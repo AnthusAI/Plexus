@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8b134d0f-5516-4f8e-b253-911a431993da",
+  "issue_id": "plx-6e79cb9b-6ac0-46aa-bdb2-ab909821309f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T13:19:28.242Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As a SelectQuote HCS QA stakeholder, I want the split Medication Review scores to evaluate only medications the customer currently takes and for the composite to match the sub-scores, so that client feedback and reporting reflect the real review behavior instead of penalizing discontinued medications or showing contradictory composite results.\n\nFeature: Medication Review split scoring respects current-medication status and consistent aggregation\n\nScenario: Discontinued medication does not cause split-score failure\nGiven a call where a medication is mentioned and the customer clearly says they no longer take it or that it was only a completed short-course medication\nWhen Medication Review split scores are computed\nThen that medication is excluded from dosage and prescriber failure counting\nAnd the agent is not penalized for not confirming dosage or prescriber for that non-current medication\n\nScenario: Composite matches all passing sub-scores\nGiven a call where Medication Review: Prescriber, Dosage, Pharmacy, and Individual Confirmation all return Yes\nWhen Medication Review (Composite) is computed\nThen the composite returns Yes\nAnd the explanation indicates that all elements passed\n\nScenario: Composite lists failed split elements\nGiven a call where one or more Medication Review split scores return No\nWhen Medication Review (Composite) is computed\nThen the composite returns No\nAnd the explanation names the failed split elements only.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 1,
+    "status": "open",
+    "title": "Medication Review split scores should ignore non-current medications and aggregate consistently"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "id": "plx-6e8095f0-98f5-4359-a961-518a4b3f032a",
+  "title": "Procedures dashboard optimizer charts must use authenticated Amplify data path",
+  "description": "Migrate optimizer performance chart data loading in Procedures dashboard from API-key/proxy-based path to authenticated Amplify Cognito credentials end-to-end.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-17T21:32:08.504760Z",
+  "updated_at": "2026-04-17T21:32:08.504760Z",
+  "closed_at": null,
+  "custom": {}
+}

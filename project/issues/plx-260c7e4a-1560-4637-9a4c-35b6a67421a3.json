@@ -1,0 +1,37 @@
+{
+  "id": "plx-260c7e4a-1560-4637-9a4c-35b6a67421a3",
+  "title": "Dataset filters: standard score/source version selectors with explicit modes",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-dd79dc54-e717-45ed-adb4-6accdf4f5adc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3f77f6d0-e7e2-4ecf-bc67-e77f9d2e9ef0",
+      "author": "ryan",
+      "text": "Implementing standard selector-based dataset filters for /lab/datasets: segmented mode switch (All, By Score, By Source Version), reusable score/data source/data source version selectors, and strict index-backed query path selection.",
+      "created_at": "2026-04-03T13:29:05.449841Z"
+    },
+    {
+      "id": "2fe090b8-9f69-49bd-8693-2eb5746ac923",
+      "author": "ryan",
+      "text": "Implemented standard selector UX for /lab/datasets filters with explicit mode switch (All, By Score, By Source Version). Added reusable selectors: ScoreVersionSelector (listScoreVersionByScoreIdAndCreatedAt DESC), DataSourceSelector (listDataSourceByAccountIdAndName ASC, scaffold sources excluded), and DataSourceVersionSelector (listDataSourceVersionByDataSourceIdAndCreatedAt DESC). Removed raw version-ID text inputs from primary flow. Preserved strict single index-backed query path per mode (no multi-filter composition/fallback). Updated docs in associated-datasets and evaluate-score pages to describe selector-based filtering. Validation: npm --prefix dashboard run build:fast passed.",
+      "created_at": "2026-04-03T13:42:21.546765Z"
+    },
+    {
+      "id": "c2be1aca-02f9-432d-9324-83963e2cd06f",
+      "author": "ryan",
+      "text": "Landed in commit 9c9c42e20. Added explicit filter modes and standard selectors in /lab/datasets, removed raw version-ID entry in primary flow, and updated docs. build:fast green.",
+      "created_at": "2026-04-03T13:42:57.767472Z"
+    }
+  ],
+  "created_at": "2026-04-03T13:29:01.918080Z",
+  "updated_at": "2026-04-03T13:42:57.781770Z",
+  "closed_at": "2026-04-03T13:42:57.781770Z",
+  "custom": {}
+}

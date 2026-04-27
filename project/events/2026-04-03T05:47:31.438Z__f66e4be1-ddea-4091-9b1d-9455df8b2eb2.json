@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f66e4be1-ddea-4091-9b1d-9455df8b2eb2",
+  "issue_id": "plx-3adb7706-804a-4cfd-a95c-b94321eea6ac",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T05:47:31.438Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-94485ba2-ef6a-4e83-b6ba-3febe4581a69",
+    "priority": 1,
+    "status": "open",
+    "title": "Evaluation UI provenance links for score version and dataset"
+  }
+}

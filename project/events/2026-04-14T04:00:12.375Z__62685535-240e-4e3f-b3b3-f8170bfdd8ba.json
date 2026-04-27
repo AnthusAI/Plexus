@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "62685535-240e-4e3f-b3b3-f8170bfdd8ba",
+  "issue_id": "plx-e2f03fdb-b3c0-4de6-b2eb-0316807c5c37",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-14T04:00:12.375Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Fix develop CI failures in FeedbackEvaluation and LangGraphScore tests",
+    "description": "",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+    "labels": []
+  }
+}

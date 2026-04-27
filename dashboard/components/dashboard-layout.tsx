@@ -2,15 +2,10 @@
 
 import * as React from "react"
 import { useState, useEffect, useRef } from "react"
-import { StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Siren, HardDriveDownload, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge, Waypoints, SquareTerminal } from "lucide-react"
+import { StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge, Waypoints, SquareTerminal } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
-import { generateClient } from "aws-amplify/data"
-import { listFromModel } from "@/utils/amplify-helpers"
-import type { Schema } from "@/amplify/data/resource"
-import type { AccountSettings } from "@/types/account-config"
-import { isValidAccountSettings } from "@/types/account-config"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button, type ButtonProps } from "@/components/ui/button"
@@ -89,18 +84,14 @@ const MobileHeader = ({
   </div>
 )
 
-const client = generateClient<Schema>()
-
-type Account = Schema['Account']['type']
-
 export const menuItems = [
   { name: "Items", icon: StickyNote, path: "/lab/items" },
-  { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback-queues" },
+  { name: "Feedback", icon: MessageCircleMore, path: "/lab/feedback" },
   { name: "Reports", icon: FileBarChart, path: "/lab/reports" },
   { name: "Evaluations", icon: FlaskConical, path: "/lab/evaluations" },
   { name: "Procedures", icon: Waypoints, path: "/lab/procedures" },
   { name: "Scorecards", icon: ListChecks, path: "/lab/scorecards" },
-  { name: "Sources", icon: HardDriveDownload, path: "/lab/sources" },
+  { name: "Data", icon: Database, path: "/lab/datasets" },
   { name: "Batches", icon: Layers3, path: "/lab/batches" },
   { name: "Alerts", icon: Siren, path: "/lab/alerts" },
   { name: "Console", icon: SquareTerminal, path: "/lab/console" },
@@ -220,7 +211,10 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
           <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3 w-16'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
             {visibleMenuItems.map((item) => {
               const isCurrentPage = (pathname === item.path ||
-                (item.name === "Feedback" && (pathname === "/feedback-queues" || pathname.startsWith("/feedback"))) ||
+                (item.name === "Feedback" &&
+                  (pathname === "/feedback"
+                    || pathname === "/lab/feedback-queues"
+                    || pathname.startsWith("/lab/feedback"))) ||
                 (item.name === "Items" && pathname.startsWith(item.path)) ||
                 (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
                 (item.name === "Procedures" && pathname.startsWith(item.path)) ||

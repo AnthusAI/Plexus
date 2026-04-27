@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "af633748-92da-4e02-b4e3-a67390a252eb",
+  "issue_id": "plx-3c73348a-163a-436e-8b26-0da2bca510cc",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-14T21:44:42.101Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Bump Tactus to v0.46.0 and regenerate lock for Python 3.11"
+  }
+}

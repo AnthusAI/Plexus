@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e07e4b63-10d9-4912-9d69-410df9c8bfc8",
+  "issue_id": "plx-eca6cbd3-4db9-4226-b105-f468cedfb9ab",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T00:33:51.660Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 2,
+    "status": "open",
+    "title": "Document balanced associated-dataset curation and score-page dataset visibility"
+  }
+}

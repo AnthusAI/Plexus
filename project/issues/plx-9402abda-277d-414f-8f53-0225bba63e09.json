@@ -1,0 +1,45 @@
+{
+  "id": "plx-9402abda-277d-414f-8f53-0225bba63e09",
+  "title": "Persist associated dataset stats for score-page UI consumption",
+  "description": "## Summary\nPersist associated-dataset stats at build time for UI consumption.\n\n## Purpose\nAllow score-page dataset visibility without expensive per-view parquet scans.\n\n## Acceptance Criteria\n- Newly curated associated datasets persist row count and label distribution metadata.\n- Persist class list and curation policy metadata used for build.\n- Score-page UI path can read these stats directly.\n- No on-demand parquet parsing is required for this feature path.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-072c435e-59aa-4872-a3a6-3f5a911648d5",
+      "type": "blocked-by"
+    }
+  ],
+  "comments": [
+    {
+      "id": "f223c6ad-0b40-4df5-8d98-42aba1c71783",
+      "author": "ryan",
+      "text": "Starting persistence work for dataset stats metadata. Plan: store row_count/label_distribution/class_list/policy in associated-dataset datasource version configuration at build time, with tests.",
+      "created_at": "2026-04-03T00:41:52.671596Z"
+    },
+    {
+      "id": "315e4c24-ec82-461d-b740-a3962a7f1c06",
+      "author": "ryan",
+      "text": "Implemented build-time dataset stats persistence for associated dataset curation. Changes: datasource-version YAML configuration now includes dataset_stats payload (row_count, label_distribution, class_list_used, curation_policy, balance_applied, and before/after distribution for balanced window builds). Wired both curation paths: score dataset-curate window flow and explicit feedback-id flow populate dataset_stats at creation time. Added/updated tests to assert stats are emitted and threaded through: curation_test and datasets_test. Verification: pytest -q plexus/cli/dataset/curation_test.py plexus/cli/score/scores_dataset_curate_test.py tests/scores/test_score_validation.py -q => pass; py_compile on changed modules => pass.",
+      "created_at": "2026-04-03T00:43:04.360118Z"
+    },
+    {
+      "id": "566684f1-59c6-444a-9ac1-cc767b17a417",
+      "author": "ryan",
+      "text": "Completed and verified in branch.",
+      "created_at": "2026-04-03T00:43:04.407100Z"
+    }
+  ],
+  "created_at": "2026-04-03T00:33:51.553414Z",
+  "updated_at": "2026-04-03T00:43:04.407100Z",
+  "closed_at": "2026-04-03T00:43:04.383682Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "plexus"
-version = "1.23.0"
+version = "1.38.1"
 description = "A Python module for configuring and managing data scoring"
 readme = "README.md"
 license = "MIT"
@@ -52,8 +52,8 @@ langgraph = "0.6.7"
 "langchain-anthropic" = "0.3.22"
 "langgraph-checkpoint-postgres" = "2.0.9"
 psycopg = { version = ">=3.2.0,<4.0.0", extras = ["binary"] }
-lupa = "2.6"
-tactus = "^0.45.2"
+lupa = "2.7"
+tactus = "^0.46.3"
 openpyxl = "3.1.5"
 rapidfuzz = "3.9.4"
 datasets = "*"
@@ -70,8 +70,8 @@ sqlalchemy = { version = "1.4.15", extras = ["asyncio"] }
 fastmcp = ">=2.3.5"
 ollama = ">=0.1.6"
 bertopic = ">=0.16.2"
-umap-learn = ">=0.5.7"
-hdbscan = ">=0.8.40"
+umap-learn = "0.5.7"
+hdbscan = "0.8.40"
 sentence-transformers = ">=5.0.0"
 kaleido = ">=0.2.1"
 requests = ">=2.31.0"
@@ -118,6 +118,7 @@ exclude_lines = [
 
 [tool.semantic_release]
 version_source = "tag"
+version_toml = ["pyproject.toml:tool.poetry.version"]
 version_variables = ["plexus/_version.py:__version__"]
 commit_message = "chore: release {version}"
 major_on_zero = false

@@ -1,0 +1,91 @@
+{
+  "id": "plx-e7329ba2-5000-4576-8fd0-854b05b7d5ac",
+  "title": "Restore semantic-memory RCA UI as primary and layer misclassification overlays",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6c892ea3-5fa8-4c0a-bcb7-b30ecb1c9fb9",
+      "author": "ryan",
+      "text": "Addressing regression: restore semantic reinforcement memory topic hierarchy (with temporal/memory signals and exemplar drill-down) as primary RCA view. Keep misclassification breakdown/classification as overlay/augmentation rather than replacement hierarchy.",
+      "created_at": "2026-04-04T18:22:39.056176Z"
+    },
+    {
+      "id": "0196fb39-fc8c-4e05-bb1b-07e48dd37e0d",
+      "author": "ryan",
+      "text": "Adjustment: constrain pre-cluster misclassification rationale to a very short snippet so semantic-memory RCA remains driven by core evidence/topic signals, not triage prose.",
+      "created_at": "2026-04-04T18:25:13.794962Z"
+    },
+    {
+      "id": "a2975808-3e54-453c-a26a-57d0bb9658f7",
+      "author": "ryan",
+      "text": "Implemented: pre-cluster triage rationale now hard-capped to 12 words and stored in pre_cluster_misclassification_rationale_short; reinforcement-memory input receives only the short signal while full item-level misclassification rationale remains available in downstream RCA synthesis and exemplar analysis.",
+      "created_at": "2026-04-04T18:25:33.627066Z"
+    },
+    {
+      "id": "6ab156c2-19d2-4143-8b9a-e71684f43dbe",
+      "author": "ryan",
+      "text": "Execution split into sub-tasks: plx-ad68bf (full-scope classification pass), plx-c2cb2d (agent-facing RCA payload contract), plx-f7a7ff (aggregate computation from full item set), plx-a93f09 (docs). Proceeding with code changes now.",
+      "created_at": "2026-04-04T18:30:42.204832Z"
+    },
+    {
+      "id": "2d61b3d4-c587-4843-9c5c-796e4f61cc84",
+      "author": "ryan",
+      "text": "Implemented full-scope item classification for semantic RCA and agent-facing payload contract. Canonical field is misclassification_analysis.item_classifications_all with analysis_scope (topic_assignment_scope=exemplar_only). Removed duplicate item_classifications payload and switched dashboard consumption to item_classifications_all only. Runtime validation: evaluation a07da29f-f6cf-4025-89f6-cca701f0ef60 completed with max-samples=50; verified classified_items_total=29, item_classifications_all_count=29, and deterministic ordering. Note: a previous 100-sample run (7bb88656-a233-4501-b0b7-89570ef92c74) hit DynamoDB parameters size limits before these payload-shaping changes.",
+      "created_at": "2026-04-04T18:58:28.106803Z"
+    },
+    {
+      "id": "2d52aa94-cf5d-440a-bf66-5f007a6ffe78",
+      "author": "ryan",
+      "text": "Implemented triage hardening: removed keyword-only category heuristics for information-gap/guideline-gap classification and now require LLM-extracted evidence flags for those categories. Mechanical classification remains strict structural/runtime based. Added regression tests ensuring keyword-only comments no longer change category without flags, while LLM flags still drive correct classification. Validation: pytest -q plexus/rca_analysis_test.py (19 passed) and pytest -q plexus/Evaluation_feedback_test.py (17 passed).",
+      "created_at": "2026-04-04T21:55:18.831706Z"
+    },
+    {
+      "id": "5f0ce853-18f8-44fc-bf9a-9f5390189eb8",
+      "author": "ryan",
+      "text": "Committed and pushed triage hardening on branch feature/plx-f45a6b-data-flywheel-ops: 02b6ed3eb. Includes classifier logic update to require LLM evidence flags for information-gap/guideline-gap (keyword-only heuristics removed), plus test updates. Runtime validation evaluation: 9844d871-dec8-4ce5-b478-40a2451c1716 (50/50 processed, RCA completed).",
+      "created_at": "2026-04-04T22:13:45.513765Z"
+    },
+    {
+      "id": "23208944-4ebe-476b-a872-57894a637a38",
+      "author": "ryan",
+      "text": "Runtime validation found another RCA source alias failure after prior fix: BEST_EVIDENCE_SOURCE=feedback_comment on evaluation 9758e0be-915b-4f7b-93bf-b7112c8656f7. Implementing hard fix by extending canonical source normalization and adding regression test.",
+      "created_at": "2026-04-05T14:58:33.557137Z"
+    },
+    {
+      "id": "70ab596b-07c8-4001-9888-23718e3c0bc5",
+      "author": "ryan",
+      "text": "Patched RCA evidence-source normalizer for additional upstream variants: feedback_comment, feedback_comments, reviewer_comment (+prefix handling for feedback_comment*/reviewer_comment*). Runtime validation passed: evaluation d131e8dc-4471-4094-af13-3f68c6a848d3 completed with root_cause + misclassification_analysis populated (50 items, AW - Confirmation / Parties Present).",
+      "created_at": "2026-04-05T15:08:02.791953Z"
+    },
+    {
+      "id": "ce98e48e-55f5-4d42-8c68-645d2bfd4478",
+      "author": "ryan",
+      "text": "Starting cross-scenario runtime RCA validation sweep: multiple real-data evaluations across scores, sampling modes, and dataset-backed accuracy to detect remaining RCA edge failures.",
+      "created_at": "2026-04-05T15:18:52.589615Z"
+    },
+    {
+      "id": "54205e3b-e155-42cc-a4c3-bee113f25323",
+      "author": "ryan",
+      "text": "Cross-scenario runtime sweep results (real data): feedback evals 9efb7b3a-1f78-49aa-a0bd-1eac3196a434 and c096a755-a176-44e6-b501-e5a8922612be both COMPLETED with RCA present after alias fix. Found new issue: dataset-backed accuracy evals on datasets with 200 rows processed total_items=1 (evals d3a2f53e-91b9-4cd7-93b7-aedaf3266bfb and ef2f7217-d4c2-48ee-9c0f-6f4aa3927ada). Filed bug for follow-up.",
+      "created_at": "2026-04-05T15:36:24.579997Z"
+    },
+    {
+      "id": "c03e327c-6567-46d8-b54f-4bebda7a1ba5",
+      "author": "ryan",
+      "text": "Additional runtime scenarios completed: (1) feedback eval with days omitted/all-time newest completed: fc47f8eb-604e-4f6a-a098-cbea76b44b75 (total_items=7, RCA absent because no incorrect-item RCA path triggered). (2) dataset curation on 1039/45425 with balancing ON fails preflight due unresolved final classes from champion YAML; with --no-balance succeeds and writes 200 rows (dataset ddb4a669-1db2-4c84-b3b0-a3deb5dbb032). (3) dataset curation on AW/Parties Present with balancing ON succeeds and produces balanced 100/100 split (dataset d1826fbf-3eb1-4389-8418-f50576778580).",
+      "created_at": "2026-04-05T15:37:51.460414Z"
+    }
+  ],
+  "created_at": "2026-04-04T18:22:36.531013Z",
+  "updated_at": "2026-04-05T15:37:51.460414Z",
+  "closed_at": "2026-04-04T18:58:50.177130Z",
+  "custom": {}
+}

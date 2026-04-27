@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2e793fba-f483-4fb4-9753-f0f7141b8254",
+  "issue_id": "plx-4703d980-50b6-44b1-b0d1-dffe3674fc8e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T23:23:15.298Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Restart 59125 optimizers at 12 iterations"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "id": "plx-3d9714df-787a-44bc-8908-61108ced4042",
+  "title": "Run stabilized optimizer on Medication Review: Dosage",
+  "description": "Launch the Medication Review: Dosage optimizer with the stabilized cycle-control behavior using the direct CLI path. Use the current dosage optimizer baseline shape: 180-day feedback window, 100 feedback items, 100-sample regression dataset, and 20 max iterations.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3a3b53b0-b05e-46bb-82ab-bb35d2c315d4",
+      "author": "ryan",
+      "text": "Reviewing recent Medication Review: Dosage optimizer history from the repo-local plexus-score-optimizer skill and direct CLI evidence. Next step is to inspect recent procedure records/logs for SelectQuote HCS Medium-Risk / Medication Review: Dosage and identify the most relevant restart point or failure mode before making changes.",
+      "created_at": "2026-04-23T20:34:08.749192Z"
+    },
+    {
+      "id": "57a6080b-a412-4de3-b9a0-5920dd35fb89",
+      "author": "ryan",
+      "text": "Confirmed repo-local optimizer skill path is skills/plexus-score-optimizer/SKILL.md. Using its direct-CLI guardrails while investigating recent Dosage runs. Historical local log review shows an older Dosage run started from champion 72805404-4a3a-4299-afd8-90fe6026b7b2, finished after 35 cycles with winning version 5fd8ee3d-614a-4fa2-bb62-eca306cd7f44, and reported Recent AC1 0.464->0.536 plus Regression AC1 0.455->0.528. Next I am separating that historical result from the newer post-guard/normalized verification runs on 2026-04-23 so we can pick the right continuation point.",
+      "created_at": "2026-04-23T20:34:48.857002Z"
+    },
+    {
+      "id": "6137613f-2263-477c-9ea7-5eb514350932",
+      "author": "ryan",
+      "text": "Recent Dosage optimizer evidence now separated into: (1) older 35-cycle historical run that produced current champion 5fd8ee3d-614a-4fa2-bb62-eca306cd7f44 with Recent AC1 0.464->0.536 and Regression AC1 0.455->0.528; (2) a 2026-04-23 one-cycle verification run that stayed flat at Recent/Regression AC1 0.511/0.536 and concluded contradiction-heavy labels are the blocker; (3) an active 2026-04-23 post-guard run that has already CARRIED three neutral cycles at AC1 0.536/0.536 with no net gain, plus repeated APIConnectionError noise, and is currently in cycle 4 synthesis. Strong current signal: stop expecting prompt churn to move Dosage until contradiction cleanup or a vetted deterministic slice reduces label noise and denominator ambiguity.",
+      "created_at": "2026-04-23T20:36:18.287631Z"
+    },
+    {
+      "id": "9ef322d7-1e0a-4f7a-bf12-e326b48eed31",
+      "author": "ryan",
+      "text": "Stopped the active Dosage optimizer direct-CLI process on 2026-04-23 at process level. Terminated optimizer shell PID 95073 and child optimizer PID 95085; verification via pgrep shows no remaining `python -m plexus.cli procedure optimize --scorecard SelectQuote HCS Medium-Risk --score Medication Review: Dosage` process. Also cleaned up the abandoned item-ID feedback invalidation process from the earlier failed command path.",
+      "created_at": "2026-04-23T20:51:30.135593Z"
+    }
+  ],
+  "created_at": "2026-04-23T05:59:09.781153Z",
+  "updated_at": "2026-04-23T20:51:30.135593Z",
+  "closed_at": null,
+  "custom": {}
+}

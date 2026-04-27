@@ -1,0 +1,31 @@
+{
+  "id": "plx-8715381c-ace8-4ec3-aaec-8a6fa1a56240",
+  "title": "Canonical score-result RCA UX + information-gap explainability",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-cf41c224-290b-4ef0-a87c-589074ce3253",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2759130a-8acc-4e1e-bc9a-4758164e908e",
+      "author": "ryan",
+      "text": "Implementing canonical single-renderer RCA UX: remove duplicate per-item cards from topic/category sections, route all inspection through score-result detail, add info-gap diagnostics payload+banner, and validate with 50-sample feedback run.",
+      "created_at": "2026-04-04T19:06:56.923436Z"
+    },
+    {
+      "id": "b131886f-8e43-426d-8ff1-95f55d122b18",
+      "author": "ryan",
+      "text": "Implemented canonical single-renderer RCA UX and information-gap diagnostics. Runtime validation completed with evaluation d086da92-c220-4eb4-b1d8-a13dfcf61a81 (max-samples=50). Verified payload fields: item_classifications_all count=24, analysis_scope.topic_assignment_scope=exemplar_only, category_diagnostics.information_gap present with transcript-unavailable diagnostics. Frontend tests and build passed.",
+      "created_at": "2026-04-04T19:18:20.541649Z"
+    }
+  ],
+  "created_at": "2026-04-04T19:06:49.002989Z",
+  "updated_at": "2026-04-04T19:18:22.955006Z",
+  "closed_at": "2026-04-04T19:18:22.955006Z",
+  "custom": {}
+}

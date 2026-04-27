@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1e155019-4682-4111-9df3-d1269b57fc8b",
+  "issue_id": "plx-22e6fa71-1220-42e9-8c73-03a0a9c4692d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-24T04:40:11.936Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Investigate recent procedure failures and summarize causes"
+  }
+}

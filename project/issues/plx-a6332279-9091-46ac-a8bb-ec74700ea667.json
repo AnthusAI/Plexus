@@ -1,0 +1,46 @@
+{
+  "id": "plx-a6332279-9091-46ac-a8bb-ec74700ea667",
+  "title": "Add official guidelines for Medication Review Pharmacy and Individual Confirmation",
+  "description": "Write and validate official rubric guidelines for Medication Review: Pharmacy and Medication Review: Individual Confirmation so RCA no longer flags guideline gaps or empty-guideline ambiguity on those split scores.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "dade1a89-1afe-469c-9b40-0ddb3da8707c",
+      "author": "ryan",
+      "text": "Reviewing local optimization-agent guidance and recent optimizer procedures for Medication Review: Individual Confirmation on SelectQuote HCS Medium-Risk to identify prior hypotheses, baselines, and the next safe iteration.",
+      "created_at": "2026-04-23T20:33:29.199471Z"
+    },
+    {
+      "id": "a691884a-396f-4de3-b8fa-4fbcaec50a55",
+      "author": "ryan",
+      "text": "User requested a fresh optimizer run for Medication Review: Individual Confirmation on SelectQuote HCS Medium-Risk. Preparing a new direct-CLI optimizer launch with days=180, max_samples=200, and max_iterations=10 from the current champion version; will capture stdout/stderr to a log file and use the resulting procedure/task IDs as the run anchor.",
+      "created_at": "2026-04-23T20:37:18.680900Z"
+    },
+    {
+      "id": "ca4a0853-a55f-4fcc-9588-2804eee8ee77",
+      "author": "ryan",
+      "text": "Launched direct CLI optimizer run for Medication Review: Individual Confirmation with procedure_id=d371de9c-3e7f-40df-956e-eca37ad79154, task_id=aeb81028-a6a3-4268-b0eb-41ca8c703814, start_version=f1040a1b-ab02-48db-9ed6-18af22703c55, days=180, max_samples=200, max_iterations=10. Live runtime metadata shows host=BlackbookM3 pid=46184; monitoring for first chat activity and baseline dispatch.",
+      "created_at": "2026-04-23T20:38:45.004701Z"
+    },
+    {
+      "id": "0f5a73ff-1b1f-4daa-942f-8b2c6a2eb9c0",
+      "author": "ryan",
+      "text": "Checked the OS process table for optimizer runs targeting Medication Review: Individual Confirmation. No previous local optimizer PIDs were present for that score; only the current run remains active (shell pid 46173, python pid 46184). No kill action taken because there were no older matching processes to terminate.",
+      "created_at": "2026-04-23T20:40:10.248971Z"
+    }
+  ],
+  "created_at": "2026-04-22T13:42:54.179186Z",
+  "updated_at": "2026-04-23T20:40:10.248971Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

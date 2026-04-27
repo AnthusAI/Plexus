@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "74b2eb99-0b70-4634-8bd7-41c5aebe01ed",
+  "issue_id": "plx-8d12a506-5d28-4958-a440-af2cf814c49f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T12:37:24.778Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-dd79dc54-e717-45ed-adb4-6accdf4f5adc",
+    "priority": 1,
+    "status": "open",
+    "title": "Data IA clarification: datasets-first tabs + clean sources"
+  }
+}

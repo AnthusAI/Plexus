@@ -3,9 +3,7 @@ Tests for the FeedbackService.
 """
 
 import pytest
-import asyncio
-from unittest.mock import Mock, MagicMock, AsyncMock, patch
-from datetime import datetime, timezone, timedelta
+from unittest.mock import Mock, AsyncMock, patch
 
 from plexus.cli.feedback.feedback_service import (
     FeedbackService, 
@@ -470,6 +468,7 @@ class TestFeedbackServiceTimeWindow:
         mock_feedback_obj.initialAnswerValue = 'Yes'
         mock_feedback_obj.finalAnswerValue = 'No'
         mock_feedback_obj.editCommentValue = 'Recent correction'
+        mock_feedback_obj.isInvalid = False
         
         # Mock FeedbackItem.list to return the mock object directly
         with patch('plexus.dashboard.api.models.feedback_item.FeedbackItem.list') as mock_list:
@@ -510,6 +509,7 @@ class TestFeedbackServiceTimeWindow:
         mock_feedback_obj.itemId = 'test-item-id'
         mock_feedback_obj.initialAnswerValue = 'No'
         mock_feedback_obj.finalAnswerValue = 'Yes'
+        mock_feedback_obj.isInvalid = False
         
         # Mock FeedbackItem.list to return the mock object directly
         with patch('plexus.dashboard.api.models.feedback_item.FeedbackItem.list') as mock_list:

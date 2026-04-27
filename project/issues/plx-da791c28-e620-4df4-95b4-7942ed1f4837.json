@@ -3,7 +3,7 @@
   "title": "Runs-first Procedures dashboard for Tactus templates",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -202,11 +202,17 @@
       "author": "ryan",
       "text": "Iteration result: identified and removed competing workers on EC2 i-05124645ca441c68f that were claiming dashboard tasks with old code; fixed local worker queue-override bug in CommandDispatch.worker; fixed worker hang by replacing subprocess git-sha lookup with .git/HEAD read in CommandTasks and experiment_runner; verified end-to-end by redispatching task c86f3f88-a73f-41ed-8f77-52636c344390 and it completed on BlackbookM3 with runtime_fingerprint + procedure_status metadata.",
       "created_at": "2026-03-14T04:57:44.508851Z"
+    },
+    {
+      "id": "97cfdc8b-a62f-4e7a-b71d-4bce03a8ad0c",
+      "author": "ryan",
+      "text": "Runs-first Procedures dashboard for Tactus templates implemented.",
+      "created_at": "2026-04-04T19:12:41.047822Z"
     }
   ],
   "created_at": "2026-03-13T22:18:48.746896Z",
-  "updated_at": "2026-03-14T04:57:44.508851Z",
-  "closed_at": null,
+  "updated_at": "2026-04-04T19:12:41.047822Z",
+  "closed_at": "2026-04-04T19:12:41.047822Z",
   "custom": {
     "project_label": "plx",
     "source": "shared"

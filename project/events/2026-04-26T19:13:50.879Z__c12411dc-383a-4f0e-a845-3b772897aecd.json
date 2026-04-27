@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c12411dc-383a-4f0e-a845-3b772897aecd",
+  "issue_id": "plx-e76bd138-e77e-4f39-abe4-ac0ebb517398",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-26T19:13:50.879Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implement realtime procedure/evaluation lists in scorecards dashboard, fix procedure dashboard create subscriptions, standardize task matching, and refresh optimizer manifests with debounce.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+    "priority": 1,
+    "status": "open",
+    "title": "Add realtime score-scoped procedures and evaluations"
+  }
+}

@@ -84,7 +84,7 @@ class MetricsAggregator:
             event_source_arn: DynamoDB stream ARN
             
         Returns:
-            Record type string ('items', 'scoreResults', 'tasks', 'evaluations')
+            Record type string ('items', 'scoreResults', 'tasks', 'evaluations', 'procedures')
         """
         arn_lower = event_source_arn.lower()
         
@@ -96,6 +96,8 @@ class MetricsAggregator:
             return 'tasks'
         elif 'evaluation' in arn_lower:
             return 'evaluations'
+        elif 'procedure' in arn_lower:
+            return 'procedures'
         
         return ''
     
@@ -227,4 +229,3 @@ def process_stream_batch(records: List[Dict[str, Any]]) -> Dict[str, List[Dict[s
     """
     aggregator = MetricsAggregator()
     return aggregator.process_stream_records(records)
-

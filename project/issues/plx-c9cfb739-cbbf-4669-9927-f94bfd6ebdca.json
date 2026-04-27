@@ -1,0 +1,31 @@
+{
+  "id": "plx-c9cfb739-cbbf-4669-9927-f94bfd6ebdca",
+  "title": "Report run dialog supports date range parameter entry",
+  "description": "",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-88d8f8c6-72b2-4f34-8a65-9818f9673ab7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "66d6dd48-2ebd-4f79-818c-2d30e094ff6c",
+      "author": "derek",
+      "text": "As a report operator, I want to choose a start and end date in the run dialog, so that I can run analyses over precise windows without manual parameter math.\n\nFeature: Report run date range parameter\nScenario: Provide a valid date range before running a report\nGiven a report configuration defines a required parameter named window of type date_range\nWhen I open Run Report and choose both a start date and end date where start is before or equal to end\nThen the dialog accepts the input\nAnd dispatches the run with scalar parameters window_start and window_end in YYYY-MM-DD format\n\nScenario: Reject invalid date range\nGiven a report configuration defines a required parameter named window of type date_range\nWhen I provide an end date earlier than the start date\nThen the dialog shows a validation error and blocks submission",
+      "created_at": "2026-04-21T16:23:30.770744604Z"
+    },
+    {
+      "id": "23ad05d2-26bc-47c3-a98e-cc21ea99eb02",
+      "author": "derek",
+      "text": "Story behavior implemented and verified. Run Report dialog now supports required date_range entry with start/end controls, client-side ordering guard (end cannot be before start), and dispatch flattening to window_start/window_end. Parsing supports markdown report templates with YAML parameter header.",
+      "created_at": "2026-04-21T17:51:25.262040412Z"
+    }
+  ],
+  "created_at": "2026-04-21T16:23:23.628006536Z",
+  "updated_at": "2026-04-21T17:51:32.655926708Z",
+  "closed_at": "2026-04-21T17:51:32.655926708Z",
+  "custom": {}
+}

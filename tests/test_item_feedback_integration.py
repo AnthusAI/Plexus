@@ -68,6 +68,7 @@ class TestItemFeedbackIntegration:
             mock_feedback_obj.initialAnswerValue = 'Yes'
             mock_feedback_obj.finalAnswerValue = 'No'
             mock_feedback_obj.editCommentValue = 'This should be NO'
+            mock_feedback_obj.isInvalid = False
             mock_list.return_value = ([mock_feedback_obj], None)
             
             # Search for feedback in last day - should find the recent item
@@ -189,6 +190,7 @@ class TestItemFeedbackIntegration:
             mock_feedback_obj.itemId = 'test-item'
             mock_feedback_obj.initialAnswerValue = 'Yes'
             mock_feedback_obj.finalAnswerValue = 'No'
+            mock_feedback_obj.isInvalid = False
             mock_list.return_value = ([mock_feedback_obj], None)
             
             # Test feedback search with time boundaries

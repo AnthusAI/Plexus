@@ -1,0 +1,43 @@
+{
+  "id": "plx-6f2d5bc4-8763-4d82-9614-fe415d5a3307",
+  "title": "Detect and fail stale procedures after one hour",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a29f5b2a-8d19-496c-882a-f60b2d8b2cca",
+      "author": "ryan",
+      "text": "Implementing a direct CLI stale-procedure timeout path with a 1-hour inactivity threshold. Plan: add a  command that scans running procedures/tasks for last activity, marks stale ones as FAILED/TIMED_OUT with a structured timeout error in existing metadata/error fields, and invoke the same scan asynchronously when a new direct procedure run starts so stale records are cleaned up without blocking the active run.",
+      "created_at": "2026-04-20T17:59:30.605188Z"
+    },
+    {
+      "id": "741ea715-daa6-4925-8a80-13a726a3bb55",
+      "author": "ryan",
+      "text": "Updating stale-timeout behavior per latest requirement: scope detection/reporting to procedures started in the last 72 hours, list that full set in command output, and continue marking stalled RUNNING procedures as FAILED when chat inactivity exceeds threshold.",
+      "created_at": "2026-04-20T18:22:13.772485Z"
+    },
+    {
+      "id": "01e11fe9-ce20-4cd6-864e-c0d84bd3527e",
+      "author": "ryan",
+      "text": "Patched ProcedureTask error-state rendering: segmented bar now forces FAILED when procedure.status is ERROR/FAILED even if task.status is stale COMPLETED; also prevented completion segment from turning green when overall task status is FAILED. Verified with dashboard TypeScript compile.",
+      "created_at": "2026-04-20T18:33:38.004346Z"
+    },
+    {
+      "id": "e6a4d3b7-81bb-4fc3-b4b5-bca6a59a494a",
+      "author": "ryan",
+      "text": "Starting change: stale-timeout classification will use STALLED status (procedure/task/stages) instead of FAILED/error semantics, with corresponding ProcedureTask/TaskStatus UI mapping updates so stalled appears distinct from errors.",
+      "created_at": "2026-04-20T18:34:19.589008Z"
+    }
+  ],
+  "created_at": "2026-04-20T17:58:18.198446Z",
+  "updated_at": "2026-04-20T18:34:19.589008Z",
+  "closed_at": null,
+  "custom": {}
+}

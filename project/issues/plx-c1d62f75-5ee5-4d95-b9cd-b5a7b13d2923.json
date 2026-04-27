@@ -3,7 +3,7 @@
   "title": "Reuse dashboard warning/alert components for evaluation-level red flags",
   "description": "## Summary\nReuse the dashboard's existing warning/alert presentation patterns for evaluation-level misclassification red flags.\n\n## Deliverables\n- Surface evaluation-level flags using an established warning/error visual treatment.\n- Keep the visual treatment coherent with existing dashboard report and evaluation warning patterns.\n- Define how multiple flags are summarized without overwhelming the evaluation view.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -11,13 +11,35 @@
   "labels": [],
   "dependencies": [
     {
-      "target": "plx-9dc194",
+      "target": "plx-9dc194ce-2c77-4e00-b1bd-c33fe0401ca0",
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "970368be-f4bb-4a9a-8b5f-e5f58ca59077",
+      "author": "ryan",
+      "text": "Starting implementation: replace custom evaluation red-flag cards in EvaluationTask with shared ui/alert components (severity-aware) to match established dashboard warning patterns.",
+      "created_at": "2026-04-04T14:51:18.114188Z"
+    },
+    {
+      "id": "e83594f5-a192-401b-951a-666ba5e5dd20",
+      "author": "ryan",
+      "text": "Validation: npm --prefix dashboard run build:fast passed after alert-component integration.",
+      "created_at": "2026-04-04T14:51:52.736861Z"
+    },
+    {
+      "id": "9ceb9f92-35f9-43d9-b6ff-95b02b78cb39",
+      "author": "ryan",
+      "text": "Implemented: EvaluationTask red flags now use shared ui/alert components instead of custom cards. Severity mapping uses destructive alerts for high severity and default alerts for medium/low severity.",
+      "created_at": "2026-04-04T14:51:55.015901Z"
+    }
+  ],
   "created_at": "2026-04-02T13:21:09.860772Z",
-  "updated_at": "2026-04-02T13:21:09.860772Z",
-  "closed_at": null,
-  "custom": {}
+  "updated_at": "2026-04-04T14:51:55.015901Z",
+  "closed_at": "2026-04-04T14:51:52.737346Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }

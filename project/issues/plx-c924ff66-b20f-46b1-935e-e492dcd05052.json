@@ -1,0 +1,37 @@
+{
+  "id": "plx-c924ff66-b20f-46b1-935e-e492dcd05052",
+  "title": "Migrate Plexus to shared git-hooks submodule and remove local hook copies",
+  "description": "",
+  "type": "chore",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "87010238-63f3-4a24-ac60-df1cf7f930f6",
+      "author": "derek",
+      "text": "Starting migration to shared git-hooks submodule. Plan: move current uncommitted submodule changes onto a dedicated branch from develop, remove legacy .githooks, set local core.hooksPath to .shared-hooks/hooks, and validate hooks execute from submodule path.",
+      "created_at": "2026-04-23T18:32:03.615989861Z"
+    },
+    {
+      "id": "c54dfaf0-f283-4f53-a980-ca56e6566fd0",
+      "author": "derek",
+      "text": "Migration progress: switched local hook resolution to shared submodule path (.shared-hooks/hooks), removed legacy tracked .githooks/pre-push from Plexus, and validated commit-msg enforcement now runs from submodule hooks (invalid message blocked, valid conventional message accepted).",
+      "created_at": "2026-04-23T18:32:40.360090784Z"
+    },
+    {
+      "id": "fe8ea40d-bcf4-411e-b307-b97ec55535f1",
+      "author": "derek",
+      "text": "Committed migration on chore/shared-git-hooks-migration and opened PR #200 to develop: https://github.com/AnthusAI/Plexus/pull/200. Changes include adding .shared-hooks submodule, removing .githooks/pre-push, and switching active hooks path to .shared-hooks/hooks. CI checks are currently pending.",
+      "created_at": "2026-04-23T18:33:49.728388869Z"
+    }
+  ],
+  "created_at": "2026-04-23T18:32:00.172389192Z",
+  "updated_at": "2026-04-23T18:33:49.728388869Z",
+  "closed_at": null,
+  "custom": {}
+}

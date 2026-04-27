@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dce2b3a5-6458-42d8-8a44-4b6e094a64a8",
+  "issue_id": "plx-ef76e2bb-c0cd-4a53-906e-d0b6e5cc1f9d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T00:32:08.622Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Update documentation/diagrams/Feedback Loop.excalidraw to a single mixed eng/ops data flywheel with stage artifacts, two decision gates, and consistent visual language.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Revise Feedback Loop Excalidraw into Data Flywheel master diagram"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "50fd9255-ef70-46f1-bf06-948eeb28f1cd",
+  "issue_id": "plx-cc35bdaf-aab7-4536-ac2f-c9f1b0fb6adf",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T17:46:48.121Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Create shared score-version mechanical test service, expose as CLI and MCP tool, and replace optimizer manual smoke testing with the shared tool.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Add reusable score version mechanical test for optimizer"
+  }
+}

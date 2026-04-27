@@ -1,0 +1,73 @@
+{
+  "id": "plx-3c73348a-163a-436e-8b26-0da2bca510cc",
+  "title": "Bump Tactus to v0.46.0 and regenerate lock for Python 3.11",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f030e9eb-ebd2-4b38-a775-363718a1dd1c",
+      "author": "derek.norrbom",
+      "text": "Starting work: will update tactus dependency to v0.46.0 in pyproject.toml and regenerate poetry.lock using Python 3.11 to match production.",
+      "created_at": "2026-04-14T21:44:45.878101Z"
+    },
+    {
+      "id": "35c55e97-d660-4e5a-aec3-15b23b09db19",
+      "author": "derek.norrbom",
+      "text": "Updated pyproject.toml: tactus constraint changed from ^0.45.2 to ^0.46.0. Next step: regenerate poetry.lock with Python 3.11.",
+      "created_at": "2026-04-14T21:45:00.192098Z"
+    },
+    {
+      "id": "b9848503-fef9-4de4-b420-87ed13dcdb0a",
+      "author": "derek.norrbom",
+      "text": "Lock attempt failed: tactus 0.46.0 requires lupa >=2.7, but project pinned lupa=2.6. Applying minimal compatible update to lupa=2.7 and re-locking.",
+      "created_at": "2026-04-14T21:45:17.381837Z"
+    },
+    {
+      "id": "34c85264-52e5-4764-83e7-e88f348cec72",
+      "author": "derek.norrbom",
+      "text": "poetry lock succeeded after updating lupa to 2.7 for compatibility with tactus 0.46.0. Verifying lock contents and preparing completion summary.",
+      "created_at": "2026-04-14T21:45:28.986679Z"
+    },
+    {
+      "id": "8af9df7e-4aed-49bf-95d6-0e83d4cab865",
+      "author": "derek.norrbom",
+      "text": "Implementation complete in working tree: updated pyproject to tactus ^0.46.0 and lupa 2.7 (required by tactus), regenerated poetry.lock with Poetry 2.3.2 on Python 3.11, and verified with poetry check (warnings only about deprecated poetry metadata fields). Leaving task in_progress until changes are landed.",
+      "created_at": "2026-04-14T21:45:54.607102Z"
+    },
+    {
+      "id": "265129eb-a419-4afb-b2af-546d2a06f556",
+      "author": "derek.norrbom",
+      "text": "User requested release-path promotion. Opened PR from develop to main for merged Tactus update work; will share URL once created.",
+      "created_at": "2026-04-14T21:52:38.918694Z"
+    },
+    {
+      "id": "ad143417-3042-4c9b-b980-1032f176d8e8",
+      "author": "derek.norrbom",
+      "text": "PR opened: https://github.com/AnthusAI/Plexus/pull/167 (develop -> main), title: chore: promote develop to main.",
+      "created_at": "2026-04-14T21:52:45.556032Z"
+    },
+    {
+      "id": "cb2289ce-b262-4327-825d-0be53201063c",
+      "author": "derek.norrbom",
+      "text": "Starting follow-up repair: create fix branch from develop and resolve current failing checks on PR #167 (develop -> main) introduced by recent develop commits.",
+      "created_at": "2026-04-14T22:14:46.988659Z"
+    },
+    {
+      "id": "fe0a80cb-5357-4f89-806d-47d5b5d8c926",
+      "author": "derek.norrbom",
+      "text": "Opened develop repair PR for CI regressions affecting reviewability of PR #167: https://github.com/AnthusAI/Plexus/pull/168.",
+      "created_at": "2026-04-14T22:17:32.720546Z"
+    }
+  ],
+  "created_at": "2026-04-14T21:44:42.101227Z",
+  "updated_at": "2026-04-14T22:17:32.720546Z",
+  "closed_at": null,
+  "custom": {}
+}

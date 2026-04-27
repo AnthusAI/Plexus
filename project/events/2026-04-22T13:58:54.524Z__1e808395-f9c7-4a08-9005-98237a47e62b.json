@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1e808395-f9c7-4a08-9005-98237a47e62b",
+  "issue_id": "plx-af79c711-277f-4ce3-b9d5-fd8e99fb06aa",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T13:58:54.524Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Align published guidelines with the current Medication Review split-score logic, ensure code and guidelines are merged into the same promotable version for Prescriber, Dosage, Pharmacy, Individual Confirmation, and Medication Review (Composite), promote the merged versions to champion, rerun 180-day contradiction analysis on split scores only, and produce rubric-vs-invalidation triage notes without mutating legacy Medication Review or invalidating feedback.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 2,
+    "status": "open",
+    "title": "Publish Medication Review split-score guidelines, promote merged champions, and rerun contradictions"
+  }
+}

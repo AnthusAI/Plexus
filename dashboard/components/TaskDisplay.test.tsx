@@ -10,6 +10,11 @@ jest.mock('./EvaluationTask', () => {
     return (
       <div data-testid="mock-evaluation-task">
         <div data-testid="task-id">{task?.id || task?.data?.id}</div>
+        <div data-testid="task-scorecard">{task?.scorecard || ''}</div>
+        <div data-testid="task-score">{task?.score || ''}</div>
+        <div data-testid="task-procedure-id">{task?.procedureId || ''}</div>
+        <div data-testid="task-baseline-id">{task?.data?.baseline_evaluation_id || ''}</div>
+        <div data-testid="task-current-baseline-id">{task?.data?.current_baseline_evaluation_id || ''}</div>
         <div data-testid="score-results-count">{scoreResults.length}</div>
         {scoreResults.map((result: any, index: number) => (
           <div key={result.id || index} data-testid={`score-result-${index}`}>
@@ -239,6 +244,50 @@ describe('TaskDisplay Golden Path', () => {
       );
 
       expect(screen.getByTestId('score-results-count')).toHaveTextContent('0');
+    });
+
+    it('should fall back to scorecard and score ids and pass through procedure id', () => {
+      const mockEvaluationData = {
+        id: 'eval-links',
+        type: 'accuracy',
+        scorecardId: 'scorecard-123',
+        scoreId: 'score-456',
+        procedureId: 'procedure-789',
+        scoreResults: []
+      };
+
+      render(
+        <TaskDisplay
+          variant="detail"
+          task={mockTask}
+          evaluationData={mockEvaluationData}
+        />
+      );
+
+      expect(screen.getByTestId('task-scorecard')).toHaveTextContent('scorecard-123');
+      expect(screen.getByTestId('task-score')).toHaveTextContent('score-456');
+      expect(screen.getByTestId('task-procedure-id')).toHaveTextContent('procedure-789');
+    });
+
+    it('passes through original and current baseline ids to EvaluationTask', () => {
+      const mockEvaluationData = {
+        id: 'eval-baselines',
+        type: 'accuracy',
+        baseline_evaluation_id: 'eval-original',
+        current_baseline_evaluation_id: 'eval-current',
+        scoreResults: []
+      };
+
+      render(
+        <TaskDisplay
+          variant="detail"
+          task={mockTask}
+          evaluationData={mockEvaluationData}
+        />
+      );
+
+      expect(screen.getByTestId('task-baseline-id')).toHaveTextContent('eval-original');
+      expect(screen.getByTestId('task-current-baseline-id')).toHaveTextContent('eval-current');
     });
   });
 

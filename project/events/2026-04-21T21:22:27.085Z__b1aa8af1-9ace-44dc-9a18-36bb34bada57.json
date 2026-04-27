@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b1aa8af1-9ace-44dc-9a18-36bb34bada57",
+  "issue_id": "plx-ac4de131-73a1-47b4-886e-fdbf9b4cadb5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T21:22:27.085Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Update the live SelectQuote HCS Medium-Risk Information Accuracy split scores to match Liz Fossen's authoritative meeting guidance and the 2026-04-01 SelectRx enrollment script.\n\nAcceptance criteria:\n- Update score code and official guidelines for the affected Information Accuracy scores in Plexus.\n- Validate updated guideline markdown before pushing each changed score version.\n- Verify changed scores execute with direct predictions on representative items.\n- Record any follow-up platform or policy issues in Kanbus.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+    "priority": 1,
+    "status": "open",
+    "title": "Apply Liz script-based rubric refinements to Information Accuracy scores"
+  }
+}

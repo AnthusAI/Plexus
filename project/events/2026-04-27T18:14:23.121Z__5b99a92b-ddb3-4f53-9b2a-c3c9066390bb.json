@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5b99a92b-ddb3-4f53-9b2a-c3c9066390bb",
+  "issue_id": "plx-e24fd0e5-3f12-44b8-aeff-9d32cb7ee67f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-27T18:14:23.121Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement ScoreVersion management schema and tools"
+  }
+}

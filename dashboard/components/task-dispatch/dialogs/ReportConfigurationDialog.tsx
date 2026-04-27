@@ -22,30 +22,39 @@ import { getClient } from "@/utils/amplify-client"
 import { toast } from "sonner"
 import { ConfigurableParametersDialog } from "@/components/ui/ConfigurableParametersDialog"
 import { parseParametersFromYaml, hasParameters } from "@/lib/parameter-parser"
+import { useAccount } from "@/app/contexts/AccountContext"
+import {
+  listAllReportConfigurationsByAccount,
+  type ReportConfigurationListItem,
+} from "@/utils/report-configurations"
 
 // Report configuration type definition
-interface ReportConfiguration {
+interface ReportConfiguration extends ReportConfigurationListItem {
   id: string
-  name: string
-  description?: string | null
   configuration?: string | null
 }
 
-// GraphQL query to list report configurations
-const LIST_REPORT_CONFIGURATIONS = `
-  query ListReportConfigurations($accountId: String!) {
-    listReportConfigurationByAccountIdAndUpdatedAt(
-      accountId: $accountId
-      limit: 100
+function flattenReportParameters(parameters: Record<string, any>): Record<string, any> {
+  const flattened: Record<string, any> = {}
+
+  Object.entries(parameters).forEach(([key, value]) => {
+    if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      ('start' in value || 'end' in value)
     ) {
-      items {
-        id
-        name
-        description
-      }
+      const start = typeof value.start === 'string' ? value.start : ''
+      const end = typeof value.end === 'string' ? value.end : ''
+      if (start) flattened[`${key}_start`] = start
+      if (end) flattened[`${key}_end`] = end
+      return
     }
-  }
-`
+    flattened[key] = value
+  })
+
+  return flattened
+}
 
 // GraphQL query to get full report configuration with content
 const GET_REPORT_CONFIGURATION = `
@@ -60,11 +69,13 @@ const GET_REPORT_CONFIGURATION = `
 `
 
 export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch }: TaskDialogProps) {
+  const { selectedAccount } = useAccount()
   const [configurations, setConfigurations] = useState<ReportConfiguration[]>([])
   const [selectedConfigId, setSelectedConfigId] = useState<string>("")
   const [selectedConfig, setSelectedConfig] = useState<ReportConfiguration | null>(null)
   const [showParametersDialog, setShowParametersDialog] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isDispatching, setIsDispatching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
   
@@ -72,53 +83,27 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
   useEffect(() => {
     const fetchConfigurations = async () => {
       if (!isOpen) return
+      if (!selectedAccount?.id) {
+        setError("No account selected")
+        return
+      }
       
       setIsLoading(true)
       setError(null)
       
       try {
-        // First get the account ID
-        const accountResponse = await getClient().graphql({
-          query: `
-            query ListAccounts($filter: ModelAccountFilterInput) {
-              listAccounts(filter: $filter) {
-                items {
-                  id
-                  key
-                }
-              }
-            }
-          `,
-          variables: {
-            filter: { key: { eq: process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || '' } }
-          }
-        })
-        
-        if ('data' in accountResponse && accountResponse.data?.listAccounts?.items?.length) {
-          const accountId = accountResponse.data.listAccounts.items[0].id
-          
-          // Then fetch report configurations for that account
-          const configResponse = await getClient().graphql({
-            query: LIST_REPORT_CONFIGURATIONS,
-            variables: {
-              accountId
-            }
-          })
-          
-          if ('data' in configResponse && 
-              configResponse.data?.listReportConfigurationByAccountIdAndUpdatedAt?.items) {
-            const configs = configResponse.data.listReportConfigurationByAccountIdAndUpdatedAt.items
-            setConfigurations(configs)
-            
-            // Auto-select the first config if none is selected
-            if (configs.length > 0 && !selectedConfigId) {
-              setSelectedConfigId(configs[0].id)
-            }
-          } else {
-            setError("No report configurations found")
+        const allConfigs = await listAllReportConfigurationsByAccount(selectedAccount.id)
+
+        if (allConfigs.length > 0) {
+          setConfigurations(allConfigs)
+
+          // Prefer current selection when present, otherwise select most recent.
+          if (!selectedConfigId || !allConfigs.some((config) => config.id === selectedConfigId)) {
+            setSelectedConfigId(allConfigs[0].id)
           }
         } else {
-          setError("Account not found")
+          setError("No report configurations found")
+          setConfigurations([])
         }
       } catch (err: any) {
         console.error('Error fetching report configurations:', err)
@@ -129,7 +114,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
     }
     
     fetchConfigurations()
-  }, [isOpen, selectedConfigId])
+  }, [isOpen, selectedAccount?.id])
   
   // Fetch full configuration when selected config changes
   useEffect(() => {
@@ -161,6 +146,10 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
   }, [selectedConfigId])
   
   const handleRunReport = async () => {
+    if (isDispatching) {
+      return
+    }
+
     if (!selectedConfigId) {
       toast.error("Please select a report configuration")
       return
@@ -173,38 +162,38 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
       setShowParametersDialog(true)
     } else {
       // Run directly without parameters
-      handleDispatchReport()
+      await handleDispatchReport()
     }
   }
   
-  const handleDispatchReport = (parameters?: Record<string, any>) => {
+  const handleDispatchReport = async (parameters?: Record<string, any>) => {
     if (!selectedConfigId) return
+
+    const flattenedParameters = parameters ? flattenReportParameters(parameters) : undefined
     
     // Build the command for running this report
     let command = `report run --config ${selectedConfigId}`
     
     // Add parameter options if provided
-    if (parameters) {
-      Object.entries(parameters).forEach(([key, value]) => {
+    if (flattenedParameters) {
+      Object.entries(flattenedParameters).forEach(([key, value]) => {
         command += ` --param-${key}=${value}`
       })
     }
     
-    // Get additional metadata
-    const metadata = {
-      reportConfigurationId: selectedConfigId,
-      reportConfigurationName: selectedConfig?.name || 'Report',
-      parameters: parameters || {}
+    // Dispatch the task once and close only after dispatch attempt completes.
+    setIsDispatching(true)
+    try {
+      await onDispatch(command, 'report')
+      onClose()
+    } finally {
+      setIsDispatching(false)
     }
-    
-    // Dispatch the task with metadata
-    onDispatch(command, 'report')
-    onClose()
   }
   
-  const handleParametersSubmit = (parameters: Record<string, any>) => {
+  const handleParametersSubmit = async (parameters: Record<string, any>) => {
     setShowParametersDialog(false)
-    handleDispatchReport(parameters)
+    await handleDispatchReport(parameters)
   }
   
   return (
@@ -238,7 +227,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
               <Select
                 value={selectedConfigId}
                 onValueChange={setSelectedConfigId}
-                disabled={isLoading || configurations.length === 0}
+                disabled={isLoading || isDispatching || configurations.length === 0}
               >
                 <SelectTrigger className="col-span-3 border-0 bg-background" tabIndex={-1}>
                   <SelectValue placeholder="Select a report configuration" />
@@ -267,9 +256,9 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
             onClick={handleRunReport} 
             className="border-0" 
             tabIndex={-1}
-            disabled={!selectedConfigId || isLoading}
+            disabled={!selectedConfigId || isLoading || isDispatching}
           >
-            Run Report
+            {isDispatching ? "Running..." : "Run Report"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -278,13 +267,7 @@ export function ReportConfigurationDialog({ action, isOpen, onClose, onDispatch 
       {selectedConfig && selectedConfig.configuration && (
         <ConfigurableParametersDialog
           open={showParametersDialog}
-          onOpenChange={(open) => {
-            setShowParametersDialog(open)
-            if (!open) {
-              // User cancelled parameters - close main dialog too
-              onClose()
-            }
-          }}
+          onOpenChange={setShowParametersDialog}
           title={`Configure ${selectedConfig.name}`}
           description="Please provide the required parameters for this report"
           parameters={parseParametersFromYaml(selectedConfig.configuration)}

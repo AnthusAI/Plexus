@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "140cd958-aa38-454c-a264-34fcfddc930f",
+  "issue_id": "plx-a6332279-9091-46ac-a8bb-ec74700ea667",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-22T13:42:54.180Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Write and validate official rubric guidelines for Medication Review: Pharmacy and Medication Review: Individual Confirmation so RCA no longer flags guideline gaps or empty-guideline ambiguity on those split scores.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 2,
+    "status": "open",
+    "title": "Add official guidelines for Medication Review Pharmacy and Individual Confirmation"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "id": "plx-fcfbb512-9386-4a50-ba71-d37f07dd59f6",
+  "title": "Bump tactus to v0.46.2 and open PR to develop",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1f6b32f8-0d5c-4792-be56-a5caa89242a7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "95857c71-f5cd-4ee2-b6ca-629b5b5f458b",
+      "author": "derek",
+      "text": "Started PR workflow for tactus v0.46.2 dependency bump. Verifying branch state, quality gates, push status, and GitHub PR/checks.",
+      "created_at": "2026-04-21T19:34:28.639758217Z"
+    },
+    {
+      "id": "390145be-b82d-4e8c-9b9c-abc4dc619465",
+      "author": "derek",
+      "text": "Completed: tactus v0.46.2 bump was merged via PR #196 and is now in main.",
+      "created_at": "2026-04-22T17:50:36.902210473Z"
+    }
+  ],
+  "created_at": "2026-04-21T19:34:24.457992150Z",
+  "updated_at": "2026-04-22T17:50:36.914129644Z",
+  "closed_at": "2026-04-22T17:50:36.914129644Z",
+  "custom": {}
+}

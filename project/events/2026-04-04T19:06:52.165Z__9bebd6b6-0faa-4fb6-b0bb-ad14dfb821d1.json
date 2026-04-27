@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9bebd6b6-0faa-4fb6-b0bb-ad14dfb821d1",
+  "issue_id": "plx-2877f222-15d6-4a02-8196-2310ba9cb5e0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-04T19:06:52.165Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-8715381c-ace8-4ec3-aaec-8a6fa1a56240",
+    "priority": 1,
+    "status": "open",
+    "title": "RCA context unification from item_classifications_all"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "3bb86932-644b-4a6d-88c1-27f5c094a672",
+  "issue_id": "plx-ee1949e0-88de-4154-94af-f44a26b5473d",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-14T16:14:01.485Z",
+  "actor_id": "derek",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "## Problem\nDashboard shell renders after login, but all top pages display 'Error: No account found' and page content never loads.\n\n## Repro\n1. Run  in .\n2. Login to dashboard.\n3. Observe nav renders but content regions fail with no account.\n\n## Expected\nAuthenticated users with valid env config should resolve account and load page content.\n\n## Initial hypothesis\nMismatch or timing issue in account-key/account-context resolution between env bootstrap and page data hooks.",
+        "to": "## Problem\nDashboard shell renders after login, but all top pages display `Error: No account found` and page content never loads.\n\n## Repro\n1. Run `npm run dev:web` in `dashboard/`.\n2. Login to dashboard.\n3. Observe nav renders but content regions fail with no account.\n\n## Expected\nAuthenticated users with valid env config should resolve account and load page content.\n\n## Initial hypothesis\nMismatch or timing issue in account-key/account-context resolution between env bootstrap and page data hooks."
+      }
+    }
+  }
+}

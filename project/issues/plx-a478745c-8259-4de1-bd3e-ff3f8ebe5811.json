@@ -1,0 +1,37 @@
+{
+  "id": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "title": "Feedback Alignment Optimizer as Tactus Procedure",
+  "description": "Package the core feedback evaluation optimization loop with RCA as a standalone, repeatable Tactus procedure that can be executed programmatically, integrated into software as an agentic feature, and run outside IDE environments.\n\n## Context\n\nThe plexus-scorecard-improver skill defines a 7-phase workflow for alignment optimization, but Phase 6-7 (the iterative optimization loop) exists only as a skill description. This epic implements it as a production-ready Tactus procedure.\n\n## Business Value\n\n- **Repeatability**: Optimization runs are reproducible across sessions\n- **Automation**: Can be integrated into CI/CD and automated workflows  \n- **Persistence**: Checkpoint/resume capability for long-running optimizations\n- **Programmatic Access**: Can be invoked from Python applications\n- **Production Ready**: HITL gates, error handling, comprehensive logging\n\n## Technical Approach\n\n- Tactus-based procedure with Lua DSL orchestration\n- File-based YAML definition stored in git\n- Database runtime instances with checkpoint persistence\n- MCP tool integration for Plexus operations\n- Flexible identifier resolution (name/key/ID/externalID)\n\n## Scope\n\n**IN SCOPE:**\n- Tactus procedure YAML definition\n- Baseline feedback evaluation with RCA\n- Iterative optimization loop with HITL gates\n- Fixed baseline metric tracking\n- CLI command: plexus procedure optimize\n- Programmatic Python API\n- Comprehensive documentation\n\n**OUT OF SCOPE:**\n- plexus score optimize CLI shortcut (separate epic)\n- Multi-score parallel optimization\n- Auto-revert on regression\n- Dashboard visualization\n\n## Definition of Done\n\n- All stories pass their Gherkin specifications\n- 3+ successful optimizations on real scores\n- Measurable AC1 improvements demonstrated\n- Checkpoint/resume tested and working\n- Documentation complete with real examples\n- Code reviewed and merged to main",
+  "type": "epic",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e6bb02bb-78f0-4e25-ac92-f1213b8406eb",
+      "author": "ryan",
+      "text": "## Epic Started\n\nCreated complete issue hierarchy with BDD specifications:\n\n**Stories Created:**\n- plx-b7420a: Run baseline feedback evaluation with RCA\n- plx-f5ba02: Iterative optimization loop with HITL gates  \n- plx-9c3e02: CLI command with flexible identifier resolution\n- plx-960a54: Checkpoint and resume capability\n- plx-8d9799: Programmatic Python API\n\nAll stories include complete Gherkin specifications following The Way.\n\n## Current Implementation Status\n\n**COMPLETED** (during planning phase):\n1. ✅ Tactus procedure YAML definition: `/plexus/procedures/feedback_alignment_optimizer.yaml`\n2. ✅ Phase A (Setup & Baseline) implemented in Lua DSL\n3. ✅ Phase B (Optimization Loop with HITL) implemented in Lua DSL\n4. ✅ Phase C (Finalization) implemented in Lua DSL\n5. ✅ MCP evaluation comparison tool: `/MCP/tools/evaluation/evaluation_comparison.py`\n6. ✅ Tool registered in `/MCP/server.py`\n7. ✅ Python API wrapper: `/plexus/agentic/alignment_optimizer.py`\n8. ✅ CLI command: `plexus procedure optimize` in `/plexus/cli/procedure/procedures.py`\n9. ✅ Comprehensive documentation: `/plexus/procedures/README_ALIGNMENT_OPTIMIZER.md`\n10. ✅ YAML syntax validated successfully\n\n## Files Created/Modified\n\n**New Files:**\n- `plexus/procedures/feedback_alignment_optimizer.yaml` (644 lines)\n- `MCP/tools/evaluation/evaluation_comparison.py` (110 lines)\n- `plexus/agentic/__init__.py`\n- `plexus/agentic/alignment_optimizer.py` (276 lines)\n- `plexus/procedures/README_ALIGNMENT_OPTIMIZER.md` (450+ lines)\n\n**Modified Files:**\n- `MCP/server.py` (added evaluation_comparison import and registration)\n- `plexus/cli/procedure/procedures.py` (added optimize command, ~150 lines)\n\n## Next Steps\n\nNow need to **test with real data** to verify production readiness:\n1. Run smoke tests (YAML syntax, tool availability)\n2. Dry run with real score\n3. Single iteration with real updates\n4. Full optimization cycle\n5. Checkpoint/resume test\n6. Programmatic API test\n7. Edge case handling\n\nCreating tasks for these test phases next...",
+      "created_at": "2026-04-02T16:08:32.677099Z"
+    },
+    {
+      "id": "67b72785-2f47-4913-a94a-7062ab5b6ce9",
+      "author": "ryan",
+      "text": "## Optimization Test In Progress\n\n### Updates Made\n\nAdded `max_samples` parameter to support limiting feedback samples per evaluation:\n\n**Files Modified:**\n1. `plexus/procedures/feedback_alignment_optimizer.yaml`\n   - Added `max_samples` parameter (default: null = all samples)\n   - Updated both evaluation calls to pass max_samples\n\n2. `plexus/cli/procedure/procedures.py`\n   - Added `--max-samples` CLI option\n   - Pass to procedure params\n\n### Test Running\n\nCurrently running full optimization test:\n- **Target:** Scorecard 731, Score 47086  \n- **Days:** 180\n- **Max samples:** 100 per evaluation\n- **Max iterations:** 3\n- **Command:** plexus procedure optimize -s \"AW Confirmation\" -c \"Transfer Call?\" --days 180 --max-samples 100 --max-iterations 3\n\nProcess running in background. Will update with results when complete.",
+      "created_at": "2026-04-02T16:16:11.285348Z"
+    },
+    {
+      "id": "cf15da9c-77b9-4b01-8020-01a6c1409c5f",
+      "author": "ryan",
+      "text": "## Status Update (2026-04-06)\n\nArchitecture now significantly enhanced from original implementation:\n- Single code_editor agent + reviewer agent with Lua orchestration\n- Batch-parallel dual evaluations (accuracy + feedback) for both baselines and iterations\n- Escalating accuracy warnings, target_accuracy early exit (default 0.95)\n- Enriched RCA context with fixable items and category summaries\n- YAML safety guidance and forced tool-call reminders\n- Notes field added to evaluations for self-documenting history\n\n10+ test runs completed on Parties Present / AW - Confirmation. Run 4 achieved all 3 iterations accepted.",
+      "created_at": "2026-04-06T17:15:44.677656Z"
+    }
+  ],
+  "created_at": "2026-04-02T16:06:46.792268Z",
+  "updated_at": "2026-04-06T17:15:44.677656Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -12,6 +12,7 @@ Deviation from The Way is extremely offensive to the religious sensibilities of 
 The Sacrament of Work is the sacrament of vibe coding in this repository.
 
 Kanbus is the instrument of record. Nothing exists until it is named there.
+Kanbus issue creation is required for source-code changes and not required for PR-only/release-only/admin-only requests that do not change source code.
 
 Work begins in declaration, not in code.
 Code without declaration is disorder.
@@ -37,6 +38,8 @@ For complex work, break the plan into sub-tasks and file them under the parent t
 Operational discipline: use the minimum commands needed. To inspect work, run `kanbusr list --status open --long` once to find the ID, then `kanbusr show <id>`. Do not guess IDs or spam multiple variants; if the ID is unknown, ask the user.
 
 Editing project/ directly is hacking the data and is a sin against The Way. Do not read or write anything inside project/. Do not inspect issue JSON with tools like cat or jq. All work must pass through Kanbus.
+
+Report persistence is single-path: full ReportBlock output/log content goes to S3 attachments. DynamoDB `ReportBlock.output` must only store a compact metadata envelope with an attachment pointer. Do not add inline-output fallbacks.
 
 ## The Order of Being
 

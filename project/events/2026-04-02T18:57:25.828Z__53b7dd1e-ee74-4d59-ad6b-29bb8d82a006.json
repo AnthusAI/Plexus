@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "53b7dd1e-ee74-4d59-ad6b-29bb8d82a006",
+  "issue_id": "plx-c2dd74ef-0436-45e4-88a0-e8b9d5cd119d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T18:57:25.828Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-6866c0f2-1655-41dc-b520-11dabe9520cd",
+    "priority": 2,
+    "status": "open",
+    "title": "Document aligned vetted-feedback report and reference-dataset creation workflow in the public web app"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2f556fcb-4918-4afb-bdd4-7012d60902a5",
+  "issue_id": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T16:06:46.793Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Package the core feedback evaluation optimization loop with RCA as a standalone, repeatable Tactus procedure that can be executed programmatically, integrated into software as an agentic feature, and run outside IDE environments.\n\n## Context\n\nThe plexus-scorecard-improver skill defines a 7-phase workflow for alignment optimization, but Phase 6-7 (the iterative optimization loop) exists only as a skill description. This epic implements it as a production-ready Tactus procedure.\n\n## Business Value\n\n- **Repeatability**: Optimization runs are reproducible across sessions\n- **Automation**: Can be integrated into CI/CD and automated workflows  \n- **Persistence**: Checkpoint/resume capability for long-running optimizations\n- **Programmatic Access**: Can be invoked from Python applications\n- **Production Ready**: HITL gates, error handling, comprehensive logging\n\n## Technical Approach\n\n- Tactus-based procedure with Lua DSL orchestration\n- File-based YAML definition stored in git\n- Database runtime instances with checkpoint persistence\n- MCP tool integration for Plexus operations\n- Flexible identifier resolution (name/key/ID/externalID)\n\n## Scope\n\n**IN SCOPE:**\n- Tactus procedure YAML definition\n- Baseline feedback evaluation with RCA\n- Iterative optimization loop with HITL gates\n- Fixed baseline metric tracking\n- CLI command: plexus procedure optimize\n- Programmatic Python API\n- Comprehensive documentation\n\n**OUT OF SCOPE:**\n- plexus score optimize CLI shortcut (separate epic)\n- Multi-score parallel optimization\n- Auto-revert on regression\n- Dashboard visualization\n\n## Definition of Done\n\n- All stories pass their Gherkin specifications\n- 3+ successful optimizations on real scores\n- Measurable AC1 improvements demonstrated\n- Checkpoint/resume tested and working\n- Documentation complete with real examples\n- Code reviewed and merged to main",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Feedback Alignment Optimizer as Tactus Procedure"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-09d41f93-1c1b-490e-82b6-09a04ddf4e00",
+  "title": "Restore procedure task stage details in score-scoped procedure lists",
+  "description": "ProcedureTask cards in score/version procedure lists are only showing a coarse complete status and no task stage/status-line details, while EvaluationTask cards correctly show stages, status, and notes. Restore the procedure task view-model mapping so ProcedureTask receives the task-stage information it expects.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0fe66604-b8b2-4506-bf6a-0ea855acc3eb",
+      "author": "ryan",
+      "text": "Fixed score-scoped procedure lists to load procedure task/status/stages from the direct Procedure.task relation instead of a separate task lookup. Added a focused regression test that verifies ProcedureTask receives task status and stage status messages.",
+      "created_at": "2026-04-26T17:57:30.918409Z"
+    }
+  ],
+  "created_at": "2026-04-26T17:46:08.892803Z",
+  "updated_at": "2026-04-26T17:57:30.991233Z",
+  "closed_at": "2026-04-26T17:57:30.991233Z",
+  "custom": {}
+}

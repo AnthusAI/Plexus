@@ -17,7 +17,8 @@ import { toast } from 'sonner'
 import { Editor } from '@monaco-editor/react'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher } from '@/lib/monaco-theme'
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 // Types
 // NOTE: ProcedureTemplate table was removed. Templates are now Procedures with isTemplate=true
@@ -47,7 +48,7 @@ exploration: |
   Your role is to analyze feedback alignment data and generate testable hypotheses 
   for improving AI score accuracy based on human reviewer corrections.
   
-  You have access to feedback analysis tools that show where human reviewers 
+  You have access to feedback alignment tools that show where human reviewers 
   corrected AI scores, plus detailed item information for understanding the 
   underlying content that caused misalignment.
   
@@ -76,7 +77,7 @@ conversation_flow:
         **Next Steps:** {next_action_guidance}
         
         **Available Tools:**
-        - \`plexus_feedback_analysis(scorecard_name="{scorecard_name}", score_name="{score_name}")\` - Get confusion matrix and patterns
+        - \`plexus_feedback_alignment(scorecard_name="{scorecard_name}", score_name="{score_name}")\` - Get confusion matrix and patterns
         - \`plexus_feedback_find(scorecard_name="{scorecard_name}", score_name="{score_name}", initial_value="No", final_value="Yes")\` - Find specific correction cases  
         - \`plexus_item_info(item_id="...")\` - Examine individual item details
         
@@ -147,7 +148,7 @@ conversation_flow:
       to_state: "pattern_analysis"
       conditions:
         - type: "tool_usage_count"
-          tool: "plexus_feedback_analysis"
+          tool: "plexus_feedback_alignment"
           min_count: 1
         - type: "tool_usage_count" 
           tool: "plexus_feedback_find"
@@ -164,7 +165,7 @@ conversation_flow:
       to_state: "pattern_analysis"
       conditions:
         - type: "tool_usage_count"
-          tool: "plexus_feedback_analysis"
+          tool: "plexus_feedback_alignment"
           min_count: 1
         - type: "round_in_state"
           min_rounds: 6
@@ -214,7 +215,7 @@ conversation_flow:
   # Guidance for specific situations
   guidance:
     missing_tools:
-      plexus_feedback_analysis: "Start with the feedback analysis to understand overall error patterns and confusion matrix"
+      plexus_feedback_alignment: "Start with the feedback alignment to understand overall error patterns and confusion matrix"
       plexus_feedback_find: "Search for specific feedback corrections to understand individual misalignment cases"
       plexus_item_info: "Examine item details to understand what content characteristics lead to errors"
       create_experiment_node: "Create testable hypotheses based on the patterns you've discovered"
@@ -256,7 +257,7 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
   const loadTemplates = async () => {
     setIsLoading(true)
     try {
-      const result = await (client.models.Procedure.listProcedureByAccountIdAndUpdatedAt as any)({
+      const result = await (getAmplifyClient().models.Procedure.listProcedureByAccountIdAndUpdatedAt as any)({
         accountId: accountId,
       })
 
@@ -294,7 +295,7 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
         accountId: accountId
       }
 
-      const result = await (client.models.Procedure.create as any)(input as any)
+      const result = await (getAmplifyClient().models.Procedure.create as any)(input as any)
       
       if (result.data) {
         setTemplates(prev => [result.data!, ...prev])
@@ -317,7 +318,7 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
 
     setIsLoading(true)
     try {
-      await (client.models.Procedure.delete as any)({ id: template.id })
+      await (getAmplifyClient().models.Procedure.delete as any)({ id: template.id })
       setTemplates(prev => prev.filter(t => t.id !== template.id))
       if (selectedTemplate?.id === template.id) {
         setSelectedTemplate(null)

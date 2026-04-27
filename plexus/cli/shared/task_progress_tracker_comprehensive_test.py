@@ -30,6 +30,7 @@ from plexus.cli.shared.stage_configurations import (
 )
 from plexus.dashboard.api.models.task import Task
 from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 
 class TestStageConfigurationSystem:
@@ -42,22 +43,22 @@ class TestStageConfigurationSystem:
         # Verify all expected stages are present
         assert "Setup" in configs
         assert "Processing" in configs
-        assert "Finalizing" in configs
-        
+        assert "Analyzing" in configs
+
         # Verify stage ordering
         assert configs["Setup"].order == 1
         assert configs["Processing"].order == 2
-        assert configs["Finalizing"].order == 3
-        
+        assert configs["Analyzing"].order == 3
+
         # Verify progress bar behavior (only Processing should have total_items)
         assert configs["Setup"].total_items is None
         assert configs["Processing"].total_items == 100
-        assert configs["Finalizing"].total_items is None
-        
+        assert configs["Analyzing"].total_items is None
+
         # Verify status messages are set
         assert configs["Setup"].status_message == "Setting up evaluation..."
-        assert configs["Processing"].status_message == "Starting processing..."
-        assert configs["Finalizing"].status_message == "Starting finalization..."
+        assert configs["Processing"].status_message == "Generating predictions..."
+        assert configs["Analyzing"].status_message == "Analyzing results..."
     
     def test_prediction_stage_configs_structure(self):
         """Test prediction stage configuration structure and defaults."""
@@ -85,7 +86,7 @@ class TestStageConfigurationSystem:
         # Should return evaluation configs
         assert "Setup" in configs
         assert "Processing" in configs
-        assert "Finalizing" in configs
+        assert "Analyzing" in configs
         assert configs["Processing"].total_items == 75
         
         # Test case variations
@@ -344,16 +345,16 @@ class TestCommandStageIntegration:
         assert len(tracker._stages) == 3
         assert "Setup" in tracker._stages
         assert "Processing" in tracker._stages
-        assert "Finalizing" in tracker._stages
-        
+        assert "Analyzing" in tracker._stages
+
         # Verify only Processing stage has progress tracking
         setup_stage = tracker._stages["Setup"]
         processing_stage = tracker._stages["Processing"]
-        finalizing_stage = tracker._stages["Finalizing"]
-        
+        analyzing_stage = tracker._stages["Analyzing"]
+
         assert setup_stage.total_items is None
         assert processing_stage.total_items == 200
-        assert finalizing_stage.total_items is None
+        assert analyzing_stage.total_items is None
     
     def test_prediction_workflow_integration(self):
         """Test TaskProgressTracker with prediction stage configs."""
@@ -1245,3 +1246,43 @@ class TestEdgeCases:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_async_update_api_task_progress_uses_long_running_retry_policy():
+    tracker = object.__new__(TaskProgressTracker)
+
+    client = Mock()
+    api_task = Mock(spec=Task)
+    api_task.id = "task-1"
+    api_task.accountId = "acct-1"
+    api_task.type = "Procedure"
+    api_task.status = "RUNNING"
+    api_task.target = "procedure/proc-1"
+    api_task.command = "procedure proc-1"
+    api_task._client = client
+
+    evaluation_stage = Mock()
+    evaluation_stage.id = "stage-1"
+    evaluation_stage.taskId = "task-1"
+    evaluation_stage.order = 2
+    evaluation_stage.name = "Evaluation"
+    evaluation_stage.status = "RUNNING"
+    api_task.get_stages.return_value = [evaluation_stage]
+
+    tracker.api_task = api_task
+    tracker._current_stage_name = "Evaluation"
+
+    stage_configs = {
+        "Evaluation": {
+            "status": "RUNNING",
+            "statusMessage": "Evaluating",
+            "startedAt": "2026-04-23T12:00:00+00:00",
+            "completedAt": None,
+            "totalItems": 10,
+            "processedItems": 4,
+        }
+    }
+
+    tracker._async_update_api_task_progress(stage_configs, "2026-04-23T13:00:00+00:00")
+
+    assert client.execute.call_args.kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME

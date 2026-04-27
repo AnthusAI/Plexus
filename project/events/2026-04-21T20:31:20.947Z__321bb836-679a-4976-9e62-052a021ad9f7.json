@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "321bb836-679a-4976-9e62-052a021ad9f7",
+  "issue_id": "plx-f13b9c41-8771-4ac3-bb0d-9748e0c1b95a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-21T20:31:20.947Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Realign the split Agent Misrepresentation score set to the Information Accuracy rubric rows from the CSV, update the composite dependencies and explanation order, and verify predictions on the revised phrase-level scores.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-44548ff1-57ee-4e90-ade1-ff59002b317e",
+    "priority": 2,
+    "status": "open",
+    "title": "Realign split Agent Misrepresentation scores to Information Accuracy rubric"
+  }
+}

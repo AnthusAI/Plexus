@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "34470f4e-a8d8-4547-82ca-30505839f5c0",
+  "issue_id": "plx-ef0eaa13-1a88-4702-9a45-b4012e8b5f6f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-26T18:16:21.238Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Selecting Procedures for a score version can show a Failed to load procedures toast without useful console detail. Diagnose and fix the version-scoped procedure loading path so it loads reliably and reports actionable errors.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix version procedure loading toast"
+  }
+}

@@ -19,6 +19,7 @@ def create_tracker_and_evaluation(
     number_of_samples: int,
     sampling_method: str = "random",
     score_name: Optional[str] = None,
+    procedure_id: Optional[str] = None,
 ) -> Tuple[TaskProgressTracker, DashboardEvaluation]:
     """Create a TaskProgressTracker and an Evaluation record for an accuracy evaluation.
 
@@ -40,6 +41,7 @@ def create_tracker_and_evaluation(
             "scorecard": scorecard_name,
             "task_type": "Accuracy Evaluation",
             **({"score": score_name} if score_name else {}),
+            **({"procedure_id": procedure_id} if procedure_id else {}),
         },
         account_id=account_id,
         client=client,
@@ -90,6 +92,7 @@ async def run_accuracy_evaluation(
     score_name: Optional[str] = None,
     number_of_samples: int = 10,
     sampling_method: str = "random",
+    procedure_id: Optional[str] = None,
     client: Optional[PlexusDashboardClient] = None,
     account_id: Optional[str] = None,
     fresh: bool = True,
@@ -127,6 +130,7 @@ async def run_accuracy_evaluation(
         number_of_samples=number_of_samples,
         sampling_method=sampling_method,
         score_name=score_name,
+        procedure_id=procedure_id,
     )
 
     try:
@@ -300,6 +304,5 @@ async def run_accuracy_evaluation(
         if tracker:
             tracker.fail_current_stage(str(e))
         raise
-
 
 

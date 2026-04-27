@@ -28,6 +28,8 @@ from .time_utils import get_time_range_from_args, format_time_range
 from .aggregation import (
     query_records_for_counting,
     count_records_efficiently,
+    count_feedback_records_efficiently,
+    FEEDBACK_RECORD_TYPES,
     BUCKET_SIZES
 )
 
@@ -45,8 +47,9 @@ RECORD_TYPES = [
     'evaluations',     # Low volume
     'procedures',      # Low volume
     'chatSessions',    # Low volume
-    'graphNodes',      # Low volume
     'feedbackItems',   # Medium volume
+    'feedbackItemsByScorecard',
+    'feedbackItemsByScore',
     'items',           # HIGH volume - 3 metrics computed
     'predictionItems',        # Filtered items
     'evaluationItems',        # Filtered items
@@ -62,6 +65,26 @@ RECORD_TYPE_FILTERS = {
     'predictionScoreResults': {'filter_field': 'type', 'filter_value': 'prediction'},
     'evaluationScoreResults': {'filter_field': 'type', 'filter_value': 'evaluation'},
 }
+
+
+def is_feedback_record_type(record_type: str) -> bool:
+    return record_type in FEEDBACK_RECORD_TYPES
+
+
+def metric_count_lookup_key(metric_or_bucket: Any) -> tuple:
+    if isinstance(metric_or_bucket, dict):
+        return (
+            metric_or_bucket['time_range_start'].isoformat(),
+            metric_or_bucket['number_of_minutes'],
+            metric_or_bucket.get('scorecard_id'),
+            metric_or_bucket.get('score_id'),
+        )
+    return (
+        metric_or_bucket.timeRangeStart.isoformat(),
+        metric_or_bucket.numberOfMinutes,
+        metric_or_bucket.scorecardId,
+        metric_or_bucket.scoreId,
+    )
 
 
 def get_account_id_from_env(client: PlexusDashboardClient) -> str:
@@ -216,14 +239,24 @@ def verify_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
                 # Count into buckets
                 task = progress.add_task("Counting into buckets...", total=None)
                 # Get filter settings if this is a filtered record type
-                filter_settings = RECORD_TYPE_FILTERS.get(rec_type, {})
-                computed_counts = count_records_efficiently(
-                    records,
-                    account_id,
-                    rec_type,
-                    verbose=False,
-                    **filter_settings
-                )
+                if is_feedback_record_type(rec_type):
+                    computed_counts = [
+                        bucket for bucket in count_feedback_records_efficiently(
+                            records,
+                            account_id,
+                            verbose=False,
+                        )
+                        if bucket['record_type'] == rec_type
+                    ]
+                else:
+                    filter_settings = RECORD_TYPE_FILTERS.get(rec_type, {})
+                    computed_counts = count_records_efficiently(
+                        records,
+                        account_id,
+                        rec_type,
+                        verbose=False,
+                        **filter_settings
+                    )
                 progress.update(task, completed=True)
                 
                 # Query existing metrics
@@ -240,29 +273,31 @@ def verify_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
             # Create lookup for stored metrics
             stored_lookup = {}
             for metric in stored_metrics:
-                key = (
-                    metric.timeRangeStart.isoformat(),
-                    metric.numberOfMinutes
-                )
-                stored_lookup[key] = metric.count
+                stored_lookup[metric_count_lookup_key(metric)] = metric
             
             # Compare computed vs stored
             differences = []
             for computed in computed_counts:
-                key = (
-                    computed['time_range_start'].isoformat(),
-                    computed['number_of_minutes']
-                )
+                key = metric_count_lookup_key(computed)
                 computed_count = computed['count']
-                stored_count = stored_lookup.get(key, 0)
-                
-                if computed_count != stored_count:
+                stored_metric = stored_lookup.get(key)
+                stored_count = stored_metric.count if stored_metric else 0
+                stored_metadata = stored_metric.metadata if stored_metric else {}
+                computed_metadata = computed.get('metadata') or {}
+
+                if (
+                    computed_count != stored_count
+                    or stored_metadata.get('changedCount', 0) != computed_metadata.get('changedCount', 0)
+                    or stored_metadata.get('unchangedCount', 0) != computed_metadata.get('unchangedCount', 0)
+                    or stored_metadata.get('invalidCount', 0) != computed_metadata.get('invalidCount', 0)
+                ):
                     differences.append({
                         'time': computed['time_range_start'].strftime('%Y-%m-%d %H:%M'),
                         'bucket': f"{computed['number_of_minutes']}min",
                         'computed': computed_count,
                         'stored': stored_count,
-                        'diff': computed_count - stored_count
+                        'diff': computed_count - stored_count,
+                        'scope': computed.get('score_id') or computed.get('scorecard_id') or 'account',
                     })
             
             # Display results
@@ -277,7 +312,7 @@ def verify_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
                 
                 for diff in differences:
                     table.add_row(
-                        diff['time'],
+                        f"{diff['time']} ({diff['scope']})",
                         diff['bucket'],
                         str(diff['computed']),
                         str(diff['stored']),
@@ -369,15 +404,25 @@ def update_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
                 # Count into buckets
                 count_task = progress.add_task("Counting into buckets...", total=None)
                 console.print(f"[dim]Counting {len(records)} records into time buckets...[/dim]")
-                # Get filter settings if this is a filtered record type
-                filter_settings = RECORD_TYPE_FILTERS.get(rec_type, {})
-                computed_counts = count_records_efficiently(
-                    records,
-                    account_id,
-                    rec_type,
-                    verbose=True,  # Show counting details
-                    **filter_settings
-                )
+                if is_feedback_record_type(rec_type):
+                    computed_counts = [
+                        bucket for bucket in count_feedback_records_efficiently(
+                            records,
+                            account_id,
+                            verbose=True,
+                        )
+                        if bucket['record_type'] == rec_type
+                    ]
+                else:
+                    # Get filter settings if this is a filtered record type
+                    filter_settings = RECORD_TYPE_FILTERS.get(rec_type, {})
+                    computed_counts = count_records_efficiently(
+                        records,
+                        account_id,
+                        rec_type,
+                        verbose=True,  # Show counting details
+                        **filter_settings
+                    )
                 console.print(f"[dim]Generated {len(computed_counts)} bucket counts[/dim]")
                 progress.update(count_task, completed=True)
                 
@@ -395,24 +440,26 @@ def update_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
                     progress.update(task, completed=True)
                     
                     for metric in stored_metrics:
-                        key = (
-                            metric.timeRangeStart.isoformat(),
-                            metric.numberOfMinutes
-                        )
-                        stored_lookup[key] = metric.count
+                        stored_lookup[metric_count_lookup_key(metric)] = metric
                 
                 # Filter buckets that need updating
                 buckets_to_update = []
                 for computed in computed_counts:
-                    key = (
-                        computed['time_range_start'].isoformat(),
-                        computed['number_of_minutes']
-                    )
+                    key = metric_count_lookup_key(computed)
                     computed_count = computed['count']
-                    stored_count = stored_lookup.get(key, None)
+                    stored_metric = stored_lookup.get(key)
+                    stored_count = stored_metric.count if stored_metric else None
+                    stored_metadata = stored_metric.metadata if stored_metric else {}
+                    computed_metadata = computed.get('metadata') or {}
                     
                     # Skip if counts match and not forcing
-                    if not force and stored_count == computed_count:
+                    if (
+                        not force
+                        and stored_count == computed_count
+                        and stored_metadata.get('changedCount', 0) == computed_metadata.get('changedCount', 0)
+                        and stored_metadata.get('unchangedCount', 0) == computed_metadata.get('unchangedCount', 0)
+                        and stored_metadata.get('invalidCount', 0) == computed_metadata.get('invalidCount', 0)
+                    ):
                         total_skipped += 1
                         continue
                     
@@ -461,7 +508,10 @@ def update_metrics(hours: Optional[int], start: Optional[str], end: Optional[str
                             time_range_end=bucket_data['time_range_end'],
                             number_of_minutes=bucket_data['number_of_minutes'],
                             count=bucket_data['count'],
-                            complete=bucket_data['complete']
+                            complete=bucket_data['complete'],
+                            scorecard_id=bucket_data.get('scorecard_id'),
+                            score_id=bucket_data.get('score_id'),
+                            metadata=bucket_data.get('metadata'),
                         )
                         return True
                     except Exception as e:

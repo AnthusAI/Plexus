@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "afec8389-d85c-4ba0-8f22-f1a35a13985e",
+  "issue_id": "plx-c2943e5a-20c4-43e8-9d8b-52a5e529cb0f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-02T16:09:02.923Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Find a suitable test score with adequate feedback data for running real optimization.\n\n## Requirements for Test Score\n\n- Has feedback data (≥30 items in last 90 days)\n- Has room for improvement (AC1 < 0.90)\n- Safe to modify (non-production or designated test score)\n- RCA data should be meaningful\n\n## Steps\n\n1. Run scorecard-wide FeedbackAnalysis report on target scorecard\n2. Review scores with:\n   - Reasonable feedback volume\n   - Alignment metrics showing improvement opportunity\n   - Clear error patterns in confusion matrix\n3. Document selected score and rationale\n4. Verify score has champion version\n5. Record baseline metrics for comparison\n\n## Deliverable\n\nComment on this task with:\n- Selected scorecard (by key or ID, not client name)\n- Selected score (by key or ID)  \n- Current AC1/accuracy metrics\n- Feedback item count\n- Brief rationale for selection",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "Test with real scorecard - identify candidate score with feedback"
+  }
+}

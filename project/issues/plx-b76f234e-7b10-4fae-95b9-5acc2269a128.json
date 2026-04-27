@@ -1,0 +1,31 @@
+{
+  "id": "plx-b76f234e-7b10-4fae-95b9-5acc2269a128",
+  "title": "Audit Medication Review Dosage and Individual Confirmation champion code against champion guidelines",
+  "description": "Compare the published champion guidelines and current live champion implementations for Medication Review: Dosage and Medication Review: Individual Confirmation. Record concrete inconsistencies, conflicts, translation gaps, and risky ambiguities in decision logic, scope, enrollment-type handling, thresholds, exclusions, ambiguity handling, and evidence standards. No edits in this task; audit only.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "532ac67a-5880-4066-9b66-60fe3927f367",
+      "author": "ryan",
+      "text": "Starting audit. Plan: identify published champion guidelines for Medication Review: Dosage and Individual Confirmation, inspect current champion score implementations, compare scope/thresholds/exclusions/ambiguity handling/evidence standards, and return findings only. No edits.",
+      "created_at": "2026-04-23T19:56:23.561138Z"
+    },
+    {
+      "id": "bea13437-8c22-4456-83d1-0008dd760123",
+      "author": "ryan",
+      "text": "Audit complete. Key findings:\n\n- Dosage live champion code scores against every medication discussed rather than current medications only, and omits the rubric exclusions for no-longer-taken / discontinued / short-course meds plus the rule to treat unclear status as current.\n- Dosage live champion code also omits the explicit schedule-only exclusion and treats any patient contradiction in SPM as No, while the rubric says unresolved contradiction only.\n- Individual Confirmation live champion code lacks the rubric's applicability-first bounded-segment logic, truncated/missing-context guardrails, anti-pooling rule, sparse-confirmation rule, uncertainty/caregiver-deferral rule, and several batch-pattern exclusions.\n- Individual Confirmation live champion code is also materially tighter in one dimension: it frames Yes as pause-after-each-item back-and-forth, whereas the detailed rubric allows a predominant individualized pattern with salvage for a few missed or paired items.\n\nSources compared: local published/detailed rubric text in scorecard markdown / working-copy prompt versus pulled API champion YAML for the live score versions.",
+      "created_at": "2026-04-23T19:59:35.570421Z"
+    }
+  ],
+  "created_at": "2026-04-23T19:56:21.010571Z",
+  "updated_at": "2026-04-23T19:59:41.117950Z",
+  "closed_at": "2026-04-23T19:59:41.117950Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "144bf2f1-96fa-4627-9b7a-6ab698efc479",
+  "issue_id": "plx-82a3aa63-be32-4939-965d-6ec2d45fd3f6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-03T00:33:51.149Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-2efd169d-0349-4731-984d-340f0e9f1909",
+    "priority": 1,
+    "status": "open",
+    "title": "Merge and verify PR #78 score validation contract"
+  }
+}

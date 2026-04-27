@@ -5,6 +5,12 @@ import { ScoreComponent } from '../ui/score-component'
 jest.mock('../../app/contexts/AccountContext', () => ({
   useAccount: () => ({ selectedAccount: { id: 'A1' } })
 }))
+jest.mock('../ui/score-procedure-list', () => ({
+  ScoreProcedureList: () => null,
+}))
+jest.mock('../ui/score-evaluation-list', () => ({
+  ScoreEvaluationList: () => null,
+}))
 
 describe('ScoreComponent cost menu', () => {
   const baseScore = {
@@ -33,6 +39,25 @@ describe('ScoreComponent cost menu', () => {
     // Verify Analyze Cost present
     expect(await screen.findByText(/Analyze Cost/i)).toBeInTheDocument()
   })
+
+  it('shows View Procedures and View Evaluations when callbacks are provided', async () => {
+    const user = userEvent.setup()
+    const onViewProcedures = jest.fn()
+    const onViewEvaluations = jest.fn()
+
+    render(
+      <ScoreComponent
+        score={baseScore as any}
+        variant="detail"
+        onViewProcedures={onViewProcedures}
+        onViewEvaluations={onViewEvaluations}
+      />
+    )
+
+    const menuButton = screen.getAllByRole('button', { name: /more options/i })[0]
+    await user.click(menuButton)
+
+    expect(await screen.findByText(/View Procedures/i)).toBeInTheDocument()
+    expect(await screen.findByText(/View Evaluations/i)).toBeInTheDocument()
+  })
 })
-
-

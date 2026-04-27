@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "76037d50-c6b2-4201-bbe3-00fbf41accfc",
+  "issue_id": "plx-5e4bb6d9-cca6-4249-acbc-6b2efa69f2e7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-10T11:56:50.431Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Create a new non-champion ScoreVersion for CMG Edu Branding and Matching based on the current champion.\n\nScope:\n- Pull current champion configuration\n- Rework logic to perform the full YES/NO classification in one LLM request (single decision pass)\n- Set model to `gpt-5.4-nano`\n- Push as a new ScoreVersion\n\nDefinition of Done:\n- New ScoreVersion created successfully from champion baseline\n- Configuration uses exactly one LLM classification request path\n- Model is `gpt-5.4-nano`\n- Kanbus log contains command trail and resulting ScoreVersion ID",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-08684eb9-4b25-47a3-afef-9b55b3a66e09",
+    "priority": 1,
+    "status": "open",
+    "title": "Rearchitect CMG Edu Branding and Matching to single-request gpt-5.4-nano ScoreVersion"
+  }
+}

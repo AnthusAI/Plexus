@@ -48,6 +48,9 @@ export type ProcessedEvaluation = Omit<BaseEvaluation, 'task' | 'scorecard' | 's
   task: AmplifyTask | null;
   scorecard: { name: string } | null;
   score: { name: string } | null;
+  procedureId?: string | null;
+  baseline_evaluation_id?: string | null;
+  current_baseline_evaluation_id?: string | null;
   metrics: any;  // Allow any for processed metrics since we parse JSON
   confusionMatrix: any;  // Allow any for processed matrix since we parse JSON
   datasetClassDistribution: any;  // Allow any for processed distribution since we parse JSON
@@ -565,6 +568,28 @@ export async function listRecentEvaluations(
   }
 }
 
+export async function fetchEvaluationById(
+  evaluationId: string
+): Promise<ProcessedEvaluation | null> {
+  try {
+    const client = getClient();
+    const query = `
+      query GetEvaluation($id: ID!) {
+        getEvaluation(id: $id) {
+          ${EVALUATION_FIELDS}
+        }
+      }
+    `;
+    const response = await client.graphql({ query, variables: { id: evaluationId } }) as GraphQLResult<any>;
+    const raw = response?.data?.getEvaluation;
+    if (!raw) return null;
+    return transformEvaluation(raw);
+  } catch (error) {
+    console.error('Error in fetchEvaluationById:', error);
+    return null;
+  }
+}
+
 export function observeRecentEvaluations(
   limit: number = 100,
   accountId: string | null = null,
@@ -580,7 +605,10 @@ export function observeRecentEvaluations(
       try {
         const response = await listRecentEvaluations(limit, accountId, selectedScorecard, selectedScore, null);
         
-        evaluations = response.items;
+        // Merge: preserve any items already received via create events during loading
+        const loadedIds = new Set(response.items.map((e: any) => e.id));
+        const pendingCreates = evaluations.filter((e: any) => !loadedIds.has(e.id));
+        evaluations = [...pendingCreates, ...response.items];
         subscriber.next({ items: evaluations, isSynced: true });
       } catch (error) {
         console.error('Error loading initial evaluations:', error);
@@ -594,6 +622,7 @@ export function observeRecentEvaluations(
 
       // Helper function to handle evaluation changes
       const handleEvaluationChange = (evaluation: any, action: 'create' | 'update') => {
+        if (accountId && evaluation.accountId && evaluation.accountId !== accountId) return;
         if (action === 'create') {
           evaluations = [evaluation, ...evaluations];
         } else {
@@ -682,6 +711,7 @@ export function observeRecentEvaluations(
               id
               name
             }
+            scoreVersionId
             confusionMatrix
             scoreGoal
             datasetClassDistribution
@@ -731,6 +761,7 @@ export function observeRecentEvaluations(
               id
               name
             }
+            scoreVersionId
             confusionMatrix
             scoreGoal
             datasetClassDistribution
@@ -852,6 +883,33 @@ type RawScoreResult = {
 type RawScoreResults = {
   items: RawScoreResult[];
 };
+
+export function parseTaskMetadata(rawMetadata: unknown): Record<string, unknown> | null {
+  if (!rawMetadata) return null;
+
+  if (typeof rawMetadata === 'string') {
+    try {
+      const parsed = JSON.parse(rawMetadata);
+      return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof rawMetadata === 'object') {
+    return rawMetadata as Record<string, unknown>;
+  }
+
+  return null;
+}
+
+export function getTaskProcedureId(task: AmplifyTask | null | undefined): string | null {
+  const metadata = parseTaskMetadata(task?.metadata);
+  if (!metadata) return null;
+
+  const procedureId = metadata.procedure_id ?? metadata.procedureId;
+  return typeof procedureId === 'string' && procedureId.trim() ? procedureId : null;
+}
 
 export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvaluation | null {
 
@@ -996,12 +1054,27 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
     };
   });
 
+  const procedureId = getTaskProcedureId(taskData);
+  const parsedParameters = parseJsonMaybeDeep(evaluation.parameters);
+  const parsedMetadata = parsedParameters && typeof parsedParameters === 'object'
+    ? parseJsonMaybeDeep((parsedParameters as Record<string, unknown>).metadata)
+    : null;
+  const baselineEvaluationId = parsedMetadata && typeof parsedMetadata === 'object' && typeof (parsedMetadata as Record<string, unknown>).baseline === 'string'
+    ? (parsedMetadata as Record<string, unknown>).baseline as string
+    : null;
+  const currentBaselineEvaluationId = parsedMetadata && typeof parsedMetadata === 'object' && typeof (parsedMetadata as Record<string, unknown>).current_baseline === 'string'
+    ? (parsedMetadata as Record<string, unknown>).current_baseline as string
+    : null;
+
   // Transform the evaluation into the format expected by components
   const transformedEvaluation: ProcessedEvaluation = {
     ...evaluation, // Include all base evaluation fields
     task: taskData,
     scorecard: scorecardData ? { name: scorecardData.name } : null,
     score: scoreData ? { name: scoreData.name } : null,
+    procedureId,
+    baseline_evaluation_id: baselineEvaluationId,
+    current_baseline_evaluation_id: currentBaselineEvaluationId,
     metrics: typeof evaluation.metrics === 'string' ? 
       JSON.parse(evaluation.metrics) : evaluation.metrics,
     confusionMatrix: typeof evaluation.confusionMatrix === 'string' ? 
@@ -1015,6 +1088,24 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
 
 
   return transformedEvaluation;
+}
+
+function parseJsonMaybeDeep(value: unknown): unknown {
+  let current = value;
+
+  for (let i = 0; i < 2; i += 1) {
+    if (typeof current !== 'string') {
+      return current;
+    }
+
+    try {
+      current = JSON.parse(current);
+    } catch {
+      return current;
+    }
+  }
+
+  return current;
 }
 
 // Add to the existing types at the top
@@ -1031,6 +1122,7 @@ export type Evaluation = {
   totalItems?: number | null;
   inferences?: number | null;
   cost?: number | null;
+  costDetails?: any;
   status?: string | null;
   elapsedSeconds?: number | null;
   estimatedRemainingSeconds?: number | null;

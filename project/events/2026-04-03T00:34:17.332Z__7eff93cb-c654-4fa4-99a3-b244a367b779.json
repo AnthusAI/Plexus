@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "7eff93cb-c654-4fa4-99a3-b244a367b779",
+  "issue_id": "plx-01fa7055-82c6-4329-8f2d-c0b1e118c9fd",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-03T00:34:17.332Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "## Summary\nImplement one canonical class-list resolver from champion score YAML.\n\n## Purpose\nProvide a single source of truth for class labels used by associated-dataset balancing.\n\n## Acceptance Criteria\n- Resolver extracts class list deterministically from champion score YAML.\n- Fail-fast error when class list cannot be resolved.\n- No alternate class-source fallback path is introduced.\n- Tests cover success and fail-fast behavior."
+      }
+    }
+  }
+}

@@ -18,7 +18,6 @@ import { useYamlLinter, useLintMessageHandler } from "@/hooks/use-yaml-linter"
 import YamlLinterPanel from "@/components/ui/yaml-linter-panel"
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from "@/lib/monaco-theme"
 import ProcedureTask from "./ProcedureTask"
-import GraphNodesList from "./graph-nodes-list"
 import { useAccount } from '@/app/contexts/AccountContext'
 import ScorecardContext from '@/components/ScorecardContext'
 import { ConfigurableParametersForm } from "@/components/ui/ConfigurableParametersForm"
@@ -27,6 +26,7 @@ import { parseParametersFromYaml } from "@/lib/parameter-parser"
 import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
 import { CardButton } from "@/components/CardButton"
 import { X } from "lucide-react"
+import { PROCEDURE_CARD_FIELDS } from "@/components/ui/optimizer-results-utils"
 
 type ParameterValues = ParameterValue
 import * as yaml from 'js-yaml'
@@ -40,7 +40,8 @@ import {
 // Types based on our GraphQL schema
 type Procedure = Schema['Procedure']['type']
 
-const client = generateClient<Schema>()
+let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
+const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 // Minimal fallback for YAML editor - actual templates come from backend service
 const MINIMAL_YAML_FALLBACK = `class: "BeamSearch"
@@ -128,14 +129,13 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
       setIsLoading(true)
       setError(null)
       
-      const result = await client.graphql({
+      const result = await getAmplifyClient().graphql({
         query: `
           query GetProcedure($id: ID!) {
             getProcedure(id: $id) {
               id
               featured
               code
-              rootNodeId
               createdAt
               updatedAt
               accountId
@@ -219,16 +219,11 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
       if (procedureId) {
         // Update existing procedure
         // Note: scoreVersionId is stored in the YAML code, not as a separate field
-        await client.graphql({
+        await getAmplifyClient().graphql({
           query: `
             mutation UpdateProcedure($input: UpdateProcedureInput!) {
               updateProcedure(input: $input) {
-                id
-                featured
-                code
-                scorecardId
-                scoreId
-                updatedAt
+                ${PROCEDURE_CARD_FIELDS}
               }
             }
           `,
@@ -247,17 +242,11 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
       } else {
         // Create new procedure
         // Note: scoreVersionId is stored in the YAML code, not as a separate field
-        const result = await client.graphql({
+        const result = await getAmplifyClient().graphql({
           query: `
             mutation CreateProcedure($input: CreateProcedureInput!) {
               createProcedure(input: $input) {
-                id
-                featured
-                code
-                scorecardId
-                scoreId
-                createdAt
-                updatedAt
+                ${PROCEDURE_CARD_FIELDS}
               }
             }
           `,
@@ -323,7 +312,7 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
     }
 
     try {
-      await client.graphql({
+      await getAmplifyClient().graphql({
         query: `
           mutation DeleteProcedure($input: DeleteProcedureInput!) {
             deleteProcedure(input: $input) {
@@ -508,13 +497,6 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
             </AccordionItem>
           </Accordion>
 
-
-          {/* Procedure Nodes section - only show when not in edit mode and procedureId exists */}
-          {!isEditMode && procedureId && (
-            <div className="mt-6 bg-background rounded-lg p-4">
-              <GraphNodesList procedureId={procedureId} />
-            </div>
-          )}
         </div>
         
         {/* Save/Cancel Bar - appears when in edit mode */}

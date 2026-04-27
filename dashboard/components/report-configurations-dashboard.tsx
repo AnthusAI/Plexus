@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation'
 import { getClient } from '@/utils/amplify-client'
 import type { GraphQLResult } from '@aws-amplify/api'
 import { toast } from "sonner"
-import { useAuthenticator } from '@aws-amplify/ui-react'
+import { useAccount } from "@/app/contexts/AccountContext"
 
 // Define types based on Amplify schema
 type ReportConfiguration = {
@@ -64,57 +64,25 @@ const CREATE_REPORT_CONFIGURATION = `
   }
 `
 
-const ACCOUNT_KEY = process.env.NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY || ''
-
 export function ReportConfigurationsDashboard() {
-  const { user } = useAuthenticator()
+  const { selectedAccount, isLoadingAccounts } = useAccount()
   const router = useRouter()
   const [configurations, setConfigurations] = useState<ReportConfiguration[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [accountId, setAccountId] = useState<string | null>(null)
   const [configurationsFilter, setConfigurationsFilter] = useState('')
-
-  // Fetch account ID
-  useEffect(() => {
-    const fetchAccountId = async () => {
-      try {
-        const accountResponse = await getClient().graphql({
-          query: `
-            query ListAccounts($filter: ModelAccountFilterInput) {
-              listAccounts(filter: $filter) {
-                items {
-                  id
-                  key
-                }
-              }
-            }
-          `,
-          variables: {
-            filter: { key: { eq: ACCOUNT_KEY } }
-          }
-        })
-
-        if ('data' in accountResponse && accountResponse.data?.listAccounts?.items?.length) {
-          const id = accountResponse.data.listAccounts.items[0].id
-          setAccountId(id)
-        } else {
-          console.warn('No account found with key:', ACCOUNT_KEY)
-          setError('No account found')
-          setIsLoading(false)
-        }
-      } catch (err: any) {
-        console.error('Error fetching account:', err)
-        setError(`Error fetching account: ${err.message}`)
-        setIsLoading(false)
-      }
-    }
-    fetchAccountId()
-  }, [])
+  const accountId = selectedAccount?.id || null
 
   // Define fetchConfigurations function outside useEffect
   const fetchConfigurations = async () => {
-    if (!accountId) return
+    if (!accountId) {
+      setConfigurations([])
+      if (!isLoadingAccounts) {
+        setError("No account selected")
+      }
+      setIsLoading(isLoadingAccounts)
+      return
+    }
 
     setIsLoading(true)
     setError(null)
@@ -147,7 +115,7 @@ export function ReportConfigurationsDashboard() {
   // Fetch report configurations on mount or when accountId changes
   useEffect(() => {
     fetchConfigurations() // Call the function defined above
-  }, [accountId])
+  }, [accountId, isLoadingAccounts])
 
   const handleCreate = () => {
     router.push('/lab/reports/edit/new')
@@ -179,7 +147,10 @@ export function ReportConfigurationsDashboard() {
   }
 
   const handleDuplicate = async (config: ReportConfiguration) => {
-    if (!accountId) return
+    if (!accountId) {
+      toast.error("No account selected")
+      return
+    }
 
     try {
       const response = await getClient().graphql<GraphQLResult<{

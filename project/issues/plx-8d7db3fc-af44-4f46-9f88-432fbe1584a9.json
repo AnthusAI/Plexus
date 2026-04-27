@@ -1,0 +1,25 @@
+{
+  "id": "plx-8d7db3fc-af44-4f46-9f88-432fbe1584a9",
+  "title": "Create release PR from develop into main with curated summary",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c8c13db3-5c6d-4b49-8d51-de235d55f1bc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5ebac65f-136d-4626-8cae-68be164c77c4",
+      "author": "ryan",
+      "text": "Created release PR from develop into main: https://github.com/AnthusAI/Plexus/pull/160. PR body includes reviewed delta summary (57 commits, 191 files), key feature/CI/runtime changes, Kanbus metadata churn, and current develop CI run links. Current GitHub state: mergeable=MERGEABLE, mergeStateStatus=BEHIND.",
+      "created_at": "2026-04-14T12:57:13.166969Z"
+    }
+  ],
+  "created_at": "2026-04-14T12:52:33.903906Z",
+  "updated_at": "2026-04-14T12:57:13.183397Z",
+  "closed_at": "2026-04-14T12:57:13.183397Z",
+  "custom": {}
+}

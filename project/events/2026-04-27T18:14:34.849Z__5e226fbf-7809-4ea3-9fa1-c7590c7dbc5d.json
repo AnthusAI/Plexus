@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "5e226fbf-7809-4ea3-9fa1-c7590c7dbc5d",
+  "issue_id": "plx-fb52fc85-7e60-4999-a558-96e3b5bae143",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-27T18:14:34.849Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "Feature: Star important score versions\n\nAs a lab worker, I want to mark score versions as versions of interest, so that important human-reviewed versions stay visible above optimizer-generated noise.\n\nScenario: Starred versions are prioritized\nGiven a score has many generated versions\nWhen a version is starred\nThen it appears in the pinned section above recent unstarred versions and remains distinct from champion status."
+      }
+    }
+  }
+}

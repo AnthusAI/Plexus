@@ -439,6 +439,56 @@ Segment text into "before" and "after" parts based on a found quote:
           extracted_text: extracted_text
 ```
 
+### Classifier vs Extractor
+
+Use the node type that matches the output contract:
+
+- `Classifier` is for closed-set labels only, such as `Yes`/`No`, routing labels, or other enum-like classes.
+- `Extractor` is for free-form evidence, quotes, ledgers, summaries, or other extracted artifacts.
+
+If your prompt asks the model to produce multiline evidence, snippets, medication ledgers, or a summary artifact, do **not** implement that node as a `Classifier`. A pseudo-extractor pattern such as:
+
+```yaml
+- name: extract_evidence
+  class: Classifier
+  valid_classes:
+    - Extracted
+```
+
+is invalid design. It creates a parser contract that expects an exact class label while the prompt is asking for free-form extraction output.
+
+Recommended two-step pattern:
+
+```yaml
+- name: dosage_evidence_extractor
+  class: Extractor
+  trust_model_output: true
+  system_message: |-
+    Extract only the dosage evidence needed for the final decision.
+  user_message: |-
+    {{text}}
+  output:
+    dosage_evidence: extracted_text
+
+- name: check_dosage_verification
+  class: Classifier
+  valid_classes:
+    - Yes
+    - No
+  user_message: |-
+    Transcript:
+    {{text}}
+
+    Extracted dosage evidence:
+    {{dosage_evidence}}
+```
+
+In that pattern:
+
+- the extractor owns the free-form artifact
+- the classifier owns the final closed-set decision
+- downstream nodes should consume the mapped extractor output field (for example `{{dosage_evidence}}`), not a classifier explanation field
+
 ## LogicalClassifier Usage
 
 Apply custom Python logic to make scoring decisions based on previous node outputs:
@@ -611,6 +661,70 @@ data:
   balance: false  # Whether to balance positive/negative examples
 ```
 
+## Text Preprocessing with Processors
+
+Scores can preprocess the input text **before** it reaches the LLM using the `item.processors` pipeline. Processors run in order; each transforms the text before the next one sees it. This is especially valuable for long transcripts where you want the LLM to focus on the relevant parts.
+
+### Configuration
+
+```yaml
+# Recommended location (under item):
+item:
+  processors:
+    - class: RelevantWindowsTranscriptFilter
+      parameters:
+        keywords: ["school", "university", "degree"]
+        fuzzy_match: true
+        fuzzy_threshold: 80
+        prev_count: 2
+        next_count: 2
+    - class: RemoveSpeakerIdentifiersTranscriptFilter
+      parameters: {}
+```
+
+A legacy `data.processors` location is also supported but `item.processors` is preferred.
+
+### Available Text Processors
+
+**RelevantWindowsTranscriptFilter** — Extract windows of text around matching keywords. This is the most impactful processor for improving classification on long transcripts — it dramatically reduces noise by showing only the parts of the text relevant to the classification task.
+
+Parameters:
+- `keywords` (list): Keywords/phrases to match
+- `fuzzy_match` (bool): Enable fuzzy matching via RapidFuzz (default: false)
+- `fuzzy_threshold` (int): Minimum similarity score 0-100 for fuzzy matching (default: 80)
+- `case_sensitive` (bool): Case-sensitive matching (default: false)
+- `prev_count` (int): Sentences to include before match (default: 1)
+- `next_count` (int): Sentences to include after match (default: 1)
+- `window_unit` (str): `'sentences'`, `'words'`, or `'characters'` (default: `'sentences'`)
+
+**FilterCustomerOnlyProcessor** — Keep only customer speech (removes agent/system lines).
+
+**RemoveSpeakerIdentifiersTranscriptFilter** — Strip speaker labels (`Agent:`, `Customer:`, etc.) from the text.
+
+**ExpandContractionsProcessor** — Expand contractions (`don't` → `do not`, `can't` → `cannot`).
+
+**RemoveStopWordsTranscriptFilter** — Remove common English filler/stop words.
+
+**AddEnumeratedSpeakerIdentifiersTranscriptFilter** — Normalize speaker labels to `Speaker A`, `Speaker B`, etc.
+
+### Example: Keyword-focused transcript trimming
+
+For a score that classifies whether a school name was mentioned correctly, extract only the parts of the transcript where schools are discussed:
+
+```yaml
+item:
+  processors:
+    - class: RelevantWindowsTranscriptFilter
+      parameters:
+        keywords: ["school", "university", "college", "program", "degree", "campus"]
+        fuzzy_match: true
+        fuzzy_threshold: 75
+        prev_count: 3
+        next_count: 3
+```
+
+This feeds the LLM a focused excerpt instead of the full transcript, reducing both token cost and classification errors from irrelevant context.
+
 ## Confidence Scoring
 
 Enable confidence calculation based on first token log probabilities:
@@ -628,6 +742,29 @@ When enabled:
 - Requires `parse_from_start: true`
 - Works best with fine-tuned models
 - Only supported with OpenAI models
+
+## Result Validation
+
+Add optional validation rules under score `parameters.validation` to enforce output contracts:
+
+```yaml
+parameters:
+  validation:
+    value:
+      valid_classes: ["Yes", "No", "NQ - Pricing", "NQ - Technical"]
+      patterns: ["^(Yes|No)$", "^NQ - (?!Other$).*"]
+    explanation:
+      minimum_length: 10
+      maximum_length: 200
+      patterns: [".*evidence.*", ".*found.*"]
+```
+
+Rules are evaluated automatically after each `predict()` call when validation is configured:
+- `valid_classes`: value must be one of the listed classes
+- `patterns`: value must match at least one regex pattern
+- `minimum_length` / `maximum_length`: string length bounds
+
+If any configured rule fails, the score raises a validation error and the invalid output is rejected.
 
 ## Best Practices
 
