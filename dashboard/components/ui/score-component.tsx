@@ -438,8 +438,8 @@ function RelatedScoreVersionCard({
             <Button
               type="button"
               size="sm"
-              variant="secondary"
-              className="h-6 shrink-0 px-2 text-xs"
+              variant="ghost"
+              className="h-6 shrink-0 bg-muted px-2 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground"
               disabled={!relatedVersion}
               onClick={() => relatedVersion && onCompare?.(relatedVersion.id, currentVersion.id)}
             >
