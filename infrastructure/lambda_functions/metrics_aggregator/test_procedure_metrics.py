@@ -1,4 +1,5 @@
 import sys
+import importlib.util
 from pathlib import Path
 
 
@@ -8,8 +9,28 @@ sys.path.insert(0, str(METRICS_DIR))
 sys.path.insert(0, str(INFRA_DIR))
 
 from handler import determine_record_type
-from stacks.metrics_aggregation_stack import METRICS_STREAM_CONFIGS, METRICS_TABLE_TYPES
-from stacks.shared.amplify_discovery import METRICS_TABLE_PATTERNS
+
+
+def load_module_from_path(module_name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
+metrics_config = load_module_from_path(
+    "metrics_aggregation_config",
+    INFRA_DIR / "stacks" / "metrics_aggregation_config.py",
+)
+amplify_discovery = load_module_from_path(
+    "amplify_discovery",
+    INFRA_DIR / "stacks" / "shared" / "amplify_discovery.py",
+)
+
+METRICS_STREAM_CONFIGS = metrics_config.METRICS_STREAM_CONFIGS
+METRICS_TABLE_TYPES = metrics_config.METRICS_TABLE_TYPES
+METRICS_TABLE_PATTERNS = amplify_discovery.METRICS_TABLE_PATTERNS
 
 
 def test_procedure_streams_are_classified_as_procedures():
