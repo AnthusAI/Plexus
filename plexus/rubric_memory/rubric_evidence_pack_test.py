@@ -294,6 +294,122 @@ def test_local_corpus_resolver_uses_score_yaml_stem(monkeypatch, tmp_path):
         / "SelectQuote HCS Medium-Risk"
         / "scorecard.knowledge-base"
     )
+    assert paths.prefix_knowledge_bases == []
+
+
+def test_local_corpus_resolver_includes_matching_prefix_knowledge_base(
+    monkeypatch,
+    tmp_path,
+):
+    cache_root = tmp_path / "dashboard" / "scorecards"
+    monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
+    prefix_root = (
+        cache_root
+        / "SelectQuote HCS Medium-Risk"
+        / "Information Accuracy.knowledge-base"
+    )
+    score_root = (
+        cache_root
+        / "SelectQuote HCS Medium-Risk"
+        / "Information Accuracy- High-Pressure Tactics.knowledge-base"
+    )
+    prefix_root.mkdir(parents=True)
+    score_root.mkdir(parents=True)
+
+    paths = LocalRubricMemoryCorpusResolver().resolve(
+        scorecard_name="SelectQuote HCS Medium-Risk",
+        score_name="Information Accuracy: High-Pressure Tactics",
+    )
+
+    assert paths.prefix_knowledge_bases == [prefix_root]
+    assert [(source.root, source.scope_level) for source in paths.sources] == [
+        (paths.scorecard_knowledge_base, "scorecard"),
+        (prefix_root, "prefix"),
+        (paths.score_knowledge_base, "score"),
+    ]
+
+
+def test_local_corpus_resolver_allows_prefix_without_score_specific_folder(
+    monkeypatch,
+    tmp_path,
+):
+    cache_root = tmp_path / "dashboard" / "scorecards"
+    monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
+    prefix_root = (
+        cache_root
+        / "SelectQuote HCS Medium-Risk"
+        / "Information Accuracy.knowledge-base"
+    )
+    prefix_root.mkdir(parents=True)
+
+    paths = LocalRubricMemoryCorpusResolver().resolve(
+        scorecard_name="SelectQuote HCS Medium-Risk",
+        score_name="Information Accuracy: High-Pressure Tactics",
+    )
+
+    assert [(source.root, source.scope_level) for source in paths.sources] == [
+        (paths.scorecard_knowledge_base, "scorecard"),
+        (prefix_root, "prefix"),
+    ]
+
+
+def test_local_corpus_resolver_includes_prefix_for_composite_score(
+    monkeypatch,
+    tmp_path,
+):
+    cache_root = tmp_path / "dashboard" / "scorecards"
+    monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
+    prefix_root = (
+        cache_root
+        / "SelectQuote HCS Medium-Risk"
+        / "Information Accuracy.knowledge-base"
+    )
+    prefix_root.mkdir(parents=True)
+
+    paths = LocalRubricMemoryCorpusResolver().resolve(
+        scorecard_name="SelectQuote HCS Medium-Risk",
+        score_name="Information Accuracy (Composite)",
+    )
+
+    assert paths.prefix_knowledge_bases == [prefix_root]
+
+
+def test_local_corpus_resolver_does_not_duplicate_exact_score_knowledge_base(
+    monkeypatch,
+    tmp_path,
+):
+    cache_root = tmp_path / "dashboard" / "scorecards"
+    monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
+    exact_root = (
+        cache_root
+        / "SelectQuote HCS Medium-Risk"
+        / "Agent Misrepresentation.knowledge-base"
+    )
+    exact_root.mkdir(parents=True)
+
+    paths = LocalRubricMemoryCorpusResolver().resolve(
+        scorecard_name="SelectQuote HCS Medium-Risk",
+        score_name="Agent Misrepresentation",
+    )
+
+    assert paths.prefix_knowledge_bases == []
+    assert [source.root for source in paths.sources].count(exact_root) == 1
+
+
+def test_local_corpus_resolver_treats_missing_prefix_as_optional(
+    monkeypatch,
+    tmp_path,
+):
+    cache_root = tmp_path / "dashboard" / "scorecards"
+    monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
+
+    paths = LocalRubricMemoryCorpusResolver().resolve(
+        scorecard_name="SelectQuote HCS Medium-Risk",
+        score_name="Information Accuracy: High-Pressure Tactics",
+    )
+
+    assert paths.prefix_knowledge_bases == []
+    assert [source.scope_level for source in paths.sources] == ["scorecard", "score"]
 
 
 def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
@@ -311,10 +427,19 @@ def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
         scorecard_file = (
             paths.scorecard_knowledge_base / "2026-04-01" / "scorecard.md"
         )
+        prefix_file = (
+            cache_root
+            / "SelectQuote HCS Medium-Risk"
+            / "Medication Review.knowledge-base"
+            / "2026-04-10"
+            / "medication-review.md"
+        )
         score_file = paths.score_knowledge_base / "2026-04-24" / "dosage.md"
         scorecard_file.parent.mkdir(parents=True)
+        prefix_file.parent.mkdir(parents=True)
         score_file.parent.mkdir(parents=True)
         scorecard_file.write_text("Shared medication review policy.", encoding="utf-8")
+        prefix_file.write_text("Medication review policy memory.", encoding="utf-8")
         score_file.write_text("Dosage-specific policy memory.", encoding="utf-8")
 
         first = runner.invoke(
@@ -347,8 +472,12 @@ def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
     assert "retriever_id: scan" in first.output
     assert "fingerprint:" in first.output
     assert "prepared_corpus_path:" in first.output
-    assert "source_file_count: 2" in first.output
+    assert "source_file_count: 3" in first.output
+    assert "included_knowledge_base[scorecard]:" in first.output
+    assert "included_knowledge_base[prefix]:" in first.output
+    assert "included_knowledge_base[score]:" in first.output
     assert "Medication Review- Dosage.knowledge-base" in first.output
+    assert "Medication Review.knowledge-base" in first.output
 
 
 def test_query_planner_derives_retrieval_phrases_from_request():
@@ -537,14 +666,18 @@ def test_prepared_corpus_leaves_unknown_date_without_timestamp(tmp_path):
     assert "source_timestamp" not in metadata
 
 
-def test_prepared_corpus_combines_scorecard_and_score_scopes(tmp_path):
+def test_prepared_corpus_combines_scorecard_prefix_and_score_scopes(tmp_path):
     scorecard_root = tmp_path / "scorecard.knowledge-base"
+    prefix_root = tmp_path / "Medication Review.knowledge-base"
     score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
     scorecard_file = scorecard_root / "2026-04-01" / "scorecard.md"
+    prefix_file = prefix_root / "2026-04-10" / "prefix.md"
     score_file = score_root / "2026-04-24" / "score.md"
     scorecard_file.parent.mkdir(parents=True)
+    prefix_file.parent.mkdir(parents=True)
     score_file.parent.mkdir(parents=True)
     scorecard_file.write_text("Shared scorecard note.", encoding="utf-8")
+    prefix_file.write_text("Shared medication review note.", encoding="utf-8")
     score_file.write_text("Score-local dosage note.", encoding="utf-8")
 
     prepared = RubricMemoryPreparedCorpusManager(
@@ -555,6 +688,7 @@ def test_prepared_corpus_combines_scorecard_and_score_scopes(tmp_path):
                 root=scorecard_root,
                 scope_level="scorecard",
             ),
+            LocalRubricMemorySource(root=prefix_root, scope_level="prefix"),
             LocalRubricMemorySource(root=score_root, scope_level="score"),
         ]
     )
@@ -567,18 +701,28 @@ def test_prepared_corpus_combines_scorecard_and_score_scopes(tmp_path):
             / "scorecard.md.biblicus.yml"
         ).read_text(encoding="utf-8")
     )
+    prefix_metadata = json.loads(
+        (
+            prepared.corpus_root
+            / "01-prefix"
+            / "2026-04-10"
+            / "prefix.md.biblicus.yml"
+        ).read_text(encoding="utf-8")
+    )
     score_metadata = json.loads(
         (
             prepared.corpus_root
-            / "01-score"
+            / "02-score"
             / "2026-04-24"
             / "score.md.biblicus.yml"
         ).read_text(encoding="utf-8")
     )
 
     assert scorecard_metadata["scope_level"] == "scorecard"
+    assert prefix_metadata["scope_level"] == "prefix"
     assert score_metadata["scope_level"] == "score"
     assert scorecard_metadata["source_timestamp"] == "2026-04-01T00:00:00"
+    assert prefix_metadata["source_timestamp"] == "2026-04-10T00:00:00"
     assert score_metadata["source_timestamp"] == "2026-04-24T00:00:00"
 
 
@@ -994,6 +1138,43 @@ async def test_score_specific_evidence_ranks_ahead_of_scorecard_shared_evidence(
         "notes/score.md",
         "notes/scorecard.md",
     ]
+
+
+@pytest.mark.asyncio
+async def test_prefix_evidence_ranks_between_score_and_scorecard_evidence():
+    scorecard_snippet = _snippet(
+        "Scorecard-wide billing discussion.",
+        source_uri="notes/scorecard.md",
+        scope_level="scorecard",
+        retrieval_score=0.99,
+    )
+    prefix_snippet = _snippet(
+        "Information Accuracy family policy discussion.",
+        source_uri="notes/prefix.md",
+        scope_level="prefix",
+        retrieval_score=0.10,
+    )
+    score_snippet = _snippet(
+        "Score-specific billing exception.",
+        source_uri="notes/score.md",
+        scope_level="score",
+        retrieval_score=0.05,
+    )
+    synthesizer = _CapturingSynthesizer()
+    service = RubricEvidencePackService(
+        retriever=_StaticRetriever([scorecard_snippet, prefix_snippet, score_snippet]),
+        synthesizer=synthesizer,
+    )
+
+    pack = await service.generate(_request())
+
+    assert [snippet.source_uri for snippet in synthesizer.evidence] == [
+        "notes/score.md",
+        "notes/prefix.md",
+        "notes/scorecard.md",
+    ]
+    assert pack.confidence_inputs.prefix_scope_evidence_count == 1
+    assert pack.confidence_inputs.unknown_scope_evidence_count == 0
 
 
 @pytest.mark.asyncio

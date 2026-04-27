@@ -113,6 +113,7 @@ class ConfidenceInputs(BaseModel):
     score_version_id: str = Field(min_length=1)
     total_evidence_count: int = Field(ge=0)
     score_scope_evidence_count: int = Field(ge=0)
+    prefix_scope_evidence_count: int = Field(default=0, ge=0)
     scorecard_scope_evidence_count: int = Field(ge=0)
     unknown_scope_evidence_count: int = Field(ge=0)
     high_authority_evidence_count: int = Field(ge=0)
