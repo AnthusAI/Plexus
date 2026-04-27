@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "090368fc-1724-4a92-ab4f-268279ae036a",
+  "issue_id": "plx-c2025a41-fc9e-4312-ae9c-1ebdab2ab4a7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-27T15:07:53.197Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Replace removed graph-node gauge slot with evaluations-rate gauge on Procedures dashboard, and validate/fix AggregatedMetrics procedure counting so procedure-rate gauge is accurate.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "task Add evaluations rate gauge to procedures dashboard and verify procedures aggregation"
+  }
+}
