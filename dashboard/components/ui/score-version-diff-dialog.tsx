@@ -24,6 +24,8 @@ interface ScoreVersionDiffDialogProps {
   versions: ScoreVersion[]
   selectedVersionId?: string
   championVersionId?: string
+  initialLeftVersionId?: string
+  initialRightVersionId?: string
 }
 
 const versionLabel = (version?: ScoreVersion) => {
@@ -48,6 +50,8 @@ export function ScoreVersionDiffDialog({
   versions,
   selectedVersionId,
   championVersionId,
+  initialLeftVersionId,
+  initialRightVersionId,
 }: ScoreVersionDiffDialogProps) {
   const sortedVersions = React.useMemo(
     () => [...versions].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
@@ -58,9 +62,9 @@ export function ScoreVersionDiffDialog({
 
   React.useEffect(() => {
     if (!isOpen) return
-    setLeftVersionId(findDefaultLeftVersionId(sortedVersions, selectedVersionId, championVersionId))
-    setRightVersionId(selectedVersionId || championVersionId || sortedVersions[0]?.id)
-  }, [championVersionId, isOpen, selectedVersionId, sortedVersions])
+    setLeftVersionId(initialLeftVersionId || findDefaultLeftVersionId(sortedVersions, selectedVersionId, championVersionId))
+    setRightVersionId(initialRightVersionId || selectedVersionId || championVersionId || sortedVersions[0]?.id)
+  }, [championVersionId, initialLeftVersionId, initialRightVersionId, isOpen, selectedVersionId, sortedVersions])
 
   const leftVersion = sortedVersions.find(version => version.id === leftVersionId)
   const rightVersion = sortedVersions.find(version => version.id === rightVersionId)
