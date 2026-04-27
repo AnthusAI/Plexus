@@ -19,7 +19,8 @@ class TestDocumentationTool:
         valid_files = {
             "score-yaml-format": "score-yaml-format.md",
             "feedback-alignment": "feedback-alignment.md", 
-            "dataset-yaml-format": "dataset-yaml-format.md"
+            "dataset-yaml-format": "dataset-yaml-format.md",
+            "rubric-memory": "rubric-memory.md",
         }
         
         def validate_filename(filename):
@@ -41,6 +42,7 @@ class TestDocumentationTool:
         assert "score-yaml-format" in error
         assert "feedback-alignment" in error
         assert "dataset-yaml-format" in error
+        assert "rubric-memory" in error
         
         # Test empty filename
         valid, error = validate_filename("")
@@ -53,7 +55,8 @@ class TestDocumentationTool:
             valid_files = {
                 "score-yaml-format": "score-yaml-format.md",
                 "feedback-alignment": "feedback-alignment.md",
-                "dataset-yaml-format": "dataset-yaml-format.md"
+                "dataset-yaml-format": "dataset-yaml-format.md",
+                "rubric-memory": "rubric-memory.md",
             }
             
             # Navigate from MCP/ to plexus/docs/
@@ -75,6 +78,10 @@ class TestDocumentationTool:
         # Test path construction for dataset yaml format
         path = construct_file_path("dataset-yaml-format", "/app/MCP")
         expected = "/app/plexus/docs/dataset-yaml-format.md"
+        assert path == expected
+
+        path = construct_file_path("rubric-memory", "/app/MCP")
+        expected = "/app/plexus/docs/rubric-memory.md"
         assert path == expected
     
     def test_file_reading_patterns(self):
@@ -291,7 +298,12 @@ class TestDocumentationToolSharedPatterns:
             return True, None
         
         # Test safe filenames
-        safe_filenames = ["score-yaml-format", "feedback-alignment", "dataset-yaml-format"]
+        safe_filenames = [
+            "score-yaml-format",
+            "feedback-alignment",
+            "dataset-yaml-format",
+            "rubric-memory",
+        ]
         for filename in safe_filenames:
             valid, error = validate_filename_safety(filename)
             assert valid is True
@@ -312,7 +324,7 @@ class TestDocumentationToolSharedPatterns:
     
     def test_content_size_validation(self):
         """Test content size validation patterns"""
-        def validate_content_size(content, max_size=1024*1024):  # 1MB default
+        def validate_content_size(content, max_size=1024 * 1024):  # 1MB default
             if len(content) > max_size:
                 return False, f"File content too large: {len(content)} bytes (max: {max_size})"
             return True, None
@@ -325,7 +337,7 @@ class TestDocumentationToolSharedPatterns:
         
         # Test oversized content
         large_content = "A" * (2 * 1024 * 1024)  # 2MB
-        valid, error = validate_content_size(large_content, 1024*1024)
+        valid, error = validate_content_size(large_content, 1024 * 1024)
         assert valid is False
         assert "File content too large" in error
         assert "2097152 bytes" in error
