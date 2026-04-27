@@ -46,10 +46,16 @@
       "author": "ryan",
       "text": "Job 121 failure root cause: cross-environment reference requires explicit physical name for ConsoleRunWorkerQueue. Implementing explicit queue names (queue + DLQ) in ConsoleRunWorkerStack and redeploying staging.",
       "created_at": "2026-04-27T12:39:32.777876Z"
+    },
+    {
+      "id": "ee3f7ef6-1026-4b13-bfc5-d2422b1ab0f3",
+      "author": "ryan",
+      "text": "Job 122 failure: cross-environment reference now on startConsoleRun-lambda ServiceRole. Next fix: move ConsoleRunWorkerStack to NestedStack under backend.stack and remove explicit env wiring to keep all references same-environment.",
+      "created_at": "2026-04-27T12:45:06.131021Z"
     }
   ],
   "created_at": "2026-04-25T15:15:43.216098Z",
-  "updated_at": "2026-04-27T12:39:32.777876Z",
+  "updated_at": "2026-04-27T12:45:06.131021Z",
   "closed_at": null,
   "custom": {}
 }
