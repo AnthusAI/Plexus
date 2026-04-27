@@ -26,6 +26,7 @@ from datetime import datetime
 
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
+from plexus.cli.shared.optimizer_results import OptimizerResultsService
 from .service import ProcedureService
 
 @click.group()
@@ -1372,7 +1373,10 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
         console.print("[red]Error: Could not create API client[/red]")
         return
 
-    from plexus.cli.procedure.continuation_service import prepare_continuation
+    from plexus.cli.procedure.continuation_service import (
+        build_continuation_context,
+        prepare_continuation,
+    )
 
     console.print(f"Preparing continuation for procedure {procedure_id} (+{additional_cycles} cycles)...")
 
@@ -1398,12 +1402,19 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
 
     import asyncio
     from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    context = build_continuation_context(
+        client,
+        procedure_id,
+        max_iterations=info["new_max_iterations"],
+        hint=hint,
+    )
 
     try:
         result = asyncio.run(run_experiment_with_task_tracking(
             procedure_id=procedure_id,
             client=client,
             account_id=account_id,
+            context=context,
         ))
     except Exception as e:
         console.print(f"[red]Error dispatching procedure: {e}[/red]")
@@ -1461,7 +1472,10 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
         console.print("[red]Error: Could not create API client[/red]")
         return
 
-    from plexus.cli.procedure.continuation_service import prepare_branch
+    from plexus.cli.procedure.continuation_service import (
+        build_continuation_context,
+        prepare_branch,
+    )
 
     console.print(f"Branching {source_id} from cycle {cycle} (+{additional_cycles} cycles)...")
 
@@ -1487,12 +1501,19 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
 
     import asyncio
     from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    context = build_continuation_context(
+        client,
+        target_id,
+        max_iterations=info["new_max_iterations"],
+        hint=hint,
+    )
 
     try:
         result = asyncio.run(run_experiment_with_task_tracking(
             procedure_id=target_id,
             client=client,
             account_id=account_id,
+            context=context,
         ))
     except Exception as e:
         console.print(f"[red]Error dispatching branch: {e}[/red]")
@@ -1558,6 +1579,117 @@ def clone_state(source_id: str, target_id: str, truncate_to_cycle: int):
         console.print(f"[red]Error cloning state: {e}[/red]")
         import traceback
         console.print(traceback.format_exc())
+
+
+@procedure.command("index-optimizer-run")
+@click.argument("procedure_id")
+@click.option("--force", is_flag=True, help="Rewrite optimizer artifacts even if the task already has them attached")
+@click.option("--output", "-o", type=click.Choice(["json", "yaml", "table"]), default="table", show_default=True)
+def index_optimizer_run(procedure_id: str, force: bool, output: str):
+    """Index one historical optimizer run into canonical task attachments."""
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    service = OptimizerResultsService(client)
+    try:
+        result = service.index_optimizer_run(procedure_id, force=force)
+    except Exception as exc:
+        console.print(f"[red]Error indexing optimizer run: {exc}[/red]")
+        return
+
+    payload = {
+        "procedure_id": procedure_id,
+        "task_id": result["task_id"],
+        "pointer": result["pointer"],
+        "summary": result["manifest"].get("summary"),
+        "best": result["manifest"].get("best"),
+    }
+
+    if output == "json":
+        click.echo(json.dumps(payload, indent=2, default=str))
+        return
+    if output == "yaml":
+        click.echo(yaml.dump(payload, default_flow_style=False))
+        return
+
+    table = Table(title=f"Indexed Optimizer Run {procedure_id}")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Task", payload["task_id"])
+    table.add_row("Manifest", payload["pointer"]["manifest"])
+    table.add_row("Events", payload["pointer"]["events"])
+    table.add_row("Runtime log", payload["pointer"]["runtime_log"])
+    table.add_row("Completed cycles", str((payload["summary"] or {}).get("completed_cycles") or "—"))
+    table.add_row("Winning version", (payload["best"] or {}).get("winning_version_id") or "—")
+    table.add_row("Best feedback alignment evaluation", (payload["best"] or {}).get("best_feedback_evaluation_id") or "—")
+    table.add_row("Best regression alignment evaluation", (payload["best"] or {}).get("best_accuracy_evaluation_id") or "—")
+    console.print(table)
+
+
+@procedure.command("optimizer-summary")
+@click.argument("procedure_id")
+@click.option("--runtime-log", is_flag=True, help="Include a runtime log excerpt")
+@click.option("--events", is_flag=True, help="Include an events.jsonl excerpt")
+@click.option("--log-lines", default=80, show_default=True, help="Number of trailing lines to include for excerpts")
+@click.option("--output", "-o", type=click.Choice(["json", "yaml", "table"]), default="table", show_default=True)
+def optimizer_summary(procedure_id: str, runtime_log: bool, events: bool, log_lines: int, output: str):
+    """Summarize one indexed optimizer procedure and its candidate/evaluation history."""
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    service = OptimizerResultsService(client)
+    try:
+        payload = service.summarize_optimizer_procedure(
+            procedure_id,
+            include_runtime_log=runtime_log,
+            include_events=events,
+            log_lines=log_lines,
+        )
+    except Exception as exc:
+        console.print(f"[red]Error loading optimizer summary: {exc}[/red]")
+        return
+
+    if output == "json":
+        click.echo(json.dumps(payload, indent=2, default=str))
+        return
+    if output == "yaml":
+        click.echo(yaml.dump(payload, default_flow_style=False))
+        return
+
+    summary = payload.get("summary") or {}
+    best = payload.get("best") or {}
+    table = Table(title=f"Optimizer Summary {procedure_id}")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Status", str((payload.get("procedure") or {}).get("status") or "—"))
+    table.add_row("Cycles", f"{summary.get('completed_cycles') or '—'}/{summary.get('configured_max_iterations') or '—'}")
+    table.add_row("Stop reason", summary.get("stop_reason") or "—")
+    table.add_row("Winning version", best.get("winning_version_id") or "—")
+    table.add_row("Best feedback alignment evaluation", best.get("best_feedback_evaluation_url") or best.get("best_feedback_evaluation_id") or "—")
+    table.add_row("Best regression alignment evaluation", best.get("best_accuracy_evaluation_url") or best.get("best_accuracy_evaluation_id") or "—")
+    table.add_row("Manifest", (payload.get("artifact_pointer") or {}).get("manifest") or "—")
+    table.add_row("Runtime log", (payload.get("artifact_pointer") or {}).get("runtime_log") or "—")
+    console.print(table)
+
+    cycles = Table(title="Cycles")
+    cycles.add_column("Cycle", style="cyan")
+    cycles.add_column("Status", style="white")
+    cycles.add_column("Version", style="magenta")
+    cycles.add_column("Feedback AC1", style="green")
+    cycles.add_column("Regression AC1", style="green")
+    for cycle in payload.get("cycles") or []:
+        cycles.add_row(
+            str(cycle.get("cycle") or "—"),
+            str(cycle.get("status") or "—"),
+            str(cycle.get("version_id") or "—"),
+            f"{cycle['feedback_alignment']:.4f}" if cycle.get("feedback_alignment") is not None else "—",
+            f"{cycle['accuracy_alignment']:.4f}" if cycle.get("accuracy_alignment") is not None else "—",
+        )
+    console.print(cycles)
 
 
 # Add to CLI

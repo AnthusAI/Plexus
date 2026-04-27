@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ef73a07d-95ad-4cce-9c34-f1dba363863c",
+  "issue_id": "plx-a0969aad-9621-4ec3-946e-5c2ef68764a0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-23T20:10:25.810Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the approved Prescriber clarification from item 305259519 that SRX follows the published at-most-one-miss threshold and does not require prescriber verification for each medication. Apply the change on top of version 770575d5-b3dd-4939-a19d-64ac99fb592e so the prior prescribed-by recognition stays intact. Update both the score guidelines and the current non-champion score version with a minimal wording patch; do not broaden other Prescriber rules or change optimizer direction.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 2,
+    "status": "open",
+    "title": "Patch Prescriber score to reaffirm SRX at-most-one-miss rule"
+  }
+}

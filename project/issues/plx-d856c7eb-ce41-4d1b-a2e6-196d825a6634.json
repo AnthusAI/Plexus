@@ -3,7 +3,7 @@
   "title": "Clarify remaining Medication Review rubric gaps from contradictions",
   "description": "Review contradiction-report policy-gap items and decide whether the published Medication Review split-score guidelines need clarification.\n\nPriority questions:\n- Prescriber: how to score agent attempts when the customer cannot confirm prescriber information because they are unsure\n- Dosage: how to score dosage verification when the customer is unable to confirm because they are unsure\n- Individual Confirmation: whether patient-led item-by-item medication listing can satisfy the score, or whether the rubric should remain agent-triggered only\n- Optional low-priority clarification: whether explicit phrasing like \"prescribed by\" should be called out as a valid prescriber-verification pattern in examples\n\nOutput should be SME-facing questions and a proposed guideline-change recommendation for each gap.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,64 @@
       "author": "ryan",
       "text": "Reviewed the recent client clarification against the Prescriber contradiction item about customer uncertainty. The explicit client guidance we have is the discontinued / no-longer-taking / completed-antibiotic carveout (do not count those medications against prescriber or dosage verification). I do not see a separate explicit client ruling yet on current medications where the customer is unsure who prescribed them. The current Prescriber champion treats unresolved current-medication prescriber uncertainty as a miss, but that appears to be our adopted rubric choice, not a directly captured client quote.",
       "created_at": "2026-04-22T15:09:42.082779Z"
+    },
+    {
+      "id": "ea2a4b02-5101-4b62-9a57-08bc86dd6ed0",
+      "author": "ryan",
+      "text": "Fresh Prescriber contradiction triage from report fab5a6a8-8304-417f-9ea9-3ff5e4a9391b produced four SME/rubric clarification items rather than clean invalidations. Items: 309504448 (c1f9bbe8-e050-48ee-a95b-c40ba6153d81) generic doctor mention without med link; 307500372 (444991a6-3347-4f2b-9745-250a829a38ea) customer/agent uncertainty about prescriber; 307498132 (d97466bf-3b4b-43d6-ba42-c3c5d0c24f92) whether the phrase prescribed by plus provider name should count as valid prescriber verification evidence; 305259519 (8093d5eb-48aa-4b99-9a29-c5f516f296e5) reviewer comment implies per-med verification for each medication even though published SRX rule allows at most one miss. Output needed next: concise SME-facing questions and a recommendation on whether each item is a policy clarification, implementation-recognition gap, or contradiction candidate.",
+      "created_at": "2026-04-23T19:51:34.193963Z"
+    },
+    {
+      "id": "53c1d054-062d-4db1-9b2d-0359dac4df6f",
+      "author": "ryan",
+      "text": "User requested we adopt the previously discussed scope clarification because it appears uniquely helpful for Medication Review: Individual Confirmation. Proceeding in two steps under this task: (1) update the published Individual Confirmation guidelines to make the in-scope medication-review segment requirement explicit and (2) audit the live Pharmacy, Prescriber, Dosage, and Individual Confirmation score implementations for guideline-to-code inconsistencies, conflicts, or translation gaps. Will report any follow-up issues separately if the audit finds implementation defects rather than rubric wording gaps.",
+      "created_at": "2026-04-23T19:53:54.528663Z"
+    },
+    {
+      "id": "3200d285-f3f8-427a-aca5-ff4c72b7a7db",
+      "author": "ryan",
+      "text": "Starting a review-only audit of the live Medication Review split-score implementations against published champion guidelines, narrowed to Pharmacy and Prescriber per user request. Scope: decision logic, scope, enrollment-type handling, thresholds, exclusions, ambiguity handling, and evidence standards. Will return findings only; no edits.",
+      "created_at": "2026-04-23T19:56:48.985165Z"
+    },
+    {
+      "id": "40db47c2-a3d8-477b-9f6f-df2676c883a1",
+      "author": "ryan",
+      "text": "Review-only audit completed for live Medication Review split-score implementations, focused on Pharmacy and Prescriber. Main findings: (1) Prescriber code now adds a clipped-transcript/inconclusive rescue path that is looser than the published objective guideline and can avoid counting missing doctor links as misses when retained windows look partial. (2) Prescriber code adds OTC/vitamin exclusions that are not present in the published guideline. (3) Pharmacy still lacks a real guideline artifact in the canonical scorecard folder (local md is only '*No guidelines specified for this score.*'), so faithful guideline-to-code translation review is blocked there. (4) Pharmacy implementation has an internal strict-vs-loose prompt conflict: SRX system rules require a specific current pharmacy with explicit confirmation, but the user prompt says Yes if pharmacy is merely addressed and No only if there is no pharmacy discussion or the patient cannot provide information.",
+      "created_at": "2026-04-23T19:59:22.071234Z"
+    },
+    {
+      "id": "0377f1db-d3f5-4552-9369-9ba8d222f0f5",
+      "author": "ryan",
+      "text": "Progress update:\n\n- Created a new **draft** guideline version for : . The wording now makes the bounded medication-review segment requirement explicit, forbids pooling scattered medication mentions across the call to create applicability, and states that truncated fragments do not count unless the actual review exchange is visible. This draft was validated and saved, but not promoted.\n- Completed a live MCP-based audit of the champion Pharmacy / Prescriber / Dosage / Individual Confirmation score definitions. Important note: local pulled scorecard files appear to drift from live champion state for some of these scores, so the audit findings below are based on the live Plexus score definitions retrieved via MCP, not on stale local package artifacts.\n\nLive MCP audit findings:\n1.  has the clearest implementation mismatch. The published guideline requires establishing a **specific current pharmacy** and excludes general/future/transfer-only pharmacy discussion, but the live user prompt broadens Yes to cases where the agent merely addresses pharmacy information and says No only if there is effectively no pharmacy discussion. This makes the operative prompt materially looser than the rubric.\n2.  shows a real SPM translation gap. The published guideline says SPM Yes requires discussing/confirming dosage information and patient acknowledgement/provision of dosage details, but the live prompt explicitly allows medication-specific current-use / same / unchanged / no-changes-style review to count as dosage discussion even without numeric detail. The same implementation also claims some unchanged-regimen patterns count while its retrieval keyword set does not include several of those phrases, creating an evidence-retrieval mismatch.\n3.  code is broadly aligned with the intended applicability-first rubric, but the currently published champion guideline is less explicit than the live prompt about bounded scope, no-pooling, and truncated-fragment handling. The new draft version above narrows that documentation gap. The live prompt still contains a mild internal tension: its opening question sounds stricter (pause after each) than the later majority-pattern / predominantly-individualized logic.\n4.  is the closest guideline-to-code match of the four. I did not find a major live MCP contradiction there. The remaining issues are lower-grade wording/risk items rather than a clear implementation conflict.\n\nFiled follow-up sub-tasks for the remaining work:\n-  Align Medication Review Pharmacy implementation with current-pharmacy guideline\n-  Align Medication Review Dosage SPM logic and retrieval with published rubric\n-  Review and publish Individual Confirmation scope-clarification draft if approved",
+      "created_at": "2026-04-23T20:00:54.754731Z"
+    },
+    {
+      "id": "6b05697c-d7a6-49fb-b43b-95cfa2b100dd",
+      "author": "ryan",
+      "text": "Progress update:\n\n- Created a new draft guideline version for Medication Review: Individual Confirmation: f1040a1b-ab02-48db-9ed6-18af22703c55.\n- The wording now makes the bounded medication-review segment requirement explicit, forbids pooling scattered medication mentions across the call to create applicability, and states that truncated fragments do not count unless the actual review exchange is visible.\n- This draft was validated and saved, but not promoted.\n- Completed a live MCP-based audit of the champion Pharmacy / Prescriber / Dosage / Individual Confirmation score definitions.\n- Important note: local pulled scorecard files appear to drift from live champion state for some of these scores, so the findings below are based on the live Plexus score definitions retrieved via MCP, not on stale local package artifacts.\n\nLive MCP audit findings:\n1. Medication Review: Pharmacy has the clearest implementation mismatch. The published guideline requires establishing a specific current pharmacy and excludes general, future, or transfer-only pharmacy discussion, but the live user prompt broadens Yes to cases where the agent merely addresses pharmacy information and says No only if there is effectively no pharmacy discussion. This makes the operative prompt materially looser than the rubric.\n2. Medication Review: Dosage shows a real SPM translation gap. The published guideline says SPM Yes requires discussing or confirming dosage information and patient acknowledgement or provision of dosage details, but the live prompt explicitly allows medication-specific current-use / same / unchanged style review to count as dosage discussion even without numeric detail. The same implementation also claims some unchanged-regimen patterns count while its retrieval keyword set does not include several of those phrases, creating an evidence-retrieval mismatch.\n3. Medication Review: Individual Confirmation code is broadly aligned with the intended applicability-first rubric, but the currently published champion guideline is less explicit than the live prompt about bounded scope, no-pooling, and truncated-fragment handling. The new draft version above narrows that documentation gap. The live prompt still contains a mild internal tension: its opening question sounds stricter (pause after each) than the later majority-pattern / predominantly-individualized logic.\n4. Medication Review: Prescriber is the closest guideline-to-code match of the four. I did not find a major live MCP contradiction there. The remaining issues are lower-grade wording/risk items rather than a clear implementation conflict.\n\nFiled follow-up sub-tasks for the remaining work:\n- plx-551be7 Align Medication Review Pharmacy implementation with current-pharmacy guideline\n- plx-34f091 Align Medication Review Dosage SPM logic and retrieval with published rubric\n- plx-7c9498 Review and publish Individual Confirmation scope-clarification draft if approved",
+      "created_at": "2026-04-23T20:01:06.558994Z"
+    },
+    {
+      "id": "cf0a57fa-9ae5-4766-b415-8a4123b2485b",
+      "author": "ryan",
+      "text": "User confirmed the policy answer for Prescriber item 307498132 / d97466bf-3b4b-43d6-ba42-c3c5d0c24f92: the phrase prescribed by plus provider name should count as valid medication-linked prescriber-verification evidence. Next step: patch the live guidelines and create a new score version from the current champion with a minimal wording update that explicitly recognizes this phrasing.",
+      "created_at": "2026-04-23T20:01:24.812948Z"
+    },
+    {
+      "id": "14f1ba17-32f1-45d3-ae95-7ddf5c823c55",
+      "author": "ryan",
+      "text": "Resolved one Prescriber clarification by implementation rather than escalation: item 307498132 is now reflected in live score version 770575d5-b3dd-4939-a19d-64ac99fb592e, which explicitly recognizes prescribed by plus provider-name phrasing as valid medication-linked prescriber verification evidence when tied to the medication and confirmed or clearly accepted by the patient. Remaining SME-oriented Prescriber questions are narrower: unresolved patient-vs-agent uncertainty handling and any mismatch between the published at-most-one-miss rubric and stricter reviewer comments.",
+      "created_at": "2026-04-23T20:04:09.372963Z"
+    },
+    {
+      "id": "744ec421-e310-445b-9796-807202274047",
+      "author": "ryan",
+      "text": "User confirmed the policy answer for Prescriber item 305259519 / 8093d5eb-48aa-4b99-9a29-c5f516f296e5: the published SRX threshold rule remains correct, so at most one unresolved current-medication miss still passes and reviewer policy should not require prescriber verification for each medication. Next step: patch the latest Prescriber candidate version on top of 770575d5-b3dd-4939-a19d-64ac99fb592e so both approved clarifications are present in YAML and guidelines.",
+      "created_at": "2026-04-23T20:10:25.620166Z"
     }
   ],
   "created_at": "2026-04-22T14:30:09.933619Z",
-  "updated_at": "2026-04-22T15:09:42.082779Z",
+  "updated_at": "2026-04-23T20:10:25.620166Z",
   "closed_at": null,
   "custom": {}
 }

@@ -860,6 +860,64 @@ def register_procedure_tools(mcp):
             logger.error(f"Error branching procedure: {e}")
             return {"success": False, "error": str(e)}
 
+    class ProcedureIndexOptimizerRunRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID to backfill into canonical optimizer artifacts")]
+        force: Annotated[bool, Field(description="Rewrite optimizer artifacts even if they already exist")] = False
+
+    @mcp.tool()
+    def plexus_procedure_index_optimizer_run(request: ProcedureIndexOptimizerRunRequest) -> Dict[str, Any]:
+        """Index or backfill one optimizer procedure into canonical task attachments."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            service = OptimizerResultsService(client)
+            result = service.index_optimizer_run(request.procedure_id, force=request.force)
+            return {
+                "success": True,
+                "procedure_id": request.procedure_id,
+                "task_id": result["task_id"],
+                "pointer": result["pointer"],
+                "summary": result["manifest"].get("summary"),
+                "best": result["manifest"].get("best"),
+            }
+        except Exception as e:
+            logger.error(f"Error indexing optimizer procedure: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    class ProcedureOptimizerSummaryRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID to summarize from indexed optimizer artifacts")]
+        include_runtime_log: Annotated[bool, Field(description="Include a trailing runtime.log excerpt")] = False
+        include_events: Annotated[bool, Field(description="Include a trailing events.jsonl excerpt")] = False
+        log_lines: Annotated[int, Field(description="Number of trailing lines to include for excerpts", ge=1)] = 80
+
+    @mcp.tool()
+    def plexus_procedure_optimizer_summary(request: ProcedureOptimizerSummaryRequest) -> Dict[str, Any]:
+        """Summarize one indexed optimizer procedure with cycles, candidates, evals, and artifact pointers."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            service = OptimizerResultsService(client)
+            payload = service.summarize_optimizer_procedure(
+                request.procedure_id,
+                include_runtime_log=request.include_runtime_log,
+                include_events=request.include_events,
+                log_lines=request.log_lines,
+            )
+            return {"success": True, **payload}
+        except Exception as e:
+            logger.error(f"Error summarizing optimizer procedure: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
     # Register the stop tool
     from .stop import register_stop_tool
     register_stop_tool(mcp)

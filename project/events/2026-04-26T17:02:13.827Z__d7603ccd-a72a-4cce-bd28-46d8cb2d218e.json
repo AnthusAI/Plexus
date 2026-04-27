@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d7603ccd-a72a-4cce-bd28-46d8cb2d218e",
+  "issue_id": "plx-6dcdc15d-5770-4a81-9f48-b18d951f2478",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-26T17:02:13.827Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Score-level View Procedures and View Evaluations replacement panels need a distinct flat brown-themed background slot behind their task cards so ProcedureTask and EvaluationTask cards have enough contrast. Keep this scoped to score-level panels, not version tabs.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+    "priority": 2,
+    "status": "open",
+    "title": "Add contrast slot for score-level procedure and evaluation panels"
+  }
+}

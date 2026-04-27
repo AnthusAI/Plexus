@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8cc0be80-f022-47eb-a7fc-132d713e8227",
+  "issue_id": "plx-0bf11ebd-1cfe-43a1-b9c6-fa00990a2050",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-25T15:15:43.223Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Remove GraphNode model and related control-plane cruft",
+    "description": "",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+    "labels": []
+  }
+}

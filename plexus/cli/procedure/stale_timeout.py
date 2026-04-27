@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import socket
+import subprocess
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -46,6 +49,82 @@ def _extract_procedure_id_from_task_payload(task_data: Dict[str, Any]) -> Option
     if isinstance(procedure_id, str) and procedure_id.strip():
         return procedure_id.strip()
     return None
+
+
+def _extract_runtime_identity(
+    procedure_snapshot: Dict[str, Any],
+    task_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    task_metadata = _parse_json_dict(task_data.get("metadata"))
+    task_runtime = task_metadata.get("runtime")
+    if isinstance(task_runtime, dict):
+        return task_runtime
+
+    procedure_metadata = procedure_snapshot.get("metadata")
+    if isinstance(procedure_metadata, dict):
+        procedure_runtime = procedure_metadata.get("runtime")
+        if isinstance(procedure_runtime, dict):
+            return procedure_runtime
+
+    return {}
+
+
+def _extract_runtime_heartbeat_at(
+    procedure_snapshot: Dict[str, Any],
+    task_data: Dict[str, Any],
+) -> Optional[datetime]:
+    task_runtime = _parse_json_dict(task_data.get("metadata")).get("runtime")
+    if isinstance(task_runtime, dict):
+        heartbeat_at = _parse_iso_datetime(task_runtime.get("lastHeartbeatAt"))
+        if heartbeat_at:
+            return heartbeat_at
+
+    procedure_runtime = procedure_snapshot.get("metadata")
+    if isinstance(procedure_runtime, dict):
+        runtime = procedure_runtime.get("runtime")
+        if isinstance(runtime, dict):
+            return _parse_iso_datetime(runtime.get("lastHeartbeatAt"))
+    return None
+
+
+def _classify_runtime_process_state(runtime: Dict[str, Any]) -> str:
+    if not isinstance(runtime, dict):
+        return "inactive"
+
+    host = runtime.get("host")
+    pid = runtime.get("pid")
+    if not isinstance(host, str) or not host.strip():
+        return "inactive"
+    if host.strip().casefold() != socket.gethostname().strip().casefold():
+        return "foreign_host"
+
+    try:
+        pid_int = int(pid)
+    except (TypeError, ValueError):
+        return "inactive"
+    if pid_int <= 0:
+        return "inactive"
+
+    try:
+        os.kill(pid_int, 0)
+    except ProcessLookupError:
+        return "inactive"
+    except PermissionError:
+        return "active"
+
+    expected_command = str(runtime.get("command") or "").strip()
+    if not expected_command:
+        return "active"
+
+    try:
+        command = subprocess.check_output(
+            ["ps", "-o", "command=", "-p", str(pid_int)],
+            text=True,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+    return "active" if bool(command) and expected_command in command else "inactive"
 
 
 def _list_procedure_tasks(client: Any, account_id: str) -> List[Dict[str, Any]]:
@@ -324,14 +403,20 @@ def timeout_stale_procedures(
             continue
 
         started_at = _parse_iso_datetime(task_data.get("startedAt"))
-        last_activity_at = _get_latest_chat_activity_at(client, procedure_id)
-        activity_source = "chat"
-        if last_activity_at is None:
-            if started_at is None:
-                skipped.append({"procedure_id": procedure_id, "reason": "no_chat_activity"})
-                continue
-            last_activity_at = started_at
-            activity_source = "task_started_at"
+        chat_activity_at = _get_latest_chat_activity_at(client, procedure_id)
+        heartbeat_at = _extract_runtime_heartbeat_at(procedure, task_data)
+        activity_candidates = [
+            ("chat", chat_activity_at),
+            ("runtime_heartbeat", heartbeat_at),
+            ("task_started_at", started_at),
+        ]
+        available_activity = [
+            (source, activity_at) for source, activity_at in activity_candidates if activity_at is not None
+        ]
+        if not available_activity:
+            skipped.append({"procedure_id": procedure_id, "reason": "no_activity_signal"})
+            continue
+        activity_source, last_activity_at = max(available_activity, key=lambda item: item[1])
 
         inactivity = now - last_activity_at
         if inactivity <= stale_after:
@@ -345,9 +430,44 @@ def timeout_stale_procedures(
             )
             continue
 
-        runtime = procedure.get("metadata", {}).get("runtime") if isinstance(procedure.get("metadata"), dict) else {}
-        if not isinstance(runtime, dict):
-            runtime = {}
+        runtime = _extract_runtime_identity(procedure, task_data)
+        runtime_state = _classify_runtime_process_state(runtime)
+        if runtime_state == "active":
+            skipped.append(
+                {
+                    "procedure_id": procedure_id,
+                    "reason": "active_runtime_process",
+                    "last_activity_at": last_activity_at.isoformat(),
+                    "activity_source": activity_source,
+                    "pid": runtime.get("pid"),
+                    "host": runtime.get("host"),
+                }
+            )
+            continue
+        if runtime_state == "foreign_host":
+            skipped.append(
+                {
+                    "procedure_id": procedure_id,
+                    "reason": "foreign_runtime_host",
+                    "last_activity_at": last_activity_at.isoformat(),
+                    "activity_source": activity_source,
+                    "pid": runtime.get("pid"),
+                    "host": runtime.get("host"),
+                }
+            )
+            continue
+        if runtime_state == "unknown":
+            skipped.append(
+                {
+                    "procedure_id": procedure_id,
+                    "reason": "runtime_process_state_unknown",
+                    "last_activity_at": last_activity_at.isoformat(),
+                    "activity_source": activity_source,
+                    "pid": runtime.get("pid"),
+                    "host": runtime.get("host"),
+                }
+            )
+            continue
         failure_payload = {
             "kind": "timeout",
             "signal": None,

@@ -13,6 +13,8 @@ interface ScoreSidebarVersionHistoryProps {
   onVersionSelect?: (version: ScoreVersion) => void
   isSidebarCollapsed?: boolean
   onToggleSidebar?: () => void
+  isLoading?: boolean
+  isLoadingMore?: boolean
 }
 
 export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProps> = ({
@@ -21,7 +23,9 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
   selectedVersionId,
   onVersionSelect,
   isSidebarCollapsed = false,
-  onToggleSidebar
+  onToggleSidebar,
+  isLoading = false,
+  isLoadingMore = false,
 }) => {
   // State for sidebar width (in pixels)
   const [sidebarWidth, setSidebarWidth] = React.useState(320) // Default 320px (w-80)
@@ -82,7 +86,11 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
       {/* Sidebar Header */}
       <div className="p-3 border-b border-border flex items-center justify-between">
         {!isSidebarCollapsed && (
-          <h3 className="text-sm font-medium">Version History ({versions?.length || 0})</h3>
+          <h3 className="text-sm font-medium">
+            {isLoading && versions.length === 0
+              ? 'Loading versions...'
+              : `Version History (${versions?.length || 0}${isLoadingMore ? '+' : ''})`}
+          </h3>
         )}
         <Button
           variant="ghost"
@@ -101,8 +109,22 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
       {/* Version List */}
       {!isSidebarCollapsed && (
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {isLoading && versions.length === 0 && (
+            Array.from({ length: 6 }).map((_, index) => (
+              <div key={`version-skeleton-${index}`} className="w-full p-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 rounded bg-muted animate-pulse" />
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="h-3 w-28 rounded bg-muted animate-pulse" />
+                    <div className="h-3 w-20 rounded bg-muted animate-pulse" />
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
           {/* Champion Version - Always at top */}
-          {championVersion && (
+          {!isLoading && championVersion && (
             <Button
               key={championVersion.id}
               variant={selectedVersionId === championVersion.id ? "secondary" : "ghost"}
@@ -149,6 +171,9 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
               </div>
             </Button>
           ))}
+          {isLoadingMore && versions.length > 0 && (
+            <div className="px-2 py-1 text-xs text-muted-foreground">Loading more versions...</div>
+          )}
         </div>
       )}
       
