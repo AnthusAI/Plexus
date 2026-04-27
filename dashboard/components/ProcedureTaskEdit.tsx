@@ -27,6 +27,7 @@ import { parseParametersFromYaml } from "@/lib/parameter-parser"
 import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
 import { CardButton } from "@/components/CardButton"
 import { X } from "lucide-react"
+import { PROCEDURE_CARD_FIELDS } from "@/components/ui/optimizer-results-utils"
 
 type ParameterValues = ParameterValue
 import * as yaml from 'js-yaml'
@@ -224,12 +225,7 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
           query: `
             mutation UpdateProcedure($input: UpdateProcedureInput!) {
               updateProcedure(input: $input) {
-                id
-                featured
-                code
-                scorecardId
-                scoreId
-                updatedAt
+                ${PROCEDURE_CARD_FIELDS}
               }
             }
           `,
@@ -252,13 +248,7 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
           query: `
             mutation CreateProcedure($input: CreateProcedureInput!) {
               createProcedure(input: $input) {
-                id
-                featured
-                code
-                scorecardId
-                scoreId
-                createdAt
-                updatedAt
+                ${PROCEDURE_CARD_FIELDS}
               }
             }
           `,

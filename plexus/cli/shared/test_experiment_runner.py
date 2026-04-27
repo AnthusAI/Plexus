@@ -153,6 +153,7 @@ async def test_run_experiment_persists_failed_result_telemetry(monkeypatch):
     assert result["status"] == "FAILED"
     assert fake_client.procedure_status == "FAILED"
     assert fake_client.procedure_metadata["runtime"]["command"] == "procedure run proc-123"
+    assert "lastHeartbeatAt" in fake_client.procedure_metadata["runtime"]
     assert fake_client.procedure_metadata["last_failure"]["kind"] == "exception"
     assert fake_client.procedure_metadata["last_failure"]["message"] == "optimizer blew up"
     assert fake_client.procedure_metadata["last_failure"]["phase"] == "Baseline Evaluation"
