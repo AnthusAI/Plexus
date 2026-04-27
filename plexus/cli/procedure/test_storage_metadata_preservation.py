@@ -55,8 +55,23 @@ class _FakeClient:
 def test_save_procedure_metadata_preserves_runtime_and_failure_fields(monkeypatch):
     fake_client = _FakeClient()
     fake_s3 = _FakeS3Client()
+    optimizer_index_calls = []
 
     monkeypatch.setattr("plexus.cli.procedure.tactus_adapters.storage.boto3.client", lambda _name: fake_s3)
+    monkeypatch.setattr(
+        "plexus.cli.shared.optimizer_results.OptimizerResultsService.index_optimizer_run",
+        lambda self, procedure_id, **kwargs: (
+            optimizer_index_calls.append({"procedure_id": procedure_id, **kwargs})
+            or {
+                "pointer": {
+                    "task_id": "task-123",
+                    "manifest": "tasks/task-123/optimizer/manifest.json",
+                    "events": "tasks/task-123/optimizer/events.jsonl",
+                    "runtime_log": "tasks/task-123/optimizer/runtime.log",
+                }
+            }
+        ),
+    )
 
     storage = PlexusStorageAdapter(fake_client, "proc-123")
     metadata = ProcedureMetadata(
@@ -79,8 +94,10 @@ def test_save_procedure_metadata_preserves_runtime_and_failure_fields(monkeypatc
     assert fake_client.saved_metadata["state"]["_s3_key"].endswith("/state.json")
     assert fake_client.saved_metadata["lua_state"]["_s3_key"].endswith("/lua_state.json")
     assert fake_client.saved_metadata["checkpoints"]["_s3_key"].endswith("/checkpoints.json")
+    assert fake_client.saved_metadata["optimizer_artifacts"]["manifest"] == "tasks/task-123/optimizer/manifest.json"
     assert fake_client.retry_policies[-1] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
     assert fake_s3.put_calls == 4
+    assert optimizer_index_calls and optimizer_index_calls[0]["procedure_id"] == "proc-123"
 
 
 def test_update_procedure_status_uses_long_running_write_policy():
