@@ -337,6 +337,8 @@ class PlexusTool:
                     'configuration': yaml_content,
                     'note': ''
                 }
+                if champion_version_id:
+                    version_input['parentVersionId'] = champion_version_id
                 
                 result = self.client.execute(mutation, {'input': version_input})
                 new_version = result.get('createScoreVersion')
@@ -368,4 +370,4 @@ class PlexusTool:
             except Exception as e:
                 return f"Error pushing score: {str(e)}"
         except Exception as e:
-            return f"Error pushing score: {str(e)}" 
+            return f"Error pushing score: {str(e)}"

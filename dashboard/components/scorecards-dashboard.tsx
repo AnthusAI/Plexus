@@ -28,7 +28,8 @@ import {
   Square,
   X,
   MessageCircleMore,
-  Coins
+  Coins,
+  History
 } from "lucide-react"
 import { ScoreCount } from "./scorecards/score-count"
 import { CardButton } from "./CardButton"
@@ -50,6 +51,7 @@ import { AdHocFeedbackAlignment } from "@/components/ui/ad-hoc-feedback-alignmen
 import { AdHocCostAnalysis } from "@/components/ui/ad-hoc-cost-analysis"
 import { ScoreProcedureList } from "@/components/ui/score-procedure-list"
 import { ScoreEvaluationList } from "@/components/ui/score-evaluation-list"
+import { ScoreChampionHistory } from "@/components/ui/score-champion-history"
 import { motion, AnimatePresence } from 'framer-motion'
 import { FilterInput } from '@/components/FilterInput'
 import { useAccount } from "@/app/contexts/AccountContext"
@@ -130,7 +132,7 @@ export default function ScorecardsComponent({
     isOpen: boolean;
     scoreId: string;
     scoreName?: string;
-    type: 'procedures' | 'evaluations';
+    type: 'procedures' | 'evaluations' | 'champion-history';
   } | null>(null)
   const [scorecardsFilter, setScorecardsFilter] = useState('')
   const router = useRouter()
@@ -406,6 +408,19 @@ export default function ScorecardsComponent({
       scoreId,
       scoreName,
       type: 'evaluations',
+    });
+    setIsTaskViewActive(false);
+  };
+
+  const handleScoreViewChampionHistory = (scoreId: string, scoreName?: string) => {
+    console.log('Opening champion history for score:', scoreId);
+    setFeedbackAlignmentPanel(null);
+    setCostAnalysisPanel(null);
+    setScoreExplorerPanel({
+      isOpen: true,
+      scoreId,
+      scoreName,
+      type: 'champion-history',
     });
     setIsTaskViewActive(false);
   };
@@ -1502,6 +1517,7 @@ export default function ScorecardsComponent({
           onDelete={() => handleDeleteScore(selectedScore.id)}
           onViewProcedures={() => handleScoreViewProcedures(selectedScore.id, selectedScore.name)}
           onViewEvaluations={() => handleScoreViewEvaluations(selectedScore.id, selectedScore.name)}
+          onViewChampionHistory={() => handleScoreViewChampionHistory(selectedScore.id, selectedScore.name)}
           initialSelectedVersionId={selectedVersionId}
           onVersionSelect={handleVersionSelect}
           onSave={async () => {
@@ -1594,13 +1610,15 @@ export default function ScorecardsComponent({
           showHeader={false}
           surface="slot"
         />
-      ) : (
+      ) : scoreExplorerPanel.type === 'evaluations' ? (
         <ScoreEvaluationList
           scoreId={selectedScore.id}
           scope="score"
           showHeader={false}
           surface="slot"
         />
+      ) : (
+        <ScoreChampionHistory scoreId={selectedScore.id} />
       )
     )
   }
@@ -1853,6 +1871,8 @@ export default function ScorecardsComponent({
                           {scoreExplorerPanel?.isOpen ? (
                             scoreExplorerPanel.type === 'procedures' ? (
                               <Activity className="h-5 w-5 text-foreground" />
+                            ) : scoreExplorerPanel.type === 'champion-history' ? (
+                              <History className="h-5 w-5 text-foreground" />
                             ) : (
                               <Database className="h-5 w-5 text-foreground" />
                             )
@@ -1863,7 +1883,11 @@ export default function ScorecardsComponent({
                           )}
                           <h2 className="text-lg font-semibold">
                             {scoreExplorerPanel?.isOpen
-                              ? (scoreExplorerPanel.type === 'procedures' ? 'Procedures' : 'Evaluations')
+                              ? (scoreExplorerPanel.type === 'procedures'
+                                  ? 'Procedures'
+                                  : scoreExplorerPanel.type === 'champion-history'
+                                    ? 'Champion History'
+                                    : 'Evaluations')
                               : feedbackAnalysisPanel?.isOpen
                                 ? 'Feedback Alignment'
                                 : 'Cost Analysis'}

@@ -1133,7 +1133,7 @@ You can also just ask me questions or tell me what you'd like to do in plain Eng
                     'configuration': yaml_content,
                     'parentVersionId': score_data.get('championVersionId'),
                     'note': 'Updated via CLI push command',
-                    'isFeatured': True
+                    'isFeatured': None
                 }
             })
             
@@ -1204,4 +1204,4 @@ You can also just ask me questions or tell me what you'd like to do in plain Eng
             self.current_score = score
             
         except Exception as e:
-            self.console.print(f"[red]Error loading score: {str(e)}[/red]") 
+            self.console.print(f"[red]Error loading score: {str(e)}[/red]")
