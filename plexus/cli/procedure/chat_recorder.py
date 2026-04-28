@@ -913,6 +913,8 @@ class ProcedureChatRecorder:
                 'sequenceNumber': self.sequence_number,
                 'humanInteraction': human_interaction,
                 'responseTarget': self._response_target(),
+                # Runtime-emitted messages are not dispatch commands; mark them
+                # completed so composite responseStatus indexes remain valid.
                 'responseStatus': 'COMPLETED',
             }
 
