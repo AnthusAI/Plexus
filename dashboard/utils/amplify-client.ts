@@ -297,7 +297,7 @@ export const amplifyClient = {
     create: async (data: {
       scoreId: string
       configuration: string
-      isFeatured: boolean
+      isFeatured: string
       comment?: string
       createdAt: string
       updatedAt: string
@@ -320,7 +320,7 @@ export const amplifyClient = {
     update: async (data: {
       id: string
       configuration?: any
-      isFeatured?: boolean
+      isFeatured?: string
       comment?: string
     }) => {
       const response = await graphqlRequest<{ updateScoreVersion: Schema['ScoreVersion']['type'] }>(`

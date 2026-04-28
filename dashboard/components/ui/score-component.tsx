@@ -67,7 +67,7 @@ export interface ScoreVersion {
   scoreId: string
   configuration: string // YAML string
   guidelines?: string
-  isFeatured: boolean
+  isFeatured: string
   isChampion?: boolean
   note?: string
   createdAt: string
@@ -2233,7 +2233,7 @@ export function ScoreComponent({
         variables: {
           input: {
             id: String(versionId),
-            isFeatured: !version.isFeatured
+            isFeatured: version.isFeatured === "true" ? "false" : "true"
           }
         }
       });
@@ -2241,7 +2241,7 @@ export function ScoreComponent({
       // Update local state regardless of response
       // This ensures UI is updated even if we can't verify the response format
       setVersions(prev => prev.map(v => 
-        v.id === versionId ? { ...v, isFeatured: !v.isFeatured } : v
+        v.id === versionId ? { ...v, isFeatured: v.isFeatured === "true" ? "false" : "true" } : v
       ));
 
       toast.success('Version feature status updated');
@@ -2384,7 +2384,7 @@ export function ScoreComponent({
         scoreId: String(score.id),
         configuration: configurationYaml,
         guidelines: overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''),
-        isFeatured: false,
+        isFeatured: "false",
         note: versionNote || 'Updated score configuration',
         createdAt: now,
         updatedAt: now

@@ -1,4 +1,5 @@
 from rubric_memory.rubric_memory import (
+    _coerce_citation_context,
     _coerce_json_object,
     _fetch_feedback_item_context,
     _fetch_score_result_context,
@@ -76,6 +77,35 @@ def test_merge_context_value_prefers_explicit_value():
 def test_coerce_json_object_accepts_dict_and_json_string():
     assert _coerce_json_object({"a": 1}, field_name="context") == {"a": 1}
     assert _coerce_json_object('{"a": 1}', field_name="context") == {"a": 1}
+
+
+def test_coerce_citation_context_accepts_evidence_pack_wrapper_and_lua_arrays():
+    context = _coerce_citation_context(
+        {
+            "success": True,
+            "score_id": "score-1",
+            "markdown_context": "context",
+            "citation_index": {
+                "2": {"id": "evidence:02", "kind": "corpus"},
+                "1": {"id": "rubric:abc", "kind": "official_rubric"},
+            },
+            "machine_context": {"score_version_id": "version-1"},
+            "diagnostics": {
+                "1": {"kind": "prepared_corpus"},
+            },
+        },
+        field_name="rubric_memory_context",
+    )
+
+    assert context == {
+        "markdown_context": "context",
+        "citation_index": [
+            {"id": "rubric:abc", "kind": "official_rubric"},
+            {"id": "evidence:02", "kind": "corpus"},
+        ],
+        "machine_context": {"score_version_id": "version-1"},
+        "diagnostics": [{"kind": "prepared_corpus"}],
+    }
 
 
 def test_register_rubric_memory_tools_includes_sme_question_gate():
