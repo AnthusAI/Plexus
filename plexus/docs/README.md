@@ -5,13 +5,14 @@ This directory contains documentation files that are accessible through the Plex
 ## Available Documentation
 
 - **score-yaml-format.md**: Complete guide to Score YAML configuration format including LangGraph, node types, dependencies, and best practices
+- **rubric-memory.md**: Guide to scorecard knowledge-base folders, temporal source conventions, retrieval-only citation contexts, and RubricEvidencePack synthesis
 
 ## Adding New Documentation Files
 
 To add a new documentation file that can be accessed via the MCP server:
 
 1. **Add the documentation file** to this directory (`plexus/docs/`)
-2. **Update the tool configuration** in `MCP/plexus_fastmcp_server.py`:
+2. **Update the tool configuration** in `MCP/tools/util/docs.py` and `MCP/tools/documentation/docs.py`:
    - Locate the `get_plexus_documentation` tool function
    - Add your new file to the `valid_files` dictionary mapping
    - Update the tool's docstring to list the new filename option
@@ -45,4 +46,4 @@ To add a new file called `evaluation-metrics.md`:
 - **Easy to update**: Documentation can be updated by simply editing the markdown files
 - **Version controlled**: Documentation changes are tracked in git
 - **Accessible to AI**: The MCP server can provide documentation on-demand to AI agents
-- **Maintainable**: No need to modify server code when updating documentation content 
+- **Maintainable**: No need to modify server code when updating documentation content

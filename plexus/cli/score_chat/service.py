@@ -552,7 +552,7 @@ Then ask the user what they would like to change about the scorecard."""
                     'configuration': yaml_content,
                     'parentVersionId': score_data.get('championVersionId'),
                     'note': 'Updated via API chat command',
-                    'isFeatured': None
+                    'isFeatured': "true"
                 }
             })
             
