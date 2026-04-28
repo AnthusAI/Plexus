@@ -22,10 +22,16 @@
       "author": "derek",
       "text": "Implemented consoleRunWorker credential cleanup on `feature/plx-c884b5-console-worker-iam-secrets`.\n\nCode changes:\n- Cloud Lambda `app.py` now uses AppSync IAM auth via `PLEXUS_GRAPHQL_AUTH_MODE=iam` and creates `PlexusDashboardClient` without an API key.\n- Cloud Lambda bootstraps provider credentials from `PLEXUS_CONFIG_SECRET_NAME` using Secrets Manager, setting `OPENAI_API_KEY` in-process from `openai-api-key` and optional `ANTHROPIC_API_KEY` from `anthropic-api-key`.\n- Amplify worker resource no longer injects `PLEXUS_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` as Lambda environment variables.\n- Worker resource now injects `PLEXUS_CONFIG_SECRET_NAME` and grants read access to that secret.\n- Backend now maps `main` to `production` through existing environment mapping for secret name resolution.\n- Added `requests-aws4auth` to root dependencies so the existing dashboard client IAM auth path is available in the worker image.\n- Cleaned up the reported CodeQL `py/unnecessary-lambda` test findings.\n\nValidation completed:\n- Console worker Python tests: 15 passed.\n- Dashboard typecheck: passed.\n- `rcql --lang python -q -v --files \"dashboard/amplify/functions/consoleRunWorker/*.py\"`: passed with no reported findings.\n- `poetry check --lock`: exit 0 with existing Poetry metadata deprecation warnings only.\n- `git diff --check`: passed.\n- `py_compile` for changed Python files: passed.",
       "created_at": "2026-04-28T23:08:48.517882390Z"
+    },
+    {
+      "id": "26c70349-af20-483b-a719-24ffcfd502e8",
+      "author": "derek",
+      "text": "Pushed implementation and opened PR:\n- Branch: `feature/plx-c884b5-console-worker-iam-secrets`\n- Commit after rebase: `7a9a7468`\n- PR: https://github.com/AnthusAI/Plexus/pull/241\n\nValidation included in PR body:\n- Console worker Python tests: 15 passed.\n- Dashboard typecheck passed.\n- rcql consoleRunWorker scan passed with no reported findings.\n- poetry check --lock passed with existing deprecation warnings only.\n- git diff --check and py_compile passed.",
+      "created_at": "2026-04-28T23:09:29.187441202Z"
     }
   ],
   "created_at": "2026-04-28T22:50:27.437588793Z",
-  "updated_at": "2026-04-28T23:08:48.517882390Z",
+  "updated_at": "2026-04-28T23:09:29.187441202Z",
   "closed_at": null,
   "custom": {}
 }
