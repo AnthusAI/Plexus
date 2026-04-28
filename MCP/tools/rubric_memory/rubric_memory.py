@@ -97,6 +97,30 @@ def _coerce_json_object(value, *, field_name: str) -> dict:
     raise ValueError(f"{field_name} must be a JSON object.")
 
 
+def _coerce_lua_array(value):
+    """Convert Lua/MCP table arrays encoded as numeric-key dicts into lists."""
+    if isinstance(value, dict):
+        numeric_items = []
+        for key, item in value.items():
+            key_text = str(key)
+            if not key_text.isdigit():
+                return value
+            numeric_items.append((int(key_text), item))
+        return [item for _, item in sorted(numeric_items)]
+    return value
+
+
+def _coerce_citation_context(value, *, field_name: str) -> dict:
+    """Extract the canonical citation context from MCP wrapper or raw context input."""
+    obj = _coerce_json_object(value, field_name=field_name)
+    return {
+        "markdown_context": obj.get("markdown_context") or "",
+        "citation_index": _coerce_lua_array(obj.get("citation_index") or []),
+        "machine_context": obj.get("machine_context") or {},
+        "diagnostics": _coerce_lua_array(obj.get("diagnostics") or []),
+    }
+
+
 def register_rubric_memory_tools(server):
     """Register rubric-memory tools."""
 
@@ -240,7 +264,7 @@ def register_rubric_memory_tools(server):
             )
 
             context = RubricMemoryCitationContext.model_validate(
-                _coerce_json_object(
+                _coerce_citation_context(
                     rubric_memory_context,
                     field_name="rubric_memory_context",
                 )

@@ -335,7 +335,8 @@ class PlexusTool:
                 version_input = {
                     'scoreId': score_id,
                     'configuration': yaml_content,
-                    'note': ''
+                    'note': '',
+                    'isFeatured': "true"
                 }
                 
                 result = self.client.execute(mutation, {'input': version_input})
@@ -368,4 +369,4 @@ class PlexusTool:
             except Exception as e:
                 return f"Error pushing score: {str(e)}"
         except Exception as e:
-            return f"Error pushing score: {str(e)}" 
+            return f"Error pushing score: {str(e)}"

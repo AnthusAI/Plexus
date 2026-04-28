@@ -199,7 +199,7 @@ const schema = a.schema({
             score: a.belongsTo('Score', 'scoreId'),
             configuration: a.string().required(),
             guidelines: a.string(),
-            isFeatured: a.boolean().required(),
+            isFeatured: a.string().required(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             note: a.string(),
