@@ -3,7 +3,7 @@
   "title": "Accept and apply CodeQL suggestions for develop->main PR",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -43,8 +43,8 @@
     }
   ],
   "created_at": "2026-04-14T13:06:37.216868Z",
-  "updated_at": "2026-04-28T03:32:10.360743Z",
-  "closed_at": null,
+  "updated_at": "2026-04-28T03:33:27.280304Z",
+  "closed_at": "2026-04-28T03:33:27.280304Z",
   "custom": {
     "project_label": "plx",
     "source": "shared"
