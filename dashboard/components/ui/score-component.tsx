@@ -3155,7 +3155,6 @@ export function ScoreComponent({
         incoming: true,
       });
       await updateVersionMetadata(versionId, incomingMetadata, { isFeatured: 'true' });
-      await updateVersionMetadata(versionId, incomingMetadata, { isFeatured: 'true' });
 
       if (previousChampionVersionId) {
         const outgoingMetadata = buildChampionMetadata({

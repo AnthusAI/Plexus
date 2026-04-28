@@ -1,0 +1,25 @@
+{
+  "id": "plx-986ac997-9e5c-41c9-867c-991522fa1413",
+  "title": "Fix version-scoped score procedure list",
+  "description": "In the scorecards dashboard, the selected score version shows evaluations but not associated procedures. Investigate and fix version-scoped procedure matching/loading.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e62c8d84-a309-456c-8074-7fa1f82f3d4f",
+      "author": "ryan",
+      "text": "Fixed version-scoped score procedure list by making loadOptimizerRuns paginate all procedures for the score before client-side version filtering. This prevents older procedure manifests from being omitted when a selected score version was touched outside the first query page. Also removed a duplicate champion metadata update call introduced during merge resolution. Validation: dashboard npm run typecheck passed.",
+      "created_at": "2026-04-28T01:17:36.380054Z"
+    }
+  ],
+  "created_at": "2026-04-28T01:15:29.788803Z",
+  "updated_at": "2026-04-28T01:17:36.380054Z",
+  "closed_at": null,
+  "custom": {}
+}
