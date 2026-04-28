@@ -600,6 +600,72 @@ async def test_execute_tactus_injects_console_session_history_into_runtime_conte
 
 
 @pytest.mark.asyncio
+async def test_execute_tactus_skips_chat_recorder_console_lookups_when_context_provides_values(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _RecorderWithCounters(SimpleNamespace):
+        def __init__(self):
+            super().__init__()
+            self.trigger_calls = 0
+            self.history_calls = 0
+
+        def get_latest_console_trigger_message(self):
+            self.trigger_calls += 1
+            return "from-recorder"
+
+        def get_console_session_history(self):
+            self.history_calls += 1
+            return [{"role": "USER", "content": "from-recorder"}]
+
+    recorder = _RecorderWithCounters()
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithChatRecorder)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: recorder,
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-chat-history-preloaded",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  local function run(input)\n"
+            "    return { success = true }\n"
+            "  end\n"
+            "  return run(input)\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={
+            "console_user_message": "from-context",
+            "console_session_history": [{"role": "USER", "content": "from-context"}],
+        },
+    )
+
+    assert result["success"] is True
+    assert recorder.trigger_calls == 0
+    assert recorder.history_calls == 0
+    assert _RuntimeWithChatRecorder.last_context["console_user_message"] == "from-context"
+    assert _RuntimeWithChatRecorder.last_context["console_session_history"] == [
+        {"role": "USER", "content": "from-context"}
+    ]
+
+
+@pytest.mark.asyncio
 async def test_execute_tactus_sets_chat_recorder_account_id_from_runtime_context(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
