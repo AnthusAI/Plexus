@@ -4,28 +4,36 @@ GraphQL client for updating AggregatedMetrics table.
 
 import json
 import os
-import requests
-from typing import Dict, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, Optional
+from urllib.parse import urlparse
+
+import boto3
+import requests
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
 
 
 class GraphQLClient:
     """Client for interacting with the Plexus GraphQL API."""
     
-    def __init__(self, endpoint: str, api_key: str):
+    def __init__(self, endpoint: str):
         """
         Initialize GraphQL client.
         
         Args:
             endpoint: GraphQL API endpoint URL
-            api_key: API key for authentication
         """
         self.endpoint = endpoint
-        self.api_key = api_key
-        self.headers = {
-            'Content-Type': 'application/json',
-            'x-api-key': api_key
-        }
+        parsed_endpoint = urlparse(endpoint)
+        hostname = parsed_endpoint.netloc
+        parts = hostname.split(".")
+        if len(parts) < 5 or parts[1] != "appsync-api":
+            raise ValueError(f"Invalid AppSync endpoint format: {endpoint}")
+
+        self.host = hostname
+        self.region = parts[2]
+        self.session = boto3.Session()
     
     def execute_query(self, query: str, variables: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -45,11 +53,31 @@ class GraphQLClient:
             'query': query,
             'variables': variables
         }
+        payload_json = json.dumps(payload)
+
+        credentials = self.session.get_credentials()
+        if credentials is None:
+            raise ValueError(
+                "AWS credentials not found. Metrics aggregator requires IAM credentials for SigV4 GraphQL auth."
+            )
+
+        frozen_credentials = credentials.get_frozen_credentials()
+        aws_request = AWSRequest(
+            method='POST',
+            url=self.endpoint,
+            data=payload_json,
+            headers={
+                'Content-Type': 'application/json',
+                'Host': self.host
+            }
+        )
+        SigV4Auth(frozen_credentials, 'appsync', self.region).add_auth(aws_request)
+        signed_headers = dict(aws_request.headers.items())
         
         response = requests.post(
             self.endpoint,
-            headers=self.headers,
-            json=payload,
+            headers=signed_headers,
+            data=payload_json,
             timeout=30
         )
         
@@ -286,8 +314,8 @@ def get_client_from_env() -> GraphQLClient:
     """
     Create a GraphQL client from environment variables.
     
-    Looks for PLEXUS_API_URL and PLEXUS_API_KEY (developer .env format)
-    or GRAPHQL_ENDPOINT and GRAPHQL_API_KEY (Lambda environment format).
+    Looks for PLEXUS_API_URL (developer .env format)
+    or GRAPHQL_ENDPOINT (Lambda environment format).
     
     Returns:
         Configured GraphQL client
@@ -297,16 +325,10 @@ def get_client_from_env() -> GraphQLClient:
     """
     # Try developer .env format first
     endpoint = os.environ.get('PLEXUS_API_URL') or os.environ.get('GRAPHQL_ENDPOINT')
-    api_key = os.environ.get('PLEXUS_API_KEY') or os.environ.get('GRAPHQL_API_KEY')
     
     if not endpoint:
         raise ValueError(
             "GraphQL endpoint not found. Set PLEXUS_API_URL or GRAPHQL_ENDPOINT environment variable."
         )
-    if not api_key:
-        raise ValueError(
-            "GraphQL API key not found. Set PLEXUS_API_KEY or GRAPHQL_API_KEY environment variable."
-        )
     
-    return GraphQLClient(endpoint, api_key)
-
+    return GraphQLClient(endpoint)
