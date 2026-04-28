@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "01bb1c1e-36a5-4de8-bfc0-08e911cc100c",
+  "issue_id": "plx-0c8df847-996b-4097-8256-5ff1c3ef99da",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-28T17:43:31.711Z",
+  "actor_id": "derek",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "## Summary\nInvestigate why  fails while deploying .\n\n## Scope\n- Retrieve failing pipeline execution details\n- Identify exact failed action and CloudFormation stack event/reason\n- Provide root cause and recommended remediation\n\n## Done\n- Root cause identified with concrete AWS evidence\n- Next remediation steps documented",
+        "to": "## Summary\nInvestigate why `plexus-infrastructure-production-pipeline` fails while deploying `plexus-metrics-aggregation-production`.\n\n## Scope\n- Retrieve failing pipeline execution details\n- Identify exact failed action and CloudFormation stack event/reason\n- Provide root cause and recommended remediation\n\n## Done\n- Root cause identified with concrete AWS evidence\n- Next remediation steps documented"
+      }
+    }
+  }
+}

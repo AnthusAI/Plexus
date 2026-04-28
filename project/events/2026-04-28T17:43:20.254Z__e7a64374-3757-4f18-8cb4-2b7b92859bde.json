@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e7a64374-3757-4f18-8cb4-2b7b92859bde",
+  "issue_id": "plx-2b205fdf-e22e-4077-82b6-fe38ef5de848",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T17:43:20.254Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "initiative",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Production deployment reliability"
+  }
+}
