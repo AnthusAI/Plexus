@@ -335,7 +335,8 @@ class PlexusTool:
                 version_input = {
                     'scoreId': score_id,
                     'configuration': yaml_content,
-                    'note': ''
+                    'note': '',
+                    'isFeatured': "true"
                 }
                 if champion_version_id:
                     version_input['parentVersionId'] = champion_version_id

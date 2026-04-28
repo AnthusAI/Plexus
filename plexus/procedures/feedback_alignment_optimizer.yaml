@@ -86,7 +86,12 @@ params:
     type: number
     default: 180000
     required: false
-    description: "Model context window size in tokens. Used to calibrate proactive context budget management. Default 180000 is safe for Claude Sonnet/Opus (200K window with 20K output reserve)."
+    description: "Model context window size in tokens. Used to calibrate proactive context budget management."
+
+  agent_models:
+    type: object
+    required: false
+    description: "Optional per-agent model overrides, keyed by optimizer agent name. Example: {hypothesis_planner: gpt-5.4-mini, code_editor: gpt-5-mini, report_writer: gpt-5-mini}."
 
 outputs:
   success:
@@ -148,28 +153,45 @@ outputs:
     required: false
 
 agents:
+  hypothesis_planner:
+    provider: openai
+    model: gpt-5.4-mini
+    temperature: 1
+    system_prompt: |
+      You are the hypothesis-generation planner for a Plexus score optimizer.
+
+      Your job is to propose one high-quality optimization hypothesis at a time.
+      You do not edit YAML. You do not call tools. You read RCA analysis,
+      evaluation metrics, rubric-memory briefing, guidelines, score code, and
+      accumulated lessons, then return exactly one numbered hypothesis line.
+
+      The highest-value hypotheses are almost always about policy clarity:
+      missing rubric rules, ambiguous decision criteria, contradictory feedback,
+      stale rubric areas, or context that should be made explicit in the score.
+      Use rubric-memory citation IDs for policy claims when rubric memory is supplied.
+
+      Required output shape:
+      1. <Hypothesis name>: <Description of what to change and why>
+
+    initial_message: "Ready to plan hypotheses."
+
   code_editor:
     provider: openai
-    model: gpt-5.4
+    model: gpt-5-mini
     temperature: 1
     system_prompt: |
       You are an optimizer for a Plexus score configuration.
 
-      You work in phases within a single continuous session:
+      You work in implementation and synthesis phases within a single continuous session.
+      A separate hypothesis_planner agent proposes the hypotheses before you edit code.
 
-      PHASE 1 — PLANNING:
-      You receive RCA analysis, evaluation metrics, guidelines, and the current score
-      configuration. You will be asked to propose ONE hypothesis at a time, with a specific
-      objective (e.g., incremental feedback fix, bold feedback fix, accuracy fix).
-      Respond with a single numbered hypothesis on one line.
-
-      PHASE 2 — IMPLEMENTATION:
+      PHASE 1 — IMPLEMENTATION:
       For each hypothesis, you edit score_config.yaml to test it. The current file content
       appears in a system message before each task message. After editing, submit with
       submit_score_version(version_note="..."). The system evaluates your version and reports
       results. Then you move to the next hypothesis, starting from the original baseline.
 
-      PHASE 3 — SYNTHESIS:
+      PHASE 2 — SYNTHESIS:
       After all hypotheses are evaluated, you see all results with their metrics.
       Synthesize what you learned. If any versions showed improvement (on either
       dataset, without significantly hurting the other), create a final version
@@ -190,6 +212,8 @@ agents:
       TOOLS:
       - str_replace_editor: view or edit score_config.yaml
       - submit_score_version: submit current edits for evaluation
+      - plexus_rubric_memory_evidence_pack: retrieve rubric-memory citation context for policy-sensitive hypotheses or disputed items
+      - plexus_rubric_memory_sme_question_gate: check proposed SME questions against rubric-memory citations before asking SMEs
       - done: signal you cannot improve current hypothesis
 
       LANGGRAPH NODE CONTRACTS:
@@ -211,6 +235,16 @@ agents:
       Ask: "Is the rubric missing a rule? Is an existing rule ambiguous or mis-stated?"
       Fixing a policy gap generalizes to every item of that type. Adding an example
       only helps items that closely resemble that example.
+
+      RUBRIC MEMORY CITATIONS:
+      When rubric-memory context is supplied or you call plexus_rubric_memory_evidence_pack,
+      cite exact citation IDs for policy claims, hypotheses, version notes, and
+      cannot_improve conclusions. The official score version rubric remains canonical;
+      corpus citations explain history, interpretation, stale areas, or gaps.
+      Before concluding that SME input is needed, check rubric memory. Do not ask SMEs
+      the same policy question again if the official rubric or cited corpus evidence
+      already answers it. If corpus evidence answers the question but the rubric does not,
+      frame the SME request as a decision to codify or update the rubric.
 
       FEW-SHOT EXAMPLES — use sparingly:
       Adding examples is tempting but usually counterproductive at scale. More than
@@ -270,12 +304,14 @@ agents:
     tools:
       - str_replace_editor
       - submit_score_version
+      - plexus_rubric_memory_evidence_pack
+      - plexus_rubric_memory_sme_question_gate
       - done
 
   cycle_analyst:
     provider: openai
-    model: gpt-5.4
-    max_tokens: 1200
+    model: gpt-5-mini
+    max_tokens: 16000
     verbosity: low
     system_prompt: |
       You analyze optimization results and produce compact planning guidance.
@@ -310,8 +346,8 @@ agents:
 
   report_writer:
     provider: openai
-    model: gpt-5.2
-    max_tokens: 900
+    model: gpt-5-mini
+    max_tokens: 16000
     verbosity: low
     system_prompt: |
       You write short optimizer reports for humans and downstream tooling.
@@ -330,7 +366,7 @@ agents:
 
   reviewer:
     provider: openai
-    model: gpt-5.4
+    model: gpt-5.4-mini
     temperature: 1
     system_prompt: |
       You are a score optimization reviewer. You will see the eval results for an edit
@@ -362,8 +398,8 @@ agents:
 
   early_stop_advisor:
     provider: openai
-    model: gpt-5.4
-    temperature: 0
+    model: gpt-5.4-mini
+    temperature: 1
     system_prompt: |
       You are an escalation advisor for a score optimization run.
 
@@ -1556,6 +1592,15 @@ code: |
         table.insert(parts, "But follow the RCA over historical patterns if they conflict.")
         table.insert(parts, "")
       end
+    end
+
+    if has_text(opts.rubric_memory_briefing) then
+      table.insert(parts, "=== RUBRIC MEMORY BRIEFING (official rubric + cited corpus evidence) ===")
+      table.insert(parts, trunc(opts.rubric_memory_briefing, 12000))
+      table.insert(parts, "=== END RUBRIC MEMORY BRIEFING ===")
+      table.insert(parts, "")
+      table.insert(parts, "Use citation IDs from this briefing for policy-memory claims and hypotheses.")
+      table.insert(parts, "")
     end
 
     -- Evaluation results
@@ -2862,6 +2907,74 @@ code: |
 
   Human.notify({message = "Resolved: scorecard_id=" .. scorecard_id .. ", score_id=" .. score_id, level = "info"})
 
+  local rubric_memory_briefing = ""
+  local rubric_memory_context = nil
+  do
+    local rm_ok, rm_result = pcall(call_plexus_tool, "plexus_rubric_memory_evidence_pack", {
+      scorecard_identifier = params.scorecard,
+      score_identifier = params.score,
+      score_id = score_id,
+      topic_hint = "Score-level optimizer rubric-memory briefing"
+    }, {max_retries = 1})
+    if rm_ok and type(rm_result) == "table" and rm_result.success and has_text(rm_result.markdown_context) then
+      rubric_memory_context = rm_result
+      rubric_memory_briefing = rm_result.markdown_context
+      State.set("rubric_memory_context", rm_result)
+      Human.notify({message = "Rubric-memory briefing loaded for optimizer planning.", level = "info"})
+    elseif rm_ok and type(rm_result) == "table" and rm_result.error then
+      Human.notify({message = "Rubric-memory briefing unavailable: " .. tostring(rm_result.error), level = "warning"})
+    else
+      Human.notify({message = "Rubric-memory briefing unavailable for this optimizer run.", level = "debug"})
+    end
+  end
+
+  local function record_sme_question_gate(stage, raw_agenda, gate_result)
+    local records = State.get("sme_question_gate_diagnostics") or {}
+    table.insert(records, {
+      stage = stage,
+      raw_agenda = raw_agenda or "",
+      result = gate_result
+    })
+    State.set("sme_question_gate_diagnostics", records)
+  end
+
+  local function gate_sme_agenda(raw_agenda, stage, optimizer_context)
+    if not has_text(raw_agenda) or not rubric_memory_context then
+      return raw_agenda, nil
+    end
+    local score_version_id = ""
+    if type(rubric_memory_context.machine_context) == "table" then
+      score_version_id = rubric_memory_context.machine_context.score_version_id or ""
+    end
+    if not has_text(score_version_id) then
+      Human.notify({message = "SME question gate skipped: rubric-memory context has no score_version_id.", level = "warning"})
+      return raw_agenda, nil
+    end
+    local gate_ok, gate_result = pcall(call_plexus_tool, "plexus_rubric_memory_sme_question_gate", {
+      scorecard_identifier = params.scorecard,
+      score_identifier = params.score,
+      score_version_id = score_version_id,
+      candidate_agenda_markdown = raw_agenda,
+      rubric_memory_context = rubric_memory_context,
+      optimizer_context = optimizer_context or ""
+    }, {max_retries = 1})
+    if gate_ok and type(gate_result) == "table" and gate_result.success then
+      record_sme_question_gate(stage, raw_agenda, gate_result)
+      Human.notify({message = string.format(
+        "SME question gate applied (%s): suppressed=%s transformed=%s kept=%s",
+        stage,
+        tostring(gate_result.summary_counts and gate_result.summary_counts.suppressed or 0),
+        tostring(gate_result.summary_counts and gate_result.summary_counts.transformed or 0),
+        tostring(gate_result.summary_counts and gate_result.summary_counts.kept or 0)
+      ), level = "info"})
+      return gate_result.final_agenda_markdown or raw_agenda, gate_result
+    end
+    local err = gate_ok and type(gate_result) == "table" and gate_result.error or tostring(gate_result)
+    record_sme_question_gate(stage, raw_agenda, {success = false, error = err})
+    Human.notify({message = "SME question gate unavailable: " .. tostring(err), level = "warning"})
+    return raw_agenda, nil
+  end
+
   -- ================================================================
   -- Pre-declare variables shared between fresh-run and continuation paths.
   -- (Lua 5.4 goto cannot jump into the scope of a local, so all locals that
@@ -2952,7 +3065,8 @@ code: |
         mode = "contradictions",
         days = tostring(params.days or 90),
         max_feedback_items = 100,
-        num_topics = 8
+        num_topics = 8,
+        include_rubric_memory = false
       },
       cache_key = "FeedbackContradictions: " .. scorecard_name .. " / " .. score_name,
       ttl_hours = ttl,
@@ -4117,7 +4231,8 @@ code: |
       iteration = cycle,
       consecutive_failed_cycles = consecutive_failed_cycles,
       hint = params.hint,
-      prior_run_prescription = params.prior_run_prescription
+      prior_run_prescription = params.prior_run_prescription,
+      rubric_memory_briefing = rubric_memory_briefing
     })
 
     -- Build shared cookbook section
@@ -4182,7 +4297,7 @@ code: |
 
         -- Each hypothesis generation gets a fresh conversation to avoid confusion
         Tool.reset()
-        code_editor.clear_history()
+        hypothesis_planner.clear_history()
         -- Inject ALL prior cycles' synthesis reasoning + accumulated lessons
         do
           local prior_insights = State.get("cycle_insights") or {}
@@ -4194,7 +4309,7 @@ code: |
             end
           end
           if #reasoning_parts > 0 then
-            code_editor.history:add({
+            hypothesis_planner.history:add({
               role = "system",
               content = "=== SYNTHESIS REASONING FROM ALL PRIOR CYCLES ===\n"
                 .. table.concat(reasoning_parts, "\n\n")
@@ -4206,7 +4321,7 @@ code: |
           end
           local acc_lessons = State.get("accumulated_lessons")
           if has_text(acc_lessons) then
-            code_editor.history:add({
+            hypothesis_planner.history:add({
               role = "system",
               content = "=== ACCUMULATED LESSONS (LLM-synthesized summary) ===\n"
                 .. trunc(acc_lessons, 3000)
@@ -4214,9 +4329,9 @@ code: |
             })
           end
         end
-        guard_context_budget(code_editor)
+        guard_context_budget(hypothesis_planner)
 
-        local plan_ok, plan_err = safe_editor_call(full_prompt, {
+        local plan_ok, plan_err = safe_agent_call(hypothesis_planner, "hypothesis_planner", full_prompt, {
           file_content = current_code,
           task_description = full_prompt
         })
@@ -4226,7 +4341,7 @@ code: |
           Human.notify({message = string.format(
             "    Slot %d (%s) failed: %s", slot_idx, slot_name, trunc(tostring(plan_err), 100)), level = "error"})
         else
-          local response = code_editor.output or ""
+          local response = hypothesis_planner.output or ""
           local parsed = parse_hypotheses(response)
 
           if #parsed > 0 then
@@ -4242,14 +4357,16 @@ code: |
           else
             -- Retry once with a nudge
             diag(string.format("Hyp slot %d (%s) produced no parseable hypothesis, retrying...", slot_idx, slot_name))
-            guard_context_budget(code_editor)
-            local retry_ok, _ = safe_editor_call(
+            guard_context_budget(hypothesis_planner)
+            local retry_ok, _ = safe_agent_call(
+              hypothesis_planner,
+              "hypothesis_planner",
               "I need exactly ONE hypothesis on a single numbered line. Example:\n"
               .. string.format("%d. Fix something: Description of what to change and why", #hypotheses + 1),
               {file_content = current_code, task_description = full_prompt}
             )
             if retry_ok then
-              local retry_parsed = parse_hypotheses(code_editor.output or "")
+              local retry_parsed = parse_hypotheses(hypothesis_planner.output or "")
               if #retry_parsed > 0 then
                 local hyp = retry_parsed[1]
                 hyp.index = #hypotheses + 1
@@ -6476,6 +6593,17 @@ code: |
             diag("SME agenda generation failed: " .. tostring(sme_err))
           end
         end
+        local raw_cycle_sme_agenda = sme_agenda
+        local cycle_gate_context = table.concat({
+          "Cycle " .. tostring(cycle) .. " SME agenda",
+          "Executive summary: " .. trunc(exec_summary, 500),
+          "Planning analysis: " .. trunc(syn_text, 900)
+        }, "\n")
+        sme_agenda = gate_sme_agenda(
+          raw_cycle_sme_agenda,
+          "cycle_" .. tostring(cycle) .. "_sme_agenda",
+          cycle_gate_context
+        )
 
         -- Backward-compat field: exec_summary doubles as the "diagnosis" for older dashboard code
         local diag_summary  = exec_summary
@@ -6510,6 +6638,7 @@ code: |
           analysis = syn_text,
           executive_summary = exec_summary or "",
           lab_report = lab_report or "",
+          sme_agenda_raw = raw_cycle_sme_agenda or "",
           sme_agenda = sme_agenda or "",
           diagnosis_summary = diag_summary or "",
           prescription_summary = presc_summary or "",
@@ -6959,7 +7088,8 @@ code: |
         mode = "contradictions",
         days = tostring(params.days or 90),
         max_feedback_items = 400,
-        num_topics = 12
+        num_topics = 12,
+        include_rubric_memory = false
       },
       cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name,
       ttl_hours = 4,
@@ -7427,6 +7557,19 @@ code: |
     if not ok then
       sme_agenda_text = "SME agenda generation failed: " .. tostring(err)
     end
+    local raw_end_sme_agenda = sme_agenda_text
+    State.set("sme_agenda_raw", raw_end_sme_agenda)
+    sme_agenda_text = gate_sme_agenda(
+      raw_end_sme_agenda,
+      "end_of_run_sme_agenda",
+      table.concat({
+        "End-of-run SME agenda",
+        "Executive summary: " .. trunc(executive_summary_text, 600),
+        "Lab report: " .. trunc(lab_report_text, 900),
+        "Residual errors: " .. trunc(residual_errors_text, 900)
+      }, "\n")
+    )
+    State.set("sme_agenda_gated", sme_agenda_text)
   end)
 
   -- Store results

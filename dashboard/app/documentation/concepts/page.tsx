@@ -63,6 +63,17 @@ export default function BasicsPage() {
             </div>
 
             <div>
+              <h3 className="text-xl font-medium mb-2">Rubric Memory</h3>
+              <p className="text-muted-foreground mb-4">
+                Scorecard knowledge bases that give agents and reports policy history, dated source
+                evidence, and citation context while preserving ScoreVersion rubric authority.
+              </p>
+              <Link href="/documentation/concepts/rubric-memory">
+                <DocButton>Explore Rubric Memory</DocButton>
+              </Link>
+            </div>
+
+            <div>
               <h3 className="text-xl font-medium mb-2">Evaluations</h3>
               <p className="text-muted-foreground mb-4">
                 The process of analyzing sources using scorecards to generate insights

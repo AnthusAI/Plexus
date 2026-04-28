@@ -176,12 +176,12 @@ class Evaluation:
         scorecard: Scorecard,
         labeled_samples_filename: str = None,
         labeled_samples: list = None,
-        number_of_texts_to_sample = 100,
-        sampling_method = 'random',
-        random_seed = None,
-        session_ids_to_sample = None,
-        subset_of_score_names = None,
-        experiment_label = None,
+        number_of_texts_to_sample=100,
+        sampling_method='random',
+        random_seed=None,
+        session_ids_to_sample=None,
+        subset_of_score_names=None,
+        experiment_label=None,
         max_mismatches_to_report=5,
         account_key: str = None,
         score_id: str = None,
@@ -359,6 +359,59 @@ class Evaluation:
             return [score_name for score_name in self.subset_of_score_names if score_name in all_score_names_to_process]
         else:
             return all_score_names_to_process
+
+    async def _rubric_memory_context_for_misclassification(
+        self,
+        *,
+        primary_input_text: str,
+        predicted_value: str,
+        score_explanation: str,
+        correct_value: str,
+        feedback_comment: str,
+        topic_hint: str,
+    ) -> dict:
+        """Build optional rubric-memory citation context for RCA item analysis."""
+        score_name = None
+        if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+            score_name = self.subset_of_score_names[0]
+        if not score_name or not getattr(self, "score_id", None):
+            return {}
+        try:
+            from plexus.rubric_memory import RubricMemoryContextProvider
+
+            provider = getattr(self, "_rubric_memory_context_provider", None)
+            if provider is None:
+                provider = RubricMemoryContextProvider(api_client=self.dashboard_client)
+                self._rubric_memory_context_provider = provider
+                status = provider.local_corpus_status(
+                    scorecard_identifier=self.scorecard_name,
+                    score_identifier=score_name,
+                )
+                self._rubric_memory_available_for_rca = status["available"]
+                if not status["available"]:
+                    self.logging.warning(
+                        "Rubric memory not available for RCA; missing canonical folders: %s",
+                        ", ".join(
+                            root["path"] for root in status["roots"] if not root["exists"]
+                        ),
+                    )
+            if not getattr(self, "_rubric_memory_available_for_rca", False):
+                return {}
+            context = await provider.generate_for_score_item(
+                scorecard_identifier=self.scorecard_name,
+                score_identifier=score_name,
+                score_id=self.score_id,
+                transcript_text=primary_input_text,
+                model_value=predicted_value,
+                model_explanation=score_explanation,
+                feedback_value=correct_value,
+                feedback_comment=feedback_comment,
+                topic_hint=topic_hint,
+            )
+            return context.model_dump(mode="json")
+        except Exception as exc:
+            self.logging.warning("Could not build rubric-memory RCA context: %s", exc)
+            return {}
 
     def time_execution(func):
         async def async_wrapper(self, *args, **kwargs):
@@ -849,11 +902,11 @@ class Evaluation:
 
         if primary_score_name_for_cm and primary_score_name_for_cm in confusion_matrices:
             matrix_data = confusion_matrices[primary_score_name_for_cm]
-        elif confusion_matrices: # Fallback to the first matrix if primary not found or not set
+        elif confusion_matrices:  # Fallback to the first matrix if primary not found or not set
             first_score_name = next(iter(confusion_matrices))
             matrix_data = confusion_matrices[first_score_name]
         else:
-            matrix_data = None # No matrices calculated
+            matrix_data = None  # No matrices calculated
 
         if matrix_data:
             labels = sorted(list(matrix_data['labels']))
@@ -878,7 +931,7 @@ class Evaluation:
             self.logging.warning("No confusion matrix data generated, creating default structure.")
             primary_confusion_matrix_dict = {
                 "matrix": [[0, 0], [0, 0]],
-                "labels": ['yes', 'no'] # Default labels
+                "labels": ['yes', 'no']  # Default labels
             }
 
         # Format distributions for API - now including score names in the distribution
@@ -935,7 +988,7 @@ class Evaluation:
             "precision": precision_value,
             "alignment": alignment,  # Changed from sensitivity to alignment
             "recall": recall_value,        # Changed from specificity to recall
-            "confusionMatrix": primary_confusion_matrix_dict, # Use the new single dict
+            "confusionMatrix": primary_confusion_matrix_dict,  # Use the new single dict
             "predictedClassDistribution": predicted_label_distributions,
             "datasetClassDistribution": actual_label_distributions,
             # "confusion_matrices": formatted_confusion_matrices # Removed old key
@@ -1903,19 +1956,19 @@ class Evaluation:
         x = np.arange(len(unique_labels))
         width = 0.35
         
-        ax1.bar(x - width/2, true_counts, width, label='Ground Truth', color=(0.012, 0.635, 0.996))
-        ax1.bar(x + width/2, pred_counts, width, label='Predicted', color=(0.815, 0.2, 0.51))
+        ax1.bar(x - width / 2, true_counts, width, label='Ground Truth', color=(0.012, 0.635, 0.996))
+        ax1.bar(x + width / 2, pred_counts, width, label='Predicted', color=(0.815, 0.2, 0.51))
         ax1.set_ylabel('Count', fontsize=10)
         ax1.set_title(f'Label Distribution for {question}', fontsize=12)
         ax1.legend(fontsize=10)
         ax1.tick_params(axis='both', which='major', labelsize=8)
         
         incorrect = [1 - acc for acc in accuracies]
-        ax2.bar(x, incorrect, width*2, bottom=accuracies, color='#d33', label='Incorrect')
-        ax2.bar(x, accuracies, width*2, color='#393', label='Correct')
+        ax2.bar(x, incorrect, width * 2, bottom=accuracies, color='#d33', label='Incorrect')
+        ax2.bar(x, accuracies, width * 2, color='#393', label='Correct')
         ax2.set_ylabel('Accuracy (%)', fontsize=10)
         ax2.set_ylim(0, 1)
-        ax2.set_yticklabels([f'{int(x*100)}%' for x in ax2.get_yticks()], fontsize=8)
+        ax2.set_yticklabels([f'{int(x * 100)}%' for x in ax2.get_yticks()], fontsize=8)
         ax2.set_xlabel('Labels (Based on Ground Truth)', fontsize=10)
         ax2.set_title(f'Accuracy by Label for {question}', fontsize=12)
         ax2.legend(fontsize=10)
@@ -2314,7 +2367,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                             
                         # Determine label score name from config or default to current score name
                         label_score_name = score_config.get('label_score_name', current_score_name)
-                        score_name = current_score_name # Use the name from the result parameters
+                        score_name = current_score_name  # Use the name from the result parameters
                         # --- End Refactor ---
 
                         # Skip if this is a dependency score and not our primary score
@@ -2438,7 +2491,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                             error=str(e),
                             parameters=Score.Parameters(
                                 name=score_identifier,
-                                scorecard=self.scorecard_name # Use string name here too
+                                scorecard=self.scorecard_name  # Use string name here too
                             )
                         )
                         # Add the error result to filtered_results so it's logged/counted
@@ -2461,11 +2514,11 @@ Total cost:       ${expenses['total_cost']:.6f}
                             f"{underlying_error}"
                         )
 
-                if has_processed_scores and score_name: # Check if we are processing a specific score
+                if has_processed_scores and score_name:  # Check if we are processing a specific score
                     self.processed_items_by_score[score_name] = self.processed_items_by_score.get(score_name, 0) + 1
                     self.processed_items = sum(self.processed_items_by_score.values())
 
-                return result # Return the processed result dict
+                return result  # Return the processed result dict
 
             except (Timeout, RequestException, asyncio.TimeoutError) as e:
                 if attempt == max_attempts - 1:  # Last attempt
@@ -4085,6 +4138,14 @@ class FeedbackEvaluation(Evaluation):
                                 fi.itemId, _proc_exc,
                             )
 
+                    rubric_memory_context = await self._rubric_memory_context_for_misclassification(
+                        primary_input_text=primary_input_text,
+                        predicted_value=metadata.get("initial_answer_value", "") or "",
+                        score_explanation=metadata.get("score_explanation", "") or "",
+                        correct_value=metadata.get("final_answer_value", "") or "",
+                        feedback_comment=metadata.get("edit_comment", ""),
+                        topic_hint="Evaluation RCA misclassification evidence",
+                    )
                     misclassification_item_context = build_misclassification_item_context(
                         feedback_item_id=fi.id,
                         item_id=fi.itemId or "",
@@ -4109,6 +4170,7 @@ class FeedbackEvaluation(Evaluation):
                         primary_input_fetch_error=primary_input_fetch_error,
                         processed_input_text=processed_input_text,
                         processors_config_summary=processors_config_summary,
+                        rubric_memory_context=rubric_memory_context,
                     )
                     misclassification_evidence_flags = await asyncio.to_thread(
                         extract_misclassification_evidence_flags,
@@ -4131,6 +4193,14 @@ class FeedbackEvaluation(Evaluation):
                     )
                     misclassification_classification["config_fixability"] = triage_explainer.get(
                         "config_fixability", ""
+                    )
+                    misclassification_classification["citation_ids"] = triage_explainer.get(
+                        "citation_ids",
+                        misclassification_classification.get("citation_ids", []),
+                    )
+                    misclassification_classification["citation_validation"] = triage_explainer.get(
+                        "citation_validation",
+                        {},
                     )
                     primary_category = (
                         misclassification_classification.get("primary_category")
@@ -4170,6 +4240,8 @@ class FeedbackEvaluation(Evaluation):
                         "rationale_paragraph": triage_explainer.get("rationale_paragraph", ""),
                         "evidence_quote": triage_explainer.get("evidence_quote", ""),
                         "config_fixability": triage_explainer.get("config_fixability", ""),
+                        "citation_ids": triage_explainer.get("citation_ids", []),
+                        "citation_validation": triage_explainer.get("citation_validation", {}),
                         "evidence_snippets": misclassification_classification.get("evidence_snippets", []),
                         "mechanical_subtype": (
                             mechanical_subtype if mechanical_subtype != "none" else None
@@ -4883,6 +4955,14 @@ class FeedbackEvaluation(Evaluation):
                         "Failed to apply processors for small-set RCA context (item %s): %s",
                         ex.get("item_id"), _proc_exc,
                     )
+            rubric_memory_context = await self._rubric_memory_context_for_misclassification(
+                primary_input_text=primary_input_text,
+                predicted_value=ex.get("initial_answer_value", "") or "",
+                score_explanation=ex.get("score_explanation", "") or "",
+                correct_value=ex.get("final_answer_value", "") or "",
+                feedback_comment=ex.get("edit_comment", "") or "",
+                topic_hint="Evaluation small-set RCA misclassification evidence",
+            )
             ex["misclassification_item_context"] = build_misclassification_item_context(
                 feedback_item_id=ex.get("feedback_item_id", ""),
                 item_id=ex.get("item_id", ""),
@@ -4909,6 +4989,7 @@ class FeedbackEvaluation(Evaluation):
                 primary_input_fetch_error=primary_input_fetch_error,
                 processed_input_text=processed_input_text,
                 processors_config_summary=processors_config_summary,
+                rubric_memory_context=rubric_memory_context,
             )
             misclassification_evidence_flags = await asyncio.to_thread(
                 extract_misclassification_evidence_flags,
@@ -4926,6 +5007,11 @@ class FeedbackEvaluation(Evaluation):
             classification["rationale_paragraph"] = explainer.get("rationale_paragraph", "")
             classification["evidence_quote"] = explainer.get("evidence_quote", "")
             classification["config_fixability"] = explainer.get("config_fixability", "")
+            classification["citation_ids"] = explainer.get(
+                "citation_ids",
+                classification.get("citation_ids", []),
+            )
+            classification["citation_validation"] = explainer.get("citation_validation", {})
             ex["misclassification_classification"] = classification
 
         def _bedrock_converse(system: str, prompt: str, max_tokens: int = 500) -> str:

@@ -2839,19 +2839,19 @@ export function ScoreComponent({
         variables: {
           input: {
             id: String(versionId),
-            isFeatured: nextPinned ? 'true' : null,
+            isFeatured: nextPinned ? 'true' : 'false',
             createdAt: version.createdAt,
           }
         }
       });
 
       // Update local state regardless of response
-      // This ensures UI is updated even if we can't verify the response format
-      setVersions(prev => prev.map(v => 
+        // This ensures UI is updated even if we can't verify the response format
+        setVersions(prev => prev.map(v => 
         v.id === versionId
-          ? { ...v, isFeatured: nextPinned ? 'true' : null }
+          ? { ...v, isFeatured: nextPinned ? 'true' : 'false' }
           : v
-      ));
+        ));
 
       toast.success('Version feature status updated');
     } catch (error) {
@@ -2993,7 +2993,7 @@ export function ScoreComponent({
         scoreId: String(score.id),
         configuration: configurationYaml,
         guidelines: overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''),
-        isFeatured: null,
+        isFeatured: "false",
         note: versionNote || 'Updated score configuration',
         parentVersionId: selectedVersionId || score.championVersionId || undefined,
         createdAt: now,
