@@ -50,6 +50,23 @@ jest.mock("@/components/ai-elements/prompt-input", () => ({
   ),
   PromptInputBody: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   PromptInputFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PromptInputSelect: ({
+    children,
+    disabled,
+  }: {
+    children: React.ReactNode
+    disabled?: boolean
+  }) => <div data-disabled={disabled}>{children}</div>,
+  PromptInputSelectTrigger: ({ children }: { children: React.ReactNode }) => <button type="button">{children}</button>,
+  PromptInputSelectValue: ({ placeholder }: { placeholder?: string }) => <>{placeholder}</>,
+  PromptInputSelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  PromptInputSelectItem: ({
+    children,
+    value: _value,
+  }: {
+    children: React.ReactNode
+    value: string
+  }) => <div>{children}</div>,
   PromptInputSubmit: ({ disabled }: { disabled?: boolean }) => (
     <button type="submit" disabled={disabled} aria-label="Submit">
       Submit

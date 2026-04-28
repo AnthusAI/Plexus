@@ -19,10 +19,15 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     parsed = yaml.safe_load(yaml_text)
     assert parsed["class"] == "Tactus"
     assert "console_session_history" in parsed.get("input", {})
+    assert parsed["agents"]["assistant"]["model"] == "gpt-5.4-mini"
+    assert parsed["agents"]["assistant"]["reasoning_effort"] == "low"
+    assert parsed["agents"]["assistant"]["verbosity"] == "low"
+    assert parsed["agents"]["assistant"]["max_tokens"] == 220
+    assert parsed["agents"]["assistant"]["stream"] is True
     assert isinstance(parsed.get("code"), str)
     assert "State.set(\"stage\", \"preparing\")" in parsed["code"]
     assert "Previous user message before latest (if any):" in parsed["code"]
-    assert "Do not ask the user to repeat something already present in context." in parsed["code"]
+    assert "Use prior turns for continuity and respond concisely with concrete help." in parsed["code"]
 
 
 def test_is_builtin_procedure_id():
@@ -105,6 +110,35 @@ async def test_run_experiment_builtin_passes_console_context_overrides():
         {"role": "ASSISTANT", "content": "How about 7?"},
         {"role": "USER", "content": "Multiply that by three."},
     ]
+
+
+@pytest.mark.asyncio
+async def test_run_experiment_builtin_skips_mcp_server_when_disabled():
+    client = Mock()
+    service = ProcedureService(client)
+    expected_result = {
+        "success": True,
+        "status": "COMPLETED",
+        "procedure_id": CONSOLE_CHAT_BUILTIN_ID,
+    }
+
+    with patch(
+        "plexus.cli.procedure.mcp_transport.create_procedure_mcp_server",
+        new=AsyncMock(return_value=Mock()),
+    ) as create_mcp_mock, patch(
+        "plexus.cli.procedure.procedure_executor.execute_procedure",
+        new=AsyncMock(return_value=expected_result),
+    ) as execute_mock:
+        result = await service.run_experiment(
+            CONSOLE_CHAT_BUILTIN_ID,
+            account_id="acct-1",
+            enable_mcp=False,
+        )
+
+    assert result == expected_result
+    create_mcp_mock.assert_not_called()
+    execute_kwargs = execute_mock.await_args.kwargs
+    assert execute_kwargs["mcp_server"] is None
 
 
 def test_builtin_storage_adapter_uses_in_memory_metadata():
