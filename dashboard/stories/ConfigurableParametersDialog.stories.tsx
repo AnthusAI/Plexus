@@ -32,9 +32,9 @@ const meta: Meta<typeof ConfigurableParametersDialog> = {
         ]
       },
       versions: [
-        { id: 'version-1', createdAt: '2024-01-15T10:00:00Z', isFeatured: true },
-        { id: 'version-2', createdAt: '2024-01-10T10:00:00Z', isFeatured: false },
-        { id: 'version-3', createdAt: '2024-01-05T10:00:00Z', isFeatured: false },
+        { id: 'version-1', createdAt: '2024-01-15T10:00:00Z', isFeatured: 'true' },
+        { id: 'version-2', createdAt: '2024-01-10T10:00:00Z', isFeatured: 'false' },
+        { id: 'version-3', createdAt: '2024-01-05T10:00:00Z', isFeatured: 'false' },
       ]
     }
   },
@@ -376,6 +376,4 @@ export const ValidationExample: Story = {
     )
   },
 }
-
-
 

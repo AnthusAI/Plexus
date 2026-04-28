@@ -1364,7 +1364,7 @@ def push(scorecard: str, score: str, note: str):
                 'configuration': cleaned_yaml_content,
                 'note': note,
                 # Never auto-promote to champion via CLI push
-                'isFeatured': None
+                'isFeatured': "false"
             }
         }
 

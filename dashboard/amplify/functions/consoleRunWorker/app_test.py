@@ -129,3 +129,21 @@ def test_handler_skips_insert_without_new_image(monkeypatch):
 
     assert result["processed"] == 0
     assert result["skipped"] == 1
+
+
+def test_handler_duplicate_stream_delivery_counts_only_one_processed(monkeypatch):
+    app = _load_app_module()
+    outcomes = iter([True, False])
+
+    monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
+    monkeypatch.setattr(app, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(app, "process_console_message", lambda *_args, **_kwargs: next(outcomes))
+
+    result = app.handler(
+        {"Records": [_stream_record(), _stream_record()]},
+        SimpleNamespace(aws_request_id="req-1"),
+    )
+
+    assert result["processed"] == 1
+    assert result["skipped"] == 1
+    assert result["batchItemFailures"] == []

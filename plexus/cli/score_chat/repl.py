@@ -68,7 +68,7 @@ class StreamingCallbackHandler(BaseCallbackHandler):
             self.console.print(f"[dim]DEBUG: Received list token: {token}[/dim]")
             # Log the full token data to a file for inspection
             with open("streaming_tokens.log", "a") as f:
-                f.write(f"LIST TOKEN: {token}\n{'='*50}\n")
+                f.write(f"LIST TOKEN: {token}\n{'=' * 50}\n")
             # Skip tool calls in the streaming display
             return
         
@@ -76,7 +76,7 @@ class StreamingCallbackHandler(BaseCallbackHandler):
         with open("streaming_tokens.log", "a") as f:
             f.write(f"TOKEN: {token[:100]}{'...' if len(token) > 100 else ''}\n")
             if any(marker in token for marker in ['toolu_', '"command":', '"input":', 'tool_use', '"new_str":', '"old_str":', '{']):
-                f.write(f"TOOL DATA DETECTED - FULL TOKEN: {token}\n{'='*50}\n")
+                f.write(f"TOOL DATA DETECTED - FULL TOKEN: {token}\n{'=' * 50}\n")
         
         # Don't skip tokens that look like tool call data - collect them instead
         if self.first_token and token.strip().startswith('{'):
@@ -168,7 +168,7 @@ class StreamingCallbackHandler(BaseCallbackHandler):
                         f"[bold blue]Tool:[/bold blue] {tool_call['name']}\n\n"
                         f"[bold blue]Input:[/bold blue]\n{input_str}\n\n"
                         f"[bold blue]Output:[/bold blue]\n{output_str}",
-                        title=f"Tool Call {i+1}",
+                        title=f"Tool Call {i + 1}",
                         border_style="blue",
                         width=self.console.width  # Make panel full width
                     )
@@ -676,7 +676,7 @@ Then ask the user what they would like to change about the scorecard."""
                         with open("tool_calls.log", "a") as f:
                             f.write(f"Found {len(ai_msg.tool_calls)} tool calls\n")
                             for i, tc in enumerate(ai_msg.tool_calls):
-                                f.write(f"TOOL CALL #{i+1}:\n")
+                                f.write(f"TOOL CALL #{i + 1}:\n")
                                 f.write(f"  ID: {tc.get('id', 'unknown')}\n")
                                 f.write(f"  Name: {tc.get('name', 'unknown')}\n")
                                 f.write(f"  Type: {tc.get('type', 'unknown')}\n")
@@ -1133,7 +1133,7 @@ You can also just ask me questions or tell me what you'd like to do in plain Eng
                     'configuration': yaml_content,
                     'parentVersionId': score_data.get('championVersionId'),
                     'note': 'Updated via CLI push command',
-                    'isFeatured': None
+                    'isFeatured': "true"
                 }
             })
             
@@ -1204,4 +1204,4 @@ You can also just ask me questions or tell me what you'd like to do in plain Eng
             self.current_score = score
             
         except Exception as e:
-            self.console.print(f"[red]Error loading score: {str(e)}[/red]") 
+            self.console.print(f"[red]Error loading score: {str(e)}[/red]")

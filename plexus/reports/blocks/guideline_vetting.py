@@ -8,6 +8,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
+from plexus.rubric_memory import validate_rubric_memory_citations
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class GuidelineVettingService:
         item: Any,
         guidelines: Optional[str],
         score_explanation: str,
+        rubric_memory_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """Build classifier prompt for a feedback item; return None when item should be skipped."""
         initial = getattr(item, "initialAnswerValue", "") or ""
@@ -71,10 +73,17 @@ class GuidelineVettingService:
 
         situation = "\n".join(situation_lines)
         guideline_section = f"\nScore Guidelines:\n{guidelines[:3000]}\n" if guidelines else ""
+        rubric_memory_section = ""
+        if rubric_memory_context and rubric_memory_context.get("markdown_context"):
+            rubric_memory_section = (
+                "\nRubric Memory Citation Context:\n"
+                f"{rubric_memory_context['markdown_context'][:6000]}\n"
+            )
 
         return (
             f"{situation}\n"
             f"{guideline_section}\n"
+            f"{rubric_memory_section}\n"
             "Based on the above, evaluate whether this feedback item falls into EITHER of "
             "these two categories:\n\n"
             "  A) CONTRADICTION: The reviewer's correction is INCONSISTENT with what the "
@@ -84,7 +93,7 @@ class GuidelineVettingService:
             "guidelines do NOT address at all - neither permitting nor prohibiting it. This "
             "means the guidelines may need to be updated to cover this behavior.\n\n"
             "Mark `contradicts` as true for EITHER category A or B.\n\n"
-            "Reply ONLY with a JSON object with four keys:\n"
+            "Reply ONLY with a JSON object with five keys:\n"
             '  "contradicts": true or false\n'
             '  "category": "contradiction" or "policy_gap" (or null if contradicts is false)\n'
             '  "reason": one sentence focused on the POLICY issue - for contradictions, '
@@ -94,6 +103,7 @@ class GuidelineVettingService:
             '  "guideline_quote": the exact short phrase from the guidelines being '
             'contradicted (for category A), or "Policy gap: not addressed in guidelines" '
             "(for category B), or empty string if not contradicting\n"
+            '  "citation_ids": an array of exact rubric-memory citation IDs used for any policy-memory claim, or []\n'
             "Reply ONLY with valid JSON, no other text."
         )
 
@@ -199,7 +209,8 @@ class GuidelineVettingService:
                         "content": (
                             "Your response was not valid JSON. Respond ONLY with a valid JSON object "
                             "with exactly these keys: \"contradicts\" (boolean), \"reason\" (string), "
-                            "\"category\" (string), \"guideline_quote\" (string). "
+                            "\"category\" (string), \"guideline_quote\" (string), "
+                            "\"citation_ids\" (array). "
                             "No prose, no code blocks, no extra text."
                         ),
                     }
@@ -217,6 +228,7 @@ class GuidelineVettingService:
         confidence: str,
         verdict: str,
         associated_dataset_eligible: bool,
+        rubric_memory_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         edited_at = getattr(item, "editedAt", None)
         if hasattr(edited_at, "isoformat"):
@@ -242,6 +254,11 @@ class GuidelineVettingService:
         category = best_result.get("category", "") or ""
         if verdict == "aligned" and not category:
             category = "aligned"
+        citation_validation = validate_rubric_memory_citations(
+            best_result.get("citation_ids") or [],
+            rubric_memory_context,
+            require_citation=bool(rubric_memory_context and rubric_memory_context.get("citation_index")),
+        )
 
         return {
             "feedback_item_id": item.id,
@@ -262,6 +279,11 @@ class GuidelineVettingService:
             "voting": votes_meta,
             "verdict": verdict,
             "associated_dataset_eligible": associated_dataset_eligible,
+            "citation_ids": citation_validation.valid_ids,
+            "citation_validation": citation_validation.model_dump(mode="json"),
+            "rubric_memory_citation_count": len(
+                (rubric_memory_context or {}).get("citation_index") or []
+            ),
         }
 
     async def analyze_items(
@@ -270,6 +292,7 @@ class GuidelineVettingService:
         guidelines: Optional[str],
         max_concurrent: int,
         score_results_by_item: Dict[str, Any],
+        rubric_memory_contexts_by_item: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Analyze items via shared voting and return both contradiction and aligned results.
@@ -284,8 +307,17 @@ class GuidelineVettingService:
                 item_id = getattr(item, "itemId", None)
                 score_result = score_results_by_item.get(item_id) if item_id else None
                 score_explanation = (score_result.get("explanation") or "") if score_result else ""
+                rubric_memory_context = (
+                    (rubric_memory_contexts_by_item or {}).get(item_id)
+                    or (rubric_memory_contexts_by_item or {}).get(getattr(item, "id", ""))
+                )
 
-                prompt = self._build_prompt(item, guidelines, score_explanation)
+                prompt = self._build_prompt(
+                    item,
+                    guidelines,
+                    score_explanation,
+                    rubric_memory_context=rubric_memory_context,
+                )
                 if prompt is None:
                     return None
 
@@ -343,6 +375,12 @@ class GuidelineVettingService:
                         "reason": result.get("reason", "") if result else "",
                         "category": result.get("category", "") if result else "",
                         "guideline_quote": result.get("guideline_quote", "") if result else "",
+                        "citation_ids": result.get("citation_ids", []) if result else [],
+                        "citation_validation": validate_rubric_memory_citations(
+                            result.get("citation_ids", []) if result else [],
+                            rubric_memory_context,
+                            require_citation=False,
+                        ).model_dump(mode="json"),
                         "thinking": result.get("_thinking", "") if result else "",
                     }
                     for model, result in all_votes
@@ -381,6 +419,7 @@ class GuidelineVettingService:
                     confidence=confidence,
                     verdict=verdict,
                     associated_dataset_eligible=associated_dataset_eligible,
+                    rubric_memory_context=rubric_memory_context,
                 )
 
         analyzed = await asyncio.gather(*[analyze_one(item) for item in items])
