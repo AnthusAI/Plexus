@@ -907,7 +907,10 @@ class ProcedureChatRecorder:
                 'content': content,
                 'messageType': message_type,
                 'sequenceNumber': self.sequence_number,
-                'humanInteraction': human_interaction
+                'humanInteraction': human_interaction,
+                # Runtime-emitted messages are not dispatch commands; mark them
+                # completed so composite responseStatus indexes remain valid.
+                'responseStatus': 'COMPLETED',
             }
 
             # Add accountId if available

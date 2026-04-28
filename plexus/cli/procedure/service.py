@@ -830,11 +830,13 @@ class ProcedureService:
                             context['task_id'] = task_id_for_tracking
 
                         from .procedure_executor import execute_procedure
-                        from .mcp_transport import create_procedure_mcp_server
-
-                        mcp_server = await create_procedure_mcp_server(
-                            experiment_context=context
-                        )
+                        enable_mcp = bool(options.pop('enable_mcp', True))
+                        mcp_server = None
+                        if enable_mcp:
+                            from .mcp_transport import create_procedure_mcp_server
+                            mcp_server = await create_procedure_mcp_server(
+                                experiment_context=context
+                            )
 
                         result = await execute_procedure(
                             procedure_id=procedure_id,
