@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Root cause found in Amplify job 1036: backend build fails during CDK assembly with InvalidStorageAccessPathError because rubricMemory storage access used bare '*' instead of a required '*/' prefix. Applying hotfix to use rubric-memory/* as the single valid bucket prefix.",
       "created_at": "2026-04-28T16:21:07.854921Z"
+    },
+    {
+      "id": "34ed64e3-cac3-4576-b6e9-f0f40a04d12c",
+      "author": "ryan",
+      "text": "Verified original failed main deployment job 1034 and latest release job 1036 both failed with the same CDK assembly error: InvalidStorageAccessPathError for storage access path '*'. Opened hotfix PR #235 to change rubricMemory access to rubric-memory/*; Amplify deploy can only validate after that PR is approved/merged to main.",
+      "created_at": "2026-04-28T16:23:32.964445Z"
     }
   ],
   "created_at": "2026-04-28T16:18:48.359438Z",
-  "updated_at": "2026-04-28T16:21:07.854921Z",
+  "updated_at": "2026-04-28T16:23:32.964445Z",
   "closed_at": null,
   "custom": {}
 }
