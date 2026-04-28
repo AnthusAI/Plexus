@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "plexus"
-version = "1.42.0"
+version = "1.42.1"
 description = "A Python module for configuring and managing data scoring"
 readme = "README.md"
 license = "MIT"
