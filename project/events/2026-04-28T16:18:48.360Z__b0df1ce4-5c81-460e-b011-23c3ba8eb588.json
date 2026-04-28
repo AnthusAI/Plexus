@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b0df1ce4-5c81-460e-b011-23c3ba8eb588",
+  "issue_id": "plx-fb173067-6c14-48ba-bff3-0e533f9a82ec",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T16:18:48.360Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Investigate failed Amplify deployment after PR 225 merge"
+  }
+}
