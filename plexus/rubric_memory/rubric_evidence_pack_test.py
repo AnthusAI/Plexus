@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Sequence
 
@@ -32,6 +34,8 @@ from plexus.rubric_memory import (
     RubricMemorySMEQuestionGateService,
     SMEQuestionAnswerStatus,
     SMEQuestionGateAction,
+    S3RubricMemoryCorpusResolver,
+    S3RubricMemorySource,
     TactusRubricEvidenceSynthesizer,
     TactusRubricMemorySMEQuestionGateSynthesizer,
     candidate_agenda_items_from_markdown,
@@ -63,6 +67,96 @@ class _StaticRetriever:
         self, _request: RubricEvidencePackRequest
     ) -> Sequence[EvidenceSnippet]:
         return self.evidence
+
+
+class _FakeS3Paginator:
+    def __init__(self, client):
+        self.client = client
+
+    def paginate(self, **kwargs):
+        yield self.client.list_objects_v2(**kwargs)
+
+
+class _FakeS3Client:
+    def __init__(self):
+        self.objects: dict[str, dict] = {}
+        self.uploads: list[tuple[str, str]] = []
+        self.downloads: list[tuple[str, str]] = []
+
+    def put_text(
+        self,
+        key: str,
+        text: str,
+        *,
+        last_modified: datetime | None = None,
+        etag: str | None = None,
+    ) -> None:
+        body = text.encode("utf-8")
+        self.objects[key] = {
+            "Body": body,
+            "Size": len(body),
+            "ETag": etag or f"etag-{len(self.objects) + 1}",
+            "LastModified": (
+                last_modified or datetime(2026, 4, 24, tzinfo=timezone.utc)
+            ),
+        }
+
+    def get_paginator(self, operation_name: str):
+        assert operation_name == "list_objects_v2"
+        return _FakeS3Paginator(self)
+
+    def list_objects_v2(
+        self,
+        *,
+        Bucket: str,
+        Prefix: str,
+        Delimiter: str | None = None,
+    ) -> dict:
+        del Bucket
+        matching_keys = sorted(key for key in self.objects if key.startswith(Prefix))
+        if Delimiter:
+            common_prefixes = set()
+            contents = []
+            for key in matching_keys:
+                suffix = key[len(Prefix) :]
+                if Delimiter in suffix:
+                    common_prefixes.add(
+                        Prefix + suffix.split(Delimiter, 1)[0] + Delimiter
+                    )
+                else:
+                    contents.append(self._content(key))
+            return {
+                "CommonPrefixes": [
+                    {"Prefix": prefix} for prefix in sorted(common_prefixes)
+                ],
+                "Contents": contents,
+            }
+        return {"Contents": [self._content(key) for key in matching_keys]}
+
+    def upload_file(self, filename: str, bucket: str, key: str) -> None:
+        del bucket
+        self.uploads.append((filename, key))
+        body = Path(filename).read_bytes()
+        self.objects[key] = {
+            "Body": body,
+            "Size": len(body),
+            "ETag": f"upload-{len(self.uploads)}",
+            "LastModified": datetime(2026, 4, 24, tzinfo=timezone.utc),
+        }
+
+    def download_file(self, bucket: str, key: str, filename: str) -> None:
+        del bucket
+        self.downloads.append((key, filename))
+        Path(filename).write_bytes(self.objects[key]["Body"])
+
+    def _content(self, key: str) -> dict:
+        obj = self.objects[key]
+        return {
+            "Key": key,
+            "Size": obj["Size"],
+            "ETag": obj["ETag"],
+            "LastModified": obj["LastModified"],
+        }
 
 
 class _CapturingSynthesizer:
@@ -436,14 +530,72 @@ def test_local_corpus_resolver_treats_missing_prefix_as_optional(
     assert [source.scope_level for source in paths.sources] == ["scorecard", "score"]
 
 
+def test_s3_corpus_resolver_maps_scorecard_prefix_and_score_roots(monkeypatch):
+    fake_s3 = _FakeS3Client()
+    fake_s3.put_text(
+        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/2026-04-01/source.md",
+        "Scorecard memory.",
+    )
+    fake_s3.put_text(
+        "SelectQuote HCS Medium-Risk/Medication Review.knowledge-base/2026-04-10/source.md",
+        "Prefix memory.",
+    )
+    fake_s3.put_text(
+        "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/2026-04-24/source.md",
+        "Score memory.",
+    )
+    monkeypatch.setenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", "rubric-bucket")
+
+    paths = S3RubricMemoryCorpusResolver(s3_client=fake_s3).resolve(
+        scorecard_name="SelectQuote HCS Medium-Risk",
+        score_name="Medication Review: Dosage",
+    )
+
+    assert paths.bucket_name == "rubric-bucket"
+    assert paths.scorecard_knowledge_base_prefix == (
+        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/"
+    )
+    assert paths.prefix_knowledge_base_prefixes == [
+        "SelectQuote HCS Medium-Risk/Medication Review.knowledge-base/"
+    ]
+    assert paths.score_knowledge_base_prefix == (
+        "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/"
+    )
+    assert [source.scope_level for source in paths.sources] == [
+        "scorecard",
+        "prefix",
+        "score",
+    ]
+
+
+def test_s3_corpus_resolver_requires_scorecard_and_score_prefixes(monkeypatch):
+    fake_s3 = _FakeS3Client()
+    fake_s3.put_text(
+        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/2026-04-01/source.md",
+        "Scorecard memory.",
+    )
+    monkeypatch.setenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", "rubric-bucket")
+
+    with pytest.raises(FileNotFoundError, match="Medication Review- Dosage"):
+        S3RubricMemoryCorpusResolver(s3_client=fake_s3).resolve(
+            scorecard_name="SelectQuote HCS Medium-Risk",
+            score_name="Medication Review: Dosage",
+        )
+
+
 def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
     monkeypatch,
     tmp_path,
 ):
+    import boto3
+
+    fake_s3 = _FakeS3Client()
+    monkeypatch.setattr(boto3, "client", lambda service_name: fake_s3)
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         cache_root = tmp_path / "dashboard" / "scorecards"
         monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
+        monkeypatch.setenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", "rubric-bucket")
         paths = LocalRubricMemoryCorpusResolver().resolve(
             scorecard_name="SelectQuote HCS Medium-Risk",
             score_name="Medication Review: Dosage",
@@ -466,6 +618,17 @@ def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
         prefix_file.write_text("Medication review policy memory.", encoding="utf-8")
         score_file.write_text("Dosage-specific policy memory.", encoding="utf-8")
 
+        sync_result = runner.invoke(
+            cli,
+            [
+                "rubric-memory",
+                "sync",
+                "--scorecard",
+                "SelectQuote HCS Medium-Risk",
+                "--score",
+                "Medication Review: Dosage",
+            ],
+        )
         first = runner.invoke(
             cli,
             [
@@ -489,10 +652,17 @@ def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
             ],
         )
 
+    assert sync_result.exit_code == 0, sync_result.output
+    assert "uploaded_file_count: 3" in sync_result.output
+    assert any(
+        key.endswith("Medication Review- Dosage.knowledge-base/2026-04-24/dosage.md")
+        for _filename, key in fake_s3.uploads
+    )
     assert first.exit_code == 0, first.output
     assert second.exit_code == 0, second.output
     assert "status: rebuilt" in first.output
     assert "status: reused" in second.output
+    assert "bucket: rubric-bucket" in first.output
     assert "retriever_id: scan" in first.output
     assert "fingerprint:" in first.output
     assert "prepared_corpus_path:" in first.output
@@ -502,6 +672,26 @@ def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
     assert "included_knowledge_base[score]:" in first.output
     assert "Medication Review- Dosage.knowledge-base" in first.output
     assert "Medication Review.knowledge-base" in first.output
+
+
+def test_rubric_memory_prewarm_cli_requires_s3_bucket(monkeypatch):
+    runner = CliRunner()
+    monkeypatch.delenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", raising=False)
+
+    result = runner.invoke(
+        cli,
+        [
+            "rubric-memory",
+            "prewarm",
+            "--scorecard",
+            "SelectQuote HCS Medium-Risk",
+            "--score",
+            "Medication Review: Dosage",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME" in result.output
 
 
 def test_query_planner_derives_retrieval_phrases_from_request():
@@ -747,6 +937,106 @@ def test_prepared_corpus_combines_scorecard_prefix_and_score_scopes(tmp_path):
     assert scorecard_metadata["source_timestamp"] == "2026-04-01T00:00:00"
     assert prefix_metadata["source_timestamp"] == "2026-04-10T00:00:00"
     assert score_metadata["source_timestamp"] == "2026-04-24T00:00:00"
+
+
+def test_prepared_corpus_downloads_s3_objects_with_sidecar_metadata(
+    monkeypatch,
+    tmp_path,
+):
+    import boto3
+
+    fake_s3 = _FakeS3Client()
+    fake_s3.put_text(
+        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/2026-04-01/source.md",
+        "S3 scorecard note.",
+    )
+    fake_s3.put_text(
+        "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/2026-04-24/client/source.md",
+        "S3 dosage calibration note.",
+        etag="source-etag",
+    )
+    monkeypatch.setattr(boto3, "client", lambda service_name: fake_s3)
+    source = S3RubricMemorySource(
+        bucket_name="rubric-bucket",
+        prefix="SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/",
+        scope_level="score",
+        objects=tuple(
+            S3RubricMemoryCorpusResolver(
+                bucket_name="rubric-bucket",
+                s3_client=fake_s3,
+            )
+            .resolve(
+                scorecard_name="SelectQuote HCS Medium-Risk",
+                score_name="Medication Review: Dosage",
+            )
+            .sources[-1]
+            .objects
+        ),
+    )
+
+    prepared = RubricMemoryPreparedCorpusManager(
+        cache_root=tmp_path / "prepared"
+    ).prepare(corpus_sources=[source])
+    copied_file = (
+        prepared.corpus_root / "00-score" / "2026-04-24" / "client" / "source.md"
+    )
+    metadata = json.loads(
+        copied_file.with_name("source.md.biblicus.yml").read_text(encoding="utf-8")
+    )
+
+    assert "S3 dosage calibration note." in copied_file.read_text(encoding="utf-8")
+    assert (
+        fake_s3.objects[
+            "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/2026-04-24/client/source.md"
+        ]["Body"]
+        == b"S3 dosage calibration note."
+    )
+    assert metadata["scope_level"] == "score"
+    assert metadata["source_uri"] == (
+        "s3://rubric-bucket/SelectQuote HCS Medium-Risk/"
+        "Medication Review- Dosage.knowledge-base/2026-04-24/client/source.md"
+    )
+    assert metadata["bucket_name"] == "rubric-bucket"
+    assert metadata["source_timestamp"] == "2026-04-24T00:00:00"
+    assert prepared.sources[0]["source_type"] == "s3"
+    assert prepared.source_file_count == 1
+
+
+def test_prepared_corpus_rebuilds_when_s3_etag_changes(monkeypatch, tmp_path):
+    import boto3
+
+    fake_s3 = _FakeS3Client()
+    fake_s3.put_text(
+        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/2026-04-01/source.md",
+        "S3 scorecard note.",
+    )
+    key = (
+        "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/"
+        "2026-04-24/source.md"
+    )
+    fake_s3.put_text(key, "S3 dosage calibration note.", etag="etag-1")
+    monkeypatch.setattr(boto3, "client", lambda service_name: fake_s3)
+
+    resolver = S3RubricMemoryCorpusResolver(
+        bucket_name="rubric-bucket",
+        s3_client=fake_s3,
+    )
+    first_source = resolver.resolve(
+        scorecard_name="SelectQuote HCS Medium-Risk",
+        score_name="Medication Review: Dosage",
+    ).sources[-1]
+    manager = RubricMemoryPreparedCorpusManager(cache_root=tmp_path / "prepared")
+    first = manager.prepare(corpus_sources=[first_source])
+
+    fake_s3.put_text(key, "S3 dosage calibration note.", etag="etag-2")
+    second_source = resolver.resolve(
+        scorecard_name="SelectQuote HCS Medium-Risk",
+        score_name="Medication Review: Dosage",
+    ).sources[-1]
+    second = manager.prepare(corpus_sources=[second_source])
+
+    assert second.status == "rebuilt"
+    assert second.fingerprint != first.fingerprint
 
 
 def test_prepared_corpus_rejects_missing_knowledge_base_folder(tmp_path):
@@ -1095,7 +1385,7 @@ async def test_context_provider_records_prepared_corpus_and_query_plan_diagnosti
     retriever = _DiagnosticRetriever()
 
     monkeypatch.setattr(
-        "plexus.rubric_memory.provider.BiblicusRubricEvidenceRetriever.from_local_score",
+        "plexus.rubric_memory.provider.BiblicusRubricEvidenceRetriever.from_score",
         lambda **_kwargs: retriever,
     )
     monkeypatch.setattr(
@@ -1164,7 +1454,7 @@ async def test_context_provider_retrieves_item_context_without_synthesis(monkeyp
         _AuthorityResolver,
     )
     monkeypatch.setattr(
-        "plexus.rubric_memory.provider.BiblicusRubricEvidenceRetriever.from_local_score",
+        "plexus.rubric_memory.provider.BiblicusRubricEvidenceRetriever.from_score",
         lambda **_kwargs: created_retrievers.append(retriever) or retriever,
     )
     monkeypatch.setattr(
