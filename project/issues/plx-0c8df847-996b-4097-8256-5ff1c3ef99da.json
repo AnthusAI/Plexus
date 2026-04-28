@@ -1,0 +1,67 @@
+{
+  "id": "plx-0c8df847-996b-4097-8256-5ff1c3ef99da",
+  "title": "Investigate CodePipeline failure for plexus-metrics-aggregation-production stack",
+  "description": "## Summary\nInvestigate why `plexus-infrastructure-production-pipeline` fails while deploying `plexus-metrics-aggregation-production`.\n\n## Scope\n- Retrieve failing pipeline execution details\n- Identify exact failed action and CloudFormation stack event/reason\n- Provide root cause and recommended remediation\n\n## Done\n- Root cause identified with concrete AWS evidence\n- Next remediation steps documented",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f87c86e2-f5a5-417c-a520-ae2957f6b459",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7ad9a08c-9997-4c6d-bab1-6af5507e7b01",
+      "author": "derek",
+      "text": "Started investigation via AWS CLI.\n\nPlan:\n1. Identify latest failed pipeline execution and failed action.\n2. Pull CloudFormation stack events for `plexus-metrics-aggregation-production`.\n3. Correlate failure timestamp/action to root cause and recommend fix.",
+      "created_at": "2026-04-28T17:43:31.736399911Z"
+    },
+    {
+      "id": "d53b2f7d-bad2-41c2-b7af-ec972ac6511f",
+      "author": "derek",
+      "text": "AWS evidence captured (us-west-2):\n\n- Pipeline `plexus-infrastructure-production-pipeline` latest execution `9372b098-a23a-4b66-948f-f70d0475cd06` failed in action `plexus-metrics-aggregation-production.Deploy`.\n- CloudFormation stack `plexus-metrics-aggregation-production` entered `UPDATE_ROLLBACK_COMPLETE`.\n- Failing event on resource `MetricsAggregatorRoleDefaultPolicy2B6831DE`:\n  `UPDATE_FAILED: Could not find a value associated with JSONKey in SecretString`.\n- Inspected failed change set `PipelineChange/d93b7d14-76de-4263-bb1a-1cedc6e3d881` template:\n  IAM policy Resource list includes dynamic ref to\n  `...:SecretString:table-procedure-stream-arn::`.\n- Verified production secret `plexus/production/config` does NOT contain key `table-procedure-stream-arn` (`has(...) == false`).\n\nConclusion: deployment fails because new metrics aggregation policy references `table-procedure-stream-arn` before that key exists in production secret.",
+      "created_at": "2026-04-28T17:45:19.128205093Z"
+    },
+    {
+      "id": "ef643b29-59f4-4060-bea2-1d04103d6c89",
+      "author": "derek",
+      "text": "Remediation recommendation:\n1) Add `table-procedure-stream-arn` (and optionally `table-procedure-name`/`table-procedure-arn`) to secret `plexus/production/config`.\n2) Re-run `plexus-infrastructure-production-pipeline`.\n\nLikely correct value for this production env prefix (`qh4jgzgazfd2ncwbekhi4woj7a`):\n`arn:aws:dynamodb:us-west-2:695039645615:table/Procedure-qh4jgzgazfd2ncwbekhi4woj7a-NONE/stream/2025-09-01T00:54:54.193`\n\nEvidence source: CloudFormation export `qh4jgzgazfd2ncwbekhi4woj7a:GetAtt:ProcedureTable:StreamArn`.",
+      "created_at": "2026-04-28T17:45:54.937259078Z"
+    },
+    {
+      "id": "5044a9fb-9ffb-41b1-b3a1-98c4727d0ecf",
+      "author": "derek",
+      "text": "Applied remediation to production secret:\n- Updated `plexus/production/config` to include `table-procedure-stream-arn`\n- Resolved value from CloudFormation export `qh4jgzgazfd2ncwbekhi4woj7a:GetAtt:ProcedureTable:StreamArn`\n- Corrected value to exact ARN (no trailing newline/None artifacts)\n\nNext: trigger `plexus-infrastructure-production-pipeline` and monitor result.",
+      "created_at": "2026-04-28T17:49:31.801301786Z"
+    },
+    {
+      "id": "3cbd8ea0-3eac-495a-a383-d939d929780b",
+      "author": "derek",
+      "text": "Checked current AppSync auth modes for production endpoint used by metrics aggregation (`https://7ubj23ym5vekxagab2damu2euy.appsync-api.us-west-2.amazonaws.com/graphql`, API ID `qh4jgzgazfd2ncwbekhi4woj7a`).\n\nCurrent auth config:\n- Primary: `AMAZON_COGNITO_USER_POOLS`\n- Additional: `API_KEY`, `AWS_IAM`\n\nAlso verified currently deployed Lambda env on `plexus-lambda-production-metrics-aggregator`:\n- `GRAPHQL_API_KEY=da2-6eczifxvjbclbecxu5ofpjx4g4`\n- This key is present on API and expires at epoch `1807635600` (2027-04-13 17:00:00 UTC).\n}",
+      "created_at": "2026-04-28T17:56:05.920240192Z"
+    },
+    {
+      "id": "6ef169d3-433d-4f82-b90c-648e697b14fa",
+      "author": "derek",
+      "text": "Starting implementation work to switch metrics aggregation Lambda from AppSync API key auth to IAM SigV4 auth.\n\nPlan:\n1) Create feature branch from develop.\n2) Update GraphQL client auth flow to IAM signing.\n3) Remove API-key env dependency in stack/config/docs.\n4) Run targeted validation checks.",
+      "created_at": "2026-04-28T18:01:28.207247169Z"
+    },
+    {
+      "id": "a93c9148-ee31-4407-a908-1669970b4203",
+      "author": "derek",
+      "text": "Implemented IAM auth migration for metrics aggregation Lambda on branch `feature/plx-0c8df8-metrics-iam-appsync`.\n\nChanges made:\n- `infrastructure/lambda_functions/metrics_aggregator/graphql_client.py`\n  - Removed API key auth path.\n  - Added SigV4 signing using Lambda IAM credentials (`botocore` SigV4Auth with service `appsync`).\n  - `get_client_from_env()` now requires endpoint only (`PLEXUS_API_URL` or `GRAPHQL_ENDPOINT`).\n- `infrastructure/stacks/metrics_aggregation_stack.py`\n  - Removed `GRAPHQL_API_KEY` from Lambda environment variables.\n- `infrastructure/lambda_functions/metrics_aggregator/README.md`\n  - Updated env requirements to IAM role-based auth; removed API key requirement.\n- `infrastructure/.env.example`\n  - Removed `PLEXUS_API_KEY`; clarified IAM role auth.\n\nValidation:\n- `python -m py_compile infrastructure/lambda_functions/metrics_aggregator/graphql_client.py infrastructure/stacks/metrics_aggregation_stack.py` ✅\n- `pytest` unavailable in this shell (`ModuleNotFoundError: No module named pytest`).}",
+      "created_at": "2026-04-28T18:02:44.772208564Z"
+    },
+    {
+      "id": "252c3933-c145-4fe0-b0ff-a4cb631c0102",
+      "author": "derek",
+      "text": "Validation rerun in project virtualenv:\n- Python: /home/derek/.venvs/cc-local/call-criteria-python-o9nOlyIe-py3.12/bin/python (3.12.4)\n- Command: `python -m pytest -q infrastructure/lambda_functions/metrics_aggregator/test_procedure_metrics.py`\n- Result: 3 passed (0.38s).}",
+      "created_at": "2026-04-28T18:05:55.909623177Z"
+    }
+  ],
+  "created_at": "2026-04-28T17:43:26.200654915Z",
+  "updated_at": "2026-04-28T18:05:55.909623177Z",
+  "closed_at": null,
+  "custom": {}
+}
