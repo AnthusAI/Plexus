@@ -1,0 +1,18 @@
+{
+  "id": "plx-f87c86e2-f5a5-417c-a520-ae2957f6b459",
+  "title": "Stabilize production infrastructure pipeline deployments",
+  "description": "",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2b205fdf-e22e-4077-82b6-fe38ef5de848",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-28T17:43:22.066018532Z",
+  "updated_at": "2026-04-28T17:43:22.066018532Z",
+  "closed_at": null,
+  "custom": {}
+}
