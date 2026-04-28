@@ -392,6 +392,12 @@ class PlexusTraceSink:
     def _get_console_dispatch_metadata(self) -> Optional[Dict[str, Any]]:
         if self._console_dispatch_metadata is not None:
             return self._console_dispatch_metadata if isinstance(self._console_dispatch_metadata, dict) else None
+        procedure_id = str(getattr(self.chat_recorder, "procedure_id", "") or "").strip()
+        if procedure_id == "builtin:console/chat":
+            # Stream-dispatch console chat does not use Task metadata for routing.
+            # Skip expensive task-history lookup so first assistant chunk can persist immediately.
+            self._console_dispatch_metadata = False
+            return None
         if isinstance(self._session_context, dict):
             if self._session_context.get("disable_console_dispatch_metadata_lookup"):
                 self._console_dispatch_metadata = False
