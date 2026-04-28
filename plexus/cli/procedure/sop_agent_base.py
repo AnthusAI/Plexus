@@ -945,9 +945,8 @@ Your response will become the next user message to guide the coding assistant.
         """
         try:
             # Use correct sibling-package import for state constants
-            from .states import STATE_HYPOTHESIS, STATE_TEST
+            from .states import STATE_HYPOTHESIS
             from plexus.dashboard.api.models.procedure import Procedure
-            from plexus.dashboard.api.models.graph_node import GraphNode
             # Lazily create an API client if not present
             if not hasattr(self, 'client') or self.client is None:
                 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -972,32 +971,7 @@ Your response will become the next user message to guide the coding assistant.
                 logger.info(f"Not in hypothesis state, skipping transition check")
                 return
             
-            # Get all hypothesis nodes (non-root nodes)
-            all_nodes = GraphNode.list_by_procedure(self.procedure_id, self.client)
-            hypothesis_nodes = [node for node in all_nodes if node.parentNodeId is not None]
-            
-            if not hypothesis_nodes:
-                logger.info("No hypothesis nodes found, staying in hypothesis state")
-                return
-            
-            # Check if any hypothesis nodes need ScoreVersions
-            # For now, assume all hypothesis nodes need ScoreVersions
-            # TODO: Check metadata for scoreVersionId to see which ones already have versions
-            nodes_needing_versions = len(hypothesis_nodes)
-            
-            if nodes_needing_versions > 0:
-                logger.info(f"Found {nodes_needing_versions} hypothesis nodes needing ScoreVersions")
-                logger.info(f"Transitioning from {STATE_HYPOTHESIS} → {STATE_TEST}")
-
-                # Use ProcedureService which now uses state machine for validation
-                from .service import ProcedureService
-                service = ProcedureService(self.client)
-                service._update_procedure_state(self.procedure_id, STATE_TEST, current_state=current_state)
-                # Also update root node status to match
-                if procedure.rootNodeId:
-                    service._update_node_status(procedure.rootNodeId, STATE_TEST)
-            else:
-                logger.info("All hypothesis nodes have ScoreVersions, procedure may be complete")
+            logger.info("Legacy graph-node transition checks have been removed; state is task-stage driven.")
                 
         except Exception as e:
             logger.error(f"Error checking state transition: {e}")

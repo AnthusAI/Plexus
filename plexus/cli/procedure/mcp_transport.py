@@ -13,13 +13,43 @@ access for procedure contexts.
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Callable, Union
 from dataclasses import dataclass, field
 from contextlib import asynccontextmanager
 
 from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+from plexus.dashboard.api.models.task import Task
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_task_metadata(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+    return {}
+
+
+def _touch_task_runtime_heartbeat(client: Any, task_id: str) -> None:
+    task = Task.get_by_id(task_id, client)
+    runtime = _parse_task_metadata(task.metadata).get("runtime")
+    if not isinstance(runtime, dict):
+        runtime = {}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    runtime["lastHeartbeatAt"] = now_iso
+    metadata = _parse_task_metadata(task.metadata)
+    metadata["runtime"] = runtime
+    task.update(
+        metadata=json.dumps(metadata),
+        updatedAt=now_iso,
+    )
 
 
 @dataclass
@@ -190,8 +220,6 @@ def _advance_task_to_stage_by_name(client: Any, task_id: str, stage_name: str) -
         task_id: Task whose stages to update
         stage_name: Name of the stage to mark as RUNNING (case-insensitive match)
     """
-    from datetime import datetime, timezone
-
     stage_query = """
     query GetTask($id: ID!) {
         getTask(id: $id) {
@@ -257,6 +285,10 @@ def _advance_task_to_stage_by_name(client: Any, task_id: str, stage_name: str) -
                 },
                 retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
             )
+    try:
+        _touch_task_runtime_heartbeat(client, task_id)
+    except Exception as exc:
+        logger.warning("Could not refresh runtime heartbeat for task %s after stage update: %s", task_id, exc)
 
 
 def _update_stage_progress(client: Any, task_id: str, current: int, total: int) -> None:
@@ -311,6 +343,10 @@ def _update_stage_progress(client: Any, task_id: str, current: int, total: int) 
         retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
     )
     logger.info("Updated stage %s progress: %d/%d", running.get("name"), current, total)
+    try:
+        _touch_task_runtime_heartbeat(client, task_id)
+    except Exception as exc:
+        logger.warning("Could not refresh runtime heartbeat for task %s after progress update: %s", task_id, exc)
 
 
 class EmbeddedMCPServer:

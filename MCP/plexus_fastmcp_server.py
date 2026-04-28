@@ -455,7 +455,6 @@ try:
     from tools.cost.analysis import register_cost_analysis_tools
     from tools.dataset.datasets import register_dataset_tools
     from tools.procedure.procedures import register_procedure_tools
-    from tools.procedure.procedure_nodes import register_procedure_node_tools
     from tools.rubric_memory.rubric_memory import register_rubric_memory_tools
     
     register_think_tool(mcp)
@@ -472,7 +471,6 @@ try:
     register_cost_analysis_tools(mcp)
     register_dataset_tools(mcp)
     register_procedure_tools(mcp)
-    register_procedure_node_tools(mcp)
     register_rubric_memory_tools(mcp)
 
     logger.info("Successfully registered separated tools")
@@ -662,7 +660,6 @@ if __name__ == "__main__":
         from tools.score.guidelines import register_guidelines_tools
         from tools.evaluation.evaluations import register_evaluation_tools
         from tools.procedure.procedures import register_procedure_tools
-        from tools.procedure.procedure_nodes import register_procedure_node_tools
         from tools.report.reports import register_report_tools
         from tools.feedback.feedback import register_feedback_tools
         from tools.task.tasks import register_task_tools
@@ -691,10 +688,6 @@ if __name__ == "__main__":
         print("Registering procedure tools...", file=sys.stderr)
         register_procedure_tools(mcp)
         print("✓ Registered procedure tools", file=sys.stderr)
-
-        print("Registering procedure node tools...", file=sys.stderr)
-        register_procedure_node_tools(mcp)
-        print("✓ Registered procedure node tools", file=sys.stderr)
 
         print("Registering report tools...", file=sys.stderr)
         register_report_tools(mcp)

@@ -13,7 +13,6 @@ from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
 from plexus.dashboard.api.models.report_block import ReportBlock
 from plexus.dashboard.api.models.item import Item  # Add Item model import
-
 from .base import BaseReportBlock
 from . import feedback_utils
 from .feedback_scope_resolver import resolve_scorecard

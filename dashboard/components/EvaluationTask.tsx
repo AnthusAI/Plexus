@@ -1983,6 +1983,8 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   const [currentBaselineAccuracy, setCurrentBaselineAccuracy] = useState<number | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
+  const hasInlineActionMenu = Boolean(onShare || onDelete)
+  const hasGridActions = variant === 'grid' && (Boolean(controlButtons) || hasInlineActionMenu)
 
   const evaluationNotes = useMemo(() => {
     try {
@@ -2528,9 +2530,17 @@ ${categoryLines}${mechanicalLines}
               {/* Grid variant: show all metadata inline in header */}
               {variant !== 'detail' && (
                 <>
-                  {props.task.name && (
-                    <div className="font-semibold text-sm truncate">{props.task.name}</div>
-                  )}
+                  {props.task.name ? (
+                    <div className="font-semibold text-sm min-w-0 flex items-center gap-1.5">
+                      {hasGridActions && <FlaskConical className="h-4 w-4 flex-shrink-0 text-muted-foreground" />}
+                      <span className="truncate">{props.task.name}</span>
+                    </div>
+                  ) : hasGridActions ? (
+                    <div className="font-semibold text-sm min-w-0 flex items-center gap-1.5">
+                      <FlaskConical className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      <span className="truncate">{props.task.type}</span>
+                    </div>
+                  ) : null}
                   {props.task.description && (
                     <div className="text-sm text-muted-foreground truncate">
                       {props.task.description}
@@ -2560,10 +2570,13 @@ ${categoryLines}${mechanicalLines}
               {variant === 'grid' ? (
                 <div className="flex flex-col items-center gap-1">
                   <div className="flex items-center gap-2">
-                    <div className="text-muted-foreground">
-                      <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
-                    </div>
-                    {(onShare || onDelete) && (
+                    {!hasGridActions && (
+                      <div className="text-muted-foreground">
+                        <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                      </div>
+                    )}
+                    {controlButtons}
+                    {hasInlineActionMenu && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <CardButton
@@ -2598,17 +2611,19 @@ ${categoryLines}${mechanicalLines}
                       </DropdownMenu>
                     )}
                   </div>
-                  <div className="text-xs text-muted-foreground text-center">
-                    {(() => {
-                      const [firstWord, ...restWords] = props.task.type.split(/\s+/);
-                      return (
-                        <>
-                          {firstWord}<br />
-                          {restWords.join(' ')}
-                        </>
-                      );
-                    })()}
-                  </div>
+                  {!hasGridActions && (
+                    <div className="text-xs text-muted-foreground text-center">
+                      {(() => {
+                        const [firstWord, ...restWords] = props.task.type.split(/\s+/);
+                        return (
+                          <>
+                            {firstWord}<br />
+                            {restWords.join(' ')}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex gap-2">

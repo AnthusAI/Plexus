@@ -1,14 +1,19 @@
-import { CfnOutput, Duration, Stack, StackProps } from "aws-cdk-lib";
+import { CfnOutput, Duration, NestedStack, NestedStackProps } from "aws-cdk-lib";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as sqs from "aws-cdk-lib/aws-sqs";
+import { StartingPosition } from "aws-cdk-lib/aws-lambda";
+import { DynamoEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
+import { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
 
-interface ConsoleRunWorkerStackProps extends StackProps {
+interface ConsoleChatResponderStackProps extends NestedStackProps {
+  chatMessageTable: ITable;
   plexusApiUrl?: string;
   plexusApiKey?: string;
   workerImageUri?: string;
+  anthropicApiKey?: string;
+  environmentName?: string;
 }
 
 interface ParsedEcrImageUri {
@@ -54,27 +59,11 @@ const parseEcrImageUri = (imageUri: string): ParsedEcrImageUri => {
   return { repositoryName, tagOrDigest: tag };
 }
 
-export class ConsoleRunWorkerStack extends Stack {
-  public readonly queue: sqs.Queue;
-  public readonly deadLetterQueue: sqs.Queue;
-  public readonly workerFunction: lambda.DockerImageFunction;
+export class ConsoleChatResponderStack extends NestedStack {
+  public readonly responderFunction: lambda.DockerImageFunction;
 
-  constructor(scope: Construct, id: string, props: ConsoleRunWorkerStackProps = {}) {
+  constructor(scope: Construct, id: string, props: ConsoleChatResponderStackProps) {
     super(scope, id, props);
-
-    this.deadLetterQueue = new sqs.Queue(this, "ConsoleRunWorkerDlq", {
-      retentionPeriod: Duration.days(14),
-    });
-
-    this.queue = new sqs.Queue(this, "ConsoleRunWorkerQueue", {
-      visibilityTimeout: Duration.minutes(15),
-      retentionPeriod: Duration.days(4),
-      deadLetterQueue: {
-        maxReceiveCount: 3,
-        queue: this.deadLetterQueue,
-      },
-    });
-
     const workerImage = parseEcrImageUri(
       props.workerImageUri || process.env.CONSOLE_WORKER_IMAGE_URI || "",
     );
@@ -83,7 +72,7 @@ export class ConsoleRunWorkerStack extends Stack {
       "ConsoleRunWorkerImageRepository",
       workerImage.repositoryName,
     );
-    this.workerFunction = new lambda.DockerImageFunction(this, "ConsoleRunWorkerFunction", {
+    this.responderFunction = new lambda.DockerImageFunction(this, "ConsoleChatResponderFunction", {
       code: lambda.DockerImageCode.fromEcr(workerImageRepository, {
         tagOrDigest: workerImage.tagOrDigest,
       }),
@@ -94,21 +83,19 @@ export class ConsoleRunWorkerStack extends Stack {
         PLEXUS_API_KEY: props.plexusApiKey || process.env.PLEXUS_API_KEY || "",
         PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT: "false",
         PYTHONUNBUFFERED: "1",
+        ANTHROPIC_API_KEY: props.anthropicApiKey || process.env.ANTHROPIC_API_KEY || "",
+        CONSOLE_RESPONSE_TARGET: "cloud",
       },
     });
 
-    const workerVersion = this.workerFunction.currentVersion;
-    new lambda.EventSourceMapping(this, "ConsoleRunWorkerQueueEventSource", {
-      target: workerVersion,
-      eventSourceArn: this.queue.queueArn,
+    this.responderFunction.addEventSource(new DynamoEventSource(props.chatMessageTable, {
+      startingPosition: StartingPosition.LATEST,
       batchSize: 1,
       reportBatchItemFailures: true,
-    });
+      retryAttempts: 2,
+    }));
 
-    this.queue.grantConsumeMessages(this.workerFunction);
-    this.deadLetterQueue.grantSendMessages(this.workerFunction);
-
-    this.workerFunction.addToRolePolicy(
+    this.responderFunction.addToRolePolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,
         actions: ["appsync:GraphQL"],
@@ -116,11 +103,8 @@ export class ConsoleRunWorkerStack extends Stack {
       }),
     );
 
-    new CfnOutput(this, "ConsoleRunWorkerQueueUrl", {
-      value: this.queue.queueUrl,
-    });
-    new CfnOutput(this, "ConsoleRunWorkerFunctionArn", {
-      value: this.workerFunction.functionArn,
+    new CfnOutput(this, "ConsoleChatResponderFunctionArn", {
+      value: this.responderFunction.functionArn,
     });
   }
 }

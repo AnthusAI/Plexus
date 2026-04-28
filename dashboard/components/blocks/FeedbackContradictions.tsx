@@ -17,7 +17,7 @@ const markdownPlugins: PluggableList = [remarkGfm, remarkBreaks];
 // ---- Types ----------------------------------------------------------------
 
 interface Vote {
-  model: 'sonnet' | 'gpt';
+  model: 'haiku' | 'gpt';
   result: boolean | null;  // null = call failed
   // Full vote details stored in newer reports
   reason?: string;
@@ -127,8 +127,8 @@ const VotingBadges: React.FC<{ votes: Vote[]; confidence: 'high' | 'medium' | 'l
           : isAgreement
             ? 'bg-green-200 text-green-900 dark:bg-green-800 dark:text-green-100'
             : 'bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100';
-        const label = v.result === null ? '×' : (v.model === 'sonnet' ? 'S' : 'G');
-        const modelName = v.model === 'sonnet' ? 'Sonnet' : 'GPT-5.4';
+        const label = v.result === null ? '×' : (v.model === 'haiku' ? 'H' : 'G');
+        const modelName = v.model === 'haiku' ? 'Haiku 4.5' : 'GPT-5.4';
         const title = v.result === null
           ? `${modelName}: call failed — no response received`
           : isAlignedMode
@@ -367,7 +367,7 @@ const GuidelinesSection: React.FC<{ guidelines: string }> = ({ guidelines }) => 
 const CONTEXT_HEADER = `# Feedback Guideline-Vetting Report Output
 #
 # This report evaluates feedback items against score guidelines using shared
-# multi-model voting (Sonnet + GPT-5.4 with optional tiebreakers).
+# multi-model voting (Haiku 4.5 + GPT-5.4 with optional tiebreakers).
 #
 # Structure:
 #   mode: contradictions | aligned

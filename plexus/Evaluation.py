@@ -35,6 +35,7 @@ from plexus.utils.feedback_selection import (
 from plexus.cli.shared.optimizer_shadow_invalidation import (
     resolve_score_version_shadow_invalidation_metadata,
 )
+from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
 
 from plexus.scores.LangGraphScore import LangGraphScore
 import inspect
@@ -4374,7 +4375,7 @@ class FeedbackEvaluation(Evaluation):
                     score_yaml_code=score_yaml_code,
                 )
 
-            _SONNET_MODEL = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+            _HAIKU_MODEL = CLAUDE_HAIKU_45_MODEL_ID
 
             def _bedrock_converse(system: str, messages: list, max_tokens: int = 1000) -> str:
                 """Run a Bedrock Claude conversation and return the assistant response."""
@@ -4389,7 +4390,7 @@ class FeedbackEvaluation(Evaluation):
                         "messages": messages,
                     })
                     resp = brt.invoke_model(
-                        modelId=_SONNET_MODEL,
+                        modelId=_HAIKU_MODEL,
                         body=body,
                         contentType="application/json",
                         accept="application/json",
@@ -5025,7 +5026,7 @@ class FeedbackEvaluation(Evaluation):
                 "messages": [{"role": "user", "content": prompt}],
             })
             resp = brt.invoke_model(
-                modelId="us.anthropic.claude-sonnet-4-20250514-v1:0",
+                modelId=CLAUDE_HAIKU_45_MODEL_ID,
                 body=body,
                 contentType="application/json",
                 accept="application/json",

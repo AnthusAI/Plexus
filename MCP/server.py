@@ -17,7 +17,6 @@ from tools.evaluation.evaluations import register_evaluation_tools
 from tools.evaluation.evaluation_comparison import register_evaluation_comparison_tools
 from tools.score.scores import register_score_tools
 from tools.procedure.procedures import register_procedure_tools
-from tools.procedure.procedure_nodes import register_procedure_node_tools
 from tools.report.reports import register_report_tools
 from tools.feedback.feedback import register_feedback_tools
 from tools.task.tasks import register_task_tools
@@ -119,10 +118,6 @@ def register_all_tools():
     # Register procedure tools
     register_procedure_tools(mcp)
     logger.info("Registered procedure tools")
-
-    # Register procedure node tools
-    register_procedure_node_tools(mcp)
-    logger.info("Registered procedure node tools")
 
     # Register report tools
     register_report_tools(mcp)

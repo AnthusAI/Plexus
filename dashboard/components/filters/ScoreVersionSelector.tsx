@@ -13,7 +13,7 @@ import { graphqlRequest, handleGraphQLErrors } from "@/utils/amplify-client"
 interface ScoreVersionOption {
   id: string
   createdAt: string
-  isFeatured: string
+  isFeatured?: string | null
 }
 
 interface ScoreVersionSelectorProps {
@@ -80,7 +80,7 @@ export default function ScoreVersionSelector({
             .map((item) => ({
               id: item.id,
               createdAt: item.createdAt,
-              isFeatured: item.isFeatured,
+              isFeatured: item.isFeatured ?? null,
             }))
         )
       } catch (error) {

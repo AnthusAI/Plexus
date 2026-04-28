@@ -24,6 +24,7 @@ import urllib3.exceptions
 import re
 import datetime
 import requests
+import difflib
 from gql import gql
 from plexus.cli.shared.file_editor import FileEditor
 from plexus.cli.shared import sanitize_path_name, get_score_yaml_path, get_score_guidelines_path
@@ -450,7 +451,8 @@ def dataset_curate_vetted(
 
 @score.command()
 @click.option('--id', required=True, help='Score ID to list versions for')
-def versions(id: str):
+@click.option('--pinned-only', is_flag=True, help='Show only pinned/starred versions')
+def versions(id: str, pinned_only: bool):
     """List all versions for a specific score."""
     client = create_client()
     
@@ -504,8 +506,25 @@ def versions(id: str):
             console.print("[yellow]No versions found for this score.[/yellow]")
             return
         
-        # Sort versions by creation date (newest first)
-        versions.sort(key=lambda v: v.get('createdAt', ''), reverse=True)
+        def is_pinned_version(version):
+            return version.get('isFeatured') == 'true'
+
+        if pinned_only:
+            versions = [version for version in versions if is_pinned_version(version)]
+
+        def version_sort_key(version):
+            created_at = (version.get('createdAt') or '1970-01-01T00:00:00+00:00').replace('Z', '+00:00')
+            try:
+                created_ts = datetime.datetime.fromisoformat(created_at).timestamp()
+            except ValueError:
+                created_ts = 0
+            return (
+                0 if version.get('id') == champion_version_id else 1,
+                0 if is_pinned_version(version) else 1,
+                -created_ts,
+            )
+
+        versions.sort(key=version_sort_key)
         
         # Create a table to display the versions
         table = Table(title=f"Score Versions ({len(versions)} total)")
@@ -514,6 +533,7 @@ def versions(id: str):
         table.add_column("Updated", style="green")
         table.add_column("Parent ID", style="blue")
         table.add_column("Champion", style="magenta")
+        table.add_column("Pinned", style="magenta")
         table.add_column("Note", style="yellow")
         
         for version in versions:
@@ -522,6 +542,7 @@ def versions(id: str):
             updated_at = version.get('updatedAt')
             parent_id = version.get('parentVersionId', 'None')
             is_champion = "✓" if version_id == champion_version_id else ""
+            is_pinned = "★" if is_pinned_version(version) else ""
             note = version.get('note', '')
             
             # Truncate note if it's too long
@@ -534,6 +555,7 @@ def versions(id: str):
                 updated_at,
                 parent_id,
                 is_champion,
+                is_pinned,
                 note
             )
         
@@ -1316,7 +1338,7 @@ def push(scorecard: str, score: str, note: str):
             console.print(f"[blue]Changes detected: {' and '.join(changes)}. Creating new version.[/blue]")
     else:
         console.print("[blue]Creating initial version.[/blue]")
-    
+
     # Create a new version with the cleaned configuration
     mutation = """
     mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
@@ -1585,7 +1607,6 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         score_identifier=None,
         yaml_config=yaml_config,
         featured=False,
-        create_root_node=False,
         stage_configs=get_alignment_optimizer_stage_configs(),
     )
 
@@ -1678,3 +1699,445 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
                 delta_str = f"[green]{delta:+.4f}[/green]" if delta >= 0 else f"[red]{delta:+.4f}[/red]"
                 hypothesis = str(it.get('hypothesis') or '')[:60]
                 console.print(f"  {it.get('iteration', '?')}. {hypothesis}... (AC1 {delta_str})")
+
+
+def _resolve_optimizer_score_context(client, scorecard_identifier: str, score_identifier: str) -> dict:
+    from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_identifier)
+    if not scorecard_id:
+        raise click.ClickException(f"Scorecard not found: {scorecard_identifier}")
+
+    score_id = memoized_resolve_score_identifier(client, scorecard_id, score_identifier)
+    if not score_id:
+        raise click.ClickException(f"Score not found: {score_identifier}")
+
+    query = """
+    query GetOptimizerScoreContext($scorecardId: ID!, $scoreId: ID!) {
+      getScorecard(id: $scorecardId) {
+        id
+        name
+      }
+      getScore(id: $scoreId) {
+        id
+        name
+        championVersionId
+      }
+    }
+    """
+    result = client.execute(query, {"scorecardId": scorecard_id, "scoreId": score_id})
+    scorecard = result.get("getScorecard") or {}
+    score = result.get("getScore") or {}
+    if not score:
+        raise click.ClickException(f"Score {score_identifier} resolved to {score_id}, but could not be loaded.")
+
+    return {
+        "scorecard_id": scorecard_id,
+        "scorecard_name": scorecard.get("name") or scorecard_identifier,
+        "score_id": score_id,
+        "score_name": score.get("name") or score_identifier,
+        "champion_version_id": score.get("championVersionId"),
+        "service": OptimizerResultsService(client),
+    }
+
+def _fetch_score_version_for_management(client, version_id: str) -> dict:
+    query = """
+    query GetScoreVersionForManagement($id: ID!) {
+      getScoreVersion(id: $id) {
+        id
+        scoreId
+        configuration
+        guidelines
+        isFeatured
+        note
+        branch
+        parentVersionId
+        metadata
+        createdAt
+        updatedAt
+      }
+    }
+    """
+    version = (client.execute(query, {"id": version_id}).get("getScoreVersion") or {})
+    if not version:
+        raise click.ClickException(f"Score version not found: {version_id}")
+    return version
+
+
+def _build_unified_diff(left_text: str, right_text: str, left_label: str, right_label: str) -> str:
+    return "".join(difflib.unified_diff(
+        (left_text or "").splitlines(keepends=True),
+        (right_text or "").splitlines(keepends=True),
+        fromfile=left_label,
+        tofile=right_label,
+    ))
+
+
+@score.command(name="version-pin")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--version', 'version_id', required=True, help='ScoreVersion ID to pin or unpin')
+@click.option('--pinned/--unpinned', default=True, show_default=True, help='Whether the version should be pinned/starred')
+@click.option('--output', '-o', type=click.Choice(['json', 'table']), default='table', show_default=True)
+def version_pin(scorecard: str, score: str, version_id: str, pinned: bool, output: str):
+    """Pin or unpin a ScoreVersion using isFeatured."""
+    client = create_client()
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    version = _fetch_score_version_for_management(client, version_id)
+    if version.get("scoreId") != context["score_id"]:
+        raise click.ClickException(
+            f"Version {version_id} belongs to score {version.get('scoreId')}, not {context['score_id']}"
+        )
+
+    mutation = """
+    mutation UpdateScoreVersionPin($input: UpdateScoreVersionInput!) {
+      updateScoreVersion(input: $input) {
+        id
+        scoreId
+        isFeatured
+        updatedAt
+      }
+    }
+    """
+    updated = (client.execute(
+        mutation,
+        {
+            "input": {
+                "id": version_id,
+                "isFeatured": "true" if pinned else None,
+                "createdAt": version.get("createdAt"),
+            }
+        },
+    ).get("updateScoreVersion") or {})
+    payload = {
+        "success": True,
+        "score_id": context["score_id"],
+        "score_name": context["score_name"],
+        "version_id": updated.get("id") or version_id,
+        "pinned": updated.get("isFeatured") == "true",
+    }
+
+    if output == 'json':
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    table = Table(title="Score Version Pin")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Score", context["score_name"])
+    table.add_row("Version", payload["version_id"])
+    table.add_row("Pinned", "yes" if payload["pinned"] else "no")
+    console.print(table)
+
+
+scores.add_command(version_pin)
+
+
+@score.command(name="version-diff")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--left', 'left_version_id', required=True, help='Left/original ScoreVersion ID')
+@click.option('--right', 'right_version_id', required=True, help='Right/modified ScoreVersion ID')
+@click.option('--include', 'include_part', type=click.Choice(['code', 'guidelines', 'both']), default='both', show_default=True)
+@click.option('--output', '-o', type=click.Choice(['json', 'text']), default='text', show_default=True)
+def version_diff(scorecard: str, score: str, left_version_id: str, right_version_id: str, include_part: str, output: str):
+    """Show code and/or guideline diffs between two ScoreVersions."""
+    client = create_client()
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    left = _fetch_score_version_for_management(client, left_version_id)
+    right = _fetch_score_version_for_management(client, right_version_id)
+    for label, version in (("left", left), ("right", right)):
+        if version.get("scoreId") != context["score_id"]:
+            raise click.ClickException(
+                f"{label} version {version.get('id')} belongs to score {version.get('scoreId')}, not {context['score_id']}"
+            )
+
+    include_code = include_part in ('code', 'both')
+    include_guidelines = include_part in ('guidelines', 'both')
+    payload = {
+        "success": True,
+        "score_id": context["score_id"],
+        "score_name": context["score_name"],
+        "left_version_id": left_version_id,
+        "right_version_id": right_version_id,
+        "code_diff": _build_unified_diff(left.get("configuration") or "", right.get("configuration") or "", f"{left_version_id}/code.yaml", f"{right_version_id}/code.yaml") if include_code else None,
+        "guidelines_diff": _build_unified_diff(left.get("guidelines") or "", right.get("guidelines") or "", f"{left_version_id}/guidelines.md", f"{right_version_id}/guidelines.md") if include_guidelines else None,
+    }
+
+    if output == 'json':
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    console.print(f"[bold]Score version diff for {context['score_name']}[/bold]")
+    if include_code:
+        console.print("\n[bold cyan]Code[/bold cyan]")
+        console.print(payload["code_diff"] or "[dim]No code differences.[/dim]")
+    if include_guidelines:
+        console.print("\n[bold cyan]Guidelines[/bold cyan]")
+        console.print(payload["guidelines_diff"] or "[dim]No guideline differences.[/dim]")
+
+
+scores.add_command(version_diff)
+
+
+@score.command(name="optimizer-runs")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--limit', '-l', default=25, show_default=True, help='Maximum number of runs to show')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
+def optimizer_runs(scorecard: str, score: str, limit: int, output: str):
+    """List optimizer runs for a score using indexed task-attachment manifests."""
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create API client")
+
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    runs = context["service"].list_optimizer_runs_for_score(context["score_id"], limit=limit)
+    payload = [context["service"].summarize_optimizer_run(run) for run in runs]
+
+    if output == 'json':
+        click.echo(json.dumps(payload, indent=2, default=str))
+        return
+    if output == 'yaml':
+        yaml_dumper = YAML()
+        yaml_dumper.dump(payload, sys.stdout)
+        return
+
+    table = Table(title=f"Optimizer Runs for {context['score_name']}")
+    table.add_column("Procedure", style="cyan")
+    table.add_column("Status", style="white")
+    table.add_column("Cycles", style="green")
+    table.add_column("Stop", style="yellow")
+    table.add_column("Winning Version", style="magenta")
+    table.add_column("Feedback Alignment Evaluation", style="blue")
+    table.add_column("Regression Alignment Evaluation", style="blue")
+    for row in payload:
+        cycles = "—"
+        if row["completed_cycles"] is not None:
+            cycles = str(row["completed_cycles"])
+            if row["configured_max_iterations"] is not None:
+                cycles = f"{cycles}/{row['configured_max_iterations']}"
+        table.add_row(
+            row["procedure_id"],
+            row["status"] or "unknown",
+            cycles,
+            row["stop_reason"] or "—",
+            row["winning_version_id"] or "—",
+            row["best_feedback_evaluation_id"] or "—",
+            row["best_accuracy_evaluation_id"] or "—",
+        )
+    console.print(table)
+
+
+scores.add_command(optimizer_runs)
+
+
+@score.command(name="optimizer-review")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
+def optimizer_review(scorecard: str, score: str, output: str):
+    """Build a compact agent review packet for optimizer results on one score."""
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create API client")
+
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    packet = context["service"].build_optimizer_review_packet_for_score(
+        context["score_id"],
+        score_name=context["score_name"],
+        scorecard_name=context["scorecard_name"],
+        champion_version_id=context["champion_version_id"],
+    )
+
+    if output == 'json':
+        click.echo(json.dumps(packet, indent=2, default=str))
+        return
+    if output == 'yaml':
+        yaml_dumper = YAML()
+        yaml_dumper.dump(packet, sys.stdout)
+        return
+
+    promotion = packet.get("promotion_packet") or {}
+    best = packet.get("best_candidate") or {}
+    table = Table(title=f"Optimizer Review for {context['score_name']}")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Champion", packet.get("champion_version_id") or "—")
+    table.add_row("Best version", best.get("version_id") or "—")
+    table.add_row("Best feedback alignment evaluation", promotion.get("best_feedback_evaluation_url") or "—")
+    table.add_row("Best regression alignment evaluation", promotion.get("best_accuracy_evaluation_url") or "—")
+    table.add_row("Feedback AC1", f"{best['best_feedback_alignment']:.4f}" if best.get("best_feedback_alignment") is not None else "—")
+    table.add_row("Regression AC1", f"{best['best_accuracy_alignment']:.4f}" if best.get("best_accuracy_alignment") is not None else "—")
+    table.add_row("Guidelines", promotion.get("guidelines_relative_path") or "—")
+    table.add_row("Indexed runs", str(packet.get("indexed_run_count", 0)))
+    table.add_row("Unindexed runs", str(packet.get("unindexed_run_count", 0)))
+    table.add_row("Recommendation", packet.get("promotion_recommendation") or "—")
+    console.print(table)
+
+
+scores.add_command(optimizer_review)
+
+
+@score.command(name="optimizer-candidates")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--limit-runs', default=25, show_default=True, help='Number of indexed runs to aggregate')
+@click.option('--detail', type=click.Choice(['summary', 'full']), default='summary', show_default=True)
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
+def optimizer_candidates(scorecard: str, score: str, limit_runs: int, detail: str, output: str):
+    """List optimizer candidate versions and their best visible evaluations for a score."""
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create API client")
+
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    candidates = context["service"].list_optimizer_candidates_for_score(
+        context["score_id"],
+        limit_runs=limit_runs,
+    )
+    if detail != 'full':
+        candidates = [context["service"].summarize_optimizer_candidate(candidate) for candidate in candidates]
+
+    if output == 'json':
+        click.echo(json.dumps(candidates, indent=2, default=str))
+        return
+    if output == 'yaml':
+        yaml_dumper = YAML()
+        yaml_dumper.dump(candidates, sys.stdout)
+        return
+
+    table = Table(title=f"Optimizer Candidates for {context['score_name']}")
+    table.add_column("Version", style="magenta")
+    table.add_column("Pinned", style="yellow")
+    table.add_column("Feedback AC1", style="green")
+    table.add_column("Regression AC1", style="green")
+    table.add_column("Feedback Alignment Evaluation", style="blue")
+    table.add_column("Regression Alignment Evaluation", style="blue")
+    table.add_column("Runs", style="cyan")
+    for candidate in candidates:
+        table.add_row(
+            candidate["version_id"],
+            "★" if candidate.get("pinned") else "",
+            f"{candidate['best_feedback_alignment']:.4f}" if candidate.get("best_feedback_alignment") is not None else "—",
+            f"{candidate['best_accuracy_alignment']:.4f}" if candidate.get("best_accuracy_alignment") is not None else "—",
+            candidate.get("best_feedback_evaluation_id") or "—",
+            candidate.get("best_accuracy_evaluation_id") or "—",
+            ", ".join(candidate.get("runs") or []),
+        )
+    console.print(table)
+
+
+scores.add_command(optimizer_candidates)
+
+
+@score.command(name="evaluations")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--version', 'version_id', default=None, help='Optional score version ID filter')
+@click.option('--sort', 'sort_by', type=click.Choice(['updated', 'alignment', 'accuracy', 'precision', 'recall', 'cost']), default='updated', show_default=True)
+@click.option('--limit', '-l', default=25, show_default=True, help='Maximum number of evaluations to show')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
+def score_evaluations(scorecard: str, score: str, version_id: Optional[str], sort_by: str, limit: int, output: str):
+    """List concise evaluations for a score, optionally filtered to one version."""
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create API client")
+
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    evaluations = context["service"].list_score_evaluations(
+        context["score_id"],
+        version_id=version_id,
+        sort_by=sort_by,
+        limit=limit,
+    )
+
+    if output == 'json':
+        click.echo(json.dumps(evaluations, indent=2, default=str))
+        return
+    if output == 'yaml':
+        yaml_dumper = YAML()
+        yaml_dumper.dump(evaluations, sys.stdout)
+        return
+
+    title = f"Evaluations for {context['score_name']}"
+    if version_id:
+        title += f" ({version_id})"
+    table = Table(title=title)
+    table.add_column("Evaluation", style="cyan")
+    table.add_column("Version", style="magenta")
+    table.add_column("Type", style="white")
+    table.add_column("Status", style="white")
+    table.add_column("Accuracy", style="green")
+    table.add_column("AC1", style="green")
+    table.add_column("Precision", style="green")
+    table.add_column("Recall", style="green")
+    table.add_column("Cost", style="green")
+    table.add_column("Items", style="yellow")
+    table.add_column("Updated", style="dim")
+    for row in evaluations:
+        total = row.get("total_items")
+        processed = row.get("processed_items")
+        table.add_row(
+            row.get("evaluation_id") or "—",
+            row.get("score_version_id") or "—",
+            row.get("type") or "—",
+            row.get("status") or "—",
+            f"{row['accuracy']:.2f}" if row.get("accuracy") is not None else "—",
+            f"{row['alignment']:.4f}" if row.get("alignment") is not None else "—",
+            f"{row['precision']:.4f}" if row.get("precision") is not None else "—",
+            f"{row['recall']:.4f}" if row.get("recall") is not None else "—",
+            f"{row['cost']:.4f}" if row.get("cost") is not None else "—",
+            f"{processed or 0}/{total or 0}" if processed is not None or total is not None else "—",
+            row.get("updated_at") or "—",
+        )
+    console.print(table)
+
+
+scores.add_command(score_evaluations)
+
+
+@score.command(name="promotion-packet")
+@click.option('--scorecard', '-s', required=True, help='Scorecard identifier (name, key, or ID)')
+@click.option('--score', '-c', required=True, help='Score identifier (name, key, or ID)')
+@click.option('--version', 'version_id', default=None, help='Specific version ID to build a packet for')
+@click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', show_default=True)
+def promotion_packet(scorecard: str, score: str, version_id: Optional[str], output: str):
+    """Build a client-ready promotion packet for the best indexed optimizer candidate."""
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create API client")
+
+    context = _resolve_optimizer_score_context(client, scorecard, score)
+    packet = context["service"].build_promotion_packet_for_score(
+        context["score_id"],
+        score_name=context["score_name"],
+        scorecard_name=context["scorecard_name"],
+        champion_version_id=context["champion_version_id"],
+        version_id=version_id,
+    )
+
+    if output == 'json':
+        click.echo(json.dumps(packet, indent=2, default=str))
+        return
+    if output == 'yaml':
+        yaml_dumper = YAML()
+        yaml_dumper.dump(packet, sys.stdout)
+        return
+
+    table = Table(title=f"Promotion Packet for {context['score_name']}")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Version", packet["version_id"])
+    table.add_row("Champion", "yes" if packet["is_champion"] else "no")
+    table.add_row("Current champion", packet.get("champion_version_id") or "—")
+    table.add_row("Best feedback alignment evaluation", packet.get("best_feedback_evaluation_id") or "—")
+    table.add_row("Best regression alignment evaluation", packet.get("best_accuracy_evaluation_id") or "—")
+    table.add_row("Feedback URL", packet.get("best_feedback_evaluation_url") or "—")
+    table.add_row("Regression URL", packet.get("best_accuracy_evaluation_url") or "—")
+    table.add_row("Guidelines", packet.get("guidelines_relative_path") or "—")
+    table.add_row("Pinned", "yes" if packet.get("pinned") else "no")
+    console.print(table)
+
+
+scores.add_command(promotion_packet)
