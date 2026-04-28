@@ -12,9 +12,8 @@ from collections import Counter
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import yaml
-
 from plexus.rubric_memory import validate_rubric_memory_citations
+import yaml
 
 logger = logging.getLogger(__name__)
 

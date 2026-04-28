@@ -19,7 +19,7 @@ interface ScoreVersionSelectParameterProps {
 }
 
 export function ScoreVersionSelectParameter({ definition, value, onChange, scoreId, error }: ScoreVersionSelectParameterProps) {
-  const [versions, setVersions] = useState<Array<{ id: string; createdAt: string; isFeatured: string }>>([])
+  const [versions, setVersions] = useState<Array<{ id: string; createdAt: string; isFeatured?: string | null }>>([])
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export function ScoreVersionSelectParameter({ definition, value, onChange, score
         setVersions(sorted.map((v: any) => ({ 
           id: v.id, 
           createdAt: v.createdAt,
-          isFeatured: v.isFeatured
+          isFeatured: v.isFeatured ?? null
         })))
       } catch (error) {
         console.error('Error loading score versions:', error)
@@ -113,4 +113,3 @@ export function ScoreVersionSelectParameter({ definition, value, onChange, score
     </div>
   )
 }
-

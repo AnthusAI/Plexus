@@ -5,7 +5,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
 from plexus.reports.blocks.feedback_contradictions import FeedbackContradictions
+from plexus.reports.blocks.guideline_vetting import GuidelineVettingService
 
 
 class _DummyClient:
@@ -48,6 +50,66 @@ def _parse_output(payload: str):
     return json.loads(json_text)
 
 
+def test_guideline_vetting_bedrock_uses_haiku_45(monkeypatch):
+    captured = {}
+
+    class _Body:
+        def read(self):
+            return json.dumps({
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "contradicts": False,
+                                "category": None,
+                                "reason": "Aligned.",
+                                "guideline_quote": "",
+                            }
+                        ),
+                    }
+                ]
+            }).encode()
+
+    class _Client:
+        def invoke_model(self, **kwargs):
+            captured.update(kwargs)
+            return {"body": _Body()}
+
+    monkeypatch.setattr("boto3.client", lambda *_args, **_kwargs: _Client())
+
+    result = GuidelineVettingService()._invoke_bedrock("prompt")
+
+    assert captured["modelId"] == CLAUDE_HAIKU_45_MODEL_ID
+    assert result["contradicts"] is False
+
+
+def test_feedback_contradictions_topic_enrichment_uses_haiku_45(monkeypatch):
+    captured = {}
+
+    class _Body:
+        def read(self):
+            return json.dumps({
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps({"summaries": {}, "guideline_quotes": {}}),
+                    }
+                ]
+            }).encode()
+
+    class _Client:
+        def invoke_model(self, **kwargs):
+            captured.update(kwargs)
+            return {"body": _Body()}
+
+    monkeypatch.setattr("boto3.client", lambda *_args, **_kwargs: _Client())
+    block = FeedbackContradictions(config={}, params={}, api_client=_DummyClient())
+
+    assert block._call_bedrock_for_topics("prompt") == {"summaries": {}, "guideline_quotes": {}}
+    assert captured["modelId"] == CLAUDE_HAIKU_45_MODEL_ID
+
+
 @pytest.mark.asyncio
 async def test_feedback_contradictions_mode_returns_contradiction_payload(monkeypatch):
     block = FeedbackContradictions(
@@ -88,7 +150,7 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
                 {
                     'feedback_item_id': 'fi-1',
                     'reason': 'Policy contradiction.',
-                    'voting': [{'model': 'sonnet', 'result': True}],
+                    'voting': [{'model': 'haiku', 'result': True}],
                     'confidence': 'high',
                     'verdict': 'contradiction',
                     'associated_dataset_eligible': False,
@@ -157,7 +219,7 @@ async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(mon
                 {
                     'feedback_item_id': 'fi-1',
                     'reason': 'Aligned with guideline.',
-                    'voting': [{'model': 'sonnet', 'result': False}],
+                    'voting': [{'model': 'haiku', 'result': False}],
                     'confidence': 'high',
                     'verdict': 'aligned',
                     'associated_dataset_eligible': True,
@@ -262,7 +324,7 @@ async def test_feedback_contradictions_applies_max_feedback_items_cap(monkeypatc
                 {
                     'feedback_item_id': items[0].id,
                     'reason': 'Aligned with guideline.',
-                    'voting': [{'model': 'sonnet', 'result': False}],
+                    'voting': [{'model': 'haiku', 'result': False}],
                     'confidence': 'high',
                     'verdict': 'aligned',
                     'associated_dataset_eligible': True,
