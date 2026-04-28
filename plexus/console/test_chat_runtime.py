@@ -128,6 +128,7 @@ def test_claim_message_uses_conditional_pending_to_running_update():
 
     query, variables = client.executed[0]
     assert "ClaimConsoleChatMessage" in query
+    assert variables["input"]["createdAt"] == "2026-04-27T00:00:00.000Z"
     assert variables["input"]["responseStatus"] == "RUNNING"
     assert variables["input"]["responseOwner"] == "cloud:test"
     assert variables["condition"] == {
@@ -170,7 +171,13 @@ def test_process_console_message_runs_harness_and_marks_completed(monkeypatch):
         owner="cloud:test",
     ) is True
     assert calls == ["ran"]
-    assert any("CompleteConsoleChatMessage" in query for query, _ in client.executed)
+    complete_call = next(
+        variables
+        for query, variables in client.executed
+        if "CompleteConsoleChatMessage" in query
+    )
+    assert complete_call["input"]["createdAt"] == "2026-04-27T00:00:00.000Z"
+    assert complete_call["input"]["responseStatus"] == "COMPLETED"
 
 
 def test_process_console_message_marks_failed_when_harness_raises(monkeypatch):
@@ -198,6 +205,7 @@ def test_process_console_message_marks_failed_when_harness_raises(monkeypatch):
         for query, variables in client.executed
         if "FailConsoleChatMessage" in query
     )
+    assert fail_call["input"]["createdAt"] == "2026-04-27T00:00:00.000Z"
     assert fail_call["input"]["responseStatus"] == "FAILED"
     assert fail_call["input"]["responseError"] == "boom"
 
