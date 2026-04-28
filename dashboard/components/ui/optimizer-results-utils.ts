@@ -790,7 +790,19 @@ export function manifestTouchesVersion(
     }
   }
 
-  return false
+  return manifestValueReferencesVersion(manifest, versionId)
+}
+
+function manifestValueReferencesVersion(value: unknown, versionId: string): boolean {
+  if (value == null) return false
+  if (typeof value === 'string') return value === versionId
+  if (typeof value !== 'object') return false
+  if (Array.isArray(value)) {
+    return value.some((item) => manifestValueReferencesVersion(item, versionId))
+  }
+  return Object.values(value as Record<string, unknown>).some((item) =>
+    manifestValueReferencesVersion(item, versionId)
+  )
 }
 
 export function procedureIdFromTaskTarget(target: unknown): string | null {
@@ -972,7 +984,7 @@ async function loadManifestFromProcedureMetadata(procedure: any): Promise<{
   manifest: OptimizerManifest | null
 }> {
   const metadata = safeJsonParse<Record<string, any>>(procedure.metadata)
-  const artifactPointer = metadata?.optimizer_artifacts ?? null
+  const artifactPointer = safeJsonParse<Record<string, any>>(metadata?.optimizer_artifacts)
   const manifestKey = artifactPointer?.manifest as string | undefined
   let manifest: OptimizerManifest | null = null
 
