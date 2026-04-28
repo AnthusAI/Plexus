@@ -28,10 +28,22 @@
       "author": "ryan",
       "text": "Committed pending Kanbus state files on develop: 8f63c27c4 (chore(project): commit pending Kanbus issue/event updates).",
       "created_at": "2026-04-14T22:15:51.179792Z"
+    },
+    {
+      "id": "e3c06fe2-491f-4b74-aabc-9cecd1252217",
+      "author": "ryan",
+      "text": "Investigating new CodeQL/code-quality suggestions on active develop->main PR #225 after latest develop updates; will apply concrete suggestions only.",
+      "created_at": "2026-04-28T03:31:08.821206Z"
+    },
+    {
+      "id": "665fe82b-100f-40c6-bf6f-42ca49991fc3",
+      "author": "ryan",
+      "text": "Applied the two unresolved PR #225 github-code-quality suggestions in consoleRunWorker local worker tests and verified with py311 pytest: dashboard/amplify/functions/consoleRunWorker/local_worker_test.py.",
+      "created_at": "2026-04-28T03:32:10.360743Z"
     }
   ],
   "created_at": "2026-04-14T13:06:37.216868Z",
-  "updated_at": "2026-04-14T22:15:51.179792Z",
+  "updated_at": "2026-04-28T03:32:10.360743Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
