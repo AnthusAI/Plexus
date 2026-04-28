@@ -66,6 +66,13 @@ class FakeClient:
         return {}
 
 
+class FakeRaisingClaimClient(FakeClient):
+    def execute(self, query, variables=None, **_kwargs):
+        if "ClaimConsoleChatMessage" in query:
+            raise Exception("GraphQL query failed: The conditional request failed")
+        return super().execute(query, variables, **_kwargs)
+
+
 class FakePendingClient(FakeClient):
     def __init__(self, pages):
         super().__init__()
@@ -152,6 +159,24 @@ def test_claim_message_uses_conditional_pending_to_running_update():
 
 def test_duplicate_claim_returns_false_without_running_response(monkeypatch):
     client = FakeClient(claim_result=False)
+    calls = []
+    monkeypatch.setattr(
+        chat_runtime,
+        "run_console_chat_response",
+        lambda *_args, **_kwargs: calls.append("ran"),
+    )
+
+    assert chat_runtime.process_console_message(
+        client,
+        _raw_message(),
+        expected_target="cloud",
+        owner="cloud:test",
+    ) is False
+    assert calls == []
+
+
+def test_duplicate_claim_exception_returns_false(monkeypatch):
+    client = FakeRaisingClaimClient()
     calls = []
     monkeypatch.setattr(
         chat_runtime,
@@ -293,7 +318,7 @@ def test_process_pending_local_messages_uses_response_status_sort_key(monkeypatc
     assert processed == 1
     query, variables = client.executed[0]
     assert "responseStatusCreatedAt" in query
-    assert 'responseStatus: "PENDING"' in query
+    assert "responseStatus: PENDING" in query
     assert "filter:" not in query
     assert variables == {
         "responseTarget": "local:ryan",
@@ -367,6 +392,7 @@ def test_run_console_chat_response_passes_console_context_to_builtin(monkeypatch
         "role": "USER",
         "content": "Multiply 6 by 7",
     }
+    assert kwargs["enable_mcp"] is False
     assert kwargs["context"] == {
         "account_id": "acct-1",
         "chat_session_id": "sess-1",
