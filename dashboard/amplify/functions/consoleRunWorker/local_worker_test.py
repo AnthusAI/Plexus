@@ -37,11 +37,13 @@ def test_resolve_client_accepts_next_public_env(monkeypatch):
 def test_load_local_env_reads_repo_and_dashboard_env_files(monkeypatch):
     worker = _load_local_worker_module()
     loaded_calls: list[tuple[Path, bool]] = []
-    expected = {
-        str(Path("/Users/ryan/Projects/Plexus-2/.env")),
-        str(Path("/Users/ryan/Projects/Plexus-2/dashboard/.env")),
-        str(Path("/Users/ryan/Projects/Plexus-2/dashboard/.env.local")),
-    }
+    repo_root = Path(__file__).resolve().parents[4]
+    expected_order = [
+        repo_root / ".env",
+        repo_root / "dashboard" / ".env",
+        repo_root / "dashboard" / ".env.local",
+    ]
+    expected = {str(path) for path in expected_order}
 
     monkeypatch.setattr(worker.Path, "exists", lambda path: str(path) in expected)
     monkeypatch.setattr(
@@ -52,11 +54,7 @@ def test_load_local_env_reads_repo_and_dashboard_env_files(monkeypatch):
 
     worker._load_local_env()
 
-    assert [str(path) for path, _ in loaded_calls] == [
-        "/Users/ryan/Projects/Plexus-2/.env",
-        "/Users/ryan/Projects/Plexus-2/dashboard/.env",
-        "/Users/ryan/Projects/Plexus-2/dashboard/.env.local",
-    ]
+    assert [str(path) for path, _ in loaded_calls] == [str(path) for path in expected_order]
     assert [override for _, override in loaded_calls] == [False, True, True]
 
 
