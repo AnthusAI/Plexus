@@ -69,7 +69,7 @@ export const taskAttachments = defineStorage({
 export const rubricMemory = defineStorage({
   name: 'rubricMemory',
   access: (allow) => ({
-    '*': [
+    'rubric-memory/*': [
       allow.authenticated.to(['read', 'write', 'delete'])
     ]
   })
