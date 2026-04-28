@@ -135,21 +135,29 @@ def claim_message(
       }
     }
     """
-    result = client.execute(
-        mutation,
-        {
-            "input": {
-                "id": message.id,
-                "responseStatus": RUNNING,
-                "responseOwner": owner,
-                "responseStartedAt": utc_now(),
+    try:
+        result = client.execute(
+            mutation,
+            {
+                "input": {
+                    "id": message.id,
+                    "createdAt": message.created_at,
+                    "responseStatus": RUNNING,
+                    "responseOwner": owner,
+                    "responseStartedAt": utc_now(),
+                },
+                "condition": {
+                    "responseTarget": {"eq": expected_target},
+                    "responseStatus": {"eq": PENDING},
+                },
             },
-            "condition": {
-                "responseTarget": {"eq": expected_target},
-                "responseStatus": {"eq": PENDING},
-            },
-        },
-    )
+        )
+    except Exception as exc:
+        message_text = str(exc).lower()
+        if "conditional request failed" in message_text or "conditionalcheckfailed" in message_text:
+            logger.info("Console message %s was already claimed", message.id)
+            return False
+        raise
     if _has_conditional_failure(result):
         logger.info("Console message %s was already claimed", message.id)
         return False
@@ -159,7 +167,12 @@ def claim_message(
     return isinstance(claimed, dict) and claimed.get("id") == message.id
 
 
-def mark_message_completed(client: PlexusDashboardClient, message_id: str) -> None:
+def mark_message_completed(
+    client: PlexusDashboardClient,
+    message_id: str,
+    *,
+    created_at: Optional[str],
+) -> None:
     mutation = """
     mutation CompleteConsoleChatMessage($input: UpdateChatMessageInput!) {
       updateChatMessage(input: $input) {
@@ -173,6 +186,7 @@ def mark_message_completed(client: PlexusDashboardClient, message_id: str) -> No
         {
             "input": {
                 "id": message_id,
+                "createdAt": created_at,
                 "responseStatus": COMPLETED,
                 "responseCompletedAt": utc_now(),
                 "responseError": None,
@@ -181,7 +195,13 @@ def mark_message_completed(client: PlexusDashboardClient, message_id: str) -> No
     )
 
 
-def mark_message_failed(client: PlexusDashboardClient, message_id: str, error: Exception) -> None:
+def mark_message_failed(
+    client: PlexusDashboardClient,
+    message_id: str,
+    error: Exception,
+    *,
+    created_at: Optional[str],
+) -> None:
     mutation = """
     mutation FailConsoleChatMessage($input: UpdateChatMessageInput!) {
       updateChatMessage(input: $input) {
@@ -195,6 +215,7 @@ def mark_message_failed(client: PlexusDashboardClient, message_id: str, error: E
         {
             "input": {
                 "id": message_id,
+                "createdAt": created_at,
                 "responseStatus": FAILED,
                 "responseCompletedAt": utc_now(),
                 "responseError": str(error),
@@ -302,6 +323,7 @@ async def run_console_chat_response_async(
         account_id=message.account_id,
         console_user_message=message.content,
         console_session_history=history,
+        enable_mcp=False,
         context={
             "account_id": message.account_id,
             "chat_session_id": message.session_id,
@@ -335,14 +357,17 @@ def process_console_message(
     if not claim_message(client, message, expected_target=expected_target, owner=owner):
         return False
 
+    latest_message = message
     try:
         latest_message = fetch_message(client, message.id) or message
+        created_at = latest_message.created_at or message.created_at or None
         run_console_chat_response(client, latest_message, owner=owner)
-        mark_message_completed(client, message.id)
+        mark_message_completed(client, message.id, created_at=created_at)
         return True
     except Exception as exc:
         logger.exception("Console chat response failed for message %s", message.id)
-        mark_message_failed(client, message.id, exc)
+        created_at = latest_message.created_at or message.created_at or None
+        mark_message_failed(client, message.id, exc, created_at=created_at)
         raise
 
 
@@ -361,7 +386,7 @@ def process_pending_local_messages(
     ) {
       listChatMessageByResponseTargetAndResponseStatusAndCreatedAt(
         responseTarget: $responseTarget
-        responseStatusCreatedAt: { beginsWith: { responseStatus: "PENDING" } }
+        responseStatusCreatedAt: { beginsWith: { responseStatus: PENDING } }
         sortDirection: ASC
         limit: $limit
         nextToken: $nextToken

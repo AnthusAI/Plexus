@@ -2024,11 +2024,16 @@ def register_score_tools(mcp: FastMCP):
                     mutation UpdateScoreVersionMetadata($input: UpdateScoreVersionInput!) {
                         updateScoreVersion(input: $input) {
                             id
+                            isFeatured
                             metadata
                         }
                     }
                     """
-                    client.execute(update_version_mutation, {"input": {"id": version_id, "metadata": incoming_metadata}})
+                    client.execute(update_version_mutation, {"input": {
+                        "id": version_id,
+                        "metadata": incoming_metadata,
+                        "isFeatured": "true",
+                    }})
                     if previous_champion_version_id and previous_champion_version_id != version_id:
                         outgoing_metadata = _build_champion_metadata(
                             previous_version_data.get("metadata"),
@@ -2585,7 +2590,7 @@ async def _create_version_from_code_with_parent(
             'scoreId': score.id,
             'configuration': (code_content or '').strip(),
             'note': note or 'Updated via MCP score update tool',
-            'isFeatured': None
+            'isFeatured': "true"  # Mark as featured by default
         }
         
         # Add guidelines if provided

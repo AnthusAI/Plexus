@@ -66,6 +66,13 @@ class FakeClient:
         return {}
 
 
+class FakeRaisingClaimClient(FakeClient):
+    def execute(self, query, variables=None, **_kwargs):
+        if "ClaimConsoleChatMessage" in query:
+            raise Exception("GraphQL query failed: The conditional request failed")
+        return super().execute(query, variables, **_kwargs)
+
+
 class FakePendingClient(FakeClient):
     def __init__(self, pages):
         super().__init__()
@@ -80,6 +87,19 @@ class FakePendingClient(FakeClient):
                     "listChatMessageByResponseTargetAndResponseStatusAndCreatedAt": page
                 }
             }
+        return super().execute(query, variables, **_kwargs)
+
+
+class FakeHistoryClient(FakeClient):
+    def __init__(self, pages):
+        super().__init__()
+        self.pages = list(pages)
+
+    def execute(self, query, variables=None, **_kwargs):
+        if "ListConsoleSessionHistory" in query:
+            self.executed.append((query, variables or {}))
+            page = self.pages.pop(0) if self.pages else {"items": [], "nextToken": None}
+            return {"data": {"listChatMessageBySessionIdAndCreatedAt": page}}
         return super().execute(query, variables, **_kwargs)
 
 
@@ -128,6 +148,7 @@ def test_claim_message_uses_conditional_pending_to_running_update():
 
     query, variables = client.executed[0]
     assert "ClaimConsoleChatMessage" in query
+    assert variables["input"]["createdAt"] == "2026-04-27T00:00:00.000Z"
     assert variables["input"]["responseStatus"] == "RUNNING"
     assert variables["input"]["responseOwner"] == "cloud:test"
     assert variables["condition"] == {
@@ -138,6 +159,24 @@ def test_claim_message_uses_conditional_pending_to_running_update():
 
 def test_duplicate_claim_returns_false_without_running_response(monkeypatch):
     client = FakeClient(claim_result=False)
+    calls = []
+    monkeypatch.setattr(
+        chat_runtime,
+        "run_console_chat_response",
+        lambda *_args, **_kwargs: calls.append("ran"),
+    )
+
+    assert chat_runtime.process_console_message(
+        client,
+        _raw_message(),
+        expected_target="cloud",
+        owner="cloud:test",
+    ) is False
+    assert calls == []
+
+
+def test_duplicate_claim_exception_returns_false(monkeypatch):
+    client = FakeRaisingClaimClient()
     calls = []
     monkeypatch.setattr(
         chat_runtime,
@@ -170,7 +209,13 @@ def test_process_console_message_runs_harness_and_marks_completed(monkeypatch):
         owner="cloud:test",
     ) is True
     assert calls == ["ran"]
-    assert any("CompleteConsoleChatMessage" in query for query, _ in client.executed)
+    complete_call = next(
+        variables
+        for query, variables in client.executed
+        if "CompleteConsoleChatMessage" in query
+    )
+    assert complete_call["input"]["createdAt"] == "2026-04-27T00:00:00.000Z"
+    assert complete_call["input"]["responseStatus"] == "COMPLETED"
 
 
 def test_process_console_message_marks_failed_when_harness_raises(monkeypatch):
@@ -198,8 +243,37 @@ def test_process_console_message_marks_failed_when_harness_raises(monkeypatch):
         for query, variables in client.executed
         if "FailConsoleChatMessage" in query
     )
+    assert fail_call["input"]["createdAt"] == "2026-04-27T00:00:00.000Z"
     assert fail_call["input"]["responseStatus"] == "FAILED"
     assert fail_call["input"]["responseError"] == "boom"
+
+
+def test_process_console_message_falls_back_to_trigger_created_at(monkeypatch):
+    client = FakeClient()
+    monkeypatch.setattr(
+        chat_runtime,
+        "run_console_chat_response",
+        lambda *_args, **_kwargs: {"success": True},
+    )
+    monkeypatch.setattr(
+        chat_runtime,
+        "fetch_message",
+        lambda *_args, **_kwargs: chat_runtime.parse_chat_message(_raw_message(createdAt="")),
+    )
+
+    assert chat_runtime.process_console_message(
+        client,
+        _raw_message(createdAt="2026-04-27T00:00:00.000Z"),
+        expected_target="cloud",
+        owner="cloud:test",
+    ) is True
+
+    complete_call = next(
+        variables
+        for query, variables in client.executed
+        if "CompleteConsoleChatMessage" in query
+    )
+    assert complete_call["input"]["createdAt"] == "2026-04-27T00:00:00.000Z"
 
 
 def test_process_console_message_ignores_local_target_for_cloud_worker(monkeypatch):
@@ -244,7 +318,7 @@ def test_process_pending_local_messages_uses_response_status_sort_key(monkeypatc
     assert processed == 1
     query, variables = client.executed[0]
     assert "responseStatusCreatedAt" in query
-    assert 'responseStatus: "PENDING"' in query
+    assert "responseStatus: PENDING" in query
     assert "filter:" not in query
     assert variables == {
         "responseTarget": "local:ryan",
@@ -318,9 +392,64 @@ def test_run_console_chat_response_passes_console_context_to_builtin(monkeypatch
         "role": "USER",
         "content": "Multiply 6 by 7",
     }
+    assert kwargs["enable_mcp"] is False
     assert kwargs["context"] == {
         "account_id": "acct-1",
         "chat_session_id": "sess-1",
         "console_trigger_message_id": "msg-1",
         "console_response_owner": "local:ryan:test",
     }
+
+
+def test_fetch_session_history_filters_and_sorts_messages():
+    client = FakeHistoryClient([
+        {
+            "items": [
+                {
+                    "id": "msg-3",
+                    "role": "ASSISTANT",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT_ASSISTANT",
+                    "content": "third",
+                    "createdAt": "2026-04-27T00:00:03.000Z",
+                },
+                {
+                    "id": "msg-tool",
+                    "role": "ASSISTANT",
+                    "messageType": "TOOL_CALL",
+                    "humanInteraction": "CHAT_ASSISTANT",
+                    "content": "ignore",
+                    "createdAt": "2026-04-27T00:00:02.000Z",
+                },
+            ],
+            "nextToken": "page-2",
+        },
+        {
+            "items": [
+                {
+                    "id": "msg-1",
+                    "role": "USER",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "first",
+                    "createdAt": "2026-04-27T00:00:01.000Z",
+                },
+                {
+                    "id": "msg-sys",
+                    "role": "SYSTEM",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "ignore",
+                    "createdAt": "2026-04-27T00:00:00.500Z",
+                },
+            ],
+            "nextToken": None,
+        },
+    ])
+
+    history = chat_runtime.fetch_session_history(client, "sess-1", limit=10)
+
+    assert history == [
+        {"role": "USER", "content": "first"},
+        {"role": "ASSISTANT", "content": "third"},
+    ]

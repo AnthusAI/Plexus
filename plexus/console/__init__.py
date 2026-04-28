@@ -1,2 +1,1 @@
 """Console chat runtime helpers."""
-

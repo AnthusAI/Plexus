@@ -14,6 +14,9 @@ import logging
 import os
 import sys
 import time
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 # Allow running this file directly from the repository checkout.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../../"))
@@ -29,7 +32,22 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 
+def _load_local_env() -> None:
+    worker_path = Path(__file__).resolve()
+    repo_root = worker_path.parents[4]
+    dashboard_dir = repo_root / "dashboard"
+    env_load_order = (
+        (repo_root / ".env", False),
+        (dashboard_dir / ".env", True),
+        (dashboard_dir / ".env.local", True),
+    )
+    for env_file, override in env_load_order:
+        if env_file.exists():
+            load_dotenv(env_file, override=override)
+
+
 def _resolve_client() -> PlexusDashboardClient:
+    _load_local_env()
     api_url = str(os.getenv("PLEXUS_API_URL") or os.getenv("NEXT_PUBLIC_PLEXUS_API_URL") or "").strip()
     api_key = str(os.getenv("PLEXUS_API_KEY") or os.getenv("NEXT_PUBLIC_PLEXUS_API_KEY") or "").strip()
     if not api_url or not api_key:
@@ -38,7 +56,10 @@ def _resolve_client() -> PlexusDashboardClient:
 
 
 def main() -> None:
-    response_target = normalize_response_target(os.getenv("CONSOLE_RESPONSE_TARGET"))
+    _load_local_env()
+    response_target = normalize_response_target(
+        os.getenv("CONSOLE_RESPONSE_TARGET") or os.getenv("NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET")
+    )
     if response_target == "cloud":
         raise RuntimeError("Local worker requires CONSOLE_RESPONSE_TARGET to be local:<developer>")
 
