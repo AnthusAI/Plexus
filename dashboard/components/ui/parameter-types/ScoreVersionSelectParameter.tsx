@@ -19,7 +19,7 @@ interface ScoreVersionSelectParameterProps {
 }
 
 export function ScoreVersionSelectParameter({ definition, value, onChange, scoreId, error }: ScoreVersionSelectParameterProps) {
-  const [versions, setVersions] = useState<Array<{ id: string; createdAt: string; isFeatured: boolean }>>([])
+  const [versions, setVersions] = useState<Array<{ id: string; createdAt: string; isFeatured: string }>>([])
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
@@ -57,14 +57,14 @@ export function ScoreVersionSelectParameter({ definition, value, onChange, score
         const versionData = (result as any).data?.listScoreVersionByScoreIdAndCreatedAt?.items || []
         // Sort by featured first, then keep chronological order from query
         const sorted = [...versionData].sort((a: any, b: any) => {
-          if (a.isFeatured && !b.isFeatured) return -1
-          if (!a.isFeatured && b.isFeatured) return 1
+          if (a.isFeatured === 'true' && b.isFeatured !== 'true') return -1
+          if (a.isFeatured !== 'true' && b.isFeatured === 'true') return 1
           return 0 // Keep DESC order from query
         })
         setVersions(sorted.map((v: any) => ({ 
           id: v.id, 
           createdAt: v.createdAt,
-          isFeatured: v.isFeatured || false
+          isFeatured: v.isFeatured
         })))
       } catch (error) {
         console.error('Error loading score versions:', error)
@@ -102,7 +102,7 @@ export function ScoreVersionSelectParameter({ definition, value, onChange, score
         <SelectContent>
           {versions.map((version) => (
             <SelectItem key={version.id} value={version.id}>
-              {version.isFeatured && '⭐ '}
+              {version.isFeatured === 'true' && '⭐ '}
               {new Date(version.createdAt).toLocaleString()}
               <span className="text-muted-foreground ml-2 text-xs">({version.id.substring(0, 8)}...)</span>
             </SelectItem>
@@ -113,6 +113,4 @@ export function ScoreVersionSelectParameter({ definition, value, onChange, score
     </div>
   )
 }
-
-
 
