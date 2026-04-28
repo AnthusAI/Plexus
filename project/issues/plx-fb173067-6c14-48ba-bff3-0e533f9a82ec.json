@@ -1,0 +1,31 @@
+{
+  "id": "plx-fb173067-6c14-48ba-bff3-0e533f9a82ec",
+  "title": "Investigate failed Amplify deployment after PR 225 merge",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3411352f-4160-4fd4-9fcd-8decfcb9f9fb",
+      "author": "ryan",
+      "text": "Investigating failed Amplify deployment for app d1cegb1ft4iove after PR #225 merge; starting with AWS Amplify job/status logs.",
+      "created_at": "2026-04-28T16:19:21.961591Z"
+    },
+    {
+      "id": "454c03bf-2ded-48f5-999f-501bb1f5a581",
+      "author": "ryan",
+      "text": "Root cause found in Amplify job 1036: backend build fails during CDK assembly with InvalidStorageAccessPathError because rubricMemory storage access used bare '*' instead of a required '*/' prefix. Applying hotfix to use rubric-memory/* as the single valid bucket prefix.",
+      "created_at": "2026-04-28T16:21:07.854921Z"
+    }
+  ],
+  "created_at": "2026-04-28T16:18:48.359438Z",
+  "updated_at": "2026-04-28T16:21:07.854921Z",
+  "closed_at": null,
+  "custom": {}
+}
