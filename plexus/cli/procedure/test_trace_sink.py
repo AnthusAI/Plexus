@@ -256,6 +256,38 @@ async def test_trace_sink_stream_metadata_contains_latency_markers():
 
 
 @pytest.mark.asyncio
+async def test_trace_sink_skips_dispatch_metadata_lookup_when_disabled():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-stream-1"
+    recorder.update_message.return_value = True
+    recorder.get_latest_console_chat_metadata.side_effect = RuntimeError("should not be called")
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session({"disable_console_dispatch_metadata_lookup": True})
+
+    await sink.record(
+        {
+            "event_type": "agent_stream_chunk",
+            "agent_name": "assistant",
+            "chunk_text": "Hello there.",
+            "accumulated_text": "Hello there.",
+            "timestamp": "2026-03-28T01:00:02+00:00",
+        }
+    )
+    await sink.record(
+        {
+            "event_type": "agent_turn",
+            "agent_name": "assistant",
+            "stage": "completed",
+            "timestamp": "2026-03-28T01:00:03+00:00",
+        }
+    )
+
+    recorder.get_latest_console_chat_metadata.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_trace_sink_cost_events_attach_to_streamed_assistant_message():
     recorder = AsyncMock()
     recorder.start_session.return_value = "sess-1"

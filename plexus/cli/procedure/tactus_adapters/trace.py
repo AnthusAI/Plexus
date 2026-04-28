@@ -392,6 +392,14 @@ class PlexusTraceSink:
     def _get_console_dispatch_metadata(self) -> Optional[Dict[str, Any]]:
         if self._console_dispatch_metadata is not None:
             return self._console_dispatch_metadata if isinstance(self._console_dispatch_metadata, dict) else None
+        if isinstance(self._session_context, dict):
+            if self._session_context.get("disable_console_dispatch_metadata_lookup"):
+                self._console_dispatch_metadata = False
+                return None
+            direct_metadata = self._session_context.get("console_dispatch_metadata")
+            if isinstance(direct_metadata, dict):
+                self._console_dispatch_metadata = direct_metadata
+                return direct_metadata
         getter = getattr(self.chat_recorder, "get_latest_console_chat_metadata", None)
         if not callable(getter):
             self._console_dispatch_metadata = False  # sentinel to avoid re-fetching

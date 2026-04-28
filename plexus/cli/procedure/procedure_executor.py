@@ -1117,31 +1117,25 @@ async def _execute_tactus(
                 except Exception:  # noqa: BLE001
                     pass  # account_id is best-effort; proceed without it
 
-            get_console_trigger_message = getattr(chat_recorder, "get_latest_console_trigger_message", None)
-            console_trigger_message = (
-                get_console_trigger_message()
-                if callable(get_console_trigger_message)
-                else None
-            )
-            if (
-                isinstance(console_trigger_message, str)
-                and console_trigger_message.strip()
-                and not runtime_context.get("console_user_message")
-            ):
-                runtime_context["console_user_message"] = console_trigger_message.strip()
+            if not runtime_context.get("console_user_message"):
+                get_console_trigger_message = getattr(chat_recorder, "get_latest_console_trigger_message", None)
+                console_trigger_message = (
+                    get_console_trigger_message()
+                    if callable(get_console_trigger_message)
+                    else None
+                )
+                if isinstance(console_trigger_message, str) and console_trigger_message.strip():
+                    runtime_context["console_user_message"] = console_trigger_message.strip()
 
-            get_console_session_history = getattr(chat_recorder, "get_console_session_history", None)
-            console_session_history = (
-                get_console_session_history()
-                if callable(get_console_session_history)
-                else None
-            )
-            if (
-                isinstance(console_session_history, list)
-                and console_session_history
-                and not runtime_context.get("console_session_history")
-            ):
-                runtime_context["console_session_history"] = console_session_history
+            if not runtime_context.get("console_session_history"):
+                get_console_session_history = getattr(chat_recorder, "get_console_session_history", None)
+                console_session_history = (
+                    get_console_session_history()
+                    if callable(get_console_session_history)
+                    else None
+                )
+                if isinstance(console_session_history, list) and console_session_history:
+                    runtime_context["console_session_history"] = console_session_history
 
         mark_runtime_execute_started = getattr(trace_sink, "mark_runtime_execute_started", None)
         if callable(mark_runtime_execute_started):
