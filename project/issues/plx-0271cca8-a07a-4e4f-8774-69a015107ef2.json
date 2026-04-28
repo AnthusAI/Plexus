@@ -16,10 +16,22 @@
       "author": "ryan",
       "text": "Root cause: the dashboard's initial procedure load stopped after a single sparse page from listProcedureByAccountIdAndUpdatedAt. The AppSync GSI/query was fine; newer procedures were on later pages. Fix: keep using the normal Amplify Gen2 list query, but page through nextToken during initial load until we accumulate enough visible rows for the existing client-side start/created-time sort to surface recent procedures.",
       "created_at": "2026-04-20T19:39:57.057885Z"
+    },
+    {
+      "id": "1b37dd36-6724-4f81-93a2-98acc7da5509",
+      "author": "ryan",
+      "text": "Fixed version-scoped procedure discovery in scorecards dashboard. Root cause for historical procedures: procedure manifests are often discoverable through canonical Task.attachedFiles, but the frontend only inspected Procedure.metadata and only loaded the first page of account tasks. The loader now paginates score procedures and account tasks until it finds the relevant procedure tasks, then uses task attachments to load optimizer manifests for version-touch filtering. Focused procedure/evaluation list tests pass.",
+      "created_at": "2026-04-28T02:32:21.484514Z"
+    },
+    {
+      "id": "08dc65bb-c250-4dfb-bb9e-4f63c2129948",
+      "author": "ryan",
+      "text": "Schema fix selected for score-version procedure lists. The schema had ScoreVersion.procedures / Procedure.scoreVersionId, but no Procedure GSI on scoreVersionId, so the UI had no efficient query equivalent to evaluations. Added one Procedure-table GSI: scoreVersionId + updatedAt. This is intentionally one GSI change on one table for CloudFormation safety.",
+      "created_at": "2026-04-28T02:39:42.544815Z"
     }
   ],
   "created_at": "2026-04-20T19:12:14.848643Z",
-  "updated_at": "2026-04-20T19:39:57.057885Z",
+  "updated_at": "2026-04-28T02:39:42.544815Z",
   "closed_at": null,
   "custom": {}
 }
