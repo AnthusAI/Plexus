@@ -4310,6 +4310,7 @@ code: |
         score_identifier     = score_id,
         yaml_content         = current_code,
         code_file_path       = score_pull.codeFilePath,
+        parent_version_id    = last_accepted_version_id,
         iteration            = cycle,
         hypothesis           = hyp.name .. ": " .. (hyp.description or "")
       })
@@ -4843,7 +4844,7 @@ code: |
 
       -- Helper: run a synthesis ReAct loop with a given prompt and starting code.
       -- Returns: version_id (or nil), done_reason, reasoning_parts table
-      local function run_synthesis_react(prompt_text, start_code, start_label, max_steps, strategy_label)
+      local function run_synthesis_react(prompt_text, start_code, start_label, parent_version_id, max_steps, strategy_label)
         local react_version_id = nil
         local react_done_reason = ""
         local react_reasoning = {}
@@ -4853,6 +4854,7 @@ code: |
           score_identifier     = score_id,
           yaml_content         = start_code,
           code_file_path       = score_pull.codeFilePath,
+          parent_version_id    = parent_version_id,
           iteration            = cycle,
           hypothesis           = string.format("Cycle %d synthesis (%s)", cycle, strategy_label)
         })
@@ -5246,6 +5248,7 @@ code: |
       -- ----------------------------------------------------------------
       local synth_start_code = current_code
       local synth_start_label = "BASELINE"
+      local synth_parent_version_id = last_accepted_version_id
       if #succeeded >= 1 then
         local best = succeeded[1]
         local best_score = -999
@@ -5267,6 +5270,7 @@ code: |
           if has_text(best_code) then
             synth_start_code = best_code
             synth_start_label = string.format("HYPOTHESIS %d (%s)", best.index, best.version_id)
+            synth_parent_version_id = best.version_id
             diag(string.format("Strategy A starting from hypothesis %d (combined delta %+.3f)", best.index, best_score))
           end
         end
@@ -5394,7 +5398,7 @@ code: |
       Human.notify({message = string.format(
         "  Strategy A (cycle synthesis): starting from %s, max 8 steps", synth_start_label), level = "info"})
       local strategy_a_version_id, strategy_a_done_reason, strategy_a_reasoning =
-        run_synthesis_react(table.concat(strategy_a_parts, "\n"), synth_start_code, synth_start_label, 8, "Strategy-A")
+        run_synthesis_react(table.concat(strategy_a_parts, "\n"), synth_start_code, synth_start_label, synth_parent_version_id, 8, "Strategy-A")
 
       -- ================================================================
       -- STRATEGY B — "Arc-focused" (pattern-based) — cycle 2+ only
@@ -5503,7 +5507,7 @@ code: |
         diag("Running Strategy B (arc-focused, pattern-based)")
         Human.notify({message = "  Strategy B (arc-focused): starting from BASELINE, max 10 steps", level = "info"})
         strategy_b_version_id, strategy_b_done_reason, strategy_b_reasoning =
-          run_synthesis_react(table.concat(strategy_b_parts, "\n"), current_code, "BASELINE", 10, "Strategy-B")
+          run_synthesis_react(table.concat(strategy_b_parts, "\n"), current_code, "BASELINE", last_accepted_version_id, 10, "Strategy-B")
       end
 
       -- ================================================================

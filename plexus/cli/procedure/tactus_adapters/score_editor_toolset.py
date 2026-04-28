@@ -78,6 +78,7 @@ class ScoreEditorToolset:
         self._last_version_id: Optional[str] = None
         self._code_file_path: Optional[str] = None
         self._last_edit_error: Optional[str] = None
+        self._parent_version_id: Optional[str] = None
 
     # ------------------------------------------------------------------
     # MCP tools (called from Lua via call_plexus_tool)
@@ -158,6 +159,7 @@ class ScoreEditorToolset:
         self._dry_run = bool(arguments.get("dry_run", False))
         self._last_version_id = None
         self._last_edit_error = None
+        self._parent_version_id = arguments.get("parent_version_id") or arguments.get("parentVersionId") or None
 
         code_file_path = arguments.get("code_file_path", "")
         if code_file_path:
@@ -586,6 +588,7 @@ class ScoreEditorToolset:
                     "scorecard_identifier": self._scorecard,
                     "score_identifier": self._score,
                     "code": self._content,
+                    "parent_version_id": self._parent_version_id,
                     "version_note": note,
                 },
             )
@@ -931,6 +934,7 @@ class ScoreEditorToolset:
                     "score_identifier": {"type": "string", "description": "Score name, key, or ID"},
                     "yaml_content": {"type": "string", "description": "Current score YAML content (direct injection, bypasses async API load)"},
                     "code_file_path": {"type": "string", "description": "Path to the score YAML file on disk (metadata only)"},
+                    "parent_version_id": {"type": "string", "description": "ScoreVersion ID this edit is based on; persisted as parentVersionId on submit"},
                     "iteration": {"type": "integer", "description": "Current iteration number"},
                     "hypothesis": {"type": "string", "description": "Short hypothesis for the version note (max 200 chars)"},
                     "dry_run": {"type": "boolean", "default": False},
