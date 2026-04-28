@@ -894,6 +894,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
+            idx("scoreVersionId").sortKeys(["updatedAt"]),
             idx("parentProcedureId").sortKeys(["updatedAt"]),
             idx("category").sortKeys(["version"]).name("byCategory"),
             idx("status").sortKeys(["updatedAt"]).name("byStatus")
