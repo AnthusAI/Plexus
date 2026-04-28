@@ -1,0 +1,31 @@
+{
+  "id": "plx-1d97c730-85f5-494a-9025-8040804ace75",
+  "title": "Replace ScoreVersion featured mirror with string state",
+  "description": "Remove the extra ScoreVersion featuredKey mirror field. Make isFeatured the single string field used for pinned state and indexing, with value \"true\" when pinned and absent/null otherwise. Update dashboard, CLI, and MCP to use one field consistently.",
+  "type": "bug",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c4fdd6f8-4431-4812-a34b-b69d3bbb066c",
+      "author": "ryan",
+      "text": "Implementing schema/code cleanup: remove featuredKey mirror, make ScoreVersion.isFeatured the single string state used for pinned versions and indexing.",
+      "created_at": "2026-04-27T23:16:14.460302Z"
+    },
+    {
+      "id": "787fa580-dfaf-4d56-bfd4-e34b50118d80",
+      "author": "ryan",
+      "text": "Implemented and typechecked the target-state fix: ScoreVersion.isFeatured is now optional string state, pinned query uses scoreId + isFeatured + createdAt, and featuredKey is removed from frontend/CLI/MCP writers and readers.",
+      "created_at": "2026-04-27T23:22:35.643635Z"
+    }
+  ],
+  "created_at": "2026-04-27T23:14:54.217780Z",
+  "updated_at": "2026-04-27T23:22:35.643635Z",
+  "closed_at": null,
+  "custom": {}
+}

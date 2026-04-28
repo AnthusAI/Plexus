@@ -7,6 +7,8 @@ import json
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
+
 logger = logging.getLogger(__name__)
 
 
@@ -109,7 +111,7 @@ class GuidelineVettingService:
         return json.loads(text)
 
     def _invoke_bedrock(self, prompt: str, use_thinking: bool = False) -> Dict[str, Any]:
-        """Single Sonnet classifier call with one parse retry."""
+        """Single Haiku classifier call with one parse retry."""
         import boto3
 
         bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
@@ -129,7 +131,7 @@ class GuidelineVettingService:
         last_error: Optional[Exception] = None
         for _ in range(2):
             response = bedrock.invoke_model(
-                modelId="us.anthropic.claude-sonnet-4-6",
+                modelId=CLAUDE_HAIKU_45_MODEL_ID,
                 body=body,
                 contentType="application/json",
                 accept="application/json",
@@ -293,7 +295,7 @@ class GuidelineVettingService:
                     asyncio.to_thread(self._invoke_bedrock_fn, prompt),
                     return_exceptions=True,
                 )
-                round_one_models = ["sonnet", "gpt", "sonnet"]
+                round_one_models = ["haiku", "gpt", "haiku"]
                 round_one_votes: List[Tuple[str, Optional[Dict[str, Any]]]] = [
                     (model, result if not isinstance(result, Exception) else None)
                     for model, result in zip(round_one_models, round_one_raw)
@@ -314,20 +316,20 @@ class GuidelineVettingService:
                 if not round_one_unanimous:
                     round_one_context = _build_prior_votes_context(round_one_votes)
 
-                    prompt_round_two_sonnet = prompt + "\n\n" + round_one_context
+                    prompt_round_two_haiku = prompt + "\n\n" + round_one_context
                     try:
-                        round_two_sonnet = await asyncio.to_thread(self._invoke_bedrock_fn, prompt_round_two_sonnet, True)
+                        round_two_haiku = await asyncio.to_thread(self._invoke_bedrock_fn, prompt_round_two_haiku, True)
                     except Exception:
-                        round_two_sonnet = None
+                        round_two_haiku = None
 
-                    round_two_context = _build_prior_votes_context(round_one_votes + [("sonnet", round_two_sonnet)])
+                    round_two_context = _build_prior_votes_context(round_one_votes + [("haiku", round_two_haiku)])
                     prompt_round_two_gpt = prompt + "\n\n" + round_two_context
                     try:
                         round_two_gpt = await asyncio.to_thread(self._invoke_openai_fn, prompt_round_two_gpt, "high")
                     except Exception:
                         round_two_gpt = None
 
-                    round_two_votes = [("sonnet", round_two_sonnet), ("gpt", round_two_gpt)]
+                    round_two_votes = [("haiku", round_two_haiku), ("gpt", round_two_gpt)]
                     valid_round_two = [(model, result) for model, result in round_two_votes if result is not None]
                     round_two_bools = [result["contradicts"] for _, result in valid_round_two]
                     yes_count += sum(round_two_bools)

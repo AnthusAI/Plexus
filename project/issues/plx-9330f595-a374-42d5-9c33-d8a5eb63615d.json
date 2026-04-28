@@ -1,0 +1,49 @@
+{
+  "id": "plx-9330f595-a374-42d5-9c33-d8a5eb63615d",
+  "title": "Local development worker for console chat via dev SQS queue",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "916d6611-ab21-44fc-a2a3-cf8b338f2b2a",
+      "author": "ryan",
+      "text": "## Architecture\n\nEnable local development of the console chat feature by routing dev-targeted SQS messages to a separate per-developer queue instead of the production queue.\n\n### Why separate queue (not ESM filter)\n\nAWS Lambda EventSourceMapping filter criteria DELETES non-matching messages rather than leaving them for other consumers. So the per-developer queue approach is required — dev messages never enter the production queue.\n\n### Routing flow\n\n1. Frontend reads NEXT_PUBLIC_CONSOLE_WORKER_TARGET env var and adds workerTarget to clientInstrumentation\n2. startConsoleRun Lambda reads workerTarget; routes to CONSOLE_RUN_DEV_QUEUE_URL_{TARGET} env var for non-production targets\n3. Local worker (local_worker.py) long-polls the dev queue and processes messages with local Plexus code\n\n### Queue\n\nDev queue: https://sqs.us-west-2.amazonaws.com/695039645615/plexus-console-run-dev-local-ryan\nLambda env var added: CONSOLE_RUN_DEV_QUEUE_URL_LOCAL_RYAN\n\n### Files changed\n\n- dashboard/amplify/data/resolvers/startConsoleRun.ts — queue routing by workerTarget\n- dashboard/components/ui/conversation-viewer.tsx — pass workerTarget in instrumentation\n- dashboard/amplify/functions/consoleRunWorker/local_worker.py — local polling script\n- dashboard/.env.local — NEXT_PUBLIC_CONSOLE_WORKER_TARGET=local:ryan (not committed)\n\n### Current status (2026-04-27)\n\nLambda redeployed with routing code. CONSOLE_RUN_DEV_QUEUE_URL_LOCAL_RYAN added to startConsoleRun Lambda env. Local worker running against dev queue. End-to-end verification pending.",
+      "created_at": "2026-04-27T12:42:48.685223Z"
+    },
+    {
+      "id": "b2a82759-55bd-4fa6-82df-d7af44653697",
+      "author": "ryan",
+      "text": "Architecture pivot: replace explicit startConsoleRun/SQS/Task hot path with ChatMessage-as-command dispatch. Add responseTarget/responseStatus fields, ChatMessage stream Lambda for cloud-targeted messages, local worker for local:<developer> targets, and one shared hard-coded Tactus Console response harness reused by cloud and local execution.",
+      "created_at": "2026-04-27T13:25:18.221418Z"
+    },
+    {
+      "id": "7004bb85-511b-406a-af36-0a7552f75250",
+      "author": "ryan",
+      "text": "Implemented the stream-dispatch architecture in the working tree. Summary: ChatMessage now carries responseTarget/responseStatus lifecycle fields; Console frontend creates only the USER ChatMessage with responseStatus=PENDING; cloud Docker Lambda is wired to the ChatMessage stream instead of SQS; local_worker.py polls local:<developer> pending messages; shared plexus.console.chat_runtime owns message filtering, conditional claim, hard-coded Tactus Console execution, and completion/failure marking. Verification: pytest plexus/console/test_chat_runtime.py -q passed; pytest dashboard/amplify/functions/consoleRunWorker/app_test.py plexus/console/test_chat_runtime.py -q passed; pytest plexus/cli/procedure/test_chat_recorder_account_resolution.py -q passed; pytest plexus/cli/procedure/test_trace_sink.py -q passed; dashboard Jest streaming test passed; dashboard npm run typecheck passed; dashboard npm run build:fast passed. npm run lint could not run because the existing script calls next lint --no-cache and the installed Next CLI rejects --no-cache before linting.",
+      "created_at": "2026-04-27T13:40:47.994951Z"
+    },
+    {
+      "id": "2d5584fa-5296-406e-8d65-204dff2e39c9",
+      "author": "ryan",
+      "text": "Implemented stream-driven Console chat dispatch architecture. Post-rebase verification: Python focused suite 44 passed; Jest conversation streaming test 6 passed; dashboard typecheck passed; build:fast passed. npm run lint is blocked by existing Next CLI option error: next lint --no-cache unknown option.",
+      "created_at": "2026-04-27T13:52:39.419402Z"
+    },
+    {
+      "id": "35e3d5e0-a44c-4191-bf5a-f50ee831b04d",
+      "author": "ryan",
+      "text": "Expanded programmatic verification before manual npm-run-dev testing. Added tests for local poller index query/pagination, harness failure marking, stream Lambda partial batch failure, missing stream NewImage, explicit Console session reuse, and built-in Tactus context handoff. Also tightened local worker polling to use the responseStatusCreatedAt sort-key condition instead of a post-query filter. Verification: focused Python suite 53 passed; dashboard Jest streaming suite 6 passed; dashboard typecheck passed; py_compile passed for app.py/local_worker.py/chat_runtime.py.",
+      "created_at": "2026-04-27T14:02:15.243723Z"
+    }
+  ],
+  "created_at": "2026-04-27T12:42:41.687340Z",
+  "updated_at": "2026-04-27T14:02:15.243723Z",
+  "closed_at": null,
+  "custom": {}
+}

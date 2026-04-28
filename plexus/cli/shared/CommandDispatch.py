@@ -188,7 +188,7 @@ def _list_pending_tasks_for_account(
 
         metadata = _normalize_metadata(task.get("metadata"))
         if metadata.get("dispatch_mode") == "console_async_worker":
-            # Console runs are dispatched via startConsoleRun -> SQS worker.
+            # Console chat responses are dispatched from ChatMessage stream handling.
             # Skip them in the generic dispatcher to avoid duplicate execution.
             continue
 

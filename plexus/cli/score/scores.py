@@ -506,8 +506,11 @@ def versions(id: str, pinned_only: bool):
             console.print("[yellow]No versions found for this score.[/yellow]")
             return
         
+        def is_pinned_version(version):
+            return version.get('isFeatured') == 'true'
+
         if pinned_only:
-            versions = [version for version in versions if version.get('isFeatured') == 'true']
+            versions = [version for version in versions if is_pinned_version(version)]
 
         def version_sort_key(version):
             created_at = (version.get('createdAt') or '1970-01-01T00:00:00+00:00').replace('Z', '+00:00')
@@ -517,7 +520,7 @@ def versions(id: str, pinned_only: bool):
                 created_ts = 0
             return (
                 0 if version.get('id') == champion_version_id else 1,
-                0 if version.get('isFeatured') == 'true' else 1,
+                0 if is_pinned_version(version) else 1,
                 -created_ts,
             )
 
@@ -539,7 +542,7 @@ def versions(id: str, pinned_only: bool):
             updated_at = version.get('updatedAt')
             parent_id = version.get('parentVersionId', 'None')
             is_champion = "✓" if version_id == champion_version_id else ""
-            is_pinned = "★" if version.get('isFeatured') == 'true' else ""
+            is_pinned = "★" if is_pinned_version(version) else ""
             note = version.get('note', '')
             
             # Truncate note if it's too long
@@ -1335,7 +1338,7 @@ def push(scorecard: str, score: str, note: str):
             console.print(f"[blue]Changes detected: {' and '.join(changes)}. Creating new version.[/blue]")
     else:
         console.print("[blue]Creating initial version.[/blue]")
-    
+
     # Create a new version with the cleaned configuration
     mutation = """
     mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
