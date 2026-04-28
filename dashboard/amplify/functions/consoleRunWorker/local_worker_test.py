@@ -56,8 +56,6 @@ def test_load_local_env_reads_repo_and_dashboard_env_files(monkeypatch):
 
     assert [str(path) for path, _ in loaded_calls] == [str(path) for path in expected_order]
     assert [override for _, override in loaded_calls] == [False, True, True]
-
-
 def test_main_rejects_cloud_response_target(monkeypatch):
     worker = _load_local_worker_module()
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
@@ -95,8 +93,6 @@ def test_main_uses_next_public_response_target_from_env(monkeypatch):
 
     assert len(calls) == 1
     assert calls[0]["response_target"] == "local:ryan"
-
-
 def test_main_processes_pending_messages_with_local_owner(monkeypatch):
     worker = _load_local_worker_module()
     calls = []

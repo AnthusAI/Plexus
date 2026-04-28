@@ -79,6 +79,10 @@ class ProcedureChatRecorder:
             return data.get(field_name)
         return result.get(field_name)
 
+    def _response_target(self) -> str:
+        """Return the target used by response-status GraphQL indexes."""
+        return self.procedure_id or self.session_id
+
     def _get_resume_session_id(self) -> Optional[str]:
         """Return existing session id when procedure is waiting for human input."""
         try:
@@ -908,6 +912,7 @@ class ProcedureChatRecorder:
                 'messageType': message_type,
                 'sequenceNumber': self.sequence_number,
                 'humanInteraction': human_interaction,
+                'responseTarget': self._response_target(),
                 # Runtime-emitted messages are not dispatch commands; mark them
                 # completed so composite responseStatus indexes remain valid.
                 'responseStatus': 'COMPLETED',
@@ -1165,7 +1170,9 @@ class ProcedureChatRecorder:
                 'content': content,
                 'messageType': message_type,
                 'sequenceNumber': sequence_number,
-                'humanInteraction': human_interaction
+                'humanInteraction': human_interaction,
+                'responseTarget': self._response_target(),
+                'responseStatus': 'COMPLETED',
                 # Note: Omitting metadata field due to GraphQL validation issues
             }
 

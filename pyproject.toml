@@ -10,7 +10,13 @@ readme = "README.md"
 license = "MIT"
 authors = ["Anthus AI Solutions"]
 packages = [{ include = "plexus" }]
-include = ["plexus/templates/*", "plexus/__main__.py", "plexus/py.typed", "plexus/scores/*.py"]
+include = [
+    "plexus/templates/*",
+    "plexus/__main__.py",
+    "plexus/py.typed",
+    "plexus/scores/*.py",
+    "plexus/rubric_memory/procedures/*.tac",
+]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
