@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -57,6 +58,11 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
         },
         "agents": {
             "assistant": {
+                "model": "gpt-5.4-mini",
+                "reasoning_effort": "low",
+                "verbosity": "low",
+                "max_tokens": 220,
+                "stream": True,
                 "system_prompt": (
                     "You are the Plexus Console assistant in an interactive chat.\n\n"
                     "You are a practical, accurate engineering copilot.\n"
@@ -96,6 +102,7 @@ def get_builtin_procedure_spec(procedure_id: str) -> Optional[BuiltinProcedureSp
     return _BUILTINS.get(procedure_id)
 
 
+@lru_cache(maxsize=16)
 def get_builtin_procedure_yaml(procedure_id: str) -> Optional[str]:
     spec = get_builtin_procedure_spec(procedure_id)
     if not spec:
