@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from plexus.console import chat_runtime
 
 
@@ -126,6 +128,26 @@ def test_parse_chat_message_defaults_missing_response_target_to_cloud():
     assert message.response_target == "cloud"
 
 
+def test_parse_chat_message_extracts_selected_model_from_metadata():
+    message = chat_runtime.parse_chat_message(
+        _raw_message(
+            metadata='{"model":{"id":"gpt-5.3"},"instrumentation":{"client_selected_model":"gpt-5.3"}}'
+        )
+    )
+
+    assert message is not None
+    assert message.selected_model == "gpt-5.3"
+
+
+def test_parse_chat_message_ignores_non_object_metadata():
+    message = chat_runtime.parse_chat_message(
+        _raw_message(metadata="not-json")
+    )
+
+    assert message is not None
+    assert message.selected_model is None
+
+
 def test_should_handle_rejects_non_chat_message_shapes():
     tool_message = chat_runtime.parse_chat_message(_raw_message(messageType="TOOL_CALL"))
     internal = chat_runtime.parse_chat_message(_raw_message(humanInteraction="INTERNAL"))
@@ -216,6 +238,59 @@ def test_process_console_message_runs_harness_and_marks_completed(monkeypatch):
     )
     assert complete_call["input"]["createdAt"] == "2026-04-27T00:00:00.000Z"
     assert complete_call["input"]["responseStatus"] == "COMPLETED"
+
+
+def test_process_console_message_logs_latency_summary(monkeypatch):
+    client = FakeClient()
+    info_logs = []
+
+    def fake_run_console_chat_response(_client, _message, *, owner, latency_trace=None):
+        assert owner == "cloud:test"
+        assert isinstance(latency_trace, dict)
+        now = chat_runtime.utc_now()
+        latency_trace["t_history_loaded"] = now
+        latency_trace["t_run_started"] = now
+        latency_trace["t_first_assistant_chunk"] = now
+        return {"success": True}
+
+    monkeypatch.setattr(
+        chat_runtime,
+        "run_console_chat_response",
+        fake_run_console_chat_response,
+    )
+    monkeypatch.setattr(chat_runtime.logger, "info", lambda message, *args, **kwargs: info_logs.append(message % args if args else message))
+
+    assert chat_runtime.process_console_message(
+        client,
+        _raw_message(),
+        expected_target="cloud",
+        owner="cloud:test",
+    ) is True
+
+    payloads = []
+    for raw in info_logs:
+        text = str(raw).strip()
+        json_start = text.find("{")
+        if json_start < 0:
+            continue
+        payload = json.loads(text[json_start:])
+        if payload.get("event") == "console_chat_latency":
+            payloads.append(payload)
+
+    assert payloads, "expected console_chat_latency log payload"
+    summary = payloads[-1]
+    assert summary["status"] == "COMPLETED"
+    assert summary["message_id"] == "msg-1"
+    assert isinstance(summary["claim_ms"], int)
+    assert isinstance(summary["history_ms"], int)
+    assert isinstance(summary["startup_ms"], int)
+    assert isinstance(summary["first_token_ms"], int)
+    assert isinstance(summary["total_ms"], int)
+    assert summary["claim_ms"] >= 0
+    assert summary["history_ms"] >= 0
+    assert summary["startup_ms"] >= 0
+    assert summary["first_token_ms"] >= 0
+    assert summary["total_ms"] >= 0
 
 
 def test_process_console_message_marks_failed_when_harness_raises(monkeypatch):
@@ -398,7 +473,38 @@ def test_run_console_chat_response_passes_console_context_to_builtin(monkeypatch
         "chat_session_id": "sess-1",
         "console_trigger_message_id": "msg-1",
         "console_response_owner": "local:ryan:test",
+        "disable_console_dispatch_metadata_lookup": True,
     }
+
+
+def test_run_console_chat_response_passes_selected_model_override(monkeypatch):
+    client = FakeClient()
+    message = chat_runtime.parse_chat_message(
+        _raw_message(
+            content="Use model override",
+            metadata='{"model":{"id":"gpt-5.3"}}',
+        )
+    )
+    calls = []
+
+    class FakeProcedureService:
+        def __init__(self, service_client):
+            self.service_client = service_client
+
+        async def run_experiment(self, procedure_id, **kwargs):
+            calls.append((procedure_id, kwargs, self.service_client))
+            return {"success": True, "response": "ok"}
+
+    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+
+    assert message is not None
+    result = chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
+
+    assert result == {"success": True, "response": "ok"}
+    procedure_id, kwargs, service_client = calls[0]
+    assert procedure_id == "builtin:console/chat"
+    assert service_client is client
+    assert kwargs["context"]["agent_models"] == {"assistant": "gpt-5.3"}
 
 
 def test_fetch_session_history_filters_and_sorts_messages():

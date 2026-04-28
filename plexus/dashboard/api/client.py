@@ -58,6 +58,7 @@ import os
 import random
 from typing import Optional, Dict, Any, Tuple, List, TYPE_CHECKING, Union
 from dataclasses import dataclass
+from urllib.parse import urlparse
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 from gql.transport.exceptions import (
@@ -117,6 +118,7 @@ class GraphQLRetryPolicy:
 
 DEFAULT_GRAPHQL_RETRY_POLICY_NAME = "default_graphql"
 LONG_RUNNING_WRITE_RETRY_POLICY_NAME = "long_running_write"
+CHAT_STREAM_WRITE_RETRY_POLICY_NAME = "chat_stream_write"
 
 DEFAULT_GRAPHQL_RETRY_POLICY = GraphQLRetryPolicy(
     name=DEFAULT_GRAPHQL_RETRY_POLICY_NAME,
@@ -134,9 +136,18 @@ LONG_RUNNING_WRITE_RETRY_POLICY = GraphQLRetryPolicy(
     max_delay_seconds=60.0,
 )
 
+CHAT_STREAM_WRITE_RETRY_POLICY = GraphQLRetryPolicy(
+    name=CHAT_STREAM_WRITE_RETRY_POLICY_NAME,
+    max_attempts=4,
+    max_elapsed_seconds=8.0,
+    initial_delay_seconds=0.2,
+    max_delay_seconds=2.0,
+)
+
 _GRAPHQL_RETRY_POLICIES = {
     DEFAULT_GRAPHQL_RETRY_POLICY_NAME: DEFAULT_GRAPHQL_RETRY_POLICY,
     LONG_RUNNING_WRITE_RETRY_POLICY_NAME: LONG_RUNNING_WRITE_RETRY_POLICY,
+    CHAT_STREAM_WRITE_RETRY_POLICY_NAME: CHAT_STREAM_WRITE_RETRY_POLICY,
 }
 
 _RETRYABLE_QUERY_ERROR_TYPES = {
@@ -172,6 +183,12 @@ class _BaseAPIClient:
     ):
         self.api_url = api_url or os.getenv('PLEXUS_API_URL')
         self.api_key = api_key or os.getenv('PLEXUS_API_KEY')
+        self.auth_mode = (os.getenv('PLEXUS_GRAPHQL_AUTH_MODE') or 'api_key').strip().lower()
+        self.api_region = (
+            os.getenv('PLEXUS_API_REGION')
+            or os.getenv('NEXT_PUBLIC_PLEXUS_API_REGION')
+            or self._region_from_api_url(self.api_url)
+        )
         self.context = context or ClientContext()
         self._cache = {}
         
@@ -180,7 +197,7 @@ class _BaseAPIClient:
         self._stop_logging = None
         self._log_thread = None
         
-        if not all([self.api_url, self.api_key]):
+        if not self.api_url or (self.auth_mode != 'iam' and not self.api_key):
             raise ValueError("Missing required API URL or API key")
 
         # Check environment variable for schema introspection setting
@@ -189,16 +206,7 @@ class _BaseAPIClient:
         fetch_schema_str = os.getenv('PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT', 'false').lower()
         self._fetch_schema = fetch_schema_str in ('true', '1', 'yes')
 
-        # Set up GQL client with API key authentication
-        transport = RequestsHTTPTransport(
-            url=self.api_url,
-            headers={
-                'x-api-key': self.api_key,
-                'Content-Type': 'application/json',
-            },
-            verify=True,
-            retries=3,
-        )
+        transport = self._build_transport()
 
         self.client = Client(
             transport=transport,
@@ -220,6 +228,59 @@ class _BaseAPIClient:
         self._stop_logging = Event()
         self._log_thread = Thread(target=self._process_logs, daemon=True)
         self._log_thread.start()
+
+    @staticmethod
+    def _region_from_api_url(api_url: Optional[str]) -> Optional[str]:
+        if not api_url:
+            return None
+        try:
+            host = urlparse(api_url).hostname or ""
+            parts = host.split(".")
+            if "appsync-api" in parts:
+                idx = parts.index("appsync-api")
+                if idx + 1 < len(parts):
+                    return parts[idx + 1]
+        except Exception:
+            return None
+        return None
+
+    def _build_transport(self) -> RequestsHTTPTransport:
+        headers = {"Content-Type": "application/json"}
+        auth = None
+
+        if self.auth_mode == "iam":
+            try:
+                import boto3
+                from requests_aws4auth import AWS4Auth
+            except ImportError as exc:
+                raise ValueError(
+                    "IAM GraphQL auth mode requires boto3 and requests_aws4auth to be installed"
+                ) from exc
+
+            session = boto3.Session(profile_name=os.getenv("AWS_PROFILE"))
+            credentials = session.get_credentials()
+            if credentials is None:
+                raise ValueError("AWS credentials not available for IAM GraphQL auth mode")
+            if not self.api_region:
+                raise ValueError("Missing API region for IAM GraphQL auth mode")
+            frozen = credentials.get_frozen_credentials()
+            auth = AWS4Auth(
+                frozen.access_key,
+                frozen.secret_key,
+                self.api_region,
+                "appsync",
+                session_token=frozen.token,
+            )
+        else:
+            headers["x-api-key"] = self.api_key
+
+        return RequestsHTTPTransport(
+            url=self.api_url,
+            headers=headers,
+            auth=auth,
+            verify=True,
+            retries=3,
+        )
 
     def _process_logs(self):
         """Process logs in background thread."""
@@ -346,15 +407,7 @@ class _BaseAPIClient:
 
         while attempt < policy.max_attempts:
             try:
-                transport = RequestsHTTPTransport(
-                    url=self.api_url,
-                    headers={
-                        'x-api-key': self.api_key,
-                        'Content-Type': 'application/json',
-                    },
-                    verify=True,
-                    retries=3,
-                )
+                transport = self._build_transport()
                 client = Client(
                     transport=transport,
                     fetch_schema_from_transport=self._fetch_schema

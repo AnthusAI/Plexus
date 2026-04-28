@@ -64,7 +64,11 @@ def main() -> None:
         raise RuntimeError("Local worker requires CONSOLE_RESPONSE_TARGET to be local:<developer>")
 
     owner = build_response_owner(response_target)
-    poll_interval_seconds = float(os.getenv("CONSOLE_LOCAL_WORKER_POLL_SECONDS", "1.0"))
+    idle_poll_interval_seconds = float(
+        os.getenv("CONSOLE_LOCAL_WORKER_IDLE_POLL_SECONDS")
+        or os.getenv("CONSOLE_LOCAL_WORKER_POLL_SECONDS")
+        or "0.2"
+    )
     client = _resolve_client()
 
     logger.info("Local Console chat worker started (target=%s owner=%s)", response_target, owner)
@@ -78,9 +82,10 @@ def main() -> None:
             )
             if processed:
                 logger.info("Processed %s pending Console chat message(s)", processed)
+                continue
         except Exception:
             logger.exception("Local Console chat worker poll failed")
-        time.sleep(poll_interval_seconds)
+        time.sleep(idle_poll_interval_seconds)
 
 
 if __name__ == "__main__":
