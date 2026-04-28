@@ -22,7 +22,7 @@ interface VersionRecord {
   id: string
   scoreId: string
   note?: string | null
-  isFeatured: boolean
+  isFeatured?: string | null
   parentVersionId?: string | null
   createdAt: string
   updatedAt: string

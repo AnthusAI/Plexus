@@ -64,3 +64,13 @@ export const taskAttachments = defineStorage({
     ]
   })
 });
+
+// Define a storage bucket for rubric-memory knowledge-base source files
+export const rubricMemory = defineStorage({
+  name: 'rubricMemory',
+  access: (allow) => ({
+    '*': [
+      allow.authenticated.to(['read', 'write', 'delete'])
+    ]
+  })
+});
