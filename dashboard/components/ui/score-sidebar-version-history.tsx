@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { Button } from "@/components/ui/button"
-import { Crown, Clock, PanelLeftOpen, PanelLeftClose, Star } from 'lucide-react'
+import { Crown, PanelLeftOpen, PanelLeftClose, Star } from 'lucide-react'
 import { LayoutGroup, motion, useReducedMotion } from 'framer-motion'
 import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreVersion } from "./score-component"
@@ -92,7 +92,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
   const pinnedVersions = sortedVersions.filter(v => isPinned(v) && v.id !== championVersionId)
   const recentVersions = sortedVersions.filter(v => v.id !== championVersionId && !isPinned(v))
 
-  const renderVersionButton = (version: ScoreVersion, icon: React.ReactNode, title?: string) => (
+  const renderVersionButton = (version: ScoreVersion, icon?: React.ReactNode, title?: string) => (
     <motion.div
       key={version.id}
       layout={shouldAnimateLayout ? "position" : false}
@@ -106,21 +106,26 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
         className="w-full justify-start text-left p-2 h-auto"
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          {icon}
+          {icon && <div className="shrink-0">{icon}</div>}
           <div className="min-w-0 flex-1">
             <div className="text-xs font-medium truncate">
-              {title || version.note || `Version ${version.id.slice(0, 8)}`}
+              {version.note || title || `Version ${version.id.slice(0, 8)}`}
             </div>
-            {title && (
+            {title && version.note && (
               <div className="text-xs text-muted-foreground truncate">
-                {version.note || `Version ${version.id.slice(0, 8)}`}
+                {title}
               </div>
             )}
-            <div className="text-xs text-muted-foreground">
-              <Timestamp time={version.createdAt} variant="relative" showIcon={false} className="text-xs" />
-            </div>
+            <Timestamp time={version.createdAt} variant="relative" className="text-xs" />
           </div>
-          {onToggleFeature && version.id !== championVersionId && (
+          {version.id === championVersionId ? (
+            <span
+              aria-label="Champion version"
+              className="shrink-0 rounded-sm p-1 text-muted-foreground"
+            >
+              <Crown className="h-3.5 w-3.5" />
+            </span>
+          ) : onToggleFeature && (
             <span
               role="button"
               tabIndex={0}
@@ -194,7 +199,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
 
           {/* Champion Version - Always at top */}
           {!isLoading && championVersion && (
-            renderVersionButton(championVersion, <Crown className="h-4 w-4 flex-shrink-0" />, "Champion Version")
+            renderVersionButton(championVersion)
           )}
 
           {pinnedVersions.length > 0 && (
@@ -203,8 +208,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
             </div>
           )}
           {pinnedVersions.map((version) => renderVersionButton(
-            version,
-            <Clock className="h-4 w-4 flex-shrink-0" />
+            version
           ))}
 
           {recentVersions.length > 0 && (
@@ -213,8 +217,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
             </div>
           )}
           {recentVersions.map((version) => renderVersionButton(
-            version,
-            <Clock className="h-4 w-4 flex-shrink-0" />
+            version
           ))}
           {isLoadingMore && versions.length > 0 && (
             <div className="px-2 py-1 text-xs text-muted-foreground">Loading more versions...</div>
@@ -250,7 +253,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
               className="w-full h-8 p-0"
               title={version.note || `Version ${version.id.slice(0, 8)}`}
             >
-              {isPinned(version) ? <Star className="h-4 w-4 fill-current" /> : <Clock className="h-4 w-4" />}
+              {isPinned(version) ? <Star className="h-4 w-4 fill-current" /> : <span className="h-4 w-4 text-[10px] font-medium">{version.id.slice(0, 1)}</span>}
             </Button>
           ))}
         </div>

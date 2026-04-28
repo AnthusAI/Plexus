@@ -1363,7 +1363,7 @@ def push(scorecard: str, score: str, note: str):
                 'scoreId': score_id,
                 'configuration': cleaned_yaml_content,
                 'note': note,
-                # Never auto-promote to champion via CLI push
+                # New versions are not pinned unless explicitly starred.
                 'isFeatured': None
             }
         }

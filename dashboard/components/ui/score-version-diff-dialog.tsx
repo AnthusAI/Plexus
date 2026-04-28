@@ -87,7 +87,7 @@ export function ScoreVersionDiffDialog({
         </DialogHeader>
 
         <div className="flex flex-col min-h-0 flex-1 bg-background p-3 gap-3">
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-3 items-end">
             <VersionSelect
               label="Left version"
               value={leftVersionId}
@@ -97,7 +97,7 @@ export function ScoreVersionDiffDialog({
             />
             <Button
               variant="secondary"
-              className="h-9"
+              className="h-9 justify-self-center"
               onClick={() => {
                 setLeftVersionId(rightVersionId)
                 setRightVersionId(leftVersionId)
@@ -176,10 +176,10 @@ function VersionSelect({
   championVersionId?: string
 }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 min-w-0">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className="bg-card border-0">
+        <SelectTrigger className="w-full min-w-0 bg-card border-0">
           <SelectValue placeholder="Select version" />
         </SelectTrigger>
         <SelectContent className="bg-card border-0">
