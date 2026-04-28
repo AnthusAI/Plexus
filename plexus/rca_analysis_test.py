@@ -2,8 +2,6 @@ import json
 import sys
 import types
 
-import pytest
-
 from plexus.rca_analysis import (
     CONFIG_FIXABILITY_OPTIONS,
     MECHANICAL_SUBTYPES,
