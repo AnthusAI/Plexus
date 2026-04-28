@@ -55,7 +55,9 @@ def _resolve_client() -> PlexusDashboardClient:
     api_url = str(os.getenv("PLEXUS_API_URL") or "").strip()
     if not api_url:
         raise RuntimeError("PLEXUS_API_URL is required")
-    os.environ["PLEXUS_GRAPHQL_AUTH_MODE"] = "iam"
+    auth_mode = str(os.getenv("PLEXUS_GRAPHQL_AUTH_MODE") or "").strip().lower()
+    if auth_mode != "iam":
+        raise RuntimeError("PLEXUS_GRAPHQL_AUTH_MODE must be iam")
     return PlexusDashboardClient(api_url=api_url)
 
 

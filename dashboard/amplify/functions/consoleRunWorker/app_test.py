@@ -165,14 +165,27 @@ def test_resolve_client_uses_iam_auth_without_api_key(monkeypatch):
             created.append(api_url)
 
     monkeypatch.setenv("PLEXUS_API_URL", "https://example.appsync-api.us-west-2.amazonaws.com/graphql")
+    monkeypatch.setenv("PLEXUS_GRAPHQL_AUTH_MODE", "iam")
     monkeypatch.delenv("PLEXUS_API_KEY", raising=False)
-    monkeypatch.delenv("PLEXUS_GRAPHQL_AUTH_MODE", raising=False)
     monkeypatch.setattr(app, "PlexusDashboardClient", FakeClient)
 
     app._resolve_client()
 
     assert created == ["https://example.appsync-api.us-west-2.amazonaws.com/graphql"]
-    assert app.os.environ["PLEXUS_GRAPHQL_AUTH_MODE"] == "iam"
+
+
+def test_resolve_client_requires_iam_auth_mode(monkeypatch):
+    app = _load_app_module()
+
+    monkeypatch.setenv("PLEXUS_API_URL", "https://example.appsync-api.us-west-2.amazonaws.com/graphql")
+    monkeypatch.delenv("PLEXUS_GRAPHQL_AUTH_MODE", raising=False)
+
+    try:
+        app._resolve_client()
+    except RuntimeError as exc:
+        assert "PLEXUS_GRAPHQL_AUTH_MODE must be iam" in str(exc)
+    else:
+        raise AssertionError("expected RuntimeError")
 
 
 def test_load_provider_credentials_sets_openai_and_optional_anthropic(monkeypatch):
