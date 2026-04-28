@@ -7,11 +7,11 @@ from .citations import (
     RubricMemoryCitationContext,
     RubricMemoryCitationFormatter,
 )
-from .local_corpus import LocalRubricMemoryCorpusResolver
 from .models import RubricEvidencePackRequest
 from .models import RubricAuthority
 from .retrieval import BiblicusRubricEvidenceRetriever
 from .service import RubricEvidencePackService
+from .s3_corpus import S3RubricMemoryCorpusResolver
 from .synthesis import TactusRubricEvidenceSynthesizer
 
 
@@ -99,7 +99,7 @@ class RubricMemoryContextProvider:
     ) -> dict[str, RubricMemoryCitationContext]:
         """Retrieve citation context for existing LLM consumers without synthesis."""
         authority = await RubricAuthorityResolver(self.api_client).resolve(score_id)
-        retriever = BiblicusRubricEvidenceRetriever.from_local_score(
+        retriever = BiblicusRubricEvidenceRetriever.from_score(
             scorecard_name=scorecard_identifier,
             score_name=score_identifier,
         )
@@ -133,7 +133,7 @@ class RubricMemoryContextProvider:
         self,
         request: RubricEvidencePackRequest,
     ) -> RubricMemoryCitationContext:
-        retriever = BiblicusRubricEvidenceRetriever.from_local_score(
+        retriever = BiblicusRubricEvidenceRetriever.from_score(
             scorecard_name=request.scorecard_identifier,
             score_name=request.score_identifier,
         )
@@ -236,15 +236,15 @@ class RubricMemoryContextProvider:
         scorecard_identifier: str,
         score_identifier: str,
     ) -> dict[str, Any]:
-        paths = LocalRubricMemoryCorpusResolver().resolve(
+        paths = S3RubricMemoryCorpusResolver().resolve(
             scorecard_name=scorecard_identifier,
             score_name=score_identifier,
         )
         roots = [
             {
                 "scope_level": source.scope_level,
-                "path": str(source.root),
-                "exists": source.root.exists(),
+                "path": f"s3://{source.bucket_name}/{source.prefix}",
+                "exists": bool(source.objects),
             }
             for source in paths.sources
         ]

@@ -19,6 +19,51 @@ from typing import Dict, Any, Optional, List
 logger = logging.getLogger(__name__)
 
 
+def _install_tactus_dspy_context_capture_patch() -> None:
+    """Capture Tactus DSPy agent prompt_context before model invocation."""
+    try:
+        from tactus.dspy.agent import DSPyAgentHandle
+    except Exception as exc:  # pragma: no cover - optional dependency variance
+        logger.debug("Could not import Tactus DSPy agent for context capture: %s", exc)
+        return
+
+    if getattr(DSPyAgentHandle, "_plexus_context_capture_patched", False):
+        return
+
+    from .logging_utils import capture_tactus_dspy_context_for_agent
+
+    original_streaming = DSPyAgentHandle._turn_with_streaming
+    original_non_streaming = DSPyAgentHandle._turn_without_streaming
+
+    def _capture(agent: Any, prompt_context: Dict[str, Any], call_site: str) -> None:
+        try:
+            capture_tactus_dspy_context_for_agent(
+                agent_name=f"Tactus DSPy Agent: {getattr(agent, 'name', 'unknown')}",
+                prompt_context=prompt_context,
+                turn_count=getattr(agent, "_turn_count", None),
+                call_site=call_site,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to capture Tactus DSPy LLM context for agent %s: %s",
+                getattr(agent, "name", "unknown"),
+                exc,
+            )
+
+    def patched_streaming(self, opts: Dict[str, Any], prompt_context: Dict[str, Any]):
+        _capture(self, prompt_context, "tactus_dspy_agent_streaming")
+        return original_streaming(self, opts, prompt_context)
+
+    def patched_non_streaming(self, opts: Dict[str, Any], prompt_context: Dict[str, Any]):
+        _capture(self, prompt_context, "tactus_dspy_agent_non_streaming")
+        return original_non_streaming(self, opts, prompt_context)
+
+    DSPyAgentHandle._turn_with_streaming = patched_streaming
+    DSPyAgentHandle._turn_without_streaming = patched_non_streaming
+    DSPyAgentHandle._plexus_context_capture_patched = True
+    logger.debug("Installed Tactus DSPy context capture patch")
+
+
 def _to_float(value: Any) -> Optional[float]:
     try:
         if value is None:
@@ -1014,6 +1059,8 @@ async def _execute_tactus(
         # Ensure DSPy agents can stream even when runtime constructor does not expose log_handler.
         if getattr(runtime, "log_handler", None) is None:
             runtime.log_handler = log_bridge
+
+        _install_tactus_dspy_context_capture_patch()
 
         # Bridge legacy in-process MCP server to Tactus toolset registry.
         # Newer Tactus versions resolve agent tools through named toolsets.
