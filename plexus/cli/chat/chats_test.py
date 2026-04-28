@@ -5,7 +5,7 @@ from plexus.cli.chat.chats import chat
 
 def test_chat_last_uses_default_account_and_prints_session(monkeypatch):
     runner = CliRunner()
-    monkeypatch.setattr("plexus.cli.chat.chats.create_client", lambda: object())
+    monkeypatch.setattr("plexus.cli.chat.chats.create_client", object)
     monkeypatch.setattr("plexus.cli.chat.chats.resolve_account_id", lambda _c, _a: "acct-1")
     monkeypatch.setattr(
         "plexus.cli.chat.chats.get_latest_chat_session",
@@ -19,7 +19,7 @@ def test_chat_last_uses_default_account_and_prints_session(monkeypatch):
 
 def test_chat_messages_invokes_shared_message_listing(monkeypatch):
     runner = CliRunner()
-    monkeypatch.setattr("plexus.cli.chat.chats.create_client", lambda: object())
+    monkeypatch.setattr("plexus.cli.chat.chats.create_client", object)
     monkeypatch.setattr(
         "plexus.cli.chat.chats.list_session_messages",
         lambda *_args, **_kwargs: {"sessionId": "sess-1", "offset": 0, "limit": 2, "count": 1, "nextToken": None, "items": []},
@@ -32,7 +32,7 @@ def test_chat_messages_invokes_shared_message_listing(monkeypatch):
 
 def test_chat_send_chat_mode_calls_shared_sender(monkeypatch):
     runner = CliRunner()
-    monkeypatch.setattr("plexus.cli.chat.chats.create_client", lambda: object())
+    monkeypatch.setattr("plexus.cli.chat.chats.create_client", object)
     monkeypatch.setattr(
         "plexus.cli.chat.chats.send_chat_message",
         lambda *_args, **_kwargs: {"mode": "chat", "message": {"id": "msg-1", "sessionId": "sess-1"}},
@@ -54,4 +54,3 @@ def test_chat_send_response_mode_requires_parent():
     )
     assert result.exit_code != 0
     assert "--parent-message-id is required" in result.output
-
