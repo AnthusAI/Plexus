@@ -595,8 +595,7 @@ def test_source_window_expansion_finds_policy_section(tmp_path):
                 *["General introductory text." for _ in range(120)],
                 "Step 4 - Patient Care",
                 "Verify each medication that comes up for Review ESI Meds.",
-                "CSAs are required to confirm Medication Name, Dosage, "
-                "Prescriber, Pharmacy, and Schedule for ALL medications.",
+                "CSAs are required to confirm Medication Name, Dosage, Prescriber, Pharmacy, and Schedule for ALL medications.",
                 "Ask whether the member is still taking each medication.",
                 "If the medication is no longer prescribed, mark it appropriately.",
             ]
@@ -1101,7 +1100,7 @@ async def test_context_provider_records_prepared_corpus_and_query_plan_diagnosti
     )
     monkeypatch.setattr(
         "plexus.rubric_memory.provider.TactusRubricEvidenceSynthesizer",
-        lambda: _CapturingSynthesizer(),
+        _CapturingSynthesizer,
     )
 
     context = await RubricMemoryContextProvider(api_client=object()).generate_for_request(
