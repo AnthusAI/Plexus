@@ -1,7 +1,7 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { data } from './data/resource.js';
 import { auth } from './auth/resource.js';
-import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments } from './storage/resource.js';
+import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments, rubricMemory } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { ConsoleChatResponderStack } from './functions/consoleRunWorker/resource.js';
 import { McpStack } from './mcp/mcp_stack.js';
@@ -19,7 +19,8 @@ const backend = defineBackend({
     reportBlockDetails,
     dataSources,
     scoreResultAttachments,
-    taskAttachments
+    taskAttachments,
+    rubricMemory
 });
 
 // Enable PITR on all Amplify Data DynamoDB tables (AWS default retention is 35 days).
