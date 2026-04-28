@@ -64,6 +64,75 @@ class TestFeedbackEvaluation:
         assert evaluation.evaluation_id == "eval-789"
         assert evaluation.account_id == "account-123"
         assert evaluation.task_id == "task-999"
+
+    @pytest.mark.asyncio
+    async def test_rca_rubric_memory_context_uses_retrieval_only_provider(
+        self,
+        monkeypatch,
+        mock_api_client,
+    ):
+        """RCA should inject KB context without running evidence-pack synthesis."""
+
+        class _Context:
+            def model_dump(self, mode=None):
+                return {
+                    "markdown_context": "retrieved citation context",
+                    "citation_index": [{"id": "evidence:01:test"}],
+                    "diagnostics": [{"kind": "rubric_memory_retrieval_context"}],
+                }
+
+        class _Provider:
+            instances = []
+
+            def __init__(self, *, api_client):
+                self.api_client = api_client
+                self.generate_calls = 0
+                self.retrieve_calls = []
+                _Provider.instances.append(self)
+
+            def local_corpus_status(self, *, scorecard_identifier, score_identifier):
+                return {"available": True, "roots": []}
+
+            async def retrieve_for_score_item(self, **kwargs):
+                self.retrieve_calls.append(kwargs)
+                return _Context()
+
+            async def generate_for_score_item(self, **kwargs):
+                self.generate_calls += 1
+                raise AssertionError("RCA must not synthesize evidence packs per item")
+
+        monkeypatch.setattr(
+            "plexus.rubric_memory.RubricMemoryContextProvider",
+            _Provider,
+        )
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key",
+            subset_of_score_names=["Medication Review: Dosage"],
+        )
+
+        context = await evaluation._rubric_memory_context_for_misclassification(
+            primary_input_text="call transcript",
+            predicted_value="No",
+            score_explanation="Missing dosage.",
+            correct_value="Yes",
+            feedback_comment="Dosage was verified.",
+            topic_hint="dosage",
+        )
+
+        provider = _Provider.instances[-1]
+        assert provider.generate_calls == 0
+        assert provider.retrieve_calls
+        assert provider.retrieve_calls[0]["score_identifier"] == "Medication Review: Dosage"
+        assert context["markdown_context"] == "retrieved citation context"
+        assert context["citation_index"] == [{"id": "evidence:01:test"}]
     
     @pytest.mark.asyncio
     async def test_fetch_feedback_items(self, mock_api_client, mock_feedback_items):
@@ -1188,6 +1257,19 @@ class TestCompactRootCauseForParameters:
         )
         applicability = result["misclassification_analysis"]["optimization_applicability"]
         assert applicability["status"] == "applicable"
+
+    def test_rca_item_failure_count_preserved(self):
+        payload = self._make_full_payload(
+            rca_item_failures=[
+                {
+                    "failed_stage": "evidence_flag_extraction",
+                    "exception_type": "ValueError",
+                    "message": "empty response",
+                }
+            ]
+        )
+        result = FeedbackEvaluation._compact_root_cause_for_parameters(payload, self.ATTACHMENT)
+        assert result["rca_item_failures_total"] == 1
 
     def test_missing_misclassification_analysis_is_tolerated(self):
         payload = self._make_full_payload()

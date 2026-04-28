@@ -25,24 +25,46 @@ def _invoke_rca_openai_text(
     system: str,
     messages: list[dict[str, str]],
     max_output_tokens: int,
+    call_site: str = "rca_openai_text",
 ) -> str:
     """Invoke the RCA standard OpenAI model and return plain response text."""
     from dotenv import load_dotenv
     from openai import OpenAI
+    from plexus.cli.procedure.logging_utils import capture_llm_context_for_agent
 
     load_dotenv(override=False)
     client = OpenAI()
-    response = client.responses.create(
-        model=RCA_OPENAI_MODEL,
-        instructions=system,
-        input=messages,
-        max_output_tokens=max_output_tokens,
-    )
-    text = getattr(response, "output_text", "") or ""
-    text = text.strip()
-    if not text:
+    current_messages = list(messages)
+    last_empty = False
+    for attempt in range(2):
+        capture_llm_context_for_agent(
+            "RCA",
+            [{"role": "system", "content": system}, *current_messages],
+            call_site=call_site if attempt == 0 else f"{call_site}_retry_empty",
+        )
+        response = client.responses.create(
+            model=RCA_OPENAI_MODEL,
+            instructions=system,
+            input=current_messages,
+            max_output_tokens=max_output_tokens,
+        )
+        text = (getattr(response, "output_text", "") or "").strip()
+        if text:
+            return text
+        last_empty = True
+        current_messages = [
+            *current_messages,
+            {
+                "role": "user",
+                "content": (
+                    "Your previous response was empty. Return the requested "
+                    "structured text exactly in the specified format."
+                ),
+            },
+        ]
+    if last_empty:
         raise ValueError(f"{RCA_OPENAI_MODEL} returned an empty response")
-    return text
+    raise ValueError(f"{RCA_OPENAI_MODEL} returned no usable response")
 
 
 MISCLASSIFICATION_CATEGORIES = (
@@ -69,6 +91,7 @@ MECHANICAL_SUBTYPES = (
     "runtime_error",
     "parse_or_schema_error",
     "invalid_output_class",
+    "rca_analysis_failure",
     "unknown_mechanical",
 )
 
@@ -687,90 +710,114 @@ def extract_misclassification_evidence_flags(
         f"Item context JSON:\n{json.dumps(_compact_context_for_triage(item_context), ensure_ascii=True)}\n"
     )
 
-    text = _invoke_rca_openai_text(
-        system=system,
-        messages=[{"role": "user", "content": prompt}],
-        max_output_tokens=320,
-    )
-    if not isinstance(text, str) or not text.strip():
-        raise ValueError("Invalid evidence flag output: empty response")
+    def _parse_flag_text(text: str) -> Dict[str, Any]:
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("Invalid evidence flag output: empty response")
 
-    kv: Dict[str, str] = {}
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        kv[key.strip().upper()] = value.strip()
+        kv: Dict[str, str] = {}
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or ":" not in line:
+                continue
+            key, value = line.split(":", 1)
+            kv[key.strip().upper()] = value.strip()
 
-    required = (
-        "FLAG_EXTERNAL_INFORMATION_GAP",
-        "FLAG_GUIDELINE_GAP",
-        "FLAG_SYSTEM_MISSING_CONTEXT",
-        "FLAG_RUNTIME_OR_PARSER_FAILURE",
-        "FLAG_INVALID_OUTPUT_CLASS",
-        "FLAG_PREPROCESSING_EVIDENCE_LOSS",
-        "BEST_EVIDENCE_SOURCE",
-        "BEST_EVIDENCE_QUOTE",
-    )
-    missing = [key for key in required if key not in kv]
-    if missing:
-        raise ValueError(
-            f"Invalid evidence flag output: missing keys {missing}. Raw output: {text[:500]}"
-        )
-
-    def _parse_bool(value: str, key: str) -> bool:
-        low = str(value or "").strip().lower()
-        if low in {"true", "yes"}:
-            return True
-        if low in {"false", "no"}:
-            return False
-        raise ValueError(f"Invalid boolean for {key}: {value}")
-
-    raw_source = _normalize_label(kv["BEST_EVIDENCE_SOURCE"]).lower()
-    source = normalize_best_evidence_source(raw_source)
-    allowed_sources = {
-        "edit_comment",
-        "score_explanation",
-        "guidelines",
-        "score_yaml",
-        "primary_input",
-        "processed_input",
-        "metadata",
-        "rubric_memory",
-        "none",
-    }
-    if source not in allowed_sources:
-        raise ValueError(f"Invalid BEST_EVIDENCE_SOURCE: {raw_source}")
-
-    return {
-        "external_information_missing_or_degraded": _parse_bool(
-            kv["FLAG_EXTERNAL_INFORMATION_GAP"],
+        required = (
             "FLAG_EXTERNAL_INFORMATION_GAP",
-        ),
-        "guideline_or_policy_ambiguity": _parse_bool(
-            kv["FLAG_GUIDELINE_GAP"],
             "FLAG_GUIDELINE_GAP",
-        ),
-        "missing_required_context_due_system": _parse_bool(
-            kv["FLAG_SYSTEM_MISSING_CONTEXT"],
             "FLAG_SYSTEM_MISSING_CONTEXT",
-        ),
-        "runtime_or_parsing_failure": _parse_bool(
-            kv["FLAG_RUNTIME_OR_PARSER_FAILURE"],
             "FLAG_RUNTIME_OR_PARSER_FAILURE",
-        ),
-        "invalid_output_class_signal": _parse_bool(
-            kv["FLAG_INVALID_OUTPUT_CLASS"],
             "FLAG_INVALID_OUTPUT_CLASS",
-        ),
-        "preprocessing_evidence_loss": _parse_bool(
-            kv["FLAG_PREPROCESSING_EVIDENCE_LOSS"],
             "FLAG_PREPROCESSING_EVIDENCE_LOSS",
-        ),
-        "best_evidence_source": source,
-        "best_evidence_quote": _excerpt(kv["BEST_EVIDENCE_QUOTE"], 260),
-    }
+            "BEST_EVIDENCE_SOURCE",
+            "BEST_EVIDENCE_QUOTE",
+        )
+        missing = [key for key in required if key not in kv]
+        if missing:
+            raise ValueError(
+                f"Invalid evidence flag output: missing keys {missing}. Raw output: {text[:500]}"
+            )
+
+        def _parse_bool(value: str, key: str) -> bool:
+            low = str(value or "").strip().lower()
+            if low in {"true", "yes"}:
+                return True
+            if low in {"false", "no"}:
+                return False
+            raise ValueError(f"Invalid boolean for {key}: {value}")
+
+        raw_source = _normalize_label(kv["BEST_EVIDENCE_SOURCE"]).lower()
+        source = normalize_best_evidence_source(raw_source)
+        allowed_sources = {
+            "edit_comment",
+            "score_explanation",
+            "guidelines",
+            "score_yaml",
+            "primary_input",
+            "processed_input",
+            "metadata",
+            "rubric_memory",
+            "none",
+        }
+        if source not in allowed_sources:
+            raise ValueError(f"Invalid BEST_EVIDENCE_SOURCE: {raw_source}")
+
+        return {
+            "external_information_missing_or_degraded": _parse_bool(
+                kv["FLAG_EXTERNAL_INFORMATION_GAP"],
+                "FLAG_EXTERNAL_INFORMATION_GAP",
+            ),
+            "guideline_or_policy_ambiguity": _parse_bool(
+                kv["FLAG_GUIDELINE_GAP"],
+                "FLAG_GUIDELINE_GAP",
+            ),
+            "missing_required_context_due_system": _parse_bool(
+                kv["FLAG_SYSTEM_MISSING_CONTEXT"],
+                "FLAG_SYSTEM_MISSING_CONTEXT",
+            ),
+            "runtime_or_parsing_failure": _parse_bool(
+                kv["FLAG_RUNTIME_OR_PARSER_FAILURE"],
+                "FLAG_RUNTIME_OR_PARSER_FAILURE",
+            ),
+            "invalid_output_class_signal": _parse_bool(
+                kv["FLAG_INVALID_OUTPUT_CLASS"],
+                "FLAG_INVALID_OUTPUT_CLASS",
+            ),
+            "preprocessing_evidence_loss": _parse_bool(
+                kv["FLAG_PREPROCESSING_EVIDENCE_LOSS"],
+                "FLAG_PREPROCESSING_EVIDENCE_LOSS",
+            ),
+            "best_evidence_source": source,
+            "best_evidence_quote": _excerpt(kv["BEST_EVIDENCE_QUOTE"], 260),
+        }
+
+    messages = [{"role": "user", "content": prompt}]
+    last_error: Optional[Exception] = None
+    for attempt in range(2):
+        text = _invoke_rca_openai_text(
+            system=system,
+            messages=messages,
+            max_output_tokens=320,
+            call_site="rca_evidence_flags" if attempt == 0 else "rca_evidence_flags_repair",
+        )
+        try:
+            return _parse_flag_text(text)
+        except ValueError as exc:
+            last_error = exc
+            if attempt == 1:
+                break
+            messages = [
+                *messages,
+                {"role": "assistant", "content": text[:1000]},
+                {
+                    "role": "user",
+                    "content": (
+                        "Your previous response did not match the required eight-line schema. "
+                        "Return exactly the eight requested lines and no extra prose."
+                    ),
+                },
+            ]
+    raise last_error or ValueError("Invalid evidence flag output")
 
 
 def normalize_best_evidence_source(raw_source: str) -> str:
@@ -818,6 +865,79 @@ def _rubric_memory_citation_ids(item_context: dict, limit: int = 3) -> list[str]
         if isinstance(raw, dict) and raw.get("id"):
             citation_ids.append(str(raw["id"]))
     return citation_ids[:limit]
+
+
+def rubric_memory_state_from_item_context(item_context: dict) -> dict:
+    """Return compact rubric-memory availability/provenance state for RCA artifacts."""
+    rubric_memory = (item_context or {}).get("rubric_memory", {}) or {}
+    citation_index = rubric_memory.get("citation_index") or []
+    diagnostics = rubric_memory.get("diagnostics") or []
+    return {
+        "rubric_memory_available": bool(citation_index),
+        "citation_index_count": len(citation_index),
+        "rubric_memory_diagnostics": diagnostics,
+    }
+
+
+def build_rca_analysis_failure_details(stage: str, exc: BaseException) -> dict:
+    """Build a serializable RCA item-stage failure diagnostic."""
+    return {
+        "failed_stage": _normalize_label(stage) or "unknown",
+        "exception_type": exc.__class__.__name__,
+        "message": _excerpt(str(exc), 1000),
+    }
+
+
+def build_rca_analysis_failure_classification(
+    *,
+    item_context: dict,
+    stage: str,
+    exc: BaseException,
+    evidence_flags: Optional[Dict[str, Any]] = None,
+) -> dict:
+    """Preserve an RCA item as a mechanical failure row when RCA analysis itself fails."""
+    failure = build_rca_analysis_failure_details(stage, exc)
+    citation_ids = _rubric_memory_citation_ids(item_context)
+    citation_validation = validate_rubric_memory_citations(
+        citation_ids,
+        (item_context or {}).get("rubric_memory"),
+        require_citation=False,
+    )
+    return {
+        "primary_category": "mechanical_malfunction",
+        "rationale": (
+            "RCA item analysis failed before a reliable triage classification could be produced."
+        ),
+        "confidence": "high",
+        "mechanical_subtype": "rca_analysis_failure",
+        "mechanical_details": (
+            f"failed_stage={failure['failed_stage']}; "
+            f"exception_type={failure['exception_type']}; "
+            f"message={failure['message']}"
+        ),
+        "information_gap_subtype": None,
+        "evidence_snippets": [
+            {
+                "source": "metadata",
+                "quote_or_fact": (
+                    f"RCA analysis failed at {failure['failed_stage']}: "
+                    f"{failure['exception_type']}: {failure['message']}"
+                ),
+            }
+        ],
+        "evidence_flags": evidence_flags or {},
+        "rationale_paragraph": (
+            "RCA item analysis failed before this item could be categorized. "
+            "The item is preserved for debugging instead of being dropped."
+        ),
+        "evidence_quote": (
+            f"{failure['failed_stage']}: {failure['exception_type']}: {failure['message']}"
+        ),
+        "config_fixability": "blocked_by_mechanical",
+        "citation_ids": citation_validation.valid_ids,
+        "citation_validation": citation_validation.model_dump(mode="json"),
+        "rca_failure": failure,
+    }
 
 
 def classify_misclassification_item(item_context: dict, evidence_flags: Dict[str, Any]) -> dict:
@@ -1163,48 +1283,73 @@ def explain_misclassification_item_classification(
         f"Item context JSON:\n{json.dumps(item_context, ensure_ascii=True)}\n\n"
         f"Deterministic classification JSON:\n{json.dumps(classification, ensure_ascii=True)}\n"
     )
-    raw_text = _invoke_rca_openai_text(
-        system=system,
-        messages=[{"role": "user", "content": prompt}],
-        max_output_tokens=320,
-    )
-    line_map = {}
-    for line in str(raw_text or "").splitlines():
-        if ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        line_map[_normalize_label(key).upper()] = _normalize_label(value)
+    def _parse_explainer_text(raw_text: str) -> Dict[str, Any]:
+        line_map = {}
+        for line in str(raw_text or "").splitlines():
+            if ":" not in line:
+                continue
+            key, value = line.split(":", 1)
+            line_map[_normalize_label(key).upper()] = _normalize_label(value)
 
-    rationale_paragraph = line_map.get("RATIONALE_PARAGRAPH", "")
-    evidence_quote = line_map.get("EVIDENCE_QUOTE", "")
-    config_fixability = line_map.get("CONFIG_FIXABILITY", "")
-    citation_ids = [
-        value.strip()
-        for value in re.split(r"[,\\s]+", line_map.get("CITATION_IDS", ""))
-        if value.strip()
-    ]
+        rationale_paragraph = line_map.get("RATIONALE_PARAGRAPH", "")
+        evidence_quote = line_map.get("EVIDENCE_QUOTE", "")
+        config_fixability = line_map.get("CONFIG_FIXABILITY", "")
+        citation_ids = [
+            value.strip()
+            for value in re.split(r"[,\\s]+", line_map.get("CITATION_IDS", ""))
+            if value.strip()
+        ]
 
-    if not rationale_paragraph:
-        raise ValueError(f"Triage explainer output missing RATIONALE_PARAGRAPH: {raw_text}")
-    if not evidence_quote:
-        raise ValueError(f"Triage explainer output missing EVIDENCE_QUOTE: {raw_text}")
-    if config_fixability not in CONFIG_FIXABILITY_OPTIONS:
-        raise ValueError(
-            f"Triage explainer output has invalid config_fixability '{config_fixability}'. "
-            f"Allowed: {CONFIG_FIXABILITY_OPTIONS}. Raw output: {raw_text}"
+        if not rationale_paragraph:
+            raise ValueError(f"Triage explainer output missing RATIONALE_PARAGRAPH: {raw_text}")
+        if not evidence_quote:
+            raise ValueError(f"Triage explainer output missing EVIDENCE_QUOTE: {raw_text}")
+        if config_fixability not in CONFIG_FIXABILITY_OPTIONS:
+            raise ValueError(
+                f"Triage explainer output has invalid config_fixability '{config_fixability}'. "
+                f"Allowed: {CONFIG_FIXABILITY_OPTIONS}. Raw output: {raw_text}"
+            )
+        citation_validation = validate_rubric_memory_citations(
+            citation_ids,
+            item_context.get("rubric_memory"),
+            require_citation=bool(item_context.get("rubric_memory", {}).get("citation_index")),
         )
-    citation_validation = validate_rubric_memory_citations(
-        citation_ids,
-        item_context.get("rubric_memory"),
-        require_citation=bool(item_context.get("rubric_memory", {}).get("citation_index")),
-    )
-    return {
-        "rationale_paragraph": _excerpt(rationale_paragraph, 320),
-        "evidence_quote": _excerpt(evidence_quote, 180),
-        "config_fixability": config_fixability,
-        "citation_ids": citation_validation.valid_ids,
-        "citation_validation": citation_validation.model_dump(mode="json"),
-    }
+        return {
+            "rationale_paragraph": _excerpt(rationale_paragraph, 320),
+            "evidence_quote": _excerpt(evidence_quote, 180),
+            "config_fixability": config_fixability,
+            "citation_ids": citation_validation.valid_ids,
+            "citation_validation": citation_validation.model_dump(mode="json"),
+        }
+
+    messages = [{"role": "user", "content": prompt}]
+    last_error: Optional[Exception] = None
+    for attempt in range(2):
+        raw_text = _invoke_rca_openai_text(
+            system=system,
+            messages=messages,
+            max_output_tokens=320,
+            call_site="rca_triage_explainer" if attempt == 0 else "rca_triage_explainer_repair",
+        )
+        try:
+            return _parse_explainer_text(raw_text)
+        except ValueError as exc:
+            last_error = exc
+            if attempt == 1:
+                break
+            messages = [
+                *messages,
+                {"role": "assistant", "content": raw_text[:1000]},
+                {
+                    "role": "user",
+                    "content": (
+                        "Your previous response did not match the required four-line schema. "
+                        "Return exactly RATIONALE_PARAGRAPH, EVIDENCE_QUOTE, CONFIG_FIXABILITY, "
+                        "and CITATION_IDS lines with no extra prose."
+                    ),
+                },
+            ]
+    raise last_error or ValueError("Invalid triage explainer output")
 
 
 def build_misclassification_analysis_summary(
@@ -1234,6 +1379,7 @@ def build_misclassification_analysis_summary(
     for raw in item_classifications_all:
         context = raw.get("misclassification_item_context") or {}
         availability = context.get("source_availability", {})
+        rubric_state = rubric_memory_state_from_item_context(context)
         row = {
             "topic_id": raw.get("topic_id"),
             "topic_label": raw.get("topic_label", ""),
@@ -1260,6 +1406,11 @@ def build_misclassification_analysis_summary(
             "config_fixability": raw.get("config_fixability", ""),
             "citation_ids": raw.get("citation_ids", []),
             "citation_validation": raw.get("citation_validation", {}),
+            "rubric_memory_available": bool(rubric_state["rubric_memory_available"]),
+            "citation_index_count": int(rubric_state["citation_index_count"]),
+            "rubric_memory_diagnostics": rubric_state["rubric_memory_diagnostics"],
+            "rca_failure": raw.get("rca_failure"),
+            "rca_failures": raw.get("rca_failures", []),
             "has_primary_input": bool(availability.get("has_primary_input")),
             "missing_required_context": bool(availability.get("missing_required_context_keys")),
             "detailed_cause": raw.get("detailed_cause"),
@@ -1739,15 +1890,13 @@ def analyze_score_result(
     )
 
     try:
-        def _gpt5_mini_call(messages: list[dict[str, str]], max_tokens: int) -> str:
-            return _invoke_rca_openai_text(
-                system=system,
-                messages=messages,
-                max_output_tokens=max_tokens,
-            )
-
         messages = [{"role": "user", "content": turn1_prompt}]
-        detailed_cause = _gpt5_mini_call(messages, max_tokens=200)
+        detailed_cause = _invoke_rca_openai_text(
+            system=system,
+            messages=messages,
+            max_output_tokens=200,
+            call_site="rca_score_result_detailed_cause",
+        )
 
         messages.append({"role": "assistant", "content": detailed_cause})
         messages.append({"role": "user", "content": (
@@ -1755,7 +1904,12 @@ def analyze_score_result(
             "suggest one concrete change to the score code that would prevent "
             "this specific misclassification. Be specific and brief (1-2 sentences)."
         )})
-        suggested_fix = _gpt5_mini_call(messages, max_tokens=150)
+        suggested_fix = _invoke_rca_openai_text(
+            system=system,
+            messages=messages,
+            max_output_tokens=150,
+            call_site="rca_score_result_suggested_fix",
+        )
 
         return detailed_cause, suggested_fix
     except Exception as exc:
