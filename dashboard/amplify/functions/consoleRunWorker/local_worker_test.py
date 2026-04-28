@@ -78,7 +78,7 @@ def test_main_uses_next_public_response_target_from_env(monkeypatch):
     monkeypatch.delenv("CONSOLE_RESPONSE_TARGET", raising=False)
     monkeypatch.setenv("NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET", "local:ryan")
     monkeypatch.setenv("CONSOLE_LOCAL_WORKER_IDLE_POLL_SECONDS", "0")
-    monkeypatch.setattr(worker, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(worker, "_resolve_client", SimpleNamespace)
     monkeypatch.setattr(worker, "_load_local_env", lambda: None)
     monkeypatch.setattr(
         worker,
@@ -105,7 +105,7 @@ def test_main_processes_pending_messages_with_local_owner(monkeypatch):
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "local:ryan")
     monkeypatch.setenv("CONSOLE_LOCAL_WORKER_IDLE_POLL_SECONDS", "0")
-    monkeypatch.setattr(worker, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(worker, "_resolve_client", SimpleNamespace)
     monkeypatch.setattr(
         worker,
         "process_pending_local_messages",
@@ -133,7 +133,7 @@ def test_main_drain_mode_only_sleeps_when_no_work(monkeypatch):
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "local:ryan")
     monkeypatch.setenv("CONSOLE_LOCAL_WORKER_IDLE_POLL_SECONDS", "0")
-    monkeypatch.setattr(worker, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(worker, "_resolve_client", SimpleNamespace)
     monkeypatch.setattr(
         worker,
         "process_pending_local_messages",

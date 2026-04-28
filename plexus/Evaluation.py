@@ -4262,6 +4262,7 @@ class FeedbackEvaluation(Evaluation):
                             item_context=misclassification_item_context,
                             stage="evidence_flag_extraction",
                             exc=exc,
+                            evidence_flags=misclassification_evidence_flags,
                         )
                     else:
                         try:
