@@ -10,9 +10,11 @@ from .local_corpus import LocalRubricMemoryCorpusResolver, LocalRubricMemorySour
 from .models import EvidenceClassification, EvidenceSnippet, RubricEvidencePackRequest
 from .preparation import (
     PreparedRubricMemoryCorpus,
+    RubricMemoryCorpusSource,
     RubricMemoryPreparedCorpusManager,
 )
 from .query_planner import RubricMemoryQueryPlan, RubricMemoryQueryPlanner
+from .s3_corpus import S3RubricMemoryCorpusResolver
 
 
 class RubricEvidenceRetriever(Protocol):
@@ -23,7 +25,7 @@ class RubricEvidenceRetriever(Protocol):
 
 
 class BiblicusRubricEvidenceRetriever:
-    """Retrieve rubric-memory evidence from one local Biblicus corpus folder."""
+    """Retrieve rubric-memory evidence from one prepared Biblicus corpus."""
 
     _SOURCE_POLICY_ANCHORS = {
         "required to confirm",
@@ -40,7 +42,7 @@ class BiblicusRubricEvidenceRetriever:
         self,
         corpus_root: str | Path | None = None,
         *,
-        corpus_sources: Sequence[LocalRubricMemorySource] | None = None,
+        corpus_sources: Sequence[RubricMemoryCorpusSource] | None = None,
         retriever_id: str = "scan",
         max_total_items: int = 16,
         maximum_total_characters: int = 60000,
@@ -60,13 +62,7 @@ class BiblicusRubricEvidenceRetriever:
                 )
             ]
         else:
-            self.corpus_sources = [
-                LocalRubricMemorySource(
-                    root=source.root.resolve(),
-                    scope_level=source.scope_level,
-                )
-                for source in corpus_sources
-            ]
+            self.corpus_sources = list(corpus_sources)
         self.retriever_id = retriever_id
         self.max_total_items = max_total_items
         self.maximum_total_characters = maximum_total_characters
@@ -92,6 +88,32 @@ class BiblicusRubricEvidenceRetriever:
         prepared_corpus_manager: RubricMemoryPreparedCorpusManager | None = None,
     ) -> "BiblicusRubricEvidenceRetriever":
         paths = LocalRubricMemoryCorpusResolver().resolve(
+            scorecard_name=scorecard_name,
+            score_name=score_name,
+        )
+        return cls(
+            corpus_sources=paths.sources,
+            retriever_id=retriever_id,
+            max_total_items=max_total_items,
+            maximum_total_characters=maximum_total_characters,
+            source_window_characters=source_window_characters,
+            prepared_corpus_manager=prepared_corpus_manager,
+        )
+
+    @classmethod
+    def from_score(
+        cls,
+        *,
+        scorecard_name: str,
+        score_name: str,
+        retriever_id: str = "scan",
+        max_total_items: int = 16,
+        maximum_total_characters: int = 60000,
+        source_window_characters: int = 6000,
+        prepared_corpus_manager: RubricMemoryPreparedCorpusManager | None = None,
+        s3_client: Any | None = None,
+    ) -> "BiblicusRubricEvidenceRetriever":
+        paths = S3RubricMemoryCorpusResolver(s3_client=s3_client).resolve(
             scorecard_name=scorecard_name,
             score_name=score_name,
         )
@@ -229,9 +251,28 @@ class BiblicusRubricEvidenceRetriever:
 
     def _source_uri_to_path(self, source_uri: str) -> Path | None:
         parsed = urlparse(source_uri)
-        if parsed.scheme != "file":
+        if parsed.scheme == "file":
+            return Path(unquote(parsed.path))
+        if parsed.scheme != "s3" or self.last_prepared_corpus is None:
             return None
-        return Path(unquote(parsed.path))
+        bucket_name = parsed.netloc
+        key = unquote(parsed.path.lstrip("/"))
+        for index, source in enumerate(self.last_prepared_corpus.sources):
+            if source.get("source_type") != "s3":
+                continue
+            if source.get("bucket_name") != bucket_name:
+                continue
+            prefix = str(source.get("prefix") or "")
+            if not key.startswith(prefix):
+                continue
+            relative = key[len(prefix) :]
+            if not relative:
+                continue
+            scope_level = str(source.get("scope_level") or "unknown")
+            return self.last_prepared_corpus.corpus_root / (
+                f"{index:02d}-{scope_level}"
+            ) / relative
+        return None
 
     def _strip_markdown_frontmatter(self, text: str) -> str:
         if not text.startswith("---\n"):
