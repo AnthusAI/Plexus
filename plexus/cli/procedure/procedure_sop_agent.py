@@ -42,6 +42,8 @@ class ProcedureProcedureDefinition:
         self.available_tools = [
             "plexus_evaluation_score_result_find",  # Find specific evaluation error cases to analyze
             "plexus_evaluation_info",  # Get evaluation metadata and summary
+            "plexus_rubric_memory_evidence_pack",  # Get rubric-memory citations for policy-sensitive cases
+            "plexus_rubric_memory_sme_question_gate",  # Avoid re-asking SME questions already answered by memory
             "upsert_procedure_node",  # Create hypothesis experiment nodes
             "stop_procedure"  # Signal completion when done
         ]

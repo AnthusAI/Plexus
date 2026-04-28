@@ -19,6 +19,7 @@ from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field
 import yaml
 from .logging_utils import (
+    capture_llm_context_for_agent,
     log_chat_history_for_agent, 
     log_agent_response, 
     log_tool_execution,
@@ -286,6 +287,12 @@ class StandardOperatingProcedureAgent:
                 chat_history=filtered_messages,
                 context="for procedural guidance generation"
             )
+            capture_llm_context_for_agent(
+                agent_name="SOP_AGENT (Manager)",
+                chat_history=filtered_messages,
+                context="for procedural guidance generation",
+                call_site="sop_manager_guidance",
+            )
             
             response = sop_guidance_llm.invoke(filtered_messages)
             
@@ -417,7 +424,7 @@ Your response will become the next user message to guide the coding assistant.
                     else:
                         tool_name = getattr(tool_call, 'name', 'UNKNOWN')
                         tool_args = getattr(tool_call, 'args', {})
-                    logger.info(f"     [{i+1}] {tool_name}: {tool_args}")
+                    logger.info(f"     [{i + 1}] {tool_name}: {tool_args}")
             else:
                 logger.info(f"   Tool Calls: None")
             
@@ -674,6 +681,13 @@ Your response will become the next user message to guide the coding assistant.
                             agent_name="CODING_ASSISTANT (Worker)",
                             chat_history=filtered_history,
                             context=f"round {round_num}"
+                        )
+                        capture_llm_context_for_agent(
+                            agent_name="CODING_ASSISTANT (Worker)",
+                            chat_history=filtered_history,
+                            context=f"round {round_num}",
+                            call_site="sop_worker_round",
+                            tools=langchain_tools,
                         )
                         
                         # Check if we need to force explanation (remove tools temporarily)
@@ -1021,6 +1035,12 @@ Your response will become the next user message to guide the coding assistant.
             # Create final conversation for summarization
             summarization_history = conversation_history.copy()
             summarization_history.append(HumanMessage(content=summarization_request))
+            capture_llm_context_for_agent(
+                agent_name="CODING_ASSISTANT (Final Summarization)",
+                chat_history=summarization_history,
+                context="final summarization",
+                call_site="sop_final_summarization",
+            )
             
             # Get summarization response
             response = summarization_llm.invoke(summarization_history)
