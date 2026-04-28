@@ -56,9 +56,6 @@ type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVers
 const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
 });
-const startConsoleRunHandler = defineFunction({
-    entry: './resolvers/startConsoleRun.ts'
-});
 
 const schema = a.schema({
     Account: a
@@ -590,28 +587,6 @@ const schema = a.schema({
         ])
         .handler(a.handler.function(getResourceByShareTokenHandler)),
 
-    StartConsoleRunResponse: a.customType({
-        runId: a.string().required(),
-        taskId: a.string().required(),
-        accepted: a.boolean().required(),
-        queuedAt: a.datetime().required(),
-    }),
-
-    startConsoleRun: a
-        .mutation()
-        .arguments({
-            sessionId: a.string().required(),
-            procedureId: a.string().required(),
-            triggerMessageId: a.string().required(),
-            clientInstrumentation: a.json(),
-        })
-        .returns(a.ref('StartConsoleRunResponse'))
-        .authorization(allow => [
-            allow.publicApiKey(),
-            allow.authenticated(),
-        ])
-        .handler(a.handler.function(startConsoleRunHandler)),
-
     ReportConfiguration: a
         .model({
             name: a.string().required(),
@@ -988,6 +963,12 @@ const schema = a.schema({
             parentMessage: a.belongsTo('ChatMessage', 'parentMessageId'),
             childMessages: a.hasMany('ChatMessage', 'parentMessageId'),
             sequenceNumber: a.integer(), // Order within the session for proper conversation flow
+            responseTarget: a.string(),
+            responseStatus: a.enum(['PENDING', 'RUNNING', 'COMPLETED', 'FAILED']),
+            responseOwner: a.string(),
+            responseStartedAt: a.datetime(),
+            responseCompletedAt: a.datetime(),
+            responseError: a.string(),
             createdAt: a.datetime().required()
         })
         .authorization((allow) => [
@@ -1000,7 +981,8 @@ const schema = a.schema({
             idx("procedureId").sortKeys(["createdAt"]),
             idx("parentMessageId"),
             idx("humanInteraction").sortKeys(["createdAt"]),
-            idx("accountId").sortKeys(["createdAt"])
+            idx("accountId").sortKeys(["createdAt"]),
+            idx("responseTarget").sortKeys(["responseStatus", "createdAt"])
         ]),
 });
 
