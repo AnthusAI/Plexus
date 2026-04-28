@@ -22,7 +22,7 @@ const mockVersions = [
       externalId: 'SCORE_CHAMPION'
     }),
     guidelines: 'These are the champion guidelines for scoring.',
-    isFeatured: null,
+    isFeatured: 'false',
     createdAt: getTimeAgo(120), // 2 hours ago
     updatedAt: getTimeAgo(120),
     note: "Champion version with optimized parameters"
@@ -48,7 +48,7 @@ const mockVersions = [
       externalId: 'SCORE_V3'
     }),
     guidelines: 'Latest test version guidelines.',
-    isFeatured: null,
+    isFeatured: 'false',
     createdAt: getTimeAgo(15), // 15 mins ago
     updatedAt: getTimeAgo(15),
     note: "Experimental changes for edge case handling"
@@ -61,7 +61,7 @@ const mockVersions = [
       externalId: 'SCORE_V4'
     }),
     guidelines: 'Bug fix version guidelines.',
-    isFeatured: null,
+    isFeatured: 'false',
     createdAt: getTimeAgo(5), // 5 mins ago
     updatedAt: getTimeAgo(5),
     note: "Fixed validation issue with special characters"
@@ -358,7 +358,7 @@ export const ManyVersions: Story = {
           externalId: `SCORE_V${i + 5}`
         }),
         guidelines: `Guidelines for version ${i + 5}`,
-        isFeatured: null,
+        isFeatured: 'false',
         createdAt: getTimeAgo((i + 1) * 30),
         updatedAt: getTimeAgo((i + 1) * 30),
         note: `Version ${i + 5} with various improvements and bug fixes`
