@@ -146,6 +146,8 @@ class PlexusHITLAdapter:
             "humanInteraction": interaction,
             "sequenceNumber": sequence_number,
             "metadata": json.dumps(message_metadata),
+            "responseTarget": self.procedure_id,
+            "responseStatus": "PENDING",
         }
         account_id = getattr(self.chat_recorder, "account_id", None)
         if account_id:

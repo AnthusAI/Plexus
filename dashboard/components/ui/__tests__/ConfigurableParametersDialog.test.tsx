@@ -49,7 +49,7 @@ jest.mock('aws-amplify/data', () => ({
         list: jest.fn().mockResolvedValue({
           data: [
             { id: 'sv1', createdAt: '2024-01-01', isFeatured: 'true' },
-            { id: 'sv2', createdAt: '2024-01-02', isFeatured: null }
+            { id: 'sv2', createdAt: '2024-01-02', isFeatured: 'false' }
           ]
         })
       }

@@ -42,6 +42,7 @@ def test_item_classifier_output_contract_shape():
         "rationale_paragraph",
         "evidence_quote",
         "config_fixability",
+        "citation_ids",
     ]
     assert output["field_contracts"]["primary_category"]["allowed_values"] == list(
         MISCLASSIFICATION_CATEGORIES
@@ -52,6 +53,7 @@ def test_item_classifier_output_contract_shape():
     assert output["field_contracts"]["config_fixability"]["allowed_values"] == list(
         CONFIG_FIXABILITY_OPTIONS
     )
+    assert output["field_contracts"]["citation_ids"]["type"] == "array"
 
 
 def test_item_context_contract_and_provenance_sources():
@@ -95,8 +97,39 @@ def test_build_misclassification_item_context_includes_availability_flags():
     assert context["label_provenance"]["feedback_context_present"] is True
     assert context["source_availability"]["has_primary_input"] is True
     assert context["source_availability"]["has_metadata_snapshot"] is True
+    assert context["source_availability"]["has_rubric_memory"] is False
     assert context["score_context"]["resolved_final_classes"] == ["Yes", "No"]
     assert context["score_context"]["class_resolution_source"] == "graph[-1].LogicalClassifier.code"
+
+
+def test_build_misclassification_item_context_includes_rubric_memory():
+    context = build_misclassification_item_context(
+        feedback_item_id="fb-1",
+        item_id="item-1",
+        score_id="score-1",
+        scorecard_id="scorecard-1",
+        score_version_id="version-1",
+        predicted_value="No",
+        correct_value="Yes",
+        score_explanation="Prediction explanation",
+        edit_comment="Reviewer comment.",
+        initial_comment="",
+        final_comment="",
+        score_guidelines_text="Guidelines text",
+        score_yaml_configuration="name: Score",
+        scorecard_guidance_text="",
+        primary_input_text="Transcript text",
+        primary_input_modality="text",
+        metadata_snapshot="{}",
+        label_provenance_source="feedback_final_answer_value",
+        rubric_memory_context={
+            "markdown_context": "Rubric memory.",
+            "citation_index": [{"id": "rubric:abc"}],
+        },
+    )
+
+    assert context["source_availability"]["has_rubric_memory"] is True
+    assert context["rubric_memory"]["citation_index"][0]["id"] == "rubric:abc"
 
 
 def test_build_misclassification_item_context_rejects_unknown_provenance_source():
@@ -146,6 +179,7 @@ def test_normalize_best_evidence_source_supports_metadata_and_primary_input_alia
 def test_normalize_best_evidence_source_supports_guideline_and_score_context_aliases():
     assert normalize_best_evidence_source("score_guidelines") == "guidelines"
     assert normalize_best_evidence_source("score_context") == "score_yaml"
+    assert normalize_best_evidence_source("citation_context") == "rubric_memory"
 
 
 def _base_item_context():

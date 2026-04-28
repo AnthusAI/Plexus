@@ -1,0 +1,1 @@
+"""Rubric memory CLI commands."""

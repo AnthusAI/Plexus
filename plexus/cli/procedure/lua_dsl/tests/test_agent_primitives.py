@@ -5,6 +5,7 @@ Tests Agent.turn() method for executing agent reasoning and tool calls.
 """
 
 import pytest
+import json
 from unittest.mock import Mock, MagicMock, AsyncMock
 from plexus.cli.procedure.lua_dsl.primitives.agent import AgentPrimitive, AgentResponse
 from plexus.cli.procedure.lua_dsl.lua_sandbox import LuaSandbox
@@ -94,6 +95,27 @@ class TestAgentTurn:
         assert agent_primitive._initialized is True
         # After turn, conversation has system + initial + AI response
         assert len(agent_primitive._conversation) == 3
+
+    def test_turn_captures_context_before_llm_invoke(
+        self, agent_primitive, mock_llm, monkeypatch, tmp_path
+    ):
+        """AgentPrimitive writes the exact initialized conversation before invoking the LLM."""
+        monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_DIR", str(tmp_path))
+        mock_response = Mock()
+        mock_response.content = 'Hello'
+        mock_response.tool_calls = []
+        mock_llm.invoke.return_value = mock_response
+
+        agent_primitive.turn()
+
+        payload = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
+        markdown = next(tmp_path.glob("*.md")).read_text(encoding="utf-8")
+
+        assert payload["agent_name"] == "Tactus AgentPrimitive: worker"
+        assert payload["call_site"] == "tactus_agent_turn"
+        assert payload["messages"][0]["content"] == "You are a helpful assistant."
+        assert payload["messages"][1]["content"] == "Start working."
+        assert "You are a helpful assistant." in markdown
 
     def test_turn_increments_iteration_counter(
         self, agent_primitive, mock_llm, mock_iterations_primitive

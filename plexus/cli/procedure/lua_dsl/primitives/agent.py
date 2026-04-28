@@ -291,6 +291,15 @@ class AgentPrimitive:
 
             # Call LLM
             logger.debug(f"Calling LLM for agent '{self.name}' (turn {self.iterations_primitive.current()})")
+            from plexus.cli.procedure.logging_utils import capture_llm_context_for_agent
+
+            capture_llm_context_for_agent(
+                agent_name=f"Tactus AgentPrimitive: {self.name}",
+                chat_history=self._conversation,
+                context=f"turn {self.iterations_primitive.current()}",
+                call_site="tactus_agent_turn",
+                tools=self.available_tools,
+            )
             ai_response = self.llm.invoke(self._conversation)
 
             # Log response
