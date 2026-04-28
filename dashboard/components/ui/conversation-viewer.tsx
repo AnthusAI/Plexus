@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { getClient } from '@/utils/data-operations'
+import { formatAmplifyError } from '@/utils/amplify-client'
 import {
   Conversation,
   ConversationEmptyState,
@@ -78,6 +79,12 @@ export interface ChatMessage {
   parentMessageId?: string
   accountId?: string
   procedureId?: string
+  responseTarget?: string
+  responseStatus?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  responseOwner?: string
+  responseStartedAt?: string
+  responseCompletedAt?: string
+  responseError?: string
   createdAt: string
   sequenceNumber?: number
   sessionId?: string
@@ -104,7 +111,6 @@ type PendingAssistantState = {
   requestedAt: string
   baselineAssistantCreatedAt?: string | null
   triggerMessageId?: string
-  taskId?: string
 }
 
 type ConsoleToolViewModel = {
@@ -137,38 +143,6 @@ export interface ConversationViewerProps {
   defaultAccountIdForNewSession?: string
 }
 
-const START_CONSOLE_RUN_MUTATION = `
-  mutation StartConsoleRun(
-    $sessionId: String!
-    $procedureId: String!
-    $triggerMessageId: String!
-    $clientInstrumentation: AWSJSON
-  ) {
-    startConsoleRun(
-      sessionId: $sessionId
-      procedureId: $procedureId
-      triggerMessageId: $triggerMessageId
-      clientInstrumentation: $clientInstrumentation
-    ) {
-      runId
-      taskId
-      accepted
-      queuedAt
-    }
-  }
-`
-
-const GET_TASK_STATUS_QUERY = `
-  query GetTaskStatus($id: ID!) {
-    getTask(id: $id) {
-      id
-      status
-      dispatchStatus
-      errorMessage
-      updatedAt
-    }
-  }
-`
 
 // Helper function to format JSON with proper newlines
 const formatJsonWithNewlines = (obj: any): string => {
@@ -332,6 +306,12 @@ const parseRawChatMessage = (msg: any): ChatMessage | null => {
     parentMessageId: msg.parentMessageId,
     accountId: msg.accountId,
     procedureId: msg.procedureId,
+    responseTarget: msg.responseTarget,
+    responseStatus: msg.responseStatus,
+    responseOwner: msg.responseOwner,
+    responseStartedAt: msg.responseStartedAt,
+    responseCompletedAt: msg.responseCompletedAt,
+    responseError: msg.responseError,
     createdAt: msg.createdAt,
     sequenceNumber: msg.sequenceNumber,
     sessionId: msg.sessionId
@@ -1267,7 +1247,6 @@ function ConversationViewer({
   const promptSubmitLockRef = React.useRef(false)
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const [atBottom, setAtBottom] = useState(true)
-  const reportedTerminalTaskIdsRef = React.useRef<Set<string>>(new Set())
   const authFailureReportedRef = React.useRef(false)
 
   const markAuthUnavailable = React.useCallback((error: unknown, source: string): boolean => {
@@ -1358,7 +1337,6 @@ function ConversationViewer({
     sessionId: string,
     requestedAt: string,
     triggerMessageId?: string,
-    taskId?: string,
   ) => {
     const baselineAssistantCreatedAt = getLatestAssistantCreatedAtForSession(messages, sessionId)
     setPendingAssistantBySession((prev) => ({
@@ -1367,7 +1345,6 @@ function ConversationViewer({
         requestedAt,
         baselineAssistantCreatedAt,
         triggerMessageId,
-        taskId,
       },
     }))
   }, [messages])
@@ -1429,73 +1406,6 @@ function ConversationViewer({
     })
   }, [messages, pendingAssistantBySession])
 
-  useEffect(() => {
-    const pendingEntries = Object.entries(pendingAssistantBySession)
-    if (!pendingEntries.length) {
-      return
-    }
-
-    let cancelled = false
-
-    const pollPendingTaskStatuses = async () => {
-      const client = getClient() as any
-      for (const [sessionId, pendingState] of pendingEntries) {
-        const explicitTaskId = (pendingState.taskId || '').trim()
-        const fallbackTaskId = (pendingState.triggerMessageId || '').trim()
-          ? `console-run-${(pendingState.triggerMessageId || '').trim()}`
-          : ''
-        const taskId = explicitTaskId || fallbackTaskId
-        if (!taskId) {
-          continue
-        }
-
-        try {
-          const response = await client.graphql({
-            query: GET_TASK_STATUS_QUERY,
-            variables: { id: taskId },
-          })
-          if (cancelled) {
-            return
-          }
-
-          const task = response?.data?.getTask
-          const taskStatus = String(task?.status || '').toUpperCase()
-          if (!taskStatus || taskStatus === 'PENDING' || taskStatus === 'RUNNING') {
-            continue
-          }
-
-          clearPendingAssistant(sessionId)
-
-          if ((taskStatus === 'FAILED' || taskStatus === 'CANCELED') && !reportedTerminalTaskIdsRef.current.has(taskId)) {
-            reportedTerminalTaskIdsRef.current.add(taskId)
-            const errorText = typeof task?.errorMessage === 'string' && task.errorMessage.trim()
-              ? task.errorMessage.trim()
-              : `Assistant run ${taskStatus.toLowerCase()}.`
-            toast.error(errorText)
-            console.error('[ConsoleChat] assistant run terminal state', {
-              sessionId,
-              taskId,
-              status: taskStatus,
-              errorMessage: task?.errorMessage,
-            })
-          }
-        } catch (error) {
-          if (markAuthUnavailable(error, 'pending_task_poll')) {
-            return
-          }
-          console.error('[ConsoleChat] pending task poll failed', { sessionId, taskId, error })
-        }
-      }
-    }
-
-    const timer = window.setInterval(pollPendingTaskStatuses, 4000)
-    pollPendingTaskStatuses()
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
-  }, [pendingAssistantBySession, clearPendingAssistant, isAuthUnavailable, markAuthUnavailable])
-  
   const handleSessionSelect = (sessionId: string) => {
     setInternalSelectedSessionId(sessionId)
     if (onSessionSelect) {
@@ -1535,85 +1445,9 @@ function ConversationViewer({
     })
   }
 
-  const startConsoleRun = React.useCallback(async (
-    sessionId: string,
-    procedureIdToRun: string,
-    triggerMessageId: string,
-    clientInstrumentation: Record<string, unknown> = {},
-  ): Promise<{ taskId: string; runId: string; queuedAt: string }> => {
-    const client = getClient() as any
-    const response = await client.graphql({
-      query: START_CONSOLE_RUN_MUTATION,
-      variables: {
-        sessionId,
-        procedureId: procedureIdToRun,
-        triggerMessageId,
-        clientInstrumentation: JSON.stringify(clientInstrumentation),
-      },
-    })
-
-    const result = response?.data?.startConsoleRun
-    if (!result?.accepted || !result?.taskId || !result?.runId || !result?.queuedAt) {
-      throw new Error('Failed to queue procedure run after chat input')
-    }
-    return {
-      taskId: result.taskId,
-      runId: result.runId,
-      queuedAt: result.queuedAt,
-    }
-  }, [])
-
-  const enqueueProcedureRunTask = async (
-    procedureIdToRun: string,
-    sessionId: string,
-    pendingMessageId: string,
-    responseMessageId: string,
-    requestId: string
-  ): Promise<{ taskId: string; runId: string; queuedAt: string }> => {
-    return startConsoleRun(
-      sessionId,
-      procedureIdToRun,
-      responseMessageId,
-      {
-        hitl_resume: {
-          pending_message_id: pendingMessageId,
-          response_message_id: responseMessageId,
-          request_id: requestId,
-        },
-      },
-    )
-  }
-
-  const enqueueProcedureRunFromChat = React.useCallback(async (
-    procedureIdToRun: string,
-    triggerMessageId: string,
-    sessionId: string,
-    clientTiming: Record<string, unknown> = {},
-  ): Promise<{ taskId: string; runId: string; queuedAt: string }> => {
-    const instrumentation: Record<string, unknown> = {
-      ...clientTiming,
-      client_dispatch_request_started_at: new Date().toISOString(),
-    }
-
-    try {
-      const dispatchResult = await startConsoleRun(
-        sessionId,
-        procedureIdToRun,
-        triggerMessageId,
-        instrumentation,
-      )
-      instrumentation.client_dispatch_request_completed_at = new Date().toISOString()
-      instrumentation.client_dispatch_request_accepted = true
-      instrumentation.queue_task_id = dispatchResult.taskId
-      instrumentation.queue_run_id = dispatchResult.runId
-      instrumentation.queue_accepted_at = dispatchResult.queuedAt
-      return dispatchResult
-    } catch (error) {
-      instrumentation.client_dispatch_request_completed_at = new Date().toISOString()
-      instrumentation.client_dispatch_request_accepted = false
-      throw error
-    }
-  }, [startConsoleRun])
+  const getConsoleResponseTarget = React.useCallback(() => (
+    process.env.NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET?.trim() || 'cloud'
+  ), [])
 
   const submitHitlResponse = async (
     pendingMessage: ChatMessage,
@@ -1644,6 +1478,7 @@ function ConversationViewer({
         inputText,
       })
       const respondedAt = new Date().toISOString()
+      const responseTarget = getConsoleResponseTarget()
       const responseMetadata = {
         control: {
           request_id: control.request_id,
@@ -1667,6 +1502,8 @@ function ConversationViewer({
         humanInteraction: 'RESPONSE',
         content: JSON.stringify({ value: responseValue }),
         metadata: JSON.stringify(responseMetadata),
+        responseTarget,
+        responseStatus: 'PENDING',
         createdAt: respondedAt,
       })
       const responseMessageId = created?.data?.id
@@ -1674,21 +1511,13 @@ function ConversationViewer({
         throw new Error('Failed to persist RESPONSE message')
       }
 
-      const dispatchResult = await enqueueProcedureRunTask(
-        pendingMessage.procedureId,
-        pendingMessage.sessionId,
-        pendingMessage.id,
-        responseMessageId,
-        control.request_id
-      )
       markPendingAssistant(
         pendingMessage.sessionId,
         respondedAt,
         responseMessageId,
-        dispatchResult.taskId,
       )
 
-      toast.success('Response submitted. Procedure resume queued.')
+      toast.success('Response submitted.')
 
       setInternalMessages(prev => {
         const responseMessage: ChatMessage = {
@@ -1702,6 +1531,8 @@ function ConversationViewer({
           humanInteraction: 'RESPONSE',
           content: JSON.stringify({ value: responseValue }),
           metadata: responseMetadata,
+          responseTarget,
+          responseStatus: 'PENDING',
           createdAt: respondedAt,
         }
         const deduped = prev.filter(message => message.id !== responseMessageId)
@@ -2420,6 +2251,7 @@ function ConversationViewer({
 
         const clientSendStartedAt = new Date().toISOString()
         const nowIso = new Date().toISOString()
+        const responseTarget = getConsoleResponseTarget()
         const optimisticMessageId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         const optimisticMessage: ChatMessage = {
           id: optimisticMessageId,
@@ -2430,6 +2262,8 @@ function ConversationViewer({
           messageType: 'MESSAGE',
           humanInteraction: 'CHAT',
           content: nextValue,
+          responseTarget,
+          responseStatus: 'PENDING',
           createdAt: nowIso,
         }
 
@@ -2444,6 +2278,14 @@ function ConversationViewer({
         let messagePersisted = false
         try {
           const client = getClient()
+          const dispatchMessageText = nextValue.length > 4000
+            ? `${nextValue.slice(0, 4000)}…`
+            : nextValue
+          const clientHistorySnapshot = buildClientHistorySnapshot(
+            messages,
+            targetSessionId,
+            nextValue,
+          )
           const created = await (client.models.ChatMessage.create as any)({
             accountId: targetSessionAccountId,
             sessionId: targetSessionId,
@@ -2457,8 +2299,13 @@ function ConversationViewer({
               sent_at: nowIso,
               instrumentation: {
                 client_send_started_at: clientSendStartedAt,
+                client_prompt_length_chars: nextValue.length,
+                client_user_message_text: dispatchMessageText,
+                client_history_snapshot: clientHistorySnapshot,
               },
             }),
+            responseTarget,
+            responseStatus: 'PENDING',
           })
 
           const createdMessageId = created?.data?.id
@@ -2474,32 +2321,10 @@ function ConversationViewer({
               : message
           )))
 
-          const dispatchMessageText = nextValue.length > 4000
-            ? `${nextValue.slice(0, 4000)}…`
-            : nextValue
-          const clientHistorySnapshot = buildClientHistorySnapshot(
-            messages,
-            targetSessionId,
-            nextValue,
-          )
-
-          const dispatchResult = await enqueueProcedureRunFromChat(
-            targetSessionProcedureId,
-            createdMessageId,
-            targetSessionId,
-            {
-              client_send_started_at: clientSendStartedAt,
-              client_user_message_created_at: persistedCreatedAt,
-              client_prompt_length_chars: nextValue.length,
-              client_user_message_text: dispatchMessageText,
-              client_history_snapshot: clientHistorySnapshot,
-            },
-          )
           markPendingAssistant(
             targetSessionId,
             persistedCreatedAt,
             createdMessageId,
-            dispatchResult.taskId,
           )
 
           setPromptValue('')
@@ -2515,7 +2340,7 @@ function ConversationViewer({
             )))
           }
 
-          const errorMessage = getErrorMessage(error, 'Failed to send chat message')
+          const errorMessage = formatAmplifyError(error) || getErrorMessage(error, 'Failed to send chat message')
           console.error('[ConsoleChat] send/dispatch failure', {
             messagePersisted,
             sessionId: targetSessionId,
@@ -2546,8 +2371,8 @@ function ConversationViewer({
       isCreatingSession,
       messages,
       createNewSession,
-      enqueueProcedureRunFromChat,
       clearPendingAssistant,
+      getConsoleResponseTarget,
       markAuthUnavailable,
       markPendingAssistant,
       submitHitlResponse,
