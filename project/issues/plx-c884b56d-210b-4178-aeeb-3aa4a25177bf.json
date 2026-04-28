@@ -28,10 +28,16 @@
       "author": "derek",
       "text": "Pushed implementation and opened PR:\n- Branch: `feature/plx-c884b5-console-worker-iam-secrets`\n- Commit after rebase: `7a9a7468`\n- PR: https://github.com/AnthusAI/Plexus/pull/241\n\nValidation included in PR body:\n- Console worker Python tests: 15 passed.\n- Dashboard typecheck passed.\n- rcql consoleRunWorker scan passed with no reported findings.\n- poetry check --lock passed with existing deprecation warnings only.\n- git diff --check and py_compile passed.",
       "created_at": "2026-04-28T23:09:29.187441202Z"
+    },
+    {
+      "id": "3ee01121-7739-4cb4-bab1-90f8854473df",
+      "author": "derek",
+      "text": "Follow-up CI fix: changed consoleRunWorker app.py to require PLEXUS_GRAPHQL_AUTH_MODE=iam from the Lambda environment instead of mutating os.environ at runtime. This keeps the production path strict and prevents IAM auth mode from leaking into unrelated Python tests. Validation: targeted consoleRunWorker pytest passed (16 tests), app_test plus dashboard client regression guard passed (11 tests), rcql over consoleRunWorker Python files passed with no findings, git diff --check passed.",
+      "created_at": "2026-04-28T23:18:58.418304897Z"
     }
   ],
   "created_at": "2026-04-28T22:50:27.437588793Z",
-  "updated_at": "2026-04-28T23:09:29.187441202Z",
+  "updated_at": "2026-04-28T23:18:58.418304897Z",
   "closed_at": null,
   "custom": {}
 }
