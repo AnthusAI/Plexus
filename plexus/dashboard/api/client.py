@@ -59,7 +59,6 @@ import random
 from typing import Optional, Dict, Any, Tuple, List, TYPE_CHECKING, Union
 from dataclasses import dataclass
 from urllib.parse import urlparse
-import boto3
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 from gql.transport.exceptions import (
@@ -67,7 +66,6 @@ from gql.transport.exceptions import (
     TransportQueryError,
     TransportServerError,
 )
-from requests_aws4auth import AWS4Auth
 from queue import Queue, Empty
 from threading import Thread, Event
 import time
@@ -199,10 +197,8 @@ class _BaseAPIClient:
         self._stop_logging = None
         self._log_thread = None
         
-        if not self.api_url:
-            raise ValueError("Missing required API URL")
-        if self.auth_mode != 'iam' and not self.api_key:
-            raise ValueError("Missing required API key for GraphQL API key auth")
+        if not self.api_url or (self.auth_mode != 'iam' and not self.api_key):
+            raise ValueError("Missing required API URL or API key")
 
         # Check environment variable for schema introspection setting
         # Default to False — introspection adds 500ms-2s per execute() call (full schema fetch).
@@ -253,6 +249,14 @@ class _BaseAPIClient:
         auth = None
 
         if self.auth_mode == "iam":
+            try:
+                import boto3
+                from requests_aws4auth import AWS4Auth
+            except ImportError as exc:
+                raise ValueError(
+                    "IAM GraphQL auth mode requires boto3 and requests_aws4auth to be installed"
+                ) from exc
+
             session = boto3.Session(profile_name=os.getenv("AWS_PROFILE"))
             credentials = session.get_credentials()
             if credentials is None:
