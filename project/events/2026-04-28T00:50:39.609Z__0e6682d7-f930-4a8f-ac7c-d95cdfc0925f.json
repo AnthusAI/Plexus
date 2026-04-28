@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0e6682d7-f930-4a8f-ac7c-d95cdfc0925f",
+  "issue_id": "plx-436f9d18-fc3a-48d5-a05e-b94677a8b808",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T00:50:39.609Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Champion rows in the score-version sidebar should show a trailing crown instead of a leading icon, and promotion paths should set ScoreVersion.isFeatured to string true so former champions remain starred.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Feature promoted ScoreVersions and move champion crown icon"
+  }
+}

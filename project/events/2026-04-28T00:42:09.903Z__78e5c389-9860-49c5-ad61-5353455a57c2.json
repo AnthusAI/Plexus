@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "78e5c389-9860-49c5-ad61-5353455a57c2",
+  "issue_id": "plx-631bd46a-59ba-43de-aae2-aba8c5af83d8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T00:42:09.903Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Find ScoreVersion creation paths that fail to persist parentVersionId, especially optimizer-created versions, so rollback lineage can be reconstructed from the DB instead of relying on YAML.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Investigate ScoreVersion parentVersionId gaps"
+  }
+}

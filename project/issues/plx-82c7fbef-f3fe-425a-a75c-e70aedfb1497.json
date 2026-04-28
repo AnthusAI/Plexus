@@ -1,0 +1,25 @@
+{
+  "id": "plx-82c7fbef-f3fe-425a-a75c-e70aedfb1497",
+  "title": "Use standard distribution visualizer for associated datasets",
+  "description": "Replace ad hoc Associated Datasets label-distribution colors with the standard class distribution visualization component and theme-safe colors.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "917c448f-8ee6-4ff6-aa62-1d25829d7692",
+      "author": "ryan",
+      "text": "Replaced the Associated Datasets ad hoc hex-color segmented distribution indicator with the shared ClassDistributionVisualizer so it uses standard chart theme colors and behavior. Validation: dashboard npm run typecheck passed.",
+      "created_at": "2026-04-28T00:56:24.281148Z"
+    }
+  ],
+  "created_at": "2026-04-28T00:54:18.836900Z",
+  "updated_at": "2026-04-28T00:56:24.281148Z",
+  "closed_at": null,
+  "custom": {}
+}
