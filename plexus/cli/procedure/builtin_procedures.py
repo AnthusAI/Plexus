@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -101,6 +102,7 @@ def get_builtin_procedure_spec(procedure_id: str) -> Optional[BuiltinProcedureSp
     return _BUILTINS.get(procedure_id)
 
 
+@lru_cache(maxsize=16)
 def get_builtin_procedure_yaml(procedure_id: str) -> Optional[str]:
     spec = get_builtin_procedure_spec(procedure_id)
     if not spec:
