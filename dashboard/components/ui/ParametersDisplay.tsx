@@ -87,7 +87,7 @@ export function ParametersDisplay({
             if (version) {
               const timestamp = new Date(version.createdAt).toLocaleString()
               const idPrefix = version.id.substring(0, 8)
-              const star = version.isFeatured ? '⭐ ' : ''
+              const star = version.isFeatured === 'true' ? '⭐ ' : ''
               names[param.name] = `${star}${timestamp} (${idPrefix}...)`
             }
           }

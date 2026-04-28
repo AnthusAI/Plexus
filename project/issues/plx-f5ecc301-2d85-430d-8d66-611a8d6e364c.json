@@ -3,7 +3,7 @@
   "title": "Unify procedure and evaluation card actions/icon placement",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-04-27T17:06:56.013494Z",
-  "updated_at": "2026-04-27T17:10:11.875441Z",
-  "closed_at": null,
+  "updated_at": "2026-04-27T17:22:21.574677Z",
+  "closed_at": "2026-04-27T17:22:21.574677Z",
   "custom": {}
 }

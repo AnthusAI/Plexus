@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronRight, Expand, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Star, GitCompareArrows, History, Link as LinkIcon } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Clock, PanelLeftOpen, PanelLeftClose, Edit, Star, GitCompareArrows, History, Link as LinkIcon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -48,6 +48,7 @@ import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import MetricsSummary from '@/components/MetricsSummary'
+import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 
 let amplifyClient: any = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient())
@@ -282,17 +283,6 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   initialSelectedVersionId?: string | null
   onVersionSelect?: (versionId: string) => void
 }
-
-const DATASET_DISTRIBUTION_COLORS = [
-  '#10b981',
-  '#3b82f6',
-  '#f59e0b',
-  '#ef4444',
-  '#8b5cf6',
-  '#14b8a6',
-  '#f97316',
-  '#ec4899',
-]
 
 interface DetailContentProps {
   score: ScoreData
@@ -1526,6 +1516,7 @@ const DetailContent = React.memo(({
                       : []
                     const totalLabels = distributionEntries.reduce((sum, [, count]) => sum + count, 0)
                     const rowCount = dataset.rowCount ?? totalLabels
+                    const distributionData = distributionEntries.map(([label, count]) => ({ label, count }))
                     const distributionText = distributionEntries.length > 0
                       ? distributionEntries.map(([label, count]) => `${label}: ${count}`).join(' · ')
                       : 'Label distribution unavailable'
@@ -1544,21 +1535,12 @@ const DetailContent = React.memo(({
 
                         {distributionEntries.length > 0 && totalLabels > 0 ? (
                           <div className="mt-2">
-                            <div className="h-2 w-full rounded overflow-hidden bg-muted flex">
-                              {distributionEntries.map(([label, count], index) => {
-                                const widthPercent = (count / totalLabels) * 100
-                                return (
-                                  <div
-                                    key={`${dataset.id}-${label}`}
-                                    title={`${label}: ${count}`}
-                                    style={{
-                                      width: `${widthPercent}%`,
-                                      backgroundColor: DATASET_DISTRIBUTION_COLORS[index % DATASET_DISTRIBUTION_COLORS.length],
-                                    }}
-                                  />
-                                )
-                              })}
-                            </div>
+                            <ClassDistributionVisualizer
+                              data={distributionData}
+                              hideHeader
+                              rotateThreshold={10}
+                              hideThreshold={3}
+                            />
                             <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                               <div>Rows: {rowCount ?? 'stats unavailable'}</div>
                               <div className="text-right">{distributionText}</div>
@@ -2640,7 +2622,7 @@ export function ScoreComponent({
           nextToken = page.nextToken;
         }
       } catch (error) {
-        console.error('Error fetching versions:', error);
+        console.error('Error fetching versions:', formatAmplifyError(error));
         if (!cancelled) {
           setVersionsLoadError('Failed to load score versions');
           setHasLoadedFirstVersionPage(true);
@@ -3013,6 +2995,7 @@ export function ScoreComponent({
         guidelines: overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''),
         isFeatured: null,
         note: versionNote || 'Updated score configuration',
+        parentVersionId: selectedVersionId || score.championVersionId || undefined,
         createdAt: now,
         updatedAt: now
       };
@@ -3026,6 +3009,7 @@ export function ScoreComponent({
               configuration
               guidelines
               isFeatured
+              parentVersionId
               note
               createdAt
               updatedAt
@@ -3135,13 +3119,18 @@ export function ScoreComponent({
       });
       assertGraphQLSuccess(updateScoreResponse, 'Update score champion');
 
-      const updateVersionMetadata = async (targetVersionId: string, metadata: Record<string, any>) => {
+      const updateVersionMetadata = async (
+        targetVersionId: string,
+        metadata: Record<string, any>,
+        options?: { isFeatured?: string | null }
+      ) => {
         const updateMetadataResponse = await getAmplifyClient().graphql({
           query: `
             mutation UpdateScoreVersionMetadata($input: UpdateScoreVersionInput!) {
               updateScoreVersion(input: $input) {
                 id
                 metadata
+                isFeatured
               }
             }
           `,
@@ -3149,6 +3138,7 @@ export function ScoreComponent({
             input: {
               id: String(targetVersionId),
               metadata: JSON.stringify(metadata),
+              ...(options?.isFeatured !== undefined ? { isFeatured: options.isFeatured } : {}),
             }
           }
         });
@@ -3164,7 +3154,8 @@ export function ScoreComponent({
         transitionId,
         incoming: true,
       });
-      await updateVersionMetadata(versionId, incomingMetadata);
+      await updateVersionMetadata(versionId, incomingMetadata, { isFeatured: 'true' });
+      await updateVersionMetadata(versionId, incomingMetadata, { isFeatured: 'true' });
 
       if (previousChampionVersionId) {
         const outgoingMetadata = buildChampionMetadata({
@@ -3183,7 +3174,7 @@ export function ScoreComponent({
       setChampionVersionId(versionId);
       setVersions(prev => prev.map(item => {
         if (item.id === versionId) {
-          return { ...item, metadata: incomingMetadata };
+          return { ...item, metadata: incomingMetadata, isFeatured: 'true' };
         }
         if (item.id === previousChampionVersionId) {
           return {
@@ -3204,7 +3195,7 @@ export function ScoreComponent({
       
       // If this version is not already selected, select it
       if (selectedVersionId !== versionId) {
-        handleVersionSelect(version);
+        handleVersionSelect({ ...version, metadata: incomingMetadata, isFeatured: 'true' });
       }
 
       toast.success('Version promoted to champion');
