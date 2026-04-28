@@ -1,0 +1,25 @@
+{
+  "id": "plx-46ed6a21-6139-4869-8644-31fb630a2c37",
+  "title": "Clean ScoreVersion featured flags after schema change",
+  "description": "Remove legacy isFeatured/featuredKey attributes from existing ScoreVersion records so initial pinned/starred state is empty after changing ScoreVersion.isFeatured to optional string.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "47aec57e-b127-4441-b7c7-d438145c6291",
+      "author": "ryan",
+      "text": "Cleaned production ScoreVersion table qh4jgzgazfd2ncwbekhi4woj7a: removed isFeatured, isFeatured#createdAt, featuredKey, and featuredKey#createdAt from 5,061 total touched records after single-record validation. Final scan shows 5,956 ScoreVersion records and zero remaining featured attributes. Pinned GSI query returned zero items for the affected Dosage score.",
+      "created_at": "2026-04-28T00:46:51.047513Z"
+    }
+  ],
+  "created_at": "2026-04-28T00:33:27.537206Z",
+  "updated_at": "2026-04-28T00:47:01.201180Z",
+  "closed_at": "2026-04-28T00:47:01.201180Z",
+  "custom": {}
+}

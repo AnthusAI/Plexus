@@ -872,7 +872,7 @@ class OptimizerResultsService:
                     "note": version.get("note"),
                     "branch": version.get("branch"),
                     "parent_version_id": version.get("parentVersionId"),
-                    "pinned": bool(version.get("isFeatured")),
+                    "pinned": version.get("isFeatured") == "true",
                 }
             )
 

@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "Schema slice implemented: added nullable ScoreVersion.metadata JSON field and one ScoreVersion featured lookup index named byScoreIdAndIsFeaturedAndCreatedAt. No other schema indexes were changed.",
       "created_at": "2026-04-27T18:15:17.524039Z"
+    },
+    {
+      "id": "a4f14d14-0d76-48ae-82fc-5ab5f3f6e331",
+      "author": "ryan",
+      "text": "Schema deployment succeeded. Resumed ScoreVersion management work against deployed featuredKey schema. Verified dashboard typecheck passes; CLI/MCP Python syntax checks pass; filled featuredKey on new version creation paths and MCP/CLI pin updates.",
+      "created_at": "2026-04-27T19:58:01.593844Z"
     }
   ],
   "created_at": "2026-04-27T18:14:23.120850Z",
-  "updated_at": "2026-04-27T18:15:17.524039Z",
+  "updated_at": "2026-04-27T19:58:01.593844Z",
   "closed_at": null,
   "custom": {}
 }

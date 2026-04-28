@@ -303,7 +303,7 @@ export type OptimizerRunView = {
 
 export type ScoreVersionSummary = {
   id: string
-  isFeatured: boolean
+  isFeatured?: string | null
   note?: string
   branch?: string
   parentVersionId?: string

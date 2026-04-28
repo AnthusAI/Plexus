@@ -552,7 +552,7 @@ Then ask the user what they would like to change about the scorecard."""
                     'configuration': yaml_content,
                     'parentVersionId': score_data.get('championVersionId'),
                     'note': 'Updated via API chat command',
-                    'isFeatured': True
+                    'isFeatured': None
                 }
             })
             
@@ -637,4 +637,4 @@ Then ask the user what they would like to change about the scorecard."""
         except Exception as e:
             error_msg = f"Error loading score: {str(e)}"
             self.message_callback(error_msg)
-            return error_msg 
+            return error_msg

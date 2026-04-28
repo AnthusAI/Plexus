@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "32a49d75-3b76-4523-988b-9546632229d4",
+  "issue_id": "plx-46ed6a21-6139-4869-8644-31fb630a2c37",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T00:33:27.537Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Remove legacy isFeatured/featuredKey attributes from existing ScoreVersion records so initial pinned/starred state is empty after changing ScoreVersion.isFeatured to optional string.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Clean ScoreVersion featured flags after schema change"
+  }
+}
