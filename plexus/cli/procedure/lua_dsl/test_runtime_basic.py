@@ -43,6 +43,37 @@ workflow: |
     logger.info("✓ YAML parser test passed")
 
 
+def test_agent_model_override_resolution():
+    """Agent model overrides are resolved from context by agent name."""
+    from plexus.cli.procedure.lua_dsl.runtime import LuaDSLRuntime
+
+    agent_config = {"model": "gpt-5-mini"}
+
+    assert LuaDSLRuntime._resolve_agent_model(
+        "hypothesis_planner",
+        agent_config,
+        {"agent_models": {"hypothesis_planner": "gpt-5.4-mini"}},
+    ) == "gpt-5.4-mini"
+    assert LuaDSLRuntime._resolve_agent_model(
+        "code_editor",
+        agent_config,
+        {},
+    ) == "gpt-5-mini"
+
+
+def test_agent_model_override_rejects_non_object_context():
+    """Invalid override shape fails fast instead of silently ignoring it."""
+    import pytest
+    from plexus.cli.procedure.lua_dsl.runtime import LuaDSLRuntime, LuaDSLRuntimeError
+
+    with pytest.raises(LuaDSLRuntimeError, match="agent_models must be an object"):
+        LuaDSLRuntime._resolve_agent_model(
+            "code_editor",
+            {"model": "gpt-5-mini"},
+            {"agent_models": "code_editor=gpt-5.4-mini"},
+        )
+
+
 def test_lua_sandbox():
     """Test Lua sandbox."""
     from plexus.cli.procedure.lua_dsl.lua_sandbox import LuaSandbox

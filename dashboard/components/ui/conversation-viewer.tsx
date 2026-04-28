@@ -22,6 +22,11 @@ import {
   PromptInput,
   PromptInputBody,
   PromptInputFooter,
+  PromptInputSelect,
+  PromptInputSelectContent,
+  PromptInputSelectItem,
+  PromptInputSelectTrigger,
+  PromptInputSelectValue,
   PromptInputSubmit,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input"
@@ -65,6 +70,19 @@ const EVALUATION_TOOL_NAMES = new Set([
   'plexus_evaluation_info',
 ])
 
+const CONSOLE_CHAT_MODEL_OPTIONS = [
+  { value: 'gpt-5.4', label: 'GPT-5.4' },
+  { value: 'gpt-5.3', label: 'GPT-5.3' },
+  { value: 'gpt-5.2', label: 'GPT-5.2' },
+  { value: 'gpt-5.1', label: 'GPT-5.1' },
+  { value: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
+  { value: 'gpt-5-mini', label: 'GPT-5 mini' },
+  { value: 'gpt-5.4-nano', label: 'GPT-5.4 nano' },
+  { value: 'gpt-5-nano', label: 'GPT-5 nano' },
+] as const
+
+const DEFAULT_CONSOLE_CHAT_MODEL = 'gpt-5.4-mini'
+
 // Types for the conversation data
 export interface ChatMessage {
   id: string
@@ -101,11 +119,20 @@ export interface ChatSession {
   messageCount?: number
 }
 
-type ConversationRow = {
+type MessageConversationRow = {
   id: string
   from: 'assistant' | 'user'
   message: ChatMessage
+  kind: 'message'
 }
+
+type ThinkingConversationRow = {
+  id: string
+  from: 'assistant'
+  kind: 'thinking'
+}
+
+type ConversationRow = MessageConversationRow | ThinkingConversationRow
 
 type PendingAssistantState = {
   requestedAt: string
@@ -783,12 +810,13 @@ const shouldShowMessageTypeBadge = (message: ChatMessage): boolean => {
   ].includes(message.humanInteraction || '')
 }
 
-const getRowFromMessage = (message: ChatMessage): ConversationRow => {
+const getRowFromMessage = (message: ChatMessage): MessageConversationRow => {
   if (message.role === 'USER' || message.humanInteraction === 'RESPONSE') {
     return {
       id: message.id,
       from: 'user',
       message,
+      kind: 'message',
     }
   }
 
@@ -796,6 +824,7 @@ const getRowFromMessage = (message: ChatMessage): ConversationRow => {
     id: message.id,
     from: 'assistant',
     message,
+    kind: 'message',
   }
 }
 
@@ -855,7 +884,7 @@ const formatUsd = (value: number | undefined): string => `$${(value || 0).toFixe
 
 // Props passed into each virtualized row
 interface MessageRowProps {
-  row: ConversationRow
+  row: MessageConversationRow
   enableHitlActions: boolean
   responseParentIds: Set<string>
   submittedMessageIds: Set<string>
@@ -981,7 +1010,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                 </ToolContent>
               </Tool>
               {costMetadata && costSummary && hasCostSummary && (
-                <details className="group rounded-md bg-card/60 text-xs">
+                <details className="group inline-block w-64 max-w-full rounded-md bg-card/60 text-xs">
                   <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
                     <span className="flex items-center justify-between gap-2">
                       <span>{`${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costSummary.total_usd)}`}</span>
@@ -1019,10 +1048,10 @@ const MemoizedMessageRow = React.memo(function MessageRow({
               )}
             </div>
           ) : (
-            <div className="text-sm space-y-2">
+            <div className="text-base space-y-2">
               <CollapsibleText content={message.content} />
               {costMetadata && costSummary && hasCostSummary && (
-                <details className="group rounded-md bg-card/60 text-xs">
+                <details className="group inline-block w-64 max-w-full rounded-md bg-card/60 text-xs">
                   <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
                     <span className="flex items-center justify-between gap-2">
                       <span>{`${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costSummary.total_usd)}`}</span>
@@ -1240,6 +1269,7 @@ function ConversationViewer({
   const [submittedMessageIds, setSubmittedMessageIds] = useState<Set<string>>(new Set())
   const [hitlSubmitErrors, setHitlSubmitErrors] = useState<Record<string, string>>({})
   const [promptValue, setPromptValue] = useState("")
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_CONSOLE_CHAT_MODEL)
   const [isPromptSubmitting, setIsPromptSubmitting] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [pendingAssistantBySession, setPendingAssistantBySession] = useState<Record<string, PendingAssistantState>>({})
@@ -1247,6 +1277,7 @@ function ConversationViewer({
   const promptSubmitLockRef = React.useRef(false)
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const [atBottom, setAtBottom] = useState(true)
+  const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
   const authFailureReportedRef = React.useRef(false)
 
   const markAuthUnavailable = React.useCallback((error: unknown, source: string): boolean => {
@@ -1338,6 +1369,7 @@ function ConversationViewer({
     requestedAt: string,
     triggerMessageId?: string,
   ) => {
+    setAutoFollowEnabled(true)
     const baselineAssistantCreatedAt = getLatestAssistantCreatedAtForSession(messages, sessionId)
     setPendingAssistantBySession((prev) => ({
       ...prev,
@@ -1448,6 +1480,8 @@ function ConversationViewer({
   const getConsoleResponseTarget = React.useCallback(() => (
     process.env.NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET?.trim() || 'cloud'
   ), [])
+
+  const getConsoleSelectedModel = React.useCallback(() => selectedModel, [selectedModel])
 
   const submitHitlResponse = async (
     pendingMessage: ChatMessage,
@@ -2091,6 +2125,49 @@ function ConversationViewer({
   }, [pendingAssistantState, selectedSession, sortedMessages])
   const isPromptDisabled = !selectedSession || isAuthUnavailable
   const conversationRows = sortedMessages.map(getRowFromMessage)
+  const renderRows = React.useMemo<ConversationRow[]>(() => {
+    if (!showThinkingPlaceholder || !selectedSessionId) {
+      return conversationRows
+    }
+    return [
+      ...conversationRows,
+      {
+        id: `thinking-${selectedSessionId}`,
+        from: 'assistant',
+        kind: 'thinking',
+      },
+    ]
+  }, [conversationRows, selectedSessionId, showThinkingPlaceholder])
+  const hasStreamingAssistantTail = React.useMemo(() => {
+    const lastMessage = sortedMessages[sortedMessages.length - 1]
+    if (!lastMessage || !isAssistantChatMessage(lastMessage)) {
+      return false
+    }
+    const streamingState = (lastMessage.metadata as { streaming?: { state?: string } } | undefined)?.streaming?.state
+    if (!streamingState) {
+      return false
+    }
+    return streamingState !== 'complete'
+  }, [sortedMessages])
+  const latestConversationRenderSignature = React.useMemo(() => {
+    const lastMessage = sortedMessages[sortedMessages.length - 1]
+    if (!lastMessage) {
+      return `${selectedSessionId || 'none'}:empty:${showThinkingPlaceholder ? 'thinking' : 'idle'}`
+    }
+    return [
+      selectedSessionId || 'none',
+      sortedMessages.length,
+      lastMessage.id,
+      lastMessage.createdAt,
+      lastMessage.content.length,
+      lastMessage.responseStatus || '',
+      showThinkingPlaceholder ? 'thinking' : 'idle',
+    ].join(':')
+  }, [selectedSessionId, showThinkingPlaceholder, sortedMessages])
+  const shouldForceFollow = autoFollowEnabled
+    || showThinkingPlaceholder
+    || Boolean(pendingAssistantState)
+    || hasStreamingAssistantTail
   const pendingMessageForPrompt = React.useMemo(
     () => [...sortedMessages].reverse().find(message => unresolvedPendingMessageIds.has(message.id)) || null,
     [sortedMessages, unresolvedPendingMessageIds]
@@ -2122,6 +2199,62 @@ function ConversationViewer({
     [dispatchProcedureId, effectiveId, messages, selectedSessionProcedureId, sessions]
   )
   const canCreateSession = Boolean(fallbackSessionAccountId && fallbackSessionProcedureId)
+
+  const handleAtBottomStateChange = React.useCallback((isNowAtBottom: boolean) => {
+    setAtBottom(isNowAtBottom)
+    if (isNowAtBottom) {
+      setAutoFollowEnabled(true)
+      return
+    }
+    if (showThinkingPlaceholder || Boolean(pendingAssistantState) || hasStreamingAssistantTail) {
+      return
+    }
+    setAutoFollowEnabled(false)
+  }, [hasStreamingAssistantTail, pendingAssistantState, showThinkingPlaceholder])
+
+  useEffect(() => {
+    setAutoFollowEnabled(true)
+    setAtBottom(true)
+  }, [selectedSessionId])
+
+  useEffect(() => {
+    if (!shouldForceFollow) {
+      return
+    }
+
+    if (!selectedSessionId) {
+      return
+    }
+
+    if (!latestConversationRenderSignature) {
+      return
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" })
+    })
+
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [latestConversationRenderSignature, selectedSessionId, shouldForceFollow])
+
+  const previousThinkingStateRef = React.useRef(false)
+  useEffect(() => {
+    const transitionedFromThinkingToMessage = previousThinkingStateRef.current && !showThinkingPlaceholder
+    previousThinkingStateRef.current = showThinkingPlaceholder
+
+    if (!transitionedFromThinkingToMessage || !shouldForceFollow || !selectedSessionId) {
+      return
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" })
+    })
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [selectedSessionId, shouldForceFollow, showThinkingPlaceholder])
 
   const createNewSession = React.useCallback(async () => {
     if (!fallbackSessionAccountId || !fallbackSessionProcedureId) {
@@ -2237,6 +2370,7 @@ function ConversationViewer({
           setIsPromptSubmitting(true)
           try {
             await submitHitlResponse(pendingMessageForPrompt, 'submit', nextValue)
+            setAutoFollowEnabled(true)
             setPromptValue('')
           } finally {
             setIsPromptSubmitting(false)
@@ -2268,6 +2402,7 @@ function ConversationViewer({
         }
 
         setIsPromptSubmitting(true)
+        setAutoFollowEnabled(true)
         setInternalMessages(prev => [...prev, optimisticMessage])
         setInternalSessions(prev => prev.map(session => (
           session.id === targetSessionId
@@ -2281,6 +2416,7 @@ function ConversationViewer({
           const dispatchMessageText = nextValue.length > 4000
             ? `${nextValue.slice(0, 4000)}…`
             : nextValue
+          const model = getConsoleSelectedModel()
           const clientHistorySnapshot = buildClientHistorySnapshot(
             messages,
             targetSessionId,
@@ -2297,10 +2433,14 @@ function ConversationViewer({
             metadata: JSON.stringify({
               source: 'console-prompt-input',
               sent_at: nowIso,
+              model: {
+                id: model,
+              },
               instrumentation: {
                 client_send_started_at: clientSendStartedAt,
                 client_prompt_length_chars: nextValue.length,
                 client_user_message_text: dispatchMessageText,
+                client_selected_model: model,
                 client_history_snapshot: clientHistorySnapshot,
               },
             }),
@@ -2373,6 +2513,7 @@ function ConversationViewer({
       createNewSession,
       clearPendingAssistant,
       getConsoleResponseTarget,
+      getConsoleSelectedModel,
       markAuthUnavailable,
       markPendingAssistant,
       submitHitlResponse,
@@ -2560,7 +2701,7 @@ function ConversationViewer({
                   Create New Session
                 </Button>
               </div>
-            ) : conversationRows.length === 0 && !showThinkingPlaceholder ? (
+            ) : renderRows.length === 0 ? (
               <ConversationEmptyState
                 title="No messages in this session"
                 description="Run the console REPL or send a message to start this session."
@@ -2570,45 +2711,47 @@ function ConversationViewer({
               <Virtuoso
                 ref={virtuosoRef}
                 className="h-full"
-                data={conversationRows}
-                followOutput="smooth"
-                initialTopMostItemIndex={Math.max(0, conversationRows.length - 1)}
-                atBottomStateChange={setAtBottom}
+                data={renderRows}
+                followOutput={(isAtBottom) => (shouldForceFollow || isAtBottom ? "auto" : false)}
+                initialTopMostItemIndex={Math.max(0, renderRows.length - 1)}
+                atBottomStateChange={handleAtBottomStateChange}
                 atBottomThreshold={50}
                 overscan={600}
                 increaseViewportBy={{ top: 400, bottom: 400 }}
                 itemContent={(_index, row) => (
-                  <div className="px-3 py-2">
-                    <MemoizedMessageRow
-                      row={row}
-                      enableHitlActions={enableHitlActions}
-                      responseParentIds={responseParentIds}
-                      submittedMessageIds={submittedMessageIds}
-                      submittingMessageIds={submittingMessageIds}
-                      hitlTextByMessage={hitlTextByMessage}
-                      hitlSubmitErrors={hitlSubmitErrors}
-                      setHitlTextByMessage={setHitlTextByMessage}
-                      submitHitlResponse={submitHitlResponse}
-                    />
-                  </div>
-                )}
-                components={{
-                  Footer: showThinkingPlaceholder ? () => (
-                    <div className="px-3 py-2">
+                  row.kind === 'thinking' ? (
+                    <div className="px-3 py-2 pb-8">
                       <Message
                         from="assistant"
-                        data-message-id={`thinking-${selectedSessionId}`}
+                        data-message-id={row.id}
                         data-from="assistant"
                         className="max-w-full"
                       >
                         <div className="flex items-start">
                           <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
-                            <Shimmer className="text-sm">Thinking</Shimmer>
+                            <Shimmer className="text-base">Thinking</Shimmer>
                           </MessageContent>
                         </div>
                       </Message>
                     </div>
-                  ) : undefined,
+                  ) : (
+                    <div className="px-3 py-2">
+                      <MemoizedMessageRow
+                        row={row}
+                        enableHitlActions={enableHitlActions}
+                        responseParentIds={responseParentIds}
+                        submittedMessageIds={submittedMessageIds}
+                        submittingMessageIds={submittingMessageIds}
+                        hitlTextByMessage={hitlTextByMessage}
+                        hitlSubmitErrors={hitlSubmitErrors}
+                        setHitlTextByMessage={setHitlTextByMessage}
+                        submitHitlResponse={submitHitlResponse}
+                      />
+                    </div>
+                  )
+                )}
+                components={{
+                  Footer: () => (!showThinkingPlaceholder ? <div aria-hidden className="h-8" /> : null),
                 }}
               />
             )}
@@ -2637,7 +2780,23 @@ function ConversationViewer({
                   }
                 />
             </PromptInputBody>
-            <PromptInputFooter className="justify-end">
+            <PromptInputFooter className="justify-between gap-2">
+              <PromptInputSelect
+                value={selectedModel}
+                onValueChange={setSelectedModel}
+                disabled={isPromptDisabled || isPromptSubmitting}
+              >
+                <PromptInputSelectTrigger className="h-8 w-40 text-xs">
+                  <PromptInputSelectValue placeholder="Model" />
+                </PromptInputSelectTrigger>
+                <PromptInputSelectContent>
+                  {CONSOLE_CHAT_MODEL_OPTIONS.map((option) => (
+                    <PromptInputSelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </PromptInputSelectItem>
+                  ))}
+                </PromptInputSelectContent>
+              </PromptInputSelect>
               <PromptInputSubmit disabled={isPromptDisabled || !promptValue.trim() || isPromptSubmitting} />
             </PromptInputFooter>
           </PromptInput>

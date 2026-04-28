@@ -102,7 +102,7 @@ type CandidateVersionSummary = {
 
 type WorkbenchScoreVersion = {
   id: string
-  isFeatured: boolean
+  isFeatured?: string | null
   note?: string
   branch?: string
   parentVersionId?: string
@@ -155,7 +155,7 @@ function aggregateCandidatesFromRuns(
     const version = versionsById.get(versionId)
     const existing: CandidateVersionSummary = byVersionId.get(versionId) ?? {
       versionId,
-      pinned: Boolean(version?.isFeatured),
+      pinned: version?.isFeatured === 'true',
       isChampion: championVersionId === versionId,
       note: version?.note ?? null,
       branch: (version as any)?.branch ?? null,

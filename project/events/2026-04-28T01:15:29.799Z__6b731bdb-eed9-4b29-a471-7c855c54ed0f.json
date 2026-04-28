@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6b731bdb-eed9-4b29-a471-7c855c54ed0f",
+  "issue_id": "plx-986ac997-9e5c-41c9-867c-991522fa1413",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T01:15:29.799Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "In the scorecards dashboard, the selected score version shows evaluations but not associated procedures. Investigate and fix version-scoped procedure matching/loading.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix version-scoped score procedure list"
+  }
+}

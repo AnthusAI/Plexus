@@ -5,14 +5,13 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import { StartingPosition } from "aws-cdk-lib/aws-lambda";
 import { DynamoEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import { ITable } from "aws-cdk-lib/aws-dynamodb";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
 
 interface ConsoleChatResponderStackProps extends NestedStackProps {
   chatMessageTable: ITable;
   plexusApiUrl?: string;
-  plexusApiKey?: string;
   workerImageUri?: string;
-  anthropicApiKey?: string;
   environmentName?: string;
 }
 
@@ -67,6 +66,13 @@ export class ConsoleChatResponderStack extends NestedStack {
     const workerImage = parseEcrImageUri(
       props.workerImageUri || process.env.CONSOLE_WORKER_IMAGE_URI || "",
     );
+    const environmentName = props.environmentName || "staging";
+    const configSecretName = `plexus/${environmentName}/config`;
+    const configSecret = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      "PlexusConfigSecret",
+      configSecretName,
+    );
     const workerImageRepository = ecr.Repository.fromRepositoryName(
       this,
       "ConsoleRunWorkerImageRepository",
@@ -80,13 +86,15 @@ export class ConsoleChatResponderStack extends NestedStack {
       memorySize: 2048,
       environment: {
         PLEXUS_API_URL: props.plexusApiUrl || process.env.PLEXUS_API_URL || "",
-        PLEXUS_API_KEY: props.plexusApiKey || process.env.PLEXUS_API_KEY || "",
         PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT: "false",
+        PLEXUS_GRAPHQL_AUTH_MODE: "iam",
+        PLEXUS_CONFIG_SECRET_NAME: configSecretName,
         PYTHONUNBUFFERED: "1",
-        ANTHROPIC_API_KEY: props.anthropicApiKey || process.env.ANTHROPIC_API_KEY || "",
         CONSOLE_RESPONSE_TARGET: "cloud",
       },
     });
+
+    configSecret.grantRead(this.responderFunction);
 
     this.responderFunction.addEventSource(new DynamoEventSource(props.chatMessageTable, {
       startingPosition: StartingPosition.LATEST,

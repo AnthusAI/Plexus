@@ -1164,6 +1164,7 @@ async def _run_shared_feedback_root_cause_orchestration(
     scorecard_id: str,
     score_id: str,
     score_version_id: Optional[str],
+    score_identifier: Optional[str] = None,
     max_items: int,
     sampling_mode: str,
     sample_seed: Optional[int],
@@ -1193,6 +1194,7 @@ async def _run_shared_feedback_root_cause_orchestration(
         sampling_mode=sampling_mode,
         sample_seed=sample_seed,
         max_category_summary_items=max_category_summary_items,
+        subset_of_score_names=[score_identifier] if score_identifier else None,
     )
     # FeedbackEvaluation constructor does not accept score_version_id directly.
     # Set it on the instance for RCA prompt/context usage.
@@ -3112,6 +3114,11 @@ def accuracy(
                             scorecard_id=scorecard_id,
                             score_id=score_id_for_eval,
                             score_version_id=score_version_id_for_eval,
+                            score_identifier=(
+                                subset_of_score_names[0]
+                                if subset_of_score_names and len(subset_of_score_names) == 1
+                                else None
+                            ),
                             max_items=len(labeled_samples_data),
                             sampling_mode="newest",
                             sample_seed=None,
@@ -4567,6 +4574,7 @@ def feedback(
                             scorecard_id=scorecard_id,
                             score_id=score_id,
                             score_version_id=version,
+                            score_identifier=score_name_for_dataset,
                             max_items=max_items,
                             sampling_mode=normalized_sampling_mode,
                             sample_seed=sample_seed,

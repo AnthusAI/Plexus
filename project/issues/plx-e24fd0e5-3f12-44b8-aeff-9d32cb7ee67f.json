@@ -18,14 +18,14 @@
       "created_at": "2026-04-27T18:15:17.524039Z"
     },
     {
-      "id": "43bc220d-2655-41dd-8fde-68eaf8a035c4",
+      "id": "a4f14d14-0d76-48ae-82fc-5ab5f3f6e331",
       "author": "ryan",
-      "text": "Hotfix: CI showed Amplify Gen2 does not allow boolean isFeatured as an index sort key. Switched the new featured-version GSI to use a materialized string featuredKey while preserving isFeatured as the product flag. Local dashboard typecheck passes in the hotfix worktree.",
-      "created_at": "2026-04-27T19:06:56.148764Z"
+      "text": "Schema deployment succeeded. Resumed ScoreVersion management work against deployed featuredKey schema. Verified dashboard typecheck passes; CLI/MCP Python syntax checks pass; filled featuredKey on new version creation paths and MCP/CLI pin updates.",
+      "created_at": "2026-04-27T19:58:01.593844Z"
     }
   ],
   "created_at": "2026-04-27T18:14:23.120850Z",
-  "updated_at": "2026-04-27T19:06:56.148764Z",
+  "updated_at": "2026-04-27T19:58:01.593844Z",
   "closed_at": null,
   "custom": {}
 }

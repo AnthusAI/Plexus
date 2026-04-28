@@ -1,0 +1,25 @@
+{
+  "id": "plx-f87c86e2-f5a5-417c-a520-ae2957f6b459",
+  "title": "Stabilize production infrastructure pipeline deployments",
+  "description": "",
+  "type": "epic",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2b205fdf-e22e-4077-82b6-fe38ef5de848",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3ff33531-dca7-4ec5-a264-b13320daafd3",
+      "author": "derek",
+      "text": "Epic complete: production infrastructure pipeline stabilization work for this incident is finished and deployed to main via PR #237.",
+      "created_at": "2026-04-28T22:27:42.445841651Z"
+    }
+  ],
+  "created_at": "2026-04-28T17:43:22.066018532Z",
+  "updated_at": "2026-04-28T22:27:42.457700959Z",
+  "closed_at": "2026-04-28T22:27:42.457700959Z",
+  "custom": {}
+}

@@ -176,12 +176,12 @@ class Evaluation:
         scorecard: Scorecard,
         labeled_samples_filename: str = None,
         labeled_samples: list = None,
-        number_of_texts_to_sample = 100,
-        sampling_method = 'random',
-        random_seed = None,
-        session_ids_to_sample = None,
-        subset_of_score_names = None,
-        experiment_label = None,
+        number_of_texts_to_sample=100,
+        sampling_method='random',
+        random_seed=None,
+        session_ids_to_sample=None,
+        subset_of_score_names=None,
+        experiment_label=None,
         max_mismatches_to_report=5,
         account_key: str = None,
         score_id: str = None,
@@ -359,6 +359,99 @@ class Evaluation:
             return [score_name for score_name in self.subset_of_score_names if score_name in all_score_names_to_process]
         else:
             return all_score_names_to_process
+
+    async def _rubric_memory_context_for_misclassification(
+        self,
+        *,
+        primary_input_text: str,
+        predicted_value: str,
+        score_explanation: str,
+        correct_value: str,
+        feedback_comment: str,
+        topic_hint: str,
+    ) -> dict:
+        """Build optional rubric-memory citation context for RCA item analysis."""
+        score_name = None
+        if self.subset_of_score_names and len(self.subset_of_score_names) == 1:
+            score_name = self.subset_of_score_names[0]
+        if not score_name:
+            try:
+                score_names = self.score_names_to_process()
+                if len(score_names) == 1:
+                    score_name = score_names[0]
+            except Exception as exc:
+                self.logger.warning("Could not resolve score name for rubric-memory RCA context: %s", exc)
+        if not score_name or not getattr(self, "score_id", None):
+            return {
+                "markdown_context": "",
+                "citation_index": [],
+                "diagnostics": [
+                    {
+                        "code": "rubric_memory_unavailable",
+                        "message": "Could not resolve single score name or score ID for RCA rubric-memory context.",
+                        "failed_stage": "rubric_memory_resolution",
+                        "exception_type": "",
+                    }
+                ],
+            }
+        try:
+            from plexus.rubric_memory import RubricMemoryContextProvider
+
+            provider = getattr(self, "_rubric_memory_context_provider", None)
+            if provider is None:
+                provider = RubricMemoryContextProvider(api_client=self.dashboard_client)
+                self._rubric_memory_context_provider = provider
+                status = provider.local_corpus_status(
+                    scorecard_identifier=self.scorecard_name,
+                    score_identifier=score_name,
+                )
+                self._rubric_memory_available_for_rca = status["available"]
+                if not status["available"]:
+                    self.logger.warning(
+                        "Rubric memory not available for RCA; missing canonical folders: %s",
+                        ", ".join(
+                            root["path"] for root in status["roots"] if not root["exists"]
+                        ),
+                    )
+            if not getattr(self, "_rubric_memory_available_for_rca", False):
+                return {
+                    "markdown_context": "",
+                    "citation_index": [],
+                    "diagnostics": [
+                        {
+                            "code": "rubric_memory_unavailable",
+                            "message": "Canonical rubric-memory corpus is unavailable for this score.",
+                            "failed_stage": "rubric_memory_resolution",
+                            "exception_type": "",
+                        }
+                    ],
+                }
+            context = await provider.retrieve_for_score_item(
+                scorecard_identifier=self.scorecard_name,
+                score_identifier=score_name,
+                score_id=self.score_id,
+                transcript_text=primary_input_text,
+                model_value=predicted_value,
+                model_explanation=score_explanation,
+                feedback_value=correct_value,
+                feedback_comment=feedback_comment,
+                topic_hint=topic_hint,
+            )
+            return context.model_dump(mode="json")
+        except Exception as exc:
+            self.logger.warning("Could not build rubric-memory RCA context: %s", exc)
+            return {
+                "markdown_context": "",
+                "citation_index": [],
+                "diagnostics": [
+                    {
+                        "code": "rubric_memory_unavailable",
+                        "message": str(exc),
+                        "failed_stage": "rubric_memory_retrieval",
+                        "exception_type": exc.__class__.__name__,
+                    }
+                ],
+            }
 
     def time_execution(func):
         async def async_wrapper(self, *args, **kwargs):
@@ -849,11 +942,11 @@ class Evaluation:
 
         if primary_score_name_for_cm and primary_score_name_for_cm in confusion_matrices:
             matrix_data = confusion_matrices[primary_score_name_for_cm]
-        elif confusion_matrices: # Fallback to the first matrix if primary not found or not set
+        elif confusion_matrices:  # Fallback to the first matrix if primary not found or not set
             first_score_name = next(iter(confusion_matrices))
             matrix_data = confusion_matrices[first_score_name]
         else:
-            matrix_data = None # No matrices calculated
+            matrix_data = None  # No matrices calculated
 
         if matrix_data:
             labels = sorted(list(matrix_data['labels']))
@@ -878,7 +971,7 @@ class Evaluation:
             self.logging.warning("No confusion matrix data generated, creating default structure.")
             primary_confusion_matrix_dict = {
                 "matrix": [[0, 0], [0, 0]],
-                "labels": ['yes', 'no'] # Default labels
+                "labels": ['yes', 'no']  # Default labels
             }
 
         # Format distributions for API - now including score names in the distribution
@@ -935,7 +1028,7 @@ class Evaluation:
             "precision": precision_value,
             "alignment": alignment,  # Changed from sensitivity to alignment
             "recall": recall_value,        # Changed from specificity to recall
-            "confusionMatrix": primary_confusion_matrix_dict, # Use the new single dict
+            "confusionMatrix": primary_confusion_matrix_dict,  # Use the new single dict
             "predictedClassDistribution": predicted_label_distributions,
             "datasetClassDistribution": actual_label_distributions,
             # "confusion_matrices": formatted_confusion_matrices # Removed old key
@@ -1903,19 +1996,19 @@ class Evaluation:
         x = np.arange(len(unique_labels))
         width = 0.35
         
-        ax1.bar(x - width/2, true_counts, width, label='Ground Truth', color=(0.012, 0.635, 0.996))
-        ax1.bar(x + width/2, pred_counts, width, label='Predicted', color=(0.815, 0.2, 0.51))
+        ax1.bar(x - width / 2, true_counts, width, label='Ground Truth', color=(0.012, 0.635, 0.996))
+        ax1.bar(x + width / 2, pred_counts, width, label='Predicted', color=(0.815, 0.2, 0.51))
         ax1.set_ylabel('Count', fontsize=10)
         ax1.set_title(f'Label Distribution for {question}', fontsize=12)
         ax1.legend(fontsize=10)
         ax1.tick_params(axis='both', which='major', labelsize=8)
         
         incorrect = [1 - acc for acc in accuracies]
-        ax2.bar(x, incorrect, width*2, bottom=accuracies, color='#d33', label='Incorrect')
-        ax2.bar(x, accuracies, width*2, color='#393', label='Correct')
+        ax2.bar(x, incorrect, width * 2, bottom=accuracies, color='#d33', label='Incorrect')
+        ax2.bar(x, accuracies, width * 2, color='#393', label='Correct')
         ax2.set_ylabel('Accuracy (%)', fontsize=10)
         ax2.set_ylim(0, 1)
-        ax2.set_yticklabels([f'{int(x*100)}%' for x in ax2.get_yticks()], fontsize=8)
+        ax2.set_yticklabels([f'{int(x * 100)}%' for x in ax2.get_yticks()], fontsize=8)
         ax2.set_xlabel('Labels (Based on Ground Truth)', fontsize=10)
         ax2.set_title(f'Accuracy by Label for {question}', fontsize=12)
         ax2.legend(fontsize=10)
@@ -2314,7 +2407,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                             
                         # Determine label score name from config or default to current score name
                         label_score_name = score_config.get('label_score_name', current_score_name)
-                        score_name = current_score_name # Use the name from the result parameters
+                        score_name = current_score_name  # Use the name from the result parameters
                         # --- End Refactor ---
 
                         # Skip if this is a dependency score and not our primary score
@@ -2438,7 +2531,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                             error=str(e),
                             parameters=Score.Parameters(
                                 name=score_identifier,
-                                scorecard=self.scorecard_name # Use string name here too
+                                scorecard=self.scorecard_name  # Use string name here too
                             )
                         )
                         # Add the error result to filtered_results so it's logged/counted
@@ -2461,11 +2554,11 @@ Total cost:       ${expenses['total_cost']:.6f}
                             f"{underlying_error}"
                         )
 
-                if has_processed_scores and score_name: # Check if we are processing a specific score
+                if has_processed_scores and score_name:  # Check if we are processing a specific score
                     self.processed_items_by_score[score_name] = self.processed_items_by_score.get(score_name, 0) + 1
                     self.processed_items = sum(self.processed_items_by_score.values())
 
-                return result # Return the processed result dict
+                return result  # Return the processed result dict
 
             except (Timeout, RequestException, asyncio.TimeoutError) as e:
                 if attempt == max_attempts - 1:  # Last attempt
@@ -3297,6 +3390,10 @@ class FeedbackEvaluation(Evaluation):
                 if k != "item_classifications_all"
             }
 
+        raw_item_failures = root_cause_payload.get("rca_item_failures")
+        if isinstance(raw_item_failures, list):
+            compact_payload["rca_item_failures_total"] = len(raw_item_failures)
+
         return compact_payload
 
     def _persist_root_cause_for_parameters(self, root_cause_payload: dict) -> dict:
@@ -3836,9 +3933,12 @@ class FeedbackEvaluation(Evaluation):
                 build_misclassification_classification_contract,
                 build_misclassification_analysis_summary,
                 build_misclassification_item_context,
+                build_rca_analysis_failure_classification,
+                build_rca_analysis_failure_details,
                 classify_misclassification_item,
                 extract_misclassification_evidence_flags,
                 explain_misclassification_item_classification,
+                rubric_memory_state_from_item_context,
                 resolve_final_output_classes_from_yaml_text,
             )
 
@@ -3953,6 +4053,7 @@ class FeedbackEvaluation(Evaluation):
             texts = []
             canonical_item_classifications = []
             canonical_item_by_feedback_id = {}
+            rca_item_failures = []
             item_context_cache = {}
             if dashboard_client:
                 from plexus.dashboard.api.models.item import Item as DashboardItem
@@ -4015,6 +4116,7 @@ class FeedbackEvaluation(Evaluation):
             async def _process_single_candidate(fi):
                 """Process one candidate item: build context, extract evidence, classify, explain."""
                 async with rca_sem:
+                    item_failure_diagnostics = []
                     ts = fi.editedAt or getattr(fi, 'updatedAt', None) or getattr(fi, 'createdAt', None)
                     ts_str = (
                         (ts if ts.tzinfo else ts.replace(tzinfo=_tz.utc)).isoformat()
@@ -4085,6 +4187,42 @@ class FeedbackEvaluation(Evaluation):
                                 fi.itemId, _proc_exc,
                             )
 
+                    rubric_memory_context = {}
+                    try:
+                        rubric_memory_context = await self._rubric_memory_context_for_misclassification(
+                            primary_input_text=primary_input_text,
+                            predicted_value=metadata.get("initial_answer_value", "") or "",
+                            score_explanation=metadata.get("score_explanation", "") or "",
+                            correct_value=metadata.get("final_answer_value", "") or "",
+                            feedback_comment=metadata.get("edit_comment", ""),
+                            topic_hint="Evaluation RCA misclassification evidence",
+                        )
+                    except Exception as exc:
+                        failure = build_rca_analysis_failure_details("rubric_memory_retrieval", exc)
+                        failure.update({
+                            "feedback_item_id": fi.id,
+                            "item_id": fi.itemId or "",
+                        })
+                        item_failure_diagnostics.append(failure)
+                        self.logger.warning(
+                            "RCA rubric-memory retrieval failed for feedback_item_id=%s item_id=%s: %s: %s",
+                            fi.id,
+                            fi.itemId or "",
+                            failure["exception_type"],
+                            failure["message"],
+                        )
+                        rubric_memory_context = {
+                            "markdown_context": "",
+                            "citation_index": [],
+                            "diagnostics": [
+                                {
+                                    "code": "rubric_memory_unavailable",
+                                    "message": failure["message"],
+                                    "failed_stage": failure["failed_stage"],
+                                    "exception_type": failure["exception_type"],
+                                }
+                            ],
+                        }
                     misclassification_item_context = build_misclassification_item_context(
                         feedback_item_id=fi.id,
                         item_id=fi.itemId or "",
@@ -4109,29 +4247,111 @@ class FeedbackEvaluation(Evaluation):
                         primary_input_fetch_error=primary_input_fetch_error,
                         processed_input_text=processed_input_text,
                         processors_config_summary=processors_config_summary,
+                        rubric_memory_context=rubric_memory_context,
                     )
-                    misclassification_evidence_flags = await asyncio.to_thread(
-                        extract_misclassification_evidence_flags,
-                        item_context=misclassification_item_context,
-                    )
-                    misclassification_classification = classify_misclassification_item(
-                        misclassification_item_context,
-                        misclassification_evidence_flags,
-                    )
-                    triage_explainer = await asyncio.to_thread(
-                        explain_misclassification_item_classification,
-                        item_context=misclassification_item_context,
-                        classification=misclassification_classification,
-                    )
-                    misclassification_classification["rationale_paragraph"] = triage_explainer.get(
-                        "rationale_paragraph", ""
-                    )
-                    misclassification_classification["evidence_quote"] = triage_explainer.get(
-                        "evidence_quote", ""
-                    )
-                    misclassification_classification["config_fixability"] = triage_explainer.get(
-                        "config_fixability", ""
-                    )
+                    rca_failure = None
+                    try:
+                        misclassification_evidence_flags = await asyncio.to_thread(
+                            extract_misclassification_evidence_flags,
+                            item_context=misclassification_item_context,
+                        )
+                    except Exception as exc:
+                        rca_failure = build_rca_analysis_failure_details("evidence_flag_extraction", exc)
+                        misclassification_evidence_flags = {}
+                        misclassification_classification = build_rca_analysis_failure_classification(
+                            item_context=misclassification_item_context,
+                            stage="evidence_flag_extraction",
+                            exc=exc,
+                        )
+                    else:
+                        try:
+                            misclassification_classification = classify_misclassification_item(
+                                misclassification_item_context,
+                                misclassification_evidence_flags,
+                            )
+                        except Exception as exc:
+                            rca_failure = build_rca_analysis_failure_details("deterministic_classification", exc)
+                            misclassification_classification = build_rca_analysis_failure_classification(
+                                item_context=misclassification_item_context,
+                                stage="deterministic_classification",
+                                exc=exc,
+                                evidence_flags=misclassification_evidence_flags,
+                            )
+
+                    if rca_failure is None:
+                        try:
+                            triage_explainer = await asyncio.to_thread(
+                                explain_misclassification_item_classification,
+                                item_context=misclassification_item_context,
+                                classification=misclassification_classification,
+                            )
+                        except Exception as exc:
+                            rca_failure = build_rca_analysis_failure_details("explainer", exc)
+                            triage_explainer = {
+                                "rationale_paragraph": (
+                                    misclassification_classification.get("rationale")
+                                    or "RCA explainer failed; deterministic classification was preserved."
+                                ),
+                                "evidence_quote": (
+                                    f"explainer: {rca_failure['exception_type']}: {rca_failure['message']}"
+                                ),
+                                "config_fixability": (
+                                    "blocked_by_mechanical"
+                                    if misclassification_classification.get("primary_category") == "mechanical_malfunction"
+                                    else "likely_fixable"
+                                ),
+                                "citation_ids": misclassification_classification.get("citation_ids", []),
+                                "citation_validation": misclassification_classification.get(
+                                    "citation_validation", {}
+                                ),
+                            }
+                        misclassification_classification["rationale_paragraph"] = triage_explainer.get(
+                            "rationale_paragraph", ""
+                        )
+                        misclassification_classification["evidence_quote"] = triage_explainer.get(
+                            "evidence_quote", ""
+                        )
+                        misclassification_classification["config_fixability"] = triage_explainer.get(
+                            "config_fixability", ""
+                        )
+                        misclassification_classification["citation_ids"] = triage_explainer.get(
+                            "citation_ids",
+                            misclassification_classification.get("citation_ids", []),
+                        )
+                        misclassification_classification["citation_validation"] = triage_explainer.get(
+                            "citation_validation",
+                            {},
+                        )
+                    else:
+                        triage_explainer = {
+                            "rationale_paragraph": misclassification_classification.get(
+                                "rationale_paragraph", ""
+                            ),
+                            "evidence_quote": misclassification_classification.get(
+                                "evidence_quote", ""
+                            ),
+                            "config_fixability": misclassification_classification.get(
+                                "config_fixability", "blocked_by_mechanical"
+                            ),
+                            "citation_ids": misclassification_classification.get("citation_ids", []),
+                            "citation_validation": misclassification_classification.get(
+                                "citation_validation", {}
+                            ),
+                        }
+                    if rca_failure:
+                        rca_failure.update({
+                            "feedback_item_id": fi.id,
+                            "item_id": fi.itemId or "",
+                        })
+                        item_failure_diagnostics.append(rca_failure)
+                        self.logger.warning(
+                            "RCA item failed at %s for feedback_item_id=%s item_id=%s: %s: %s",
+                            rca_failure["failed_stage"],
+                            fi.id,
+                            fi.itemId or "",
+                            rca_failure["exception_type"],
+                            rca_failure["message"],
+                        )
                     primary_category = (
                         misclassification_classification.get("primary_category")
                         or "score_configuration_problem"
@@ -4170,6 +4390,11 @@ class FeedbackEvaluation(Evaluation):
                         "rationale_paragraph": triage_explainer.get("rationale_paragraph", ""),
                         "evidence_quote": triage_explainer.get("evidence_quote", ""),
                         "config_fixability": triage_explainer.get("config_fixability", ""),
+                        "citation_ids": triage_explainer.get("citation_ids", []),
+                        "citation_validation": triage_explainer.get("citation_validation", {}),
+                        **rubric_memory_state_from_item_context(misclassification_item_context),
+                        "rca_failure": rca_failure,
+                        "rca_failures": item_failure_diagnostics,
                         "evidence_snippets": misclassification_classification.get("evidence_snippets", []),
                         "mechanical_subtype": (
                             mechanical_subtype if mechanical_subtype != "none" else None
@@ -4197,7 +4422,7 @@ class FeedbackEvaluation(Evaluation):
                         metadata=metadata,
                     )
 
-                    return timestamped, canonical_row
+                    return timestamped, canonical_row, item_failure_diagnostics
 
             _rca_completed = [0]  # mutable counter for closure
             _rca_total = len(candidate_items)
@@ -4216,12 +4441,17 @@ class FeedbackEvaluation(Evaluation):
             for result in rca_results:
                 if isinstance(result, Exception):
                     rca_errors += 1
-                    self.logger.debug("RCA item failed: %s: %s", type(result).__name__, result)
+                    self.logger.warning(
+                        "RCA item failed before fallback preservation: %s: %s",
+                        type(result).__name__,
+                        result,
+                    )
                     continue
-                timestamped, canonical_row = result
+                timestamped, canonical_row, item_failure_diagnostics = result
                 texts.append(timestamped)
                 canonical_item_classifications.append(canonical_row)
                 canonical_item_by_feedback_id[canonical_row["feedback_item_id"]] = canonical_row
+                rca_item_failures.extend(item_failure_diagnostics or [])
             if rca_errors:
                 self.logger.warning(f"RCA: {rca_errors}/{len(candidate_items)} items failed (continuing with {len(texts)} successful)")
 
@@ -4640,6 +4870,7 @@ class FeedbackEvaluation(Evaluation):
                     "classified_items_total": len(item_classifications_all),
                     "texts_analyzed_total": len(texts),
                     "topics_found": len(topics),
+                    "rca_item_failures_total": len(rca_item_failures),
                     "topic_assignment_scope": "exemplar_only",
                     "topic_assignment_unavailable_count": topic_assignment_unavailable_count,
                 },
@@ -4652,6 +4883,7 @@ class FeedbackEvaluation(Evaluation):
                 "overall_improvement_suggestion": overall_improvement_suggestion,
                 "misclassification_classification_contract": build_misclassification_classification_contract(),
                 "misclassification_analysis": misclassification_analysis,
+                "rca_item_failures": rca_item_failures,
             }
 
         except Exception as e:
@@ -4677,9 +4909,12 @@ class FeedbackEvaluation(Evaluation):
             build_misclassification_classification_contract,
             build_misclassification_analysis_summary,
             build_misclassification_item_context,
+            build_rca_analysis_failure_classification,
+            build_rca_analysis_failure_details,
             classify_misclassification_item,
             extract_misclassification_evidence_flags,
             explain_misclassification_item_classification,
+            rubric_memory_state_from_item_context,
             resolve_final_output_classes_from_yaml_text,
         )
 
@@ -4857,7 +5092,9 @@ class FeedbackEvaluation(Evaluation):
                 ex["detailed_cause"] = detailed_cause
             if suggested_fix:
                 ex["suggested_fix"] = suggested_fix
+        rca_item_failures = []
         for ex in exemplars:
+            item_failure_diagnostics = []
             item_context_record = item_context_cache.get(ex.get("item_id"))
             primary_input_text = (
                 item_context_record.get("primary_input") if item_context_record else ""
@@ -4883,6 +5120,42 @@ class FeedbackEvaluation(Evaluation):
                         "Failed to apply processors for small-set RCA context (item %s): %s",
                         ex.get("item_id"), _proc_exc,
                     )
+            rubric_memory_context = {}
+            try:
+                rubric_memory_context = await self._rubric_memory_context_for_misclassification(
+                    primary_input_text=primary_input_text,
+                    predicted_value=ex.get("initial_answer_value", "") or "",
+                    score_explanation=ex.get("score_explanation", "") or "",
+                    correct_value=ex.get("final_answer_value", "") or "",
+                    feedback_comment=ex.get("edit_comment", "") or "",
+                    topic_hint="Evaluation small-set RCA misclassification evidence",
+                )
+            except Exception as exc:
+                failure = build_rca_analysis_failure_details("rubric_memory_retrieval", exc)
+                failure.update({
+                    "feedback_item_id": ex.get("feedback_item_id", ""),
+                    "item_id": ex.get("item_id", ""),
+                })
+                item_failure_diagnostics.append(failure)
+                self.logger.warning(
+                    "Small-set RCA rubric-memory retrieval failed for feedback_item_id=%s item_id=%s: %s: %s",
+                    ex.get("feedback_item_id", ""),
+                    ex.get("item_id", ""),
+                    failure["exception_type"],
+                    failure["message"],
+                )
+                rubric_memory_context = {
+                    "markdown_context": "",
+                    "citation_index": [],
+                    "diagnostics": [
+                        {
+                            "code": "rubric_memory_unavailable",
+                            "message": failure["message"],
+                            "failed_stage": failure["failed_stage"],
+                            "exception_type": failure["exception_type"],
+                        }
+                    ],
+                }
             ex["misclassification_item_context"] = build_misclassification_item_context(
                 feedback_item_id=ex.get("feedback_item_id", ""),
                 item_id=ex.get("item_id", ""),
@@ -4909,24 +5182,88 @@ class FeedbackEvaluation(Evaluation):
                 primary_input_fetch_error=primary_input_fetch_error,
                 processed_input_text=processed_input_text,
                 processors_config_summary=processors_config_summary,
+                rubric_memory_context=rubric_memory_context,
             )
-            misclassification_evidence_flags = await asyncio.to_thread(
-                extract_misclassification_evidence_flags,
-                item_context=ex["misclassification_item_context"],
-            )
-            classification = classify_misclassification_item(
-                ex["misclassification_item_context"],
-                misclassification_evidence_flags,
-            )
-            explainer = await asyncio.to_thread(
-                explain_misclassification_item_classification,
-                item_context=ex["misclassification_item_context"],
-                classification=classification,
-            )
-            classification["rationale_paragraph"] = explainer.get("rationale_paragraph", "")
-            classification["evidence_quote"] = explainer.get("evidence_quote", "")
-            classification["config_fixability"] = explainer.get("config_fixability", "")
+            rca_failure = None
+            try:
+                misclassification_evidence_flags = await asyncio.to_thread(
+                    extract_misclassification_evidence_flags,
+                    item_context=ex["misclassification_item_context"],
+                )
+            except Exception as exc:
+                rca_failure = build_rca_analysis_failure_details("evidence_flag_extraction", exc)
+                misclassification_evidence_flags = {}
+                classification = build_rca_analysis_failure_classification(
+                    item_context=ex["misclassification_item_context"],
+                    stage="evidence_flag_extraction",
+                    exc=exc,
+                )
+            else:
+                try:
+                    classification = classify_misclassification_item(
+                        ex["misclassification_item_context"],
+                        misclassification_evidence_flags,
+                    )
+                except Exception as exc:
+                    rca_failure = build_rca_analysis_failure_details("deterministic_classification", exc)
+                    classification = build_rca_analysis_failure_classification(
+                        item_context=ex["misclassification_item_context"],
+                        stage="deterministic_classification",
+                        exc=exc,
+                        evidence_flags=misclassification_evidence_flags,
+                    )
+
+            if rca_failure is None:
+                try:
+                    explainer = await asyncio.to_thread(
+                        explain_misclassification_item_classification,
+                        item_context=ex["misclassification_item_context"],
+                        classification=classification,
+                    )
+                except Exception as exc:
+                    rca_failure = build_rca_analysis_failure_details("explainer", exc)
+                    explainer = {
+                        "rationale_paragraph": (
+                            classification.get("rationale")
+                            or "RCA explainer failed; deterministic classification was preserved."
+                        ),
+                        "evidence_quote": (
+                            f"explainer: {rca_failure['exception_type']}: {rca_failure['message']}"
+                        ),
+                        "config_fixability": (
+                            "blocked_by_mechanical"
+                            if classification.get("primary_category") == "mechanical_malfunction"
+                            else "likely_fixable"
+                        ),
+                        "citation_ids": classification.get("citation_ids", []),
+                        "citation_validation": classification.get("citation_validation", {}),
+                    }
+                classification["rationale_paragraph"] = explainer.get("rationale_paragraph", "")
+                classification["evidence_quote"] = explainer.get("evidence_quote", "")
+                classification["config_fixability"] = explainer.get("config_fixability", "")
+                classification["citation_ids"] = explainer.get(
+                    "citation_ids",
+                    classification.get("citation_ids", []),
+                )
+                classification["citation_validation"] = explainer.get("citation_validation", {})
+            if rca_failure:
+                rca_failure.update({
+                    "feedback_item_id": ex.get("feedback_item_id", ""),
+                    "item_id": ex.get("item_id", ""),
+                })
+                item_failure_diagnostics.append(rca_failure)
+                self.logger.warning(
+                    "Small-set RCA item failed at %s for feedback_item_id=%s item_id=%s: %s: %s",
+                    rca_failure["failed_stage"],
+                    ex.get("feedback_item_id", ""),
+                    ex.get("item_id", ""),
+                    rca_failure["exception_type"],
+                    rca_failure["message"],
+                )
             ex["misclassification_classification"] = classification
+            ex["rca_failure"] = rca_failure
+            ex["rca_failures"] = item_failure_diagnostics
+            rca_item_failures.extend(item_failure_diagnostics)
 
         def _bedrock_converse(system: str, prompt: str, max_tokens: int = 500) -> str:
             import boto3 as _boto3
@@ -5017,6 +5354,7 @@ class FeedbackEvaluation(Evaluation):
         item_classifications_all = []
         for ex in exemplars:
             classification = ex.get("misclassification_classification") or {}
+            misclassification_item_context = ex.get("misclassification_item_context") or {}
             item_classifications_all.append({
                 "feedback_item_id": ex.get("feedback_item_id", ""),
                 "item_id": ex.get("item_id", ""),
@@ -5049,9 +5387,14 @@ class FeedbackEvaluation(Evaluation):
                 "mechanical_details": classification.get("mechanical_details"),
                 "information_gap_subtype": classification.get("information_gap_subtype"),
                 "triage_evidence_flags": classification.get("evidence_flags"),
+                "citation_ids": classification.get("citation_ids", []),
+                "citation_validation": classification.get("citation_validation", {}),
+                **rubric_memory_state_from_item_context(misclassification_item_context),
+                "rca_failure": ex.get("rca_failure"),
+                "rca_failures": ex.get("rca_failures", []),
                 "detailed_cause": ex.get("detailed_cause"),
                 "suggested_fix": ex.get("suggested_fix"),
-                "misclassification_item_context": ex.get("misclassification_item_context") or {},
+                "misclassification_item_context": misclassification_item_context,
                 "misclassification_classification": classification,
             })
         misclassification_analysis = build_misclassification_analysis_summary(
@@ -5062,6 +5405,7 @@ class FeedbackEvaluation(Evaluation):
                 "classified_items_total": len(item_classifications_all),
                 "texts_analyzed_total": len(exemplars),
                 "topics_found": 1,
+                "rca_item_failures_total": len(rca_item_failures),
                 "topic_assignment_scope": "exemplar_only",
                 "topic_assignment_unavailable_count": 0,
             },
@@ -5073,6 +5417,7 @@ class FeedbackEvaluation(Evaluation):
             "overall_improvement_suggestion": improvement_suggestion,
             "misclassification_classification_contract": build_misclassification_classification_contract(),
             "misclassification_analysis": misclassification_analysis,
+            "rca_item_failures": rca_item_failures,
         }
 
 class AccuracyEvaluation(Evaluation):

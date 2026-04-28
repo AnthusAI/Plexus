@@ -4,13 +4,19 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "plexus"
-version = "1.38.1"
+version = "1.42.2"
 description = "A Python module for configuring and managing data scoring"
 readme = "README.md"
 license = "MIT"
 authors = ["Anthus AI Solutions"]
 packages = [{ include = "plexus" }]
-include = ["plexus/templates/*", "plexus/__main__.py", "plexus/py.typed", "plexus/scores/*.py"]
+include = [
+    "plexus/templates/*",
+    "plexus/__main__.py",
+    "plexus/py.typed",
+    "plexus/scores/*.py",
+    "plexus/rubric_memory/procedures/*.tac",
+]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
@@ -75,6 +81,7 @@ hdbscan = "0.8.40"
 sentence-transformers = ">=5.0.0"
 kaleido = ">=0.2.1"
 requests = ">=2.31.0"
+requests-aws4auth = "*"
 
 [tool.poetry.group.dev.dependencies]
 invoke = ">=2.2.0"

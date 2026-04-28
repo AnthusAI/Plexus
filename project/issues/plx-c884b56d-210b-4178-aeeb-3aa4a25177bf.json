@@ -1,0 +1,43 @@
+{
+  "id": "plx-c884b56d-210b-4178-aeeb-3aa4a25177bf",
+  "title": "Migrate consoleRunWorker GraphQL/OpenAI credentials to IAM + Secrets Manager",
+  "description": "## Summary\nStop using API-key-based GraphQL auth and remove OpenAI API key from Lambda env vars for `consoleRunWorker`.\n\n## Scope\n- Replace AppSync API key usage with IAM-auth request signing where applicable.\n- Remove OpenAI API key from Lambda environment variables.\n- Read OpenAI key from `plexus/production/config` secret at runtime.\n- Keep one canonical auth/credential path (no fallback credential modes).\n\n## Done\n- No GraphQL API key dependency in `consoleRunWorker` production path.\n- No OpenAI API key in Lambda env configuration for this worker.\n- Runtime retrieves required key from Secrets Manager.\n- Changes merged and deployed to develop.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1d6e6e95-e882-4751-afe3-6f4d37a2a9f3",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "819d4faf-e5a6-4db2-a506-c2926cff64f1",
+      "author": "derek",
+      "text": "Starting implementation. First step: create feature branch from develop, then inspect consoleRunWorker GraphQL auth + OpenAI credential wiring to remove env/API-key usage in production path.",
+      "created_at": "2026-04-28T22:50:30.322653256Z"
+    },
+    {
+      "id": "007cadfc-b8c6-4c59-b3e1-21a95d27ad53",
+      "author": "derek",
+      "text": "Implemented consoleRunWorker credential cleanup on `feature/plx-c884b5-console-worker-iam-secrets`.\n\nCode changes:\n- Cloud Lambda `app.py` now uses AppSync IAM auth via `PLEXUS_GRAPHQL_AUTH_MODE=iam` and creates `PlexusDashboardClient` without an API key.\n- Cloud Lambda bootstraps provider credentials from `PLEXUS_CONFIG_SECRET_NAME` using Secrets Manager, setting `OPENAI_API_KEY` in-process from `openai-api-key` and optional `ANTHROPIC_API_KEY` from `anthropic-api-key`.\n- Amplify worker resource no longer injects `PLEXUS_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` as Lambda environment variables.\n- Worker resource now injects `PLEXUS_CONFIG_SECRET_NAME` and grants read access to that secret.\n- Backend now maps `main` to `production` through existing environment mapping for secret name resolution.\n- Added `requests-aws4auth` to root dependencies so the existing dashboard client IAM auth path is available in the worker image.\n- Cleaned up the reported CodeQL `py/unnecessary-lambda` test findings.\n\nValidation completed:\n- Console worker Python tests: 15 passed.\n- Dashboard typecheck: passed.\n- `rcql --lang python -q -v --files \"dashboard/amplify/functions/consoleRunWorker/*.py\"`: passed with no reported findings.\n- `poetry check --lock`: exit 0 with existing Poetry metadata deprecation warnings only.\n- `git diff --check`: passed.\n- `py_compile` for changed Python files: passed.",
+      "created_at": "2026-04-28T23:08:48.517882390Z"
+    },
+    {
+      "id": "26c70349-af20-483b-a719-24ffcfd502e8",
+      "author": "derek",
+      "text": "Pushed implementation and opened PR:\n- Branch: `feature/plx-c884b5-console-worker-iam-secrets`\n- Commit after rebase: `7a9a7468`\n- PR: https://github.com/AnthusAI/Plexus/pull/241\n\nValidation included in PR body:\n- Console worker Python tests: 15 passed.\n- Dashboard typecheck passed.\n- rcql consoleRunWorker scan passed with no reported findings.\n- poetry check --lock passed with existing deprecation warnings only.\n- git diff --check and py_compile passed.",
+      "created_at": "2026-04-28T23:09:29.187441202Z"
+    },
+    {
+      "id": "3ee01121-7739-4cb4-bab1-90f8854473df",
+      "author": "derek",
+      "text": "Follow-up CI fix: changed consoleRunWorker app.py to require PLEXUS_GRAPHQL_AUTH_MODE=iam from the Lambda environment instead of mutating os.environ at runtime. This keeps the production path strict and prevents IAM auth mode from leaking into unrelated Python tests. Validation: targeted consoleRunWorker pytest passed (16 tests), app_test plus dashboard client regression guard passed (11 tests), rcql over consoleRunWorker Python files passed with no findings, git diff --check passed.",
+      "created_at": "2026-04-28T23:18:58.418304897Z"
+    }
+  ],
+  "created_at": "2026-04-28T22:50:27.437588793Z",
+  "updated_at": "2026-04-28T23:18:58.418304897Z",
+  "closed_at": null,
+  "custom": {}
+}

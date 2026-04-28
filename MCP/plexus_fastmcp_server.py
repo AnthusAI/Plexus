@@ -455,6 +455,8 @@ try:
     from tools.cost.analysis import register_cost_analysis_tools
     from tools.dataset.datasets import register_dataset_tools
     from tools.procedure.procedures import register_procedure_tools
+    from tools.rubric_memory.rubric_memory import register_rubric_memory_tools
+    from tools.chat.chats import register_chat_tools
     
     register_think_tool(mcp)
     register_scorecard_tools(mcp)
@@ -470,6 +472,8 @@ try:
     register_cost_analysis_tools(mcp)
     register_dataset_tools(mcp)
     register_procedure_tools(mcp)
+    register_rubric_memory_tools(mcp)
+    register_chat_tools(mcp)
 
     logger.info("Successfully registered separated tools")
 except ImportError as e:
@@ -663,6 +667,7 @@ if __name__ == "__main__":
         from tools.task.tasks import register_task_tools
         from tools.item.items import register_item_tools
         from tools.prediction.predictions import register_prediction_tools
+        from tools.chat.chats import register_chat_tools
         print("✓ All imports successful", file=sys.stderr)
 
         print("Registering utility tools...", file=sys.stderr)
@@ -706,6 +711,10 @@ if __name__ == "__main__":
         print("Registering prediction tools...", file=sys.stderr)
         register_prediction_tools(mcp)
         print("✓ Registered prediction tools", file=sys.stderr)
+
+        print("Registering chat tools...", file=sys.stderr)
+        register_chat_tools(mcp)
+        print("✓ Registered chat tools", file=sys.stderr)
 
         print("=" * 80, file=sys.stderr)
         print("ALL MODULAR TOOLS REGISTERED SUCCESSFULLY", file=sys.stderr)

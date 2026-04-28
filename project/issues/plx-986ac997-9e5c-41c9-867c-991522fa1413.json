@@ -1,0 +1,31 @@
+{
+  "id": "plx-986ac997-9e5c-41c9-867c-991522fa1413",
+  "title": "Fix version-scoped score procedure list",
+  "description": "In the scorecards dashboard, the selected score version shows evaluations but not associated procedures. Investigate and fix version-scoped procedure matching/loading.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e62c8d84-a309-456c-8074-7fa1f82f3d4f",
+      "author": "ryan",
+      "text": "Fixed version-scoped score procedure list by making loadOptimizerRuns paginate all procedures for the score before client-side version filtering. This prevents older procedure manifests from being omitted when a selected score version was touched outside the first query page. Also removed a duplicate champion metadata update call introduced during merge resolution. Validation: dashboard npm run typecheck passed.",
+      "created_at": "2026-04-28T01:17:36.380054Z"
+    },
+    {
+      "id": "91ef5642-ec62-448c-ac66-a6df1c6df31d",
+      "author": "ryan",
+      "text": "Found the remaining root cause: Procedure.metadata was parsed, but nested metadata.optimizer_artifacts can be stored as a JSON string. The frontend treated it as an object, so manifestKey was missing, manifests did not load, and version-scoped filtering could not see optimizer-touched version IDs. Patched frontend manifest loading to parse nested optimizer_artifacts and made manifest version matching exact-recursive across manifest values.",
+      "created_at": "2026-04-28T01:20:31.238275Z"
+    }
+  ],
+  "created_at": "2026-04-28T01:15:29.788803Z",
+  "updated_at": "2026-04-28T01:20:31.238275Z",
+  "closed_at": null,
+  "custom": {}
+}

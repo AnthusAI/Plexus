@@ -1,0 +1,18 @@
+{
+  "id": "plx-7aa18db1-1e88-4ceb-9be5-1b13d3c003c2",
+  "title": "Optimizer-created score versions default to featured",
+  "description": "",
+  "type": "bug",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-28T21:51:18.855422Z",
+  "updated_at": "2026-04-28T21:51:18.855422Z",
+  "closed_at": null,
+  "custom": {}
+}

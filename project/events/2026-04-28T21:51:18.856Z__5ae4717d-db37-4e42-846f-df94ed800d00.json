@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5ae4717d-db37-4e42-846f-df94ed800d00",
+  "issue_id": "plx-7aa18db1-1e88-4ceb-9be5-1b13d3c003c2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T21:51:18.856Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Optimizer-created score versions default to featured"
+  }
+}

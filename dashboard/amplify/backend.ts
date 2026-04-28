@@ -1,7 +1,7 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { data } from './data/resource.js';
 import { auth } from './auth/resource.js';
-import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments } from './storage/resource.js';
+import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments, rubricMemory } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { ConsoleChatResponderStack } from './functions/consoleRunWorker/resource.js';
 import { McpStack } from './mcp/mcp_stack.js';
@@ -19,7 +19,8 @@ const backend = defineBackend({
     reportBlockDetails,
     dataSources,
     scoreResultAttachments,
-    taskAttachments
+    taskAttachments,
+    rubricMemory
 });
 
 // Enable PITR on all Amplify Data DynamoDB tables (AWS default retention is 35 days).
@@ -122,13 +123,11 @@ const taskDispatcherStack = new TaskDispatcherStack(
 );
 
 const resolvedDataApiUrl = (process.env.PLEXUS_API_URL || '').trim();
-const resolvedDataApiKey = (process.env.PLEXUS_API_KEY || '').trim();
 const consoleWorkerImageUri = (process.env.CONSOLE_WORKER_IMAGE_URI || '').trim();
-const consoleWorkerEnvironmentName = ((process.env.AWS_BRANCH || 'staging').trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')) || 'staging';
-const resolvedAnthropicApiKey = (process.env.ANTHROPIC_API_KEY || '').trim();
+const consoleWorkerEnvironmentName = normalizeForResourceName(resolveEnvironmentName());
 
-if (!resolvedDataApiUrl || !resolvedDataApiKey) {
-    throw new Error('PLEXUS_API_URL and PLEXUS_API_KEY must be set for ConsoleRunWorkerStack deployment');
+if (!resolvedDataApiUrl) {
+    throw new Error('PLEXUS_API_URL must be set for ConsoleRunWorkerStack deployment');
 }
 
 if (!consoleWorkerImageUri) {
@@ -141,10 +140,8 @@ const consoleRunWorkerStack = new ConsoleChatResponderStack(
     {
         chatMessageTable,
         plexusApiUrl: resolvedDataApiUrl,
-        plexusApiKey: resolvedDataApiKey,
         workerImageUri: consoleWorkerImageUri,
         environmentName: consoleWorkerEnvironmentName,
-        anthropicApiKey: resolvedAnthropicApiKey,
     }
 );
 
