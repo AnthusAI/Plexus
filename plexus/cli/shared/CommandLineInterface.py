@@ -30,6 +30,7 @@ from plexus.cli.record_count.counting import count
 from plexus.cli.metrics.commands import metrics_group
 from plexus.cli.procedure.procedures import procedure
 from plexus.cli.rubric_memory.commands import rubric_memory
+from plexus.cli.chat.chats import chat
 
 # Define OrderCommands class for command ordering
 class OrderCommands(click.Group):
@@ -89,6 +90,7 @@ cli.add_command(metrics_group)
 cli.add_command(dataset)
 cli.add_command(procedure)
 cli.add_command(rubric_memory)
+cli.add_command(chat)
 
 def main():
     """

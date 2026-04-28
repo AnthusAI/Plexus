@@ -3,15 +3,21 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import ConversationViewer from "../conversation-viewer"
 
+const mockScrollToIndex = jest.fn()
+
 jest.mock("react-virtuoso", () => {
   const React = require("react")
   const Virtuoso = React.forwardRef(function MockVirtuoso(props: any, ref: any) {
-    const { data = [], itemContent, components, className } = props
+    const { data = [], itemContent, components, className, atBottomStateChange } = props
     const Footer = components?.Footer
 
     React.useImperativeHandle(ref, () => ({
-      scrollToIndex: jest.fn(),
+      scrollToIndex: mockScrollToIndex,
     }))
+
+    React.useEffect(() => {
+      atBottomStateChange?.(true)
+    }, [atBottomStateChange, data.length])
 
     return (
       <div data-testid="virtuoso-scroller" className={className}>
@@ -98,6 +104,36 @@ jest.mock("@/components/ai-elements/prompt-input", () => ({
   ),
   PromptInputBody: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   PromptInputFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PromptInputSelect: ({
+    children,
+    onValueChange,
+    disabled,
+  }: {
+    children: React.ReactNode
+    onValueChange?: (value: string) => void
+    disabled?: boolean
+  }) => (
+    <div data-disabled={disabled}>
+      <button
+        type="button"
+        aria-label="Select GPT-5.3"
+        onClick={() => onValueChange?.("gpt-5.3")}
+      >
+        Select GPT-5.3
+      </button>
+      {children}
+    </div>
+  ),
+  PromptInputSelectTrigger: ({ children }: { children: React.ReactNode }) => <button type="button">{children}</button>,
+  PromptInputSelectValue: ({ placeholder }: { placeholder?: string }) => <>{placeholder}</>,
+  PromptInputSelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  PromptInputSelectItem: ({
+    children,
+    value: _value,
+  }: {
+    children: React.ReactNode
+    value: string
+  }) => <div>{children}</div>,
   PromptInputSubmit: ({ disabled }: { disabled?: boolean }) => (
     <button type="submit" disabled={disabled} aria-label="Submit">
       Submit
@@ -178,6 +214,7 @@ describe("ConversationViewer streaming updates", () => {
   }
 
   beforeEach(() => {
+    mockScrollToIndex.mockReset()
     subscriptions.messageCreate = null
     subscriptions.messageUpdate = null
 
@@ -285,6 +322,50 @@ describe("ConversationViewer streaming updates", () => {
       expect(screen.getByText("Hello streaming world")).toBeInTheDocument()
     })
     expect(container.querySelectorAll('[data-message-id="msg-assistant-1"]')).toHaveLength(1)
+  })
+
+  it("auto-follows conversation when streaming updates arrive", async () => {
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByText("Hel")
+    mockScrollToIndex.mockClear()
+
+    await act(async () => {
+      subscriptions.messageUpdate?.next({
+        data: {
+          id: "msg-assistant-1",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "Hello streaming world",
+          createdAt: "2026-03-27T00:00:01.000Z",
+          sequenceNumber: 1,
+          metadata: JSON.stringify({
+            streaming: {
+              state: "streaming",
+            },
+          }),
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(mockScrollToIndex).toHaveBeenCalledWith(
+        expect.objectContaining({
+          index: "LAST",
+          align: "end",
+          behavior: "auto",
+        })
+      )
+    })
   })
 
   it("shows thinking shimmer after send and clears it on first assistant message", async () => {
@@ -415,7 +496,36 @@ describe("ConversationViewer streaming updates", () => {
     const createdMessage = mockChatMessageCreate.mock.calls[0]?.[0]
     expect(createdMessage.responseTarget).toBe("local:ryan")
     expect(createdMessage.responseStatus).toBe("PENDING")
+    const metadata = JSON.parse(createdMessage.metadata)
+    expect(metadata.model.id).toBe("gpt-5.4-mini")
+    expect(metadata.instrumentation.client_selected_model).toBe("gpt-5.4-mini")
     expect(mockGraphql).not.toHaveBeenCalled()
+  })
+
+  it("writes non-default selected model into outgoing metadata", async () => {
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByText("Hel")
+    fireEvent.click(screen.getByRole("button", { name: "Select GPT-5.3" }))
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Route this with GPT-5.3." },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageCreate).toHaveBeenCalled()
+    })
+
+    const createdMessage = mockChatMessageCreate.mock.calls[0]?.[0]
+    const metadata = JSON.parse(createdMessage.metadata)
+    expect(metadata.model.id).toBe("gpt-5.3")
+    expect(metadata.instrumentation.client_selected_model).toBe("gpt-5.3")
   })
 
   it("renders TOOL_CALL and TOOL_RESPONSE as separate Tool components", async () => {
