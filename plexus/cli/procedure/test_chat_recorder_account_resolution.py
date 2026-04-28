@@ -769,3 +769,4 @@ async def test_record_message_uses_long_running_retry_policy():
 
     assert message_id == "msg-1"
     assert client.execute.call_args.kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+    assert client.execute.call_args.args[1]["input"]["responseStatus"] == "COMPLETED"
