@@ -58,7 +58,6 @@ def register_procedure_tools(mcp):
         score_identifier: Annotated[str, Field(description="Score identifier (key, name, or ID)")]
         yaml_config: Annotated[Optional[str], Field(description="YAML configuration (uses default if not provided)")] = None
         featured: Annotated[bool, Field(description="Whether to mark as featured")] = False
-        create_root_node: Annotated[bool, Field(description="Whether to create a root node (default: True)")] = True
         template_id: Annotated[Optional[str], Field(description="Optional template ID to use for the procedure")] = None
         score_version_id: Annotated[Optional[str], Field(description="Optional score version ID to use for the procedure")] = None
     
@@ -125,7 +124,6 @@ def register_procedure_tools(mcp):
                 score_identifier=request.score_identifier,
                 yaml_config=request.yaml_config,
                 featured=request.featured,
-                create_root_node=request.create_root_node,
                 template_id=request.template_id,
                 score_version_id=request.score_version_id
             )
@@ -145,8 +143,6 @@ def register_procedure_tools(mcp):
                     "created_at": result.procedure.createdAt.isoformat(),
                     "scorecard_id": result.procedure.scorecardId,
                     "score_id": result.procedure.scoreId,
-                    "root_node_id": result.root_node.id,
-                    "initial_version_id": result.initial_version.id
                 }
             }
             
@@ -186,7 +182,6 @@ def register_procedure_tools(mcp):
                         "updated_at": exp.updatedAt.isoformat(),
                         "scorecard_id": exp.scorecardId,
                         "score_id": exp.scoreId,
-                        "root_node_id": exp.rootNodeId
                     }
                     for exp in procedures
                 ]
@@ -227,11 +222,8 @@ def register_procedure_tools(mcp):
                     "account_id": info.procedure.accountId,
                     "scorecard_id": info.procedure.scorecardId,
                     "score_id": info.procedure.scoreId,
-                    "root_node_id": info.procedure.rootNodeId
                 },
                 "summary": {
-                    "node_count": info.node_count,
-                    "version_count": info.version_count,
                     "scorecard_name": info.scorecard_name,
                     "score_name": info.score_name
                 }
@@ -449,7 +441,6 @@ def register_procedure_tools(mcp):
                         id
                         status
                         procedureId
-                        nodeId
                         createdAt
                         updatedAt
                         messages {
@@ -493,7 +484,6 @@ def register_procedure_tools(mcp):
                 processed_sessions.append({
                     "id": session["id"],
                     "status": session["status"],
-                    "node_id": session.get("nodeId"),
                     "created_at": session["createdAt"],
                     "updated_at": session.get("updatedAt"),
                     "message_count": len(messages),
@@ -537,7 +527,6 @@ def register_procedure_tools(mcp):
                         id
                         status
                         procedureId
-                        nodeId
                         createdAt
                         messages {
                             items {
@@ -590,7 +579,6 @@ def register_procedure_tools(mcp):
                             id
                             status
                             procedureId
-                            nodeId
                             createdAt
                             messages {
                                 items {
@@ -718,7 +706,6 @@ def register_procedure_tools(mcp):
                 processed_sessions.append({
                     "session_id": session["id"],
                     "status": session["status"],
-                    "node_id": session.get("nodeId"),
                     "created_at": session["createdAt"],
                     "message_count": len(processed_messages),
                     "tool_calls": len(session_tool_calls),
@@ -858,6 +845,64 @@ def register_procedure_tools(mcp):
             }
         except Exception as e:
             logger.error(f"Error branching procedure: {e}")
+            return {"success": False, "error": str(e)}
+
+    class ProcedureIndexOptimizerRunRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID to backfill into canonical optimizer artifacts")]
+        force: Annotated[bool, Field(description="Rewrite optimizer artifacts even if they already exist")] = False
+
+    @mcp.tool()
+    def plexus_procedure_index_optimizer_run(request: ProcedureIndexOptimizerRunRequest) -> Dict[str, Any]:
+        """Index or backfill one optimizer procedure into canonical task attachments."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            service = OptimizerResultsService(client)
+            result = service.index_optimizer_run(request.procedure_id, force=request.force)
+            return {
+                "success": True,
+                "procedure_id": request.procedure_id,
+                "task_id": result["task_id"],
+                "pointer": result["pointer"],
+                "summary": result["manifest"].get("summary"),
+                "best": result["manifest"].get("best"),
+            }
+        except Exception as e:
+            logger.error(f"Error indexing optimizer procedure: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    class ProcedureOptimizerSummaryRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID to summarize from indexed optimizer artifacts")]
+        include_runtime_log: Annotated[bool, Field(description="Include a trailing runtime.log excerpt")] = False
+        include_events: Annotated[bool, Field(description="Include a trailing events.jsonl excerpt")] = False
+        log_lines: Annotated[int, Field(description="Number of trailing lines to include for excerpts", ge=1)] = 80
+
+    @mcp.tool()
+    def plexus_procedure_optimizer_summary(request: ProcedureOptimizerSummaryRequest) -> Dict[str, Any]:
+        """Summarize one indexed optimizer procedure with cycles, candidates, evals, and artifact pointers."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            service = OptimizerResultsService(client)
+            payload = service.summarize_optimizer_procedure(
+                request.procedure_id,
+                include_runtime_log=request.include_runtime_log,
+                include_events=request.include_events,
+                log_lines=request.log_lines,
+            )
+            return {"success": True, **payload}
+        except Exception as e:
+            logger.error(f"Error summarizing optimizer procedure: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
 
     # Register the stop tool

@@ -1,0 +1,52 @@
+{
+  "id": "plx-b972e743-60a7-4dc7-acb8-25e6ea6b6505",
+  "title": "Implement zero-schema optimizer indexing, score workbench, and agent utilities",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4e3e354d-1ee2-4a52-98ba-9737171f5279",
+      "author": "ryan",
+      "text": "Wave 1 scope: zero-schema optimizer indexing in task attachments, shared optimizer-results service, CLI/MCP discovery tools, and a score-page Optimizer workbench using existing scoreId indexes plus ScoreVersion.isFeatured as the pinned marker. No GraphQL schema additions or GSI changes in this wave.",
+      "created_at": "2026-04-25T15:15:53.824720Z"
+    },
+    {
+      "id": "6341de33-4f61-45ad-9af6-c444a8671587",
+      "author": "ryan",
+      "text": "Continuing wave 1 implementation on feature/zero-schema-optimizer-workbench. Scope for this lane: shared optimizer-results service backed by task attachments + Procedure.metadata pointers, then first CLI path, then frontend score-page Optimizer tab. Intentionally ignoring unrelated optimizer-run tweaks in the same clone and avoiding edits to other dirty files.",
+      "created_at": "2026-04-25T15:38:26.127569Z"
+    },
+    {
+      "id": "568c54e4-0b51-47e2-a548-4ddabbfb03d4",
+      "author": "ryan",
+      "text": "Implemented zero-schema optimizer workbench wave 1 on feature/zero-schema-optimizer-workbench. Added OptimizerResultsService with canonical task-attachment artifacts (manifest/events/runtime.log), auto-indexing from optimizer state persistence, CLI commands (score optimizer-runs / optimizer-candidates / promotion-packet, procedure index-optimizer-run), MCP tools for the same flows, and a new score-page Optimizer tab with Runs + Versions panes plus runtime-log/event-stream viewing. Verified with: python -m pytest plexus/cli/shared/optimizer_results_test.py plexus/cli/procedure/test_storage_metadata_preservation.py (6 passed); npm test -- --runInBand components/ui/__tests__/score-optimizer-workbench.test.tsx (1 passed); npm run typecheck -- --pretty false (passed); live CLI smoke: indexed Prescriber procedure 695a6bcd-f17c-4d04-ae68-358a5e2cfe0b and successfully listed indexed runs, aggregated candidates, and emitted a promotion packet.",
+      "created_at": "2026-04-25T15:51:57.362949Z"
+    },
+    {
+      "id": "0ad246a9-d3ca-402a-9d82-66a67d2f32f1",
+      "author": "ryan",
+      "text": "Refining the zero-schema workbench frontend shape. Replacing the score-level Optimizer tab with: (1) score-scoped Procedures / Evaluations views launched from the score ellipsis menu using the existing scorecards-dashboard replacement-panel pattern used by Analyze Feedback, and (2) version-scoped Procedures / Evaluations tabs inside score detail for the selected version. Shared components will back both scopes, with chronological default sorting and optimizer-metric-aware sorting only where manifest metrics exist.",
+      "created_at": "2026-04-25T16:32:14.112917Z"
+    },
+    {
+      "id": "8df8c183-9c64-4ace-becb-7ed660b33eb4",
+      "author": "ryan",
+      "text": "Implemented the frontend reshape for zero-schema optimizer discovery: removed the score-level Optimizer tab, added score-level View Procedures / View Evaluations menu actions using the score-detail replacement-panel pattern, and added version-scoped Procedures / Evaluations tabs inside score detail. Added shared score procedure/evaluation list components and focused tests; dashboard typecheck and focused Jest suites pass. CLI read-model smoke check also passed: procedure index-optimizer-run + score optimizer-runs + score promotion-packet agree on the Prescriber winning version/eval IDs.",
+      "created_at": "2026-04-25T16:47:51.634614Z"
+    }
+  ],
+  "created_at": "2026-04-25T15:15:30.294571Z",
+  "updated_at": "2026-04-25T16:47:51.634614Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

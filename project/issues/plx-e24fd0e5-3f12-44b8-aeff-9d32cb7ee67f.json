@@ -1,0 +1,31 @@
+{
+  "id": "plx-e24fd0e5-3f12-44b8-aeff-9d32cb7ee67f",
+  "title": "Implement ScoreVersion management schema and tools",
+  "description": "Implement the ScoreVersion management feature: schema field/index, frontend pin/diff/history UI, CLI and MCP tools, and champion promotion metadata updates. Keep the GraphQL schema delta limited to ScoreVersion.metadata plus one featured-version index.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "de67b267-477a-427a-9f1b-64aff5335bf5",
+      "author": "ryan",
+      "text": "Schema slice implemented: added nullable ScoreVersion.metadata JSON field and one ScoreVersion featured lookup index named byScoreIdAndIsFeaturedAndCreatedAt. No other schema indexes were changed.",
+      "created_at": "2026-04-27T18:15:17.524039Z"
+    },
+    {
+      "id": "a4f14d14-0d76-48ae-82fc-5ab5f3f6e331",
+      "author": "ryan",
+      "text": "Schema deployment succeeded. Resumed ScoreVersion management work against deployed featuredKey schema. Verified dashboard typecheck passes; CLI/MCP Python syntax checks pass; filled featuredKey on new version creation paths and MCP/CLI pin updates.",
+      "created_at": "2026-04-27T19:58:01.593844Z"
+    }
+  ],
+  "created_at": "2026-04-27T18:14:23.120850Z",
+  "updated_at": "2026-04-27T19:58:01.593844Z",
+  "closed_at": null,
+  "custom": {}
+}

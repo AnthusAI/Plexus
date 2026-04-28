@@ -1,0 +1,25 @@
+{
+  "id": "plx-f5ecc301-2d85-430d-8d66-611a8d6e364c",
+  "title": "Unify procedure and evaluation card actions/icon placement",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "33a9632b-9f35-4ba2-9744-69ffe473a744",
+      "author": "ryan",
+      "text": "Implemented score evaluation list action menu, unified grid icon placement behavior for ProcedureTask/EvaluationTask when actions are present, and added focused tests for menu behavior plus grid header action/icon state.",
+      "created_at": "2026-04-27T17:10:11.875441Z"
+    }
+  ],
+  "created_at": "2026-04-27T17:06:56.013494Z",
+  "updated_at": "2026-04-27T17:22:21.574677Z",
+  "closed_at": "2026-04-27T17:22:21.574677Z",
+  "custom": {}
+}

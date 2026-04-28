@@ -18,7 +18,6 @@ const mockProcedureData: ProcedureTaskData = {
   id: 'proc-123',
   title: 'Customer Service Optimization',
   featured: true,
-  rootNodeId: 'node-root-123',
   createdAt: '2024-01-15T10:30:00Z',
   updatedAt: '2024-01-15T14:45:00Z',
   scorecard: {

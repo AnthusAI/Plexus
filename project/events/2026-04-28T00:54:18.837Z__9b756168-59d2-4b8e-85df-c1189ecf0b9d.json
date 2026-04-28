@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9b756168-59d2-4b8e-85df-c1189ecf0b9d",
+  "issue_id": "plx-82c7fbef-f3fe-425a-a75c-e70aedfb1497",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T00:54:18.837Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Replace ad hoc Associated Datasets label-distribution colors with the standard class distribution visualization component and theme-safe colors.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Use standard distribution visualizer for associated datasets"
+  }
+}

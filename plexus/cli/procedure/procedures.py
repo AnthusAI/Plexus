@@ -26,6 +26,7 @@ from datetime import datetime
 
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
+from plexus.cli.shared.optimizer_results import OptimizerResultsService
 from .service import ProcedureService
 
 @click.group()
@@ -39,20 +40,16 @@ def procedure():
 @click.option('--score', '-c', required=True, help='Score identifier (key, name, or ID)')
 @click.option('--yaml', '-y', help='YAML configuration file path')
 @click.option('--featured', is_flag=True, help='Mark procedure as featured')
-@click.option('--no-root-node', is_flag=True, help='Create procedure without a root node')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
-def create(account: Optional[str], scorecard: str, score: str, yaml: Optional[str], featured: bool, no_root_node: bool, output: str):
+def create(account: Optional[str], scorecard: str, score: str, yaml: Optional[str], featured: bool, output: str):
     """Create a new procedure.
     
     Creates an procedure associated with a specific scorecard and score.
-    By default, creates a root node with a BeamSearch template. Use --no-root-node 
-    to create an empty procedure without any nodes.
     
     Examples:
         plexus procedure create -s "Sales Scorecard" -c "DNC Requested"
         plexus procedure create -s sales-scorecard -c dnc-requested --yaml config.yaml
         plexus procedure create -a my-account -s scorecard-id -c score-id --featured
-        plexus procedure create -s scorecard -c score --no-root-node
     """
     client = create_client()
     if not client:
@@ -85,8 +82,7 @@ def create(account: Optional[str], scorecard: str, score: str, yaml: Optional[st
         scorecard_identifier=scorecard,
         score_identifier=score,
         yaml_config=yaml_config,
-        featured=featured,
-        create_root_node=not no_root_node
+        featured=featured
     )
     
     if not result.success:
@@ -96,8 +92,6 @@ def create(account: Optional[str], scorecard: str, score: str, yaml: Optional[st
     if output == 'json':
         data = {
             'procedure_id': result.procedure.id,
-            'root_node_id': result.root_node.id,
-            'initial_version_id': result.initial_version.id,
             'featured': result.procedure.featured,
             'created_at': result.procedure.createdAt.isoformat(),
             'scorecard_id': result.procedure.scorecardId,
@@ -107,8 +101,6 @@ def create(account: Optional[str], scorecard: str, score: str, yaml: Optional[st
     elif output == 'yaml':
         data = {
             'procedure_id': result.procedure.id,
-            'root_node_id': result.root_node.id,
-            'initial_version_id': result.initial_version.id,
             'featured': result.procedure.featured,
             'created_at': result.procedure.createdAt.isoformat(),
             'scorecard_id': result.procedure.scorecardId,
@@ -124,8 +116,6 @@ def create(account: Optional[str], scorecard: str, score: str, yaml: Optional[st
         table.add_column("Value", style="white")
         
         table.add_row("Procedure ID", result.procedure.id)
-        table.add_row("Root Node ID", result.root_node.id)
-        table.add_row("Initial Version ID", result.initial_version.id)
         table.add_row("Featured", "Yes" if result.procedure.featured else "No")
         table.add_row("Created", result.procedure.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC"))
         table.add_row("Scorecard ID", result.procedure.scorecardId or "N/A")
@@ -184,7 +174,6 @@ def list(account: Optional[str], scorecard: Optional[str], limit: int, output: s
                 'account_id': exp.accountId,
                 'scorecard_id': exp.scorecardId,
                 'score_id': exp.scoreId,
-                'root_node_id': exp.rootNodeId
             })
         console.print(JSON.from_data(data))
     elif output == 'yaml':
@@ -198,7 +187,6 @@ def list(account: Optional[str], scorecard: Optional[str], limit: int, output: s
                 'account_id': exp.accountId,
                 'scorecard_id': exp.scorecardId,
                 'score_id': exp.scoreId,
-                'root_node_id': exp.rootNodeId
             })
         console.print(yaml.dump(data, default_flow_style=False))
     else:
@@ -209,7 +197,6 @@ def list(account: Optional[str], scorecard: Optional[str], limit: int, output: s
         table.add_column("Created", style="green", width=16)
         table.add_column("Scorecard ID", style="blue", width=12)
         table.add_column("Score ID", style="magenta", width=12)
-        table.add_column("Root Node", style="white", width=12)
         
         for exp in experiments:
             table.add_row(
@@ -217,8 +204,7 @@ def list(account: Optional[str], scorecard: Optional[str], limit: int, output: s
                 "★" if exp.featured else "",
                 exp.createdAt.strftime("%Y-%m-%d %H:%M"),
                 (exp.scorecardId[:10] + "...") if exp.scorecardId and len(exp.scorecardId) > 12 else (exp.scorecardId or "N/A"),
-                (exp.scoreId[:10] + "...") if exp.scoreId and len(exp.scoreId) > 12 else (exp.scoreId or "N/A"),
-                (exp.rootNodeId[:10] + "...") if exp.rootNodeId and len(exp.rootNodeId) > 12 else (exp.rootNodeId or "N/A")
+                (exp.scoreId[:10] + "...") if exp.scoreId and len(exp.scoreId) > 12 else (exp.scoreId or "N/A")
             )
         
         console.print(table)
@@ -264,11 +250,8 @@ def show(procedure_id: str, output: str, include_yaml: bool):
                 'account_id': info.procedure.accountId,
                 'scorecard_id': info.procedure.scorecardId,
                 'score_id': info.procedure.scoreId,
-                'root_node_id': info.procedure.rootNodeId
             },
             'summary': {
-                'node_count': info.node_count,
-                'version_count': info.version_count,
                 'scorecard_name': info.scorecard_name,
                 'score_name': info.score_name
             }
@@ -286,11 +269,8 @@ def show(procedure_id: str, output: str, include_yaml: bool):
                 'account_id': info.procedure.accountId,
                 'scorecard_id': info.procedure.scorecardId,
                 'score_id': info.procedure.scoreId,
-                'root_node_id': info.procedure.rootNodeId
             },
             'summary': {
-                'node_count': info.node_count,
-                'version_count': info.version_count,
                 'scorecard_name': info.scorecard_name,
                 'score_name': info.score_name
             }
@@ -312,7 +292,6 @@ def show(procedure_id: str, output: str, include_yaml: bool):
         table.add_row("Created", info.procedure.createdAt.strftime("%Y-%m-%d %H:%M:%S UTC"))
         table.add_row("Updated", info.procedure.updatedAt.strftime("%Y-%m-%d %H:%M:%S UTC"))
         table.add_row("Account ID", info.procedure.accountId)
-        table.add_row("Root Node ID", info.procedure.rootNodeId or "N/A")
         
         if info.scorecard_name:
             table.add_row("Scorecard", f"{info.scorecard_name} ({info.procedure.scorecardId})")
@@ -326,16 +305,6 @@ def show(procedure_id: str, output: str, include_yaml: bool):
         
         console.print(table)
         console.print()
-        
-        # Summary stats
-        stats_table = Table(title="Summary Statistics")
-        stats_table.add_column("Metric", style="cyan")
-        stats_table.add_column("Count", style="yellow")
-        
-        stats_table.add_row("Nodes", str(info.node_count))
-        stats_table.add_row("Versions", str(info.version_count))
-        
-        console.print(stats_table)
         
         # Show YAML if requested
         if include_yaml and yaml_config:
@@ -496,7 +465,6 @@ def delete(procedure_id: str, confirm: bool):
     
     if not confirm:
         console.print(f"[yellow]WARNING: This will permanently delete procedure {procedure_id}[/yellow]")
-        console.print(f"Procedure has {info.node_count} nodes and {info.version_count} versions")
         if not click.confirm("Are you sure you want to continue?"):
             console.print("Deletion cancelled")
             return
@@ -551,12 +519,11 @@ def pull(procedure_id: str, output: Optional[str]):
 @click.option('--timeout', type=int, help='Timeout in seconds')
 @click.option('--async-mode', is_flag=True, help='Run procedure asynchronously')
 @click.option('--dry-run', is_flag=True, help='Perform a dry run without actual execution')
-@click.option('--restart-from-root-node', is_flag=True, help='Delete all non-root graph nodes and restart from scratch')
 @click.option('--openai-api-key', help='OpenAI API key for AI-powered experiments (or set OPENAI_API_KEY env var)')
 @click.option('--set', '-s', 'set_params', multiple=True, help='Set procedure parameter as key=value (e.g., --set scorecard="AW - Confirmation")')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
 def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: Optional[int], timeout: Optional[int],
-        async_mode: bool, dry_run: bool, restart_from_root_node: bool, openai_api_key: Optional[str], set_params: tuple, output: str):
+        async_mode: bool, dry_run: bool, openai_api_key: Optional[str], set_params: tuple, output: str):
     """Run a procedure - either by ID or directly from a YAML file.
 
     You can run a procedure in two ways:
@@ -576,7 +543,6 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
         plexus procedure run abc123def456
         plexus procedure run abc123def456 --max-iterations 50 --timeout 300
         plexus procedure run abc123def456 --async-mode -o json
-        plexus procedure run abc123def456 --restart-from-root-node
 
         # Pass parameters to a procedure
         plexus procedure run -y optimizer.yaml -s scorecard="My Scorecard" -s score="My Score" -s max_samples=100
@@ -690,7 +656,6 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
             score_identifier=score_identifier_for_create,
             yaml_config=yaml_config,
             featured=False,
-            create_root_node=not is_tactus,  # Don't create root node for Tactus procedures
             stage_configs=stage_configs,
         )
 
@@ -703,7 +668,6 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
                 score_identifier=None,
                 yaml_config=yaml_config,
                 featured=False,
-                create_root_node=not is_tactus,
                 stage_configs=stage_configs,
             )
 
@@ -715,8 +679,6 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
         console.print(f"[green]✓ Created procedure {procedure_id}[/green]")
         console.print()
 
-    if restart_from_root_node:
-        console.print(f"[yellow]⚠ Restarting from root node - deleting all existing hypothesis nodes...[/yellow]")
 
     console.print(f"Running procedure {procedure_id} with task tracking...")
 
@@ -730,8 +692,6 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
         options['async_mode'] = async_mode
     if dry_run:
         options['dry_run'] = dry_run
-    if restart_from_root_node:
-        options['restart_from_root_node'] = restart_from_root_node
 
     # Add AI options
     if openai_api_key:
@@ -819,8 +779,6 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
                 table.add_row("Scorecard", details['scorecard_name'])
             if details.get('score_name'):
                 table.add_row("Score", details['score_name'])
-            if details.get('node_count'):
-                table.add_row("Node Count", str(details['node_count']))
         
         # Show MCP tools information
         mcp_info = result.get('mcp_info', {})
@@ -1201,7 +1159,6 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         score_identifier=score,
         yaml_config=yaml_config,
         featured=False,
-        create_root_node=False,
         score_version_id=version,
     )
 
@@ -1600,6 +1557,117 @@ def clone_state(source_id: str, target_id: str, truncate_to_cycle: int):
         console.print(f"[red]Error cloning state: {e}[/red]")
         import traceback
         console.print(traceback.format_exc())
+
+
+@procedure.command("index-optimizer-run")
+@click.argument("procedure_id")
+@click.option("--force", is_flag=True, help="Rewrite optimizer artifacts even if the task already has them attached")
+@click.option("--output", "-o", type=click.Choice(["json", "yaml", "table"]), default="table", show_default=True)
+def index_optimizer_run(procedure_id: str, force: bool, output: str):
+    """Index one historical optimizer run into canonical task attachments."""
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    service = OptimizerResultsService(client)
+    try:
+        result = service.index_optimizer_run(procedure_id, force=force)
+    except Exception as exc:
+        console.print(f"[red]Error indexing optimizer run: {exc}[/red]")
+        return
+
+    payload = {
+        "procedure_id": procedure_id,
+        "task_id": result["task_id"],
+        "pointer": result["pointer"],
+        "summary": result["manifest"].get("summary"),
+        "best": result["manifest"].get("best"),
+    }
+
+    if output == "json":
+        click.echo(json.dumps(payload, indent=2, default=str))
+        return
+    if output == "yaml":
+        click.echo(yaml.dump(payload, default_flow_style=False))
+        return
+
+    table = Table(title=f"Indexed Optimizer Run {procedure_id}")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Task", payload["task_id"])
+    table.add_row("Manifest", payload["pointer"]["manifest"])
+    table.add_row("Events", payload["pointer"]["events"])
+    table.add_row("Runtime log", payload["pointer"]["runtime_log"])
+    table.add_row("Completed cycles", str((payload["summary"] or {}).get("completed_cycles") or "—"))
+    table.add_row("Winning version", (payload["best"] or {}).get("winning_version_id") or "—")
+    table.add_row("Best feedback alignment evaluation", (payload["best"] or {}).get("best_feedback_evaluation_id") or "—")
+    table.add_row("Best regression alignment evaluation", (payload["best"] or {}).get("best_accuracy_evaluation_id") or "—")
+    console.print(table)
+
+
+@procedure.command("optimizer-summary")
+@click.argument("procedure_id")
+@click.option("--runtime-log", is_flag=True, help="Include a runtime log excerpt")
+@click.option("--events", is_flag=True, help="Include an events.jsonl excerpt")
+@click.option("--log-lines", default=80, show_default=True, help="Number of trailing lines to include for excerpts")
+@click.option("--output", "-o", type=click.Choice(["json", "yaml", "table"]), default="table", show_default=True)
+def optimizer_summary(procedure_id: str, runtime_log: bool, events: bool, log_lines: int, output: str):
+    """Summarize one indexed optimizer procedure and its candidate/evaluation history."""
+    client = create_client()
+    if not client:
+        console.print("[red]Error: Could not create API client[/red]")
+        return
+
+    service = OptimizerResultsService(client)
+    try:
+        payload = service.summarize_optimizer_procedure(
+            procedure_id,
+            include_runtime_log=runtime_log,
+            include_events=events,
+            log_lines=log_lines,
+        )
+    except Exception as exc:
+        console.print(f"[red]Error loading optimizer summary: {exc}[/red]")
+        return
+
+    if output == "json":
+        click.echo(json.dumps(payload, indent=2, default=str))
+        return
+    if output == "yaml":
+        click.echo(yaml.dump(payload, default_flow_style=False))
+        return
+
+    summary = payload.get("summary") or {}
+    best = payload.get("best") or {}
+    table = Table(title=f"Optimizer Summary {procedure_id}")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("Status", str((payload.get("procedure") or {}).get("status") or "—"))
+    table.add_row("Cycles", f"{summary.get('completed_cycles') or '—'}/{summary.get('configured_max_iterations') or '—'}")
+    table.add_row("Stop reason", summary.get("stop_reason") or "—")
+    table.add_row("Winning version", best.get("winning_version_id") or "—")
+    table.add_row("Best feedback alignment evaluation", best.get("best_feedback_evaluation_url") or best.get("best_feedback_evaluation_id") or "—")
+    table.add_row("Best regression alignment evaluation", best.get("best_accuracy_evaluation_url") or best.get("best_accuracy_evaluation_id") or "—")
+    table.add_row("Manifest", (payload.get("artifact_pointer") or {}).get("manifest") or "—")
+    table.add_row("Runtime log", (payload.get("artifact_pointer") or {}).get("runtime_log") or "—")
+    console.print(table)
+
+    cycles = Table(title="Cycles")
+    cycles.add_column("Cycle", style="cyan")
+    cycles.add_column("Status", style="white")
+    cycles.add_column("Version", style="magenta")
+    cycles.add_column("Feedback AC1", style="green")
+    cycles.add_column("Regression AC1", style="green")
+    for cycle in payload.get("cycles") or []:
+        cycles.add_row(
+            str(cycle.get("cycle") or "—"),
+            str(cycle.get("status") or "—"),
+            str(cycle.get("version_id") or "—"),
+            f"{cycle['feedback_alignment']:.4f}" if cycle.get("feedback_alignment") is not None else "—",
+            f"{cycle['accuracy_alignment']:.4f}" if cycle.get("accuracy_alignment") is not None else "—",
+        )
+    console.print(cycles)
 
 
 # Add to CLI

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "70759403-1aaf-48b6-ba46-2c60f8e5b556",
+  "issue_id": "plx-e2dbaa5b-91fc-4b3d-a8cb-e1d77c836bf4",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-27T18:14:34.863Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "Feature: Track champion production history\n\nAs a lab worker, I want to see which score versions were champion over time, so that production changes are auditable.\n\nScenario: Promotion records production transition\nGiven a score has a current champion\nWhen a new version is promoted\nThen the incoming and outgoing ScoreVersion metadata record the production transition with timestamps and linked predecessor/successor IDs."
+      }
+    }
+  }
+}

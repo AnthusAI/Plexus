@@ -292,45 +292,6 @@ def query_procedures_in_window(graphql_client,
     )
 
 
-def query_graph_nodes_in_window(graphql_client,
-                                account_id: str,
-                                start_time: datetime,
-                                end_time: datetime) -> List[Dict[str, Any]]:
-    """Query all GraphNodes in a time window with pagination."""
-    query = """
-    query ListGraphNodesByTime(
-        $accountId: String!,
-        $startTime: String!,
-        $endTime: String!,
-        $nextToken: String
-    ) {
-        listGraphNodeByAccountIdAndCreatedAt(
-            accountId: $accountId,
-            createdAt: { between: [$startTime, $endTime] },
-            limit: 1000,
-            nextToken: $nextToken
-        ) {
-            items {
-                id
-                createdAt
-            }
-            nextToken
-        }
-    }
-    """
-    
-    return _paginated_query(
-        graphql_client,
-        query,
-        {
-            'accountId': account_id,
-            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
-            'endTime': end_time.isoformat().replace('+00:00', 'Z')
-        },
-        'listGraphNodeByAccountIdAndCreatedAt'
-    )
-
-
 def query_chat_sessions_in_window(graphql_client,
                                   account_id: str,
                                   start_time: datetime,
@@ -475,7 +436,6 @@ QUERY_FUNCTIONS = {
     'evaluations': query_evaluations_in_window,
     'feedbackItems': query_feedback_items_in_window,
     'procedures': query_procedures_in_window,
-    'graphNodes': query_graph_nodes_in_window,
     'chatSessions': query_chat_sessions_in_window
 }
 
@@ -506,4 +466,3 @@ def query_records_for_counting(graphql_client,
         raise ValueError(f"Unsupported record type: {record_type}")
     
     return query_func(graphql_client, account_id, start_time, end_time)
-

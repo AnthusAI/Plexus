@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "64a20a7b-ccf1-4c7d-88d0-e91b5c251dd1",
+  "issue_id": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-25T15:15:14.565Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Zero-schema optimizer indexing, workbench UI, and agent utilities",
+    "description": "",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}
