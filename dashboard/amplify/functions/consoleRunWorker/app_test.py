@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -42,7 +43,8 @@ def test_handler_processes_cloud_targeted_insert(monkeypatch):
     calls = []
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
-    monkeypatch.setattr(app, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
+    monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
     monkeypatch.setattr(
         app,
         "process_console_message",
@@ -62,7 +64,8 @@ def test_handler_skips_local_target_when_cloud_worker_does_not_claim(monkeypatch
     app = _load_app_module()
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
-    monkeypatch.setattr(app, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
+    monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
     monkeypatch.setattr(app, "process_console_message", lambda *_args, **_kwargs: False)
 
     result = app.handler(
@@ -79,7 +82,8 @@ def test_handler_ignores_non_insert_records(monkeypatch):
     app = _load_app_module()
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
-    monkeypatch.setattr(app, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
+    monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
 
     result = app.handler(
         {"Records": [_stream_record(event_name="MODIFY")]},
@@ -94,7 +98,8 @@ def test_handler_reports_partial_batch_failure_when_processing_raises(monkeypatc
     app = _load_app_module()
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
-    monkeypatch.setattr(app, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
+    monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
 
     def fail_processing(*_args, **_kwargs):
         raise RuntimeError("boom")
@@ -112,7 +117,8 @@ def test_handler_skips_insert_without_new_image(monkeypatch):
     app = _load_app_module()
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
-    monkeypatch.setattr(app, "_resolve_client", lambda: SimpleNamespace())
+    monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
+    monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
 
     result = app.handler(
         {
@@ -129,3 +135,100 @@ def test_handler_skips_insert_without_new_image(monkeypatch):
 
     assert result["processed"] == 0
     assert result["skipped"] == 1
+
+
+def test_handler_duplicate_stream_delivery_counts_only_one_processed(monkeypatch):
+    app = _load_app_module()
+    outcomes = iter([True, False])
+
+    monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
+    monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
+    monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
+    monkeypatch.setattr(app, "process_console_message", lambda *_args, **_kwargs: next(outcomes))
+
+    result = app.handler(
+        {"Records": [_stream_record(), _stream_record()]},
+        SimpleNamespace(aws_request_id="req-1"),
+    )
+
+    assert result["processed"] == 1
+    assert result["skipped"] == 1
+    assert result["batchItemFailures"] == []
+
+
+def test_resolve_client_uses_iam_auth_without_api_key(monkeypatch):
+    app = _load_app_module()
+    created = []
+
+    class FakeClient:
+        def __init__(self, *, api_url):
+            created.append(api_url)
+
+    monkeypatch.setenv("PLEXUS_API_URL", "https://example.appsync-api.us-west-2.amazonaws.com/graphql")
+    monkeypatch.setenv("PLEXUS_GRAPHQL_AUTH_MODE", "iam")
+    monkeypatch.delenv("PLEXUS_API_KEY", raising=False)
+    monkeypatch.setattr(app, "PlexusDashboardClient", FakeClient)
+
+    app._resolve_client()
+
+    assert created == ["https://example.appsync-api.us-west-2.amazonaws.com/graphql"]
+
+
+def test_resolve_client_requires_iam_auth_mode(monkeypatch):
+    app = _load_app_module()
+
+    monkeypatch.setenv("PLEXUS_API_URL", "https://example.appsync-api.us-west-2.amazonaws.com/graphql")
+    monkeypatch.delenv("PLEXUS_GRAPHQL_AUTH_MODE", raising=False)
+
+    try:
+        app._resolve_client()
+    except RuntimeError as exc:
+        assert "PLEXUS_GRAPHQL_AUTH_MODE must be iam" in str(exc)
+    else:
+        raise AssertionError("expected RuntimeError")
+
+
+def test_load_provider_credentials_sets_openai_and_optional_anthropic(monkeypatch):
+    app = _load_app_module()
+    app._load_provider_credentials.cache_clear()
+
+    class FakeSecretsManager:
+        def get_secret_value(self, *, SecretId):
+            assert SecretId == "plexus/production/config"
+            return {
+                "SecretString": json.dumps(
+                    {
+                        "openai-api-key": "test-openai-key",
+                        "anthropic-api-key": "test-anthropic-key",
+                    }
+                )
+            }
+
+    monkeypatch.setenv("PLEXUS_CONFIG_SECRET_NAME", "plexus/production/config")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(app.boto3, "client", lambda service_name: FakeSecretsManager())
+
+    app._load_provider_credentials()
+
+    assert app.os.environ["OPENAI_API_KEY"] == "test-openai-key"
+    assert app.os.environ["ANTHROPIC_API_KEY"] == "test-anthropic-key"
+
+
+def test_load_provider_credentials_allows_missing_anthropic(monkeypatch):
+    app = _load_app_module()
+    app._load_provider_credentials.cache_clear()
+
+    class FakeSecretsManager:
+        def get_secret_value(self, *, SecretId):
+            return {"SecretString": json.dumps({"openai-api-key": "test-openai-key"})}
+
+    monkeypatch.setenv("PLEXUS_CONFIG_SECRET_NAME", "plexus/production/config")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(app.boto3, "client", lambda service_name: FakeSecretsManager())
+
+    app._load_provider_credentials()
+
+    assert app.os.environ["OPENAI_API_KEY"] == "test-openai-key"
+    assert "ANTHROPIC_API_KEY" not in app.os.environ

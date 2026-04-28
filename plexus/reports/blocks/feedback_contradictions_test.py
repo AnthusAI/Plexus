@@ -138,6 +138,11 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
         _fetch_items,
     )
     monkeypatch.setattr(block, '_fetch_score_results_by_item_ids', AsyncMock(return_value={}))
+    monkeypatch.setattr(
+        block,
+        '_build_rubric_memory_contexts',
+        AsyncMock(side_effect=AssertionError('rubric memory must be opt-in')),
+    )
 
     class _Service:
         async def analyze_items(self, *args, **kwargs):
@@ -174,6 +179,9 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
     assert parsed['contradictions_found'] == 1
     assert parsed['aligned_found'] == 0
     assert len(parsed['topics']) == 1
+    assert parsed['block_configuration']['include_rubric_memory'] is False
+    assert parsed['rubric_memory'] == {'enabled': False, 'context_count': 0}
+    assert 'rubric_evidence_packs' not in parsed
 
 
 @pytest.mark.asyncio
@@ -264,6 +272,7 @@ async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(mon
     assert parsed['eligible_count'] == 2
     assert parsed['eligibility_rule'] == 'unanimous non-contradiction'
     assert parsed['source_report_block_id'] == 'block-456'
+    assert 'rubric_evidence_packs' not in parsed
 
 
 @pytest.mark.asyncio
@@ -334,6 +343,151 @@ async def test_feedback_contradictions_applies_max_feedback_items_cap(monkeypatc
     assert captured_item_ids == ['item-1']
     assert parsed['total_items_analyzed'] == 1
     assert parsed['block_configuration']['max_feedback_items'] == 1
+
+
+@pytest.mark.asyncio
+async def test_feedback_contradictions_rubric_memory_is_explicit_opt_in(monkeypatch):
+    block = FeedbackContradictions(
+        config={
+            'scorecard': 'CMG EDU',
+            'score': 'Branding and Matching',
+            'mode': 'contradictions',
+            'include_rubric_memory': True,
+        },
+        params={},
+        api_client=_DummyClient(),
+    )
+
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name',
+        lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
+    )
+    monkeypatch.setattr(
+        block,
+        '_resolve_score',
+        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
+    )
+    monkeypatch.setattr(block, '_fetch_guidelines', AsyncMock(return_value='Guideline text'))
+
+    async def _fetch_items(*_args, **_kwargs):
+        return [SimpleNamespace(id='fi-1', itemId='item-1', isInvalid=False)]
+
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.feedback_utils.fetch_feedback_items_for_score',
+        _fetch_items,
+    )
+    monkeypatch.setattr(block, '_fetch_score_results_by_item_ids', AsyncMock(return_value={}))
+    monkeypatch.setattr(
+        block,
+        '_build_rubric_memory_contexts',
+        AsyncMock(return_value={'item-1': {'markdown_context': 'citation context'}}),
+    )
+
+    captured_contexts = {}
+
+    class _Service:
+        async def analyze_items(self, *_args, **kwargs):
+            captured_contexts.update(kwargs.get('rubric_memory_contexts_by_item') or {})
+            return [
+                {
+                    'feedback_item_id': 'fi-1',
+                    'reason': 'Policy contradiction.',
+                    'voting': [{'model': 'gpt', 'result': True}],
+                    'confidence': 'high',
+                    'verdict': 'contradiction',
+                    'associated_dataset_eligible': False,
+                    'edited_at': None,
+                }
+            ]
+
+    monkeypatch.setattr('plexus.reports.blocks.feedback_contradictions.GuidelineVettingService', _Service)
+    monkeypatch.setattr(block, '_cluster_topics', AsyncMock(return_value=[]))
+
+    output, _log = await block.generate()
+    parsed = _parse_output(output)
+
+    assert captured_contexts == {'item-1': {'markdown_context': 'citation context'}}
+    assert parsed['block_configuration']['include_rubric_memory'] is True
+    assert parsed['rubric_memory'] == {'enabled': True, 'context_count': 1}
+
+
+@pytest.mark.asyncio
+async def test_build_rubric_memory_contexts_uses_retrieval_only_provider(monkeypatch):
+    block = FeedbackContradictions(
+        config={'scorecard': 'CMG EDU', 'score': 'Branding and Matching'},
+        params={},
+        api_client=_DummyClient(),
+    )
+
+    calls = {}
+
+    class _Context:
+        def model_dump(self, mode):
+            assert mode == 'json'
+            return {
+                'markdown_context': 'retrieved context',
+                'citation_index': [{'id': 'evidence:01:test'}],
+            }
+
+    class _Provider:
+        def __init__(self, api_client):
+            assert api_client is block.api_client
+
+        def local_corpus_status(self, **kwargs):
+            calls['status_kwargs'] = kwargs
+            return {
+                'available': True,
+                'roots': [
+                    {'path': '/kb/scorecard', 'exists': True},
+                    {'path': '/kb/score', 'exists': True},
+                ],
+            }
+
+        async def retrieve_for_score_items(self, **kwargs):
+            calls['retrieve_kwargs'] = kwargs
+            return {'item-1': _Context()}
+
+        async def generate_for_score_item(self, **_kwargs):
+            raise AssertionError('FeedbackContradictions must not synthesize evidence packs')
+
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.RubricMemoryContextProvider',
+        _Provider,
+    )
+
+    contexts = await block._build_rubric_memory_contexts(
+        valid_items=[
+            SimpleNamespace(
+                id='fi-1',
+                itemId='item-1',
+                initialAnswerValue='No',
+                finalAnswerValue='Yes',
+                editCommentValue='Reviewer comment',
+            )
+        ],
+        score_results_by_item={'item-1': {'explanation': 'Model explanation'}},
+        scorecard_name='CMG EDU',
+        score_name='Branding and Matching',
+        score_id='score-1',
+    )
+
+    assert contexts == {
+        'item-1': {
+            'markdown_context': 'retrieved context',
+            'citation_index': [{'id': 'evidence:01:test'}],
+        }
+    }
+    assert calls['retrieve_kwargs']['score_id'] == 'score-1'
+    assert calls['retrieve_kwargs']['item_contexts'] == [
+        {
+            'key': 'item-1',
+            'model_value': 'No',
+            'model_explanation': 'Model explanation',
+            'feedback_value': 'Yes',
+            'feedback_comment': 'Reviewer comment',
+            'topic_hint': 'Feedback contradiction rubric-memory evidence',
+        }
+    ]
 
 
 @pytest.mark.asyncio

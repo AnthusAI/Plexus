@@ -36,7 +36,7 @@ type TaskIndexFields = "accountId" | "type" | "status" | "target" |
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
 type TaskStageIndexFields = "taskId" | "name" | "order" | "status";
 type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId";
-type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured" | "featuredKey";
+type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
 type ReportBlockIndexFields = "reportId" | "name" | "position" | "dataSetId";
@@ -194,8 +194,7 @@ const schema = a.schema({
             score: a.belongsTo('Score', 'scoreId'),
             configuration: a.string().required(),
             guidelines: a.string(),
-            isFeatured: a.boolean().required(),
-            featuredKey: a.string(),
+            isFeatured: a.string(),
             createdAt: a.datetime().required(),
             updatedAt: a.datetime().required(),
             note: a.string(),
@@ -216,7 +215,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("scoreId").sortKeys(["createdAt"]),
-            idx("scoreId").sortKeys(["featuredKey", "createdAt"]).name("byScoreIdAndFeaturedKeyAndCreatedAt")
+            idx("scoreId").sortKeys(["isFeatured", "createdAt"]).name("byScoreIdAndIsFeaturedAndCreatedAt")
         ]),
 
     Evaluation: a
@@ -895,6 +894,7 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
+            idx("scoreVersionId").sortKeys(["updatedAt"]),
             idx("parentProcedureId").sortKeys(["updatedAt"]),
             idx("category").sortKeys(["version"]).name("byCategory"),
             idx("status").sortKeys(["updatedAt"]).name("byStatus")

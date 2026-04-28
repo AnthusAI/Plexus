@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronUp, ChevronRight, Award, FileCode, Minimize, Maximize, ArrowDownWideNarrow, Expand, Shrink, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Clock, PanelLeftOpen, PanelLeftClose, Edit } from 'lucide-react'
+import { MoreHorizontal, X, Square, Columns2, FileStack, ChevronDown, ChevronRight, Expand, TestTube, FlaskConical, FlaskRound, TestTubes, ListCheck, MessageCircleMore, IdCard, Coins, Trash2, Crown, Star, GitCompareArrows, History, Link as LinkIcon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ScoreSidebarVersionHistory } from '@/components/ui/score-sidebar-version-history'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { generateClient } from 'aws-amplify/api'
@@ -37,14 +38,17 @@ import YamlLinterPanel from '@/components/ui/yaml-linter-panel'
 import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 import { EvaluationDialog, FeedbackEvaluationDialog } from '@/components/task-dispatch'
 import { createTask } from '@/utils/data-operations'
+import { formatAmplifyError } from '@/utils/amplify-client'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
 import { ScoreProcedureList } from '@/components/ui/score-procedure-list'
 import { ScoreEvaluationList } from '@/components/ui/score-evaluation-list'
+import { ScoreVersionDiffDialog } from '@/components/ui/score-version-diff-dialog'
 import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
 import { IdentifierDisplay } from '@/components/ui/identifier-display'
 import MetricsSummary from '@/components/MetricsSummary'
+import ClassDistributionVisualizer from '@/components/ClassDistributionVisualizer'
 
 let amplifyClient: any = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient())
@@ -69,11 +73,12 @@ export interface ScoreVersion {
   scoreId: string
   configuration: string // YAML string
   guidelines?: string
-  isFeatured: boolean
+  isFeatured?: string | null
   isChampion?: boolean
   note?: string
   branch?: string
   parentVersionId?: string
+  metadata?: Record<string, any> | null
   createdAt: string
   updatedAt: string
   user?: {
@@ -102,6 +107,125 @@ interface GetScoreVersionsResponse {
 
 interface CreateScoreVersionResponse {
   createScoreVersion: ScoreVersion
+}
+
+const parseScoreVersionMetadata = (metadata: unknown): Record<string, any> => {
+  if (!metadata) return {}
+  if (typeof metadata === 'string') {
+    const trimmed = metadata.trim()
+    if (!trimmed) return {}
+    const parsed = JSON.parse(trimmed)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  }
+  return typeof metadata === 'object' && !Array.isArray(metadata) ? metadata as Record<string, any> : {}
+}
+
+const assertGraphQLSuccess = (response: any, action: string) => {
+  if (response?.errors?.length) {
+    throw new Error(`${action}: ${response.errors.map((error: any) => error?.message || String(error)).join('; ')}`)
+  }
+}
+
+const isScoreVersionPinned = (version?: Pick<ScoreVersion, 'isFeatured'> | null) => version?.isFeatured === 'true'
+
+const buildChampionMetadata = ({
+  metadata,
+  scoreId,
+  versionId,
+  enteredAt,
+  exitedAt,
+  previousChampionVersionId,
+  nextChampionVersionId,
+  transitionId,
+  incoming,
+}: {
+  metadata?: unknown
+  scoreId: string
+  versionId: string
+  enteredAt?: string | null
+  exitedAt?: string | null
+  previousChampionVersionId?: string | null
+  nextChampionVersionId?: string | null
+  transitionId: string
+  incoming: boolean
+}) => {
+  const nextMetadata = parseScoreVersionMetadata(metadata)
+  const history = Array.isArray(nextMetadata.championHistory)
+    ? [...nextMetadata.championHistory]
+    : []
+
+  if (incoming) {
+    history.push({
+      scoreId,
+      versionId,
+      enteredAt,
+      exitedAt: null,
+      previousChampionVersionId: previousChampionVersionId || null,
+      nextChampionVersionId: null,
+      transitionId,
+    })
+  } else {
+    const openIndex = [...history].reverse().findIndex((entry) => entry && !entry.exitedAt)
+    if (openIndex >= 0) {
+      const actualIndex = history.length - 1 - openIndex
+      history[actualIndex] = {
+        ...history[actualIndex],
+        exitedAt,
+        nextChampionVersionId: nextChampionVersionId || null,
+        transitionId,
+      }
+    } else {
+      history.push({
+        scoreId,
+        versionId,
+        enteredAt: null,
+        exitedAt,
+        previousChampionVersionId: null,
+        nextChampionVersionId: nextChampionVersionId || null,
+        transitionId,
+        inferred: true,
+      })
+    }
+  }
+
+  nextMetadata.championHistory = history
+  return nextMetadata
+}
+
+interface ChampionHistoryEntry {
+  enteredAt?: string | null
+  exitedAt?: string | null
+  previousChampionVersionId?: string | null
+  nextChampionVersionId?: string | null
+}
+
+const getLatestChampionHistoryEntry = (version?: ScoreVersion): ChampionHistoryEntry | null => {
+  const entries = Array.isArray(version?.metadata?.championHistory)
+    ? version?.metadata?.championHistory
+    : []
+
+  if (!entries.length) return null
+
+  return entries.reduce<{ entry: ChampionHistoryEntry | null; index: number }>((latest, rawEntry, index) => {
+    const entry = rawEntry && typeof rawEntry === 'object' ? rawEntry as ChampionHistoryEntry : null
+    if (!entry) return latest
+
+    if (!latest.entry) return { entry, index }
+
+    const latestEntered = Date.parse(latest.entry.enteredAt || '') || 0
+    const currentEntered = Date.parse(entry.enteredAt || '') || 0
+    if (currentEntered !== latestEntered) {
+      return currentEntered > latestEntered ? { entry, index } : latest
+    }
+
+    const latestExited = Date.parse(latest.entry.exitedAt || '') || 0
+    const currentExited = Date.parse(entry.exitedAt || '') || 0
+    if (currentExited !== latestExited) {
+      return currentExited > latestExited ? { entry, index } : latest
+    }
+
+    return index > latest.index ? { entry, index } : latest
+  }, { entry: null, index: -1 }).entry
 }
 
 // Add a new interface for the secondary index query response
@@ -147,6 +271,7 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   onCostAnalysis?: () => void
   onViewProcedures?: () => void
   onViewEvaluations?: () => void
+  onViewChampionHistory?: () => void
   onDelete?: () => void
   exampleItems?: Array<{
     id: string
@@ -158,17 +283,6 @@ interface ScoreComponentProps extends React.HTMLAttributes<HTMLDivElement> {
   initialSelectedVersionId?: string | null
   onVersionSelect?: (versionId: string) => void
 }
-
-const DATASET_DISTRIBUTION_COLORS = [
-  '#10b981',
-  '#3b82f6',
-  '#f59e0b',
-  '#ef4444',
-  '#8b5cf6',
-  '#14b8a6',
-  '#f97316',
-  '#ec4899',
-]
 
 interface DetailContentProps {
   score: ScoreData
@@ -182,12 +296,14 @@ interface DetailContentProps {
   onCostAnalysis?: () => void
   onViewProcedures?: () => void
   onViewEvaluations?: () => void
+  onViewChampionHistory?: () => void
   onDelete?: () => void
   hasChanges?: boolean
   versions?: ScoreVersion[]
   championVersionId?: string
   selectedVersionId?: string
   onVersionSelect?: (version: ScoreVersion) => void
+  onHydrateVersionById?: (versionId: string) => Promise<ScoreVersion | null>
   onToggleFeature?: (versionId: string) => void
   onPromoteToChampion?: (versionId: string) => void
   isVersionsLoading?: boolean
@@ -232,6 +348,99 @@ function ScoreVersionContentSkeleton({ label = 'Loading version...' }: { label?:
         <div className="h-4 w-2/3 max-w-lg rounded bg-muted animate-pulse" />
       </div>
     </div>
+  )
+}
+
+interface RelatedScoreVersionCardProps {
+  label: string
+  currentVersion: ScoreVersion
+  relatedVersion?: ScoreVersion
+  relatedVersionId: string
+  failedToLoad?: boolean
+  onSelect?: (version: ScoreVersion) => void
+  onCompare?: (leftVersionId: string, rightVersionId: string) => void
+}
+
+function RelatedScoreVersionCard({
+  label,
+  currentVersion,
+  relatedVersion,
+  relatedVersionId,
+  failedToLoad = false,
+  onSelect,
+  onCompare,
+}: RelatedScoreVersionCardProps) {
+  const [isOpen, setIsOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    setIsOpen(false)
+  }, [currentVersion.id, relatedVersionId])
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="bg-background rounded-md">
+        <CollapsibleTrigger asChild>
+          <button type="button" className="w-full py-2 pr-2 text-left">
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex items-center gap-2">
+                {isOpen ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                <div className="min-w-0 flex items-center gap-1.5 text-xs truncate">
+                  <span className="font-medium truncate">{label}</span>
+                  <span className="text-muted-foreground">·</span>
+                  {relatedVersion ? (
+                    <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground truncate">
+                      <Timestamp time={relatedVersion.createdAt} variant="relative" className="text-xs" />
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Open related version"
+                        title="Open related version"
+                        className="shrink-0 rounded-sm p-1 text-foreground hover:bg-card"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onSelect?.(relatedVersion)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            onSelect?.(relatedVersion)
+                          }
+                        }}
+                      >
+                        <LinkIcon className="h-4 w-4" />
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground truncate">
+                      {failedToLoad ? `Unavailable: ${relatedVersionId}` : `Loading: ${relatedVersionId}`}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="flex items-start justify-between gap-3 pb-2">
+            <div className="min-w-0 flex-1 text-sm text-muted-foreground">
+              {relatedVersion?.note || (failedToLoad ? 'This related version could not be loaded.' : 'Loading related version details...')}
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-6 shrink-0 bg-muted px-2 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+              disabled={!relatedVersion}
+              onClick={() => relatedVersion && onCompare?.(relatedVersion.id, currentVersion.id)}
+            >
+              <GitCompareArrows className="mr-1.5 h-3.5 w-3.5" />
+              Compare
+            </Button>
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   )
 }
 
@@ -614,12 +823,14 @@ const DetailContent = React.memo(({
   onCostAnalysis,
   onViewProcedures,
   onViewEvaluations,
+  onViewChampionHistory,
   onDelete,
   hasChanges,
   versions,
   championVersionId,
   selectedVersionId,
   onVersionSelect,
+  onHydrateVersionById,
   onToggleFeature,
   onPromoteToChampion,
   isVersionsLoading = false,
@@ -862,6 +1073,8 @@ const DetailContent = React.memo(({
   const [evaluationAction, setEvaluationAction] = React.useState<{name: string, type: string, versionId?: string} | null>(null)
   const [isFeedbackDialogOpen, setIsFeedbackDialogOpen] = React.useState(false)
   const [feedbackAction, setFeedbackAction] = React.useState<{name: string, versionId?: string} | null>(null)
+  const [isVersionDiffOpen, setIsVersionDiffOpen] = React.useState(false)
+  const [versionDiffInitialPair, setVersionDiffInitialPair] = React.useState<{ leftVersionId?: string; rightVersionId?: string }>({})
 
   
 
@@ -1039,6 +1252,73 @@ const DetailContent = React.memo(({
     return championVersion
   }, [selectedVersionId, championVersion, versions])
 
+  const [failedRelatedVersionIds, setFailedRelatedVersionIds] = React.useState<Set<string>>(() => new Set())
+
+  React.useEffect(() => {
+    setFailedRelatedVersionIds(new Set())
+  }, [selectedVersion?.id])
+
+  const relatedVersionTargets = React.useMemo(() => {
+    if (!selectedVersion) return []
+
+    const latestChampionEntry = getLatestChampionHistoryEntry(selectedVersion)
+    const targets = [
+      { label: 'Parent Version', id: selectedVersion.parentVersionId },
+      { label: 'Previous Champion', id: latestChampionEntry?.previousChampionVersionId },
+      { label: 'Next Champion', id: latestChampionEntry?.nextChampionVersionId },
+    ]
+    const byId = new Map<string, { id: string; labels: string[] }>()
+
+    for (const target of targets) {
+      if (!target.id || target.id === selectedVersion.id) continue
+      const existing = byId.get(target.id)
+      if (existing) {
+        existing.labels.push(target.label)
+      } else {
+        byId.set(target.id, { id: target.id, labels: [target.label] })
+      }
+    }
+
+    return Array.from(byId.values())
+  }, [selectedVersion])
+
+  React.useEffect(() => {
+    if (!onHydrateVersionById || relatedVersionTargets.length === 0) return
+
+    let cancelled = false
+    const loadedVersionIds = new Set((versions ?? []).map(version => version.id))
+    const missingVersionIds = relatedVersionTargets
+      .map(target => target.id)
+      .filter(versionId => !loadedVersionIds.has(versionId) && !failedRelatedVersionIds.has(versionId))
+
+    if (missingVersionIds.length === 0) return
+
+    const hydrateMissingVersions = async () => {
+      const failedIds: string[] = []
+      for (const versionId of missingVersionIds) {
+        try {
+          const version = await onHydrateVersionById(versionId)
+          if (!version) failedIds.push(versionId)
+        } catch {
+          failedIds.push(versionId)
+        }
+      }
+      if (!cancelled && failedIds.length > 0) {
+        setFailedRelatedVersionIds(prev => new Set([...prev, ...failedIds]))
+      }
+    }
+
+    hydrateMissingVersions()
+    return () => {
+      cancelled = true
+    }
+  }, [failedRelatedVersionIds, onHydrateVersionById, relatedVersionTargets, versions])
+
+  const handleOpenVersionDiff = React.useCallback((leftVersionId?: string, rightVersionId?: string) => {
+    setVersionDiffInitialPair({ leftVersionId, rightVersionId })
+    setIsVersionDiffOpen(true)
+  }, [])
+
 
 
   // Guidelines handlers (moved up for sidebar use)
@@ -1146,6 +1426,12 @@ const DetailContent = React.memo(({
                         View Evaluations
                       </DropdownMenuItem>
                     )}
+                    {onViewChampionHistory && (
+                      <DropdownMenuItem onClick={onViewChampionHistory}>
+                        <History className="mr-2 h-4 w-4" />
+                        View Champion History
+                      </DropdownMenuItem>
+                    )}
                     {onDelete && (
                       <>
                         <DropdownMenuSeparator />
@@ -1230,6 +1516,7 @@ const DetailContent = React.memo(({
                       : []
                     const totalLabels = distributionEntries.reduce((sum, [, count]) => sum + count, 0)
                     const rowCount = dataset.rowCount ?? totalLabels
+                    const distributionData = distributionEntries.map(([label, count]) => ({ label, count }))
                     const distributionText = distributionEntries.length > 0
                       ? distributionEntries.map(([label, count]) => `${label}: ${count}`).join(' · ')
                       : 'Label distribution unavailable'
@@ -1248,21 +1535,12 @@ const DetailContent = React.memo(({
 
                         {distributionEntries.length > 0 && totalLabels > 0 ? (
                           <div className="mt-2">
-                            <div className="h-2 w-full rounded overflow-hidden bg-muted flex">
-                              {distributionEntries.map(([label, count], index) => {
-                                const widthPercent = (count / totalLabels) * 100
-                                return (
-                                  <div
-                                    key={`${dataset.id}-${label}`}
-                                    title={`${label}: ${count}`}
-                                    style={{
-                                      width: `${widthPercent}%`,
-                                      backgroundColor: DATASET_DISTRIBUTION_COLORS[index % DATASET_DISTRIBUTION_COLORS.length],
-                                    }}
-                                  />
-                                )
-                              })}
-                            </div>
+                            <ClassDistributionVisualizer
+                              data={distributionData}
+                              hideHeader
+                              rotateThreshold={10}
+                              hideThreshold={3}
+                            />
                             <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                               <div>Rows: {rowCount ?? 'stats unavailable'}</div>
                               <div className="text-right">{distributionText}</div>
@@ -1293,6 +1571,7 @@ const DetailContent = React.memo(({
             championVersionId={championVersionId}
             selectedVersionId={selectedVersionId}
             onVersionSelect={onVersionSelect}
+            onToggleFeature={onToggleFeature}
             isSidebarCollapsed={isSidebarCollapsed}
             onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             isLoading={isVersionsLoading && !hasLoadedFirstVersionPage}
@@ -1312,8 +1591,8 @@ const DetailContent = React.memo(({
               </div>
             ) : selectedVersion && (
               <div className="p-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
+                <div className="relative">
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="font-medium text-sm">
                         {selectedVersion.id === championVersionId ? 'Champion Version' : 'Version'}
@@ -1325,11 +1604,30 @@ const DetailContent = React.memo(({
                     <div className="text-xs text-muted-foreground mb-2">
                       <Timestamp time={selectedVersion.createdAt} variant="relative" className="text-xs" />
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-sm text-muted-foreground">
                       {selectedVersion.note || 'No note'}
                     </div>
+                    {relatedVersionTargets.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {relatedVersionTargets.map((target) => {
+                          const relatedVersion = versions?.find(version => version.id === target.id)
+                          return (
+                            <RelatedScoreVersionCard
+                              key={target.id}
+                              label={target.labels.join(' / ')}
+                              currentVersion={selectedVersion}
+                              relatedVersion={relatedVersion}
+                              relatedVersionId={target.id}
+                              failedToLoad={failedRelatedVersionIds.has(target.id)}
+                              onSelect={onVersionSelect}
+                              onCompare={(leftVersionId, rightVersionId) => handleOpenVersionDiff(leftVersionId, rightVersionId)}
+                            />
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2 ml-3">
+                  <div className="absolute right-0 top-0 flex items-center gap-2">
                     {selectedVersion && (
                       <ShadcnDropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -1343,6 +1641,15 @@ const DetailContent = React.memo(({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => onToggleFeature?.(selectedVersion.id)}>
+                            <Star className="mr-2 h-4 w-4" />
+                            {isScoreVersionPinned(selectedVersion) ? 'Unstar Version' : 'Star Version'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOpenVersionDiff()}>
+                            <GitCompareArrows className="mr-2 h-4 w-4" />
+                            Compare Versions
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           {selectedVersion.id !== championVersionId && onPromoteToChampion && (
                             <>
                               <DropdownMenuItem onClick={() => onPromoteToChampion(selectedVersion.id)}>
@@ -1863,6 +2170,16 @@ const DetailContent = React.memo(({
         scoreName={score.name}
         exampleItems={exampleItems}
       />
+
+      <ScoreVersionDiffDialog
+        isOpen={isVersionDiffOpen}
+        onClose={() => setIsVersionDiffOpen(false)}
+        versions={versions ?? []}
+        selectedVersionId={selectedVersionId}
+        championVersionId={championVersionId}
+        initialLeftVersionId={versionDiffInitialPair.leftVersionId}
+        initialRightVersionId={versionDiffInitialPair.rightVersionId}
+      />
     </div>
   )
 })
@@ -1880,6 +2197,7 @@ export function ScoreComponent({
   onCostAnalysis,
   onViewProcedures,
   onViewEvaluations,
+  onViewChampionHistory,
   onDelete,
   exampleItems = [],
   scorecardName,
@@ -1910,6 +2228,54 @@ export function ScoreComponent({
   const [guidelinesEditValue, setGuidelinesEditValue] = React.useState('')
   const [hasGuidelinesChanges, setHasGuidelinesChanges] = React.useState(false)
   const [isSavingGuidelines, setIsSavingGuidelines] = React.useState(false)
+
+  const sortScoreVersions = React.useCallback((items: ScoreVersion[]) =>
+    [...items].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [])
+
+  const mergeScoreVersions = React.useCallback((existing: ScoreVersion[], incoming: ScoreVersion[]) => {
+    const byId = new Map<string, ScoreVersion>();
+    for (const item of existing) byId.set(item.id, item);
+    for (const item of incoming) byId.set(item.id, item);
+    return sortScoreVersions([...byId.values()]);
+  }, [sortScoreVersions])
+
+  const hydrateVersionById = React.useCallback(async (versionId: string): Promise<ScoreVersion | null> => {
+    const existingVersion = versions.find(version => version.id === versionId)
+    if (existingVersion) return existingVersion
+
+    try {
+      const response = await getAmplifyClient().graphql({
+        query: `
+          query GetScoreVersion($id: ID!) {
+            getScoreVersion(id: $id) {
+              id
+              scoreId
+              configuration
+              guidelines
+              isFeatured
+              note
+              branch
+              parentVersionId
+              createdAt
+              updatedAt
+              metadata
+            }
+          }
+        `,
+        variables: { id: String(versionId) },
+      }) as GraphQLResult<GetScoreVersionResponse>;
+
+      const version = response.data?.getScoreVersion ?? null;
+      if (!version || version.scoreId !== score.id) return null
+
+      setVersions(prev => mergeScoreVersions(prev, [version]))
+      setLoadedVersionCount(prev => Math.max(prev, mergeScoreVersions(versions, [version]).length))
+      return version
+    } catch (error) {
+      console.error('Failed to hydrate related score version:', formatAmplifyError(error))
+      return null
+    }
+  }, [mergeScoreVersions, score.id, versions])
 
   // Version selection handler
   const handleVersionSelect = (version: ScoreVersion) => {
@@ -2019,6 +2385,7 @@ export function ScoreComponent({
               parentVersionId
               createdAt
               updatedAt
+              metadata
             }
           }
         `,
@@ -2055,16 +2422,17 @@ export function ScoreComponent({
                 parentVersionId
                 createdAt
                 updatedAt
+                metadata
               }
               nextToken
             }
           }
         `,
         variables: {
-          scoreId: String(score.id),
-          sortDirection: "DESC",
-          limit: 100,
-          nextToken,
+            scoreId: String(score.id),
+            sortDirection: "DESC",
+            limit: 100,
+            nextToken,
         }
       }) as GraphQLResult<GetScoreVersionsByScoreIdResponse>;
 
@@ -2077,6 +2445,50 @@ export function ScoreComponent({
         items: resultData?.items ?? [],
         nextToken: resultData?.nextToken ?? null,
       };
+    };
+
+    const fetchPinnedVersions = async () => {
+      const response = await getAmplifyClient().graphql({
+        query: `
+          query GetPinnedScoreVersionsByScoreId(
+            $scoreId: String!
+            $sortDirection: ModelSortDirection
+            $limit: Int
+          ) {
+            listScoreVersionByScoreIdAndIsFeaturedAndCreatedAt(
+              scoreId: $scoreId,
+              isFeaturedCreatedAt: { beginsWith: { isFeatured: "true" } },
+              sortDirection: $sortDirection,
+              limit: $limit
+            ) {
+              items {
+                id
+                scoreId
+                configuration
+                guidelines
+                isFeatured
+                note
+                branch
+                parentVersionId
+                createdAt
+                updatedAt
+                metadata
+              }
+            }
+          }
+        `,
+        variables: {
+          scoreId: String(score.id),
+          sortDirection: "DESC",
+          limit: 100,
+        }
+      }) as GraphQLResult<{
+        listScoreVersionByScoreIdAndIsFeaturedAndCreatedAt?: {
+          items: ScoreVersion[]
+        }
+      }>;
+
+      return response.data?.listScoreVersionByScoreIdAndIsFeaturedAndCreatedAt?.items ?? [];
     };
 
     const selectPreferredVersion = async (
@@ -2157,10 +2569,13 @@ export function ScoreComponent({
           }
         }
 
-        const firstPage = await fetchVersionPage(null);
+        const [firstPage, pinnedVersions] = await Promise.all([
+          fetchVersionPage(null),
+          fetchPinnedVersions(),
+        ]);
         if (cancelled) return;
 
-        const firstPageVersions = sortVersions(firstPage.items);
+        const firstPageVersions = mergeVersions(firstPage.items, pinnedVersions);
         setVersions(firstPageVersions);
         setLoadedVersionCount(firstPageVersions.length);
         setHasLoadedFirstVersionPage(true);
@@ -2207,7 +2622,7 @@ export function ScoreComponent({
           nextToken = page.nextToken;
         }
       } catch (error) {
-        console.error('Error fetching versions:', error);
+        console.error('Error fetching versions:', formatAmplifyError(error));
         if (!cancelled) {
           setVersionsLoadError('Failed to load score versions');
           setHasLoadedFirstVersionPage(true);
@@ -2408,6 +2823,8 @@ export function ScoreComponent({
     try {
       const version = versions.find(v => v.id === versionId);
       if (!version) return;
+      const isPinned = isScoreVersionPinned(version);
+      const nextPinned = !isPinned;
 
       // Enable API call to persist the feature status
       await getAmplifyClient().graphql({
@@ -2422,20 +2839,23 @@ export function ScoreComponent({
         variables: {
           input: {
             id: String(versionId),
-            isFeatured: !version.isFeatured
+            isFeatured: nextPinned ? 'true' : 'false',
+            createdAt: version.createdAt,
           }
         }
       });
 
       // Update local state regardless of response
-      // This ensures UI is updated even if we can't verify the response format
-      setVersions(prev => prev.map(v => 
-        v.id === versionId ? { ...v, isFeatured: !v.isFeatured } : v
-      ));
+        // This ensures UI is updated even if we can't verify the response format
+        setVersions(prev => prev.map(v => 
+        v.id === versionId
+          ? { ...v, isFeatured: nextPinned ? 'true' : 'false' }
+          : v
+        ));
 
       toast.success('Version feature status updated');
     } catch (error) {
-      console.error('Error toggling feature:', error);
+      console.error('Error toggling version favorite:', formatAmplifyError(error));
       toast.error('Failed to update version feature status');
     }
   };
@@ -2573,8 +2993,9 @@ export function ScoreComponent({
         scoreId: String(score.id),
         configuration: configurationYaml,
         guidelines: overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''),
-        isFeatured: false,
+        isFeatured: "false",
         note: versionNote || 'Updated score configuration',
+        parentVersionId: selectedVersionId || score.championVersionId || undefined,
         createdAt: now,
         updatedAt: now
       };
@@ -2588,6 +3009,7 @@ export function ScoreComponent({
               configuration
               guidelines
               isFeatured
+              parentVersionId
               note
               createdAt
               updatedAt
@@ -2669,9 +3091,17 @@ export function ScoreComponent({
     try {
       const version = versions.find(v => v.id === versionId);
       if (!version) return;
+      const previousChampionVersionId = championVersionId && championVersionId !== versionId ? championVersionId : undefined;
+      const previousChampionVersion = previousChampionVersionId
+        ? versions.find(v => v.id === previousChampionVersionId)
+        : undefined;
+      const promotedAt = new Date().toISOString();
+      const transitionId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${versionId}-${promotedAt}`;
 
       // Update the Score record to set this as the champion version
-      await getAmplifyClient().graphql({
+      const updateScoreResponse = await getAmplifyClient().graphql({
         query: `
           mutation UpdateScoreChampion($input: UpdateScoreInput!) {
             updateScore(input: $input) {
@@ -2687,19 +3117,91 @@ export function ScoreComponent({
           }
         }
       });
+      assertGraphQLSuccess(updateScoreResponse, 'Update score champion');
+
+      const updateVersionMetadata = async (
+        targetVersionId: string,
+        metadata: Record<string, any>,
+        options?: { isFeatured?: string | null }
+      ) => {
+        const updateMetadataResponse = await getAmplifyClient().graphql({
+          query: `
+            mutation UpdateScoreVersionMetadata($input: UpdateScoreVersionInput!) {
+              updateScoreVersion(input: $input) {
+                id
+                metadata
+                isFeatured
+              }
+            }
+          `,
+          variables: {
+            input: {
+              id: String(targetVersionId),
+              metadata: JSON.stringify(metadata),
+              ...(options?.isFeatured !== undefined ? { isFeatured: options.isFeatured } : {}),
+            }
+          }
+        });
+        assertGraphQLSuccess(updateMetadataResponse, 'Update score version champion metadata');
+      };
+
+      const incomingMetadata = buildChampionMetadata({
+        metadata: version.metadata,
+        scoreId: score.id,
+        versionId,
+        enteredAt: promotedAt,
+        previousChampionVersionId: previousChampionVersionId || null,
+        transitionId,
+        incoming: true,
+      });
+      await updateVersionMetadata(versionId, incomingMetadata, { isFeatured: 'true' });
+
+      if (previousChampionVersionId) {
+        const outgoingMetadata = buildChampionMetadata({
+          metadata: previousChampionVersion?.metadata,
+          scoreId: score.id,
+          versionId: previousChampionVersionId,
+          exitedAt: promotedAt,
+          nextChampionVersionId: versionId,
+          transitionId,
+          incoming: false,
+        });
+        await updateVersionMetadata(previousChampionVersionId, outgoingMetadata);
+      }
 
       // Update local state
       setChampionVersionId(versionId);
+      setVersions(prev => prev.map(item => {
+        if (item.id === versionId) {
+          return { ...item, metadata: incomingMetadata, isFeatured: 'true' };
+        }
+        if (item.id === previousChampionVersionId) {
+          return {
+            ...item,
+            metadata: buildChampionMetadata({
+              metadata: item.metadata,
+              scoreId: score.id,
+              versionId: item.id,
+              exitedAt: promotedAt,
+              nextChampionVersionId: versionId,
+              transitionId,
+              incoming: false,
+            })
+          };
+        }
+        return item;
+      }));
       
       // If this version is not already selected, select it
       if (selectedVersionId !== versionId) {
-        handleVersionSelect(version);
+        handleVersionSelect({ ...version, metadata: incomingMetadata, isFeatured: 'true' });
       }
 
       toast.success('Version promoted to champion');
     } catch (error) {
-      console.error('Error promoting version to champion:', error);
-      toast.error('Failed to promote version to champion');
+      const message = formatAmplifyError(error);
+      console.error('Error promoting version to champion:', message);
+      toast.error(`Failed to promote version to champion: ${message}`);
     }
   };
 
@@ -2755,12 +3257,14 @@ export function ScoreComponent({
               onCostAnalysis={onCostAnalysis}
               onViewProcedures={onViewProcedures}
               onViewEvaluations={onViewEvaluations}
+              onViewChampionHistory={onViewChampionHistory}
               onDelete={onDelete}
               hasChanges={hasChanges}
               versions={versions}
               championVersionId={championVersionId}
               selectedVersionId={selectedVersionId}
               onVersionSelect={handleVersionSelect}
+              onHydrateVersionById={hydrateVersionById}
               onToggleFeature={handleToggleFeature}
               onPromoteToChampion={handlePromoteToChampion}
               isVersionsLoading={isVersionsLoading}

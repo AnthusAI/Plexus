@@ -59,7 +59,6 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
       aliases: ['YAML', 'yaml', 'YML', 'yml'],
       mimetypes: ['application/x-yaml', 'text/x-yaml', 'text/yaml']
     });
-    console.log('YAML language registered successfully');
   }
 
   // Register YAML language configuration
@@ -91,7 +90,6 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
       decreaseIndentPattern: /^\s*[\}\]\)].*$/,
     },
   })
-  console.log('YAML language configuration set');
 
   // Enhanced YAML tokenization rules for better syntax highlighting
   monaco.languages.setMonarchTokensProvider('yaml', {
@@ -197,7 +195,6 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
       ],
     },
   })
-  console.log('YAML tokenizer provider registered');
 
   // Set up YAML validation for indentation errors
   monaco.languages.registerDocumentFormattingEditProvider('yaml', {
@@ -241,8 +238,7 @@ export const configureYamlLanguage = (monaco: Monaco): void => {
 
   // Register YAML validation - we'll call this from the editor onChange
   monaco.languages.onLanguage('yaml', () => {
-    // This ensures the language is properly registered
-    console.log('YAML language registered successfully')
+    // This ensures the language is properly registered.
   })
 }
 

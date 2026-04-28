@@ -47,7 +47,7 @@ class TestScoreInfoTool:
             'createdAt': '2024-01-01T00:00:00Z',
             'updatedAt': '2024-01-01T00:00:00Z',
             'note': 'Champion version',
-            'isFeatured': True,
+            'isFeatured': "true",
             'parentVersionId': None
         }
         
@@ -85,7 +85,7 @@ class TestScoreInfoTool:
                 "createdAt": "2024-01-01T00:00:00Z",
                 "updatedAt": "2024-01-01T00:00:00Z",
                 "note": "Champion version",
-                "isFeatured": True,
+                "isFeatured": "true",
                 "parentVersionId": None,
                 "isChampion": True
             },
@@ -172,7 +172,7 @@ class TestScoreInfoTool:
             'createdAt': '2024-02-01T00:00:00Z',
             'updatedAt': '2024-02-01T00:00:00Z',
             'note': 'Specific version for testing',
-            'isFeatured': False,
+            'isFeatured': "false",
             'parentVersionId': 'version-parent'
         }
         
@@ -211,7 +211,7 @@ class TestScoreInfoTool:
                 "createdAt": "2024-02-01T00:00:00Z",
                 "updatedAt": "2024-02-01T00:00:00Z",
                 "note": "Specific version for testing",
-                "isFeatured": False,
+                "isFeatured": "false",
                 "parentVersionId": "version-parent",
                 "isChampion": False  # Not the champion
             },
@@ -1670,14 +1670,14 @@ class TestCreateVersionFromCodeWithParent:
             'configuration': code_content.strip(),
             'guidelines': guidelines.strip(),
             'note': note,
-            'isFeatured': True,
+            'isFeatured': "true",
             'parentVersionId': parent_version_id  # Should set parent relationship
         }
         
         # Verify parent relationship is established
         assert expected_version_input['parentVersionId'] == parent_version_id
         assert expected_version_input['scoreId'] == score_id
-        assert expected_version_input['isFeatured'] is True
+        assert expected_version_input['isFeatured'] == "true"
     
     def test_create_version_with_parent_error_handling(self):
         """Test error handling in _create_version_from_code_with_parent"""

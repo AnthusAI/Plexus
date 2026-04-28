@@ -178,7 +178,6 @@ class MetricsAggregationStack(Stack):
             memory_size=512,
             environment={
                 'GRAPHQL_ENDPOINT': config.get_value("api-url"),
-                'GRAPHQL_API_KEY': config.get_value("api-key"),
                 'ENVIRONMENT': environment
             },
             description=f"Processes DynamoDB streams to update AggregatedMetrics ({environment})"

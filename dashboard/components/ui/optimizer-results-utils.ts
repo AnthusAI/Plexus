@@ -303,7 +303,7 @@ export type OptimizerRunView = {
 
 export type ScoreVersionSummary = {
   id: string
-  isFeatured: boolean
+  isFeatured?: string | null
   note?: string
   branch?: string
   parentVersionId?: string
@@ -790,7 +790,19 @@ export function manifestTouchesVersion(
     }
   }
 
-  return false
+  return manifestValueReferencesVersion(manifest, versionId)
+}
+
+function manifestValueReferencesVersion(value: unknown, versionId: string): boolean {
+  if (value == null) return false
+  if (typeof value === 'string') return value === versionId
+  if (typeof value !== 'object') return false
+  if (Array.isArray(value)) {
+    return value.some((item) => manifestValueReferencesVersion(item, versionId))
+  }
+  return Object.values(value as Record<string, unknown>).some((item) =>
+    manifestValueReferencesVersion(item, versionId)
+  )
 }
 
 export function procedureIdFromTaskTarget(target: unknown): string | null {
@@ -972,7 +984,7 @@ async function loadManifestFromProcedureMetadata(procedure: any): Promise<{
   manifest: OptimizerManifest | null
 }> {
   const metadata = safeJsonParse<Record<string, any>>(procedure.metadata)
-  const artifactPointer = metadata?.optimizer_artifacts ?? null
+  const artifactPointer = safeJsonParse<Record<string, any>>(metadata?.optimizer_artifacts)
   const manifestKey = artifactPointer?.manifest as string | undefined
   let manifest: OptimizerManifest | null = null
 
@@ -1038,34 +1050,46 @@ export async function refreshOptimizerRunManifest(run: OptimizerRunView): Promis
   }
 }
 
-export async function loadOptimizerRuns(scoreId: string, limit: number = 50): Promise<OptimizerRunView[]> {
+export async function loadOptimizerRuns(scoreId: string, pageSize: number = 100): Promise<OptimizerRunView[]> {
   const client = getAmplifyClient()
-  const procedureResponse = await client.graphql({
-    query: `
-      query ListProcedureByScoreIdAndUpdatedAtWorkbench(
-        $scoreId: String!
-        $sortDirection: ModelSortDirection
-        $limit: Int
-      ) {
-        listProcedureByScoreIdAndUpdatedAt(
-          scoreId: $scoreId
-          sortDirection: $sortDirection
-          limit: $limit
+  const procedures: ProcedureRecord[] = []
+  let nextToken: string | null | undefined = null
+
+  do {
+    const procedureResponse = await client.graphql({
+      query: `
+        query ListProcedureByScoreIdAndUpdatedAtWorkbench(
+          $scoreId: String!
+          $sortDirection: ModelSortDirection
+          $limit: Int
+          $nextToken: String
         ) {
-          items {
-            ${PROCEDURE_CARD_FIELDS}
+          listProcedureByScoreIdAndUpdatedAt(
+            scoreId: $scoreId
+            sortDirection: $sortDirection
+            limit: $limit
+            nextToken: $nextToken
+          ) {
+            items {
+              ${PROCEDURE_CARD_FIELDS}
+            }
+            nextToken
           }
         }
-      }
-    `,
-    variables: {
-      scoreId,
-      sortDirection: 'DESC',
-      limit,
-    },
-  }) as any
+      `,
+      variables: {
+        scoreId,
+        sortDirection: 'DESC',
+        limit: pageSize,
+        nextToken,
+      },
+    }) as any
 
-  const procedures: ProcedureRecord[] = procedureResponse.data?.listProcedureByScoreIdAndUpdatedAt?.items ?? []
+    const page = procedureResponse.data?.listProcedureByScoreIdAndUpdatedAt
+    procedures.push(...(page?.items ?? []))
+    nextToken = page?.nextToken ?? null
+  } while (nextToken)
+
   const accountIds = [...new Set(procedures.map((procedure) => procedure.accountId).filter(Boolean))]
   const taskResponses = await Promise.all(
     accountIds.map((accountId) =>

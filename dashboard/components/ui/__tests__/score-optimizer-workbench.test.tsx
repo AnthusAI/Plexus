@@ -89,7 +89,7 @@ describe('ScoreOptimizerWorkbench', () => {
         versions={[
           {
             id: 'version-1',
-            isFeatured: true,
+            isFeatured: 'true',
             note: 'Best candidate',
             branch: 'optimizer',
             parentVersionId: 'version-0',

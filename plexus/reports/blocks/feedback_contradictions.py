@@ -21,6 +21,7 @@ from .guideline_vetting import GuidelineVettingService
 from .feedback_scope_resolver import resolve_scorecard
 from .score_resolution import resolve_score_for_scorecard
 from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
+from plexus.rubric_memory import RubricMemoryContextProvider
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ class FeedbackContradictions(BaseReportBlock):
         max_concurrent = int(self.config.get("max_concurrent", 20))
         max_feedback_items = int(self.config.get("max_feedback_items", 400))
         num_topics = int(self.config.get("num_topics", 8))
+        include_rubric_memory = bool(self.config.get("include_rubric_memory", False))
         if max_feedback_items < 0:
             raise ValueError("'max_feedback_items' must be >= 0.")
 
@@ -192,6 +194,19 @@ class FeedbackContradictions(BaseReportBlock):
         self._log(
             f"Loaded {len(score_results_by_item)} score results ({len(score_results_by_item)}/{len(item_ids)} items have explanations)."
         )
+        rubric_memory_contexts_by_item: Dict[str, Dict[str, Any]] = {}
+        if include_rubric_memory:
+            rubric_memory_contexts_by_item = await self._build_rubric_memory_contexts(
+                valid_items=valid_items,
+                score_results_by_item=score_results_by_item,
+                scorecard_name=scorecard_obj.name,
+                score_name=score_obj.name,
+                score_id=score_obj.id,
+            )
+        if rubric_memory_contexts_by_item:
+            self._log(
+                f"Loaded rubric-memory citation context for {len(rubric_memory_contexts_by_item)} feedback items."
+            )
 
         self._log(f"Running guideline-vetting analysis (max_concurrent={max_concurrent})...")
         vetting_service = GuidelineVettingService()
@@ -200,6 +215,7 @@ class FeedbackContradictions(BaseReportBlock):
             guidelines,
             max_concurrent,
             score_results_by_item,
+            rubric_memory_contexts_by_item=rubric_memory_contexts_by_item,
         )
 
         contradictions = [item for item in analyzed_items if item.get("verdict") == "contradiction"]
@@ -257,6 +273,11 @@ class FeedbackContradictions(BaseReportBlock):
                 "max_feedback_items": max_feedback_items if max_feedback_items > 0 else None,
                 "max_concurrent": max_concurrent,
                 "num_topics": num_topics,
+                "include_rubric_memory": include_rubric_memory,
+            },
+            "rubric_memory": {
+                "enabled": include_rubric_memory and bool(rubric_memory_contexts_by_item),
+                "context_count": len(rubric_memory_contexts_by_item),
             },
         }
 
@@ -352,6 +373,67 @@ class FeedbackContradictions(BaseReportBlock):
         except Exception as exc:
             self._log(f"Could not fetch guidelines: {exc}", level="WARNING")
             return None
+
+    async def _build_rubric_memory_contexts(
+        self,
+        *,
+        valid_items: List[Any],
+        score_results_by_item: Dict[str, Any],
+        scorecard_name: str,
+        score_name: str,
+        score_id: str,
+    ) -> Dict[str, Dict[str, Any]]:
+        provider = RubricMemoryContextProvider(api_client=self.api_client)
+        status = provider.local_corpus_status(
+            scorecard_identifier=scorecard_name,
+            score_identifier=score_name,
+        )
+        if not status["available"]:
+            missing = [
+                root["path"]
+                for root in status["roots"]
+                if not root["exists"]
+            ]
+            self._log(
+                "Rubric memory not available for this score; missing canonical folders: "
+                + ", ".join(missing),
+                level="WARNING",
+            )
+            return {}
+
+        item_contexts: list[dict[str, str]] = []
+        for item in valid_items:
+            item_id = getattr(item, "itemId", None)
+            if not item_id:
+                continue
+            score_result = score_results_by_item.get(item_id) or {}
+            item_contexts.append(
+                {
+                    "key": item_id,
+                    "model_value": getattr(item, "initialAnswerValue", "") or "",
+                    "model_explanation": score_result.get("explanation") or "",
+                    "feedback_value": getattr(item, "finalAnswerValue", "") or "",
+                    "feedback_comment": getattr(item, "editCommentValue", "") or "",
+                    "topic_hint": "Feedback contradiction rubric-memory evidence",
+                }
+            )
+        try:
+            contexts = await provider.retrieve_for_score_items(
+                scorecard_identifier=scorecard_name,
+                score_identifier=score_name,
+                score_id=score_id,
+                item_contexts=item_contexts,
+            )
+        except Exception as exc:
+            self._log(
+                f"Could not retrieve rubric-memory context for feedback contradictions: {exc}",
+                level="WARNING",
+            )
+            return {}
+        return {
+            item_id: context.model_dump(mode="json")
+            for item_id, context in contexts.items()
+        }
 
     async def _fetch_score_results_by_item_ids(self, item_ids: List[str], score_id: str) -> Dict[str, Any]:
         query = """

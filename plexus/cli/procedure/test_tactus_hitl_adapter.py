@@ -62,6 +62,8 @@ def test_request_interaction_creates_pending_message_and_sets_waiting_status():
     message_input = mutation_variables["input"]
     assert message_input["humanInteraction"] == "PENDING_APPROVAL"
     assert message_input["messageType"] == "MESSAGE"
+    assert message_input["responseTarget"] == "procedure-1"
+    assert message_input["responseStatus"] == "PENDING"
     metadata = message_input["metadata"]
     assert isinstance(metadata, str)
     metadata_obj = __import__("json").loads(metadata)

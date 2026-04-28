@@ -1045,8 +1045,14 @@ def watch(interval: int):
 @click.option('--resume-recent-eval', type=str, default=None, help='Reuse existing recent baseline evaluation ID (skip running baselines)')
 @click.option('--version', '-v', type=str, default=None, help='Score version ID to start from instead of the champion version')
 @click.option('--hint', type=str, default=None, help='Expert hint to guide the optimizer (included verbatim in agent context)')
+@click.option(
+    '--agent-model',
+    'agent_models',
+    multiple=True,
+    help='Per-agent model override as agent=model. Repeatable. Example: --agent-model hypothesis_planner=gpt-5.4-mini',
+)
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
-def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, resume_regression_eval: str, resume_recent_eval: str, version: str, hint: str, output: str):
+def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, resume_regression_eval: str, resume_recent_eval: str, version: str, hint: str, agent_models: tuple[str, ...], output: str):
     """Run feedback alignment optimization with RCA for a score.
 
     This command runs the iterative optimization loop:
@@ -1093,6 +1099,8 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
     console.print(f"  Max iterations: {max_iterations}")
     console.print(f"  Improvement threshold: {improvement_threshold:.2%}")
     console.print(f"  Dry run: {'Yes' if dry_run else 'No'}")
+    if agent_models:
+        console.print(f"  Agent model overrides: {', '.join(agent_models)}")
     console.print()
 
     # Build params JSON
@@ -1114,6 +1122,20 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         params["start_version"] = version
     if hint is not None:
         params["hint"] = hint
+    if agent_models:
+        overrides = {}
+        for raw_override in agent_models:
+            if "=" not in raw_override:
+                console.print(f"[red]Error: --agent-model must be formatted as agent=model, got {raw_override!r}[/red]")
+                return
+            agent_name, model_name = raw_override.split("=", 1)
+            agent_name = agent_name.strip()
+            model_name = model_name.strip()
+            if not agent_name or not model_name:
+                console.print(f"[red]Error: --agent-model must include a non-empty agent and model, got {raw_override!r}[/red]")
+                return
+            overrides[agent_name] = model_name
+        params["agent_models"] = overrides
 
     # Load YAML
     try:

@@ -12,7 +12,10 @@ import re
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from plexus.dashboard.api.client import PlexusDashboardClient
-from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+from plexus.dashboard.api.client import (
+    CHAT_STREAM_WRITE_RETRY_POLICY_NAME,
+    LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +81,10 @@ class ProcedureChatRecorder:
         if isinstance(data, dict) and field_name in data:
             return data.get(field_name)
         return result.get(field_name)
+
+    def _response_target(self) -> str:
+        """Return the target used by response-status GraphQL indexes."""
+        return self.procedure_id or self.session_id
 
     def _get_resume_session_id(self) -> Optional[str]:
         """Return existing session id when procedure is waiting for human input."""
@@ -907,7 +914,11 @@ class ProcedureChatRecorder:
                 'content': content,
                 'messageType': message_type,
                 'sequenceNumber': self.sequence_number,
-                'humanInteraction': human_interaction
+                'humanInteraction': human_interaction,
+                'responseTarget': self._response_target(),
+                # Runtime-emitted messages are not dispatch commands; mark them
+                # completed so composite responseStatus indexes remain valid.
+                'responseStatus': 'COMPLETED',
             }
 
             # Add accountId if available
@@ -948,7 +959,7 @@ class ProcedureChatRecorder:
             result = self.client.execute(
                 mutation,
                 {'input': message_data},
-                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+                retry_policy=CHAT_STREAM_WRITE_RETRY_POLICY_NAME,
             )
             
             # Check for GraphQL errors first
@@ -1039,7 +1050,7 @@ class ProcedureChatRecorder:
             result = self.client.execute(
                 mutation,
                 {"input": update_input},
-                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+                retry_policy=CHAT_STREAM_WRITE_RETRY_POLICY_NAME,
             )
             if isinstance(result, dict) and result.get("errors"):
                 logger.error("GraphQL error updating message %s: %s", message_id, result["errors"])
@@ -1162,7 +1173,9 @@ class ProcedureChatRecorder:
                 'content': content,
                 'messageType': message_type,
                 'sequenceNumber': sequence_number,
-                'humanInteraction': human_interaction
+                'humanInteraction': human_interaction,
+                'responseTarget': self._response_target(),
+                'responseStatus': 'COMPLETED',
                 # Note: Omitting metadata field due to GraphQL validation issues
             }
 

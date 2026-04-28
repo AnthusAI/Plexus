@@ -23,6 +23,8 @@ from tools.task.tasks import register_task_tools
 from tools.item.items import register_item_tools
 from tools.prediction.predictions import register_prediction_tools
 from tools.dataset.datasets import register_dataset_tools
+from tools.rubric_memory.rubric_memory import register_rubric_memory_tools
+from tools.chat.chats import register_chat_tools
 
 # Setup Plexus imports and core functionality
 setup_plexus_imports()
@@ -134,6 +136,10 @@ def register_all_tools():
     register_item_tools(mcp)
     logger.info("Registered item tools")
 
+    # Register chat tools
+    register_chat_tools(mcp)
+    logger.info("Registered chat tools")
+
     # Register prediction tools
     register_prediction_tools(mcp)
     logger.info("Registered prediction tools")
@@ -141,6 +147,9 @@ def register_all_tools():
     # Register dataset tools
     register_dataset_tools(mcp)
     logger.info("Registered dataset tools")
+
+    register_rubric_memory_tools(mcp)
+    logger.info("Registered rubric-memory tools")
 
     logger.info("All MCP tools registered successfully")
 

@@ -69,12 +69,11 @@ This matches the existing client-side system's behavior.
 
 Required in Lambda environment:
 - `PLEXUS_API_URL` or `GRAPHQL_ENDPOINT`: AppSync GraphQL endpoint
-- `PLEXUS_API_KEY` or `GRAPHQL_API_KEY`: API key for authentication
+- AWS IAM credentials from the Lambda execution role (for SigV4 AppSync auth)
 
 For local testing, create `.env` file in `infrastructure/` directory:
 ```bash
 PLEXUS_API_URL=https://your-appsync-endpoint.com/graphql
-PLEXUS_API_KEY=da2-xxxxxxxxxxxxx
 AMPLIFY_STACK_PATTERN=amplify-xxxxx-main-branch
 ```
 

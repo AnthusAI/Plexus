@@ -23,6 +23,7 @@ def register_documentation_tools(mcp: FastMCP):
         - score-yaml-format: Complete guide to Score YAML configuration format including LangGraph, node types, dependencies, and best practices
         - feedback-alignment: Complete guide to testing score results, finding feedback items, and analyzing prediction accuracy for score improvement
         - dataset-yaml-format: Complete guide to dataset YAML configuration format for data sources
+        - rubric-memory: Guide to scorecard knowledge-base folders, temporal source conventions, retrieval-only citation contexts, and RubricEvidencePack synthesis
         
         Args:
             filename (str): The documentation file to retrieve. Must be one of the valid filenames listed above.
@@ -42,7 +43,8 @@ def register_documentation_tools(mcp: FastMCP):
             valid_files = {
                 "score-yaml-format": "score-yaml-format.md",
                 "feedback-alignment": "feedback-alignment.md",
-                "dataset-yaml-format": "dataset-yaml-format.md"
+                "dataset-yaml-format": "dataset-yaml-format.md",
+                "rubric-memory": "rubric-memory.md",
             }
             
             if filename not in valid_files:

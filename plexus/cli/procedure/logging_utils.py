@@ -5,14 +5,21 @@ This module provides consistent logging patterns for the multi-agent system,
 including truncation utilities and chat history logging.
 """
 
+import json
 import logging
+import os
+import re
 from typing import List, Any, Dict
+from datetime import datetime, timezone
+from pathlib import Path
 try:
     from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 except ImportError:
     from langchain.schema import SystemMessage, HumanMessage, AIMessage, ToolMessage
 
 logger = logging.getLogger(__name__)
+
+_CONTEXT_CAPTURE_COUNTER = 0
 
 
 def truncate_log_message(content: str, max_lines: int = 4) -> str:
@@ -84,11 +91,111 @@ def log_chat_history_for_agent(agent_name: str,
         # Only truncate subsequent conversation messages
         if i <= 1:
             # First two messages (system prompt and initial user prompt) - don't truncate
-            logger.info(f"   [{i+1}] {message_type}: {content}")
+            logger.info(f"   [{i + 1}] {message_type}: {content}")
         else:
             # Later messages - truncate for readability
             truncated_content = truncate_log_message(content, max_lines=4)
-            logger.info(f"   [{i+1}] {message_type}: {truncated_content}")
+            logger.info(f"   [{i + 1}] {message_type}: {truncated_content}")
+
+
+def capture_llm_context_for_agent(
+    agent_name: str,
+    chat_history: List[Any],
+    *,
+    context: str = "",
+    call_site: str = "",
+    tools: List[Any] | None = None,
+) -> Dict[str, str] | None:
+    """
+    Persist the exact message list about to be sent to an LLM.
+
+    Capture is opt-in via PLEXUS_CAPTURE_LLM_CONTEXT_DIR. Files are local
+    diagnostics intended for inspecting real agent context and must not be
+    committed.
+    """
+    capture_dir = os.getenv("PLEXUS_CAPTURE_LLM_CONTEXT_DIR")
+    if not capture_dir:
+        return None
+
+    global _CONTEXT_CAPTURE_COUNTER
+    _CONTEXT_CAPTURE_COUNTER += 1
+
+    output_dir = Path(capture_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now(timezone.utc)
+    timestamp_slug = timestamp.strftime("%Y%m%dT%H%M%S%fZ")
+    slug = _slugify_context_filename(
+        f"{_CONTEXT_CAPTURE_COUNTER:04d}-{agent_name}-{call_site or context or 'llm-call'}"
+    )
+    base_path = output_dir / f"{timestamp_slug}-{slug}"
+
+    serialized_messages = [
+        _serialize_context_message(index, message)
+        for index, message in enumerate(chat_history, start=1)
+    ]
+    payload = {
+        "agent_name": agent_name,
+        "call_site": call_site,
+        "context": context,
+        "captured_at": timestamp.isoformat(),
+        "message_count": len(serialized_messages),
+        "total_character_count": sum(
+            message["character_count"] for message in serialized_messages
+        ),
+        "tools": [_serialize_tool_name(tool) for tool in tools or []],
+        "messages": serialized_messages,
+    }
+
+    json_path = base_path.with_suffix(".json")
+    markdown_path = base_path.with_suffix(".md")
+    json_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, default=str) + "\n",
+        encoding="utf-8",
+    )
+    markdown_path.write_text(_format_context_capture_markdown(payload), encoding="utf-8")
+
+    logger.info(
+        "Captured LLM context for %s at %s and %s",
+        agent_name,
+        markdown_path,
+        json_path,
+    )
+    return {"markdown_path": str(markdown_path), "json_path": str(json_path)}
+
+
+def capture_tactus_dspy_context_for_agent(
+    agent_name: str,
+    prompt_context: Dict[str, Any],
+    *,
+    turn_count: int | None = None,
+    call_site: str = "tactus_dspy_agent_turn",
+) -> Dict[str, str] | None:
+    """Persist a Tactus/DSPy prompt_context using the standard capture format."""
+    messages: List[Any] = []
+
+    system_prompt = prompt_context.get("system_prompt")
+    if system_prompt:
+        messages.append({"role": "system", "content": str(system_prompt)})
+
+    history = prompt_context.get("history", [])
+    if hasattr(history, "messages"):
+        history = history.messages
+    if isinstance(history, list):
+        messages.extend(history)
+
+    user_message = prompt_context.get("user_message")
+    if user_message:
+        messages.append({"role": "user", "content": str(user_message)})
+
+    context = f"turn {turn_count}" if turn_count is not None else ""
+    return capture_llm_context_for_agent(
+        agent_name=agent_name,
+        chat_history=messages,
+        context=context,
+        call_site=call_site,
+        tools=prompt_context.get("tools") or [],
+    )
 
 
 def log_filtered_vs_full_history(agent_name: str,
@@ -115,11 +222,22 @@ def log_filtered_vs_full_history(agent_name: str,
             
             if len(full_content) != len(filtered_content):
                 msg_type = _get_message_type(full_msg)
-                logger.info(f"   [{i+1}] {msg_type}: {len(full_content)} → {len(filtered_content)} chars")
+                logger.info(f"   [{i + 1}] {msg_type}: {len(full_content)} → {len(filtered_content)} chars")
 
 
 def _get_message_type(message: Any) -> str:
     """Get a readable message type string."""
+    if isinstance(message, dict):
+        role = str(message.get("role") or "").lower()
+        if role in {"system", "user", "assistant", "tool", "tool_result"}:
+            return {
+                "system": "SYSTEM",
+                "user": "USER",
+                "assistant": "ASSISTANT",
+                "tool": "TOOL_RESULT",
+                "tool_result": "TOOL_RESULT",
+            }[role]
+        return "DICT"
     if isinstance(message, SystemMessage):
         return "SYSTEM"
     elif isinstance(message, HumanMessage):
@@ -142,6 +260,101 @@ def _get_message_content(message: Any) -> str:
         return str(message['content'])
     else:
         return str(message)
+
+
+def _serialize_context_message(index: int, message: Any) -> Dict[str, Any]:
+    content = _get_message_content(message)
+    serialized = {
+        "index": index,
+        "role": _get_message_type(message),
+        "class_name": message.__class__.__name__ if hasattr(message, "__class__") else "",
+        "content": content,
+        "character_count": len(content),
+    }
+    tool_calls = _extract_message_tool_calls(message)
+    if tool_calls:
+        serialized["tool_calls"] = tool_calls
+    if hasattr(message, "tool_call_id"):
+        serialized["tool_call_id"] = str(getattr(message, "tool_call_id"))
+    return serialized
+
+
+def _extract_message_tool_calls(message: Any) -> List[Dict[str, Any]]:
+    raw_tool_calls = getattr(message, "tool_calls", None)
+    if not raw_tool_calls and isinstance(message, dict):
+        raw_tool_calls = message.get("tool_calls")
+    tool_calls = []
+    for raw_call in raw_tool_calls or []:
+        if isinstance(raw_call, dict):
+            tool_calls.append(
+                {
+                    "name": str(raw_call.get("name") or raw_call.get("tool_name") or ""),
+                    "args": raw_call.get("args") or raw_call.get("arguments") or {},
+                    "id": str(raw_call.get("id") or ""),
+                }
+            )
+        else:
+            tool_calls.append(
+                {
+                    "name": str(getattr(raw_call, "name", "")),
+                    "args": getattr(raw_call, "args", {}),
+                    "id": str(getattr(raw_call, "id", "")),
+                }
+            )
+    return tool_calls
+
+
+def _serialize_tool_name(tool: Any) -> str:
+    if isinstance(tool, str):
+        return tool
+    return str(getattr(tool, "name", None) or getattr(tool, "__name__", None) or tool)
+
+
+def _format_context_capture_markdown(payload: Dict[str, Any]) -> str:
+    lines = [
+        f"# LLM Context Capture: {payload['agent_name']}",
+        "",
+        f"- Captured at: `{payload['captured_at']}`",
+        f"- Call site: `{payload['call_site']}`",
+        f"- Context: `{payload['context']}`",
+        f"- Messages: `{payload['message_count']}`",
+        f"- Total characters: `{payload['total_character_count']}`",
+        "",
+    ]
+    tools = payload.get("tools") or []
+    if tools:
+        lines.extend(["## Tools", ""])
+        for tool_name in tools:
+            lines.append(f"- `{tool_name}`")
+        lines.append("")
+
+    lines.extend(["## Messages", ""])
+    for message in payload["messages"]:
+        lines.extend(
+            [
+                f"### {message['index']}. {message['role']}",
+                "",
+                f"- Class: `{message['class_name']}`",
+                f"- Characters: `{message['character_count']}`",
+                "",
+            ]
+        )
+        if message.get("tool_calls"):
+            lines.extend(["Tool calls:", ""])
+            for tool_call in message["tool_calls"]:
+                lines.append(
+                    f"- `{tool_call['name']}` id=`{tool_call['id']}` args="
+                    f"`{json.dumps(tool_call['args'], ensure_ascii=False, default=str)}`"
+                )
+            lines.append("")
+        markdown_content = str(message["content"]).replace("\x00", "\\0")
+        lines.extend(["```text", markdown_content, "```", ""])
+    return "\n".join(lines)
+
+
+def _slugify_context_filename(value: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-")
+    return slug[:140] or "llm-context"
 
 
 def log_tool_execution(tool_name: str, 
