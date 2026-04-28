@@ -352,12 +352,14 @@ def process_console_message(
     latest_message = message
     try:
         latest_message = fetch_message(client, message.id) or message
+        created_at = latest_message.created_at or message.created_at or None
         run_console_chat_response(client, latest_message, owner=owner)
-        mark_message_completed(client, message.id, created_at=latest_message.created_at)
+        mark_message_completed(client, message.id, created_at=created_at)
         return True
     except Exception as exc:
         logger.exception("Console chat response failed for message %s", message.id)
-        mark_message_failed(client, message.id, exc, created_at=latest_message.created_at)
+        created_at = latest_message.created_at or message.created_at or None
+        mark_message_failed(client, message.id, exc, created_at=created_at)
         raise
 
 
