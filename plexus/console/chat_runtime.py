@@ -135,22 +135,29 @@ def claim_message(
       }
     }
     """
-    result = client.execute(
-        mutation,
-        {
-            "input": {
-                "id": message.id,
-                "createdAt": message.created_at,
-                "responseStatus": RUNNING,
-                "responseOwner": owner,
-                "responseStartedAt": utc_now(),
+    try:
+        result = client.execute(
+            mutation,
+            {
+                "input": {
+                    "id": message.id,
+                    "createdAt": message.created_at,
+                    "responseStatus": RUNNING,
+                    "responseOwner": owner,
+                    "responseStartedAt": utc_now(),
+                },
+                "condition": {
+                    "responseTarget": {"eq": expected_target},
+                    "responseStatus": {"eq": PENDING},
+                },
             },
-            "condition": {
-                "responseTarget": {"eq": expected_target},
-                "responseStatus": {"eq": PENDING},
-            },
-        },
-    )
+        )
+    except Exception as exc:
+        message_text = str(exc).lower()
+        if "conditional request failed" in message_text or "conditionalcheckfailed" in message_text:
+            logger.info("Console message %s was already claimed", message.id)
+            return False
+        raise
     if _has_conditional_failure(result):
         logger.info("Console message %s was already claimed", message.id)
         return False
@@ -316,6 +323,7 @@ async def run_console_chat_response_async(
         account_id=message.account_id,
         console_user_message=message.content,
         console_session_history=history,
+        enable_mcp=False,
         context={
             "account_id": message.account_id,
             "chat_session_id": message.session_id,
@@ -378,7 +386,7 @@ def process_pending_local_messages(
     ) {
       listChatMessageByResponseTargetAndResponseStatusAndCreatedAt(
         responseTarget: $responseTarget
-        responseStatusCreatedAt: { beginsWith: { responseStatus: "PENDING" } }
+        responseStatusCreatedAt: { beginsWith: { responseStatus: PENDING } }
         sortDirection: ASC
         limit: $limit
         nextToken: $nextToken
