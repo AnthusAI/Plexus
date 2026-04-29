@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from plexus.cli.report.utils import resolve_account_id_for_command
@@ -213,6 +213,150 @@ def resolve_feedback_item_for_invalidation(
     }
 
 
+def list_invalid_feedback_items_for_score(
+    *,
+    client,
+    scorecard_identifier: str,
+    score_identifier: str,
+    account_id: Optional[str] = None,
+    limit: int = 500,
+    days: Optional[int] = None,
+) -> Dict[str, Any]:
+    """List invalidated feedback items for one score."""
+    resolved_account_id = account_id or resolve_account_id_for_command(client, None)
+    if not resolved_account_id:
+        raise FeedbackInvalidationError(
+            "Unable to resolve the account ID required to list invalidated feedback.",
+            code="account_resolution_failed",
+        )
+
+    resolved_scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+    if not resolved_scorecard_id:
+        raise FeedbackInvalidationError(
+            f"Scorecard '{scorecard_identifier}' was not found.",
+            code="scorecard_not_found",
+        )
+
+    resolved_score_id = resolve_score_identifier(
+        client, resolved_scorecard_id, score_identifier
+    )
+    if not resolved_score_id:
+        raise FeedbackInvalidationError(
+            f"Score '{score_identifier}' was not found in scorecard '{scorecard_identifier}'.",
+            code="score_not_found",
+        )
+
+    now = datetime.now(timezone.utc)
+    window_start = (
+        now - timedelta(days=days)
+        if days is not None
+        else datetime(1970, 1, 1, tzinfo=timezone.utc)
+    )
+    window_end = now + timedelta(minutes=5)
+
+    query = """
+    query ListFeedbackItemsByScoreEditedWindow(
+        $accountId: String!,
+        $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput,
+        $limit: Int,
+        $nextToken: String,
+        $sortDirection: ModelSortDirection
+    ) {
+        listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+            accountId: $accountId,
+            scorecardIdScoreIdEditedAt: $composite_sk_condition,
+            limit: $limit,
+            nextToken: $nextToken,
+            sortDirection: $sortDirection
+        ) {
+            items {
+                id
+                accountId
+                scorecardId
+                scoreId
+                itemId
+                cacheKey
+                initialAnswerValue
+                finalAnswerValue
+                initialCommentValue
+                finalCommentValue
+                editCommentValue
+                editedAt
+                editorName
+                isAgreement
+                isInvalid
+                createdAt
+                updatedAt
+            }
+            nextToken
+        }
+    }
+    """
+
+    items: List[FeedbackItem] = []
+    next_token = None
+    while True:
+        variables = {
+            "accountId": resolved_account_id,
+            "composite_sk_condition": {
+                "between": [
+                    {
+                        "scorecardId": resolved_scorecard_id,
+                        "scoreId": resolved_score_id,
+                        "editedAt": window_start.isoformat(),
+                    },
+                    {
+                        "scorecardId": resolved_scorecard_id,
+                        "scoreId": resolved_score_id,
+                        "editedAt": window_end.isoformat(),
+                    },
+                ]
+            },
+            "limit": limit,
+            "nextToken": next_token,
+            "sortDirection": "DESC",
+        }
+        response = client.execute(query=query, variables=variables)
+        if not isinstance(response, dict):
+            raise FeedbackInvalidationError(
+                f"Unexpected feedback query response type: {type(response).__name__}",
+                code="feedback_query_failed",
+            )
+        if response.get("errors"):
+            raise FeedbackInvalidationError(
+                f"GraphQL feedback query failed: {response['errors']}",
+                code="feedback_query_failed",
+                details={"errors": response["errors"]},
+            )
+        page = (
+            response.get(
+                "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt"
+            )
+            or {}
+        )
+        batch = [
+            FeedbackItem.from_dict(item_data, client=client)
+            for item_data in page.get("items", [])
+            if (item_data or {}).get("isInvalid") is True
+        ]
+        items.extend(batch)
+        next_token = page.get("nextToken")
+        if not next_token:
+            break
+
+    return {
+        "scorecard_identifier": scorecard_identifier,
+        "score_identifier": score_identifier,
+        "account_id": resolved_account_id,
+        "scorecard_id": resolved_scorecard_id,
+        "score_id": resolved_score_id,
+        "window_start": window_start.isoformat().replace("+00:00", "Z"),
+        "window_end": window_end.isoformat().replace("+00:00", "Z"),
+        "count": len(items),
+        "feedback_items": [serialize_feedback_item(item) for item in items],
+    }
+
+
 def invalidate_feedback_item(
     *,
     client,
@@ -257,4 +401,111 @@ def invalidate_feedback_item(
         "already_invalid": False,
         "resolution": target["resolution"],
         "feedback_item": serialize_feedback_item(updated_item),
+    }
+
+
+def reinstate_feedback_item(
+    *,
+    client,
+    identifier: str,
+    scorecard_identifier: Optional[str] = None,
+    score_identifier: Optional[str] = None,
+    account_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Mark exactly one feedback item valid again and return structured result data."""
+    target = resolve_feedback_item_for_invalidation(
+        client=client,
+        identifier=identifier,
+        scorecard_identifier=scorecard_identifier,
+        score_identifier=score_identifier,
+        account_id=account_id,
+    )
+    feedback_item: FeedbackItem = target["feedback_item"]
+
+    if not feedback_item.isInvalid:
+        return {
+            "status": "already_valid",
+            "updated": False,
+            "already_invalid": False,
+            "resolution": target["resolution"],
+            "feedback_item": serialize_feedback_item(feedback_item),
+        }
+
+    updated_item = FeedbackItem.reinstate(client, feedback_item.id)
+    if not updated_item:
+        raise FeedbackInvalidationError(
+            f"Failed to reinstate feedback item '{feedback_item.id}'.",
+            code="mutation_failed",
+            details={
+                "requested_identifier": identifier,
+                "feedback_item_id": feedback_item.id,
+            },
+        )
+
+    return {
+        "status": "reinstated",
+        "updated": True,
+        "already_invalid": True,
+        "resolution": target["resolution"],
+        "feedback_item": serialize_feedback_item(updated_item),
+    }
+
+
+def reinstate_invalid_feedback_items_for_score(
+    *,
+    client,
+    scorecard_identifier: str,
+    score_identifier: str,
+    dry_run: bool = True,
+    account_id: Optional[str] = None,
+    days: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Reinstate all currently invalidated feedback items for one score."""
+    inventory = list_invalid_feedback_items_for_score(
+        client=client,
+        scorecard_identifier=scorecard_identifier,
+        score_identifier=score_identifier,
+        account_id=account_id,
+        days=days,
+    )
+
+    if dry_run:
+        return {
+            "status": "dry_run",
+            "updated_count": 0,
+            "failed_count": 0,
+            "inventory": inventory,
+            "results": [],
+        }
+
+    results: List[Dict[str, Any]] = []
+    for item in inventory["feedback_items"]:
+        try:
+            result = reinstate_feedback_item(
+                client=client,
+                identifier=item["id"],
+                scorecard_identifier=scorecard_identifier,
+                score_identifier=score_identifier,
+                account_id=inventory["account_id"],
+            )
+            results.append(result)
+        except FeedbackInvalidationError as exc:
+            results.append(
+                {
+                    "status": "failed",
+                    "updated": False,
+                    "error": str(exc),
+                    "code": exc.code,
+                    "feedback_item": item,
+                }
+            )
+
+    updated_count = sum(1 for result in results if result.get("updated"))
+    failed_count = sum(1 for result in results if result.get("status") == "failed")
+    return {
+        "status": "completed" if failed_count == 0 else "completed_with_errors",
+        "updated_count": updated_count,
+        "failed_count": failed_count,
+        "inventory": inventory,
+        "results": results,
     }
