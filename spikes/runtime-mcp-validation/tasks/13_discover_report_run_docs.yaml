@@ -7,7 +7,8 @@ prompt: |
   Call plexus.docs.list, then plexus.docs.get{ key = "reports" } before taking
   action. Then call plexus.report.configurations_list to find
   report_config_weekly_alignment. Finally call plexus.report.run with
-  configuration_id report_config_weekly_alignment.
+  configuration_id report_config_weekly_alignment, async = true, and an explicit
+  budget table containing usd, wallclock_seconds, depth, and tool_calls.
   Return exactly these fields: report_configuration_id and report_handle_or_id.
 expected_outcome:
   kind: docs_discovery_then_action

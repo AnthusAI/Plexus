@@ -12,21 +12,20 @@ snippet runs:
 - Budget, streaming events, API call accounting, and HITL approval prompts
   are enforced by the runtime. You do not need to call
   `plexus.budget.remaining()` or build approval flow yourself.
+- Any long-running async call (`plexus.evaluation.run`, `plexus.report.run`,
+  `plexus.procedure.run` with `async = true`) must include an explicit child
+  budget table:
+  `budget = { usd = <number>, wallclock_seconds = <number>, depth = <int>, tool_calls = <int> }`.
 
-For high-frequency operations the runtime also injects short helper aliases:
+The runtime also injects helper aliases. High-frequency short aliases include
+`evaluate`, `predict`, `score`, `item`, `feedback`, `dataset`, `report`, and
+`procedure`. Every advertised API also has a canonical `namespace_method`
+helper, such as `scorecards_list`, `score_info`, `score_set_champion`,
+`item_last`, `feedback_alignment`, `evaluation_info`, `evaluation_run`,
+`dataset_check_associated`, `report_configurations_list`, `procedure_run`,
+`handle_status`, `docs_get`, and `api_list`.
 
-| helper       | calls                                       |
-| ------------ | ------------------------------------------- |
-| `evaluate`   | `plexus.evaluation.run`                     |
-| `predict`    | `plexus.score.predict`                      |
-| `score`      | `plexus.score.info`                         |
-| `item`       | `plexus.item.info`                          |
-| `feedback`   | `plexus.feedback.find`                      |
-| `dataset`    | `plexus.dataset.build_from_feedback_window` |
-| `report`     | `plexus.report.run`                         |
-| `procedure`  | `plexus.procedure.info`                     |
-
-Use them when they fit. Fall back to `plexus.<namespace>.<method>{...}` for
+Use helpers when they fit. Fall back to `plexus.<namespace>.<method>{...}` for
 anything else.
 
 Discover what you need instead of guessing API details from memory:
@@ -117,6 +116,12 @@ local handle = evaluate{
   score_id = "score_compliance_tone",
   item_count = 1000,
   async = true,
+  budget = {
+    usd = 0.50,
+    wallclock_seconds = 1800,
+    depth = 1,
+    tool_calls = 10,
+  },
 }
 
 return {

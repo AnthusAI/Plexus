@@ -5,8 +5,9 @@ prompt: |
   approved feedback items. Do not wait for completion. Return the handle id,
   current status, and how I can check on it later.
   Call plexus.evaluation.run with score_id score_compliance_tone, item_count 1000,
-  and async = true. Then call plexus.handle.status once for the returned handle
-  to report its current status, but do not await completion.
+  and async = true. Include an explicit budget table with usd, wallclock_seconds,
+  depth, and tool_calls. Then call plexus.handle.status once for the returned
+  handle to report its current status, but do not await completion.
   Return exactly these fields: handle_id, status, and check_later_with.
   The check_later_with value must be exactly "plexus.handle.status".
 expected_outcome:

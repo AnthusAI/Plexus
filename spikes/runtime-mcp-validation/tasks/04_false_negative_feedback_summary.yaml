@@ -7,8 +7,11 @@ prompt: |
   Use plexus.feedback.find to retrieve false-negative feedback for score_id
   score_compliance_tone with kind = "FN". plexus.feedback.find returns an array
   of feedback items directly; iterate over it with ipairs(feedback), not
-  feedback.items. Also call plexus.feedback.alignment for aggregate alignment
-  data and plexus.item.info once for each representative item id you return.
+  feedback.items. Each feedback row includes item_id, pattern, and comment.
+  Build your recurring-miss labels from feedback[i].pattern (or fallback to
+  feedback[i].comment), and choose representative_item_id from feedback[i].item_id.
+  Also call plexus.feedback.alignment for aggregate alignment data and call
+  plexus.item.info once for each representative item id you return.
   Return exactly one top-level field named patterns. It must contain exactly three
   entries, and each entry must include label, example_count, and
   representative_item_id. Do not include a transcripts field or raw transcript text.
@@ -19,6 +22,9 @@ expected_outcome:
     each_pattern_has:
       - label
       - example_count
+      - representative_item_id
+    each_pattern_non_empty:
+      - label
       - representative_item_id
     excludes_raw_transcripts: true
 coverage_tags:

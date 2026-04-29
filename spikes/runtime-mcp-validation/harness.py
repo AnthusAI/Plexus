@@ -263,6 +263,11 @@ def check_expected(
                 if field_name not in pattern:
                     passed = False
                     details.append(f"pattern missing {field_name}")
+            for field_name in constraints.get("each_pattern_non_empty", []):
+                field_value = pattern.get(field_name)
+                if field_value is None or (isinstance(field_value, str) and field_value == ""):
+                    passed = False
+                    details.append(f"pattern has empty {field_name}")
         if constraints.get("excludes_raw_transcripts") and "transcripts" in json.dumps(value).lower():
             passed = False
             details.append("raw transcripts included")
@@ -535,6 +540,7 @@ def build_lua_plexus(
             ),
             "handle": lua.table_from(
                 {
+                    "peek": wrap(plexus.handle.peek),
                     "status": wrap(plexus.handle.status),
                     "await": wrap(getattr(plexus.handle, "await")),
                     "cancel": wrap(plexus.handle.cancel),
@@ -543,8 +549,10 @@ def build_lua_plexus(
             "procedure": lua.table_from(
                 {
                     "info": wrap(plexus.procedure.info),
+                    "list": wrap(plexus.procedure.list),
                     "chat_sessions": wrap(plexus.procedure.chat_sessions),
                     "chat_messages": wrap(plexus.procedure.chat_messages),
+                    "run": wrap(plexus.procedure.run),
                 }
             ),
             "api": lua.table_from({"list": wrap(plexus.api.list)}),
@@ -553,6 +561,37 @@ def build_lua_plexus(
 
 
 HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
+    ("scorecards_list", "scorecards", "list"),
+    ("scorecards_info", "scorecards", "info"),
+    ("score_info", "score", "info"),
+    ("score_evaluations", "score", "evaluations"),
+    ("score_predict", "score", "predict"),
+    ("score_set_champion", "score", "set_champion"),
+    ("set_champion", "score", "set_champion"),
+    ("item_info", "item", "info"),
+    ("item_last", "item", "last"),
+    ("feedback_find", "feedback", "find"),
+    ("feedback_alignment", "feedback", "alignment"),
+    ("evaluation_info", "evaluation", "info"),
+    ("evaluation_find_recent", "evaluation", "find_recent"),
+    ("evaluation_compare", "evaluation", "compare"),
+    ("evaluation_run", "evaluation", "run"),
+    ("dataset_build_from_feedback_window", "dataset", "build_from_feedback_window"),
+    ("dataset_check_associated", "dataset", "check_associated"),
+    ("report_configurations_list", "report", "configurations_list"),
+    ("report_run", "report", "run"),
+    ("procedure_info", "procedure", "info"),
+    ("procedure_list", "procedure", "list"),
+    ("procedure_chat_sessions", "procedure", "chat_sessions"),
+    ("procedure_chat_messages", "procedure", "chat_messages"),
+    ("procedure_run", "procedure", "run"),
+    ("handle_peek", "handle", "peek"),
+    ("handle_status", "handle", "status"),
+    ("handle_await", "handle", "await"),
+    ("handle_cancel", "handle", "cancel"),
+    ("docs_list", "docs", "list"),
+    ("docs_get", "docs", "get"),
+    ("api_list", "api", "list"),
     ("evaluate", "evaluation", "run"),
     ("predict", "score", "predict"),
     ("score", "score", "info"),
@@ -1058,7 +1097,17 @@ def task_run_streaming_feedback_evaluation(plexus: PlexusModule) -> dict[str, An
 
 def task_start_async_evaluation_and_return_handle(plexus: PlexusModule) -> dict[str, Any]:
     handle = plexus.evaluation.run(
-        {"score_id": "score_compliance_tone", "item_count": 1000, "async": True}
+        {
+            "score_id": "score_compliance_tone",
+            "item_count": 1000,
+            "async": True,
+            "budget": {
+                "usd": 0.5,
+                "wallclock_seconds": 1800,
+                "depth": 1,
+                "tool_calls": 10,
+            },
+        }
     )
     status = plexus.handle.status({"id": handle["id"]})
     return {
@@ -1139,7 +1188,18 @@ def task_discover_report_run_docs(plexus: PlexusModule) -> dict[str, Any]:
     plexus.docs.get({"key": "reports"})
     configs = plexus.report.configurations_list()
     config = configs[0]
-    report = plexus.report.run({"configuration_id": config["id"], "async": True})
+    report = plexus.report.run(
+        {
+            "configuration_id": config["id"],
+            "async": True,
+            "budget": {
+                "usd": 0.5,
+                "wallclock_seconds": 1800,
+                "depth": 1,
+                "tool_calls": 10,
+            },
+        }
+    )
     return {
         "report_configuration_id": config["id"],
         "report_handle_or_id": report.get("handle_id") or report["id"],
