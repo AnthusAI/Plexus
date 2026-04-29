@@ -568,9 +568,13 @@ def _raise_if_task_cancelled(
     client: PlexusDashboardClient,
     log_prefix: str,
 ) -> None:
-    if not task_id:
+    if not isinstance(task_id, str) or not task_id:
         return
-    task = Task.get_by_id(task_id, client)
+    try:
+        task = Task.get_by_id(task_id, client)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("%s Could not refresh task cancellation status: %s", log_prefix, exc)
+        return
     if _is_task_cancelled(task):
         message = f"Report generation cancelled for task {task_id}"
         logger.info("%s %s", log_prefix, message)
