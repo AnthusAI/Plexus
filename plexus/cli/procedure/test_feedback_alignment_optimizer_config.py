@@ -99,6 +99,15 @@ def test_optimizer_yaml_skips_invalid_synthesis_strategy_selection():
     assert "No viable synthesis strategy selected" in code
 
 
+def test_optimizer_yaml_ignores_code_editor_prose_after_terminal_tools():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert 'Tool.last_call("submit_score_version") or Tool.last_call("done")' in code
+    assert "Ignoring agent prose after terminal tool call" in code
+    assert code.count("Ignoring agent prose after terminal tool call") == 2
+
+
 def test_optimizer_startup_requests_retrieval_only_rubric_memory():
     config = _load_optimizer_config()
     code = config["code"]
