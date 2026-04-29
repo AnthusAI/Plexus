@@ -2750,6 +2750,8 @@ code: |
       table.insert(parts, "            If prior cycles show DeepgramInputSource smoke test failures, do NOT retry.")
       table.insert(parts, "     - C2:  Preprocessing — add, tune, relax, or REMOVE RelevantWindowsTranscriptFilter or other processors when they appear to hide needed evidence.")
       table.insert(parts, "            Removing a harmful filter is a valid structural hypothesis.")
+      table.insert(parts, "            If adding/tuning RelevantWindowsTranscriptFilter, start with broad sentence windows such as prev_count=5 and next_count=8.")
+      table.insert(parts, "            Do not start with prev_count=1/next_count=1 word windows on call transcripts; they often sever answers from the prompt they respond to.")
       table.insert(parts, "     - C1a: Architecture — decompose into multiple LLM calls, add N/A gate, add CoT node.")
       table.insert(parts, "            If you add an extraction stage, use class: Extractor and map output.extracted_text")
       table.insert(parts, "            into a named state field consumed by the final classifier.")
@@ -2987,6 +2989,56 @@ code: |
     end
   end
 
+  local function rubric_memory_context_score_version(context)
+    if type(context) ~= "table" then
+      return nil
+    end
+    if type(context.machine_context) == "table" and has_text(context.machine_context.score_version_id) then
+      return context.machine_context.score_version_id
+    end
+    local citation_index = context.citation_index
+    if type(citation_index) == "table" then
+      for _, citation in pairs(citation_index) do
+        if type(citation) == "table" and citation.kind == "official_rubric" and has_text(citation.score_version_id) then
+          return citation.score_version_id
+        end
+      end
+    end
+    return nil
+  end
+
+  local function ensure_rubric_memory_context_for_version(score_version_id, purpose)
+    if not has_text(score_version_id) then
+      return nil
+    end
+    local current_context_version = rubric_memory_context_score_version(rubric_memory_context)
+    if current_context_version == score_version_id then
+      return rubric_memory_context
+    end
+    local rm_ok, rm_result = pcall(call_plexus_tool, "plexus_rubric_memory_evidence_pack", {
+      scorecard_identifier = params.scorecard,
+      score_identifier = params.score,
+      score_id = score_id,
+      score_version_id = score_version_id,
+      topic_hint = purpose or "Optimizer rubric-memory active-version context",
+      synthesize = false
+    }, {max_retries = 1})
+    if rm_ok and type(rm_result) == "table" and rm_result.success and has_text(rm_result.markdown_context) then
+      rubric_memory_context = rm_result
+      rubric_memory_briefing = rm_result.markdown_context
+      State.set("rubric_memory_context", rm_result)
+      State.set("rubric_memory_context_score_version_id", score_version_id)
+      Human.notify({message = "Rubric-memory context refreshed for active version " .. tostring(score_version_id) .. ".", level = "info"})
+      return rubric_memory_context
+    end
+    local err = "unknown error"
+    if type(rm_result) == "table" and rm_result.error then
+      err = tostring(rm_result.error)
+    end
+    Human.notify({message = "Rubric-memory context unavailable for active version " .. tostring(score_version_id) .. ": " .. err, level = "warning"})
+    return nil
+  end
+
   local function record_sme_question_gate(stage, raw_agenda, gate_result)
     local records = State.get("sme_question_gate_diagnostics") or {}
     table.insert(records, {
@@ -2998,7 +3050,7 @@ code: |
   end
 
   local function gate_sme_agenda(raw_agenda, stage, optimizer_context)
-    if not has_text(raw_agenda) or not rubric_memory_context then
+    if not has_text(raw_agenda) then
       return raw_agenda, nil
     end
     local score_version_id = ""
@@ -3015,12 +3067,17 @@ code: |
       Human.notify({message = "SME question gate skipped: rubric-memory context has no score_version_id.", level = "warning"})
       return raw_agenda, nil
     end
+    local gate_rubric_memory_context = ensure_rubric_memory_context_for_version(score_version_id, "SME agenda rubric-memory context")
+    if not gate_rubric_memory_context then
+      Human.notify({message = "SME question gate skipped: active-version rubric-memory context unavailable.", level = "warning"})
+      return raw_agenda, nil
+    end
     local gate_ok, gate_result = pcall(call_plexus_tool, "plexus_rubric_memory_sme_question_gate", {
       scorecard_identifier = params.scorecard,
       score_identifier = params.score,
       score_version_id = score_version_id,
       candidate_agenda_markdown = raw_agenda,
-      rubric_memory_context = rubric_memory_context,
+      rubric_memory_context = gate_rubric_memory_context,
       optimizer_context = optimizer_context or ""
     }, {max_retries = 1})
     if gate_ok and type(gate_result) == "table" and gate_result.success then
@@ -3119,6 +3176,8 @@ code: |
     opts = opts or {}
     local ttl = opts.ttl_hours or 24
     local fresh = opts.fresh or false
+    local contradictions_score_version_id =
+      State.get("last_accepted_version_id") or active_rubric_memory_score_version_id or champion_version_id
     Human.notify({message = string.format(
       "Refreshing contradictions landscape (cycle %d, ttl=%dh, fresh=%s)...",
       current_cycle, ttl, tostring(fresh)), level = "info"})
@@ -3131,9 +3190,10 @@ code: |
         days = tostring(params.days or 90),
         max_feedback_items = 100,
         num_topics = 8,
-        include_rubric_memory = true
+        include_rubric_memory = true,
+        score_version_id = contradictions_score_version_id
       },
-      cache_key = "FeedbackContradictions: " .. scorecard_name .. " / " .. score_name,
+      cache_key = "FeedbackContradictions: " .. scorecard_name .. " / " .. score_name .. " / " .. tostring(contradictions_score_version_id),
       ttl_hours = ttl,
       fresh = fresh
     })
@@ -4135,6 +4195,105 @@ code: |
 
   safe_editor_call = function(msg, recovery_context)
     return safe_agent_call(code_editor, "code_editor", msg, recovery_context)
+  end
+
+  local function report_phase_marker(phase_id)
+    return "=== OPTIMIZER REPORT PHASE: " .. tostring(phase_id) .. " ==="
+  end
+
+  local function set_report_generation_status(status)
+    status.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+    State.set("report_generation_status", status)
+  end
+
+  local function run_required_report_phase(agent, agent_name, phase_id, prompt, context_setup_fn)
+    local phase = tostring(phase_id)
+    local report_cycle = State.get("current_iteration")
+    local context_chars = 0
+    if context_setup_fn then
+      local setup_ok, setup_result = pcall(context_setup_fn)
+      if not setup_ok then
+        stop_reason = "report_generation_failed"
+        set_report_generation_status({
+          phase_id = phase,
+          status = "failed",
+          cycle = report_cycle,
+          started_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+          duration_seconds = 0,
+          prompt_characters = #(prompt or ""),
+          context_characters = 0,
+          agent_name = agent_name,
+          error_type = "context_setup",
+          error_message = tostring(setup_result)
+        })
+        error("report_generation_failed:" .. phase .. ": " .. tostring(setup_result))
+      end
+      context_chars = tonumber(setup_result) or 0
+    end
+
+    local marker = report_phase_marker(phase)
+    local marked_prompt = marker .. "\n\n" .. tostring(prompt or "")
+    local started_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+    local started_clock = os.clock()
+    set_report_generation_status({
+      phase_id = phase,
+      status = "running",
+      cycle = report_cycle,
+      started_at = started_at,
+      prompt_characters = #marked_prompt,
+      context_characters = context_chars,
+      agent_name = agent_name,
+      turn_label = marker
+    })
+    diag(string.format("Report phase %s started (agent=%s, prompt=%d chars, context=%d chars)",
+      phase, agent_name, #marked_prompt, context_chars))
+    Human.notify({message = string.format("Report phase %s started", phase), level = "info"})
+
+    Tool.reset()
+    guard_context_budget(agent)
+    local ok, err = safe_agent_call(agent, agent_name, marked_prompt, nil)
+    local duration = os.clock() - started_clock
+    local output = agent.output or ""
+    if ok then
+      set_report_generation_status({
+        phase_id = phase,
+        status = "succeeded",
+        cycle = report_cycle,
+        started_at = started_at,
+        duration_seconds = duration,
+        prompt_characters = #marked_prompt,
+        context_characters = context_chars,
+        output_characters = #output,
+        agent_name = agent_name,
+        turn_label = marker
+      })
+      diag(string.format("Report phase %s succeeded in %.2fs (%d output chars)",
+        phase, duration, #output))
+      Human.notify({message = string.format(
+        "Report phase %s completed in %.2fs", phase, duration), level = "info"})
+      return output
+    end
+
+    stop_reason = "report_generation_failed"
+    set_report_generation_status({
+      phase_id = phase,
+      status = "failed",
+      cycle = report_cycle,
+      started_at = started_at,
+      duration_seconds = duration,
+      prompt_characters = #marked_prompt,
+      context_characters = context_chars,
+      output_characters = #output,
+      agent_name = agent_name,
+      turn_label = marker,
+      error_type = classify_error(err),
+      error_message = tostring(err)
+    })
+    diag(string.format("Report phase %s failed in %.2fs: %s",
+      phase, duration, tostring(err)))
+    Human.notify({message = string.format(
+      "Report phase %s failed: %s", phase, trunc(tostring(err), 300)), level = "error"})
+    error("report_generation_failed:" .. phase .. ": " .. tostring(err))
   end
 
   local function extract_markdown_section(text, heading)
@@ -6599,13 +6758,16 @@ code: |
             consecutive_failed_cycles))
         end
 
-        cycle_analyst.clear_history()
-        guard_context_budget(cycle_analyst)
-        local syn_ok, syn_err = safe_agent_call(cycle_analyst, "cycle_analyst", table.concat(syn, "\n"), nil)
-        if not syn_ok then
-          diag(string.format("CYCLE_ANALYST FAILED in per-cycle report: %s", tostring(syn_err)))
-        end
-        local syn_text = cycle_analyst.output or "(cycle report complete)"
+        local syn_text = run_required_report_phase(
+          cycle_analyst,
+          "cycle_analyst",
+          "cycle_executive_analysis",
+          table.concat(syn, "\n"),
+          function()
+            cycle_analyst.clear_history()
+            return 0
+          end
+        )
 
         local exec_summary = extract_markdown_section(syn_text, "## EXECUTIVE SUMMARY")
 
@@ -6643,23 +6805,23 @@ code: |
           table.insert(lr_parts, "\n=== PLANNING ANALYSIS (context only) ===\n")
           table.insert(lr_parts, trunc(syn_text, 800))
 
-          Tool.reset()
-          report_writer.clear_history()
-          guard_context_budget(report_writer)
-          local lr_ok, lr_err = safe_agent_call(report_writer, "report_writer", table.concat(lr_parts, "\n"), nil)
-          if lr_ok then
-            local lr_raw = report_writer.output or ""
-            local _, hdr_end = lr_raw:find("## LAB REPORT\n", 1, true)
-            if hdr_end then
-              local stop = lr_raw:find("\n===", hdr_end + 1) or lr_raw:find("\n## ", hdr_end + 1)
-              local raw = stop and lr_raw:sub(hdr_end + 1, stop - 1) or lr_raw:sub(hdr_end + 1)
-              lab_report = (raw:match("^(.-)%s*$") or raw)
-            else
-              lab_report = lr_raw
+          local lr_raw = run_required_report_phase(
+            report_writer,
+            "report_writer",
+            "cycle_lab_report",
+            table.concat(lr_parts, "\n"),
+            function()
+              report_writer.clear_history()
+              return 0
             end
+          )
+          local _, hdr_end = lr_raw:find("## LAB REPORT\n", 1, true)
+          if hdr_end then
+            local stop = lr_raw:find("\n===", hdr_end + 1) or lr_raw:find("\n## ", hdr_end + 1)
+            local raw = stop and lr_raw:sub(hdr_end + 1, stop - 1) or lr_raw:sub(hdr_end + 1)
+            lab_report = (raw:match("^(.-)%s*$") or raw)
           else
-            lab_report = "(lab report generation failed: " .. tostring(lr_err) .. ")"
-            diag("Lab report generation failed: " .. tostring(lr_err))
+            lab_report = lr_raw
           end
         end
 
@@ -6693,23 +6855,23 @@ code: |
             }, "\n"),
             600))
 
-          Tool.reset()
-          report_writer.clear_history()
-          guard_context_budget(report_writer)
-          local sme_ok, sme_err = safe_agent_call(report_writer, "report_writer", table.concat(sme_parts, "\n"), nil)
-          if sme_ok then
-            local sme_raw = report_writer.output or ""
-            local _, hdr_end = sme_raw:find("## SME AGENDA\n", 1, true)
-            if hdr_end then
-              local stop = sme_raw:find("\n===", hdr_end + 1) or sme_raw:find("\n## ", hdr_end + 1)
-              local raw = stop and sme_raw:sub(hdr_end + 1, stop - 1) or sme_raw:sub(hdr_end + 1)
-              sme_agenda = (raw:match("^(.-)%s*$") or raw)
-            else
-              sme_agenda = sme_raw
+          local sme_raw = run_required_report_phase(
+            report_writer,
+            "report_writer",
+            "cycle_sme_agenda",
+            table.concat(sme_parts, "\n"),
+            function()
+              report_writer.clear_history()
+              return 0
             end
+          )
+          local _, hdr_end = sme_raw:find("## SME AGENDA\n", 1, true)
+          if hdr_end then
+            local stop = sme_raw:find("\n===", hdr_end + 1) or sme_raw:find("\n## ", hdr_end + 1)
+            local raw = stop and sme_raw:sub(hdr_end + 1, stop - 1) or sme_raw:sub(hdr_end + 1)
+            sme_agenda = (raw:match("^(.-)%s*$") or raw)
           else
-            sme_agenda = "(SME agenda generation failed: " .. tostring(sme_err) .. ")"
-            diag("SME agenda generation failed: " .. tostring(sme_err))
+            sme_agenda = sme_raw
           end
         end
         local raw_cycle_sme_agenda = sme_agenda
@@ -6869,17 +7031,18 @@ code: |
             table.insert(lp, "- Do NOT propose changes targeting items flagged as PERSISTENT or OSCILLATING")
           end
 
-          Tool.reset()
-          report_writer.clear_history()
-          guard_context_budget(report_writer)
-          local lessons_ok, lessons_err = safe_agent_call(report_writer, "report_writer", table.concat(lp, "\n"), nil)
-          if lessons_ok then
-            local lessons_text = report_writer.output or ""
-            State.set("accumulated_lessons", lessons_text)
-            diag(string.format("Accumulated lessons updated (%d chars)", #lessons_text))
-          else
-            diag(string.format("Accumulated lessons generation failed: %s", tostring(lessons_err)))
-          end
+          local lessons_text = run_required_report_phase(
+            report_writer,
+            "report_writer",
+            "accumulated_lessons",
+            table.concat(lp, "\n"),
+            function()
+              report_writer.clear_history()
+              return 0
+            end
+          )
+          State.set("accumulated_lessons", lessons_text)
+          diag(string.format("Accumulated lessons updated (%d chars)", #lessons_text))
         end
 
         -- =============================================================
@@ -6940,28 +7103,29 @@ code: |
         table.insert(summary_parts, "Maximum 4 sentences summarizing the most important actions needed right now.")
         table.insert(summary_parts, "Prioritize only what matters now. No bullet points. No sub-headers.")
 
-        Tool.reset()
-        report_writer.clear_history()
-        guard_context_budget(report_writer)
-        local sum_ok, sum_err = safe_agent_call(report_writer, "report_writer", table.concat(summary_parts, "\n"), nil)
-        if sum_ok then
-          local sum_text = report_writer.output or ""
-          local sum_prog = sum_text:match("## PROGRESS\n(.-)\n## NEXT STEPS")
-          local sum_next = sum_text:match("## NEXT STEPS\n(.*)")
-          State.set("procedure_summary", {
-            progress = sum_prog or "",
-            next_steps = sum_next or "",
-            -- Legacy field names kept for backward compat with older runs
-            diagnosis = sum_prog or "",
-            prescription = sum_next or "",
-            updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-            cycle = cycle
-          })
-          diag(string.format("Procedure summary updated (progress=%d, next_steps=%d chars)",
-            #(sum_prog or ""), #(sum_next or "")))
-        else
-          diag(string.format("Procedure summary generation failed: %s", tostring(sum_err)))
-        end
+        local sum_text = run_required_report_phase(
+          report_writer,
+          "report_writer",
+          "procedure_summary",
+          table.concat(summary_parts, "\n"),
+          function()
+            report_writer.clear_history()
+            return 0
+          end
+        )
+        local sum_prog = sum_text:match("## PROGRESS\n(.-)\n## NEXT STEPS")
+        local sum_next = sum_text:match("## NEXT STEPS\n(.*)")
+        State.set("procedure_summary", {
+          progress = sum_prog or "",
+          next_steps = sum_next or "",
+          -- Legacy field names kept for backward compat with older runs
+          diagnosis = sum_prog or "",
+          prescription = sum_next or "",
+          updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+          cycle = cycle
+        })
+        diag(string.format("Procedure summary updated (progress=%d, next_steps=%d chars)",
+          #(sum_prog or ""), #(sum_next or "")))
       end
 
       -- ================================================================
@@ -7104,6 +7268,9 @@ code: |
         stop_reason = "interrupted"
         error(tostring(cycle_err))
       end
+      if string.find(tostring(cycle_err), "report_generation_failed", 1, true) then
+        stop_reason = "report_generation_failed"
+      end
       diag(string.format("ERROR in cycle %d: %s", cycle, tostring(cycle_err)))
       Human.notify({message = string.format(
         "ERROR in cycle %d: %s — stopping run", cycle, trunc(tostring(cycle_err), 500)), level = "error"})
@@ -7124,7 +7291,9 @@ code: |
         State.set("iterations", iterations)
       end
 
-      stop_reason = "error"
+      if stop_reason ~= "report_generation_failed" then
+        stop_reason = "error"
+      end
       error("Cycle " .. tostring(cycle) .. " failed: " .. tostring(cycle_err))
     end
     -- pcall body returns "break_cycle" when it wants to exit the while loop
@@ -7203,6 +7372,8 @@ code: |
   -- 0a. Final contradictions refresh (expanded scope)
   local final_contra_ok = pcall(function()
     Human.notify({message = "  Running final contradictions analysis (expanded scope)...", level = "info"})
+    local final_contradictions_score_version_id =
+      State.get("last_accepted_version_id") or active_rubric_memory_score_version_id or champion_version_id
     local ok, report_result = pcall(call_plexus_tool, "plexus_report_run", {
       block_class = "FeedbackContradictions",
       block_config = {
@@ -7212,9 +7383,10 @@ code: |
         days = tostring(params.days or 90),
         max_feedback_items = 400,
         num_topics = 12,
-        include_rubric_memory = true
+        include_rubric_memory = true,
+        score_version_id = final_contradictions_score_version_id
       },
-      cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name,
+      cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name .. " / " .. tostring(final_contradictions_score_version_id),
       ttl_hours = 4,
       fresh = false
     })
@@ -7496,156 +7668,118 @@ code: |
   -- Phase 1: Executive Summary (plain-English, for any audience)
   Human.notify({message = "  Phase 1: Generating executive summary...", level = "info"})
   local executive_summary_text = "(executive summary not available)"
-  pcall(function()
-    report_writer.clear_history()
-    report_writer.history:add({role = "system", content = full_ctx})
-
-    local exec_prompt = table.concat({
-      "=== END-OF-RUN EXECUTIVE SUMMARY ===\n",
-      "\nYou are writing a brief executive summary of an optimization run for any audience",
-      "\n— technical or non-technical. Write exactly 4 sentences.",
-      "\nNo markdown headers. No bullet points. Flowing prose.",
-      "\nThis should be copy-paste ready for a brief email to stakeholders.",
-      "\n\nCover in this order:",
-      "\n1. Starting point and ending point (use 'agreement' not 'AC1'; give the numbers).",
-      "\n2. How many cycles ran and what the overall trajectory was.",
-      "\n3. The single main reason we cannot improve further (specific, not generic).",
-      "\n4. What decisions or clarifications are needed from subject-matter experts to unblock next steps.",
-      "\n\nWrite nothing else. Just the 4 sentences."
-    }, "")
-
-    guard_context_budget(report_writer)
-    local ok, err = safe_agent_call(report_writer, "report_writer", exec_prompt, nil)
-    executive_summary_text = report_writer.output or "(no executive summary generated)"
-    if not ok then
-      executive_summary_text = "Executive summary generation failed: " .. tostring(err)
+  local exec_prompt = table.concat({
+    "=== END-OF-RUN EXECUTIVE SUMMARY ===\n",
+    "\nYou are writing a brief executive summary of an optimization run for any audience",
+    "\n— technical or non-technical. Write exactly 4 sentences.",
+    "\nNo markdown headers. No bullet points. Flowing prose.",
+    "\nThis should be copy-paste ready for a brief email to stakeholders.",
+    "\n\nCover in this order:",
+    "\n1. Starting point and ending point (use 'agreement' not 'AC1'; give the numbers).",
+    "\n2. How many cycles ran and what the overall trajectory was.",
+    "\n3. The single main reason we cannot improve further (specific, not generic).",
+    "\n4. What decisions or clarifications are needed from subject-matter experts to unblock next steps.",
+    "\n\nWrite nothing else. Just the 4 sentences."
+  }, "")
+  executive_summary_text = run_required_report_phase(
+    report_writer,
+    "report_writer",
+    "end_executive_summary",
+    exec_prompt,
+    function()
+      report_writer.clear_history()
+      report_writer.history:add({role = "system", content = full_ctx})
+      return #full_ctx
     end
-  end)
+  )
 
   -- Phase 2: Lab Report (technical, for operators and the next optimizer run)
   Human.notify({message = "  Phase 2: Generating lab report...", level = "info"})
   local lab_report_text = "(lab report not available)"
-  pcall(function()
-    report_writer.clear_history()
-    report_writer.history:add({role = "system", content = full_ctx})
+  local lab_prompt = table.concat({
+    "=== END-OF-RUN LAB REPORT ===\n",
+    "\nYou are writing a technical report for operators and AI agents who will work on",
+    "\nthis score next. This document feeds the next optimization run as prior_run_prescription.",
+    "\nInclude ONLY actions that lab operators or AI agents can take without SME input.",
+    "\n\nKeep the entire report under 450 words.",
+    "\nDo not pad. Do not repeat the same finding in multiple sections.",
+    "\nUse exactly the sections below and nothing else.",
+    "\n\nStructure your output with THREE top-level sections:",
+    "\n\n## SUMMARY",
+    "\nExactly 4 bullets, one sentence each. Cover: overall trajectory, stall reason,",
+    "\ndataset divergence or alignment, and the realistic ceiling estimate.",
+    "\n\n## ANALYSIS",
+    "\nExactly 3 short subsections. Each must be exactly 2 sentences.",
+    "\n\n### What happened",
+    "\nNarrate the run in plain language: baseline metrics, what improved, what stalled,",
+    "\nand the stop reason. Include the key AC1 numbers.",
+    "\n\n### Why it stalled",
+    "\nIdentify the single most important technical blocking factor. Be specific: name the",
+    "\ncontradiction topic or policy gap, how many items it affects, and what the",
+    "\nconflict is between what the model does and what reviewers expect.",
+    "\nIf the datasets diverged, explain what that reveals about the ground truth.",
+    "\n\n### Error patterns",
+    "\nDescribe the top 3 residual patterns total. Keep this subsection to exactly 2 sentences.",
+    "\nName whether each pattern is a contradiction, policy gap, or noisy label cluster.",
+    "\n\n## NEXT ACTIONS (LAB ONLY)",
+    "\nActions that lab operators or AI agents can take without SME input.",
+    "\nInclude ONLY things under lab control: prompt engineering, model swaps,",
+    "\narchitecture changes, data quality fixes.",
+    "\nDo NOT include anything requiring a policy decision — those go in the SME Agenda.",
+    "\nFormat each as: [PRIORITY] [WHAT]: [evidence/rationale]",
+    "\nCap at 3 items. No padding.",
+    "\n\n## SUSPECTED LOW-QUALITY FEEDBACK LABELS",
+    "\nIf the Feedback Landscape Diagnostic identified specific suspected items:",
+    "\nList them here. For each item:",
+    "\n  Item ID | Human label | Model prediction | Pattern | Why suspected | Confidence",
+    "\nGroup by theme if multiple items share the same root cause.",
+    "\nPay special attention to OSCILLATING items — these reveal contradictory norms, not prompt issues.",
+    "\nIf no items were identified, write: (No suspected low-quality labels identified in this run.)"
+  }, "")
 
-    local lab_prompt = table.concat({
-      "=== END-OF-RUN LAB REPORT ===\n",
-      "\nYou are writing a technical report for operators and AI agents who will work on",
-      "\nthis score next. This document feeds the next optimization run as prior_run_prescription.",
-      "\nInclude ONLY actions that lab operators or AI agents can take without SME input.",
-      "\n\nKeep the entire report under 450 words.",
-      "\nDo not pad. Do not repeat the same finding in multiple sections.",
-      "\nUse exactly the sections below and nothing else.",
-      "\n\nStructure your output with THREE top-level sections:",
-      "\n\n## SUMMARY",
-      "\nExactly 4 bullets, one sentence each. Cover: overall trajectory, stall reason,",
-      "\ndataset divergence or alignment, and the realistic ceiling estimate.",
-      "\n\n## ANALYSIS",
-      "\nExactly 3 short subsections. Each must be exactly 2 sentences.",
-      "\n\n### What happened",
-      "\nNarrate the run in plain language: baseline metrics, what improved, what stalled,",
-      "\nand the stop reason. Include the key AC1 numbers.",
-      "\n\n### Why it stalled",
-      "\nIdentify the single most important technical blocking factor. Be specific: name the",
-      "\ncontradiction topic or policy gap, how many items it affects, and what the",
-      "\nconflict is between what the model does and what reviewers expect.",
-      "\nIf the datasets diverged, explain what that reveals about the ground truth.",
-      "\n\n### Error patterns",
-      "\nDescribe the top 3 residual patterns total. Keep this subsection to exactly 2 sentences.",
-      "\nName whether each pattern is a contradiction, policy gap, or noisy label cluster.",
-      "\n\n## NEXT ACTIONS (LAB ONLY)",
-      "\nActions that lab operators or AI agents can take without SME input.",
-      "\nInclude ONLY things under lab control: prompt engineering, model swaps,",
-      "\narchitecture changes, data quality fixes.",
-      "\nDo NOT include anything requiring a policy decision — those go in the SME Agenda.",
-      "\nFormat each as: [PRIORITY] [WHAT]: [evidence/rationale]",
-      "\nCap at 3 items. No padding.",
-      "\n\n## SUSPECTED LOW-QUALITY FEEDBACK LABELS",
-      "\nIf the Feedback Landscape Diagnostic identified specific suspected items:",
-      "\nList them here. For each item:",
-      "\n  Item ID | Human label | Model prediction | Pattern | Why suspected | Confidence",
-      "\nGroup by theme if multiple items share the same root cause.",
-      "\nPay special attention to OSCILLATING items — these reveal contradictory norms, not prompt issues.",
-      "\nIf no items were identified, write: (No suspected low-quality labels identified in this run.)"
-    }, "")
-
+  lab_report_text = run_required_report_phase(
+    report_writer,
+    "report_writer",
+    "end_lab_report",
+    lab_prompt,
+    function()
+      report_writer.clear_history()
+      report_writer.history:add({role = "system", content = full_ctx})
+      local context_chars = #full_ctx
     -- Also include the feedback landscape diagnostic for label analysis
-    local kc = State.get("known_contradictions")
-    local compact_contra = build_compact_contradiction_summary(kc, 3)
-    if has_text(compact_contra) then
-      report_writer.history:add({role = "system", content =
-        "=== CONTRADICTION DETAILS (for label analysis) ===\n" .. compact_contra
-        .. "\n=== END CONTRADICTION DETAILS ==="})
+      local kc = State.get("known_contradictions")
+      local compact_contra = build_compact_contradiction_summary(kc, 3)
+      if has_text(compact_contra) then
+        local contra_context = "=== CONTRADICTION DETAILS (for label analysis) ===\n" .. compact_contra
+          .. "\n=== END CONTRADICTION DETAILS ==="
+        report_writer.history:add({role = "system", content = contra_context})
+        context_chars = context_chars + #contra_context
+      end
+      local final_diag = State.get("recent_landscape_diagnostic")
+      if final_diag and has_text(final_diag.compact_summary) then
+        local landscape_context = "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===\n"
+          .. string.format("(Generated from %d cycles; %d notable items)\n",
+              final_diag.generated_at_cycle or 0, final_diag.notable_item_count or 0)
+          .. trunc(final_diag.compact_summary, 800)
+          .. "\n=== END FEEDBACK LANDSCAPE DIAGNOSTIC ==="
+        report_writer.history:add({role = "system", content = landscape_context})
+        context_chars = context_chars + #landscape_context
+      end
+      return context_chars
     end
-    local final_diag = State.get("recent_landscape_diagnostic")
-    if final_diag and has_text(final_diag.compact_summary) then
-      report_writer.history:add({role = "system", content =
-        "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===\n"
-        .. string.format("(Generated from %d cycles; %d notable items)\n",
-            final_diag.generated_at_cycle or 0, final_diag.notable_item_count or 0)
-        .. trunc(final_diag.compact_summary, 800)
-        .. "\n=== END FEEDBACK LANDSCAPE DIAGNOSTIC ==="})
-    end
-
-    guard_context_budget(report_writer)
-    local ok, err = safe_agent_call(report_writer, "report_writer", lab_prompt, nil)
-    lab_report_text = report_writer.output or "(no lab report generated)"
-    if not ok then
-      lab_report_text = "Lab report generation failed: " .. tostring(err)
-    end
-  end)
+  )
 
   -- Phase 3: SME Agenda (decision-formatted meeting agenda for stakeholders)
   Human.notify({message = "  Phase 3: Generating SME agenda...", level = "info"})
   local sme_agenda_text = "(SME agenda not available)"
+  -- Extract score name for the agenda header if available
+  local score_name_for_agenda = score_id or "Score"
   pcall(function()
-    report_writer.clear_history()
+    local sn = State.get("score_name")
+    if has_text(sn) then score_name_for_agenda = sn end
+  end)
 
-    -- SME Agenda gets: executive summary + lab report + contradiction details + feedback landscape
-    local sme_ctx_parts = {}
-    table.insert(sme_ctx_parts, "=== EXECUTIVE SUMMARY ===")
-    table.insert(sme_ctx_parts, executive_summary_text)
-    table.insert(sme_ctx_parts, "=== END EXECUTIVE SUMMARY ===")
-    table.insert(sme_ctx_parts, "")
-
-    table.insert(sme_ctx_parts, "=== LAB REPORT ===")
-    table.insert(sme_ctx_parts, trunc(lab_report_text, 600))
-    table.insert(sme_ctx_parts, "=== END LAB REPORT ===")
-    table.insert(sme_ctx_parts, "")
-
-    local kc = State.get("known_contradictions")
-    local compact_contra = build_compact_contradiction_summary(kc, 3)
-    if has_text(compact_contra) then
-      table.insert(sme_ctx_parts, "=== CONTRADICTION LANDSCAPE ===")
-      table.insert(sme_ctx_parts, compact_contra)
-      table.insert(sme_ctx_parts, "=== END CONTRADICTION LANDSCAPE ===")
-      table.insert(sme_ctx_parts, "")
-    end
-
-    local final_diag = State.get("recent_landscape_diagnostic")
-    if final_diag and has_text(final_diag.compact_summary) then
-      table.insert(sme_ctx_parts, "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===")
-      table.insert(sme_ctx_parts, trunc(final_diag.compact_summary, 600))
-      table.insert(sme_ctx_parts, "=== END FEEDBACK LANDSCAPE DIAGNOSTIC ===")
-      table.insert(sme_ctx_parts, "")
-    end
-
-    if has_text(residual_errors_text) then
-      table.insert(sme_ctx_parts, trunc(residual_errors_text, 900))
-      table.insert(sme_ctx_parts, "")
-    end
-
-    report_writer.history:add({role = "system", content = table.concat(sme_ctx_parts, "\n")})
-
-    -- Extract score name for the agenda header if available
-    local score_name_for_agenda = score_id or "Score"
-    pcall(function()
-      local sn = State.get("score_name")
-      if has_text(sn) then score_name_for_agenda = sn end
-    end)
-
-    local sme_prompt = table.concat({
+  local sme_prompt = table.concat({
       "=== STAKEHOLDER MEETING AGENDA ===\n",
       "\nYou are writing a meeting agenda for subject-matter experts (SMEs) — the people",
       "\nwho write the rubric, handle the calls, and know the domain.",
@@ -7672,28 +7806,67 @@ code: |
       "\n(repeat the same structure for each item, up to 3 total)",
       "\n\n## Background",
       "\n1-2 sentences only: overall performance trend in plain language"
-    }, "")
+  }, "")
 
-    guard_context_budget(report_writer)
-    local ok, err = safe_agent_call(report_writer, "report_writer", sme_prompt, nil)
-    sme_agenda_text = report_writer.output or "(no SME agenda generated)"
-    if not ok then
-      sme_agenda_text = "SME agenda generation failed: " .. tostring(err)
+  sme_agenda_text = run_required_report_phase(
+    report_writer,
+    "report_writer",
+    "end_sme_agenda",
+    sme_prompt,
+    function()
+      report_writer.clear_history()
+      -- SME Agenda gets: executive summary + lab report + contradiction details + feedback landscape
+      local sme_ctx_parts = {}
+      table.insert(sme_ctx_parts, "=== EXECUTIVE SUMMARY ===")
+      table.insert(sme_ctx_parts, executive_summary_text)
+      table.insert(sme_ctx_parts, "=== END EXECUTIVE SUMMARY ===")
+      table.insert(sme_ctx_parts, "")
+
+      table.insert(sme_ctx_parts, "=== LAB REPORT ===")
+      table.insert(sme_ctx_parts, trunc(lab_report_text, 600))
+      table.insert(sme_ctx_parts, "=== END LAB REPORT ===")
+      table.insert(sme_ctx_parts, "")
+
+      local kc = State.get("known_contradictions")
+      local compact_contra = build_compact_contradiction_summary(kc, 3)
+      if has_text(compact_contra) then
+        table.insert(sme_ctx_parts, "=== CONTRADICTION LANDSCAPE ===")
+        table.insert(sme_ctx_parts, compact_contra)
+        table.insert(sme_ctx_parts, "=== END CONTRADICTION LANDSCAPE ===")
+        table.insert(sme_ctx_parts, "")
+      end
+
+      local final_diag = State.get("recent_landscape_diagnostic")
+      if final_diag and has_text(final_diag.compact_summary) then
+        table.insert(sme_ctx_parts, "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===")
+        table.insert(sme_ctx_parts, trunc(final_diag.compact_summary, 600))
+        table.insert(sme_ctx_parts, "=== END FEEDBACK LANDSCAPE DIAGNOSTIC ===")
+        table.insert(sme_ctx_parts, "")
+      end
+
+      if has_text(residual_errors_text) then
+        table.insert(sme_ctx_parts, trunc(residual_errors_text, 900))
+        table.insert(sme_ctx_parts, "")
+      end
+
+      local sme_context = table.concat(sme_ctx_parts, "\n")
+      report_writer.history:add({role = "system", content = sme_context})
+      return #sme_context
     end
-    local raw_end_sme_agenda = sme_agenda_text
-    State.set("sme_agenda_raw", raw_end_sme_agenda)
-    sme_agenda_text = gate_sme_agenda(
-      raw_end_sme_agenda,
-      "end_of_run_sme_agenda",
-      table.concat({
-        "End-of-run SME agenda",
-        "Executive summary: " .. trunc(executive_summary_text, 600),
-        "Lab report: " .. trunc(lab_report_text, 900),
-        "Residual errors: " .. trunc(residual_errors_text, 900)
-      }, "\n")
-    )
-    State.set("sme_agenda_gated", sme_agenda_text)
-  end)
+  )
+  local raw_end_sme_agenda = sme_agenda_text
+  State.set("sme_agenda_raw", raw_end_sme_agenda)
+  sme_agenda_text = gate_sme_agenda(
+    raw_end_sme_agenda,
+    "end_of_run_sme_agenda",
+    table.concat({
+      "End-of-run SME agenda",
+      "Executive summary: " .. trunc(executive_summary_text, 600),
+      "Lab report: " .. trunc(lab_report_text, 900),
+      "Residual errors: " .. trunc(residual_errors_text, 900)
+    }, "\n")
+  )
+  State.set("sme_agenda_gated", sme_agenda_text)
 
   -- Store results
   State.set("end_of_run_report", {

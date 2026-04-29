@@ -52,8 +52,9 @@ def test_optimizer_yaml_routes_report_generation_to_reporting_agents():
     config = _load_optimizer_config()
     code = config["code"]
 
-    assert 'safe_agent_call(cycle_analyst, "cycle_analyst"' in code
-    assert 'safe_agent_call(report_writer, "report_writer"' in code
+    assert 'run_required_report_phase(\n        cycle_analyst,' in code
+    assert 'run_required_report_phase(\n          report_writer,' in code
+    assert 'safe_agent_call(agent, agent_name, marked_prompt, nil)' in code
     assert "report_writer.history:add({role = \"system\", content = full_ctx})" in code
     assert "Write a complete technical analysis" not in code
 
@@ -152,6 +153,30 @@ def test_optimizer_startup_requests_recent_rubric_memory():
     assert 'State.set("recent_rubric_memory_context", recent_result)' in code
 
 
+def test_optimizer_sme_gate_refreshes_rubric_memory_for_active_version():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "ensure_rubric_memory_context_for_version" in code
+    assert "rubric_memory_context_score_version" in code
+    assert 'topic_hint = purpose or "Optimizer rubric-memory active-version context"' in code
+    assert 'State.set("rubric_memory_context_score_version_id", score_version_id)' in code
+    assert "gate_rubric_memory_context = ensure_rubric_memory_context_for_version" in code
+    assert "rubric_memory_context = gate_rubric_memory_context" in code
+
+
+def test_optimizer_contradictions_reports_use_active_score_version_cache_key():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "contradictions_score_version_id =" in code
+    assert "final_contradictions_score_version_id =" in code
+    assert "score_version_id = contradictions_score_version_id" in code
+    assert "score_version_id = final_contradictions_score_version_id" in code
+    assert '" / " .. tostring(contradictions_score_version_id)' in code
+    assert '" / " .. tostring(final_contradictions_score_version_id)' in code
+
+
 def test_optimizer_yaml_treats_interruption_as_terminal_not_retryable():
     config = _load_optimizer_config()
     code = config["code"]
@@ -186,6 +211,60 @@ def test_optimizer_yaml_bounds_report_context_and_output_shapes():
     assert 'render_items("FALSE POSITIVES (predicted YES, should be NO)", fp_items, 2)' in code
     assert 'render_items("FALSE NEGATIVES (predicted NO, should be YES)", fn_items, 2)' in code
     assert 'render_items("OTHER MISCLASSIFICATIONS", other_items, 1)' in code
+
+
+def test_optimizer_yaml_uses_required_report_phase_helper_for_all_report_llm_calls():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function run_required_report_phase" in code
+    assert "report_generation_status" in code
+    assert "Report phase %s started" in code
+    assert "Report phase %s succeeded" in code
+    assert "report_generation_failed:" in code
+    for phase_id in [
+        "cycle_executive_analysis",
+        "cycle_lab_report",
+        "cycle_sme_agenda",
+        "accumulated_lessons",
+        "procedure_summary",
+        "end_executive_summary",
+        "end_lab_report",
+        "end_sme_agenda",
+    ]:
+        assert f'"{phase_id}"' in code
+    assert code.count("run_required_report_phase(") >= 9
+
+
+def test_optimizer_yaml_preprocessing_guidance_starts_with_broad_relevant_windows():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "RelevantWindowsTranscriptFilter" in code
+    assert "start with broad sentence windows" in code
+    assert "prev_count=5 and next_count=8" in code
+    assert "Do not start with prev_count=1/next_count=1 word windows" in code
+
+
+def test_optimizer_yaml_marks_report_failures_as_terminal_without_losing_cycle_state():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert 'stop_reason = "report_generation_failed"' in code
+    assert 'if string.find(tostring(cycle_err), "report_generation_failed", 1, true) then' in code
+    assert 'if stop_reason ~= "report_generation_failed" then' in code
+    assert 'error("report_generation_failed:" .. phase .. ": " .. tostring(err))' in code
+    assert 'State.set("iterations", iterations)' in code
+
+
+def test_optimizer_yaml_adds_report_phase_markers_for_context_capture():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function report_phase_marker" in code
+    assert "=== OPTIMIZER REPORT PHASE: " in code
+    assert "local marked_prompt = marker .." in code
+    assert "turn_label = marker" in code
 
 
 def test_optimizer_yaml_uses_shared_score_version_test_tool():
