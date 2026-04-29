@@ -81,6 +81,7 @@ hdbscan = "0.8.40"
 sentence-transformers = ">=5.0.0"
 kaleido = ">=0.2.1"
 requests = ">=2.31.0"
+requests-aws4auth = "*"
 
 [tool.poetry.group.dev.dependencies]
 invoke = ">=2.2.0"
