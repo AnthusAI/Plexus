@@ -1,0 +1,43 @@
+{
+  "id": "plx-c1f5bfde-eab5-43ce-b5c4-b0400403d9e5",
+  "title": "Trial stakeholder dosage prompt/model settings for Medication Review: Dosage",
+  "description": "As a score operator, I want to trial a stricter current-medication dosage prompt for Medication Review: Dosage using only supported runtime fields, so that we can measure whether the stakeholder's proposed threshold/prompt framing improves alignment without adding unsupported configuration.\n\nDefinition of Done:\n- Pull the current champion Dosage YAML locally before editing\n- Update only supported fields and prompt content for the stakeholder trial\n- Remove fuzzy matching from RelevantWindowsTranscriptFilter for this trial\n- Run direct local validation focused on the procedure/score behavior, not CI\n- Record results and next steps in Kanbus\n\nNot included:\n- Adding new runtime support for unsupported parameters\n- Champion promotion or remote push unless explicitly requested\n- Broader rubric changes outside the stakeholder trial wording",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9c239f8e-0a8d-4707-b97e-cb5749660955",
+      "author": "ryan",
+      "text": "Scoping stakeholder Medication Review: Dosage trial. Supported runtime fields confirmed in code: model_name, reasoning_effort, verbosity, and max_tokens. Per user direction, verbosity changes are explicitly deferred even though supported. Trial will focus on model selection, reasoning effort, max_tokens, prompt wording, and disabling fuzzy matching in RelevantWindowsTranscriptFilter.",
+      "created_at": "2026-04-29T22:02:08.808145Z"
+    },
+    {
+      "id": "1171061a-4b89-4371-9dbf-a057916d44b6",
+      "author": "ryan",
+      "text": "Stakeholder clarified the trial must start from Dosage score version 21c5f5af-0a28-4036-844d-88b64898900e rather than the current champion. Re-pulling that exact version locally and treating any previously started baseline eval from champion YAML as invalid for this trial.",
+      "created_at": "2026-04-29T22:05:06.341286Z"
+    },
+    {
+      "id": "4d1d84b4-54ff-400d-9227-f2effabe86d4",
+      "author": "ryan",
+      "text": "User clarified scope: do not run evaluations here. Create a new Dosage score version directly from source version 21c5f5af-0a28-4036-844d-88b64898900e using the stakeholder trial prompt/settings only. No local/remote evaluation work in this step.",
+      "created_at": "2026-04-29T22:06:26.671480Z"
+    },
+    {
+      "id": "cf1fd247-fcbd-44d5-9ce4-16e7ec71e003",
+      "author": "ryan",
+      "text": "Created new Dosage score version d730e6a8-164b-4157-b19b-47beb00d7b2e from explicit parent 21c5f5af-0a28-4036-844d-88b64898900e. Applied stakeholder trial changes only: model_name gpt-5-mini, reasoning_effort medium, max_tokens 3500, new current-active-med numeric dosage prompt wording, and disabled RelevantWindowsTranscriptFilter fuzzy matching. No evaluations were run in this step per user instruction.",
+      "created_at": "2026-04-29T22:08:29.633972Z"
+    }
+  ],
+  "created_at": "2026-04-29T22:02:01.108045Z",
+  "updated_at": "2026-04-29T22:08:29.633972Z",
+  "closed_at": null,
+  "custom": {}
+}

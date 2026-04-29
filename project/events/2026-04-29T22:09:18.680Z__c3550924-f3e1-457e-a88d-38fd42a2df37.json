@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c3550924-f3e1-457e-a88d-38fd42a2df37",
+  "issue_id": "plx-96e95bfb-643f-47f3-939e-eee91dfc6984",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T22:09:18.680Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Validate TactusScore reasoning_effort/verbosity and pass them into TactusRuntime only when configured.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-962594bf-1064-4a3f-be14-25d9e14033e6",
+    "priority": 2,
+    "status": "open",
+    "title": "Implement Plexus TactusScore runtime wiring"
+  }
+}

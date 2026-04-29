@@ -1,0 +1,40 @@
+{
+  "id": "plx-96e95bfb-643f-47f3-939e-eee91dfc6984",
+  "title": "Implement Plexus TactusScore runtime wiring",
+  "description": "Validate TactusScore reasoning_effort/verbosity and pass them into TactusRuntime only when configured.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-962594bf-1064-4a3f-be14-25d9e14033e6",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7b922c13-4cfe-4486-a480-249de8df0759",
+      "author": "ryan",
+      "text": "Started implementation on feature/tactus-score-reasoning-verbosity. Tactus change will be implemented first, then Plexus will pass top-level score settings into TactusRuntime.",
+      "created_at": "2026-04-29T22:09:23.288931Z"
+    },
+    {
+      "id": "c01f5e77-f468-4308-9dc9-5cf9019e5e41",
+      "author": "ryan",
+      "text": "Implemented TactusScore validation and runtime wiring for top-level reasoning_effort and verbosity. Targeted TactusScore tests pass, and ruff passes for the changed Plexus files. Dependency pin was not bumped because the new Tactus package version is not published yet; keep that as release follow-up before deployment.",
+      "created_at": "2026-04-29T22:21:30.839062Z"
+    },
+    {
+      "id": "06dec1ec-58f3-48a2-99cc-00769cd1c1de",
+      "author": "ryan",
+      "text": "Closing implementation task: Plexus implementation complete. TactusScore validates top-level reasoning_effort/verbosity and passes them into TactusRuntime only when configured. Dependency update follow-up filed as plx-e6bef5.",
+      "created_at": "2026-04-29T22:21:45.958590Z"
+    }
+  ],
+  "created_at": "2026-04-29T22:09:18.680091Z",
+  "updated_at": "2026-04-29T22:21:45.978405Z",
+  "closed_at": "2026-04-29T22:21:45.978405Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "47773f7a-8812-47fa-80fc-aaa7b72d83d9",
+  "issue_id": "plx-e6bef5b9-0779-44dc-83a7-a9ff9210fbb7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T22:21:36.761Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "After the Tactus package containing reasoning_effort and verbosity support is published, update Plexus dependency pins and lockfiles to that version.\n\nDefinition of Done:\n- pyproject dependency points at the released Tactus version.\n- score-processor lambda requirements use the released Tactus version.\n- Lockfile is refreshed if required by the project workflow.\n- TactusScore tests pass against the packaged dependency.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-962594bf-1064-4a3f-be14-25d9e14033e6",
+    "priority": 2,
+    "status": "open",
+    "title": "Update Plexus Tactus dependency after package release"
+  }
+}

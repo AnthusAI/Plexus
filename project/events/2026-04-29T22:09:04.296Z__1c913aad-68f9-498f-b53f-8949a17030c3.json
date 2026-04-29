@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1c913aad-68f9-498f-b53f-8949a17030c3",
+  "issue_id": "plx-962594bf-1064-4a3f-be14-25d9e14033e6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T22:09:04.296Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Enable Plexus TactusScore YAML to configure GPT-5-family reasoning_effort and verbosity through the Tactus runtime.\n\nDefinition of Done:\n- Top-level TactusScore reasoning_effort and verbosity reach Tactus LLM calls.\n- Defaults remain provider/model defaults when values are omitted.\n- Invalid values are rejected.\n- Targeted tests pass.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Support TactusScore reasoning and verbosity controls"
+  }
+}

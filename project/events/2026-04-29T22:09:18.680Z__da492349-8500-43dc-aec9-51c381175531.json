@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "da492349-8500-43dc-aec9-51c381175531",
+  "issue_id": "plx-ee7a4c16-02fe-4cc4-8c5d-16b89ab611d5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T22:09:18.680Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: TactusScore GPT-5 controls\n\nScenario: A TactusScore sets reasoning effort and verbosity\nGiven a TactusScore YAML includes reasoning_effort and verbosity\nWhen the score predicts with Tactus\nThen those settings are passed to the Tactus runtime\n\nScenario: A TactusScore omits GPT-5 controls\nGiven a TactusScore YAML omits reasoning_effort and verbosity\nWhen the score predicts with Tactus\nThen Plexus does not send those settings and model defaults apply\n\nScenario: A TactusScore uses invalid GPT-5 controls\nGiven a TactusScore YAML includes invalid reasoning_effort or verbosity\nWhen the score is loaded\nThen validation fails before prediction",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-962594bf-1064-4a3f-be14-25d9e14033e6",
+    "priority": 2,
+    "status": "open",
+    "title": "Configure TactusScore GPT-5 controls"
+  }
+}
