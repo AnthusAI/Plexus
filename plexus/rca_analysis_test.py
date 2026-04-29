@@ -658,8 +658,11 @@ def test_explainer_retries_invalid_output(monkeypatch):
 
 
 def test_invoke_rca_openai_text_captures_context(tmp_path, monkeypatch):
+    calls = []
+
     class FakeResponses:
         def create(self, **kwargs):
+            calls.append(kwargs)
             return types.SimpleNamespace(output_text="ok")
 
     class FakeOpenAI:
@@ -677,6 +680,8 @@ def test_invoke_rca_openai_text_captures_context(tmp_path, monkeypatch):
     )
 
     assert result == "ok"
+    assert calls[0]["reasoning"] == {"effort": "low"}
+    assert calls[0]["max_output_tokens"] == 1000
     json_files = list(tmp_path.glob("*.json"))
     markdown_files = list(tmp_path.glob("*.md"))
     assert len(json_files) == 1
