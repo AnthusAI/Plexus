@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a0a0a324-0715-454a-8342-b146fac57b99",
+  "issue_id": "plx-fa71d513-c72a-452a-a124-dcea961fce53",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T17:43:20.260Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Deploy the production metrics stack, backfill FeedbackItem metrics from 2026-04-24T00:00:00Z, verify counts, push, and confirm CI.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-9f0720f4-4a36-41fb-9c8b-044316722e95",
+    "priority": 1,
+    "status": "open",
+    "title": "Deploy and backfill FeedbackItem metrics"
+  }
+}
