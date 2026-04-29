@@ -25,6 +25,7 @@ from .models import (
 from .preparation import PreparedRubricMemoryCorpus, RubricMemoryPreparedCorpusManager
 from .provider import RubricMemoryContextProvider
 from .query_planner import RubricMemoryQueryPlan, RubricMemoryQueryPlanner
+from .recent import RubricMemoryRecentBriefingProvider
 from .retrieval import BiblicusRubricEvidenceRetriever, RubricEvidenceRetriever
 from .s3_corpus import (
     RUBRIC_MEMORY_BUCKET_ENV_VAR,
@@ -75,6 +76,7 @@ __all__ = [
     "RubricMemoryPreparedCorpusManager",
     "RubricMemoryQueryPlan",
     "RubricMemoryQueryPlanner",
+    "RubricMemoryRecentBriefingProvider",
     "RubricMemorySMEQuestion",
     "RubricMemorySMEQuestionGateRequest",
     "RubricMemorySMEQuestionGateResult",

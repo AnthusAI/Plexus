@@ -63,6 +63,7 @@ class RubricMemoryContextProvider:
         scorecard_identifier: str,
         score_identifier: str,
         score_id: str,
+        score_version_id: str | None = None,
         transcript_text: str = "",
         model_value: str = "",
         model_explanation: str = "",
@@ -74,6 +75,7 @@ class RubricMemoryContextProvider:
             scorecard_identifier=scorecard_identifier,
             score_identifier=score_identifier,
             score_id=score_id,
+            score_version_id=score_version_id,
             item_contexts=[
                 {
                     "key": "item",
@@ -95,10 +97,16 @@ class RubricMemoryContextProvider:
         score_identifier: str,
         score_id: str,
         item_contexts: Sequence[dict[str, str]],
+        score_version_id: str | None = None,
         topic_hint: str | None = None,
     ) -> dict[str, RubricMemoryCitationContext]:
         """Retrieve citation context for existing LLM consumers without synthesis."""
-        authority = await RubricAuthorityResolver(self.api_client).resolve(score_id)
+        authority_resolver = RubricAuthorityResolver(self.api_client)
+        authority = (
+            await authority_resolver.resolve_score_version(score_version_id)
+            if score_version_id
+            else await authority_resolver.resolve(score_id)
+        )
         retriever = BiblicusRubricEvidenceRetriever.from_score(
             scorecard_name=scorecard_identifier,
             score_name=score_identifier,

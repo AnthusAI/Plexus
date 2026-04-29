@@ -249,6 +249,79 @@ def register_rubric_memory_tools(server):
             return json.dumps({"success": False, "error": str(exc)})
 
     @server.tool()
+    async def plexus_rubric_memory_recent_entries(
+        scorecard_identifier: str,
+        score_identifier: str,
+        score_id: Optional[str] = None,
+        query: str = "",
+        days: int = 30,
+        since: Optional[str] = None,
+        limit: int = 16,
+    ) -> str:
+        """
+        Retrieve recent rubric-memory citation context for one score.
+
+        Use this before optimization or SME-question drafting to find recent
+        score, prefix, and scorecard knowledge-base entries that may require
+        guideline updates or feedback curation before prompt/code optimization.
+        """
+        try:
+            from shared.utils import create_dashboard_client
+            from plexus.cli.shared.direct_identifier_resolution import (
+                direct_resolve_score_identifier,
+                direct_resolve_scorecard_identifier,
+            )
+            from plexus.rubric_memory import RubricMemoryRecentBriefingProvider
+
+            client = create_dashboard_client()
+            resolved_score_id = score_id
+            if not resolved_score_id:
+                scorecard_id = direct_resolve_scorecard_identifier(
+                    client,
+                    scorecard_identifier,
+                )
+                if not scorecard_id:
+                    raise ValueError(f"Could not resolve scorecard: {scorecard_identifier}")
+                resolved_score_id = direct_resolve_score_identifier(
+                    client,
+                    scorecard_id,
+                    score_identifier,
+                )
+            if not resolved_score_id:
+                raise ValueError(
+                    f"Could not resolve score '{score_identifier}' in scorecard '{scorecard_identifier}'."
+                )
+
+            context = await RubricMemoryRecentBriefingProvider(
+                api_client=client,
+            ).retrieve_recent(
+                scorecard_identifier=scorecard_identifier,
+                score_identifier=score_identifier,
+                score_id=resolved_score_id,
+                query=query,
+                days=days,
+                since=since,
+                limit=limit,
+            )
+            return json.dumps(
+                {
+                    "success": True,
+                    "score_id": resolved_score_id,
+                    "markdown_context": context.markdown_context,
+                    "citation_index": [
+                        citation.model_dump(mode="json")
+                        for citation in context.citation_index
+                    ],
+                    "machine_context": context.machine_context,
+                    "diagnostics": context.diagnostics,
+                },
+                default=str,
+            )
+        except Exception as exc:
+            logger.warning("plexus_rubric_memory_recent_entries failed: %s", exc)
+            return json.dumps({"success": False, "error": str(exc)})
+
+    @server.tool()
     async def plexus_rubric_memory_sme_question_gate(
         scorecard_identifier: str,
         score_identifier: str,

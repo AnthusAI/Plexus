@@ -829,6 +829,11 @@ class ProcedureService:
                         if task_id_for_tracking:
                             context['task_id'] = task_id_for_tracking
 
+                        recent_rubric_memory_briefing = await self._build_optimizer_recent_rubric_memory_briefing(
+                            context
+                        )
+                        if recent_rubric_memory_briefing:
+                            context['recent_rubric_memory_briefing'] = recent_rubric_memory_briefing
                         rubric_memory_briefing = await self._build_optimizer_rubric_memory_briefing(
                             context
                         )
@@ -1276,6 +1281,37 @@ Based on this data, you should prioritize examining error types with the highest
             return context.markdown_context
         except Exception as exc:
             logger.warning("Could not build optimizer rubric-memory briefing: %s", exc)
+            return None
+
+    async def _build_optimizer_recent_rubric_memory_briefing(
+        self,
+        experiment_context: Dict[str, Any],
+    ) -> Optional[str]:
+        """Generate optional recent rubric-memory briefing for optimizer preflight."""
+        scorecard_name = experiment_context.get('scorecard_name')
+        score_name = experiment_context.get('score_name')
+        score_id = experiment_context.get('score_id')
+        if not scorecard_name or not score_name or not score_id:
+            return None
+        try:
+            from plexus.rubric_memory import RubricMemoryRecentBriefingProvider
+
+            context = await RubricMemoryRecentBriefingProvider(
+                api_client=self.client,
+            ).retrieve_recent(
+                scorecard_identifier=scorecard_name,
+                score_identifier=score_name,
+                score_id=score_id,
+                query=(
+                    "recent SME stakeholder policy update rubric guideline "
+                    "change clarification before optimization"
+                ),
+                days=30,
+                limit=16,
+            )
+            return context.markdown_context
+        except Exception as exc:
+            logger.warning("Could not build optimizer recent rubric-memory briefing: %s", exc)
             return None
     
     def _reset_procedure_to_start(self, procedure_id: str, account_id: str) -> bool:
