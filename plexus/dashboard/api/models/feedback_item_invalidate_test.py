@@ -24,6 +24,26 @@ def test_feedback_item_invalidate_delegates_to_update_mutation():
     assert result == updated_item
 
 
+def test_feedback_item_reinstate_delegates_to_update_mutation():
+    client = Mock()
+    updated_item = Mock(id="feedback-123")
+
+    with patch.object(
+        FeedbackItem,
+        "_update_feedback_item",
+        return_value=updated_item,
+    ) as update_mock:
+        result = FeedbackItem.reinstate(client, "feedback-123")
+
+    update_mock.assert_called_once_with(
+        client=client,
+        feedback_item_id="feedback-123",
+        feedback_data={"isInvalid": False},
+        debug=False,
+    )
+    assert result == updated_item
+
+
 def test_update_feedback_item_mutation_requests_is_invalid_field():
     client = Mock()
     client.execute.return_value = {

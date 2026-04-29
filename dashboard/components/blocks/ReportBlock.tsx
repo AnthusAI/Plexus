@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from 'react'
-import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Code, Eye, MessageSquareCode, Copy, Database, ExternalLink } from 'lucide-react';
+import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Eye, MessageSquareCode, Copy, Database, Link as LinkIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { downloadData, getUrl } from 'aws-amplify/storage';
 import { CardButton } from '@/components/CardButton';
@@ -629,7 +629,7 @@ ${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).
                     >
                       {dataSet.name || dataSet.id}
                     </a>
-                    <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                    <LinkIcon className="h-3 w-3 text-muted-foreground" />
                     {dataSet.dataSourceVersion?.dataSource?.name && (
                       <>
                         <span className="text-muted-foreground mx-1">•</span>
@@ -641,7 +641,7 @@ ${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).
                         >
                           {dataSet.dataSourceVersion.dataSource.name}
                         </a>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                        <LinkIcon className="h-3 w-3 text-muted-foreground" />
                       </>
                     )}
                   </div>

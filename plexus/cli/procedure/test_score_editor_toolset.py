@@ -5,10 +5,12 @@ import json
 class FakeMCPClient:
     def __init__(self, response):
         self._response = response
+        self.calls = []
 
     async def call_tool(self, tool_name, arguments):
         assert tool_name == "plexus_score_update"
         assert "code" in arguments
+        self.calls.append((tool_name, arguments))
         return self._response
 
 
@@ -135,6 +137,38 @@ async def test_submit_score_version_surfaces_validation_errors_from_envelope():
     assert "YAML validation failed" in result["error"]
     assert "Validation errors:" in result["error"]
     assert "Schema Validation Failed" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_submit_score_version_rejects_semantically_unchanged_yaml():
+    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
+
+    mcp_client = FakeMCPClient({"success": True, "version_id": "should-not-create"})
+    toolset = ScoreEditorToolset(mcp_client=mcp_client)
+    toolset._scorecard = "sc-1"
+    toolset._score = "score-1"
+    toolset._iteration = 1
+    toolset._hypothesis = "h"
+    toolset._dry_run = False
+    toolset._original = (
+        "name: Test Score\n"
+        "key: test-score\n"
+        "class: LangGraphScore\n"
+        "model_name: gpt-5-mini\n"
+    )
+    toolset._content = (
+        "# harmless formatting-only candidate\n"
+        "key: test-score\n"
+        "class: LangGraphScore\n"
+        "model_name: gpt-5-mini\n"
+        "name: Test Score\n"
+    )
+
+    result = await toolset.submit_score_version({"version_note": "format only"})
+
+    assert result["success"] is False
+    assert "semantically unchanged" in result["error"]
+    assert mcp_client.calls == []
 
 
 def test_setup_normalizes_direct_yaml_content_to_block_scalars():
