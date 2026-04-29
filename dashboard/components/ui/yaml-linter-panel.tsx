@@ -6,7 +6,7 @@
  */
 
 import React from 'react'
-import { OctagonX, ThumbsUp, Info, AlertTriangle, ExternalLink, Lightbulb } from 'lucide-react'
+import { OctagonX, ThumbsUp, Info, AlertTriangle, Link as LinkIcon, Lightbulb } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -221,7 +221,7 @@ function LintMessageItem({ message, onClick, showLineNumber = true }: LintMessag
                 rel="noopener noreferrer"
                 aria-label="View documentation"
               >
-                <ExternalLink className="h-3 w-3" />
+                <LinkIcon className="h-3 w-3" />
               </a>
             </Button>
           )}

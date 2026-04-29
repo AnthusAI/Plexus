@@ -6,6 +6,7 @@ import json
 import pandas as pd
 import time
 import traceback
+import re
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any, Tuple
 import asyncio
@@ -44,6 +45,56 @@ from plexus.CustomLogging import logging, setup_logging, set_log_group
 # Set up logging for evaluations
 set_log_group('plexus/evaluation')
 setup_logging()
+
+
+_RCA_HEADING_RE = re.compile(
+    r"^(?:#{1,6}\s*)?(?:"
+    r"executive summary(?:\s*:\s*.*)?|"
+    r"root causes? of .*|"
+    r"configuration recommendation(?:\s*:\s*.*)?|"
+    r"score-configuration improvement(?:\s*:\s*.*)?|"
+    r"overall root cause(?:\s*:\s*.*)?|"
+    r"analysis(?:\s*:\s*)?|"
+    r"recommendation(?:\s*:\s*)?"
+    r")$",
+    re.IGNORECASE,
+)
+
+
+def _sanitize_rca_generated_prose(text: str, *, max_sentences: int = 3, max_chars: int = 900) -> str:
+    """Keep RCA generated prose concise and remove headings supplied by the UI."""
+    if not text:
+        return ""
+    cleaned_lines = []
+    for raw_line in str(text).splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        line = re.sub(r"^[-*]\s+", "", line)
+        line = re.sub(
+            r"^(?:Executive Summary|Configuration Recommendation|Overall Root Cause|"
+            r"Score-configuration Improvement|Analysis|Recommendation)\s*:\s*",
+            "",
+            line,
+            flags=re.IGNORECASE,
+        ).strip()
+        if _RCA_HEADING_RE.match(line):
+            continue
+        if line:
+            cleaned_lines.append(line)
+
+    prose = " ".join(cleaned_lines)
+    prose = re.sub(r"\s+", " ", prose).strip()
+    if not prose:
+        return ""
+
+    sentences = re.split(r"(?<=[.!?])\s+", prose)
+    if max_sentences > 0 and len(sentences) > max_sentences:
+        prose = " ".join(sentences[:max_sentences]).strip()
+    if len(prose) > max_chars:
+        prose = prose[:max_chars].rsplit(" ", 1)[0].rstrip(" ,;:") + "."
+    return prose
+
 
 class Evaluation:
     """
@@ -4568,7 +4619,8 @@ class FeedbackEvaluation(Evaluation):
                 """Run multi-turn conversation to produce detailed explanation + improvement suggestion."""
                 system = (
                     "You are an expert QA analyst reviewing patterns in AI scoring errors "
-                    "across domains and input modalities. Be specific and concrete."
+                    "across domains and input modalities. Write in plain English. Be specific, "
+                    "brief, and economical. Do not write Markdown headings; the UI supplies fixed headings."
                 )
 
                 # Build context for turn 1
@@ -4596,14 +4648,19 @@ class FeedbackEvaluation(Evaluation):
                 if meta_parts:
                     turn1_prompt += f"All {len(exemplar_dicts)} items in this cluster:\n" + "\n".join(meta_parts) + "\n\n"
                 turn1_prompt += (
-                    "Explain in 2-3 paragraphs what patterns of errors exist in this cluster. "
+                    "Explain what pattern of errors exists in this cluster in 2-3 short sentences. "
                     "Be specific about the directionality of errors (what was predicted vs what "
                     "the correct answer should be), what the primary input evidence contained, and why "
-                    "the AI classifier got these wrong."
+                    "the AI classifier got these wrong. Use plain words. Avoid headers, bullet lists, "
+                    "acronyms, and implementation jargon unless the evidence directly requires it."
                 )
 
                 messages = [{"role": "user", "content": turn1_prompt}]
-                detailed_explanation = _bedrock_converse(system, messages, max_tokens=800)
+                detailed_explanation = _sanitize_rca_generated_prose(
+                    _bedrock_converse(system, messages, max_tokens=360),
+                    max_sentences=3,
+                    max_chars=700,
+                )
 
                 # Turn 2: improvement suggestion (same conversation)
                 improvement_suggestion = ""
@@ -4622,11 +4679,17 @@ class FeedbackEvaluation(Evaluation):
                             "Use ONLY items classified as score_configuration_problem to suggest "
                             "specific improvements to the score configuration that would reduce "
                             "these misclassifications. Ignore information gaps, guideline gaps, "
-                            "and mechanical malfunctions for this recommendation.\n\n"
+                            "and mechanical malfunctions for this recommendation. Write 1-2 short "
+                            "sentences. Do not add a heading. Prefer simple operational language over "
+                            "architecture jargon.\n\n"
                             f"score_configuration_problem items:\n{chr(10).join(score_fix_parts)}"
                         )
                         messages.append({"role": "user", "content": turn2_prompt})
-                        improvement_suggestion = _bedrock_converse(system, messages, max_tokens=600)
+                        improvement_suggestion = _sanitize_rca_generated_prose(
+                            _bedrock_converse(system, messages, max_tokens=260),
+                            max_sentences=2,
+                            max_chars=520,
+                        )
                     else:
                         improvement_suggestion = (
                             "No score_configuration_problem items in this topic; "
@@ -4676,7 +4739,8 @@ class FeedbackEvaluation(Evaluation):
 
                 system = (
                     "You are an expert QA analyst reviewing patterns in AI scoring errors "
-                    "across domains and input modalities. Be specific and concrete."
+                    "across domains and input modalities. Write in plain English. Be specific, "
+                    "brief, and economical. Do not write Markdown headings; the UI supplies fixed headings."
                 )
                 prompt1 = ""
                 if score_guidelines:
@@ -4687,12 +4751,18 @@ class FeedbackEvaluation(Evaluation):
                     f"Below are root-cause analysis results for {len(topics)} identified "
                     f"error pattern(s), each with item counts and temporal context:\n\n"
                     f"{topics_text}\n\n"
-                    "Write a 2-3 sentence executive summary of the overall root causes of "
+                    "Write a 2-3 sentence summary of the overall root causes of "
                     "misclassification across all topics. Prioritize by frequency and recency. "
-                    "Be specific and concrete."
+                    "Be specific and concrete, but plain. Do not add a heading, title, bullets, "
+                    "or labels. Avoid technical architecture language unless the evidence directly "
+                    "requires it."
                 )
                 messages = [{"role": "user", "content": prompt1}]
-                overall_explanation = _bedrock_converse(system, messages, max_tokens=300)
+                overall_explanation = _sanitize_rca_generated_prose(
+                    _bedrock_converse(system, messages, max_tokens=220),
+                    max_sentences=3,
+                    max_chars=650,
+                )
 
                 if not overall_explanation:
                     return "", ""
@@ -4709,11 +4779,16 @@ class FeedbackEvaluation(Evaluation):
                     messages.append({"role": "assistant", "content": overall_explanation})
                     messages.append({"role": "user", "content": (
                         "Based only on topics that include score_configuration_problem items, "
-                        "write a 2-3 sentence overall recommendation for the most impactful "
+                        "write a 1-2 sentence overall recommendation for the most impactful "
                         "score-configuration changes. Ignore information gaps, guideline gaps, "
-                        "and mechanical malfunctions."
+                        "and mechanical malfunctions. Do not add a heading. Keep it plain and "
+                        "operator-readable."
                     )})
-                    overall_suggestion = _bedrock_converse(system, messages, max_tokens=300)
+                    overall_suggestion = _sanitize_rca_generated_prose(
+                        _bedrock_converse(system, messages, max_tokens=220),
+                        max_sentences=2,
+                        max_chars=520,
+                    )
 
                 return overall_explanation, overall_suggestion
 
@@ -5294,11 +5369,11 @@ class FeedbackEvaluation(Evaluation):
         ])
         system = (
             "You are an expert QA analyst reviewing AI scoring failures. "
-            "Provide concrete, implementation-oriented analysis."
+            "Write concrete, plain-English analysis. Be brief. Do not write Markdown headings."
         )
         explanation_prompt = (
-            "Summarize root causes across this small set of misclassifications in 2-3 "
-            "sentences. Include concrete error direction patterns.\n\n"
+            "Summarize root causes across this small set of misclassifications in 2 short "
+            "sentences. Include concrete error direction patterns. Do not add a heading.\n\n"
             f"{exemplar_text}"
         )
         score_fix_exemplars = [
@@ -5316,18 +5391,23 @@ class FeedbackEvaluation(Evaluation):
             for ex in score_fix_exemplars
         ])
 
-        detailed_explanation = await asyncio.to_thread(
-            _bedrock_converse, system, explanation_prompt, 500
+        detailed_explanation = _sanitize_rca_generated_prose(
+            await asyncio.to_thread(_bedrock_converse, system, explanation_prompt, 260),
+            max_sentences=2,
+            max_chars=520,
         )
         if score_fix_exemplars:
             improvement_prompt = (
-                "Using ONLY items classified as score_configuration_problem, provide 2-3 "
+                "Using ONLY items classified as score_configuration_problem, provide 1-2 "
                 "sentences with specific score-configuration changes that would reduce these "
-                "errors. Ignore information gaps, guideline gaps, and mechanical malfunctions.\n\n"
+                "errors. Ignore information gaps, guideline gaps, and mechanical malfunctions. "
+                "Do not add a heading. Use simple operator language.\n\n"
                 f"{score_fix_text}"
             )
-            improvement_suggestion = await asyncio.to_thread(
-                _bedrock_converse, system, improvement_prompt, 500
+            improvement_suggestion = _sanitize_rca_generated_prose(
+                await asyncio.to_thread(_bedrock_converse, system, improvement_prompt, 260),
+                max_sentences=2,
+                max_chars=520,
             )
         else:
             improvement_suggestion = (
