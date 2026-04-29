@@ -646,6 +646,14 @@ async def test_recent_briefing_filters_to_recent_dated_s3_sources_and_ranks_rece
                 score_code="classifier prompt",
             )
 
+        async def resolve_score_version(self, score_version_id):
+            assert score_version_id == "active-version-1"
+            return RubricAuthority(
+                score_version_id="active-version-1",
+                rubric_text="Active version dosage rubric.",
+                score_code="active classifier prompt",
+            )
+
     class _RecentRetriever:
         created_sources = []
 
@@ -696,10 +704,12 @@ async def test_recent_briefing_filters_to_recent_dated_s3_sources_and_ranks_rece
         scorecard_identifier="SelectQuote HCS Medium-Risk",
         score_identifier="Medication Review: Dosage",
         score_id="score-1",
+        score_version_id="active-version-1",
         days=30,
     )
 
     assert context.machine_context["context_kind"] == "recent_briefing"
+    assert context.machine_context["score_version_id"] == "active-version-1"
     assert context.machine_context["since"] == "2026-03-30"
     assert context.machine_context["latest_source_date"] == "2026-04-28"
     assert context.machine_context["source_counts"] == {
@@ -1408,6 +1418,37 @@ class _GateSynthesizer:
 
 
 @pytest.mark.asyncio
+async def test_sme_question_gate_tactus_synthesizer_disables_control_loop_hitl(
+    monkeypatch,
+):
+    captured = {}
+
+    class _Runtime:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def execute(self, *_args, **_kwargs):
+            return {
+                "result": {
+                    "text": json.dumps({
+                        "items": [],
+                        "final_agenda_markdown": "No SME agenda items.",
+                    })
+                }
+            }
+
+    monkeypatch.setattr("tactus.core.runtime.TactusRuntime", _Runtime)
+
+    result = await TactusRubricMemorySMEQuestionGateSynthesizer().synthesize(
+        request=_sme_gate_request(),
+    )
+
+    assert result["final_agenda_markdown"] == "No SME agenda items."
+    assert captured["hitl_handler"] is not None
+    assert captured["hitl_handler"].check_pending_response("proc", "msg") is None
+
+
+@pytest.mark.asyncio
 async def test_sme_question_gate_suppresses_answered_questions():
     request = _sme_gate_request()
     citation_id = request.rubric_memory_context.citation_index[0].id
@@ -1624,6 +1665,14 @@ async def test_context_provider_retrieves_item_context_without_synthesis(monkeyp
                 score_code="classifier prompt",
             )
 
+        async def resolve_score_version(self, score_version_id):
+            assert score_version_id == "active-version-1"
+            return RubricAuthority(
+                score_version_id="active-version-1",
+                rubric_text="Active version dosage rubric.",
+                score_code="active classifier prompt",
+            )
+
     class _DiagnosticRetriever:
         def __init__(self):
             self.requests = []
@@ -1671,6 +1720,7 @@ async def test_context_provider_retrieves_item_context_without_synthesis(monkeyp
         scorecard_identifier="Scorecard A",
         score_identifier="Medication Review: Dosage",
         score_id="score-1",
+        score_version_id="active-version-1",
         item_contexts=[
             {
                 "key": "item-1",
@@ -1694,6 +1744,7 @@ async def test_context_provider_retrieves_item_context_without_synthesis(monkeyp
     assert set(contexts) == {"item-1", "item-2"}
     context = contexts["item-1"]
     assert context.machine_context["context_kind"] == "retrieval_only"
+    assert context.machine_context["score_version_id"] == "active-version-1"
     assert context.machine_context["evidence_counts"]["score"] == 1
     assert "SelectRx script" in context.markdown_context
     assert any(citation.id.startswith("rubric:") for citation in context.citation_index)

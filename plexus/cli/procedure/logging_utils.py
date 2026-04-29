@@ -22,6 +22,30 @@ logger = logging.getLogger(__name__)
 _CONTEXT_CAPTURE_COUNTER = 0
 
 
+def _context_capture_filter_matches(
+    *,
+    agent_name: str,
+    call_site: str,
+    context: str,
+) -> bool:
+    """Return whether this LLM call should be captured under the optional filter."""
+    raw_filter = os.getenv("PLEXUS_CAPTURE_LLM_CONTEXT_FILTER", "")
+    if not raw_filter.strip():
+        return True
+
+    haystack = " ".join(
+        part.lower()
+        for part in (agent_name or "", call_site or "", context or "")
+        if part
+    )
+    filters = [
+        item.strip().lower()
+        for item in re.split(r"[,;\n]+", raw_filter)
+        if item.strip()
+    ]
+    return any(item in haystack for item in filters)
+
+
 def truncate_log_message(content: str, max_lines: int = 4) -> str:
     """
     Truncate log message content after specified number of lines.
@@ -115,6 +139,12 @@ def capture_llm_context_for_agent(
     """
     capture_dir = os.getenv("PLEXUS_CAPTURE_LLM_CONTEXT_DIR")
     if not capture_dir:
+        return None
+    if not _context_capture_filter_matches(
+        agent_name=agent_name,
+        call_site=call_site,
+        context=context,
+    ):
         return None
 
     global _CONTEXT_CAPTURE_COUNTER
