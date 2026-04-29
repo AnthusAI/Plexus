@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { generateClient } from 'aws-amplify/api'
-import { Copy, ExternalLink, MoreHorizontal } from 'lucide-react'
+import { Copy, Link as LinkIcon, MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -602,7 +602,7 @@ export function ScoreProcedureList({
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
                           <a href={`/lab/procedures/${run.procedureId}`} target="_blank" rel="noreferrer">
-                            <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                            <LinkIcon className="mr-2 h-3.5 w-3.5" />
                             Open procedure
                           </a>
                         </DropdownMenuItem>
@@ -664,7 +664,7 @@ export function ScoreProcedureList({
                               setBestEvaluationDialog({ run })
                             }}
                           >
-                            <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                            <LinkIcon className="mr-2 h-3.5 w-3.5" />
                             Find best evaluation…
                           </DropdownMenuItem>
                         )}
