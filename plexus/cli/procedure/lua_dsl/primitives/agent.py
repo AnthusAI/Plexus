@@ -507,10 +507,19 @@ class AgentPrimitive:
                 success = tool_args.get('success', True)
                 self.stop_primitive.request(reason, success)
 
-            # Add tool result to conversation
+            # Add tool result to conversation. Some model providers omit tool_call_id,
+            # so we still inject a deterministic result message into history.
             if tool_call_id:
-                tool_message = ToolMessage(content=str(tool_result), tool_call_id=tool_call_id)
+                tool_message = ToolMessage(content=str(tool_result), tool_call_id=str(tool_call_id))
                 self._conversation.append(tool_message)
+            else:
+                try:
+                    from langchain_core.messages import HumanMessage
+                except ImportError:  # pragma: no cover - compatibility only
+                    from langchain.schema import HumanMessage
+                self._conversation.append(
+                    HumanMessage(content=f"Tool '{tool_name}' result: {tool_result}")
+                )
 
             # Build executed tool dict for Lua
             executed.append({
