@@ -28,10 +28,16 @@
       "author": "ryan",
       "text": "Branch status:\n- Committed fix as efe40d303 on bugfix/feedbackitem-metrics-aggregation.\n- Pushed branch to origin.\n- Local targeted tests passed after rollback: python -m pytest plexus/cli/metrics/aggregation_test.py infrastructure/lambda_functions/metrics_aggregator/test_procedure_metrics.py infrastructure/lambda_functions/metrics_aggregator/test_feedback_metrics.py.\n- gh run list found no GitHub Actions runs for the branch push. A PR into develop is needed to run the normal CI/CD path; PR was not opened because repo policy requires explicit confirmation.",
       "created_at": "2026-04-29T17:57:52.027223Z"
+    },
+    {
+      "id": "90fb86ae-3978-4fc7-a906-8f0d35b9c587",
+      "author": "ryan",
+      "text": "Normal deployment path restored:\n- Opened PR #248 into develop: https://github.com/AnthusAI/Plexus/pull/248\n- CI/CD Pipeline run 25126019100 is queued on PR checks.\n- No direct deploy or backfill will be run outside the normal Amplify Gen2 CI/CD process.",
+      "created_at": "2026-04-29T18:15:00.393010Z"
     }
   ],
   "created_at": "2026-04-29T17:43:04.369433Z",
-  "updated_at": "2026-04-29T17:57:52.027223Z",
+  "updated_at": "2026-04-29T18:15:00.393010Z",
   "closed_at": null,
   "custom": {}
 }
