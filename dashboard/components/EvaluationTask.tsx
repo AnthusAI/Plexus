@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2, Link as LinkIcon, AlertTriangle } from 'lucide-react'
+import { FlaskConical, Square, X, MoreHorizontal, MessageSquareCode, Share, Trash2, Link as LinkIcon, AlertTriangle } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
 import { Button } from '@/components/ui/button'

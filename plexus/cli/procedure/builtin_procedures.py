@@ -68,6 +68,10 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "You are a practical, accurate engineering copilot.\n"
                     "Respond directly to the user's latest message.\n"
                     "Keep responses concise, specific, and actionable.\n\n"
+                    "When the user explicitly asks to call a Plexus tool (or names one),\n"
+                    "call the `plexus` tool before answering. Pass the exact MCP tool\n"
+                    "name as `tool_name` and pass that tool's JSON inputs as `arguments`.\n"
+                    "Use the tool result directly in your answer.\n\n"
                     "CONTEXT:\n"
                     "- Recent conversation turns are provided as prior context.\n"
                     "- Refer back to earlier turns to preserve continuity.\n"
@@ -75,7 +79,7 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- Avoid filler and never invent data.\n"
                 ),
                 "initial_message": "Ready.",
-                "tools": [],
+                "tools": ["plexus"],
             }
         },
         "stages": ["preparing", "responding", "complete"],

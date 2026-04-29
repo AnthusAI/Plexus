@@ -167,7 +167,7 @@ async def test_evidence_pack_tool_defaults_to_retrieval_only_context(monkeypatch
     import shared.utils
     import plexus.rubric_memory
 
-    monkeypatch.setattr(shared.utils, "create_dashboard_client", lambda: object())
+    monkeypatch.setattr(shared.utils, "create_dashboard_client", object)
     monkeypatch.setattr(
         plexus.rubric_memory,
         "RubricMemoryContextProvider",
@@ -226,7 +226,7 @@ async def test_recent_entries_tool_returns_recent_briefing_context(monkeypatch):
     import shared.utils
     import plexus.rubric_memory
 
-    monkeypatch.setattr(shared.utils, "create_dashboard_client", lambda: object())
+    monkeypatch.setattr(shared.utils, "create_dashboard_client", object)
     monkeypatch.setattr(
         plexus.rubric_memory,
         "RubricMemoryRecentBriefingProvider",
