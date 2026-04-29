@@ -268,10 +268,22 @@
       "author": "ryan",
       "text": "Prepared Console Plexus tool dispatcher for fresh develop PR. Tactus import resolves to 0.46.3 from /Users/ryan/Projects/Tactus. Focused verification passed: python -m pytest -q plexus/cli/procedure/test_procedure_executor_compat.py plexus/cli/procedure/test_builtin_procedures.py plexus/console/test_chat_runtime.py plexus/cli/procedure/lua_dsl/test_runtime_basic.py plexus/cli/procedure/lua_dsl/tests/test_agent_primitives.py (84 passed).",
       "created_at": "2026-04-29T17:45:02.636604Z"
+    },
+    {
+      "id": "927a3a37-6933-4e5e-be6f-75a6d99d7cc6",
+      "author": "ryan",
+      "text": "Cloud smoke found Lambda packaging gap: ConsoleChatResponder claimed cloud message and exposed the single plexus dispatcher, but dispatcher registry lacked MCP tools because Lambda image excluded MCP/. Fixing image include rules and adding regression coverage before another deploy.",
+      "created_at": "2026-04-29T18:41:37.918330Z"
+    },
+    {
+      "id": "b3bdf37f-a400-4b74-a877-8d98c7fb327e",
+      "author": "ryan",
+      "text": "Added Docker context fix for ConsoleChatResponder: re-include MCP Python tool modules so the cloud in-process dispatcher can import full Plexus MCP tools. Added regression test dashboard/amplify/functions/consoleRunWorker/test_docker_context.py. Focused checks passed: 85 passed, 9 warnings.",
+      "created_at": "2026-04-29T18:42:45.844187Z"
     }
   ],
   "created_at": "2026-04-27T12:42:41.687340Z",
-  "updated_at": "2026-04-29T17:45:02.636604Z",
+  "updated_at": "2026-04-29T18:42:45.844187Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
