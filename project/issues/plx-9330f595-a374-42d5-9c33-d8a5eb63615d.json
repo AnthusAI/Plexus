@@ -40,10 +40,232 @@
       "author": "ryan",
       "text": "Expanded programmatic verification before manual npm-run-dev testing. Added tests for local poller index query/pagination, harness failure marking, stream Lambda partial batch failure, missing stream NewImage, explicit Console session reuse, and built-in Tactus context handoff. Also tightened local worker polling to use the responseStatusCreatedAt sort-key condition instead of a post-query filter. Verification: focused Python suite 53 passed; dashboard Jest streaming suite 6 passed; dashboard typecheck passed; py_compile passed for app.py/local_worker.py/chat_runtime.py.",
       "created_at": "2026-04-27T14:02:15.243723Z"
+    },
+    {
+      "id": "77c8fdb5-e0a6-4945-8048-1da063a25eeb",
+      "author": "ryan",
+      "text": "Deployment progress (2026-04-27): PR #215 merged into develop (4d1b66e). Staging merge was blocked by conflicts on #217; resolved via release branch chore/release-develop-into-staging and merged as PR #218 (1ea6c4f). Staging CI/CD run is active: https://github.com/AnthusAI/Plexus/actions/runs/25018032021. Infra deltas in this release: ChatMessage response routing/status fields + responseTarget/responseStatus/createdAt index, removal of startConsoleRun resolver from data API, ConsoleChatResponder Docker Lambda subscribed directly to ChatMessage DynamoDB stream, and required env vars PLEXUS_API_URL, PLEXUS_API_KEY, CONSOLE_WORKER_IMAGE_URI, optional ANTHROPIC_API_KEY.",
+      "created_at": "2026-04-27T20:39:01.714567Z"
+    },
+    {
+      "id": "319d570d-fa32-4331-970b-d447d2a612ef",
+      "author": "ryan",
+      "text": "Now resolving develop->main promotion conflicts on PR #219 so release can proceed.",
+      "created_at": "2026-04-27T21:03:43.702576Z"
+    },
+    {
+      "id": "caee288e-e264-49cc-93a6-104adf72b583",
+      "author": "ryan",
+      "text": "Applied github-code-quality suggestions on PR #219: replaced five unnecessary lambda wrappers with SimpleNamespace in dashboard/amplify/functions/consoleRunWorker/app_test.py. Pushed to develop at a4ed815f; PR checks rerunning.",
+      "created_at": "2026-04-27T21:25:24.974170Z"
+    },
+    {
+      "id": "f5556fe1-cef6-48c5-b6f6-e1a6942ebb46",
+      "author": "ryan",
+      "text": "Post-deploy validation: running focused architecture smoke tests (stream handler, chat runtime harness, and local worker) before manual UI testing.",
+      "created_at": "2026-04-27T22:34:46.458661Z"
+    },
+    {
+      "id": "8aed0b08-4ea2-464a-865d-f99078fa8a36",
+      "author": "ryan",
+      "text": "Post-deploy smoke results: PR #219 merged to main at cb5267a. Focused architecture tests passed locally: PYTHONPATH=. pytest dashboard/amplify/functions/consoleRunWorker/app_test.py -q (5 passed), pytest plexus/console/test_chat_runtime.py -q (11 passed), pytest plexus/cli/procedure/test_trace_sink.py -q (15 passed), and dashboard Jest conversation streaming suite (6 passed). Ready for live end-to-end cloud/local routing verification from UI.",
+      "created_at": "2026-04-27T22:41:20.899743Z"
+    },
+    {
+      "id": "94d074fd-292d-4f94-a7ed-1213d6f5175a",
+      "author": "ryan",
+      "text": "Deep post-deploy testing found a production blocker. Programmatic suites are green (stream handler/chat runtime/trace sink/frontend streaming tests), but live cloud path fails at runtime: ConsoleChatResponder Lambda invokes from ChatMessage stream and then errors on GraphQL auth (UnauthorizedException: You are not authorized to make this call) during claim_message in process_console_message. Evidence from CloudWatch log group /aws/lambda/amplify-d1cegb1ft4iove-ma-ConsoleChatResponderFunc-QGryg0iEuCI9 around 2026-04-27T23:43Z for stream record 1205984500002426694388310189. Trigger message id 78984680-2258-4751-9941-5cb2493c58b7 remained responseStatus=PENDING with no assistant message. Local worker similarly fails with same auth error when pointed at deployed API. This indicates PLEXUS_API_KEY/authorization wiring is invalid for runtime client in deployed env.",
+      "created_at": "2026-04-27T23:45:54.979177Z"
+    },
+    {
+      "id": "0eb800ad-1b03-4f51-9621-006cf763d04f",
+      "author": "ryan",
+      "text": "Additional local hardening tests completed (2026-04-28): added coverage for createdAt fallback during completion updates when fetched message lacks createdAt; added duplicate stream-delivery handler behavior (process once, skip once); added local_worker tests for NEXT_PUBLIC env fallback, cloud-target rejection, and poll-loop processing owner/target wiring; added fetch_session_history filtering/sort test for USER+ASSISTANT chat messages only. Verification: PYTHONPATH=. pytest plexus/console/test_chat_runtime.py dashboard/amplify/functions/consoleRunWorker/app_test.py dashboard/amplify/functions/consoleRunWorker/local_worker_test.py -q (22 passed); pytest plexus/cli/procedure/test_trace_sink.py plexus/cli/procedure/test_chat_recorder_account_resolution.py plexus/cli/procedure/test_procedure_executor_compat.py -k 'stream or trace or legacy_chat_runtime' -q (22 passed); dashboard Jest console/conversation streaming suite (14 passed); dashboard typecheck passed.",
+      "created_at": "2026-04-28T01:18:42.416706Z"
+    },
+    {
+      "id": "7530b5a4-4e57-4cc8-bec6-b5a8a51fde54",
+      "author": "ryan",
+      "text": "UI follow-up: increasing Console chat message font size in conversation-viewer/message components because message text is currently too small for readability in /lab/console.",
+      "created_at": "2026-04-28T04:00:03.752597Z"
+    },
+    {
+      "id": "5bbe81bb-02ed-492a-aa74-f8b794e39480",
+      "author": "ryan",
+      "text": "Implemented UI readability tweak: increased Console chat message text from text-sm to text-base in message rendering components and thinking placeholder. Verified with focused Jest suites for conversation-viewer streaming and session routing (both passing).",
+      "created_at": "2026-04-28T04:00:31.408421Z"
+    },
+    {
+      "id": "ca440085-74d4-43f5-bfe3-418854bcb3d0",
+      "author": "ryan",
+      "text": "UI tweak requested: make the per-message Spent/Reused cost indicator width independent from message bubble width and uniform across instances.",
+      "created_at": "2026-04-28T04:02:03.137658Z"
+    },
+    {
+      "id": "22853caf-bd01-4525-b73e-ae1b5e44f3d6",
+      "author": "ryan",
+      "text": "Applied cost indicator sizing tweak in conversation-viewer: cost details blocks now use inline-block fixed width (w-64, max-w-full), so they no longer inherit chat bubble width. Focused streaming UI test still passes.",
+      "created_at": "2026-04-28T04:02:19.119905Z"
+    },
+    {
+      "id": "72495d86-1ff1-4655-be3f-fd33a4ea6984",
+      "author": "ryan",
+      "text": "Config tweak requested: console chat currently reports GPT-4o; switching console chat harness default model to gpt-5.4-mini and validating with focused tests.",
+      "created_at": "2026-04-28T04:02:56.456344Z"
+    },
+    {
+      "id": "7fad0e54-b72c-419f-8f33-c5fe487aa77d",
+      "author": "ryan",
+      "text": "Set built-in Console chat assistant model explicitly to gpt-5.4-mini in builtin procedure YAML generation to prevent fallback/default model drift (e.g., gpt-4o). Added test assertion in test_builtin_procedures. Validation: pytest test_builtin_procedures + test_chat_runtime passed.",
+      "created_at": "2026-04-28T04:03:39.235946Z"
+    },
+    {
+      "id": "773646c3-6b58-46e9-9ff0-b8721763ef72",
+      "author": "ryan",
+      "text": "Implementing Console prompt model selector UI in PromptInput and wiring selected model into outgoing chat message metadata (default gpt-5.4-mini).",
+      "created_at": "2026-04-28T04:05:18.994020Z"
+    },
+    {
+      "id": "5928c911-5d38-4f7d-84f3-3dbea7e9dc14",
+      "author": "ryan",
+      "text": "Added Console PromptInput model selector (GPT 5.4 mini / 5.4 / 5.2), defaulting to gpt-5.4-mini. Wired selected model into outgoing USER ChatMessage metadata under metadata.model.id and metadata.instrumentation.client_selected_model. Updated conversation-viewer Jest mocks for PromptInputSelect primitives and added assertion for default selected model in streaming-updates test. Focused suites passing.",
+      "created_at": "2026-04-28T04:08:12.683905Z"
+    },
+    {
+      "id": "80c67b0e-2ca1-421d-9748-903c1ccad79a",
+      "author": "ryan",
+      "text": "Updating Console model selector options to requested list: GPT-5.4, 5.3, 5.2, 5.1, 5.4 mini, 5 mini, 5.4 nano, 5 nano (default remains gpt-5.4-mini).",
+      "created_at": "2026-04-28T04:10:17.142631Z"
+    },
+    {
+      "id": "057c6930-746d-412e-b835-9f05cd161ea9",
+      "author": "ryan",
+      "text": "Updated model selector list to requested set: GPT-5.4, 5.3, 5.2, 5.1, 5.4 mini, 5 mini, 5.4 nano, 5 nano. Default unchanged: gpt-5.4-mini. Re-ran focused conversation-viewer test suites; passing.",
+      "created_at": "2026-04-28T04:10:33.027794Z"
+    },
+    {
+      "id": "54bea0ad-ad66-4b25-b180-7dcdafae46a6",
+      "author": "ryan",
+      "text": "Implemented model propagation end-to-end. Backend: chat_runtime now parses metadata.model.id from ChatMessage (string/dict metadata), stores selected_model on ConsoleMessage, includes metadata in fetch/list queries, and injects context.agent_models={assistant:<model>} into run_experiment for per-turn override (trust pass-through). Tests added/updated: chat_runtime metadata extraction + model-override context; existing no-override context test still enforces absence when not selected. Frontend tests: added selector-change test asserting gpt-5.3 is written into metadata.model.id and instrumentation.client_selected_model. Validation passed: pytest chat_runtime + builtin_procedures, and Jest streaming/session-routing suites.",
+      "created_at": "2026-04-28T04:17:43.501733Z"
+    },
+    {
+      "id": "c8dbb773-5efe-413c-9bd7-0208da085d27",
+      "author": "ryan",
+      "text": "Continuing implementation/verification of latency loop: instrumentation + benchmark harness + worker drain mode + startup cache reuse. Running targeted test suite and local benchmark run next.",
+      "created_at": "2026-04-28T04:26:58.629920Z"
+    },
+    {
+      "id": "e6d1a971-7fac-427a-aac5-36d8267e79a2",
+      "author": "ryan",
+      "text": "Latency loop update (local worker path): Added structured per-message latency logs (claim/history/start/first-token/total), deterministic benchmark script (JSON/CSV artifacts), worker drain mode, ProcedureService reuse, and model pass-through instrumentation. Root cause for extreme latency was redundant chat-recorder console lookups inside _execute_tactus even when console_user_message/history were already present in context; fixed by skipping those lookups when context provides values and disabling trace dispatch-metadata lookup for stream-dispatch runs. Benchmarks: baseline /tmp/console_latency_run_20260428.json first_chunk p95 ~93.7s, total p95 ~94.8s. After fixes with isolated target local:codexbench /tmp/console_latency_codexbench_20260428.json first_chunk p50 1.75s p95 3.73s; total p50 24.8s p95 28.8s. Remaining work: reduce total completion latency (currently ~25-29s) by shrinking post-first-chunk tail and runtime startup overhead.",
+      "created_at": "2026-04-28T05:05:47.159996Z"
+    },
+    {
+      "id": "8742f643-e4fb-4d2c-be23-f75c0ac8d239",
+      "author": "ryan",
+      "text": "UI follow-up (in progress): investigate console conversation auto-follow + bottom jump button behavior for streaming replies. Goal: keep latest assistant chunks visible without manual scrolling and verify whether components are literal Vercel AI Elements package vs local wrappers.",
+      "created_at": "2026-04-28T11:55:28.331870Z"
+    },
+    {
+      "id": "3c7b9522-5914-4ec7-ad20-9c3097ec8bb0",
+      "author": "ryan",
+      "text": "UI scroll follow-up implemented for /lab/console conversation view. Findings: we are not importing the literal Vercel package component for Conversation; we use local wrappers at dashboard/components/ai-elements/*. Added auto-follow controller in conversation-viewer.tsx so stream updates keep viewport pinned, plus a transition snap on Thinking -> first assistant chunk. Added guard so transient atBottom=false during active response does not disable follow mode. Verification: npm --prefix dashboard test -- --runTestsByPath components/ui/__tests__/conversation-viewer-streaming-updates.test.tsx components/ui/__tests__/conversation-viewer-session-routing.test.tsx (12 passed); npm --prefix dashboard run typecheck (pass).",
+      "created_at": "2026-04-28T12:00:27.097798Z"
+    },
+    {
+      "id": "0579d905-deae-48a7-8e2a-40e9b1039e83",
+      "author": "ryan",
+      "text": "Starting implementation of first-class chat session CLI + MCP tools (all sessions). Scope: shared chat ops module + new plexus chat commands (last/messages/send) + MCP chat tools (plexus_chat_last/messages/send) + focused tests.",
+      "created_at": "2026-04-28T12:39:38.245570Z"
+    },
+    {
+      "id": "c1db64a8-4d64-4184-8531-af7da2dbd4f7",
+      "author": "ryan",
+      "text": "Implemented first-class chat session tooling: new shared module plexus/chat/session_ops.py (latest session lookup, message listing with pagination/offset/internal filtering, USER CHAT send, USER RESPONSE send with parent-derived control metadata), new CLI group plexus chat (last/messages/send), and new MCP chat tools (plexus_chat_last/messages/send). Registered chat tools in MCP fast server and legacy server, and registered chat CLI in CommandLineInterface. Verification: pytest -q plexus/chat/session_ops_test.py plexus/cli/chat/chats_test.py MCP/tools/chat/chats_test.py (13 passed); python -m py_compile plexus/chat/session_ops.py plexus/cli/chat/chats.py MCP/tools/chat/chats.py; python -m plexus.cli --help confirms new chat command is present.",
+      "created_at": "2026-04-28T13:01:51.879433Z"
+    },
+    {
+      "id": "6c8b2279-eec0-4d6f-a5dc-efe397456334",
+      "author": "ryan",
+      "text": "Prepared merge to develop: added first-class chat CLI/MCP tools, account resolution hardening, and IAM GraphQL auth mode for CLI/MCP smoke tests. Verified production smoke path and fixed Lambda OPENAI_API_KEY env on main responder.",
+      "created_at": "2026-04-28T18:15:24.636399Z"
+    },
+    {
+      "id": "cd58b0e7-86c2-4b12-b1a3-819d16a66f2f",
+      "author": "ryan",
+      "text": "Opened PR #238 into develop with chat CLI/MCP tools, model-routing/runtime hardening, and dashboard conversation fixes. Rebased branch on origin/develop to resolve conflicts and force-pushed; checks are running. PR: https://github.com/AnthusAI/Plexus/pull/238",
+      "created_at": "2026-04-28T18:19:28.373263Z"
+    },
+    {
+      "id": "add170de-ed66-4e2f-9ea5-8cdd4c315948",
+      "author": "ryan",
+      "text": "Starting implementation for 'hidden-until-named' session visibility: finish ChatSession.onUpdate list reveal, enforce sidebar filtering for metadata.console.hidden_until_named, wire create-first-message sessions with hidden flag, and fix/update Jest + Python tests to validate strict behavior.",
+      "created_at": "2026-04-28T23:40:32.381284Z"
+    },
+    {
+      "id": "239f0d56-f66f-4554-b49f-641ad6b53229",
+      "author": "ryan",
+      "text": "Implemented hidden-until-named session visibility flow: (1) first-prompt-created sessions are created with metadata.console.hidden_until_named=true, (2) auto-title path now clears hidden flag on successful title update and preserves strict hidden behavior on title failure, (3) manual rename sets title_source=manual and clears hidden flag, (4) sidebar filters hidden unnamed sessions, (5) session onUpdate subscription triggers fast list reveal. Validation: pytest -q plexus/console/test_chat_runtime.py (23 passed) and dashboard Jest session-routing + streaming suites (17 passed).",
+      "created_at": "2026-04-28T23:42:05.108484Z"
+    },
+    {
+      "id": "4fd4fdf6-c1d9-436e-8f4a-781a22b6f682",
+      "author": "ryan",
+      "text": "UI selection tweak implemented: when the currently selected session disappears during refresh (common with hidden-until-named + eventual consistency), we now clear selection instead of auto-selecting a different visible session. Added regression test in conversation-viewer-streaming-updates to assert 'No session selected' state after session replacement refresh. Re-ran dashboard Jest suites: 18 passed.",
+      "created_at": "2026-04-28T23:51:05.278209Z"
+    },
+    {
+      "id": "e021729b-7cbd-42a5-85c8-10d2729741e8",
+      "author": "ryan",
+      "text": "Applied stricter hidden-until-named UX: all new-session creation paths (including + New session) now set hidden_until_named=true; selected hidden session remains out of sidebar list; main header for hidden unnamed sessions now shows neutral 'New Chat' instead of Session <id>; no auto-highlight of a different session while hidden current session is active. Re-ran targeted dashboard Jest suites: 18/18 passing.",
+      "created_at": "2026-04-28T23:55:08.480419Z"
+    },
+    {
+      "id": "5647ae08-8d30-4d82-9a07-3691df46e9d1",
+      "author": "ryan",
+      "text": "Updated auto-title context for turn 2 to include prior assistant output between user turns. Session title prompt context is now: user#1, assistant message(s) between user#1 and user#2, user#2. It no longer uses only user messages for second-title generation. Added/updated runtime tests in plexus/console/test_chat_runtime.py; pytest suite remains green (23 passed).",
+      "created_at": "2026-04-29T00:01:46.403631Z"
+    },
+    {
+      "id": "2a1c44da-94a3-4d03-8f1d-957917974c42",
+      "author": "ryan",
+      "text": "Updated console built-in agent tool access: plexus/procedures/console_chat_agent.yaml now grants assistant tools: [plexus], enabling full Plexus MCP toolset for Console chat turns. Regression check: pytest -q plexus/console/test_chat_runtime.py (23 passed).",
+      "created_at": "2026-04-29T00:32:04.419728Z"
+    },
+    {
+      "id": "5d76de1a-0a6f-4748-bc02-3ef409979068",
+      "author": "ryan",
+      "text": "Investigating tool-call failure in local console responder. Verified shared runtime had enable_mcp disabled; switched to enable_mcp=True and updated tests. Next: run live smoke with local worker and inspect logs for actual tool invocation; if still failing, patch toolset resolution and re-test end-to-end.",
+      "created_at": "2026-04-29T01:09:33.806278Z"
+    },
+    {
+      "id": "aa218b0f-8d3e-4619-bb91-fe0c55e6c48b",
+      "author": "ryan",
+      "text": "Tool-use root cause identified and fixed. The built-in console procedure source is generated in plexus/cli/procedure/builtin_procedures.py, and it was hard-coded with assistant tools: [] (ignoring edits to plexus/procedures/console_chat_agent.yaml). Updated built-in config to tools: [plexus] and added explicit system prompt instruction to call tools when requested. Verified with runtime debug: agent raw tools config now ['plexus'], toolset resolves successfully, and workflow reports 1 tool call. Live local-worker smoke (IAM auth mode: PLEXUS_GRAPHQL_AUTH_MODE=iam + AWS_PROFILE=capacity_anthus) now persists ASSISTANT TOOL_CALL messages (e.g., 'Tool call: plexus_scorecards_list').",
+      "created_at": "2026-04-29T01:24:25.740364Z"
+    },
+    {
+      "id": "1488296f-4640-49d6-8536-1557852afddc",
+      "author": "ryan",
+      "text": "Starting first-party Tactus fix for tool-result propagation (no Plexus monkey patch). Confirmed editable Tactus source at /Users/ryan/Projects/Tactus/tactus/dspy/agent.py and that current non-streaming path is single-pass after tool execution. Implementing multi-round tool-call loop + force-synthesis-on-no-final-output in Tactus, then removing local post-tool patch in plexus/cli/procedure/procedure_executor.py and revalidating console smoke.",
+      "created_at": "2026-04-29T02:29:20.734591Z"
+    },
+    {
+      "id": "edf44c9b-fca8-485a-9be0-09867df691da",
+      "author": "ryan",
+      "text": "Returning focus from Tactus merge/deploy to the Console agent tool-surface cleanup: implement a single model-facing Plexus MCP dispatcher tool for the built-in Console agent, backed by the existing MCP registry, then validate via focused tests and local responder smoke.",
+      "created_at": "2026-04-29T03:30:46.281863Z"
+    },
+    {
+      "id": "3fb97c6b-1e85-4e35-964a-6097453ba19e",
+      "author": "ryan",
+      "text": "Implemented and verified Console's single model-facing Plexus MCP dispatcher tool. For builtin:console/chat, tools: [plexus] now exposes one Tactus tool named plexus; its tool_name argument dispatches to the selected underlying MCP tool and arguments are passed as JSON. Kept non-Console Tactus MCP bridging unchanged. Live IAM/local-worker smoke against session 64d67ced-c0d9-4cb8-b62a-e288abde2195 succeeded: internal TOOL_CALL is now 'Tool call: plexus' and assistant answered from plexus_scorecards_list results. Focused tests passed: PYTHONPATH=. pytest -q plexus/cli/procedure/test_procedure_executor_compat.py plexus/cli/procedure/test_builtin_procedures.py plexus/console/test_chat_runtime.py -q (51 passed).",
+      "created_at": "2026-04-29T03:39:44.209922Z"
     }
   ],
   "created_at": "2026-04-27T12:42:41.687340Z",
-  "updated_at": "2026-04-27T14:02:15.243723Z",
+  "updated_at": "2026-04-29T03:39:44.209922Z",
   "closed_at": null,
   "custom": {}
 }
