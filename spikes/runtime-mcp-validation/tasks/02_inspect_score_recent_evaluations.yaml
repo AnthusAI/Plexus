@@ -1,0 +1,36 @@
+id: inspect_score_recent_evaluations
+name: "Inspect score champion and recent evaluations"
+prompt: |
+  For the Compliance Tone score, summarize the current champion version and the
+  two most recent evaluations. Include each evaluation id, AC1, accuracy, recall,
+  and whether it improved or regressed relative to the previous evaluation.
+  First call plexus.score.info{ id = "score_compliance_tone" }.
+  Then call plexus.score.evaluations for that score and inspect the two most recent
+  evaluations with plexus.evaluation.info.
+  Return exactly these top-level fields: score_id, champion_version_id, and evaluations.
+  The evaluations field must contain exactly two entries, each including ac1,
+  accuracy, recall, and a regression/improvement assessment.
+expected_outcome:
+  kind: contains_fields
+  fields:
+    score_id: score_compliance_tone
+    champion_version_id: sv_compliance_tone_champion
+    evaluations_count: 2
+    includes_metrics:
+      - ac1
+      - accuracy
+      - recall
+    includes_regression_assessment: true
+coverage_tags:
+  - read_only
+  - score_info
+  - evaluations
+  - multi_step
+required_apis:
+  - plexus.score.info
+  - plexus.score.evaluations
+  - plexus.evaluation.info
+max_attempts_for_first_try_pass: 1
+fixture_notes: |
+  The fixture should include at least three evaluations so the agent must choose
+  the two most recent and compute directionality from their metrics.

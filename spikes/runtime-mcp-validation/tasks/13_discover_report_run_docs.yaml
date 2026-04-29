@@ -1,0 +1,32 @@
+id: discover_report_run_docs
+name: "Discover report docs and start a report run"
+prompt: |
+  Start the weekly alignment summary report for Acme Health, but first look up
+  how report configurations and report runs work in the Plexus docs. Return the
+  report run handle or report id and the configuration id used.
+  Call plexus.docs.list, then plexus.docs.get{ key = "reports" } before taking
+  action. Then call plexus.report.configurations_list to find
+  report_config_weekly_alignment. Finally call plexus.report.run with
+  configuration_id report_config_weekly_alignment.
+  Return exactly these fields: report_configuration_id and report_handle_or_id.
+expected_outcome:
+  kind: docs_discovery_then_action
+  fields:
+    docs_requested:
+      - reports
+    report_configuration_id: report_config_weekly_alignment
+    report_handle_or_id_present: true
+coverage_tags:
+  - discovery_flow
+  - docs
+  - reports
+  - long_running
+required_apis:
+  - plexus.docs.list
+  - plexus.docs.get
+  - plexus.report.configurations_list
+  - plexus.report.run
+max_attempts_for_first_try_pass: 1
+fixture_notes: |
+  This validates that long-running non-evaluation operations are not treated as
+  second-class. The report.run stub can return a handle immediately.

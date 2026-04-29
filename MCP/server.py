@@ -25,6 +25,7 @@ from tools.prediction.predictions import register_prediction_tools
 from tools.dataset.datasets import register_dataset_tools
 from tools.rubric_memory.rubric_memory import register_rubric_memory_tools
 from tools.chat.chats import register_chat_tools
+from tools.tactus_runtime.execute import register_tactus_tools
 
 # Setup Plexus imports and core functionality
 setup_plexus_imports()
@@ -89,6 +90,7 @@ mcp = FastMCP(
     - plexus_procedure_chat_messages: Get detailed chat messages for debugging conversation flow and tool calls/responses
 
     ## Utility Tools
+    - execute_tactus: Execute Tactus code inside the Plexus runtime using a single `tactus` string parameter. The runtime injects a `plexus` module and helper aliases.
     - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
     """
 )
@@ -101,6 +103,7 @@ def register_all_tools():
     # Register utility tools
     register_think_tool(mcp)
     register_docs_tool(mcp)
+    register_tactus_tools(mcp)
     logger.info("Registered utility tools")
     
     # Register scorecard tools
