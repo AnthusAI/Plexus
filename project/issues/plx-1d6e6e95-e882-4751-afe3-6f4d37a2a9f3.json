@@ -1,0 +1,18 @@
+{
+  "id": "plx-1d6e6e95-e882-4751-afe3-6f4d37a2a9f3",
+  "title": "Eliminate hardcoded/env credentials in production workers",
+  "description": "",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-0e38eb7b-5f52-48a9-bf56-f4b152ba840e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-28T22:50:23.557512094Z",
+  "updated_at": "2026-04-28T22:50:23.557512094Z",
+  "closed_at": null,
+  "custom": {}
+}
