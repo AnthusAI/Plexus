@@ -6,11 +6,25 @@ import yaml
 OPTIMIZER_YAML_PATH = (
     Path(__file__).resolve().parents[2] / "procedures" / "feedback_alignment_optimizer.yaml"
 )
+OPTIMIZER_SKILL_PATH = (
+    Path(__file__).resolve().parents[3] / "skills" / "plexus-score-optimizer" / "SKILL.md"
+)
 
 
 def _load_optimizer_config():
     with OPTIMIZER_YAML_PATH.open() as f:
         return yaml.safe_load(f)
+
+
+def test_optimizer_skill_documents_three_phase_rubric_memory_sop():
+    skill = OPTIMIZER_SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "Three-Phase Rubric-Memory SOP" in skill
+    assert "python -m plexus.cli rubric-memory recent" in skill
+    assert "--include-rubric-memory" in skill
+    assert "Phase 1" in skill
+    assert "Phase 2" in skill
+    assert "Phase 3" in skill
 
 
 def test_optimizer_yaml_defines_dedicated_reporting_agents():
@@ -124,6 +138,16 @@ def test_optimizer_startup_requests_retrieval_only_rubric_memory():
     assert "synthesize = false" in code
 
 
+def test_optimizer_startup_requests_recent_rubric_memory():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert '"plexus_rubric_memory_recent_entries"' in code
+    assert "=== RECENT RUBRIC MEMORY ===" in code
+    assert "recent_rubric_memory_briefing = recent_result.markdown_context" in code
+    assert 'State.set("recent_rubric_memory_context", recent_result)' in code
+
+
 def test_optimizer_yaml_bounds_report_context_and_output_shapes():
     config = _load_optimizer_config()
     code = config["code"]
@@ -165,8 +189,10 @@ def test_optimizer_yaml_gates_sme_questions_with_rubric_memory():
     tools = config["agents"]["code_editor"]["tools"]
     system_prompt = config["agents"]["code_editor"]["system_prompt"]
 
+    assert "plexus_rubric_memory_recent_entries" in tools
     assert "plexus_rubric_memory_sme_question_gate" in tools
     assert "Before concluding that SME input is needed, check rubric memory." in system_prompt
+    assert "Begin policy-sensitive work by reviewing recent rubric memory" in system_prompt
     assert "local function gate_sme_agenda" in code
     assert '"plexus_rubric_memory_sme_question_gate"' in code
     assert '"cycle_" .. tostring(cycle) .. "_sme_agenda"' in code
@@ -185,7 +211,8 @@ def test_optimizer_yaml_runs_contradictions_directly_without_background_dispatch
     assert 'background = false' not in code
     assert "dispatched in background" not in code
     assert "consume results later" not in code
-    assert "include_rubric_memory = false" in code
+    assert "include_rubric_memory = false" not in code
+    assert "include_rubric_memory = true" in code
     assert 'pcall(refresh_known_contradictions, 0, {ttl_hours = 48})' in code
     assert 'cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name' in code
 

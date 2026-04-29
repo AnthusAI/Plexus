@@ -162,8 +162,8 @@ agents:
 
       Your job is to propose one high-quality optimization hypothesis at a time.
       You do not edit YAML. You do not call tools. You read RCA analysis,
-      evaluation metrics, rubric-memory briefing, guidelines, score code, and
-      accumulated lessons, then return exactly one numbered hypothesis line.
+      evaluation metrics, recent rubric-memory briefing, guidelines, score code,
+      and accumulated lessons, then return exactly one numbered hypothesis line.
 
       The highest-value hypotheses are almost always about policy clarity:
       missing rubric rules, ambiguous decision criteria, contradictory feedback,
@@ -213,6 +213,7 @@ agents:
       TOOLS:
       - str_replace_editor: view or edit score_config.yaml
       - submit_score_version: submit current edits for evaluation
+      - plexus_rubric_memory_recent_entries: check recent score/prefix/scorecard KB updates before policy edits or SME questions
       - plexus_rubric_memory_evidence_pack: retrieve rubric-memory citation context for policy-sensitive hypotheses or disputed items
       - plexus_rubric_memory_sme_question_gate: check proposed SME questions against rubric-memory citations before asking SMEs
       - done: signal you cannot improve current hypothesis
@@ -238,6 +239,10 @@ agents:
       only helps items that closely resemble that example.
 
       RUBRIC MEMORY CITATIONS:
+      Begin policy-sensitive work by reviewing recent rubric memory when it is
+      supplied. Recent score, prefix, or scorecard KB entries may require
+      guideline updates across more than one related score before feedback labels
+      are curated or score YAML is optimized.
       When rubric-memory context is supplied or you call plexus_rubric_memory_evidence_pack,
       cite exact citation IDs for policy claims, hypotheses, version notes, and
       cannot_improve conclusions. The official score version rubric remains canonical;
@@ -305,6 +310,7 @@ agents:
     tools:
       - str_replace_editor
       - submit_score_version
+      - plexus_rubric_memory_recent_entries
       - plexus_rubric_memory_evidence_pack
       - plexus_rubric_memory_sme_question_gate
       - done
@@ -1593,6 +1599,15 @@ code: |
         table.insert(parts, "But follow the RCA over historical patterns if they conflict.")
         table.insert(parts, "")
       end
+    end
+
+    if has_text(opts.recent_rubric_memory_briefing) then
+      table.insert(parts, "=== RECENT RUBRIC MEMORY ===")
+      table.insert(parts, trunc(opts.recent_rubric_memory_briefing, 9000))
+      table.insert(parts, "=== END RECENT RUBRIC MEMORY ===")
+      table.insert(parts, "")
+      table.insert(parts, "Before optimizing YAML or asking SMEs, compare recent KB entries against current guidelines and current scorecard/related-score policy.")
+      table.insert(parts, "")
     end
 
     if has_text(opts.rubric_memory_briefing) then
@@ -2923,6 +2938,29 @@ code: |
 
   Human.notify({message = "Resolved: scorecard_id=" .. scorecard_id .. ", score_id=" .. score_id, level = "info"})
 
+  local recent_rubric_memory_briefing = ""
+  local recent_rubric_memory_context = nil
+  do
+    local recent_ok, recent_result = pcall(call_plexus_tool, "plexus_rubric_memory_recent_entries", {
+      scorecard_identifier = params.scorecard,
+      score_identifier = params.score,
+      score_id = score_id,
+      query = "recent SME stakeholder policy update rubric guideline change clarification before optimization",
+      days = 30,
+      limit = 16
+    }, {max_retries = 1})
+    if recent_ok and type(recent_result) == "table" and recent_result.success and has_text(recent_result.markdown_context) then
+      recent_rubric_memory_context = recent_result
+      recent_rubric_memory_briefing = recent_result.markdown_context
+      State.set("recent_rubric_memory_context", recent_result)
+      Human.notify({message = "Recent rubric-memory briefing loaded for optimizer preflight.", level = "info"})
+    elseif recent_ok and type(recent_result) == "table" and recent_result.error then
+      Human.notify({message = "Recent rubric-memory briefing unavailable: " .. tostring(recent_result.error), level = "warning"})
+    else
+      Human.notify({message = "Recent rubric-memory briefing unavailable for this optimizer run.", level = "debug"})
+    end
+  end
+
   local rubric_memory_briefing = ""
   local rubric_memory_context = nil
   do
@@ -3083,7 +3121,7 @@ code: |
         days = tostring(params.days or 90),
         max_feedback_items = 100,
         num_topics = 8,
-        include_rubric_memory = false
+        include_rubric_memory = true
       },
       cache_key = "FeedbackContradictions: " .. scorecard_name .. " / " .. score_name,
       ttl_hours = ttl,
@@ -4247,6 +4285,7 @@ code: |
       consecutive_failed_cycles = consecutive_failed_cycles,
       hint = params.hint,
       prior_run_prescription = params.prior_run_prescription,
+      recent_rubric_memory_briefing = recent_rubric_memory_briefing,
       rubric_memory_briefing = rubric_memory_briefing
     })
 
@@ -7105,7 +7144,7 @@ code: |
         days = tostring(params.days or 90),
         max_feedback_items = 400,
         num_topics = 12,
-        include_rubric_memory = false
+        include_rubric_memory = true
       },
       cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name,
       ttl_hours = 4,
