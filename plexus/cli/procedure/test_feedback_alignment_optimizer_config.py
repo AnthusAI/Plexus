@@ -19,6 +19,7 @@ def test_optimizer_yaml_defines_dedicated_reporting_agents():
 
     assert agents["hypothesis_planner"]["model"] == "gpt-5.4-mini"
     assert agents["code_editor"]["model"] == "gpt-5-mini"
+    assert agents["code_editor"]["disable_streaming"] is True
 
     assert agents["cycle_analyst"]["model"] == "gpt-5-mini"
     assert agents["cycle_analyst"]["max_tokens"] == 16000
@@ -53,6 +54,36 @@ def test_optimizer_yaml_uses_dedicated_hypothesis_planner_and_agent_model_overri
     assert "hypothesis_planner.clear_history()" in code
     assert 'safe_agent_call(hypothesis_planner, "hypothesis_planner"' in code
     assert "local response = hypothesis_planner.output or \"\"" in code
+
+
+def test_optimizer_yaml_passes_code_editor_context_inline_without_history_injection():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "code_editor.history:add" not in code
+    assert "=== CURRENT score_config.yaml (the file you are editing) ===" in code
+    assert "The current file content is included above in this message." in code
+    assert "local synthesis_context_parts = {}" in code
+    assert "=== CURRENT score_config.yaml (starting from %s" in code
+    assert "Recovered from %s context window error: cleared history, rebuilt inline context" in code
+
+
+def test_optimizer_yaml_deduplicates_submitted_candidate_records():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local submitted_version_keys = {}" in code
+    assert "local function record_submitted_version(entry)" in code
+    assert "Skipping duplicate submitted version record" in code
+    assert code.count("table.insert(submitted_versions") == 1
+
+
+def test_optimizer_startup_requests_retrieval_only_rubric_memory():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert '"plexus_rubric_memory_evidence_pack"' in code
+    assert "synthesize = false" in code
 
 
 def test_optimizer_yaml_bounds_report_context_and_output_shapes():
