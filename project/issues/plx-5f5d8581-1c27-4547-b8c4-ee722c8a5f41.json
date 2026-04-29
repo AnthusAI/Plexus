@@ -34,10 +34,16 @@
       "author": "ryan",
       "text": "Added cooperative cancellation checkpoints for report and procedure workers. Report generation now checks dashboard Task status before loading config and before each report block; Tactus procedure execution checks Task cancellation before advancing stages and before calling runtime.execute. Cancellation returns/propagates as CANCELLED rather than generic failure. Focused tests pass: python -m pytest plexus/reports/test_programmatic_report_tasks.py plexus/cli/procedure/test_procedure_executor_compat.py -q (28 passed). Remaining work on this task: streaming MCP notifications, distributed child-budget carving, report configuration background dispatch, and deeper in-process evaluation checkpoints if needed.",
       "created_at": "2026-04-29T12:11:17.729245Z"
+    },
+    {
+      "id": "bc7a1b3e-1863-440b-b1e9-913e276e7d50",
+      "author": "ryan",
+      "text": "Follow-up CI fix: made report Task cancellation refresh best-effort so unavailable mocked/task refreshes do not convert normal report work into failures, and updated the legacy report test to allow intentional cancellation status polling. Local verification: python -m pytest plexus/reports/service_test.py plexus/reports/test_service_integration.py plexus/cli/report/tests/test_config_override.py plexus/reports/test_programmatic_report_tasks.py plexus/cli/procedure/test_procedure_executor_compat.py -q (56 passed).",
+      "created_at": "2026-04-29T12:24:41.845257Z"
     }
   ],
   "created_at": "2026-04-29T04:43:42.848955Z",
-  "updated_at": "2026-04-29T12:11:17.729245Z",
+  "updated_at": "2026-04-29T12:24:41.845257Z",
   "closed_at": null,
   "custom": {}
 }
