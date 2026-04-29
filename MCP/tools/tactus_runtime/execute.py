@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import signal
 import threading
 import time
 import traceback
@@ -1105,14 +1106,7 @@ class PlexusRuntimeModule:
             if method in {"peek", "status"}:
                 return self._refresh_handle(str(handle_id))
             if method == "cancel":
-                return self._handle_store.update(
-                    str(handle_id),
-                    {
-                        "status": "cancelled",
-                        "cancel_requested": True,
-                        "cancelled_at": _iso(time.time()),
-                    },
-                )
+                return self._cancel_handle(str(handle_id))
             if method == "await":
                 timeout = _timeout_seconds(parsed.get("timeout"), default=0.0)
                 poll_interval = _timeout_seconds(
@@ -1132,6 +1126,101 @@ class PlexusRuntimeModule:
             raise ValueError(f"Unsupported Plexus runtime API: plexus.handle.{method}")
         finally:
             self._budget.record_after("handle", method)
+
+    def _cancel_handle(self, handle_id: str) -> dict[str, Any]:
+        record = self._handle_store.get(handle_id)
+        dispatch_result = record.get("dispatch_result") or {}
+        actions: list[dict[str, Any]] = []
+
+        process_id = dispatch_result.get("process_id")
+        if process_id:
+            try:
+                os.kill(int(process_id), signal.SIGTERM)
+                actions.append(
+                    {"kind": "process", "id": str(process_id), "status": "terminated"}
+                )
+            except ProcessLookupError:
+                actions.append(
+                    {"kind": "process", "id": str(process_id), "status": "not_running"}
+                )
+            except Exception as exc:  # noqa: BLE001
+                actions.append(
+                    {
+                        "kind": "process",
+                        "id": str(process_id),
+                        "status": "error",
+                        "error": str(exc),
+                    }
+                )
+
+        task_id = dispatch_result.get("task_id")
+        if task_id:
+            actions.append(self._cancel_dashboard_task(str(task_id)))
+
+        evaluation_id = dispatch_result.get("evaluation_id") or dispatch_result.get(
+            "id"
+        )
+        if record.get("kind") == "evaluation" and evaluation_id:
+            actions.append(self._cancel_evaluation_record(str(evaluation_id)))
+
+        return self._handle_store.update(
+            handle_id,
+            {
+                "status": "cancelled",
+                "cancel_requested": True,
+                "cancelled_at": _iso(time.time()),
+                "cancel_actions": actions,
+                "cancel_propagated": any(
+                    action.get("status") in {"cancelled", "terminated", "not_running"}
+                    for action in actions
+                ),
+            },
+        )
+
+    def _cancel_dashboard_task(self, task_id: str) -> dict[str, Any]:
+        try:
+            from plexus.cli.shared.client_utils import create_client
+            from plexus.dashboard.api.models.task import Task
+
+            client = create_client()
+            task = Task.get_by_id(task_id, client)
+            if not task:
+                return {"kind": "task", "id": task_id, "status": "not_found"}
+            task.update(
+                status="CANCELLED",
+                errorMessage="Cancellation requested by execute_tactus handle.",
+                completedAt=_iso(time.time()),
+            )
+            return {"kind": "task", "id": task_id, "status": "cancelled"}
+        except Exception as exc:  # noqa: BLE001
+            return {"kind": "task", "id": task_id, "status": "error", "error": str(exc)}
+
+    def _cancel_evaluation_record(self, evaluation_id: str) -> dict[str, Any]:
+        try:
+            from plexus.cli.shared.client_utils import create_client
+            from plexus.dashboard.api.models.evaluation import (
+                Evaluation as DashboardEvaluation,
+            )
+
+            evaluation = DashboardEvaluation.get_by_id(evaluation_id, create_client())
+            if not evaluation:
+                return {
+                    "kind": "evaluation",
+                    "id": evaluation_id,
+                    "status": "not_found",
+                }
+            evaluation.update(
+                status="CANCELLED",
+                errorMessage="Cancellation requested by execute_tactus handle.",
+            )
+            return {"kind": "evaluation", "id": evaluation_id, "status": "cancelled"}
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "kind": "evaluation",
+                "id": evaluation_id,
+                "status": "error",
+                "error": str(exc),
+            }
 
     def _refresh_handle(self, handle_id: str) -> dict[str, Any]:
         record = self._handle_store.get(handle_id)
