@@ -49,6 +49,8 @@ export function EvaluationTaskScoreResults({
 
   const getResultFilterKeys = (result: ScoreResultData): string[] => {
     const keys = new Set<string>()
+    const resultId = toNormalized(result.id)
+    if (resultId) keys.add(resultId)
     const itemId = toNormalized(result.itemId)
     if (itemId) keys.add(itemId)
 
@@ -57,6 +59,8 @@ export function EvaluationTaskScoreResults({
 
     const feedbackItemId = toNormalized((result as any)?.feedbackItem?.id)
     if (feedbackItemId) keys.add(feedbackItemId)
+    const metadataFeedbackItemId = toNormalized((result as any)?.metadata?.feedback_item_id)
+    if (metadataFeedbackItemId) keys.add(metadataFeedbackItemId)
 
     if (Array.isArray(result.itemIdentifiers)) {
       result.itemIdentifiers.forEach((identifier: any) => {
@@ -67,17 +71,6 @@ export function EvaluationTaskScoreResults({
 
     return Array.from(keys)
   }
-
-  console.log('EvaluationTaskScoreResults render:', {
-    resultCount: results.length,
-    firstResult: results[0],
-    lastResult: results[results.length - 1],
-    accuracy,
-    selectedPredictedValue,
-    selectedActualValue,
-    hasSelectedResult: !!selectedScoreResult,
-    selectedScoreResultId: selectedScoreResult?.id
-  });
 
   const [filters, setFilters] = useState<FilterState>({
     showCorrect: null,
@@ -122,15 +115,6 @@ export function EvaluationTaskScoreResults({
   }, [results])
 
   const filteredResults = useMemo(() => {
-    console.log('Filtering score results:', {
-      totalResults: results.length,
-      filters: {
-        showCorrect: filters.showCorrect,
-        predictedValue: filters.predictedValue,
-        actualValue: filters.actualValue
-      }
-    });
-
     const normalizedSelectedItemIds = selectedItemIds
       ? new Set(selectedItemIds.map(toNormalized).filter((id): id is string => id !== null))
       : null
@@ -148,20 +132,13 @@ export function EvaluationTaskScoreResults({
         return false
       }
 
-      if (normalizedSelectedItemIds && normalizedSelectedItemIds.size > 0) {
+      if (normalizedSelectedItemIds) {
         const resultKeys = getResultFilterKeys(result)
         const hasMatch = resultKeys.some(key => normalizedSelectedItemIds.has(key))
         if (!hasMatch) return false
       }
 
       return true
-    });
-
-    console.log('Filtered results:', {
-      inputCount: results.length,
-      filteredCount: filtered.length,
-      firstFiltered: filtered[0],
-      lastFiltered: filtered[filtered.length - 1]
     });
 
     return filtered;
