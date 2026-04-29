@@ -137,12 +137,15 @@ def register_rubric_memory_tools(server):
         topic_hint: Optional[str] = None,
         feedback_item_id: Optional[str] = None,
         score_result_id: Optional[str] = None,
+        synthesize: bool = False,
     ) -> str:
         """
         Generate rubric-memory citation context for a disputed score item.
 
         The official champion ScoreVersion rubric is the policy authority. Local
         `.knowledge-base` corpus evidence is supporting historical context.
+        By default this returns retrieval-only citation context for use as LLM input.
+        Set synthesize=true only for full RubricEvidencePack drill-through analysis.
         """
         try:
             from shared.utils import create_dashboard_client
@@ -192,7 +195,12 @@ def register_rubric_memory_tools(server):
                 )
 
             provider = RubricMemoryContextProvider(api_client=client)
-            context = await provider.generate_for_score_item(
+            context_method = (
+                provider.generate_for_score_item
+                if synthesize
+                else provider.retrieve_for_score_item
+            )
+            context = await context_method(
                 scorecard_identifier=scorecard_identifier,
                 score_identifier=score_identifier,
                 score_id=resolved_score_id,
@@ -221,6 +229,7 @@ def register_rubric_memory_tools(server):
             return json.dumps(
                 {
                     "success": True,
+                    "synthesized": bool(synthesize),
                     "score_id": resolved_score_id,
                     "feedback_item_id": feedback_item_id,
                     "score_result_id": score_result_id,
