@@ -2534,6 +2534,21 @@ code: |
     return slots, mode
   end
 
+  local function cap_hypothesis_slots(slots, requested_count)
+    local cap = tonumber(requested_count) or #slots
+    if cap < 1 then
+      cap = 1
+    end
+    if cap >= #slots then
+      return slots
+    end
+    local capped = {}
+    for i = 1, cap do
+      capped[i] = slots[i]
+    end
+    return capped
+  end
+
   local function build_cookbook_section(opts)
     local parts = {COOKBOOK_STATIC}
     local stagnant = opts.consecutive_stagnant_cycles or 0
@@ -4258,18 +4273,20 @@ code: |
     local hyp_slots, cycle_escalation_mode = build_hypothesis_slots({
       consecutive_stagnant_cycles = consecutive_stagnant_cycles
     })
+    hyp_slots = cap_hypothesis_slots(hyp_slots, params.num_candidates)
+    local slot_names = table.concat(hyp_slots, ", ")
     if cycle_escalation_mode == "ultra_creative" then
       Human.notify({message = string.format(
-        "  Ultra-creative plateau mode: %d stagnant cycles — 6 hypotheses (incremental, bold, regression_fix, structural, reframe, full_rewrite)",
-        consecutive_stagnant_cycles), level = "warning"})
+        "  Ultra-creative plateau mode: %d stagnant cycles — generating %d/%d requested hypotheses (slots: %s)",
+        consecutive_stagnant_cycles, #hyp_slots, params.num_candidates, slot_names), level = "warning"})
     elseif cycle_escalation_mode == "escalate" then
       Human.notify({message = string.format(
-        "  Plateau escalation mode: %d stagnant cycles — 5 hypotheses (incremental, bold, regression_fix, structural, reframe)",
-        consecutive_stagnant_cycles), level = "warning"})
+        "  Plateau escalation mode: %d stagnant cycles — generating %d/%d requested hypotheses (slots: %s)",
+        consecutive_stagnant_cycles, #hyp_slots, params.num_candidates, slot_names), level = "warning"})
     else
-      hyp_slots = {"recent_incremental", "recent_bold", "regression_fix", "structural"}
-      Human.notify({message = "  4-slot hypothesis set (slots: incremental, bold, regression_fix, structural)",
-        level = "info"})
+      Human.notify({message = string.format(
+        "  Generating %d/%d requested hypotheses (slots: %s)",
+        #hyp_slots, params.num_candidates, slot_names), level = "info"})
     end
 
     -- Generate hypotheses sequentially — each sees the previous ones

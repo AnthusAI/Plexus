@@ -56,6 +56,17 @@ def test_optimizer_yaml_uses_dedicated_hypothesis_planner_and_agent_model_overri
     assert "local response = hypothesis_planner.output or \"\"" in code
 
 
+def test_optimizer_yaml_caps_hypothesis_slots_by_requested_num_candidates():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function cap_hypothesis_slots(slots, requested_count)" in code
+    assert "hyp_slots = cap_hypothesis_slots(hyp_slots, params.num_candidates)" in code
+    assert "for i = 1, cap do" in code
+    assert "Generating %d/%d requested hypotheses" in code
+    assert "else\n      hyp_slots =" not in code
+
+
 def test_optimizer_yaml_passes_code_editor_context_inline_without_history_injection():
     config = _load_optimizer_config()
     code = config["code"]
