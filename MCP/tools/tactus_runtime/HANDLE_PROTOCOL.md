@@ -109,8 +109,11 @@ Implemented handle calls:
 - `plexus.handle.await{ id = "...", timeout = "PT10M" }` polls until a terminal
   status or timeout.
 - `plexus.handle.cancel{ id = "..." }` records cancellation intent in the
-  handle store. Underlying dispatch cancellation still belongs to the next
-  `plx-247588` slice.
+  handle store and propagates cancellation where the handle carries a supported
+  target:
+  - `process_id` handles receive `SIGTERM`.
+  - `task_id` handles mark the dashboard Task `CANCELLED`.
+  - evaluation handles with `evaluation_id` mark the Evaluation `CANCELLED`.
 
 A spawn that would exceed the parent budget is rejected before any remote
 dispatch.
@@ -118,8 +121,9 @@ dispatch.
 ## Remaining Work
 
 - Streaming progress notifications still need to be wired to MCP clients.
-- `plexus.handle.cancel` records cancellation intent, but underlying
-  cancellation propagation still needs per-operation support.
+- Deeper worker-side cancellation remains cooperative: dashboard Tasks and
+  Evaluation records are marked cancelled, but any worker already running must
+  honor that status to stop promptly.
 - Report configuration handles currently require a dedicated report task
   dispatch path; the implemented report handle path is for durable
   programmatic report-block tasks.

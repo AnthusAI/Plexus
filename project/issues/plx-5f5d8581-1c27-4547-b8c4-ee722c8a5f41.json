@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Extended the execute_tactus handle slice to all configured long-running run APIs. evaluation.run, report.run, and procedure.run are now DIRECT_HANDLERS routes, LONG_RUNNING_METHODS is empty, async=true creates persisted handles, and blocking forms still return requires_handle_protocol without dispatch. report.run async supports durable programmatic report-block tasks; procedure.run async dispatches through ProcedureService async_mode. Remaining work: streaming MCP notifications, real cancellation propagation, distributed child-budget carving, and report configuration background dispatch. Tests: python -m pytest MCP/tools/tactus_runtime/execute_test.py -q (59 passed); python -m pytest spikes/runtime-mcp-validation MCP/tools/tactus_runtime -q (96 passed).",
       "created_at": "2026-04-29T06:07:00.077927Z"
+    },
+    {
+      "id": "2fd03e03-d876-450f-8932-87e65b1cb16a",
+      "author": "ryan",
+      "text": "Added cancellation propagation for execute_tactus handles. plexus.handle.cancel now attempts supported underlying cancellation before marking the handle cancelled: process_id handles receive SIGTERM, task_id handles update the dashboard Task to CANCELLED, and evaluation handles with evaluation_id update the Evaluation to CANCELLED. The handle record stores cancel_actions and cancel_propagated for traceability. Remaining work: cooperative worker-side cancellation honoring CANCELLED statuses promptly, streaming MCP notifications, distributed child-budget carving, and report configuration background dispatch. Tests: python -m pytest MCP/tools/tactus_runtime/execute_test.py -q (62 passed); python -m pytest spikes/runtime-mcp-validation MCP/tools/tactus_runtime -q (99 passed).",
+      "created_at": "2026-04-29T11:38:05.101239Z"
     }
   ],
   "created_at": "2026-04-29T04:43:42.848955Z",
-  "updated_at": "2026-04-29T06:07:00.077927Z",
+  "updated_at": "2026-04-29T11:38:05.101239Z",
   "closed_at": null,
   "custom": {}
 }
