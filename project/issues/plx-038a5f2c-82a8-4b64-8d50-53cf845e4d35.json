@@ -1,0 +1,43 @@
+{
+  "id": "plx-038a5f2c-82a8-4b64-8d50-53cf845e4d35",
+  "title": "Fix champion promotion mutation to include full composite index key",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b635a3df-a18f-4e58-8fd0-93a68a9b2b5d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bbb73b47-52de-4eee-a5e1-3991c414bd10",
+      "author": "derek",
+      "text": "Investigating regression: promoting ScoreVersion to champion now fails with composite index error requiring createdAt on byScoreIdAndIsFeaturedAndCreatedAt. Plan: identify mutation path, include required key fields in update payload, and verify champion promotion flow.",
+      "created_at": "2026-04-29T19:35:32.922437677Z"
+    },
+    {
+      "id": "5b924a05-040a-4364-8393-3bd6f4f8233f",
+      "author": "derek",
+      "text": "Implemented fix in dashboard/components/ui/score-component.tsx: champion promotion metadata update now resolves target version and includes createdAt whenever isFeatured is updated, satisfying byScoreIdAndIsFeaturedAndCreatedAt composite key requirements.",
+      "created_at": "2026-04-29T19:36:00.516865726Z"
+    },
+    {
+      "id": "a9c57771-991b-410f-98d8-a6e0f6a9b7fd",
+      "author": "derek",
+      "text": "Validation:  passed (2 tests). Note: repo lint script currently fails in this env due unsupported Next CLI flag (), and full typecheck exceeded 180s timeout without output; targeted test confirms changed path compiles/exercises.",
+      "created_at": "2026-04-29T19:50:17.794355294Z"
+    },
+    {
+      "id": "83d24181-5317-477d-9caa-88b0ddc1856f",
+      "author": "derek",
+      "text": "Validation: npm run -s test -- score-component passed (2 tests). Note: repo lint script currently fails in this env due unsupported Next CLI flag (next lint --no-cache), and full typecheck exceeded 180s timeout without output; targeted test confirms changed path compiles/exercises.",
+      "created_at": "2026-04-29T19:50:20.644929925Z"
+    }
+  ],
+  "created_at": "2026-04-29T19:35:26.898481283Z",
+  "updated_at": "2026-04-29T19:50:20.644929925Z",
+  "closed_at": null,
+  "custom": {}
+}
