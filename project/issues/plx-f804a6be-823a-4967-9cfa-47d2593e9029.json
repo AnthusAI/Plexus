@@ -70,10 +70,16 @@
       "author": "ryan",
       "text": "plx-4294e7 closed: plexus.feedback.find now calls FeedbackService.search_feedback directly via the new DIRECT_HANDLERS registry; the (feedback, find) MCP loopback is gone with no fallback. PlexusRuntimeModule._call_feedback budgets exactly one tool_call, plexus.api.list still advertises feedback.find through the merged catalog, and _execute_tactus_tool exposes an injectable feedback_finder parameter for tests. 41 of 41 focused tests pass.",
       "created_at": "2026-04-29T05:26:28.987942Z"
+    },
+    {
+      "id": "2304e578-9ded-4f76-8853-769846f2ff1a",
+      "author": "ryan",
+      "text": "Runtime-boundary progress: plexus.evaluation.info now follows the same DIRECT_HANDLERS pattern as feedback.find, with no FastMCP loopback in the Tactus host module. Focused runtime tests pass: 49/49 execute_tactus tests and 86/86 combined runtime/spike tests.",
+      "created_at": "2026-04-29T05:43:41.011873Z"
     }
   ],
   "created_at": "2026-04-29T03:50:13.779251Z",
-  "updated_at": "2026-04-29T05:26:28.987942Z",
+  "updated_at": "2026-04-29T05:43:41.011873Z",
   "closed_at": null,
   "custom": {}
 }
