@@ -7,7 +7,10 @@ try:
 except ImportError:  # pragma: no cover - compatibility only
     from langchain.schema import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from plexus.cli.procedure.logging_utils import capture_llm_context_for_agent
+from plexus.cli.procedure.logging_utils import (
+    capture_llm_context_for_agent,
+    capture_tactus_dspy_context_for_agent,
+)
 
 
 def test_capture_llm_context_disabled_writes_no_files(monkeypatch, tmp_path):
@@ -88,3 +91,64 @@ def test_capture_llm_context_preserves_rubric_memory_briefing(monkeypatch, tmp_p
     assert "=== RUBRIC MEMORY BRIEFING" in markdown
     assert "corpus:01:abc" in markdown
     assert "Information Accuracy policy memory" in payload["messages"][1]["content"]
+
+
+def test_capture_tactus_dspy_context_serializes_prompt_context(monkeypatch, tmp_path):
+    monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_DIR", str(tmp_path))
+    prompt_context = {
+        "system_prompt": "Optimizer system prompt",
+        "history": [
+            {
+                "role": "user",
+                "content": (
+                    "Planning context\n\n"
+                    "=== RUBRIC MEMORY BRIEFING ===\n"
+                    "`support:01:abc` prefix evidence\n"
+                    "=== END RUBRIC MEMORY BRIEFING ==="
+                ),
+            },
+            {"role": "assistant", "content": "Previous answer"},
+        ],
+        "user_message": "Generate the next hypothesis.",
+        "tools": ["plexus_rubric_memory_evidence_pack"],
+    }
+
+    result = capture_tactus_dspy_context_for_agent(
+        "Tactus DSPy Agent: hypothesis_planner",
+        prompt_context,
+        turn_count=1,
+        call_site="tactus_dspy_agent_non_streaming",
+    )
+
+    assert result is not None
+    payload = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
+    markdown = next(tmp_path.glob("*.md")).read_text(encoding="utf-8")
+
+    assert payload["agent_name"] == "Tactus DSPy Agent: hypothesis_planner"
+    assert payload["call_site"] == "tactus_dspy_agent_non_streaming"
+    assert payload["context"] == "turn 1"
+    assert [message["role"] for message in payload["messages"]] == [
+        "SYSTEM",
+        "USER",
+        "ASSISTANT",
+        "USER",
+    ]
+    assert "=== RUBRIC MEMORY BRIEFING" in markdown
+    assert "plexus_rubric_memory_evidence_pack" in payload["tools"]
+
+
+def test_capture_markdown_escapes_nul_bytes_but_json_preserves_content(monkeypatch, tmp_path):
+    monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_DIR", str(tmp_path))
+
+    capture_llm_context_for_agent(
+        "Binary-ish Agent",
+        [HumanMessage(content="before\x00after")],
+        call_site="unit_test",
+    )
+
+    markdown_bytes = next(tmp_path.glob("*.md")).read_bytes()
+    payload = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
+
+    assert b"\x00" not in markdown_bytes
+    assert "before\\0after" in markdown_bytes.decode("utf-8")
+    assert payload["messages"][0]["content"] == "before\x00after"

@@ -164,6 +164,40 @@ def capture_llm_context_for_agent(
     return {"markdown_path": str(markdown_path), "json_path": str(json_path)}
 
 
+def capture_tactus_dspy_context_for_agent(
+    agent_name: str,
+    prompt_context: Dict[str, Any],
+    *,
+    turn_count: int | None = None,
+    call_site: str = "tactus_dspy_agent_turn",
+) -> Dict[str, str] | None:
+    """Persist a Tactus/DSPy prompt_context using the standard capture format."""
+    messages: List[Any] = []
+
+    system_prompt = prompt_context.get("system_prompt")
+    if system_prompt:
+        messages.append({"role": "system", "content": str(system_prompt)})
+
+    history = prompt_context.get("history", [])
+    if hasattr(history, "messages"):
+        history = history.messages
+    if isinstance(history, list):
+        messages.extend(history)
+
+    user_message = prompt_context.get("user_message")
+    if user_message:
+        messages.append({"role": "user", "content": str(user_message)})
+
+    context = f"turn {turn_count}" if turn_count is not None else ""
+    return capture_llm_context_for_agent(
+        agent_name=agent_name,
+        chat_history=messages,
+        context=context,
+        call_site=call_site,
+        tools=prompt_context.get("tools") or [],
+    )
+
+
 def log_filtered_vs_full_history(agent_name: str,
                                 full_history: List[Any],
                                 filtered_history: List[Any],
@@ -193,6 +227,17 @@ def log_filtered_vs_full_history(agent_name: str,
 
 def _get_message_type(message: Any) -> str:
     """Get a readable message type string."""
+    if isinstance(message, dict):
+        role = str(message.get("role") or "").lower()
+        if role in {"system", "user", "assistant", "tool", "tool_result"}:
+            return {
+                "system": "SYSTEM",
+                "user": "USER",
+                "assistant": "ASSISTANT",
+                "tool": "TOOL_RESULT",
+                "tool_result": "TOOL_RESULT",
+            }[role]
+        return "DICT"
     if isinstance(message, SystemMessage):
         return "SYSTEM"
     elif isinstance(message, HumanMessage):
@@ -302,7 +347,8 @@ def _format_context_capture_markdown(payload: Dict[str, Any]) -> str:
                     f"`{json.dumps(tool_call['args'], ensure_ascii=False, default=str)}`"
                 )
             lines.append("")
-        lines.extend(["```text", message["content"], "```", ""])
+        markdown_content = str(message["content"]).replace("\x00", "\\0")
+        lines.extend(["```text", markdown_content, "```", ""])
     return "\n".join(lines)
 
 

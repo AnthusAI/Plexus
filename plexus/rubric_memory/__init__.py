@@ -26,6 +26,13 @@ from .preparation import PreparedRubricMemoryCorpus, RubricMemoryPreparedCorpusM
 from .provider import RubricMemoryContextProvider
 from .query_planner import RubricMemoryQueryPlan, RubricMemoryQueryPlanner
 from .retrieval import BiblicusRubricEvidenceRetriever, RubricEvidenceRetriever
+from .s3_corpus import (
+    RUBRIC_MEMORY_BUCKET_ENV_VAR,
+    S3RubricMemoryCorpusPaths,
+    S3RubricMemoryCorpusResolver,
+    S3RubricMemoryObject,
+    S3RubricMemorySource,
+)
 from .service import RubricEvidencePackService
 from .sme_question_gate import (
     RubricMemoryGatedSMEQuestion,
@@ -72,6 +79,11 @@ __all__ = [
     "RubricMemorySMEQuestionGateRequest",
     "RubricMemorySMEQuestionGateResult",
     "RubricMemorySMEQuestionGateService",
+    "RUBRIC_MEMORY_BUCKET_ENV_VAR",
+    "S3RubricMemoryCorpusPaths",
+    "S3RubricMemoryCorpusResolver",
+    "S3RubricMemoryObject",
+    "S3RubricMemorySource",
     "SMEQuestionAnswerStatus",
     "SMEQuestionGateAction",
     "TactusRubricMemorySMEQuestionGateSynthesizer",

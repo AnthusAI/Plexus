@@ -1,6 +1,6 @@
 # Rubric Memory and Scorecard Knowledge Bases
 
-Rubric memory is Plexus's local knowledge-base system for adding policy history, meeting notes, emails, chat excerpts, scripts, and other supporting material to score analysis. It does not replace the official rubric. The official policy authority is the active `ScoreVersion` for the score, usually the score's champion version through `Score.championVersionId`.
+Rubric memory is Plexus's scorecard knowledge-base system for adding policy history, meeting notes, emails, chat excerpts, scripts, and other supporting material to score analysis. It does not replace the official rubric. The official policy authority is the active `ScoreVersion` for the score, usually the score's champion version through `Score.championVersionId`.
 
 In current storage, rubric text is still stored in fields named `guidelines`, and score code is stored in `configuration`. New rubric-memory code uses `rubric` terminology and translates from `guidelines` only at the storage adapter boundary.
 
@@ -15,29 +15,28 @@ Rubric memory helps agents and reports answer questions such as:
 
 Corpus evidence can explain, support, conflict with, or contextualize the official rubric. It cannot silently override the active `ScoreVersion` rubric.
 
-## Local Folder Convention
+## S3 Folder Convention
 
-Rubric memory uses the same pulled-score workspace convention as local score YAML and Markdown files. It does not use a separate root and does not require a per-score configuration file.
+Rubric memory runtime reads from the dedicated Amplify `rubricMemory` S3 bucket. The bucket name must be provided with `AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME`. There is no fallback bucket and no runtime fallback to local folders.
 
-The score YAML path is derived with `get_score_yaml_path(scorecard_name, score_name)`. The adjacent knowledge-base folders are then derived from that same location.
-
-```text
-<SCORECARD_CACHE_DIR>/
-  <Scorecard Name>/
-    scorecard.knowledge-base/
-    <Prefix>.knowledge-base/
-    <Score Name Stem>.knowledge-base/
-    <Score Name Stem>.yaml
-    <Score Name Stem>.md
-```
-
-For example, if `SCORECARD_CACHE_DIR=dashboard/scorecards` and the score is `SelectQuote HCS Medium-Risk` / `Medication Review: Dosage`, the score-level knowledge base is:
+The S3 key hierarchy intentionally mirrors the existing pulled-score folder names:
 
 ```text
-dashboard/scorecards/SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/
+<Scorecard Name>/
+  scorecard.knowledge-base/
+  <Prefix>.knowledge-base/
+  <Score Name Stem>.knowledge-base/
 ```
 
-The name must match the sanitized score file stem used by the pulled-score convention. This keeps the `.yaml`, `.md`, and `.knowledge-base` artifacts visibly aligned.
+For `SelectQuote HCS Medium-Risk` / `Medication Review: Dosage`, the score-level knowledge base prefix is:
+
+```text
+SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/
+```
+
+The name must match the sanitized score file stem used by the pulled-score convention. This keeps the `.yaml`, `.md`, local `.knowledge-base`, and S3 `.knowledge-base` artifacts visibly aligned.
+
+Local `.knowledge-base` folders are now authoring and sync input only. They are not the runtime source of truth.
 
 ## Scope Levels
 
@@ -56,11 +55,9 @@ Prefix knowledge bases apply to multiple related scores in a scorecard. They are
 Example:
 
 ```text
-dashboard/scorecards/SelectQuote HCS Medium-Risk/
+SelectQuote HCS Medium-Risk/
   Information Accuracy.knowledge-base/
-  Information Accuracy- High-Pressure Sales Tactics.yaml
   Information Accuracy- High-Pressure Sales Tactics.knowledge-base/
-  Information Accuracy (Composite).yaml
 ```
 
 `Information Accuracy.knowledge-base/` applies to scores whose sanitized score names begin with `Information Accuracy` at a clear boundary, such as a space, hyphen, or parenthesis. It applies to both `Information Accuracy: High-Pressure Sales Tactics` and `Information Accuracy (Composite)`.
@@ -88,7 +85,7 @@ The date means the meeting date, email date, chat date, or document date. Plexus
 
 Files under `unknown-date/` remain retrievable but have no `source_timestamp`, so they do not contribute to chronological history ordering.
 
-Plexus never rewrites raw knowledge-base files to add metadata. Inferred timestamps and scope metadata are attached only in the prepared working corpus.
+Plexus never rewrites raw S3 knowledge-base files to add metadata. Inferred timestamps and scope metadata are attached only in the prepared working corpus.
 
 ## Raw Source Files
 
@@ -96,9 +93,23 @@ V1 intentionally keeps raw source organization simple. You do not need separate 
 
 Overlap and duplication are acceptable. A source can be copied into a scorecard-level folder and a score-level folder if both scopes should retrieve it. Retrieval deduplication and ranking happen at runtime.
 
+## Syncing Local Folders To S3
+
+Use local folders next to pulled score YAML/Markdown files as the authoring workspace. Sync uploads those raw files to the dedicated rubric-memory bucket using the same relative hierarchy.
+
+```bash
+plexus rubric-memory sync --scorecard "SelectQuote HCS Medium-Risk"
+
+plexus rubric-memory sync \
+  --scorecard "SelectQuote HCS Medium-Risk" \
+  --score "Medication Review: Dosage"
+```
+
+The score-specific sync uploads the scorecard-level folder, matching prefix folders, and the exact score folder. Missing required local scorecard or score folders fail clearly. Prefix folders remain optional.
+
 ## Prepared Corpora
 
-Before retrieval, Plexus prepares the local corpus under ignored repo-local storage:
+Before retrieval, Plexus downloads the S3 corpus into ignored repo-local storage:
 
 ```text
 tmp/rubric-memory/prepared/<stable-cache-key>/
@@ -106,17 +117,17 @@ tmp/rubric-memory/prepared/<stable-cache-key>/
 
 The prepared corpus manager:
 
-- resolves the scorecard, prefix, and score roots using the canonical folder convention;
-- copies raw files into the prepared cache;
+- resolves the scorecard, prefix, and score S3 prefixes using the canonical folder convention;
+- downloads raw files into the prepared cache;
 - writes Biblicus sidecar metadata only inside `tmp/rubric-memory/prepared/...`;
-- records a manifest with source roots, file counts, retriever id, schema version, fingerprint, and prepared timestamp;
+- records a manifest with source prefixes, file counts, retriever id, schema version, fingerprint, and prepared timestamp;
 - reuses the cache when the source fingerprint is unchanged;
-- rebuilds when paths, sizes, mtimes, inferred timestamps, scope levels, retriever id, or sidecar schema version change.
+- rebuilds when S3 keys, sizes, ETags, LastModified values, inferred timestamps, scope levels, retriever id, or sidecar schema version change.
 
 Manual prewarming uses the same code path as just-in-time runtime preparation:
 
 ```bash
-SCORECARD_CACHE_DIR=dashboard/scorecards plexus rubric-memory prewarm \
+AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME=<bucket> plexus rubric-memory prewarm \
   --scorecard "SelectQuote HCS Medium-Risk" \
   --score "Medication Review: Dosage"
 ```
@@ -183,4 +194,3 @@ The official rubric always wins over contradictory low-authority corpus evidence
 If the corpus answers a question but the rubric is unclear, agents should transform the question from "What is the policy?" into "Should the rubric be updated to explicitly say this?" with citations.
 
 If evidence is sparse, conflicting, or undated, agents should lower confidence and produce open questions rather than confident policy claims.
-

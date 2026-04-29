@@ -19,6 +19,51 @@ from typing import Dict, Any, Optional, List
 logger = logging.getLogger(__name__)
 
 
+def _install_tactus_dspy_context_capture_patch() -> None:
+    """Capture Tactus DSPy agent prompt_context before model invocation."""
+    try:
+        from tactus.dspy.agent import DSPyAgentHandle
+    except Exception as exc:  # pragma: no cover - optional dependency variance
+        logger.debug("Could not import Tactus DSPy agent for context capture: %s", exc)
+        return
+
+    if getattr(DSPyAgentHandle, "_plexus_context_capture_patched", False):
+        return
+
+    from .logging_utils import capture_tactus_dspy_context_for_agent
+
+    original_streaming = DSPyAgentHandle._turn_with_streaming
+    original_non_streaming = DSPyAgentHandle._turn_without_streaming
+
+    def _capture(agent: Any, prompt_context: Dict[str, Any], call_site: str) -> None:
+        try:
+            capture_tactus_dspy_context_for_agent(
+                agent_name=f"Tactus DSPy Agent: {getattr(agent, 'name', 'unknown')}",
+                prompt_context=prompt_context,
+                turn_count=getattr(agent, "_turn_count", None),
+                call_site=call_site,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to capture Tactus DSPy LLM context for agent %s: %s",
+                getattr(agent, "name", "unknown"),
+                exc,
+            )
+
+    def patched_streaming(self, opts: Dict[str, Any], prompt_context: Dict[str, Any]):
+        _capture(self, prompt_context, "tactus_dspy_agent_streaming")
+        return original_streaming(self, opts, prompt_context)
+
+    def patched_non_streaming(self, opts: Dict[str, Any], prompt_context: Dict[str, Any]):
+        _capture(self, prompt_context, "tactus_dspy_agent_non_streaming")
+        return original_non_streaming(self, opts, prompt_context)
+
+    DSPyAgentHandle._turn_with_streaming = patched_streaming
+    DSPyAgentHandle._turn_without_streaming = patched_non_streaming
+    DSPyAgentHandle._plexus_context_capture_patched = True
+    logger.debug("Installed Tactus DSPy context capture patch")
+
+
 def _to_float(value: Any) -> Optional[float]:
     try:
         if value is None:
@@ -1015,6 +1060,8 @@ async def _execute_tactus(
         if getattr(runtime, "log_handler", None) is None:
             runtime.log_handler = log_bridge
 
+        _install_tactus_dspy_context_capture_patch()
+
         # Bridge legacy in-process MCP server to Tactus toolset registry.
         # Newer Tactus versions resolve agent tools through named toolsets.
         mcp_client_for_bridge = None
@@ -1117,31 +1164,25 @@ async def _execute_tactus(
                 except Exception:  # noqa: BLE001
                     pass  # account_id is best-effort; proceed without it
 
-            get_console_trigger_message = getattr(chat_recorder, "get_latest_console_trigger_message", None)
-            console_trigger_message = (
-                get_console_trigger_message()
-                if callable(get_console_trigger_message)
-                else None
-            )
-            if (
-                isinstance(console_trigger_message, str)
-                and console_trigger_message.strip()
-                and not runtime_context.get("console_user_message")
-            ):
-                runtime_context["console_user_message"] = console_trigger_message.strip()
+            if not runtime_context.get("console_user_message"):
+                get_console_trigger_message = getattr(chat_recorder, "get_latest_console_trigger_message", None)
+                console_trigger_message = (
+                    get_console_trigger_message()
+                    if callable(get_console_trigger_message)
+                    else None
+                )
+                if isinstance(console_trigger_message, str) and console_trigger_message.strip():
+                    runtime_context["console_user_message"] = console_trigger_message.strip()
 
-            get_console_session_history = getattr(chat_recorder, "get_console_session_history", None)
-            console_session_history = (
-                get_console_session_history()
-                if callable(get_console_session_history)
-                else None
-            )
-            if (
-                isinstance(console_session_history, list)
-                and console_session_history
-                and not runtime_context.get("console_session_history")
-            ):
-                runtime_context["console_session_history"] = console_session_history
+            if not runtime_context.get("console_session_history"):
+                get_console_session_history = getattr(chat_recorder, "get_console_session_history", None)
+                console_session_history = (
+                    get_console_session_history()
+                    if callable(get_console_session_history)
+                    else None
+                )
+                if isinstance(console_session_history, list) and console_session_history:
+                    runtime_context["console_session_history"] = console_session_history
 
         mark_runtime_execute_started = getattr(trace_sink, "mark_runtime_execute_started", None)
         if callable(mark_runtime_execute_started):
