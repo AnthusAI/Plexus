@@ -54,9 +54,7 @@ def test_plexus_facade_delegates_namespace_call_to_mcp_tool() -> None:
     value = facade.score.info({"id": "score_compliance_tone"})
 
     assert value == {"id": "score_compliance_tone", "name": "Compliance Tone"}
-    assert fake_mcp.calls == [
-        ("plexus_score_info", {"id": "score_compliance_tone"})
-    ]
+    assert fake_mcp.calls == [("plexus_score_info", {"id": "score_compliance_tone"})]
     assert facade.api_calls == ["plexus.score.info"]
 
 
@@ -114,7 +112,9 @@ async def test_execute_tactus_tool_returns_structured_contract(monkeypatch) -> N
     mcp = FastMCP("test-execute-tactus")
     execute.register_tactus_tools(mcp)
 
-    def fake_run_tactus_sync(tactus, mcp, *, trace_id, trace_store, budget=None, **kwargs):
+    def fake_run_tactus_sync(
+        tactus, mcp, *, trace_id, trace_store, budget=None, **kwargs
+    ):
         return {
             "ok": True,
             "value": {"ok": True, "source": tactus},
@@ -148,9 +148,15 @@ async def test_execute_tactus_tool_returns_structured_contract(monkeypatch) -> N
 
 
 @pytest.mark.asyncio
-async def test_execute_tactus_reports_missing_host_module_runtime_contract(monkeypatch) -> None:
-    def fake_run_tactus_sync(tactus, mcp, *, trace_id, trace_store, budget=None, **kwargs):
-        raise RuntimeError("execute_tactus requires TactusRuntime.register_python_module")
+async def test_execute_tactus_reports_missing_host_module_runtime_contract(
+    monkeypatch,
+) -> None:
+    def fake_run_tactus_sync(
+        tactus, mcp, *, trace_id, trace_store, budget=None, **kwargs
+    ):
+        raise RuntimeError(
+            "execute_tactus requires TactusRuntime.register_python_module"
+        )
 
     monkeypatch.setattr(execute, "_run_tactus_sync", fake_run_tactus_sync)
 
@@ -400,7 +406,9 @@ async def test_execute_tactus_writes_trace_for_invalid_request() -> None:
 async def test_execute_tactus_writes_trace_for_runtime_error(monkeypatch) -> None:
     store = _RecordingTraceStore()
 
-    def fake_run_tactus_sync(tactus, mcp, *, trace_id, trace_store, budget=None, **kwargs):
+    def fake_run_tactus_sync(
+        tactus, mcp, *, trace_id, trace_store, budget=None, **kwargs
+    ):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(execute, "_run_tactus_sync", fake_run_tactus_sync)
@@ -482,9 +490,7 @@ def test_budget_gate_trips_on_wallclock() -> None:
     def clock() -> float:
         return fake_now[0]
 
-    gate = execute.BudgetGate(
-        execute.BudgetSpec(wallclock_seconds=1.0), clock=clock
-    )
+    gate = execute.BudgetGate(execute.BudgetSpec(wallclock_seconds=1.0), clock=clock)
 
     gate.check_before("api", "list")
     gate.record_after("api", "list")
@@ -566,7 +572,9 @@ def test_plexus_runtime_module_marks_long_running_call_and_skips_loopback() -> N
 
         async def call_tool(self, name, arguments):
             self.calls.append((name, arguments))
-            raise AssertionError("long-running calls must not loop back through MCP in v0")
+            raise AssertionError(
+                "long-running calls must not loop back through MCP in v0"
+            )
 
     fake_mcp = FakeMCP()
     module = execute.PlexusRuntimeModule(fake_mcp)
@@ -580,7 +588,9 @@ def test_plexus_runtime_module_marks_long_running_call_and_skips_loopback() -> N
 
 
 @pytest.mark.asyncio
-async def test_execute_tactus_returns_requires_handle_protocol_for_long_running() -> None:
+async def test_execute_tactus_returns_requires_handle_protocol_for_long_running() -> (
+    None
+):
     mcp = FastMCP("test-execute-tactus-handle")
 
     @mcp.tool()
@@ -619,10 +629,7 @@ async def test_execute_tactus_cost_envelope_reflects_budget_remaining() -> None:
     assert cost["tool_calls"] == 1
     assert cost["usd"] == 0.0
     assert cost["budget_remaining_usd"] == execute.DEFAULT_BUDGET_USD
-    assert (
-        cost["budget_remaining_tool_calls"]
-        == execute.DEFAULT_BUDGET_TOOL_CALLS - 1
-    )
+    assert cost["budget_remaining_tool_calls"] == execute.DEFAULT_BUDGET_TOOL_CALLS - 1
     assert cost["budget_remaining_seconds"] >= 0.0
 
 
@@ -708,7 +715,139 @@ def test_feedback_find_is_listed_in_plexus_api_list() -> None:
     assert "alignment" in catalog["plexus.feedback"]
 
 
-def test_default_feedback_finder_chains_through_resolvers_and_service(monkeypatch) -> None:
+def test_evaluation_info_no_longer_in_mcp_tool_map() -> None:
+    assert ("evaluation", "info") not in execute.MCP_TOOL_MAP
+    assert ("evaluation", "info") in execute.DIRECT_HANDLERS
+
+
+def test_evaluation_info_is_listed_in_plexus_api_list() -> None:
+    module = execute.PlexusRuntimeModule(FastMCP("test"))
+
+    catalog = module.api.list()
+
+    assert "info" in catalog["plexus.evaluation"]
+    assert "compare" in catalog["plexus.evaluation"]
+    assert "find_recent" in catalog["plexus.evaluation"]
+
+
+def test_evaluation_info_uses_injected_function_and_skips_mcp_loopback() -> None:
+    received_args: dict = {}
+    canned = {"id": "eval-1", "status": "COMPLETED"}
+
+    def fake_evaluation_info(args: dict) -> dict:
+        received_args.update(args)
+        return canned
+
+    class FakeMCP:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        async def call_tool(self, name, arguments):
+            self.calls.append((name, arguments))
+            raise AssertionError("plexus.evaluation.info must not call MCP tools")
+
+    fake_mcp = FakeMCP()
+    module = execute.PlexusRuntimeModule(fake_mcp, evaluation_info=fake_evaluation_info)
+
+    value = module.evaluation.info(
+        {"evaluation_id": "eval-1", "include_score_results": True}
+    )
+
+    assert value is canned
+    assert received_args == {
+        "evaluation_id": "eval-1",
+        "include_score_results": True,
+    }
+    assert module.api_calls == ["plexus.evaluation.info"]
+    assert fake_mcp.calls == []
+
+
+def test_evaluation_info_records_one_tool_call_against_budget() -> None:
+    def fake_evaluation_info(args: dict) -> dict:
+        return {"id": args["evaluation_id"]}
+
+    gate = execute.BudgetGate()
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"), budget=gate, evaluation_info=fake_evaluation_info
+    )
+
+    module.evaluation.info({"evaluation_id": "eval-1"})
+
+    assert gate.tool_calls == 1
+    assert gate.exceeded is False
+    assert module.api_calls == ["plexus.evaluation.info"]
+
+
+def test_default_evaluation_info_gets_by_id(monkeypatch) -> None:
+    from plexus.Evaluation import Evaluation
+
+    captured: dict = {}
+
+    def fake_get_evaluation_info(evaluation_id, include_score_results=False):
+        captured["evaluation_id"] = evaluation_id
+        captured["include_score_results"] = include_score_results
+        return {"id": evaluation_id, "include_score_results": include_score_results}
+
+    monkeypatch.setattr(
+        Evaluation,
+        "get_evaluation_info",
+        staticmethod(fake_get_evaluation_info),
+    )
+
+    result = execute._default_evaluation_info(
+        {"evaluation_id": " eval-1 ", "include_score_results": True}
+    )
+
+    assert result == {"id": "eval-1", "include_score_results": True}
+    assert captured == {"evaluation_id": "eval-1", "include_score_results": True}
+
+
+def test_default_evaluation_info_gets_latest(monkeypatch) -> None:
+    from plexus.Evaluation import Evaluation
+
+    captured: dict = {}
+
+    def fake_get_latest_evaluation(account_key=None, evaluation_type=None):
+        captured["account_key"] = account_key
+        captured["evaluation_type"] = evaluation_type
+        return {"id": "latest", "account_key": account_key}
+
+    monkeypatch.setattr(
+        Evaluation,
+        "get_latest_evaluation",
+        staticmethod(fake_get_latest_evaluation),
+    )
+
+    result = execute._default_evaluation_info(
+        {
+            "use_latest": True,
+            "account_key": "acct-1",
+            "evaluation_type": "  ",
+        }
+    )
+
+    assert result == {"id": "latest", "account_key": "acct-1"}
+    assert captured == {"account_key": "acct-1", "evaluation_type": None}
+
+
+def test_default_evaluation_info_validates_lookup_mode() -> None:
+    with pytest.raises(ValueError, match="exactly one"):
+        execute._default_evaluation_info({})
+
+    with pytest.raises(ValueError, match="exactly one"):
+        execute._default_evaluation_info(
+            {"evaluation_id": "eval-1", "use_latest": True}
+        )
+
+    with pytest.raises(ValueError, match="include_examples"):
+        execute._default_evaluation_info(
+            {"evaluation_id": "eval-1", "include_examples": True}
+        )
+
+
+def test_default_feedback_finder_chains_through_resolvers_and_service(
+    monkeypatch,
+) -> None:
     captured: dict = {}
 
     class FakeFeedbackService:
@@ -816,7 +955,9 @@ async def test_execute_tactus_runs_feedback_find_through_direct_finder() -> None
 
 
 @pytest.mark.asyncio
-async def test_execute_tactus_feedback_find_missing_args_surfaces_as_tactus_error() -> None:
+async def test_execute_tactus_feedback_find_missing_args_surfaces_as_tactus_error() -> (
+    None
+):
     mcp = FastMCP("test-execute-tactus-feedback-missing-args")
 
     result = await execute._execute_tactus_tool(
@@ -827,3 +968,38 @@ async def test_execute_tactus_feedback_find_missing_args_surfaces_as_tactus_erro
     assert result["ok"] is False
     assert result["error"]["code"] == "tactus_execution_failed"
     assert "scorecard_name and score_name" in result["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_runs_evaluation_info_through_direct_function() -> None:
+    mcp = FastMCP("test-execute-tactus-evaluation-direct")
+    canned = {
+        "id": "eval-1",
+        "status": "COMPLETED",
+        "metrics": {"accuracy": 0.91},
+    }
+    seen_args: dict = {}
+
+    def fake_evaluation_info(args: dict) -> dict:
+        seen_args.update(args)
+        return canned
+
+    store = _RecordingTraceStore()
+    result = await execute._execute_tactus_tool(
+        'return plexus.evaluation.info{ evaluation_id = "eval-1", include_score_results = true }',
+        mcp,
+        trace_store=store,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    assert result["ok"] is True
+    assert result["value"] == canned
+    assert result["api_calls"] == ["plexus.evaluation.info"]
+    assert seen_args == {
+        "evaluation_id": "eval-1",
+        "include_score_results": True,
+    }
+    assert len(store.records) == 1
+    record = store.records[0]
+    assert record["api_calls"] == ["plexus.evaluation.info"]
+    assert record["ok"] is True
