@@ -22,6 +22,9 @@ from tactus.adapters.cost_collector_log import CostCollectorLogHandler
 
 logger = logging.getLogger(__name__)
 
+VALID_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
+VALID_VERBOSITIES = {"low", "medium", "high"}
+
 
 class TactusScore(Score):
     """
@@ -71,8 +74,11 @@ class TactusScore(Score):
         max_tokens: Optional[int] = None
         temperature: Optional[float] = None
         top_p: Optional[float] = None
+
+        # Runtime GPT-5-family controls passed to TactusRuntime.
         reasoning_effort: Optional[str] = None
         verbosity: Optional[str] = None
+
         model_region: Optional[str] = None
         logprobs: Optional[bool] = None
         top_logprobs: Optional[int] = None
@@ -88,6 +94,22 @@ class TactusScore(Score):
                 elif 'tactus_code' in data and 'code' in data:
                     data.pop('tactus_code')
             return data
+
+        @model_validator(mode='after')
+        def validate_gpt5_controls(self):
+            """Validate top-level GPT-5-family runtime controls."""
+            if (
+                self.reasoning_effort is not None
+                and self.reasoning_effort not in VALID_REASONING_EFFORTS
+            ):
+                allowed = ", ".join(sorted(VALID_REASONING_EFFORTS))
+                raise ValueError(
+                    f"reasoning_effort must be one of: {allowed}. Got: {self.reasoning_effort}"
+                )
+            if self.verbosity is not None and self.verbosity not in VALID_VERBOSITIES:
+                allowed = ", ".join(sorted(VALID_VERBOSITIES))
+                raise ValueError(f"verbosity must be one of: {allowed}. Got: {self.verbosity}")
+            return self
 
     def __init__(self, **parameters):
         """Initialize TactusScore with Tactus code."""
@@ -107,13 +129,24 @@ class TactusScore(Score):
         # Use MemoryStorage for stateless score execution
         # (each prediction is independent, no need for persistence)
         storage = MemoryStorage()
+        runtime_kwargs = self._tactus_runtime_kwargs()
 
         self._runtime = TactusRuntime(
             procedure_id=self.parameters.name or "tactus_score",
             storage_backend=storage,
             openai_api_key=self._get_openai_api_key(),
+            **runtime_kwargs,
         )
         logger.info(f"TactusScore initialized for '{self.parameters.name}'")
+
+    def _tactus_runtime_kwargs(self) -> Dict[str, str]:
+        """Return optional TactusRuntime GPT-5 controls when configured."""
+        runtime_kwargs = {}
+        if self.parameters.reasoning_effort is not None:
+            runtime_kwargs["reasoning_effort"] = self.parameters.reasoning_effort
+        if self.parameters.verbosity is not None:
+            runtime_kwargs["verbosity"] = self.parameters.verbosity
+        return runtime_kwargs
 
     def _get_openai_api_key(self) -> Optional[str]:
         """Get OpenAI API key from environment if available."""
@@ -202,11 +235,13 @@ class TactusScore(Score):
         # TactusRuntime holds state that doesn't reset cleanly between executions
         storage = MemoryStorage()
         log_handler = CostCollectorLogHandler()
+        runtime_kwargs = self._tactus_runtime_kwargs()
         runtime = TactusRuntime(
             procedure_id=self.parameters.name or "tactus_score",
             storage_backend=storage,
             openai_api_key=self._get_openai_api_key(),
             log_handler=log_handler,
+            **runtime_kwargs,
         )
 
         try:

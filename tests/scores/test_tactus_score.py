@@ -254,6 +254,40 @@ class TestTactusScoreBasicExecution:
             assert score.parameters.code is not None
             assert score.parameters.valid_classes == ["Yes", "No", "NA"]
 
+    def test_tactus_score_accepts_gpt5_runtime_controls(self):
+        """Test that TactusScore accepts top-level GPT-5 runtime controls."""
+        with patch('plexus.scores.TactusScore.TactusRuntime'):
+            from plexus.scores.TactusScore import TactusScore
+
+            score = TactusScore(
+                name="test_score",
+                code="Procedure { function(input) return {value='Yes'} end }",
+                reasoning_effort="xhigh",
+                verbosity="low",
+            )
+
+            assert score.parameters.reasoning_effort == "xhigh"
+            assert score.parameters.verbosity == "low"
+
+    @pytest.mark.parametrize(
+        "kwargs,error_match",
+        [
+            ({"reasoning_effort": "invalid"}, "reasoning_effort"),
+            ({"verbosity": "invalid"}, "verbosity"),
+        ],
+    )
+    def test_tactus_score_rejects_invalid_gpt5_runtime_controls(self, kwargs, error_match):
+        """Test that invalid top-level GPT-5 controls fail validation."""
+        with patch('plexus.scores.TactusScore.TactusRuntime'):
+            from plexus.scores.TactusScore import TactusScore
+
+            with pytest.raises(ValueError, match=error_match):
+                TactusScore(
+                    name="test_score",
+                    code="Procedure { function(input) return {value='Yes'} end }",
+                    **kwargs,
+                )
+
     def test_tactus_code_fallback(self):
         """Test that 'tactus_code' YAML key still works as fallback for 'code'."""
         with patch('plexus.scores.TactusScore.TactusRuntime'):
@@ -305,6 +339,51 @@ class TestTactusScoreBasicExecution:
             assert isinstance(result, Score.Result)
             assert result.value == "Yes"
             assert result.explanation == "Test passed"
+
+    @pytest.mark.asyncio
+    async def test_tactus_score_predict_passes_gpt5_runtime_controls(self, basic_code):
+        """Test that predict() passes configured GPT-5 controls to TactusRuntime."""
+        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+            mock_runtime_instance = AsyncMock()
+            mock_runtime_instance.execute = AsyncMock(return_value={
+                'result': {'value': 'Yes', 'explanation': 'Test passed'}
+            })
+            MockRuntime.return_value = mock_runtime_instance
+
+            from plexus.scores.TactusScore import TactusScore
+
+            score = TactusScore(
+                name="test_score",
+                code=basic_code,
+                reasoning_effort="xhigh",
+                verbosity="low",
+            )
+
+            await score.predict(Score.Input(text="Sample transcript text"))
+
+            runtime_kwargs = MockRuntime.call_args.kwargs
+            assert runtime_kwargs["reasoning_effort"] == "xhigh"
+            assert runtime_kwargs["verbosity"] == "low"
+
+    @pytest.mark.asyncio
+    async def test_tactus_score_predict_omits_missing_gpt5_runtime_controls(self, basic_code):
+        """Test that omitted GPT-5 controls are not sent to TactusRuntime."""
+        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+            mock_runtime_instance = AsyncMock()
+            mock_runtime_instance.execute = AsyncMock(return_value={
+                'result': {'value': 'Yes', 'explanation': 'Test passed'}
+            })
+            MockRuntime.return_value = mock_runtime_instance
+
+            from plexus.scores.TactusScore import TactusScore
+
+            score = TactusScore(name="test_score", code=basic_code)
+
+            await score.predict(Score.Input(text="Sample transcript text"))
+
+            runtime_kwargs = MockRuntime.call_args.kwargs
+            assert "reasoning_effort" not in runtime_kwargs
+            assert "verbosity" not in runtime_kwargs
 
     @pytest.mark.asyncio
     async def test_tactus_score_passes_context_to_runtime(self, basic_code):
