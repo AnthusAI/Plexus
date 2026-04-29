@@ -30,8 +30,8 @@ print()
 app = cdk.App()
 
 account = os.environ.get('CDK_DEFAULT_ACCOUNT')
-# Use AWS_REGION from .env, fallback to CDK_DEFAULT_REGION, then us-west-2
-region = os.environ.get('AWS_REGION') or os.environ.get('CDK_DEFAULT_REGION', 'us-west-2')
+# Metrics aggregation production resources are deployed with the Amplify data plane in us-west-2.
+region = os.environ.get('AWS_REGION') or 'us-west-2'
 env = cdk.Environment(account=account, region=region)
 
 print(f"Deploying to region: {region}")
