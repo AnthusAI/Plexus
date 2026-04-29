@@ -18,6 +18,8 @@ import yaml
 logger = logging.getLogger(__name__)
 
 RCA_OPENAI_MODEL = "gpt-5-mini"
+RCA_OPENAI_REASONING_EFFORT = "low"
+RCA_MIN_OUTPUT_TOKENS = 1000
 
 
 def _invoke_rca_openai_text(
@@ -46,7 +48,11 @@ def _invoke_rca_openai_text(
             model=RCA_OPENAI_MODEL,
             instructions=system,
             input=current_messages,
-            max_output_tokens=max_output_tokens,
+            reasoning={"effort": RCA_OPENAI_REASONING_EFFORT},
+            # GPT-5 output tokens include reasoning tokens. RCA prompts need a
+            # small visible schema, but too-small budgets can be exhausted by
+            # reasoning before any output_text is emitted.
+            max_output_tokens=max(max_output_tokens, RCA_MIN_OUTPUT_TOKENS),
         )
         text = (getattr(response, "output_text", "") or "").strip()
         if text:

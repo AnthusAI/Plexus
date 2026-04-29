@@ -392,6 +392,29 @@ def test_sme_gate_synthesizer_accepts_control_characters_in_llm_json():
     assert parsed["final_agenda_markdown"] == "line 1\nline 2"
 
 
+def test_sme_gate_tactus_uses_direct_text_output_not_tool_only_completion():
+    tac_source = TactusRubricMemorySMEQuestionGateSynthesizer()._load_tac_source()
+
+    assert 'model_type = "responses"' in tac_source
+    assert "output = {\n        text = field.string{required = true}," in tac_source
+    assert "local result = gate_agent({ message = gate_message })" in tac_source
+    assert "local function get_field(value, key)" in tac_source
+    assert "return Json.encode(text)" in tac_source
+    assert "finish = Tool" not in tac_source
+    assert "finish.last_call" not in tac_source
+    assert "You must call the finish tool" not in tac_source
+
+
+def test_sme_gate_synthesizer_extracts_direct_text_output():
+    raw_text = '{"items":[],"final_agenda_markdown":"(No SME decisions needed this cycle)"}'
+
+    extracted = TactusRubricMemorySMEQuestionGateSynthesizer()._extract_text({
+        "result": {"text": raw_text}
+    })
+
+    assert extracted == raw_text
+
+
 def test_local_corpus_resolver_uses_score_yaml_stem(monkeypatch, tmp_path):
     cache_root = tmp_path / "dashboard" / "scorecards"
     monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
