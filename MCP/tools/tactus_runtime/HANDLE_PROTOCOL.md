@@ -37,10 +37,12 @@ forms.
 For `async = true`, `PlexusRuntimeModule`:
 
 1. Checks the active budget before dispatch.
-2. Dispatches the operation in non-blocking mode.
-3. Creates a persisted handle record through `TactusHandleStore`.
-4. Returns the public handle table to Tactus.
-5. Records exactly one `plexus.<namespace>.run` API call in the response and
+2. Requires an explicit child `budget = { usd, wallclock_seconds, depth, tool_calls }`.
+3. Carves that child budget from the parent budget before dispatch.
+4. Dispatches the operation in non-blocking mode.
+5. Creates a persisted handle record through `TactusHandleStore`.
+6. Returns the public handle table to Tactus.
+7. Records exactly one `plexus.<namespace>.run` API call in the response and
    trace cost envelope.
 
 ## Protocol
@@ -73,9 +75,18 @@ local handle = plexus.evaluation.run{
   scorecard_name = "Compliance",
   item_count = 5000,
   async = true,
+  budget = {
+    usd = 1.00,
+    wallclock_seconds = 1800,
+    depth = 1,
+    tool_calls = 10,
+  },
 }
 return { evaluation_handle = handle }
 ```
+
+The public handle includes `child_budget` so clients can inspect the allocation
+that was actually carved and propagated.
 
 `handle` is a small Lua table with at minimum:
 
@@ -118,7 +129,10 @@ Implemented handle calls:
   a generic failure.
 
 A spawn that would exceed the parent budget is rejected before any remote
-dispatch.
+dispatch. Evaluation dispatch receives the child allocation in
+`PLEXUS_CHILD_BUDGET`, report-block task metadata stores it in the durable
+programmatic payload, and procedure dispatch passes it in Tactus context as
+`_plexus_child_budget`.
 
 ## Remaining Work
 
@@ -128,8 +142,8 @@ dispatch.
 - Report configuration handles currently require a dedicated report task
   dispatch path; the implemented report handle path is for durable
   programmatic report-block tasks.
-- Distributed budget sub-carving from `plx-a4b033` still needs to attach
-  child work to parent budgets across dispatch boundaries.
+- Worker-side enforcement of propagated child budgets remains the next step
+  after dispatch-boundary propagation.
 
 ## Removing Gates
 
