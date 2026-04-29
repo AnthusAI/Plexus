@@ -1067,6 +1067,15 @@ const DetailContent = React.memo(({
 
   const rootCauseTopics = rootCauseData?.topics ?? null
   const misclassificationAnalysis = rootCauseData?.misclassification_analysis ?? null
+  const scoreRubricConsistencyCheck = useMemo(() => {
+    try {
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      const check = params?.score_rubric_consistency_check
+      return (check && typeof check === 'object') ? check as Record<string, unknown> : null
+    } catch {
+      return null
+    }
+  }, [data.parameters])
   const rcaCoverage = useMemo(() => {
     try {
       const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
@@ -1529,6 +1538,23 @@ const DetailContent = React.memo(({
                       onSelectionChange={setSelectedPredictedActual} // Reverted to original handler
                     />
                   </div>
+                )}
+
+                {scoreRubricConsistencyCheck && (
+                  <Alert className="mt-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle className="text-sm">
+                      Score/rubric consistency
+                      {typeof scoreRubricConsistencyCheck.status === 'string'
+                        ? `: ${scoreRubricConsistencyCheck.status}`
+                        : ''}
+                    </AlertTitle>
+                    <AlertDescription className="text-sm">
+                      {typeof scoreRubricConsistencyCheck.paragraph === 'string'
+                        ? scoreRubricConsistencyCheck.paragraph
+                        : 'No consistency summary was generated.'}
+                    </AlertDescription>
+                  </Alert>
                 )}
 
                 {/* Score-Configuration RCA */}
