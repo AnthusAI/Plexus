@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from 'react'
-import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Code, Eye, MessageSquareCode, Copy, Database, Link as LinkIcon } from 'lucide-react';
+import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Eye, MessageSquareCode, Copy, Database, Link as LinkIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { downloadData, getUrl } from 'aws-amplify/storage';
 import { CardButton } from '@/components/CardButton';

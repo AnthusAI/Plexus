@@ -2,12 +2,19 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/workspace:/workspace/MCP
 
 WORKDIR /var/task
 
 # Copy repository so the worker can import Plexus source directly.
 COPY . /workspace
+
+# The Console agent's model-facing dispatcher imports the repo's MCP tool modules
+# in-process. Fail the image build if those modules are missing from the context.
+RUN test -f /workspace/MCP/tools/scorecard/scorecards.py && \
+    test -f /workspace/MCP/tools/evaluation/evaluations.py && \
+    test -f /workspace/MCP/tools/chat/chats.py
 
 # Required for git-based dependencies (for example openai-cost-calculator).
 RUN apt-get update && apt-get install -y --no-install-recommends git && \
