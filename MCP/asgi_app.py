@@ -82,8 +82,10 @@ try:
     from tools.documentation.docs import register_documentation_tools
     from tools.cost.analysis import register_cost_analysis_tools
     from tools.dataset.datasets import register_dataset_tools
+    from tools.tactus_runtime.execute import register_tactus_tools
     
     register_think_tool(mcp)
+    register_tactus_tools(mcp)
     register_scorecard_tools(mcp)
     register_report_tools(mcp)
     register_score_tools(mcp)
