@@ -824,7 +824,7 @@ async def run_console_chat_response_async(
         account_id=message.account_id,
         console_user_message=message.content,
         console_session_history=history,
-        enable_mcp=False,
+        enable_mcp=True,
         context=context,
     )
     if latency_trace is not None:

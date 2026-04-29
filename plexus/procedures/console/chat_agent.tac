@@ -211,15 +211,6 @@ local assistant_prompt = "You are the Plexus Console assistant in an ongoing eng
                          "Recent conversation context (oldest to newest):\n" .. history_context .. "\n\n" ..
                          "Respond to the latest user message now."
 
-local assistant_result = nil
-if deterministic_response ~= nil and deterministic_response ~= "" then
-  assistant_result = { response = deterministic_response }
-else
-  assistant_result = assistant({ message = assistant_prompt })
-end
-
-local final_response = ""
-
 local function extract_text(value)
   if type(value) == "string" and value ~= "" then
     return value
@@ -252,6 +243,15 @@ local function extract_text(value)
   end
   return ""
 end
+
+local assistant_result = nil
+if deterministic_response ~= nil and deterministic_response ~= "" then
+  assistant_result = { response = deterministic_response }
+else
+  assistant_result = assistant({ message = assistant_prompt })
+end
+
+local final_response = ""
 
 final_response = extract_text(assistant_result)
 
