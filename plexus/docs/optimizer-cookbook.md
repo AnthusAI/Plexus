@@ -53,6 +53,14 @@ prompt-level tweaks alone CANNOT fix an underlying input-quality problem.
   plus a configurable window of surrounding lines for context. Removed sections are
   replaced with "..." so the LLM understands the transcript is abbreviated.
 
+  DEFAULT STANCE: start with BROAD sentence windows, then narrow only after evaluation
+  proves that the extra context is hurting. A window of 1 word before/after is almost
+  never a good first experiment because it separates short customer acknowledgments,
+  corrections, and follow-up answers from the agent prompt they respond to. Prefer
+  `window_unit: sentences` with `prev_count`/`next_count` around 5-10 for the first
+  relevant-window hypothesis on conversational scorecards, then tune down if the
+  matched windows are still too noisy.
+
   WHY THIS HELPS: Long transcripts push relevant content deep into the LLM's context
   where attention degrades. Trimming to keyword windows keeps the decision-relevant
   text front and center, and also reduces cost and latency.
@@ -335,12 +343,23 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
         fuzzy_match    (optional, bool, default false) — enable fuzzy string matching
         fuzzy_threshold (optional, int 0-100, default 80) — minimum similarity score
         case_sensitive (optional, bool, default false) — case-sensitive keyword matching
-        prev_count     (optional, int, default 1) — lines to include BEFORE each match
-        next_count     (optional, int, default 1) — lines to include AFTER each match
+        prev_count     (optional, int, default 1) — units to include BEFORE each match
+        next_count     (optional, int, default 1) — units to include AFTER each match
         window_unit    (optional, string, default 'sentences') — unit for context window:
                          'sentences' — include N surrounding lines (default, most useful)
                          'words'     — include N surrounding words
                          'characters' — include N surrounding characters
+
+      Optimizer guidance:
+        - First try broad sentence windows such as prev_count: 5 and next_count: 8
+          for conversational rubric decisions. Use larger values if the customer answer
+          often trails the agent's setup by several turns.
+        - Avoid word windows with prev_count/next_count near 1 as an initial change.
+          They are too narrow for call transcripts and can remove the evidence needed
+          to interpret acknowledgments, corrections, or crosstalk.
+        - If a score already uses RelevantWindowsTranscriptFilter and evidence appears
+          missing, try relaxing the window, adding keywords, or removing the filter
+          before adding more prompt instructions.
 
       When to use fuzzy_match: Enable it when keywords may be phonetically transcribed
       (e.g., a brand name mangled in speech-to-text). Use a threshold of 75-85 to
@@ -354,8 +373,9 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
                 keywords: ["warranty", "coverage", "protection plan", "extend", "protect"]
                 fuzzy_match: true
                 fuzzy_threshold: 80
-                prev_count: 2
-                next_count: 2
+                window_unit: sentences
+                prev_count: 5
+                next_count: 8
 
     FilterCustomerOnlyProcessor
       Keeps only customer/caller speech turns; removes agent/representative lines.
