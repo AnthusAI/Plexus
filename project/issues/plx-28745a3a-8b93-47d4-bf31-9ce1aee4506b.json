@@ -1,0 +1,25 @@
+{
+  "id": "plx-28745a3a-8b93-47d4-bf31-9ce1aee4506b",
+  "title": "Expand execute_tactus helper aliases to advertised runtime API surface",
+  "description": "Add stable helper aliases for every Plexus API currently advertised by execute_tactus (MCP_TOOL_MAP, DIRECT_HANDLERS, docs, api), while preserving existing short aliases. Update production runtime wrapper, validation spike wrapper/prompt, and helper coverage tests.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "035e3872-5c30-4f2d-9442-15f2afaa7e11",
+      "author": "ryan",
+      "text": "Helper expansion implemented and verified. Production execute_tactus now preserves existing short aliases and adds canonical namespace_method helpers for the advertised runtime API surface, including scorecards_*, score_*, item_*, feedback_*, evaluation_*, dataset_*, report_*, procedure_*, handle_*, docs_*, and api_list. The validation spike now mirrors this helper contract, including added stub support for procedure.list, procedure.run, and handle.peek. Updated boot prompt to describe short helpers plus canonical namespace_method helpers. Verification: full MCP/tools/tactus_runtime/execute_test.py passed (76 tests); spike harness report tests passed (43 tests); ruff passed on changed Python files; harness --validate-tasks passed with boot_prompt_tokens=1061/2000.",
+      "created_at": "2026-04-29T18:30:17.128430Z"
+    }
+  ],
+  "created_at": "2026-04-29T18:22:22.750002Z",
+  "updated_at": "2026-04-29T18:30:17.164631Z",
+  "closed_at": "2026-04-29T18:30:17.164631Z",
+  "custom": {}
+}

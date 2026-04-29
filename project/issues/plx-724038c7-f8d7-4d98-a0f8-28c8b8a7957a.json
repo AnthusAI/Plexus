@@ -46,10 +46,22 @@
       "author": "ryan",
       "text": "Completed the Prompt Contract Repair Plan and reran GPT 5.4.\n\nChanges made:\n- Updated `spikes/runtime-mcp-validation/tasks/03_predict_single_item.yaml` so the prompt explicitly asks for:\n  - `plexus.score.info{ id = \"score_compliance_tone\" }`\n  - `plexus.item.info{ id = \"item_1007\" }`\n  - `plexus.score.predict`\n  - return fields `item_id`, `score_id`, `score_version_id`, `predicted_value`, `explanation`, and `cost`\n- Updated `spikes/runtime-mcp-validation/boot_prompt.md` prediction example to inspect score/item first and return `score_id` plus `cost`.\n- Added a prompt/checker consistency test for `predict_single_item`.\n\nLocal verification:\n```bash\npython -m pytest \"spikes/runtime-mcp-validation/test_harness_report.py\" -q\npython -m py_compile \"spikes/runtime-mcp-validation/plexus_module_stub.py\" \"spikes/runtime-mcp-validation/harness.py\" \"spikes/runtime-mcp-validation/report.py\" \"spikes/runtime-mcp-validation/measure_mcp_catalog.py\"\npython \"spikes/runtime-mcp-validation/harness.py\" --validate-tasks\npython \"spikes/runtime-mcp-validation/harness.py\" --all --model stub-oracle --run-id ignored-prompt-contract-verify\n```\nResults:\n- Guardrail tests: 20 passed.\n- Boot prompt: 810 / 2000 estimated tokens.\n- Stub oracle: 15/15 passed.\n\nPaid rerun:\n```bash\nset -a && source .env && set +a && python \"spikes/runtime-mcp-validation/harness.py\" --task predict_single_item --model openai:gpt-5.4 --run-id provider-readiness-openai-gpt54-promptfix-001\n```\nResult:\n- Strict checker: 0/1 passed.\n- Failure classification: `language`.\n- Usage: 938 input tokens, 257 output tokens.\n- The model followed the repaired contract in content, but duplicated the Lua program back-to-back. The second `local plexus = require(\"plexus\")` after the first `return` caused `LuaSyntaxError: <eof> expected near 'local'`.\n\nInterpretation:\n- The hidden prompt/checker mismatch is fixed for this task.\n- The next blocker is exactly the feedback-loop issue: syntactic validation should catch this and return a clear repair message so the model can remove the duplicated program.",
       "created_at": "2026-04-29T00:51:32.208681Z"
+    },
+    {
+      "id": "5eee1f82-722e-4d05-8d5f-73d1dc468b1c",
+      "author": "ryan",
+      "text": "Post-contract readiness executed with openai:gpt-5.4-mini. New runs: readiness-gpt54mini-async-budget-001, readiness-gpt54mini-report-async-budget-001, and provider-full-openai-gpt54-mini-budgetcontract-005. Async budget contract held in generated Tactus for evaluation/report async calls. Full pass currently 14/15 with one boot_prompt-classified miss on false_negative_feedback_summary (representative_item_id + item.info usage).",
+      "created_at": "2026-04-29T17:34:04.062360Z"
+    },
+    {
+      "id": "962038ea-12ec-497e-9854-377190680bcb",
+      "author": "ryan",
+      "text": "After tightening false_negative_feedback_summary prompt/checker, targeted rerun readiness-gpt54mini-fn-summary-promptfix-001 passed. Full rerun provider-full-openai-gpt54-mini-budgetcontract-006 now passes 15/15 first-try with repair_attempts=0. This removes the prior boot_prompt-classified miss observed in run -005.",
+      "created_at": "2026-04-29T17:37:21.943440Z"
     }
   ],
   "created_at": "2026-04-28T21:06:43.828Z",
-  "updated_at": "2026-04-29T00:51:32.208681Z",
+  "updated_at": "2026-04-29T17:37:21.943440Z",
   "closed_at": null,
   "custom": {}
 }

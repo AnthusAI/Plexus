@@ -209,7 +209,18 @@ def expected_prompt_terms(task: harness.SpikeTask) -> set[str]:
             terms.add(key[:-8] if key.endswith("_present") else key)
         terms.update(expected["stream_requirements"]["fields_per_event"])
     elif kind == "async_handle":
-        terms.update({"handle_id", "status", "check_later_with"})
+        terms.update(
+            {
+                "handle_id",
+                "status",
+                "check_later_with",
+                "budget",
+                "usd",
+                "wallclock_seconds",
+                "depth",
+                "tool_calls",
+            }
+        )
     elif kind == "budget_aware":
         for key in expected["fields"]:
             if key == "answer_present":
@@ -259,6 +270,68 @@ def test_streaming_evaluation_task_no_longer_demands_explicit_budget_call() -> N
     task = next(task for task in load_tasks() if task.id == "run_streaming_feedback_evaluation")
     assert "plexus.budget.remaining" not in task.required_apis
     assert task.required_apis == ["plexus.evaluation.run"]
+
+
+def test_helper_bindings_cover_spike_api_catalog() -> None:
+    plexus = create_plexus_module()
+    catalog = plexus.api.list()
+    helpers = {helper_name for helper_name, _, _ in harness.HELPER_BINDINGS}
+
+    expected_helpers = {
+        f"{namespace.removeprefix('plexus.')}_{method}"
+        for namespace, methods in catalog.items()
+        for method in methods
+        if namespace not in {"plexus.budget", "plexus.cost"}
+    }
+
+    assert len(helpers) == len([binding[0] for binding in harness.HELPER_BINDINGS])
+    assert expected_helpers <= helpers
+
+
+def test_boot_prompt_names_canonical_helper_contract() -> None:
+    boot_prompt = harness.BOOT_PROMPT.read_text()
+    for term in (
+        "namespace_method",
+        "scorecards_list",
+        "score_set_champion",
+        "evaluation_info",
+        "handle_status",
+        "docs_get",
+        "api_list",
+    ):
+        assert term in boot_prompt
+
+
+def test_false_negative_summary_prompt_names_fixture_fields_for_grouping() -> None:
+    task = next(task for task in load_tasks() if task.id == "false_negative_feedback_summary")
+    for term in ("item_id", "pattern", "comment"):
+        assert term in task.prompt, f"{task.id} prompt omits {term}"
+
+
+def test_async_tasks_require_explicit_budget_contract_in_prompt() -> None:
+    for task in load_tasks():
+        if "async = true" not in task.prompt:
+            continue
+        for term in ("budget", "usd", "wallclock_seconds", "depth", "tool_calls"):
+            assert term in task.prompt, f"{task.id} prompt omits async budget term: {term}"
+
+
+def test_structured_summary_rejects_empty_representative_item_id() -> None:
+    task = next(task for task in load_tasks() if task.id == "false_negative_feedback_summary")
+    result = harness.check_expected(
+        task,
+        final_value={
+            "patterns": [
+                {"label": "a", "example_count": 4, "representative_item_id": ""},
+                {"label": "b", "example_count": 3, "representative_item_id": "item_1102"},
+                {"label": "c", "example_count": 2, "representative_item_id": "item_1103"},
+            ]
+        },
+        api_calls=["plexus.feedback.find", "plexus.feedback.alignment", "plexus.item.info"],
+        stream_events=[],
+    )
+    assert result["passed"] is False
+    assert "pattern has empty representative_item_id" in result["details"]
 
 
 def test_extract_accepts_tactus_fenced_blocks() -> None:
@@ -469,6 +542,40 @@ procedure{ id = "proc_alignment_optimizer" }
         assert expected in api_calls, f"missing {expected} in {api_calls}"
 
 
+def test_canonical_helper_aliases_map_to_expected_namespace_methods() -> None:
+    pytest.importorskip("lupa")
+    plexus = create_plexus_module()
+
+    execute_lua(
+        """
+scorecards_list{ account = "Acme Health" }
+score_info{ id = "score_compliance_tone" }
+item_last{}
+feedback_alignment{ score_id = "score_compliance_tone" }
+evaluation_info{ id = "eval_compliance_candidate" }
+report_configurations_list{}
+procedure_chat_sessions{ procedure_id = "proc_alignment_optimizer" }
+docs_get{ key = "reports" }
+api_list{}
+""",
+        plexus,
+    )
+
+    api_calls = [entry["api"] for entry in plexus.call_log()]
+    for expected in [
+        "plexus.scorecards.list",
+        "plexus.score.info",
+        "plexus.item.last",
+        "plexus.feedback.alignment",
+        "plexus.evaluation.info",
+        "plexus.report.configurations_list",
+        "plexus.procedure.chat_sessions",
+        "plexus.docs.get",
+        "plexus.api.list",
+    ]:
+        assert expected in api_calls, f"missing {expected} in {api_calls}"
+
+
 def test_explicit_require_plexus_still_works_for_back_compat() -> None:
     pytest.importorskip("lupa")
     plexus = create_plexus_module()
@@ -498,6 +605,12 @@ local handle = plexus.evaluation.run{
     feedback_status = "approved",
   },
   async = true,
+  budget = {
+    usd = 0.5,
+    wallclock_seconds = 1800,
+    depth = 1,
+    tool_calls = 10,
+  },
 }
 local status = plexus.handle.status{ id = handle.id }
 return {

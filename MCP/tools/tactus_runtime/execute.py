@@ -204,14 +204,56 @@ def _safe_write_trace(store: TactusTraceStore, record: dict[str, Any]) -> None:
 
 
 HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
+    ("scorecards_list", "scorecards", "list"),
+    ("scorecards_info", "scorecards", "info"),
+    ("score_info", "score", "info"),
+    ("score_evaluations", "score", "evaluations"),
+    ("score_predict", "score", "predict"),
+    ("score_set_champion", "score", "set_champion"),
+    ("set_champion", "score", "set_champion"),
+    ("item_info", "item", "info"),
+    ("item_last", "item", "last"),
+    ("feedback_find", "feedback", "find"),
+    ("feedback_alignment", "feedback", "alignment"),
+    ("evaluation_info", "evaluation", "info"),
+    ("evaluation_find_recent", "evaluation", "find_recent"),
+    ("evaluation_compare", "evaluation", "compare"),
+    ("evaluation_run", "evaluation", "run"),
+    ("dataset_build_from_feedback_window", "dataset", "build_from_feedback_window"),
+    ("dataset_check_associated", "dataset", "check_associated"),
+    ("report_configurations_list", "report", "configurations_list"),
+    ("report_run", "report", "run"),
+    ("procedure_info", "procedure", "info"),
+    ("procedure_list", "procedure", "list"),
+    ("procedure_chat_sessions", "procedure", "chat_sessions"),
+    ("procedure_chat_messages", "procedure", "chat_messages"),
+    ("procedure_run", "procedure", "run"),
+    ("handle_peek", "handle", "peek"),
+    ("handle_status", "handle", "status"),
+    ("handle_await", "handle", "await"),
+    ("handle_cancel", "handle", "cancel"),
+    ("docs_list", "docs", "list"),
+    ("docs_get", "docs", "get"),
+    ("api_list", "api", "list"),
+    ("scorecards", "scorecards", "list"),
+    ("scorecard", "scorecards", "info"),
     ("evaluate", "evaluation", "run"),
+    ("evaluation", "evaluation", "info"),
+    ("recent_evaluations", "evaluation", "find_recent"),
+    ("compare_evaluations", "evaluation", "compare"),
     ("predict", "score", "predict"),
     ("score", "score", "info"),
+    ("last_item", "item", "last"),
     ("item", "item", "info"),
     ("feedback", "feedback", "find"),
     ("dataset", "dataset", "build_from_feedback_window"),
+    ("dataset_association", "dataset", "check_associated"),
     ("report", "report", "run"),
+    ("report_configs", "report", "configurations_list"),
     ("procedure", "procedure", "info"),
+    ("procedures", "procedure", "list"),
+    ("procedure_sessions", "procedure", "chat_sessions"),
+    ("procedure_messages", "procedure", "chat_messages"),
 )
 
 # Long-running operations require handle/streaming semantics that the v0 prototype
@@ -613,6 +655,116 @@ def _jsonable(value: Any) -> Any:
     return repr(value)
 
 
+def _normalize_mcp_tool_args(
+    namespace: str, method: str, args: dict[str, Any]
+) -> dict[str, Any]:
+    """Translate runtime-friendly Tactus names to legacy MCP tool parameters."""
+
+    normalized = dict(args)
+    if (namespace, method) == ("scorecards", "info"):
+        if "scorecard_identifier" not in normalized:
+            for key in ("id", "name", "key", "external_id", "externalId"):
+                if normalized.get(key):
+                    normalized["scorecard_identifier"] = normalized[key]
+                    break
+        for key in ("id", "name", "key", "external_id", "externalId"):
+            normalized.pop(key, None)
+    elif (namespace, method) == ("score", "info"):
+        if "score_identifier" not in normalized:
+            for key in ("id", "score_id", "score", "name", "key", "external_id", "externalId"):
+                if normalized.get(key):
+                    normalized["score_identifier"] = normalized[key]
+                    break
+        if "scorecard_identifier" not in normalized:
+            for key in (
+                "scorecard_id",
+                "scorecard",
+                "scorecard_name",
+                "scorecard_key",
+            ):
+                if normalized.get(key):
+                    normalized["scorecard_identifier"] = normalized[key]
+                    break
+        for key in (
+            "id",
+            "score_id",
+            "score",
+            "name",
+            "key",
+            "external_id",
+            "externalId",
+            "scorecard_id",
+            "scorecard",
+            "scorecard_name",
+            "scorecard_key",
+        ):
+            normalized.pop(key, None)
+    elif (namespace, method) == ("item", "info"):
+        if "item_id" not in normalized:
+            for key in ("id", "item"):
+                if normalized.get(key):
+                    normalized["item_id"] = normalized[key]
+                    break
+        for key in ("id", "item"):
+            normalized.pop(key, None)
+    elif namespace == "procedure" and method in {
+        "list",
+        "info",
+        "chat_sessions",
+        "chat_messages",
+    }:
+        if "request" in normalized and isinstance(normalized["request"], dict):
+            return normalized
+        if method == "list":
+            account_identifier = (
+                normalized.get("account_identifier")
+                or normalized.get("account")
+                or os.environ.get("PLEXUS_ACCOUNT_KEY")
+            )
+            if not account_identifier:
+                raise ValueError(
+                    "plexus.procedure.list requires account_identifier or "
+                    "PLEXUS_ACCOUNT_KEY"
+                )
+            request = {
+                "account_identifier": account_identifier,
+                "scorecard_identifier": normalized.get("scorecard_identifier")
+                or normalized.get("scorecard"),
+                "limit": int(normalized.get("limit") or 20),
+            }
+            normalized = {"request": request}
+        elif method == "info":
+            procedure_id = normalized.get("procedure_id") or normalized.get("id")
+            normalized = {
+                "request": {
+                    "procedure_id": procedure_id,
+                    "include_yaml": bool(normalized.get("include_yaml", False)),
+                }
+            }
+        elif method == "chat_sessions":
+            procedure_id = normalized.get("procedure_id") or normalized.get("id")
+            normalized = {
+                "request": {
+                    "procedure_id": procedure_id,
+                    "limit": int(normalized.get("limit") or 10),
+                }
+            }
+        elif method == "chat_messages":
+            procedure_id = normalized.get("procedure_id") or normalized.get("id")
+            normalized = {
+                "request": {
+                    "procedure_id": procedure_id,
+                    "session_id": normalized.get("session_id"),
+                    "limit": int(normalized.get("limit") or 50),
+                    "show_tool_calls": bool(normalized.get("show_tool_calls", True)),
+                    "show_tool_responses": bool(
+                        normalized.get("show_tool_responses", True)
+                    ),
+                }
+            }
+    return normalized
+
+
 def _public_handle(record: dict[str, Any]) -> dict[str, Any]:
     public = {
         "id": record["id"],
@@ -688,6 +840,12 @@ def _dict_as_lua_sequence(value: dict) -> list | None:
 
 
 def _extract_tool_value(result: Any) -> Any:
+    def parse_json_string(value: str) -> Any:
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+
     structured = getattr(result, "structured_content", None)
     if structured is not None:
         if (
@@ -695,16 +853,16 @@ def _extract_tool_value(result: Any) -> Any:
             and len(structured) == 1
             and "result" in structured
         ):
-            return structured["result"]
+            value = structured["result"]
+            return parse_json_string(value) if isinstance(value, str) else value
+        if isinstance(structured, str):
+            return parse_json_string(structured)
         return structured
 
     content = getattr(result, "content", None) or []
     if len(content) == 1 and hasattr(content[0], "text"):
         text = content[0].text
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            return text
+        return parse_json_string(text)
     return _jsonable(result)
 
 
@@ -982,7 +1140,17 @@ def _stream_event_payload(event: Any) -> dict[str, Any]:
         return _jsonable(event)
     model_dump = getattr(event, "model_dump", None)
     if callable(model_dump):
-        return _jsonable(model_dump(mode="json"))
+        try:
+            return _jsonable(model_dump(mode="json"))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "Falling back after stream event JSON serialization failed: %s",
+                exc,
+            )
+            try:
+                return _jsonable(model_dump(mode="python"))
+            except Exception:  # noqa: BLE001
+                logger.debug("Falling back to stream event attributes", exc_info=True)
     if hasattr(event, "__dict__"):
         return _jsonable(vars(event))
     return {"message": str(event)}
@@ -1100,20 +1268,26 @@ async def _maybe_await(value: Any) -> Any:
 async def _send_mcp_stream_event(ctx: Context, event: dict[str, Any]) -> None:
     progress = event.get("progress")
     if isinstance(progress, int | float):
+        try:
+            await _maybe_await(
+                ctx.report_progress(
+                    float(progress),
+                    total=event.get("total"),
+                    message=str(event.get("message") or event.get("kind") or "progress"),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Ignoring failed execute_tactus progress event: %s", exc)
+    try:
         await _maybe_await(
-            ctx.report_progress(
-                float(progress),
-                total=event.get("total"),
-                message=str(event.get("message") or event.get("kind") or "progress"),
+            ctx.info(
+                str(event.get("message") or event.get("kind") or "execute_tactus update"),
+                logger_name="plexus.execute_tactus",
+                extra={"event": event},
             )
         )
-    await _maybe_await(
-        ctx.info(
-            str(event.get("message") or event.get("kind") or "execute_tactus update"),
-            logger_name="plexus.execute_tactus",
-            extra={"event": event},
-        )
-    )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Ignoring failed execute_tactus info event: %s", exc)
 
 
 class _Namespace:
@@ -1227,7 +1401,12 @@ class PlexusRuntimeModule:
         self._budget.check_before(namespace, method)
         self._record_api_call(namespace, method)
         try:
-            result = _run_async_from_sync(self._mcp.call_tool(tool_name, _args(args)))
+            result = _run_async_from_sync(
+                self._mcp.call_tool(
+                    tool_name,
+                    _normalize_mcp_tool_args(namespace, method, _args(args)),
+                )
+            )
         finally:
             self._budget.record_after(namespace, method)
         return _extract_tool_value(result)
@@ -1272,11 +1451,11 @@ class PlexusRuntimeModule:
             raise RequiresHandleProtocol("evaluation", "run")
 
         self._budget.check_before("evaluation", "run")
+        self._record_api_call("evaluation", "run")
         child_budget = self._budget.carve_child(
             "evaluation", "run", parsed.get("budget")
         )
         parsed["budget"] = child_budget
-        self._record_api_call("evaluation", "run")
         try:
             dispatch_result = self._evaluation_runner(parsed)
             return self._handle_store.create(
@@ -1302,9 +1481,9 @@ class PlexusRuntimeModule:
             raise RequiresHandleProtocol("report", "run")
 
         self._budget.check_before("report", "run")
+        self._record_api_call("report", "run")
         child_budget = self._budget.carve_child("report", "run", parsed.get("budget"))
         parsed["budget"] = child_budget
-        self._record_api_call("report", "run")
         try:
             dispatch_result = self._report_runner(parsed)
             return self._handle_store.create(
@@ -1330,11 +1509,11 @@ class PlexusRuntimeModule:
             raise RequiresHandleProtocol("procedure", "run")
 
         self._budget.check_before("procedure", "run")
+        self._record_api_call("procedure", "run")
         child_budget = self._budget.carve_child(
             "procedure", "run", parsed.get("budget")
         )
         parsed["budget"] = child_budget
-        self._record_api_call("procedure", "run")
         try:
             dispatch_result = self._procedure_runner(parsed)
             return self._handle_store.create(
@@ -1909,8 +2088,9 @@ def register_tactus_tools(mcp: FastMCP) -> None:
             Field(
                 description=(
                     "Tactus code to execute inside the Plexus runtime. The runtime "
-                    "injects `plexus` plus helper aliases such as evaluate, predict, "
-                    "score, item, feedback, dataset, report, and procedure."
+                    "injects `plexus`, short helper aliases such as evaluate and "
+                    "predict, and canonical namespace_method helpers such as "
+                    "evaluation_info, handle_status, docs_get, and api_list."
                 )
             ),
         ],
@@ -1921,8 +2101,9 @@ def register_tactus_tools(mcp: FastMCP) -> None:
 
         This single tool is the prototype replacement for broad Plexus MCP tool
         catalogs. The submitted Tactus code receives a host-provided `plexus`
-        module and common helper aliases. The response envelope returns a single
-        structured contract with ok/value/error, conservative cost metadata,
+        module, short helper aliases, and canonical namespace_method helper aliases
+        for the advertised Plexus runtime APIs. The response envelope returns a
+        single structured contract with ok/value/error, conservative cost metadata,
         a trace identifier, partial status, and called Plexus APIs.
         """
 
