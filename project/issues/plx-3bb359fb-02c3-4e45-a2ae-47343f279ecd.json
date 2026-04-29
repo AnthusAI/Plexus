@@ -1,0 +1,25 @@
+{
+  "id": "plx-3bb359fb-02c3-4e45-a2ae-47343f279ecd",
+  "title": "Bump tactus to v0.46.4 in pyproject and lambda requirements, regenerate lock, run lambda smoke tests",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1f6b32f8-0d5c-4792-be56-a5caa89242a7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0429db07-4e14-42c1-a763-bf8385539e8c",
+      "author": "derek",
+      "text": "Updated dependency pins: pyproject.toml tactus ^0.46.4 and score-processor-lambda/requirements.txt tactus==0.46.4. Regenerated poetry.lock (tactus now locked to 0.46.4). Ran lambda container smoke test via make test-smoke in score-processor-lambda: PASS (10 passed, 0 failed).",
+      "created_at": "2026-04-29T17:23:50.519482993Z"
+    }
+  ],
+  "created_at": "2026-04-29T17:18:57.671235867Z",
+  "updated_at": "2026-04-29T17:23:50.519482993Z",
+  "closed_at": null,
+  "custom": {}
+}
