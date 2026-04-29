@@ -34,10 +34,16 @@
       "author": "derek",
       "text": "Validation: npm run -s test -- score-component passed (2 tests). Note: repo lint script currently fails in this env due unsupported Next CLI flag (next lint --no-cache), and full typecheck exceeded 180s timeout without output; targeted test confirms changed path compiles/exercises.",
       "created_at": "2026-04-29T19:50:20.644929925Z"
+    },
+    {
+      "id": "be9d3d8f-961e-4c51-b1ed-0f189ecfd197",
+      "author": "derek",
+      "text": "Code fix committed and pushed on branch bugfix/champion-promotion-composite-key (commit f0452df). GitHub Actions check via gh run list --commit f0452df returned no workflows triggered for this branch push (CI appears PR/main-triggered only). Awaiting merge/PR workflow execution for full CI signal.",
+      "created_at": "2026-04-29T19:50:58.797240579Z"
     }
   ],
   "created_at": "2026-04-29T19:35:26.898481283Z",
-  "updated_at": "2026-04-29T19:50:20.644929925Z",
+  "updated_at": "2026-04-29T19:50:58.797240579Z",
   "closed_at": null,
   "custom": {}
 }
