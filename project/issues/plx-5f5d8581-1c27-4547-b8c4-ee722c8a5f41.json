@@ -3,7 +3,7 @@
   "title": "Implement long-running handle and streaming protocol for execute_tactus",
   "description": "Implement the long-running handle and streaming model documented in MCP/tools/tactus_runtime/HANDLE_PROTOCOL.md. Remove entries from MCP/tools/tactus_runtime/execute.py LONG_RUNNING_METHODS as each API (plexus.evaluation.run, plexus.report.run, plexus.procedure.run) is wired through the streaming + handle-based async path with budget sub-carving. No fallback: each removal must land with the real integration and tests.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -46,10 +46,16 @@
       "author": "ryan",
       "text": "Added MCP streaming notifications for execute_tactus blocking runs. The tool now accepts FastMCP Context, runs Tactus in a worker thread, drains Tactus log events and Plexus API call events back to MCP progress/info messages, and keeps the final response envelope unchanged. Updated HANDLE_PROTOCOL.md to move streaming client notifications out of remaining work. Tests: python -m pytest MCP/tools/tactus_runtime/execute_test.py -q (63 passed); python -m pytest spikes/runtime-mcp-validation MCP/tools/tactus_runtime -q (100 passed).",
       "created_at": "2026-04-29T12:40:43.427572Z"
+    },
+    {
+      "id": "9260d76f-6f8b-43e0-a8ea-c27a348f9e63",
+      "author": "ryan",
+      "text": "Implemented distributed child budget carving for execute_tactus async handles. Async evaluation/report/procedure runs now require an explicit budget table, carve it from the parent budget before dispatch, persist it on handles, and propagate it via evaluation env, report task metadata, and procedure context. Focused tests and ruff passed locally.",
+      "created_at": "2026-04-29T13:46:03.693394Z"
     }
   ],
   "created_at": "2026-04-29T04:43:42.848955Z",
-  "updated_at": "2026-04-29T12:40:43.427572Z",
-  "closed_at": null,
+  "updated_at": "2026-04-29T13:46:22.722746Z",
+  "closed_at": "2026-04-29T13:46:22.722746Z",
   "custom": {}
 }

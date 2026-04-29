@@ -36,6 +36,7 @@ class _MemoryHandleStore(execute.TactusHandleStore):
         api_call: str,
         args: dict,
         dispatch_result: dict,
+        child_budget: dict | None = None,
     ) -> dict:
         handle_id = f"handle-{len(self.records) + 1}"
         record = {
@@ -49,10 +50,11 @@ class _MemoryHandleStore(execute.TactusHandleStore):
             "api_call": api_call,
             "args": args,
             "dispatch_result": dispatch_result,
+            "child_budget": child_budget,
         }
         self.records[handle_id] = record
         self.created.append(record)
-        return {
+        public = {
             "id": handle_id,
             "kind": kind,
             "status": "running",
@@ -60,6 +62,9 @@ class _MemoryHandleStore(execute.TactusHandleStore):
             "created_at": record["created_at"],
             "parent_trace_id": parent_trace_id,
         }
+        if child_budget is not None:
+            public["child_budget"] = child_budget
+        return public
 
     def get(self, handle_id: str) -> dict:
         return dict(self.records[handle_id])
@@ -83,6 +88,10 @@ class _RecordingMCPContext:
         self.info_messages.append(
             {"message": message, "logger_name": logger_name, "extra": extra}
         )
+
+
+def _child_budget() -> dict:
+    return {"usd": 0.01, "wallclock_seconds": 10, "depth": 1, "tool_calls": 2}
 
 
 def test_wrap_tactus_snippet_injects_plexus_helpers_and_capture() -> None:
@@ -781,8 +790,14 @@ def test_evaluation_run_async_creates_handle_and_records_budget() -> None:
         evaluation_runner=fake_runner,
     )
 
+    budget = _child_budget()
     handle = module.evaluation.run(
-        {"scorecard_name": "Compliance", "score_name": "Tone", "async": True}
+        {
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+            "async": True,
+            "budget": budget,
+        }
     )
 
     assert handle == {
@@ -792,15 +807,70 @@ def test_evaluation_run_async_creates_handle_and_records_budget() -> None:
         "status_url": "https://example.test/evaluations/eval-1",
         "created_at": "2026-04-29T00:00:00Z",
         "parent_trace_id": "trace-1",
+        "child_budget": budget,
     }
     assert seen_args == {
         "scorecard_name": "Compliance",
         "score_name": "Tone",
         "async": True,
+        "budget": budget,
     }
-    assert gate.tool_calls == 1
+    assert gate.tool_calls == 3
+    assert gate.spent_usd == pytest.approx(0.01)
     assert module.api_calls == ["plexus.evaluation.run"]
     assert handles.created[0]["dispatch_result"]["evaluation_id"] == "eval-1"
+    assert handles.created[0]["child_budget"] == budget
+
+
+def test_evaluation_run_async_requires_explicit_child_budget() -> None:
+    called = False
+
+    def fake_runner(_args: dict) -> dict:
+        nonlocal called
+        called = True
+        return {"status": "dispatched"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        evaluation_runner=fake_runner,
+    )
+
+    with pytest.raises(execute.ChildBudgetRequired):
+        module.evaluation.run(
+            {"scorecard_name": "Compliance", "score_name": "Tone", "async": True}
+        )
+
+    assert called is False
+    assert module.api_calls == []
+
+
+def test_async_child_budget_overrun_blocks_dispatch() -> None:
+    called = False
+
+    def fake_runner(_args: dict) -> dict:
+        nonlocal called
+        called = True
+        return {"status": "dispatched"}
+
+    gate = execute.BudgetGate(execute.BudgetSpec(usd=0.005, wallclock_seconds=60, depth=3, tool_calls=10))
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        budget=gate,
+        evaluation_runner=fake_runner,
+    )
+
+    with pytest.raises(execute.BudgetExceeded):
+        module.evaluation.run(
+            {
+                "scorecard_name": "Compliance",
+                "async": True,
+                "budget": _child_budget(),
+            }
+        )
+
+    assert called is False
+    assert gate.exceeded is True
+    assert module.api_calls == []
 
 
 def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
@@ -830,6 +900,7 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
             "score_name": "Tone",
             "max_feedback_items": 25,
             "days": 30,
+            "budget": _child_budget(),
         },
         FakeMCP(),
     )
@@ -852,6 +923,8 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
         "30",
     ]
     assert captured["kwargs"]["start_new_session"] is True
+    assert json.loads(captured["kwargs"]["env"]["PLEXUS_CHILD_BUDGET"]) == _child_budget()
+    assert result["child_budget"] == _child_budget()
 
 
 def test_handle_peek_refreshes_evaluation_status() -> None:
@@ -1027,7 +1100,11 @@ async def test_execute_tactus_evaluation_run_async_returns_handle() -> None:
 
     store = _RecordingTraceStore()
     result = await execute._execute_tactus_tool(
-        'evaluate{ scorecard_name = "Compliance", score_name = "Tone", async = true }',
+        (
+            'evaluate{ scorecard_name = "Compliance", score_name = "Tone", '
+            'async = true, budget = { usd = 0.01, wallclock_seconds = 10, '
+            'depth = 1, tool_calls = 2 } }'
+        ),
         mcp,
         trace_store=store,
         handle_store=handles,
@@ -1038,8 +1115,31 @@ async def test_execute_tactus_evaluation_run_async_returns_handle() -> None:
     assert result["value"]["kind"] == "evaluation"
     assert result["value"]["id"] == "handle-1"
     assert result["api_calls"] == ["plexus.evaluation.run"]
-    assert result["cost"]["tool_calls"] == 1
+    assert result["cost"]["tool_calls"] == 3
     assert store.records[0]["value"]["id"] == "handle-1"
+    assert result["value"]["child_budget"] == _child_budget()
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_async_run_without_budget_returns_clear_error() -> None:
+    called = False
+
+    def fake_runner(_args: dict) -> dict:
+        nonlocal called
+        called = True
+        return {"status": "dispatched"}
+
+    result = await execute._execute_tactus_tool(
+        'evaluate{ scorecard_name = "Compliance", async = true }',
+        FastMCP("test-execute-tactus-missing-child-budget"),
+        evaluation_runner=fake_runner,
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "child_budget_required"
+    assert "explicit budget" in result["error"]["message"]
+    assert result["api_calls"] == []
+    assert called is False
 
 
 def test_report_run_async_creates_handle_and_records_budget() -> None:
@@ -1061,11 +1161,13 @@ def test_report_run_async_creates_handle_and_records_budget() -> None:
         report_runner=fake_runner,
     )
 
+    budget = _child_budget()
     handle = module.report.run(
         {
             "block_class": "FeedbackContradictions",
             "cache_key": "report-cache",
             "async": True,
+            "budget": budget,
         }
     )
 
@@ -1076,9 +1178,37 @@ def test_report_run_async_creates_handle_and_records_budget() -> None:
         "block_class": "FeedbackContradictions",
         "cache_key": "report-cache",
         "async": True,
+        "budget": budget,
     }
     assert module.api_calls == ["plexus.report.run"]
     assert handles.created[0]["dispatch_result"]["task_id"] == "task-1"
+    assert handles.created[0]["child_budget"] == budget
+
+
+def test_default_report_runner_propagates_child_budget(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_run_block_cached(**kwargs):
+        captured.update(kwargs)
+        return {"status": "dispatched", "task_id": "task-1"}, None, False
+
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr("plexus.reports.service.run_block_cached", fake_run_block_cached)
+
+    result = execute._default_report_runner(
+        {
+            "block_class": "FeedbackContradictions",
+            "cache_key": "report-cache",
+            "budget": _child_budget(),
+        }
+    )
+
+    assert captured["child_budget"] == _child_budget()
+    assert result["child_budget"] == _child_budget()
 
 
 def test_report_run_blocking_requires_handle_protocol() -> None:
@@ -1110,8 +1240,14 @@ def test_procedure_run_async_creates_handle_and_records_budget() -> None:
         procedure_runner=fake_runner,
     )
 
+    budget = _child_budget()
     handle = module.procedure.run(
-        {"procedure_id": "proc-1", "max_iterations": 3, "async": True}
+        {
+            "procedure_id": "proc-1",
+            "max_iterations": 3,
+            "async": True,
+            "budget": budget,
+        }
     )
 
     assert handle["id"] == "handle-1"
@@ -1121,9 +1257,41 @@ def test_procedure_run_async_creates_handle_and_records_budget() -> None:
         "procedure_id": "proc-1",
         "max_iterations": 3,
         "async": True,
+        "budget": budget,
     }
     assert module.api_calls == ["plexus.procedure.run"]
     assert handles.created[0]["dispatch_result"]["procedure_id"] == "proc-1"
+    assert handles.created[0]["child_budget"] == budget
+
+
+def test_default_procedure_runner_propagates_child_budget(monkeypatch) -> None:
+    captured: dict = {}
+
+    class FakeService:
+        def __init__(self, client) -> None:
+            self.client = client
+
+        async def run_procedure(self, procedure_id: str, **options):
+            captured["procedure_id"] = procedure_id
+            captured["options"] = options
+            return {"status": "initiated", "procedure_id": procedure_id}
+
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr("plexus.cli.procedure.service.ProcedureService", FakeService)
+
+    result = execute._default_procedure_runner(
+        {
+            "procedure_id": "proc-1",
+            "context": {"existing": "value"},
+            "budget": _child_budget(),
+        }
+    )
+
+    assert result["status"] == "initiated"
+    assert captured["options"]["context"] == {
+        "existing": "value",
+        "_plexus_child_budget": _child_budget(),
+    }
 
 
 def test_procedure_run_blocking_requires_handle_protocol() -> None:
@@ -1149,7 +1317,12 @@ async def test_execute_tactus_report_run_async_returns_handle() -> None:
         }
 
     result = await execute._execute_tactus_tool(
-        'report{ block_class = "FeedbackContradictions", cache_key = "report-cache", async = true }',
+        (
+            'report{ block_class = "FeedbackContradictions", '
+            'cache_key = "report-cache", async = true, '
+            'budget = { usd = 0.01, wallclock_seconds = 10, '
+            'depth = 1, tool_calls = 2 } }'
+        ),
         mcp,
         handle_store=handles,
         report_runner=fake_runner,
@@ -1159,7 +1332,7 @@ async def test_execute_tactus_report_run_async_returns_handle() -> None:
     assert result["value"]["kind"] == "report"
     assert result["value"]["id"] == "handle-1"
     assert result["api_calls"] == ["plexus.report.run"]
-    assert result["cost"]["tool_calls"] == 1
+    assert result["cost"]["tool_calls"] == 3
 
 
 @pytest.mark.asyncio
@@ -1175,7 +1348,11 @@ async def test_execute_tactus_procedure_run_async_returns_handle() -> None:
         }
 
     result = await execute._execute_tactus_tool(
-        'return plexus.procedure.run{ procedure_id = "proc-1", async = true }',
+        (
+            'return plexus.procedure.run{ procedure_id = "proc-1", async = true, '
+            'budget = { usd = 0.01, wallclock_seconds = 10, '
+            'depth = 1, tool_calls = 2 } }'
+        ),
         mcp,
         handle_store=handles,
         procedure_runner=fake_runner,
@@ -1185,7 +1362,7 @@ async def test_execute_tactus_procedure_run_async_returns_handle() -> None:
     assert result["value"]["kind"] == "procedure"
     assert result["value"]["id"] == "handle-1"
     assert result["api_calls"] == ["plexus.procedure.run"]
-    assert result["cost"]["tool_calls"] == 1
+    assert result["cost"]["tool_calls"] == 3
 
 
 @pytest.mark.asyncio
