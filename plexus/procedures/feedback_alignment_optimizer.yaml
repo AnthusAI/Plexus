@@ -5771,46 +5771,57 @@ code: |
         end
 
         local selection_reason
-        if #strategy_versions == 1 then
-          selection_reason = string.format("only Strategy %s produced a version", best_sv.label)
-        else
-          local scores_str = {}
-          for _, sv in ipairs(strategy_versions) do
-            table.insert(scores_str, string.format("%s=%.3f", sv.label, score_strategy(sv)))
-          end
-          selection_reason = string.format("scores: %s -> selected %s",
-            table.concat(scores_str, ", "), best_sv.label)
+        local scores_str = {}
+        for _, sv in ipairs(strategy_versions) do
+          table.insert(scores_str, string.format("%s=%.3f", sv.label, score_strategy(sv)))
         end
 
-        diag(string.format("Strategy selection: %s (score=%.3f) — %s",
-          best_sv.label, best_sv_score, selection_reason))
-        Human.notify({message = string.format(
-          "  Selected Strategy %s (score=%.3f) — %s",
-          best_sv.label, best_sv_score, selection_reason), level = "info"})
+        if best_sv_score <= -999 then
+          selection_reason = string.format(
+            "scores: %s -> no viable synthesis strategy",
+            table.concat(scores_str, ", "))
+          diag("Strategy selection skipped — " .. selection_reason)
+          Human.notify({message = string.format(
+            "  No viable synthesis strategy selected — %s",
+            selection_reason), level = "warning"})
+        else
+          if #strategy_versions == 1 then
+            selection_reason = string.format("only Strategy %s produced a version", best_sv.label)
+          else
+            selection_reason = string.format("scores: %s -> selected %s",
+              table.concat(scores_str, ", "), best_sv.label)
+          end
 
-        -- Set final version to winner
-        final_version_id = best_sv.version_id
-        final_done_reason = best_sv.done_reason or ""
-        selected_strategy = best_sv.label
-        synth_reasoning_parts = best_sv.reasoning or {}
+          diag(string.format("Strategy selection: %s (score=%.3f) — %s",
+            best_sv.label, best_sv_score, selection_reason))
+          Human.notify({message = string.format(
+            "  Selected Strategy %s (score=%.3f) — %s",
+            best_sv.label, best_sv_score, selection_reason), level = "info"})
 
-        -- Store eval results for the winner (avoids re-evaluation later)
-        synthesis_eval_results = {
-          fb_metrics = best_sv.fb_metrics,
-          acc_metrics = best_sv.acc_metrics,
-          fb_cost_per_item = best_sv.fb_cost_per_item,
-          acc_cost_per_item = best_sv.acc_cost_per_item,
-          fb_deltas = best_sv.fb_deltas,
-          acc_deltas = best_sv.acc_deltas,
-          fb_deltas_vs_current = best_sv.fb_deltas_vs_current,
-          acc_deltas_vs_current = best_sv.acc_deltas_vs_current,
-          fb_rca = best_sv.fb_rca or {},
-          acc_rca = best_sv.acc_rca or {},
-          fb_eval_id = best_sv.fb_eval_id,
-          acc_eval_id = best_sv.acc_eval_id,
-          strategy_versions = strategy_versions,
-          selection_reason = selection_reason
-        }
+          -- Set final version to winner
+          final_version_id = best_sv.version_id
+          final_done_reason = best_sv.done_reason or ""
+          selected_strategy = best_sv.label
+          synth_reasoning_parts = best_sv.reasoning or {}
+
+          -- Store eval results for the winner (avoids re-evaluation later)
+          synthesis_eval_results = {
+            fb_metrics = best_sv.fb_metrics,
+            acc_metrics = best_sv.acc_metrics,
+            fb_cost_per_item = best_sv.fb_cost_per_item,
+            acc_cost_per_item = best_sv.acc_cost_per_item,
+            fb_deltas = best_sv.fb_deltas,
+            acc_deltas = best_sv.acc_deltas,
+            fb_deltas_vs_current = best_sv.fb_deltas_vs_current,
+            acc_deltas_vs_current = best_sv.acc_deltas_vs_current,
+            fb_rca = best_sv.fb_rca or {},
+            acc_rca = best_sv.acc_rca or {},
+            fb_eval_id = best_sv.fb_eval_id,
+            acc_eval_id = best_sv.acc_eval_id,
+            strategy_versions = strategy_versions,
+            selection_reason = selection_reason
+          }
+        end
       end
       end -- do block for dual-strategy synthesis
       ::after_synthesis::
