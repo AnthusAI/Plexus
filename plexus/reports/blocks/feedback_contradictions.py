@@ -55,6 +55,11 @@ class FeedbackContradictions(BaseReportBlock):
         max_feedback_items = int(self.config.get("max_feedback_items", 400))
         num_topics = int(self.config.get("num_topics", 8))
         include_rubric_memory = bool(self.config.get("include_rubric_memory", False))
+        score_version_param = (
+            self.config.get("score_version_id")
+            or self.config.get("score_version")
+            or self.config.get("version")
+        )
         if max_feedback_items < 0:
             raise ValueError("'max_feedback_items' must be >= 0.")
 
@@ -90,7 +95,19 @@ class FeedbackContradictions(BaseReportBlock):
         score_obj = await self._resolve_score(str(score_param), scorecard_obj.id)
         self._log(f"Score: '{score_obj.name}' ({score_obj.id})")
 
-        guidelines = await self._fetch_guidelines(score_obj.id)
+        score_version_id = await self._resolve_score_version_id(
+            score_obj.id,
+            str(score_version_param).strip() if score_version_param else None,
+        )
+        if score_version_param:
+            self._log(f"Using explicit score version: {score_version_id}")
+        elif score_version_id:
+            self._log(f"Using champion score version: {score_version_id}")
+
+        guidelines = await self._fetch_guidelines(
+            score_obj.id,
+            score_version_id=score_version_id,
+        )
         if guidelines:
             line_count = guidelines.count("\n") + 1
             self._log(f"Loaded guidelines ({len(guidelines)} chars, {line_count} lines)")
@@ -164,6 +181,7 @@ class FeedbackContradictions(BaseReportBlock):
                 "scorecard_id": scorecard_obj.id,
                 "scorecard_name": scorecard_obj.name,
                 "score_id": score_obj.id,
+                "score_version_id": score_version_id,
                 "mode": mode,
                 "score_name": score_obj.name,
                 "date_range": date_range,
@@ -202,6 +220,7 @@ class FeedbackContradictions(BaseReportBlock):
                 scorecard_name=scorecard_obj.name,
                 score_name=score_obj.name,
                 score_id=score_obj.id,
+                score_version_id=score_version_id,
             )
         if rubric_memory_contexts_by_item:
             self._log(
@@ -250,6 +269,7 @@ class FeedbackContradictions(BaseReportBlock):
             "scorecard_id": scorecard_obj.id,
             "scorecard_name": scorecard_obj.name,
             "score_id": score_obj.id,
+            "score_version_id": score_version_id,
             "mode": mode,
             "score_name": score_obj.name,
             "date_range": {
@@ -274,6 +294,7 @@ class FeedbackContradictions(BaseReportBlock):
                 "max_concurrent": max_concurrent,
                 "num_topics": num_topics,
                 "include_rubric_memory": include_rubric_memory,
+                "score_version_id": score_version_id,
             },
             "rubric_memory": {
                 "enabled": include_rubric_memory and bool(rubric_memory_contexts_by_item),
@@ -339,7 +360,13 @@ class FeedbackContradictions(BaseReportBlock):
             )
         return score_obj
 
-    async def _fetch_guidelines(self, score_id: str) -> Optional[str]:
+    async def _resolve_score_version_id(
+        self,
+        score_id: str,
+        score_version_id: Optional[str] = None,
+    ) -> Optional[str]:
+        if score_version_id:
+            return score_version_id
         try:
             score_result = await asyncio.to_thread(
                 self.api_client.execute,
@@ -353,9 +380,20 @@ class FeedbackContradictions(BaseReportBlock):
                 {"id": score_id},
             )
             champion_id = (score_result or {}).get("getScore", {}).get("championVersionId")
-            if not champion_id:
-                return None
+            return champion_id or None
+        except Exception as exc:
+            self._log(f"Could not resolve score version: {exc}", level="WARNING")
+            return None
 
+    async def _fetch_guidelines(
+        self,
+        score_id: str,
+        score_version_id: Optional[str] = None,
+    ) -> Optional[str]:
+        try:
+            version_id = score_version_id or await self._resolve_score_version_id(score_id)
+            if not version_id:
+                return None
             version_result = await asyncio.to_thread(
                 self.api_client.execute,
                 """
@@ -366,7 +404,7 @@ class FeedbackContradictions(BaseReportBlock):
                     }
                 }
                 """,
-                {"id": champion_id},
+                {"id": version_id},
             )
             score_version = (version_result or {}).get("getScoreVersion", {})
             return score_version.get("guidelines") or score_version.get("configuration") or None
@@ -382,6 +420,7 @@ class FeedbackContradictions(BaseReportBlock):
         scorecard_name: str,
         score_name: str,
         score_id: str,
+        score_version_id: Optional[str] = None,
     ) -> Dict[str, Dict[str, Any]]:
         provider = RubricMemoryContextProvider(api_client=self.api_client)
         status = provider.local_corpus_status(
@@ -422,6 +461,7 @@ class FeedbackContradictions(BaseReportBlock):
                 scorecard_identifier=scorecard_name,
                 score_identifier=score_name,
                 score_id=score_id,
+                score_version_id=score_version_id,
                 item_contexts=item_contexts,
             )
         except Exception as exc:

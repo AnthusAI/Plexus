@@ -2125,3 +2125,145 @@ async def test_score_set_champion_rejects_versions_with_shadow_invalid_feedback_
     assert result["success"] is False
     assert result["error"] == "SHADOW_INVALIDATION_PRESENT"
     assert result["optimizer_shadow_invalid_feedback_item_ids"] == ["fb-1", "fb-2"]
+
+
+@pytest.mark.asyncio
+async def test_score_set_champion_requires_prior_evaluation():
+    mcp = FastMCP("test-score-set-champion-eval-guard")
+    register_score_tools(mcp)
+    tool = await mcp.get_tool("plexus_score_set_champion")
+
+    mock_client = Mock()
+    mock_client.execute.side_effect = [
+        {
+            "getScore": {"id": "score-123", "championVersionId": "version-old"},
+            "getScoreVersion": {
+                "id": "version-new",
+                "scoreId": "score-123",
+                "configuration": "name: Test Score\n",
+                "metadata": None,
+                "createdAt": "2026-04-29T00:00:00Z",
+            },
+        },
+        {
+            "listEvaluationByScoreVersionIdAndCreatedAt": {
+                "items": [
+                    {
+                        "id": "eval-running",
+                        "status": "RUNNING",
+                        "processedItems": 10,
+                    }
+                ]
+            }
+        },
+    ]
+
+    with patch.dict(os.environ, {"PLEXUS_API_URL": "https://example.test", "PLEXUS_API_KEY": "secret"}), patch(
+        "plexus.cli.shared.client_utils.create_client",
+        return_value=mock_client,
+    ):
+        result = await tool.fn(score_id="score-123", version_id="version-new")
+
+    assert isinstance(result, dict), repr(result)
+    assert result["success"] is False
+    assert result["error"] == "EVALUATION_REQUIRED"
+    assert result["forceSupported"] is True
+    assert mock_client.execute.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_score_set_champion_allows_completed_evaluation():
+    mcp = FastMCP("test-score-set-champion-evaluated")
+    register_score_tools(mcp)
+    tool = await mcp.get_tool("plexus_score_set_champion")
+
+    mock_client = Mock()
+    mock_client.execute.side_effect = [
+        {
+            "getScore": {"id": "score-123", "championVersionId": "version-old"},
+            "getScoreVersion": {
+                "id": "version-new",
+                "scoreId": "score-123",
+                "configuration": "name: Test Score\n",
+                "metadata": None,
+                "createdAt": "2026-04-29T00:00:00Z",
+            },
+        },
+        {
+            "listEvaluationByScoreVersionIdAndCreatedAt": {
+                "items": [
+                    {
+                        "id": "eval-completed",
+                        "status": "COMPLETED",
+                        "processedItems": 25,
+                    }
+                ]
+            }
+        },
+        {
+            "getScoreVersion": {
+                "id": "version-old",
+                "scoreId": "score-123",
+                "configuration": "name: Test Score\n",
+                "guidelines": "# Test\n",
+                "metadata": None,
+                "createdAt": "2026-04-28T00:00:00Z",
+            }
+        },
+        {"updateScore": {"id": "score-123", "championVersionId": "version-new"}},
+        {"updateScoreVersion": {"id": "version-new", "isFeatured": "true", "metadata": "{}"}},
+        {"updateScoreVersion": {"id": "version-old", "isFeatured": "true", "metadata": "{}"}},
+    ]
+
+    with patch.dict(os.environ, {"PLEXUS_API_URL": "https://example.test", "PLEXUS_API_KEY": "secret"}), patch(
+        "plexus.cli.shared.client_utils.create_client",
+        return_value=mock_client,
+    ):
+        result = await tool.fn(score_id="score-123", version_id="version-new")
+
+    assert isinstance(result, dict), repr(result)
+    assert result["success"] is True
+    assert result["evaluationGuard"] == {
+        "forced": False,
+        "evaluationId": "eval-completed",
+        "evaluationStatus": "COMPLETED",
+    }
+    outgoing_update_input = mock_client.execute.call_args_list[5].args[1]["input"]
+    assert outgoing_update_input["id"] == "version-old"
+    assert outgoing_update_input["createdAt"] == "2026-04-28T00:00:00Z"
+
+
+@pytest.mark.asyncio
+async def test_score_set_champion_force_bypasses_evaluation_guard():
+    mcp = FastMCP("test-score-set-champion-force")
+    register_score_tools(mcp)
+    tool = await mcp.get_tool("plexus_score_set_champion")
+
+    mock_client = Mock()
+    mock_client.execute.side_effect = [
+        {
+            "getScore": {"id": "score-123", "championVersionId": "version-new"},
+            "getScoreVersion": {
+                "id": "version-new",
+                "scoreId": "score-123",
+                "configuration": "name: Test Score\n",
+                "metadata": None,
+                "createdAt": "2026-04-29T00:00:00Z",
+            },
+        },
+        {"updateScore": {"id": "score-123", "championVersionId": "version-new"}},
+        {"updateScoreVersion": {"id": "version-new", "isFeatured": "true", "metadata": "{}"}},
+    ]
+
+    with patch.dict(os.environ, {"PLEXUS_API_URL": "https://example.test", "PLEXUS_API_KEY": "secret"}), patch(
+        "plexus.cli.shared.client_utils.create_client",
+        return_value=mock_client,
+    ):
+        result = await tool.fn(score_id="score-123", version_id="version-new", force=True)
+
+    assert isinstance(result, dict), repr(result)
+    assert result["success"] is True
+    assert result["evaluationGuard"]["forced"] is True
+    assert "listEvaluationByScoreVersionIdAndCreatedAt" not in mock_client.execute.call_args_list[1].args[0]
+    update_version_input = mock_client.execute.call_args_list[2].args[1]["input"]
+    assert update_version_input["createdAt"] == "2026-04-29T00:00:00Z"

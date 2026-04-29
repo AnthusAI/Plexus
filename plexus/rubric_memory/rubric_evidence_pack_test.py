@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import date, datetime, timezone
+from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import Sequence
 
@@ -21,6 +21,7 @@ from plexus.rubric_memory import (
     RubricAuthority,
     RubricMemoryPreparedCorpusManager,
     RubricMemoryContextProvider,
+    RubricMemoryRecentBriefingProvider,
     RubricAuthorityResolver,
     RubricEvidencePack,
     RubricEvidencePackContextFormatter,
@@ -606,6 +607,121 @@ def test_s3_corpus_resolver_requires_scorecard_and_score_prefixes(monkeypatch):
         )
 
 
+@pytest.mark.asyncio
+async def test_recent_briefing_filters_to_recent_dated_s3_sources_and_ranks_recency(
+    monkeypatch,
+):
+    fake_s3 = _FakeS3Client()
+    fake_s3.put_text(
+        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/2026-03-01/old.md",
+        "Old scorecard policy.",
+    )
+    fake_s3.put_text(
+        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/2026-04-27/recent-scorecard.md",
+        "Recent scorecard policy.",
+    )
+    fake_s3.put_text(
+        "SelectQuote HCS Medium-Risk/Medication Review.knowledge-base/2026-04-28/recent-prefix.md",
+        "Recent prefix medication review policy.",
+    )
+    fake_s3.put_text(
+        "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/2026-04-28/recent-score.md",
+        "Recent score dosage policy.",
+    )
+    fake_s3.put_text(
+        "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/unknown-date/source.md",
+        "Unknown date note.",
+    )
+    monkeypatch.setenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", "rubric-bucket")
+
+    class _AuthorityResolver:
+        def __init__(self, _api_client):
+            pass
+
+        async def resolve(self, score_id):
+            assert score_id == "score-1"
+            return RubricAuthority(
+                score_version_id="score-version-1",
+                rubric_text="Official dosage rubric.",
+                score_code="classifier prompt",
+            )
+
+    class _RecentRetriever:
+        created_sources = []
+
+        def __init__(self, *, corpus_sources, **_kwargs):
+            self.corpus_sources = list(corpus_sources)
+            _RecentRetriever.created_sources = self.corpus_sources
+            self.last_prepared_corpus = SimpleNamespace(
+                status="reused",
+                corpus_root="/tmp/prepared/corpus",
+                fingerprint="recent-fingerprint",
+            )
+            self.last_query_plan = SimpleNamespace(
+                retrieval_phrases=["recent policy"]
+            )
+
+        async def retrieve(self, request):
+            manager = RubricMemoryPreparedCorpusManager()
+            snippets = []
+            for source in self.corpus_sources:
+                for obj in source.objects:
+                    relative_path = PurePosixPath(obj.key[len(source.prefix) :])
+                    snippets.append(
+                        _snippet(
+                            f"{source.scope_level}: {obj.key}",
+                            source_uri=f"s3://{source.bucket_name}/{obj.key}",
+                            scope_level=source.scope_level,
+                            source_timestamp=manager.infer_source_timestamp(
+                                relative_path
+                            ),
+                        )
+                    )
+            return snippets
+
+    monkeypatch.setattr(
+        "plexus.rubric_memory.recent.RubricAuthorityResolver",
+        _AuthorityResolver,
+    )
+    monkeypatch.setattr(
+        "plexus.rubric_memory.recent.BiblicusRubricEvidenceRetriever",
+        _RecentRetriever,
+    )
+
+    context = await RubricMemoryRecentBriefingProvider(
+        api_client=object(),
+        s3_client=fake_s3,
+        reference_date=date(2026, 4, 29),
+    ).retrieve_recent(
+        scorecard_identifier="SelectQuote HCS Medium-Risk",
+        score_identifier="Medication Review: Dosage",
+        score_id="score-1",
+        days=30,
+    )
+
+    assert context.machine_context["context_kind"] == "recent_briefing"
+    assert context.machine_context["since"] == "2026-03-30"
+    assert context.machine_context["latest_source_date"] == "2026-04-28"
+    assert context.machine_context["source_counts"] == {
+        "score": 1,
+        "prefix": 1,
+        "scorecard": 1,
+        "unknown": 0,
+    }
+    assert context.machine_context["skipped_unknown_date_count"] == 1
+    assert "2026-03-01/old.md" not in context.markdown_context
+    recent_section = context.markdown_context.split("## Recent Policy Memory", 1)[1]
+    assert recent_section.index("2026-04-28") < recent_section.index("2026-04-27")
+    assert "`score`" in recent_section
+    assert "`prefix`" in recent_section
+    assert "`scorecard`" in recent_section
+    assert all(
+        not obj.key.endswith("unknown-date/source.md")
+        for source in _RecentRetriever.created_sources
+        for obj in source.objects
+    )
+
+
 def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
     monkeypatch,
     tmp_path,
@@ -715,6 +831,68 @@ def test_rubric_memory_prewarm_cli_requires_s3_bucket(monkeypatch):
 
     assert result.exit_code != 0
     assert "AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME" in result.output
+
+
+def test_rubric_memory_recent_cli_reports_markdown_and_citations(monkeypatch):
+    class _FakeCitation:
+        def model_dump(self, mode="json"):
+            return {"id": "evidence:01:recent", "kind": "corpus_evidence"}
+
+    class _FakeContext:
+        markdown_context = "# Recent Rubric Memory Briefing\nApr 28 update\n"
+        citation_index = [_FakeCitation()]
+        machine_context = {"context_kind": "recent_briefing"}
+        diagnostics = [{"kind": "recent_rubric_memory"}]
+
+    class _FakeProvider:
+        def __init__(self, api_client):
+            self.api_client = api_client
+
+        async def retrieve_recent(self, **kwargs):
+            assert kwargs["score_id"] == "score-1"
+            assert kwargs["days"] == 30
+            assert kwargs["query"] == "SME update"
+            return _FakeContext()
+
+    monkeypatch.setenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", "rubric-bucket")
+    monkeypatch.setattr(
+        "plexus.cli.rubric_memory.commands.create_client",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.rubric_memory.commands.memoized_resolve_scorecard_identifier",
+        lambda _client, _scorecard: "scorecard-1",
+    )
+    monkeypatch.setattr(
+        "plexus.cli.rubric_memory.commands.memoized_resolve_score_identifier",
+        lambda _client, _scorecard_id, _score: "score-1",
+    )
+    monkeypatch.setattr(
+        "plexus.cli.rubric_memory.commands.RubricMemoryRecentBriefingProvider",
+        _FakeProvider,
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "rubric-memory",
+            "recent",
+            "--scorecard",
+            "SelectQuote HCS Medium-Risk",
+            "--score",
+            "Medication Review: Dosage",
+            "--query",
+            "SME update",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["machine_context"]["context_kind"] == "recent_briefing"
+    assert payload["citation_index"][0]["id"] == "evidence:01:recent"
+    assert "Apr 28 update" in payload["markdown_context"]
 
 
 def test_query_planner_derives_retrieval_phrases_from_request():
