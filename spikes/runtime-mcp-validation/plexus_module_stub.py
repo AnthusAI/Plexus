@@ -626,6 +626,14 @@ class HandleNamespace(Namespace):
             raise PlexusStubError("HANDLE_NOT_FOUND", f"No handle fixture for {handle_id!r}")
         return _copy(self._ctx.handles[handle_id])
 
+    def peek(self, args: Any = None) -> dict[str, Any]:
+        parsed = _args(args)
+        self._call("peek", parsed)
+        handle_id = parsed.get("id") or parsed.get("handle_id")
+        if handle_id not in self._ctx.handles:
+            raise PlexusStubError("HANDLE_NOT_FOUND", f"No handle fixture for {handle_id!r}")
+        return _copy(self._ctx.handles[handle_id])
+
     def await_(self, args: Any = None) -> dict[str, Any]:
         parsed = _args(args)
         self._call("await", parsed)
@@ -661,6 +669,11 @@ class HandleNamespace(Namespace):
 
 
 class ProcedureNamespace(Namespace):
+    def list(self, args: Any = None) -> list[dict[str, Any]]:
+        parsed = _args(args)
+        self._call("list", parsed)
+        return _copy(self._ctx.data["procedures"])
+
     def info(self, args: Any = None) -> dict[str, Any]:
         parsed = _args(args)
         self._call("info", parsed)
@@ -698,6 +711,34 @@ class ProcedureNamespace(Namespace):
         limit = int(parsed.get("limit", len(messages)))
         return _copy(list(reversed(messages[:limit])))
 
+    def run(self, args: Any = None) -> dict[str, Any]:
+        parsed = _args(args)
+        self._call("run", parsed)
+        procedure_id = parsed.get("procedure_id") or parsed.get("id")
+        procedure = _first(
+            self._ctx.data["procedures"],
+            "id",
+            procedure_id,
+            "PROCEDURE_NOT_FOUND",
+        )
+        handle_id = f"handle_{procedure['id']}"
+        handle = {
+            "id": handle_id,
+            "kind": "procedure",
+            "status": "running",
+            "procedure_id": procedure["id"],
+        }
+        self._ctx.handles[handle_id] = handle
+        self._ctx.emit_stream(
+            {
+                "event": "handle_created",
+                "handle_id": handle_id,
+                "kind": "procedure",
+                "status": "running",
+            }
+        )
+        return _copy(handle)
+
 
 class ApiNamespace(Namespace):
     def list(self, args: Any = None) -> dict[str, list[str]]:
@@ -714,8 +755,8 @@ class ApiNamespace(Namespace):
             "plexus.cost": ["analysis"],
             "plexus.dataset": ["build_from_feedback_window", "check_associated"],
             "plexus.report": ["configurations_list", "run"],
-            "plexus.handle": ["status", "await", "cancel"],
-            "plexus.procedure": ["info", "chat_sessions", "chat_messages"],
+            "plexus.handle": ["peek", "status", "await", "cancel"],
+            "plexus.procedure": ["info", "list", "chat_sessions", "chat_messages", "run"],
         }
 
 

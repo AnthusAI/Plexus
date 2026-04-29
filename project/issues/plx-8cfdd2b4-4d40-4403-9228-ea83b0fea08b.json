@@ -1,0 +1,25 @@
+{
+  "id": "plx-8cfdd2b4-4d40-4403-9228-ea83b0fea08b",
+  "title": "Tighten false-negative summary prompt/checker after empirical miss",
+  "description": "Address empirical miss from provider-full-openai-gpt54-mini-budgetcontract-005 by clarifying false_negative_feedback_summary fixture field guidance (item_id/pattern/comment) and adding non-empty representative_item_id validation in harness checks/tests.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7f7e0caa-431b-432a-8866-1db96f6d595a",
+      "author": "ryan",
+      "text": "Implemented and verified fix for empirical false_negative_feedback_summary miss. Changes: (1) task prompt now explicitly states feedback row fields item_id/pattern/comment and how to derive representative_item_id, (2) expected_outcome now requires non-empty label and representative_item_id, (3) harness structured_summary checker enforces non-empty configured fields, (4) added tests for prompt field clarity and non-empty representative_item_id rejection. Verification: python -m pytest spikes/runtime-mcp-validation/test_harness_report.py; python -m ruff check spikes/runtime-mcp-validation/harness.py spikes/runtime-mcp-validation/test_harness_report.py; empirical rerun readiness-gpt54mini-fn-summary-promptfix-001 (pass); full rerun provider-full-openai-gpt54-mini-budgetcontract-006 (15/15 first-try passes).",
+      "created_at": "2026-04-29T17:37:16.419158Z"
+    }
+  ],
+  "created_at": "2026-04-29T17:37:09.569307Z",
+  "updated_at": "2026-04-29T17:37:21.323118Z",
+  "closed_at": "2026-04-29T17:37:21.323118Z",
+  "custom": {}
+}
