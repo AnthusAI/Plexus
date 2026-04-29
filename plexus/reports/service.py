@@ -554,6 +554,29 @@ _PROGRAMMATIC_IN_FLIGHT_TASK_STATUSES = {"PENDING", "RUNNING"}
 _PROGRAMMATIC_FAILURE_TASK_STATUSES = {"FAILED", "ERROR", "CANCELLED", "CANCELED"}
 
 
+class ReportGenerationCancelled(RuntimeError):
+    """Raised when a report worker observes a dashboard cancellation request."""
+
+
+def _is_task_cancelled(task: Optional[Task]) -> bool:
+    return str(getattr(task, "status", "") or "").upper() in {"CANCELLED", "CANCELED"}
+
+
+def _raise_if_task_cancelled(
+    *,
+    task_id: Optional[str],
+    client: PlexusDashboardClient,
+    log_prefix: str,
+) -> None:
+    if not task_id:
+        return
+    task = Task.get_by_id(task_id, client)
+    if _is_task_cancelled(task):
+        message = f"Report generation cancelled for task {task_id}"
+        logger.info("%s %s", log_prefix, message)
+        raise ReportGenerationCancelled(message)
+
+
 def _get_programmatic_config_id(account_id: str, client: PlexusDashboardClient) -> str:
     """Get or create a sentinel ReportConfiguration for programmatic block results."""
     global _programmatic_config_id_cache
@@ -1655,6 +1678,12 @@ def _generate_report_core(
     first_block_error_message: Optional[str] = None
 
     try:
+        _raise_if_task_cancelled(
+            task_id=getattr(tracker, "task_id", None),
+            client=client,
+            log_prefix=log_prefix,
+        )
+
         # === 1. Load ReportConfiguration ===
         # Stage 1: Loading Configuration (Implicitly started by tracker init)
         report_config_model = _load_report_configuration(client, report_config_id)
@@ -1769,6 +1798,11 @@ def _generate_report_core(
         initial_attached_files: Optional[str] = None # Or json.dumps([]) if you prefer an empty list string
 
         for i, block_def in enumerate(block_definitions):
+            _raise_if_task_cancelled(
+                task_id=getattr(tracker, "task_id", None),
+                client=client,
+                log_prefix=log_prefix,
+            )
             position = block_def.get("position", i)
             block_class_name = block_def["class_name"]
             
@@ -1912,6 +1946,9 @@ def _generate_report_core(
         # Return the report_id and the first specific error message (or None if successful)
         return report_id, first_block_error_message
 
+    except ReportGenerationCancelled:
+        raise
+
     except Exception as e:
         # This catches critical errors from Task fetching, Tracker init, Metadata extraction, OR core logic.
         final_error_msg = f"Report generation failed: {e}"
@@ -2051,6 +2088,20 @@ def generate_report(task_id: str):
             # Use the specific error message from the core logic
             tracker.fail(first_block_error_message)
             logger.error(f"{log_prefix} Report generation task finished with errors: {first_block_error_message}")
+
+    except ReportGenerationCancelled as e:
+        logger.info(f"{log_prefix} {e}")
+        try:
+            if 'task' in locals() and task:
+                task.update(
+                    status="CANCELLED",
+                    errorMessage=str(e),
+                    completedAt=datetime.now(timezone.utc).isoformat(),
+                )
+        except Exception as update_err:
+            logger.warning(
+                f"{log_prefix} Could not preserve CANCELLED task status: {update_err}"
+            )
 
     except Exception as e:
         # This catches critical errors from Task fetching, Tracker init, Metadata extraction, OR core logic.
