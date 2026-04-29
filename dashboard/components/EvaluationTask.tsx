@@ -942,9 +942,12 @@ const DetailContent = React.memo(({
   }
 
   const selectFirstFilteredScoreResult = (itemIds: string[]) => {
-    const firstItemId = itemIds.find(Boolean)
+    const normalizedItemIds = itemIds
+      .map(id => String(id).trim())
+      .filter(Boolean)
+    const firstItemId = normalizedItemIds.find(Boolean)
     if (!firstItemId) return
-    const matching = parsedScoreResults.find(result => result.itemId === firstItemId)
+    const matching = parsedScoreResults.find(result => String(result.itemId ?? '').trim() === firstItemId)
     if (matching) {
       onSelectScoreResult?.(matching.id)
     }
@@ -976,25 +979,35 @@ const DetailContent = React.memo(({
     )
 
     const itemIds: string[] = []
+    const fallbackFeedbackItemIds: string[] = []
     let missingCount = 0
 
     filteredClassifications.forEach(classification => {
-      if (!classification.item_id) {
+      const normalizedItemId = classification.item_id ? String(classification.item_id).trim() : null
+      const normalizedFeedbackItemId = classification.feedback_item_id ? String(classification.feedback_item_id).trim() : null
+
+      if (!normalizedItemId && !normalizedFeedbackItemId) {
         missingCount += 1
         return
       }
 
-      itemIds.push(classification.item_id)
+      if (normalizedItemId) {
+        itemIds.push(normalizedItemId)
+      } else if (normalizedFeedbackItemId) {
+        fallbackFeedbackItemIds.push(normalizedFeedbackItemId)
+      }
     })
+
+    const selectedIds = itemIds.length > 0 ? itemIds : fallbackFeedbackItemIds
 
     setSelectedTopicItemIds(null)
     setSelectedTopicLabel(null)
     setSelectedCategoryKey(categoryKey)
     setSelectedCategoryLabel(categoryLabel)
-    setSelectedCategoryItemIds(Array.from(new Set(itemIds)))
+    setSelectedCategoryItemIds(Array.from(new Set(selectedIds)))
     setCategoryMissingItemIdCount(missingCount)
     setSelectedPredictedActual({ predicted: null, actual: null })
-    selectFirstFilteredScoreResult(itemIds)
+    selectFirstFilteredScoreResult(selectedIds)
   }
 
   const clearCategoryFilter = () => {
@@ -1685,12 +1698,13 @@ const DetailContent = React.memo(({
                                 const summary = misclassificationCategoryBreakdown.categorySummaries?.[row.key]
                                 const summaryText = summary?.category_summary_text
                                 const patterns = Array.isArray(summary?.top_patterns) ? summary?.top_patterns : []
-                                const itemCount = summary?.item_count ?? 0
                                 const categoryClassifications = (misclassificationCategoryBreakdown.itemClassifications ?? [])
                                   .filter(classification => classification.primary_category === row.key)
+                                const itemCount = summary?.item_count ?? categoryClassifications.length ?? 0
                                 const itemsWithMissingId = categoryClassifications
                                   .filter(classification => !classification.item_id)
                                   .length
+                                if (itemCount <= 0) return null
                                 return (
                                   <div key={`category-summary-${row.key}`} className="rounded-md bg-muted/40 p-2 space-y-1.5">
                                     <div className="flex items-center justify-between gap-2 mb-1">
@@ -1701,7 +1715,7 @@ const DetailContent = React.memo(({
                                       <span className="text-xs text-muted-foreground shrink-0">{itemCount} item(s)</span>
                                     </div>
                                     <div className="text-xs text-foreground">
-                                      {summaryText || 'No items in this category for this run.'}
+                                      {summaryText || 'Summary unavailable for this category.'}
                                     </div>
                                     {patterns.length > 0 && (
                                       <div className="mt-1 text-xs text-muted-foreground">
@@ -2735,7 +2749,6 @@ ${categoryLines}${mechanicalLines}
           </div>
           {variant !== 'detail' && evaluationNotes && (
             <div className="mt-1">
-              <div className="mb-1 text-xs font-medium text-foreground">Note</div>
               <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                 p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
@@ -2912,6 +2925,7 @@ ${categoryLines}${mechanicalLines}
             )}
             {evaluationNotes && (
               <div className="mt-1">
+                <div className="mb-1 text-xs font-medium text-foreground">Note</div>
                 <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                   p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,

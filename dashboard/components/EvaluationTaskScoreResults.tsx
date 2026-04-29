@@ -41,6 +41,33 @@ export function EvaluationTaskScoreResults({
   navigationControls,
   isLoading = false
 }: EvaluationTaskScoreResultsProps) {
+  const toNormalized = (value: unknown): string | null => {
+    if (value === null || value === undefined) return null
+    const normalized = String(value).trim()
+    return normalized.length > 0 ? normalized : null
+  }
+
+  const getResultFilterKeys = (result: ScoreResultData): string[] => {
+    const keys = new Set<string>()
+    const itemId = toNormalized(result.itemId)
+    if (itemId) keys.add(itemId)
+
+    const metadataItemId = toNormalized((result as any)?.metadata?.item_id)
+    if (metadataItemId) keys.add(metadataItemId)
+
+    const feedbackItemId = toNormalized((result as any)?.feedbackItem?.id)
+    if (feedbackItemId) keys.add(feedbackItemId)
+
+    if (Array.isArray(result.itemIdentifiers)) {
+      result.itemIdentifiers.forEach((identifier: any) => {
+        const value = toNormalized(identifier?.value)
+        if (value) keys.add(value)
+      })
+    }
+
+    return Array.from(keys)
+  }
+
   console.log('EvaluationTaskScoreResults render:', {
     resultCount: results.length,
     firstResult: results[0],
@@ -104,6 +131,10 @@ export function EvaluationTaskScoreResults({
       }
     });
 
+    const normalizedSelectedItemIds = selectedItemIds
+      ? new Set(selectedItemIds.map(toNormalized).filter((id): id is string => id !== null))
+      : null
+
     const filtered = results.filter(result => {
       if (filters.showCorrect !== null && result.metadata.correct !== filters.showCorrect) {
         return false
@@ -117,9 +148,10 @@ export function EvaluationTaskScoreResults({
         return false
       }
 
-      if (selectedItemIds && selectedItemIds.length > 0 &&
-          !selectedItemIds.includes(result.itemId ?? '')) {
-        return false
+      if (normalizedSelectedItemIds && normalizedSelectedItemIds.size > 0) {
+        const resultKeys = getResultFilterKeys(result)
+        const hasMatch = resultKeys.some(key => normalizedSelectedItemIds.has(key))
+        if (!hasMatch) return false
       }
 
       return true
@@ -264,4 +296,4 @@ export function EvaluationTaskScoreResults({
       </div>
     </div>
   )
-} 
+}
