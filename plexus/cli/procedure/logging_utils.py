@@ -218,7 +218,12 @@ def capture_tactus_dspy_context_for_agent(
     if user_message:
         messages.append({"role": "user", "content": str(user_message)})
 
-    context = f"turn {turn_count}" if turn_count is not None else ""
+    context_parts = []
+    if turn_count is not None:
+        context_parts.append(f"turn {turn_count}")
+    if user_message:
+        context_parts.append(str(user_message)[:300])
+    context = " | ".join(context_parts)
     return capture_llm_context_for_agent(
         agent_name=agent_name,
         chat_history=messages,
