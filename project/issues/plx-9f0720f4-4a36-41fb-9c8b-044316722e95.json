@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Correction after deployment-model reminder:\n- A direct CDK deploy was started from the original implementation plan, but this project deploys Amplify Gen2 changes through CI/CD.\n- The local cdk deploy process was terminated.\n- CloudFormation cancel-update-stack was issued for plexus-metrics-aggregation-production in us-west-2.\n- Stack reached UPDATE_ROLLBACK_COMPLETE.\n- Remaining work will stay on the branch as source/test changes for CI/CD; no direct backfill/deploy will be run from this session.",
       "created_at": "2026-04-29T17:56:42.522241Z"
+    },
+    {
+      "id": "24eb7e38-4100-4a77-8455-93a9c64a4665",
+      "author": "ryan",
+      "text": "Branch status:\n- Committed fix as efe40d303 on bugfix/feedbackitem-metrics-aggregation.\n- Pushed branch to origin.\n- Local targeted tests passed after rollback: python -m pytest plexus/cli/metrics/aggregation_test.py infrastructure/lambda_functions/metrics_aggregator/test_procedure_metrics.py infrastructure/lambda_functions/metrics_aggregator/test_feedback_metrics.py.\n- gh run list found no GitHub Actions runs for the branch push. A PR into develop is needed to run the normal CI/CD path; PR was not opened because repo policy requires explicit confirmation.",
+      "created_at": "2026-04-29T17:57:52.027223Z"
     }
   ],
   "created_at": "2026-04-29T17:43:04.369433Z",
-  "updated_at": "2026-04-29T17:56:42.522241Z",
+  "updated_at": "2026-04-29T17:57:52.027223Z",
   "closed_at": null,
   "custom": {}
 }
