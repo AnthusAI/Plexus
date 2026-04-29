@@ -2682,7 +2682,7 @@ async def _create_version_from_code_with_parent(
             'scoreId': score.id,
             'configuration': (code_content or '').strip(),
             'note': note or 'Updated via MCP score update tool',
-            'isFeatured': "true"  # Mark as featured by default
+            'isFeatured': "false"
         }
         
         # Add guidelines if provided
