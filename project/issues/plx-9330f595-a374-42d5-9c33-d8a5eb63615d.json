@@ -280,10 +280,16 @@
       "author": "ryan",
       "text": "Added Docker context fix for ConsoleChatResponder: re-include MCP Python tool modules so the cloud in-process dispatcher can import full Plexus MCP tools. Added regression test dashboard/amplify/functions/consoleRunWorker/test_docker_context.py. Focused checks passed: 85 passed, 9 warnings.",
       "created_at": "2026-04-29T18:42:45.844187Z"
+    },
+    {
+      "id": "3eeb120b-f8f4-4b8b-99cf-c00476e18f12",
+      "author": "ryan",
+      "text": "Post-main cloud smoke still shows Console dispatcher backed by only core/score-editor tools in Lambda. Locally the MCP server registers 52 tools, so I am adding worker image hardening/verification for MCP package availability and explicit MCP PYTHONPATH before another deploy.",
+      "created_at": "2026-04-29T19:47:15.077276Z"
     }
   ],
   "created_at": "2026-04-27T12:42:41.687340Z",
-  "updated_at": "2026-04-29T18:42:45.844187Z",
+  "updated_at": "2026-04-29T19:47:15.077276Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
