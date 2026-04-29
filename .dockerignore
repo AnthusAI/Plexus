@@ -33,6 +33,12 @@ project/
 *.jsonl.gz
 *.jsonl.gz.gz
 
+# ConsoleChatResponder imports the in-process Plexus MCP tool modules at runtime.
+# Keep non-Python MCP artifacts excluded by the broad rules above.
+!MCP/
+!MCP/**/
+!MCP/**/*.py
+
 # IDE
 .vscode/
 .cursor/
