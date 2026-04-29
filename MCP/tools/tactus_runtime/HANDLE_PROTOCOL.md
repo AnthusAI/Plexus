@@ -51,14 +51,13 @@ Two complementary mechanisms (per `plx-247588`):
 
 For runs that complete in a "feel-tolerable" timeframe (single-digit
 minutes), `execute_tactus` blocks while progress events stream up to the
-MCP client through the existing `PlexusTraceSink` /
-`_PlexusTraceLogBridge` machinery in
-`plexus/cli/procedure/tactus_adapters/trace.py`. Cost events flow on the
-same channel.
+MCP client through FastMCP `Context` progress and info messages. Tactus
+runtime log events flow through the same stream handler shape used by
+`_PlexusTraceLogBridge`, and Plexus runtime API calls emit progress messages
+as they are invoked.
 
 Response envelope additions:
 
-- `partial = true` while progress is in flight.
 - Streaming notifications carry `{ kind, message, payload, cost }` shaped
   events.
 - Final envelope is the same `ok`/`value`/`error`/`cost`/`api_calls` shape
@@ -123,7 +122,6 @@ dispatch.
 
 ## Remaining Work
 
-- Streaming progress notifications still need to be wired to MCP clients.
 - Evaluation worker-side cancellation remains cooperative beyond process
   termination and Evaluation record updates; deeper in-process checkpoints can
   be added if evaluations begin running without a killable process boundary.
