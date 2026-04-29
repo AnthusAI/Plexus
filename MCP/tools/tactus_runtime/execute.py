@@ -17,6 +17,7 @@ from typing import Annotated, Any, Callable
 
 from fastmcp import Context, FastMCP
 from pydantic import Field
+from plexus.runtime_budget import RuntimeBudgetSpec
 
 logger = logging.getLogger(__name__)
 
@@ -767,25 +768,12 @@ class BudgetSpec:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "BudgetSpec":
-        wallclock_value = value.get("wallclock_seconds")
-        if wallclock_value is None:
-            wallclock_value = value.get("wallclock")
-        required = {
-            "usd": value.get("usd"),
-            "wallclock_seconds": wallclock_value,
-            "depth": value.get("depth"),
-            "tool_calls": value.get("tool_calls"),
-        }
-        missing = [key for key, item in required.items() if item is None]
-        if missing:
-            raise ValueError(
-                "budget requires explicit " + ", ".join(sorted(missing))
-            )
+        spec = RuntimeBudgetSpec.from_dict(value)
         return cls(
-            usd=required["usd"],
-            wallclock_seconds=required["wallclock_seconds"],
-            depth=required["depth"],
-            tool_calls=required["tool_calls"],
+            usd=spec.usd,
+            wallclock_seconds=spec.wallclock_seconds,
+            depth=spec.depth,
+            tool_calls=spec.tool_calls,
         )
 
     def to_dict(self) -> dict[str, Any]:
