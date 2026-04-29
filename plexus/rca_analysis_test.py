@@ -681,8 +681,8 @@ def test_explainer_compacts_wordy_rationale(monkeypatch):
     def fake_invoke(*, call_site, **kwargs):
         return "\n".join([
             "RATIONALE_PARAGRAPH: Executive Summary: The item failed because the score "
-            "treated a generic medication mention as confirmation. The current rubric "
-            "requires a clearer medication-specific link. This extra sentence should be removed.",
+            + "treated a generic medication mention as confirmation. The current rubric "
+            + "requires a clearer medication-specific link. This extra sentence should be removed.",
             "EVIDENCE_QUOTE: generic medication mention",
             "CONFIG_FIXABILITY: likely_fixable",
             "CITATION_IDS:",

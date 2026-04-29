@@ -867,7 +867,7 @@ def test_rubric_memory_recent_cli_reports_markdown_and_citations(monkeypatch):
     monkeypatch.setenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", "rubric-bucket")
     monkeypatch.setattr(
         "plexus.cli.rubric_memory.commands.create_client",
-        lambda: object(),
+        object,
     )
     monkeypatch.setattr(
         "plexus.cli.rubric_memory.commands.memoized_resolve_scorecard_identifier",
