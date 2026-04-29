@@ -62,16 +62,16 @@ end
 
 local history_context = ""
 local history_start = 1
-if #history > 24 then
-  history_start = #history - 23
+if #history > 8 then
+  history_start = #history - 7
 end
 for i = history_start, #history do
   local msg = history[i]
   local role = string.upper(tostring((msg and msg.role) or "UNKNOWN"))
   local content = (msg and msg.content) or ""
   if type(content) == "string" and content ~= "" then
-    if #content > 800 then
-      content = string.sub(content, 1, 800) .. "..."
+    if #content > 180 then
+      content = string.sub(content, 1, 180) .. "..."
     end
     history_context = history_context .. role .. ": " .. content .. "\n"
   end
@@ -203,13 +203,9 @@ end
 
 State.set("stage", "responding")
 
-local assistant_prompt = "You are the Plexus Console assistant in an ongoing chat.\n\n" ..
-                         "Rules:\n" ..
-                         "- Treat the latest user message as part of the same ongoing conversation.\n" ..
-                         "- Use prior turns when the user refers to earlier context (pronouns, 'it', 'that', follow-ups).\n" ..
-                         "- Do not ask the user to repeat something already present in context.\n" ..
-                         "- Ask one concise clarifying question only when context is genuinely insufficient.\n" ..
-                         "- Keep responses concise and practical.\n\n" ..
+local assistant_prompt = "You are the Plexus Console assistant in an ongoing engineering chat.\n" ..
+                         "Use prior turns for continuity and respond concisely with concrete help.\n" ..
+                         "Ask one short clarifying question only if context is insufficient.\n\n" ..
                          "Latest user message:\n" .. latest_user_prompt .. "\n\n" ..
                          "Previous user message before latest (if any):\n" .. (previous_user_prompt or "") .. "\n\n" ..
                          "Recent conversation context (oldest to newest):\n" .. history_context .. "\n\n" ..

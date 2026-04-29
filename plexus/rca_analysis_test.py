@@ -1,13 +1,21 @@
+import json
+import sys
+import types
+
 from plexus.rca_analysis import (
     CONFIG_FIXABILITY_OPTIONS,
     MECHANICAL_SUBTYPES,
     MISCLASSIFICATION_CATEGORIES,
     MISCLASSIFICATION_EXCLUDED_ANALYSES,
     MISCLASSIFICATION_LABEL_PROVENANCE_SOURCES,
+    _invoke_rca_openai_text,
+    build_rca_analysis_failure_classification,
     build_misclassification_analysis_summary,
     build_misclassification_classification_contract,
     build_misclassification_item_context,
     classify_misclassification_item,
+    explain_misclassification_item_classification,
+    extract_misclassification_evidence_flags,
     normalize_best_evidence_source,
 )
 
@@ -523,3 +531,186 @@ def test_misclassification_analysis_summary_contains_v2_contract_fields():
         assert isinstance(topic["example_item_ids"], list)
     mech_node = next(node for node in summary["category_hierarchy"] if node["category_key"] == "mechanical_malfunction")
     assert "mechanical_subtype_totals" in mech_node
+
+
+def test_build_rca_analysis_failure_classification_preserves_failed_item():
+    context = _base_item_context()
+    context["rubric_memory"] = {
+        "citation_index": [{"id": "rubric:version-1"}],
+        "diagnostics": [{"code": "ok"}],
+    }
+
+    result = build_rca_analysis_failure_classification(
+        item_context=context,
+        stage="evidence_flag_extraction",
+        exc=ValueError("empty model response"),
+    )
+
+    assert result["primary_category"] == "mechanical_malfunction"
+    assert result["mechanical_subtype"] == "rca_analysis_failure"
+    assert result["config_fixability"] == "blocked_by_mechanical"
+    assert result["rca_failure"]["failed_stage"] == "evidence_flag_extraction"
+    assert result["rca_failure"]["exception_type"] == "ValueError"
+    assert result["citation_ids"] == ["rubric:version-1"]
+    assert result["citation_validation"]["missing_ids"] == []
+
+
+def test_summary_retains_rca_failure_and_rubric_memory_state():
+    context = _base_item_context()
+    context["rubric_memory"] = {
+        "citation_index": [{"id": "rubric:version-1"}],
+        "diagnostics": [{"code": "rubric_memory_unavailable"}],
+    }
+    failure = {
+        "failed_stage": "explainer",
+        "exception_type": "ValueError",
+        "message": "invalid explainer output",
+    }
+
+    summary = build_misclassification_analysis_summary(
+        [],
+        item_classifications_all=[
+            {
+                "feedback_item_id": "fb-1",
+                "item_id": "item-1",
+                "timestamp": "2026-04-04T10:00:00Z",
+                "primary_category": "mechanical_malfunction",
+                "confidence": "low",
+                "mechanical_subtype": "rca_analysis_failure",
+                "config_fixability": "blocked_by_mechanical",
+                "misclassification_item_context": context,
+                "rca_failure": failure,
+                "rca_failures": [failure],
+            }
+        ],
+        analysis_scope={
+            "candidate_items_total": 1,
+            "classified_items_total": 1,
+            "texts_analyzed_total": 1,
+            "topics_found": 0,
+            "rca_item_failures_total": 1,
+        },
+    )
+
+    row = summary["item_classifications_all"][0]
+    assert row["rca_failure"] == failure
+    assert row["rca_failures"] == [failure]
+    assert row["rubric_memory_available"] is True
+    assert row["citation_index_count"] == 1
+    assert row["rubric_memory_diagnostics"] == [{"code": "rubric_memory_unavailable"}]
+    assert summary["analysis_scope"]["rca_item_failures_total"] == 1
+
+
+def test_extract_evidence_flags_retries_invalid_output(monkeypatch):
+    calls = []
+
+    def fake_invoke(*, call_site, **kwargs):
+        calls.append(call_site)
+        if len(calls) == 1:
+            return "{}"
+        return "\n".join([
+            "FLAG_EXTERNAL_INFORMATION_GAP: false",
+            "FLAG_GUIDELINE_GAP: false",
+            "FLAG_SYSTEM_MISSING_CONTEXT: false",
+            "FLAG_RUNTIME_OR_PARSER_FAILURE: true",
+            "FLAG_INVALID_OUTPUT_CLASS: false",
+            "FLAG_PREPROCESSING_EVIDENCE_LOSS: false",
+            "BEST_EVIDENCE_SOURCE: none",
+            "BEST_EVIDENCE_QUOTE:",
+        ])
+
+    monkeypatch.setattr("plexus.rca_analysis._invoke_rca_openai_text", fake_invoke)
+
+    result = extract_misclassification_evidence_flags(item_context=_base_item_context())
+
+    assert result["runtime_or_parsing_failure"] is True
+    assert calls == ["rca_evidence_flags", "rca_evidence_flags_repair"]
+
+
+def test_explainer_retries_invalid_output(monkeypatch):
+    calls = []
+
+    def fake_invoke(*, call_site, **kwargs):
+        calls.append(call_site)
+        if len(calls) == 1:
+            return "{}"
+        return "\n".join([
+            "RATIONALE_PARAGRAPH: The deterministic classification is preserved.",
+            "EVIDENCE_QUOTE: Runtime error: timeout",
+            "CONFIG_FIXABILITY: blocked_by_mechanical",
+            "CITATION_IDS:",
+        ])
+
+    monkeypatch.setattr("plexus.rca_analysis._invoke_rca_openai_text", fake_invoke)
+
+    classification = build_rca_analysis_failure_classification(
+        item_context=_base_item_context(),
+        stage="evidence_flag_extraction",
+        exc=ValueError("empty"),
+    )
+    result = explain_misclassification_item_classification(
+        item_context=_base_item_context(),
+        classification=classification,
+    )
+
+    assert result["config_fixability"] == "blocked_by_mechanical"
+    assert calls == ["rca_triage_explainer", "rca_triage_explainer_repair"]
+
+
+def test_invoke_rca_openai_text_captures_context(tmp_path, monkeypatch):
+    class FakeResponses:
+        def create(self, **kwargs):
+            return types.SimpleNamespace(output_text="ok")
+
+    class FakeOpenAI:
+        def __init__(self):
+            self.responses = FakeResponses()
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_DIR", str(tmp_path))
+
+    result = _invoke_rca_openai_text(
+        system="system prompt",
+        messages=[{"role": "user", "content": "hello"}],
+        max_output_tokens=10,
+        call_site="rca_unit",
+    )
+
+    assert result == "ok"
+    json_files = list(tmp_path.glob("*.json"))
+    markdown_files = list(tmp_path.glob("*.md"))
+    assert len(json_files) == 1
+    assert len(markdown_files) == 1
+    payload = json.loads(json_files[0].read_text())
+    assert payload["agent_name"] == "RCA"
+    assert payload["call_site"] == "rca_unit"
+    assert [message["role"] for message in payload["messages"]] == ["SYSTEM", "USER"]
+
+
+def test_invoke_rca_openai_text_retries_empty_response(tmp_path, monkeypatch):
+    outputs = ["", "repaired"]
+
+    class FakeResponses:
+        def create(self, **kwargs):
+            return types.SimpleNamespace(output_text=outputs.pop(0))
+
+    class FakeOpenAI:
+        def __init__(self):
+            self.responses = FakeResponses()
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_DIR", str(tmp_path))
+
+    result = _invoke_rca_openai_text(
+        system="system prompt",
+        messages=[{"role": "user", "content": "hello"}],
+        max_output_tokens=10,
+        call_site="rca_unit_empty",
+    )
+
+    assert result == "repaired"
+    payloads = [json.loads(path.read_text()) for path in tmp_path.glob("*.json")]
+    assert {payload["call_site"] for payload in payloads} == {
+        "rca_unit_empty",
+        "rca_unit_empty_retry_empty",
+    }

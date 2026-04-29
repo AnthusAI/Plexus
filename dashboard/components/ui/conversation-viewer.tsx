@@ -22,6 +22,11 @@ import {
   PromptInput,
   PromptInputBody,
   PromptInputFooter,
+  PromptInputSelect,
+  PromptInputSelectContent,
+  PromptInputSelectItem,
+  PromptInputSelectTrigger,
+  PromptInputSelectValue,
   PromptInputSubmit,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input"
@@ -40,6 +45,7 @@ import {
   PanelLeftClose,
   ChevronDownIcon,
   MoreHorizontal,
+  Pencil,
   Trash2,
   AlertCircle,
   Plus
@@ -56,6 +62,15 @@ import {
   parseMessageMetadata,
 } from "@/lib/procedure-hitl"
 import { cn } from "@/lib/utils"
+import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 const EvaluationToolOutput = React.lazy(() => import('./evaluation-tool-output'))
 const STANDARD_SESSION_CATEGORY = 'Optimize'
@@ -64,6 +79,19 @@ const EVALUATION_TOOL_NAMES = new Set([
   'plexus_evaluation_run',
   'plexus_evaluation_info',
 ])
+
+const CONSOLE_CHAT_MODEL_OPTIONS = [
+  { value: 'gpt-5.4', label: 'GPT-5.4' },
+  { value: 'gpt-5.3', label: 'GPT-5.3' },
+  { value: 'gpt-5.2', label: 'GPT-5.2' },
+  { value: 'gpt-5.1', label: 'GPT-5.1' },
+  { value: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
+  { value: 'gpt-5-mini', label: 'GPT-5 mini' },
+  { value: 'gpt-5.4-nano', label: 'GPT-5.4 nano' },
+  { value: 'gpt-5-nano', label: 'GPT-5 nano' },
+] as const
+
+const DEFAULT_CONSOLE_CHAT_MODEL = 'gpt-5.4-mini'
 
 // Types for the conversation data
 export interface ChatMessage {
@@ -96,16 +124,26 @@ export interface ChatSession {
   procedureId?: string
   name?: string
   category?: string
+  metadata?: any
   createdAt: string
   updatedAt?: string
   messageCount?: number
 }
 
-type ConversationRow = {
+type MessageConversationRow = {
   id: string
   from: 'assistant' | 'user'
   message: ChatMessage
+  kind: 'message'
 }
+
+type ThinkingConversationRow = {
+  id: string
+  from: 'assistant'
+  kind: 'thinking'
+}
+
+type ConversationRow = MessageConversationRow | ThinkingConversationRow
 
 type PendingAssistantState = {
   requestedAt: string
@@ -181,6 +219,72 @@ const parseJsonField = (value: unknown): any => {
   } catch {
     return undefined
   }
+}
+
+const parseSessionMetadata = (value: unknown): Record<string, any> => {
+  const parsed = parseJsonField(value)
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return parsed as Record<string, any>
+  }
+  return {}
+}
+
+const serializeSessionMetadata = (value: unknown): string | undefined => {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    return trimmed || undefined
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return undefined
+    }
+  }
+  return undefined
+}
+
+const getSessionDisplayName = (session: Pick<ChatSession, "id" | "name">): string => {
+  const explicitName = String(session.name || "").trim()
+  if (explicitName) {
+    return explicitName
+  }
+  const sessionId = String(session.id || "").trim()
+  if (!sessionId) {
+    return "New Chat"
+  }
+  return `Session ${sessionId.slice(0, 8)}`
+}
+
+const getSessionHeaderTitle = (session: Pick<ChatSession, "id" | "name" | "metadata">): string => {
+  const explicitName = String(session.name || "").trim()
+  if (explicitName) {
+    return explicitName
+  }
+  if (isHiddenUntilNamedSession(session)) {
+    return "New Chat"
+  }
+  const sessionId = String(session.id || "").trim()
+  if (!sessionId) {
+    return "New Chat"
+  }
+  return `Session ${sessionId.slice(0, 8)}`
+}
+
+const isHiddenUntilNamedSession = (session: Pick<ChatSession, "name" | "metadata">): boolean => {
+  const explicitName = String(session.name || "").trim()
+  if (explicitName) {
+    return false
+  }
+  const metadata = parseSessionMetadata(session.metadata)
+  const consoleMetadata = metadata.console
+  if (!consoleMetadata || typeof consoleMetadata !== "object") {
+    return false
+  }
+  return Boolean((consoleMetadata as { hidden_until_named?: boolean }).hidden_until_named)
 }
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
@@ -783,12 +887,13 @@ const shouldShowMessageTypeBadge = (message: ChatMessage): boolean => {
   ].includes(message.humanInteraction || '')
 }
 
-const getRowFromMessage = (message: ChatMessage): ConversationRow => {
+const getRowFromMessage = (message: ChatMessage): MessageConversationRow => {
   if (message.role === 'USER' || message.humanInteraction === 'RESPONSE') {
     return {
       id: message.id,
       from: 'user',
       message,
+      kind: 'message',
     }
   }
 
@@ -796,6 +901,7 @@ const getRowFromMessage = (message: ChatMessage): ConversationRow => {
     id: message.id,
     from: 'assistant',
     message,
+    kind: 'message',
   }
 }
 
@@ -855,7 +961,7 @@ const formatUsd = (value: number | undefined): string => `$${(value || 0).toFixe
 
 // Props passed into each virtualized row
 interface MessageRowProps {
-  row: ConversationRow
+  row: MessageConversationRow
   enableHitlActions: boolean
   responseParentIds: Set<string>
   submittedMessageIds: Set<string>
@@ -981,7 +1087,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                 </ToolContent>
               </Tool>
               {costMetadata && costSummary && hasCostSummary && (
-                <details className="group rounded-md bg-card/60 text-xs">
+                <details className="group inline-block w-64 max-w-full rounded-md bg-card/60 text-xs">
                   <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
                     <span className="flex items-center justify-between gap-2">
                       <span>{`${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costSummary.total_usd)}`}</span>
@@ -1019,10 +1125,10 @@ const MemoizedMessageRow = React.memo(function MessageRow({
               )}
             </div>
           ) : (
-            <div className="text-sm space-y-2">
+            <div className="text-base space-y-2">
               <CollapsibleText content={message.content} />
               {costMetadata && costSummary && hasCostSummary && (
-                <details className="group rounded-md bg-card/60 text-xs">
+                <details className="group inline-block w-64 max-w-full rounded-md bg-card/60 text-xs">
                   <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">
                     <span className="flex items-center justify-between gap-2">
                       <span>{`${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costSummary.total_usd)}`}</span>
@@ -1231,6 +1337,7 @@ function ConversationViewer({
   
   // Internal state for data loading mode
   const [internalSessions, setInternalSessions] = useState<ChatSession[]>([])
+  const [sessionOverridesById, setSessionOverridesById] = useState<Record<string, Partial<ChatSession>>>({})
   const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([])
   const [internalSelectedSessionId, setInternalSelectedSessionId] = useState<string>()
   const [isLoading, setIsLoading] = useState(false)
@@ -1240,13 +1347,18 @@ function ConversationViewer({
   const [submittedMessageIds, setSubmittedMessageIds] = useState<Set<string>>(new Set())
   const [hitlSubmitErrors, setHitlSubmitErrors] = useState<Record<string, string>>({})
   const [promptValue, setPromptValue] = useState("")
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_CONSOLE_CHAT_MODEL)
   const [isPromptSubmitting, setIsPromptSubmitting] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false)
+  const [renameSessionValue, setRenameSessionValue] = useState("")
+  const [isRenamingSession, setIsRenamingSession] = useState(false)
   const [pendingAssistantBySession, setPendingAssistantBySession] = useState<Record<string, PendingAssistantState>>({})
   const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
   const promptSubmitLockRef = React.useRef(false)
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const [atBottom, setAtBottom] = useState(true)
+  const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
   const authFailureReportedRef = React.useRef(false)
 
   const markAuthUnavailable = React.useCallback((error: unknown, source: string): boolean => {
@@ -1283,7 +1395,14 @@ function ConversationViewer({
   }, [maxSidebarWidth])
 
   // Determine which data source to use
-  const sessions = propSessions || internalSessions
+  const baseSessions = propSessions || internalSessions
+  const sessions = React.useMemo(
+    () => baseSessions.map((session) => ({
+      ...session,
+      ...(sessionOverridesById[session.id] || {}),
+    })),
+    [baseSessions, sessionOverridesById]
+  )
   const messages = propMessages || internalMessages  
   const selectedSessionId = propSelectedSessionId || internalSelectedSessionId
   const isExternallyControlledSession = Boolean(propSelectedSessionId?.trim())
@@ -1338,6 +1457,7 @@ function ConversationViewer({
     requestedAt: string,
     triggerMessageId?: string,
   ) => {
+    setAutoFollowEnabled(true)
     const baselineAssistantCreatedAt = getLatestAssistantCreatedAtForSession(messages, sessionId)
     setPendingAssistantBySession((prev) => ({
       ...prev,
@@ -1448,6 +1568,8 @@ function ConversationViewer({
   const getConsoleResponseTarget = React.useCallback(() => (
     process.env.NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET?.trim() || 'cloud'
   ), [])
+
+  const getConsoleSelectedModel = React.useCallback(() => selectedModel, [selectedModel])
 
   const submitHitlResponse = async (
     pendingMessage: ChatMessage,
@@ -1613,6 +1735,7 @@ function ConversationViewer({
             procedureId: session.procedureId,
             name: session.name,
             category: session.category,
+            metadata: parseSessionMetadata(session.metadata),
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
             messageCount: 0 // Will be updated when we load messages
@@ -1739,6 +1862,7 @@ function ConversationViewer({
             procedureId: session.procedureId,
             name: session.name,
             category: session.category,
+            metadata: parseSessionMetadata(session.metadata),
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
             messageCount: 0 // Will be updated when we load messages
@@ -1771,6 +1895,7 @@ function ConversationViewer({
                   previous.updatedAt !== session.updatedAt
                   || previous.name !== session.name
                   || previous.category !== session.category
+                  || JSON.stringify(previous.metadata || {}) !== JSON.stringify(session.metadata || {})
                 )
               })
 
@@ -1783,9 +1908,15 @@ function ConversationViewer({
               ? mergedSessions.some(session => session.id === currentSelectedSessionId)
               : false
 
-            if (!selectedStillExists && !isExternallyControlledSession && mergedSessions.length > 0) {
-              const newestSessionId = mergedSessions[0].id
-              setInternalSelectedSessionId(newestSessionId)
+            if (!selectedStillExists && !isExternallyControlledSession) {
+              if (currentSelectedSessionId) {
+                // Preserve a neutral sidebar state when the active session is temporarily
+                // unavailable (for example hidden-until-named sessions during refresh lag).
+                setInternalSelectedSessionId(undefined)
+              } else if (mergedSessions.length > 0) {
+                const newestSessionId = mergedSessions[0].id
+                setInternalSelectedSessionId(newestSessionId)
+              }
             }
 
             return mergedSessions
@@ -1804,9 +1935,12 @@ function ConversationViewer({
     const pollTimer = window.setInterval(checkForNewSessions, 15000)
     checkForNewSessions()
 
+    let createSubscription: { unsubscribe: () => void } | null = null
+    let updateSubscription: { unsubscribe: () => void } | null = null
+
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      const subscription = getClient().models.ChatSession.onCreate().subscribe({
+      createSubscription = getClient().models.ChatSession.onCreate().subscribe({
         next: () => {
           // Don't rely on the subscription data, just use it as a notification
           checkForNewSessions()
@@ -1815,24 +1949,43 @@ function ConversationViewer({
           if (markAuthUnavailable(error, 'session_on_create_subscription')) {
             return
           }
-          console.error('Chat session subscription error:', error)
+          console.error('Chat session create subscription error:', error)
         }
       })
-
-      return () => {
-        window.clearInterval(pollTimer)
-        subscription.unsubscribe()
-      }
     } catch (error) {
-      if (markAuthUnavailable(error, 'session_subscription_setup')) {
+      if (markAuthUnavailable(error, 'session_create_subscription_setup')) {
         return () => {
           window.clearInterval(pollTimer)
         }
       }
-      console.error('Error setting up chat session notification:', error)
+      console.error('Error setting up chat session create notification:', error)
+    }
+
+    try {
+      // @ts-ignore - Amplify Gen2 typing issue with subscriptions
+      updateSubscription = getClient().models.ChatSession.onUpdate().subscribe({
+        next: () => {
+          checkForNewSessions()
+        },
+        error: (error: Error) => {
+          if (markAuthUnavailable(error, 'session_on_update_subscription')) {
+            return
+          }
+          console.error('Chat session update subscription error:', error)
+        }
+      })
+    } catch (error) {
+      if (markAuthUnavailable(error, 'session_update_subscription_setup')) {
+        return () => {
+          window.clearInterval(pollTimer)
+        }
+      }
+      console.error('Error setting up chat session update notification:', error)
     }
     return () => {
       window.clearInterval(pollTimer)
+      createSubscription?.unsubscribe()
+      updateSubscription?.unsubscribe()
     }
   }, [effectiveId, isAuthUnavailable, isExternallyControlledSession, markAuthUnavailable, onSessionSelect])
 
@@ -2038,6 +2191,7 @@ function ConversationViewer({
     const bTime = new Date(b.updatedAt || b.createdAt).getTime()
     return bTime - aTime
   })
+  const visibleSessions = sortedSessions.filter((session) => !isHiddenUntilNamedSession(session))
 
   // Filter messages for selected session
   const filteredMessages = selectedSessionId
@@ -2091,6 +2245,49 @@ function ConversationViewer({
   }, [pendingAssistantState, selectedSession, sortedMessages])
   const isPromptDisabled = !selectedSession || isAuthUnavailable
   const conversationRows = sortedMessages.map(getRowFromMessage)
+  const renderRows = React.useMemo<ConversationRow[]>(() => {
+    if (!showThinkingPlaceholder || !selectedSessionId) {
+      return conversationRows
+    }
+    return [
+      ...conversationRows,
+      {
+        id: `thinking-${selectedSessionId}`,
+        from: 'assistant',
+        kind: 'thinking',
+      },
+    ]
+  }, [conversationRows, selectedSessionId, showThinkingPlaceholder])
+  const hasStreamingAssistantTail = React.useMemo(() => {
+    const lastMessage = sortedMessages[sortedMessages.length - 1]
+    if (!lastMessage || !isAssistantChatMessage(lastMessage)) {
+      return false
+    }
+    const streamingState = (lastMessage.metadata as { streaming?: { state?: string } } | undefined)?.streaming?.state
+    if (!streamingState) {
+      return false
+    }
+    return streamingState !== 'complete'
+  }, [sortedMessages])
+  const latestConversationRenderSignature = React.useMemo(() => {
+    const lastMessage = sortedMessages[sortedMessages.length - 1]
+    if (!lastMessage) {
+      return `${selectedSessionId || 'none'}:empty:${showThinkingPlaceholder ? 'thinking' : 'idle'}`
+    }
+    return [
+      selectedSessionId || 'none',
+      sortedMessages.length,
+      lastMessage.id,
+      lastMessage.createdAt,
+      lastMessage.content.length,
+      lastMessage.responseStatus || '',
+      showThinkingPlaceholder ? 'thinking' : 'idle',
+    ].join(':')
+  }, [selectedSessionId, showThinkingPlaceholder, sortedMessages])
+  const shouldForceFollow = autoFollowEnabled
+    || showThinkingPlaceholder
+    || Boolean(pendingAssistantState)
+    || hasStreamingAssistantTail
   const pendingMessageForPrompt = React.useMemo(
     () => [...sortedMessages].reverse().find(message => unresolvedPendingMessageIds.has(message.id)) || null,
     [sortedMessages, unresolvedPendingMessageIds]
@@ -2123,17 +2320,134 @@ function ConversationViewer({
   )
   const canCreateSession = Boolean(fallbackSessionAccountId && fallbackSessionProcedureId)
 
-  const createNewSession = React.useCallback(async () => {
+  const openRenameDialog = React.useCallback(() => {
+    if (!selectedSession) {
+      return
+    }
+    setRenameSessionValue((selectedSession.name || "").trim())
+    setRenameDialogOpen(true)
+  }, [selectedSession])
+
+  const handleRenameSession = React.useCallback(async () => {
+    if (!selectedSession || isRenamingSession) {
+      return
+    }
+    const nextName = renameSessionValue.trim()
+    if (!nextName) {
+      toast.error("Session title cannot be empty")
+      return
+    }
+    setIsRenamingSession(true)
+    try {
+      const client = getClient()
+      const updatedAt = new Date().toISOString()
+      const nextMetadata = {
+        ...parseSessionMetadata(selectedSession.metadata),
+        title_source: "manual",
+        console: {
+          ...(parseSessionMetadata(selectedSession.metadata).console || {}),
+          hidden_until_named: false,
+        },
+      }
+      await (client.models.ChatSession.update as any)({
+        id: selectedSession.id,
+        name: nextName,
+        metadata: serializeSessionMetadata(nextMetadata),
+        updatedAt,
+      })
+      setInternalSessions(prev => prev.map(session => (
+        session.id === selectedSession.id
+          ? { ...session, name: nextName, metadata: nextMetadata, updatedAt }
+          : session
+      )))
+      setSessionOverridesById(prev => ({
+        ...prev,
+        [selectedSession.id]: {
+          name: nextName,
+          metadata: nextMetadata,
+          updatedAt,
+        },
+      }))
+      setRenameDialogOpen(false)
+      toast.success("Session renamed")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to rename session"
+      toast.error(message)
+    } finally {
+      setIsRenamingSession(false)
+    }
+  }, [isRenamingSession, renameSessionValue, selectedSession])
+
+  const handleAtBottomStateChange = React.useCallback((isNowAtBottom: boolean) => {
+    setAtBottom(isNowAtBottom)
+    if (isNowAtBottom) {
+      setAutoFollowEnabled(true)
+      return
+    }
+    if (showThinkingPlaceholder || Boolean(pendingAssistantState) || hasStreamingAssistantTail) {
+      return
+    }
+    setAutoFollowEnabled(false)
+  }, [hasStreamingAssistantTail, pendingAssistantState, showThinkingPlaceholder])
+
+  useEffect(() => {
+    setAutoFollowEnabled(true)
+    setAtBottom(true)
+  }, [selectedSessionId])
+
+  useEffect(() => {
+    if (!shouldForceFollow) {
+      return
+    }
+
+    if (!selectedSessionId) {
+      return
+    }
+
+    if (!latestConversationRenderSignature) {
+      return
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" })
+    })
+
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [latestConversationRenderSignature, selectedSessionId, shouldForceFollow])
+
+  const previousThinkingStateRef = React.useRef(false)
+  useEffect(() => {
+    const transitionedFromThinkingToMessage = previousThinkingStateRef.current && !showThinkingPlaceholder
+    previousThinkingStateRef.current = showThinkingPlaceholder
+
+    if (!transitionedFromThinkingToMessage || !shouldForceFollow || !selectedSessionId) {
+      return
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" })
+    })
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [selectedSessionId, shouldForceFollow, showThinkingPlaceholder])
+
+  const createNewSession = React.useCallback(async (options?: { hiddenUntilNamed?: boolean }) => {
     if (!fallbackSessionAccountId || !fallbackSessionProcedureId) {
       throw new Error('Missing account or procedure context to create a session')
     }
 
     const client = getClient()
     const createdAt = new Date().toISOString()
+    const hiddenUntilNamed = Boolean(options?.hiddenUntilNamed)
+    const sessionMetadata = hiddenUntilNamed ? { console: { hidden_until_named: true } } : undefined
     const created = await (client.models.ChatSession.create as any)({
       accountId: fallbackSessionAccountId,
       procedureId: fallbackSessionProcedureId,
       category: STANDARD_SESSION_CATEGORY,
+      metadata: serializeSessionMetadata(sessionMetadata),
       createdAt,
       updatedAt: createdAt,
     })
@@ -2149,12 +2463,27 @@ function ConversationViewer({
       procedureId: fallbackSessionProcedureId,
       category: created?.data?.category || STANDARD_SESSION_CATEGORY,
       name: created?.data?.name,
+      metadata: parseSessionMetadata(created?.data?.metadata || sessionMetadata),
       createdAt: created?.data?.createdAt || createdAt,
       updatedAt: created?.data?.updatedAt || createdAt,
       messageCount: 0,
     }
 
     setInternalSessions(prev => [createdSession, ...prev.filter(session => session.id !== sessionId)])
+    if (hiddenUntilNamed) {
+      setSessionOverridesById(prev => ({
+        ...prev,
+        [sessionId]: {
+          metadata: {
+            ...parseSessionMetadata(createdSession.metadata),
+            console: {
+              ...(parseSessionMetadata(createdSession.metadata).console || {}),
+              hidden_until_named: true,
+            },
+          },
+        },
+      }))
+    }
     if (onSessionSelect) {
       onSessionSelect(sessionId)
     } else {
@@ -2178,7 +2507,7 @@ function ConversationViewer({
 
     setIsCreatingSession(true)
     try {
-      await createNewSession()
+      await createNewSession({ hiddenUntilNamed: true })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create session'
       console.error('[ConsoleChat] session create failed', {
@@ -2217,7 +2546,7 @@ function ConversationViewer({
 
         if (!targetSessionId) {
           try {
-            const newSession = await createNewSession()
+            const newSession = await createNewSession({ hiddenUntilNamed: true })
             targetSessionId = newSession.id
             targetSessionAccountId = newSession.accountId
             targetSessionProcedureId = newSession.procedureId
@@ -2237,6 +2566,7 @@ function ConversationViewer({
           setIsPromptSubmitting(true)
           try {
             await submitHitlResponse(pendingMessageForPrompt, 'submit', nextValue)
+            setAutoFollowEnabled(true)
             setPromptValue('')
           } finally {
             setIsPromptSubmitting(false)
@@ -2268,6 +2598,7 @@ function ConversationViewer({
         }
 
         setIsPromptSubmitting(true)
+        setAutoFollowEnabled(true)
         setInternalMessages(prev => [...prev, optimisticMessage])
         setInternalSessions(prev => prev.map(session => (
           session.id === targetSessionId
@@ -2281,6 +2612,7 @@ function ConversationViewer({
           const dispatchMessageText = nextValue.length > 4000
             ? `${nextValue.slice(0, 4000)}…`
             : nextValue
+          const model = getConsoleSelectedModel()
           const clientHistorySnapshot = buildClientHistorySnapshot(
             messages,
             targetSessionId,
@@ -2297,10 +2629,14 @@ function ConversationViewer({
             metadata: JSON.stringify({
               source: 'console-prompt-input',
               sent_at: nowIso,
+              model: {
+                id: model,
+              },
               instrumentation: {
                 client_send_started_at: clientSendStartedAt,
                 client_prompt_length_chars: nextValue.length,
                 client_user_message_text: dispatchMessageText,
+                client_selected_model: model,
                 client_history_snapshot: clientHistorySnapshot,
               },
             }),
@@ -2373,6 +2709,7 @@ function ConversationViewer({
       createNewSession,
       clearPendingAssistant,
       getConsoleResponseTarget,
+      getConsoleSelectedModel,
       markAuthUnavailable,
       markPendingAssistant,
       submitHitlResponse,
@@ -2398,7 +2735,7 @@ function ConversationViewer({
         {/* Sidebar Header */}
         <div data-testid="conversation-sidebar-header" className="h-12 px-3 border-b border-border flex items-center justify-between">
           {!isSidebarCollapsed && (
-            <h3 className="text-sm font-medium">Chat Sessions ({sortedSessions.length})</h3>
+            <h3 className="text-sm font-medium">Chat Sessions ({visibleSessions.length})</h3>
           )}
           <div className="flex items-center gap-1">
             {!isSidebarCollapsed && (
@@ -2431,7 +2768,7 @@ function ConversationViewer({
         {/* Session List */}
         {!isSidebarCollapsed && (
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {sortedSessions.map((session) => (
+            {visibleSessions.map((session) => (
               <Button
                 key={session.id}
                 variant={selectedSessionId === session.id ? "secondary" : "ghost"}
@@ -2443,7 +2780,7 @@ function ConversationViewer({
                   <MessageSquare className="h-4 w-4 flex-shrink-0" />
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-medium truncate">
-                      {session.name || session.category || `Session ${session.id.slice(0, 8)}`}
+                      {getSessionDisplayName(session)}
                     </div>
                   <div className="text-xs text-muted-foreground">
                       {session.messageCount ? `${session.messageCount} messages` : 'No messages'}
@@ -2458,14 +2795,14 @@ function ConversationViewer({
         {/* Collapsed Sidebar Content */}
         {isSidebarCollapsed && (
           <div className="flex-1 p-2 space-y-2">
-            {sortedSessions.slice(0, 5).map((session) => (
+            {visibleSessions.slice(0, 5).map((session) => (
               <Button
                 key={session.id}
                 variant={selectedSessionId === session.id ? "secondary" : "ghost"}
                 size="sm"
                 onClick={() => handleSessionSelect(session.id)}
                 className="w-full h-8 p-0"
-                title={session.name || session.category || `Session ${session.id.slice(0, 8)}`}
+                title={getSessionDisplayName(session)}
               >
                 <MessageSquare className="h-4 w-4" />
               </Button>
@@ -2493,7 +2830,7 @@ function ConversationViewer({
                 <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="min-w-0 flex items-center gap-2">
                   <h3 className="font-medium text-sm truncate">
-                    {selectedSession.name || selectedSession.category || `Session ${selectedSession.id.slice(0, 8)}`}
+                    {getSessionHeaderTitle(selectedSession)}
                   </h3>
                   <span className="text-xs text-muted-foreground truncate">
                     {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
@@ -2514,6 +2851,15 @@ function ConversationViewer({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.preventDefault()
+                      openRenameDialog()
+                    }}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Rename session
+                  </DropdownMenuItem>
                   <DropdownMenuItem 
                     onSelect={() => {
                       if (onSessionDelete) {
@@ -2529,6 +2875,36 @@ function ConversationViewer({
             </div>
           </div>
         )}
+
+        <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Rename Session</DialogTitle>
+              <DialogDescription>Set a custom title for this chat session.</DialogDescription>
+            </DialogHeader>
+            <Input
+              value={renameSessionValue}
+              onChange={(event) => setRenameSessionValue(event.target.value)}
+              placeholder="Session title"
+              autoFocus
+            />
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setRenameDialogOpen(false)}
+                disabled={isRenamingSession}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleRenameSession}
+                disabled={isRenamingSession || !renameSessionValue.trim()}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         
         {/* Messages List */}
         <div className="min-h-0 flex-1">
@@ -2560,7 +2936,7 @@ function ConversationViewer({
                   Create New Session
                 </Button>
               </div>
-            ) : conversationRows.length === 0 && !showThinkingPlaceholder ? (
+            ) : renderRows.length === 0 ? (
               <ConversationEmptyState
                 title="No messages in this session"
                 description="Run the console REPL or send a message to start this session."
@@ -2570,45 +2946,47 @@ function ConversationViewer({
               <Virtuoso
                 ref={virtuosoRef}
                 className="h-full"
-                data={conversationRows}
-                followOutput="smooth"
-                initialTopMostItemIndex={Math.max(0, conversationRows.length - 1)}
-                atBottomStateChange={setAtBottom}
+                data={renderRows}
+                followOutput={(isAtBottom) => (shouldForceFollow || isAtBottom ? "auto" : false)}
+                initialTopMostItemIndex={Math.max(0, renderRows.length - 1)}
+                atBottomStateChange={handleAtBottomStateChange}
                 atBottomThreshold={50}
                 overscan={600}
                 increaseViewportBy={{ top: 400, bottom: 400 }}
                 itemContent={(_index, row) => (
-                  <div className="px-3 py-2">
-                    <MemoizedMessageRow
-                      row={row}
-                      enableHitlActions={enableHitlActions}
-                      responseParentIds={responseParentIds}
-                      submittedMessageIds={submittedMessageIds}
-                      submittingMessageIds={submittingMessageIds}
-                      hitlTextByMessage={hitlTextByMessage}
-                      hitlSubmitErrors={hitlSubmitErrors}
-                      setHitlTextByMessage={setHitlTextByMessage}
-                      submitHitlResponse={submitHitlResponse}
-                    />
-                  </div>
-                )}
-                components={{
-                  Footer: showThinkingPlaceholder ? () => (
-                    <div className="px-3 py-2">
+                  row.kind === 'thinking' ? (
+                    <div className="px-3 py-2 pb-8">
                       <Message
                         from="assistant"
-                        data-message-id={`thinking-${selectedSessionId}`}
+                        data-message-id={row.id}
                         data-from="assistant"
                         className="max-w-full"
                       >
                         <div className="flex items-start">
                           <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
-                            <Shimmer className="text-sm">Thinking</Shimmer>
+                            <Shimmer className="text-base">Thinking</Shimmer>
                           </MessageContent>
                         </div>
                       </Message>
                     </div>
-                  ) : undefined,
+                  ) : (
+                    <div className="px-3 py-2">
+                      <MemoizedMessageRow
+                        row={row}
+                        enableHitlActions={enableHitlActions}
+                        responseParentIds={responseParentIds}
+                        submittedMessageIds={submittedMessageIds}
+                        submittingMessageIds={submittingMessageIds}
+                        hitlTextByMessage={hitlTextByMessage}
+                        hitlSubmitErrors={hitlSubmitErrors}
+                        setHitlTextByMessage={setHitlTextByMessage}
+                        submitHitlResponse={submitHitlResponse}
+                      />
+                    </div>
+                  )
+                )}
+                components={{
+                  Footer: () => (!showThinkingPlaceholder ? <div aria-hidden className="h-8" /> : null),
                 }}
               />
             )}
@@ -2637,7 +3015,23 @@ function ConversationViewer({
                   }
                 />
             </PromptInputBody>
-            <PromptInputFooter className="justify-end">
+            <PromptInputFooter className="justify-between gap-2">
+              <PromptInputSelect
+                value={selectedModel}
+                onValueChange={setSelectedModel}
+                disabled={isPromptDisabled || isPromptSubmitting}
+              >
+                <PromptInputSelectTrigger className="h-8 w-40 text-xs">
+                  <PromptInputSelectValue placeholder="Model" />
+                </PromptInputSelectTrigger>
+                <PromptInputSelectContent>
+                  {CONSOLE_CHAT_MODEL_OPTIONS.map((option) => (
+                    <PromptInputSelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </PromptInputSelectItem>
+                  ))}
+                </PromptInputSelectContent>
+              </PromptInputSelect>
               <PromptInputSubmit disabled={isPromptDisabled || !promptValue.trim() || isPromptSubmitting} />
             </PromptInputFooter>
           </PromptInput>

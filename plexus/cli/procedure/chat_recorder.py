@@ -12,7 +12,10 @@ import re
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from plexus.dashboard.api.client import PlexusDashboardClient
-from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+from plexus.dashboard.api.client import (
+    CHAT_STREAM_WRITE_RETRY_POLICY_NAME,
+    LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -956,7 +959,7 @@ class ProcedureChatRecorder:
             result = self.client.execute(
                 mutation,
                 {'input': message_data},
-                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+                retry_policy=CHAT_STREAM_WRITE_RETRY_POLICY_NAME,
             )
             
             # Check for GraphQL errors first
@@ -1047,7 +1050,7 @@ class ProcedureChatRecorder:
             result = self.client.execute(
                 mutation,
                 {"input": update_input},
-                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+                retry_policy=CHAT_STREAM_WRITE_RETRY_POLICY_NAME,
             )
             if isinstance(result, dict) and result.get("errors"):
                 logger.error("GraphQL error updating message %s: %s", message_id, result["errors"])

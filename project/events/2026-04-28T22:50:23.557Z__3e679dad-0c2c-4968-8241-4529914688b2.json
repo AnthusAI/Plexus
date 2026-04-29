@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3e679dad-0c2c-4968-8241-4529914688b2",
+  "issue_id": "plx-1d6e6e95-e882-4751-afe3-6f4d37a2a9f3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T22:50:23.557Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-0e38eb7b-5f52-48a9-bf56-f4b152ba840e",
+    "priority": 1,
+    "status": "open",
+    "title": "Eliminate hardcoded/env credentials in production workers"
+  }
+}

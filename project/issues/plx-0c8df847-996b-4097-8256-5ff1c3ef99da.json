@@ -3,7 +3,7 @@
   "title": "Investigate CodePipeline failure for plexus-metrics-aggregation-production stack",
   "description": "## Summary\nInvestigate why `plexus-infrastructure-production-pipeline` fails while deploying `plexus-metrics-aggregation-production`.\n\n## Scope\n- Retrieve failing pipeline execution details\n- Identify exact failed action and CloudFormation stack event/reason\n- Provide root cause and recommended remediation\n\n## Done\n- Root cause identified with concrete AWS evidence\n- Next remediation steps documented",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -58,10 +58,34 @@
       "author": "derek",
       "text": "Validation rerun in project virtualenv:\n- Python: /home/derek/.venvs/cc-local/call-criteria-python-o9nOlyIe-py3.12/bin/python (3.12.4)\n- Command: `python -m pytest -q infrastructure/lambda_functions/metrics_aggregator/test_procedure_metrics.py`\n- Result: 3 passed (0.38s).}",
       "created_at": "2026-04-28T18:05:55.909623177Z"
+    },
+    {
+      "id": "1fb0e56d-a540-4e20-8981-5ddfd6297d61",
+      "author": "derek",
+      "text": "Implementation pushed and PR opened to develop:\n- Branch: `feature/plx-0c8df8-metrics-iam-appsync`\n- Commit: `70e73b10`\n- PR: https://github.com/AnthusAI/Plexus/pull/236\n\nScope: migrate metrics aggregator AppSync auth from API key to IAM SigV4, remove API key env dependency, update docs/env example, include Kanbus tracking artifacts.",
+      "created_at": "2026-04-28T18:06:51.997625138Z"
+    },
+    {
+      "id": "f9e19e06-cbba-436a-ad35-efc3e2d2d873",
+      "author": "derek",
+      "text": "Post-deploy verification started: checking production metrics aggregator Lambda CloudWatch logs and Lambda error metrics for obvious runtime failures after deployment.",
+      "created_at": "2026-04-28T22:24:58.208975847Z"
+    },
+    {
+      "id": "3e26a2c3-2c42-4df3-a1ba-532e97070211",
+      "author": "derek",
+      "text": "Post-deploy runtime check completed for `plexus-lambda-production-metrics-aggregator` (CloudWatch logs + Lambda metrics).\n\nWindow checked: last 1 hour (and auth pattern scan over last 3 hours).\n\nFindings:\n- Function state/update: `Active` / `LastUpdateStatus=Successful`.\n- Invocations: 1207 (last 1h).\n- Lambda Errors metric: 0 (last 1h).\n- Throttles metric: 0 (last 3h).\n- Max observed concurrency (last 1h): 10.\n- Logs show repeated successful completions (`✓ SUCCESS`), with regular bucket updates.\n- No AppSync auth failures observed (`AccessDenied`, `Unauthorized`, signature/auth token errors = 0 in last 3h scan).\n\nNoted non-fatal log noise:\n- `ConditionalCheckFailedException` messages still appear intermittently (6 occurrences in last 1h), but executions continue and complete successfully (handled in code path).}",
+      "created_at": "2026-04-28T22:26:43.670835833Z"
+    },
+    {
+      "id": "1efd2403-9c5f-4f23-9f34-d755cfaef0c9",
+      "author": "derek",
+      "text": "Completed and deployed.\n\nDelivered:\n- Identified production pipeline failure root cause (`table-procedure-stream-arn` missing in `plexus/production/config`).\n- Applied production secret remediation and unblocked stack deploy.\n- Migrated metrics aggregator GraphQL auth to IAM SigV4 (removed API key dependency) via PR #236.\n- Verified production runtime health post-deploy (invocations flowing, 0 Lambda errors, no auth failures).\n\nRelease path:\n- PR #236 merged to develop: https://github.com/AnthusAI/Plexus/pull/236\n- develop -> main release PR #237 merged: https://github.com/AnthusAI/Plexus/pull/237",
+      "created_at": "2026-04-28T22:27:42.420273898Z"
     }
   ],
   "created_at": "2026-04-28T17:43:26.200654915Z",
-  "updated_at": "2026-04-28T18:05:55.909623177Z",
-  "closed_at": null,
+  "updated_at": "2026-04-28T22:27:42.433531012Z",
+  "closed_at": "2026-04-28T22:27:42.433531012Z",
   "custom": {}
 }
