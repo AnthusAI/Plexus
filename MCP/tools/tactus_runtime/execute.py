@@ -15,7 +15,7 @@ import traceback
 import uuid
 from typing import Annotated, Any, Callable
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 from pydantic import Field
 
 logger = logging.getLogger(__name__)
@@ -879,6 +879,145 @@ def _run_async_from_sync(awaitable: Any) -> Any:
     return outcome.get("value")
 
 
+def _stream_event_payload(event: Any) -> dict[str, Any]:
+    if isinstance(event, dict):
+        return _jsonable(event)
+    model_dump = getattr(event, "model_dump", None)
+    if callable(model_dump):
+        return _jsonable(model_dump(mode="json"))
+    if hasattr(event, "__dict__"):
+        return _jsonable(vars(event))
+    return {"message": str(event)}
+
+
+def _stream_event_message(kind: str, payload: dict[str, Any]) -> str:
+    if kind == "agent_stream_chunk":
+        agent = payload.get("agent_name") or "agent"
+        chunk = str(payload.get("chunk_text") or "")
+        return f"{agent}: {chunk}" if chunk else f"{agent} streamed output"
+    if kind == "agent_turn":
+        agent = payload.get("agent_name") or "agent"
+        stage = payload.get("stage") or "updated"
+        return f"{agent} {stage}"
+    if kind == "tool_call_started":
+        tool = payload.get("tool_name") or "tool"
+        agent = payload.get("agent_name") or "agent"
+        return f"{agent} calling {tool}"
+    if kind == "tool_call":
+        tool = payload.get("tool_name") or "tool"
+        agent = payload.get("agent_name") or "agent"
+        return f"{agent} completed {tool}"
+    if kind == "cost":
+        agent = payload.get("agent_name") or "agent"
+        cost = payload.get("total_cost")
+        if isinstance(cost, int | float):
+            return f"{agent} cost ${cost:.6f}"
+        return f"{agent} cost update"
+    if kind == "execution_summary":
+        return "Tactus execution summary"
+    return str(payload.get("message") or kind)
+
+
+def _stream_event_cost(payload: dict[str, Any]) -> dict[str, Any] | None:
+    if payload.get("event_type") != "cost":
+        return None
+    cost_keys = (
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "prompt_cost",
+        "completion_cost",
+        "total_cost",
+        "duration_ms",
+    )
+    return {key: payload.get(key) for key in cost_keys if key in payload}
+
+
+class _MCPStreamEmitter:
+    """Thread-safe bridge from Tactus runtime events to MCP progress messages."""
+
+    supports_streaming = True
+
+    def __init__(self, *, trace_id: str, loop: asyncio.AbstractEventLoop) -> None:
+        self.trace_id = trace_id
+        self._loop = loop
+        self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        self._progress = 0
+
+    def empty(self) -> bool:
+        return self._queue.empty()
+
+    async def get(self) -> dict[str, Any]:
+        return await self._queue.get()
+
+    def emit(
+        self,
+        *,
+        kind: str,
+        message: str,
+        payload: dict[str, Any] | None = None,
+        progress: float | None = None,
+        total: float | None = None,
+        cost: dict[str, Any] | None = None,
+    ) -> None:
+        event = {
+            "kind": kind,
+            "message": message,
+            "payload": _jsonable(payload or {}),
+            "cost": _jsonable(cost),
+            "trace_id": self.trace_id,
+        }
+        if progress is not None:
+            event["progress"] = progress
+        if total is not None:
+            event["total"] = total
+        self._loop.call_soon_threadsafe(self._queue.put_nowait, event)
+
+    def log(self, event: Any) -> None:
+        payload = _stream_event_payload(event)
+        kind = str(payload.get("event_type") or "log")
+        self.emit(
+            kind=kind,
+            message=_stream_event_message(kind, payload),
+            payload=payload,
+            cost=_stream_event_cost(payload),
+        )
+
+    def api_call(self, api_call: str) -> None:
+        self._progress += 1
+        self.emit(
+            kind="api_call",
+            message=f"Calling {api_call}",
+            payload={"api_call": api_call},
+            progress=self._progress,
+        )
+
+
+async def _maybe_await(value: Any) -> Any:
+    if asyncio.iscoroutine(value):
+        return await value
+    return value
+
+
+async def _send_mcp_stream_event(ctx: Context, event: dict[str, Any]) -> None:
+    progress = event.get("progress")
+    if isinstance(progress, int | float):
+        await _maybe_await(
+            ctx.report_progress(
+                float(progress),
+                total=event.get("total"),
+                message=str(event.get("message") or event.get("kind") or "progress"),
+            )
+        )
+    await _maybe_await(
+        ctx.info(
+            str(event.get("message") or event.get("kind") or "execute_tactus update"),
+            logger_name="plexus.execute_tactus",
+            extra={"event": event},
+        )
+    )
+
+
 class _Namespace:
     def __init__(
         self,
@@ -919,6 +1058,7 @@ class PlexusRuntimeModule:
         evaluation_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         report_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        stream_handler: _MCPStreamEmitter | None = None,
     ) -> None:
         self._mcp = mcp
         self._trace_id = trace_id or str(uuid.uuid4())
@@ -946,6 +1086,7 @@ class PlexusRuntimeModule:
             if procedure_runner is not None
             else _default_procedure_runner
         )
+        self._stream_handler = stream_handler
         self._api_calls: list[str] = []
         self.handle_protocol_required: tuple[str, str] | None = None
         methods_by_namespace: dict[str, set[str]] = {}
@@ -966,6 +1107,12 @@ class PlexusRuntimeModule:
     def budget(self) -> BudgetGate:
         return self._budget
 
+    def _record_api_call(self, namespace: str, method: str) -> None:
+        api_call = f"plexus.{namespace}.{method}"
+        self._api_calls.append(api_call)
+        if self._stream_handler is not None:
+            self._stream_handler.api_call(api_call)
+
     def _call(self, namespace: str, method: str, args: Any = None) -> Any:
         direct_handler = DIRECT_HANDLERS.get((namespace, method))
         if direct_handler is not None:
@@ -976,11 +1123,11 @@ class PlexusRuntimeModule:
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
         if (namespace, method) in LONG_RUNNING_METHODS:
-            self._api_calls.append(f"plexus.{namespace}.{method}")
+            self._record_api_call(namespace, method)
             self.handle_protocol_required = (namespace, method)
             raise RequiresHandleProtocol(namespace, method)
         self._budget.check_before(namespace, method)
-        self._api_calls.append(f"plexus.{namespace}.{method}")
+        self._record_api_call(namespace, method)
         try:
             result = _run_async_from_sync(self._mcp.call_tool(tool_name, _args(args)))
         finally:
@@ -993,7 +1140,7 @@ class PlexusRuntimeModule:
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
         self._budget.check_before("feedback", "find")
-        self._api_calls.append("plexus.feedback.find")
+        self._record_api_call("feedback", "find")
         try:
             return self._feedback_finder(_args(args))
         finally:
@@ -1007,7 +1154,7 @@ class PlexusRuntimeModule:
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
         self._budget.check_before("evaluation", "info")
-        self._api_calls.append("plexus.evaluation.info")
+        self._record_api_call("evaluation", "info")
         try:
             return self._evaluation_info(_args(args))
         finally:
@@ -1022,12 +1169,12 @@ class PlexusRuntimeModule:
             )
         parsed = _args(args)
         if not bool(parsed.get("async")):
-            self._api_calls.append("plexus.evaluation.run")
+            self._record_api_call("evaluation", "run")
             self.handle_protocol_required = ("evaluation", "run")
             raise RequiresHandleProtocol("evaluation", "run")
 
         self._budget.check_before("evaluation", "run")
-        self._api_calls.append("plexus.evaluation.run")
+        self._record_api_call("evaluation", "run")
         try:
             dispatch_result = self._evaluation_runner(parsed)
             return self._handle_store.create(
@@ -1047,12 +1194,12 @@ class PlexusRuntimeModule:
             )
         parsed = _args(args)
         if not bool(parsed.get("async")):
-            self._api_calls.append("plexus.report.run")
+            self._record_api_call("report", "run")
             self.handle_protocol_required = ("report", "run")
             raise RequiresHandleProtocol("report", "run")
 
         self._budget.check_before("report", "run")
-        self._api_calls.append("plexus.report.run")
+        self._record_api_call("report", "run")
         try:
             dispatch_result = self._report_runner(parsed)
             return self._handle_store.create(
@@ -1072,12 +1219,12 @@ class PlexusRuntimeModule:
             )
         parsed = _args(args)
         if not bool(parsed.get("async")):
-            self._api_calls.append("plexus.procedure.run")
+            self._record_api_call("procedure", "run")
             self.handle_protocol_required = ("procedure", "run")
             raise RequiresHandleProtocol("procedure", "run")
 
         self._budget.check_before("procedure", "run")
-        self._api_calls.append("plexus.procedure.run")
+        self._record_api_call("procedure", "run")
         try:
             dispatch_result = self._procedure_runner(parsed)
             return self._handle_store.create(
@@ -1101,7 +1248,7 @@ class PlexusRuntimeModule:
             raise ValueError(f"plexus.handle.{method} requires id")
 
         self._budget.check_before("handle", method)
-        self._api_calls.append(f"plexus.handle.{method}")
+        self._record_api_call("handle", method)
         try:
             if method in {"peek", "status"}:
                 return self._refresh_handle(str(handle_id))
@@ -1266,7 +1413,7 @@ class PlexusRuntimeModule:
     def _call_docs(self, namespace: str, method: str, args: Any = None) -> Any:
         if method == "list":
             self._budget.check_before("docs", "list")
-            self._api_calls.append("plexus.docs.list")
+            self._record_api_call("docs", "list")
             try:
                 return self._docs_list()
             finally:
@@ -1277,7 +1424,7 @@ class PlexusRuntimeModule:
             if not key:
                 raise ValueError("plexus.docs.get requires key, name, or filename")
             self._budget.check_before("docs", "get")
-            self._api_calls.append("plexus.docs.get")
+            self._record_api_call("docs", "get")
             try:
                 return {"key": key, "content": self._docs_read(key)}
             finally:
@@ -1288,7 +1435,7 @@ class PlexusRuntimeModule:
         if method != "list":
             raise ValueError(f"Unsupported Plexus runtime API: plexus.api.{method}")
         self._budget.check_before("api", "list")
-        self._api_calls.append("plexus.api.list")
+        self._record_api_call("api", "list")
         try:
             api: dict[str, list[str]] = {}
             for namespace_name, method_name in MCP_TOOL_MAP:
@@ -1370,6 +1517,7 @@ def _run_tactus_sync(
     evaluation_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     report_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    stream_handler: _MCPStreamEmitter | None = None,
 ) -> dict[str, Any]:
     gate = budget if budget is not None else BudgetGate()
 
@@ -1386,6 +1534,7 @@ def _run_tactus_sync(
             runtime = TactusRuntime(
                 procedure_id=f"execute_tactus_{trace_id}",
                 storage_backend=MemoryStorage(),
+                log_handler=stream_handler,
                 run_id=trace_id,
             )
             if not hasattr(runtime, "register_python_module"):
@@ -1403,8 +1552,17 @@ def _run_tactus_sync(
                 evaluation_runner=evaluation_runner,
                 report_runner=report_runner,
                 procedure_runner=procedure_runner,
+                stream_handler=stream_handler,
             )
             runtime.register_python_module("plexus", plexus)
+            if stream_handler is not None:
+                stream_handler.emit(
+                    kind="execution",
+                    message="execute_tactus runtime started",
+                    payload={"stage": "started"},
+                    progress=0,
+                    total=1,
+                )
             runtime_result = await runtime.execute(wrapped, context={}, format="lua")
             api_calls = plexus.api_calls
             if plexus.handle_protocol_required is not None:
@@ -1495,6 +1653,21 @@ def _run_tactus_sync(
                 ended_at_wall=ended_wall,
             )
             _safe_write_trace(trace_store, record)
+            if stream_handler is not None:
+                envelope_for_stream = locals().get("envelope")
+                stream_handler.emit(
+                    kind="execution",
+                    message="execute_tactus runtime completed",
+                    payload={
+                        "stage": "completed",
+                        "ok": bool(
+                            isinstance(envelope_for_stream, dict)
+                            and envelope_for_stream.get("ok")
+                        ),
+                    },
+                    progress=1,
+                    total=1,
+                )
         return envelope
 
     return asyncio.run(run())
@@ -1504,6 +1677,7 @@ async def _execute_tactus_tool(
     tactus: str,
     mcp: FastMCP,
     *,
+    ctx: Context | None = None,
     trace_store: TactusTraceStore | None = None,
     budget: BudgetGate | None = None,
     handle_store: TactusHandleStore | None = None,
@@ -1542,20 +1716,43 @@ async def _execute_tactus_tool(
         return envelope
 
     try:
-        return await asyncio.to_thread(
-            _run_tactus_sync,
-            tactus,
-            mcp,
-            trace_id=trace_id,
-            trace_store=store,
-            budget=budget,
-            handle_store=handle_store,
-            feedback_finder=feedback_finder,
-            evaluation_info=evaluation_info,
-            evaluation_runner=evaluation_runner,
-            report_runner=report_runner,
-            procedure_runner=procedure_runner,
+        stream_handler = (
+            _MCPStreamEmitter(trace_id=trace_id, loop=asyncio.get_running_loop())
+            if ctx is not None
+            else None
         )
+        run_task = asyncio.create_task(
+            asyncio.to_thread(
+                _run_tactus_sync,
+                tactus,
+                mcp,
+                trace_id=trace_id,
+                trace_store=store,
+                budget=budget,
+                handle_store=handle_store,
+                feedback_finder=feedback_finder,
+                evaluation_info=evaluation_info,
+                evaluation_runner=evaluation_runner,
+                report_runner=report_runner,
+                procedure_runner=procedure_runner,
+                stream_handler=stream_handler,
+            )
+        )
+        if stream_handler is None:
+            return await run_task
+
+        while True:
+            if run_task.done():
+                await asyncio.sleep(0)
+                if stream_handler.empty():
+                    break
+            try:
+                event = await asyncio.wait_for(stream_handler.get(), timeout=0.05)
+            except asyncio.TimeoutError:
+                continue
+            await _send_mcp_stream_event(ctx, event)
+
+        return await run_task
     except Exception as exc:
         logger.error("execute_tactus failed: %s", exc, exc_info=True)
         envelope = _response_envelope(
@@ -1593,6 +1790,7 @@ def register_tactus_tools(mcp: FastMCP) -> None:
                 )
             ),
         ],
+        ctx: Context,
     ) -> dict[str, Any]:
         """
         Execute Tactus code inside the Plexus runtime.
@@ -1604,4 +1802,4 @@ def register_tactus_tools(mcp: FastMCP) -> None:
         a trace identifier, partial status, and called Plexus APIs.
         """
 
-        return await _execute_tactus_tool(tactus, mcp)
+        return await _execute_tactus_tool(tactus, mcp, ctx=ctx)

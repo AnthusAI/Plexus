@@ -69,6 +69,22 @@ class _MemoryHandleStore(execute.TactusHandleStore):
         return dict(self.records[handle_id])
 
 
+class _RecordingMCPContext:
+    def __init__(self) -> None:
+        self.progress: list[dict] = []
+        self.info_messages: list[dict] = []
+
+    async def report_progress(self, progress, total=None, message=None):
+        self.progress.append(
+            {"progress": progress, "total": total, "message": message}
+        )
+
+    async def info(self, message, logger_name=None, extra=None):
+        self.info_messages.append(
+            {"message": message, "logger_name": logger_name, "extra": extra}
+        )
+
+
 def test_wrap_tactus_snippet_injects_plexus_helpers_and_capture() -> None:
     wrapped = execute._wrap_tactus_snippet(
         'evaluate{ score_id = "score_compliance_tone", item_count = 200 }'
@@ -151,6 +167,89 @@ async def test_execute_tactus_tool_schema_uses_tactus_parameter() -> None:
     assert "lua" not in schema["properties"]
     assert "code" not in schema["properties"]
     assert schema["required"] == ["tactus"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_streams_runtime_events_to_mcp_context(
+    monkeypatch,
+) -> None:
+    ctx = _RecordingMCPContext()
+
+    def fake_run_tactus_sync(
+        tactus,
+        mcp,
+        *,
+        trace_id,
+        trace_store,
+        stream_handler=None,
+        budget=None,
+        **kwargs,
+    ):
+        assert stream_handler is not None
+        stream_handler.emit(
+            kind="execution",
+            message="runtime started",
+            payload={"stage": "started"},
+            progress=0,
+            total=1,
+        )
+        stream_handler.log(
+            {
+                "event_type": "agent_turn",
+                "agent_name": "worker",
+                "stage": "started",
+            }
+        )
+        stream_handler.api_call("plexus.docs.list")
+        stream_handler.emit(
+            kind="execution",
+            message="runtime completed",
+            payload={"stage": "completed"},
+            progress=1,
+            total=1,
+        )
+        return {
+            "ok": True,
+            "value": {"ok": True, "source": tactus},
+            "error": None,
+            "cost": {
+                "usd": 0.0,
+                "wallclock_seconds": 0.01,
+                "tokens": 0,
+                "llm_calls": 0,
+                "tool_calls": 1,
+                "workers": 0,
+                "depth_max_observed": 0,
+            },
+            "trace_id": trace_id,
+            "partial": False,
+            "api_calls": ["plexus.docs.list"],
+        }
+
+    monkeypatch.setattr(execute, "_run_tactus_sync", fake_run_tactus_sync)
+
+    result = await execute._execute_tactus_tool(
+        'plexus.docs.list{}',
+        FastMCP("test-streaming"),
+        ctx=ctx,
+    )
+
+    assert result["ok"] is True
+    assert [item["message"] for item in ctx.progress] == [
+        "runtime started",
+        "Calling plexus.docs.list",
+        "runtime completed",
+    ]
+    messages = [item["message"] for item in ctx.info_messages]
+    assert "worker started" in messages
+    assert "Calling plexus.docs.list" in messages
+    streamed_event = next(
+        item["extra"]["event"]
+        for item in ctx.info_messages
+        if item["message"] == "Calling plexus.docs.list"
+    )
+    assert streamed_event["kind"] == "api_call"
+    assert streamed_event["payload"] == {"api_call": "plexus.docs.list"}
 
 
 @pytest.mark.asyncio

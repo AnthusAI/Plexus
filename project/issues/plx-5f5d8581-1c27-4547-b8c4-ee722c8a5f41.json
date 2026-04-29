@@ -40,10 +40,16 @@
       "author": "ryan",
       "text": "Follow-up CI fix: made report Task cancellation refresh best-effort so unavailable mocked/task refreshes do not convert normal report work into failures, and updated the legacy report test to allow intentional cancellation status polling. Local verification: python -m pytest plexus/reports/service_test.py plexus/reports/test_service_integration.py plexus/cli/report/tests/test_config_override.py plexus/reports/test_programmatic_report_tasks.py plexus/cli/procedure/test_procedure_executor_compat.py -q (56 passed).",
       "created_at": "2026-04-29T12:24:41.845257Z"
+    },
+    {
+      "id": "d8a27103-b7ba-41be-8136-b8ccdf7815f1",
+      "author": "ryan",
+      "text": "Added MCP streaming notifications for execute_tactus blocking runs. The tool now accepts FastMCP Context, runs Tactus in a worker thread, drains Tactus log events and Plexus API call events back to MCP progress/info messages, and keeps the final response envelope unchanged. Updated HANDLE_PROTOCOL.md to move streaming client notifications out of remaining work. Tests: python -m pytest MCP/tools/tactus_runtime/execute_test.py -q (63 passed); python -m pytest spikes/runtime-mcp-validation MCP/tools/tactus_runtime -q (100 passed).",
+      "created_at": "2026-04-29T12:40:43.427572Z"
     }
   ],
   "created_at": "2026-04-29T04:43:42.848955Z",
-  "updated_at": "2026-04-29T12:24:41.845257Z",
+  "updated_at": "2026-04-29T12:40:43.427572Z",
   "closed_at": null,
   "custom": {}
 }
