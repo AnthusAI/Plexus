@@ -45,6 +45,35 @@ const parseJsonDeep = (value: unknown): unknown => {
   return current
 }
 
+const toNormalizedId = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null
+  const normalized = String(value).trim()
+  return normalized.length > 0 ? normalized : null
+}
+
+const getScoreResultFilterKeys = (result: ScoreResultData): string[] => {
+  const keys = new Set<string>()
+  const directId = toNormalizedId(result.id)
+  if (directId) keys.add(directId)
+  const itemId = toNormalizedId(result.itemId)
+  if (itemId) keys.add(itemId)
+  const metadataItemId = toNormalizedId((result as any)?.metadata?.item_id)
+  if (metadataItemId) keys.add(metadataItemId)
+  const feedbackItemId = toNormalizedId((result as any)?.feedbackItem?.id)
+  if (feedbackItemId) keys.add(feedbackItemId)
+  const metadataFeedbackItemId = toNormalizedId((result as any)?.metadata?.feedback_item_id)
+  if (metadataFeedbackItemId) keys.add(metadataFeedbackItemId)
+
+  if (Array.isArray(result.itemIdentifiers)) {
+    result.itemIdentifiers.forEach((identifier: any) => {
+      const value = toNormalizedId(identifier?.value)
+      if (value) keys.add(value)
+    })
+  }
+
+  return Array.from(keys)
+}
+
 export interface EvaluationMetric {
   name: string
   value: number
@@ -217,6 +246,7 @@ type MisclassificationCategorySummary = {
   category_summary_text?: string
   top_patterns?: Array<{ pattern?: string; count?: number }>
   representative_evidence?: Array<{
+    score_result_id?: string
     feedback_item_id?: string
     item_id?: string
     source?: string
@@ -269,6 +299,7 @@ type MisclassificationAnalysis = {
   item_classifications_all?: Array<{
     topic_id?: number | string
     topic_label?: string
+    score_result_id?: string
     feedback_item_id?: string
     item_id?: string
     timestamp?: string
@@ -941,13 +972,16 @@ const DetailContent = React.memo(({
     onSelectScoreResult?.(result.id)
   }
 
-  const selectFirstFilteredScoreResult = (itemIds: string[]) => {
-    const normalizedItemIds = itemIds
-      .map(id => String(id).trim())
-      .filter(Boolean)
-    const firstItemId = normalizedItemIds.find(Boolean)
-    if (!firstItemId) return
-    const matching = parsedScoreResults.find(result => String(result.itemId ?? '').trim() === firstItemId)
+  const selectFirstFilteredScoreResult = (filterIds: string[]) => {
+    const normalizedFilterIds = new Set(
+      filterIds
+        .map(id => toNormalizedId(id))
+        .filter((id): id is string => id !== null)
+    )
+    if (normalizedFilterIds.size === 0) return
+    const matching = parsedScoreResults.find(result =>
+      getScoreResultFilterKeys(result).some(key => normalizedFilterIds.has(key))
+    )
     if (matching) {
       onSelectScoreResult?.(matching.id)
     }
@@ -978,27 +1012,37 @@ const DetailContent = React.memo(({
       classification => classification.primary_category === categoryKey
     )
 
+    const scoreResultIds: string[] = []
     const itemIds: string[] = []
     const fallbackFeedbackItemIds: string[] = []
     let missingCount = 0
 
     filteredClassifications.forEach(classification => {
-      const normalizedItemId = classification.item_id ? String(classification.item_id).trim() : null
-      const normalizedFeedbackItemId = classification.feedback_item_id ? String(classification.feedback_item_id).trim() : null
+      const normalizedScoreResultId = toNormalizedId(classification.score_result_id)
+      const normalizedItemId = toNormalizedId(classification.item_id)
+      const normalizedFeedbackItemId = toNormalizedId(classification.feedback_item_id)
 
-      if (!normalizedItemId && !normalizedFeedbackItemId) {
+      if (!normalizedScoreResultId && !normalizedItemId && !normalizedFeedbackItemId) {
         missingCount += 1
         return
       }
 
+      if (normalizedScoreResultId) {
+        scoreResultIds.push(normalizedScoreResultId)
+      }
       if (normalizedItemId) {
         itemIds.push(normalizedItemId)
-      } else if (normalizedFeedbackItemId) {
+      }
+      if (normalizedFeedbackItemId) {
         fallbackFeedbackItemIds.push(normalizedFeedbackItemId)
       }
     })
 
-    const selectedIds = itemIds.length > 0 ? itemIds : fallbackFeedbackItemIds
+    const selectedIds = scoreResultIds.length > 0
+      ? scoreResultIds
+      : itemIds.length > 0
+        ? itemIds
+        : fallbackFeedbackItemIds
 
     setSelectedTopicItemIds(null)
     setSelectedTopicLabel(null)
@@ -1702,7 +1746,11 @@ const DetailContent = React.memo(({
                                   .filter(classification => classification.primary_category === row.key)
                                 const itemCount = summary?.item_count ?? categoryClassifications.length ?? 0
                                 const itemsWithMissingId = categoryClassifications
-                                  .filter(classification => !classification.item_id)
+                                  .filter(classification => (
+                                    !toNormalizedId(classification.item_id)
+                                    && !toNormalizedId(classification.feedback_item_id)
+                                    && !toNormalizedId(classification.score_result_id)
+                                  ))
                                   .length
                                 if (itemCount <= 0) return null
                                 return (
@@ -1741,14 +1789,14 @@ const DetailContent = React.memo(({
                                         </Button>
                                         {selectedCategoryKey === row.key && categoryMissingItemIdCount > 0 && (
                                           <span className="text-[11px] text-muted-foreground">
-                                            {categoryMissingItemIdCount} item(s) missing item_id not shown
+                                            {categoryMissingItemIdCount} item(s) missing linkage ids not shown
                                           </span>
                                         )}
                                       </div>
                                     )}
                                     {itemsWithMissingId > 0 && selectedCategoryKey !== row.key && (
                                       <div className="text-[11px] text-muted-foreground">
-                                        {itemsWithMissingId} item(s) in this category are missing item_id and cannot appear in score results.
+                                        {itemsWithMissingId} item(s) in this category are missing linkage ids and cannot appear in score results.
                                       </div>
                                     )}
                                   </div>
