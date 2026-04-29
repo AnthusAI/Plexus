@@ -89,6 +89,16 @@ def test_optimizer_yaml_deduplicates_submitted_candidate_records():
     assert code.count("table.insert(submitted_versions") == 1
 
 
+def test_optimizer_yaml_skips_invalid_synthesis_strategy_selection():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "if best_sv_score <= -999 then" in code
+    assert "no viable synthesis strategy" in code
+    assert "Strategy selection skipped" in code
+    assert "No viable synthesis strategy selected" in code
+
+
 def test_optimizer_startup_requests_retrieval_only_rubric_memory():
     config = _load_optimizer_config()
     code = config["code"]
