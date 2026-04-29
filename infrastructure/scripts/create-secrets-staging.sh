@@ -6,19 +6,27 @@ set -e
 
 ENVIRONMENT="staging"
 SECRET_NAME="plexus/$ENVIRONMENT/config"
+AWS_REGION="${AWS_REGION:-${CDK_DEFAULT_REGION:-us-west-2}}"
 
 # Load environment variables from root .env file
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/../../.env"
+INFRA_ENV_FILE="$SCRIPT_DIR/../.env"
 
 if [ ! -f "$ENV_FILE" ]; then
     echo "❌ Error: .env file not found at $ENV_FILE"
+    exit 1
+fi
+if [ ! -f "$INFRA_ENV_FILE" ]; then
+    echo "❌ Error: infrastructure .env file not found at $INFRA_ENV_FILE"
+    echo "Run infrastructure/discover_and_save_tables.py before refreshing secrets."
     exit 1
 fi
 
 echo "📄 Loading configuration from $ENV_FILE"
 set -a  # Automatically export all variables
 source "$ENV_FILE"
+source "$INFRA_ENV_FILE"
 set +a
 
 echo ""
@@ -51,13 +59,17 @@ SECRET_VALUE=$(cat <<EOF
   "table-evaluation-stream-arn": "${TABLE_EVALUATION_STREAM_ARN:-}",
   "table-procedure-name": "${TABLE_PROCEDURE_NAME:-}",
   "table-procedure-arn": "${TABLE_PROCEDURE_ARN:-}",
-  "table-procedure-stream-arn": "${TABLE_PROCEDURE_STREAM_ARN:-}"
+  "table-procedure-stream-arn": "${TABLE_PROCEDURE_STREAM_ARN:-}",
+  "table-feedbackitem-name": "${TABLE_FEEDBACKITEM_NAME:-}",
+  "table-feedbackitem-arn": "${TABLE_FEEDBACKITEM_ARN:-}",
+  "table-feedbackitem-stream-arn": "${TABLE_FEEDBACKITEM_STREAM_ARN:-}"
 }
 EOF
 )
 
 # Try to create the secret (will fail if it already exists)
 if aws secretsmanager create-secret \
+    --region "$AWS_REGION" \
     --name "$SECRET_NAME" \
     --description "Plexus configuration for $ENVIRONMENT environment" \
     --secret-string "$SECRET_VALUE" \
@@ -67,6 +79,7 @@ else
     # If creation failed, update the existing secret
     echo "Secret already exists, updating..."
     aws secretsmanager update-secret \
+        --region "$AWS_REGION" \
         --secret-id "$SECRET_NAME" \
         --secret-string "$SECRET_VALUE"
     echo "✅ Secret updated successfully: $SECRET_NAME"
@@ -75,6 +88,7 @@ fi
 echo ""
 echo "📋 Secret details:"
 echo "  Name: $SECRET_NAME"
+echo "  Region: $AWS_REGION"
 echo "  Keys:"
 echo "$SECRET_VALUE" | jq -r 'keys[]' | sed 's/^/    - /'
 echo ""
