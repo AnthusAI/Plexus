@@ -22,6 +22,9 @@ Each YAML file contains:
 - `forbidden_apis`: functions that should not be called for budget/safety reasons.
 - `max_attempts_for_first_try_pass`: always `1` for first-try scoring.
 - `fixture_notes`: guidance for the stub fixture author.
+- Async contract: any prompt that asks for `async = true` must also require an
+  explicit `budget` object with `usd`, `wallclock_seconds`, `depth`, and
+  `tool_calls`.
 
 The harness should treat `expected_outcome.kind` as the primary checker selector
 and should record all API calls so `required_apis` / `forbidden_apis` assertions

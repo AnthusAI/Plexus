@@ -90,6 +90,14 @@ class _RecordingMCPContext:
         )
 
 
+class _FailingMCPContext:
+    async def report_progress(self, progress, total=None, message=None):
+        raise ImportError("progress transport unavailable")
+
+    async def info(self, message, logger_name=None, extra=None):
+        raise RuntimeError("info transport unavailable")
+
+
 def _child_budget() -> dict:
     return {"usd": 0.01, "wallclock_seconds": 10, "depth": 1, "tool_calls": 2}
 
@@ -101,8 +109,32 @@ def test_wrap_tactus_snippet_injects_plexus_helpers_and_capture() -> None:
 
     assert 'local plexus = require("plexus")' in wrapped
     assert "function evaluate(args)" in wrapped
+    assert "function scorecards_list(args)" in wrapped
+    assert "function scorecards(args)" in wrapped
+    assert "function scorecard(args)" in wrapped
+    assert "function evaluation_info(args)" in wrapped
+    assert "function report_configs(args)" in wrapped
+    assert "function procedures(args)" in wrapped
+    assert "function handle_status(args)" in wrapped
+    assert "function docs_get(args)" in wrapped
+    assert "function api_list(args)" in wrapped
     assert "return __plexus_last_result" in wrapped
     assert "__execute_tactus_user_snippet" in wrapped
+
+
+def test_helper_bindings_cover_advertised_runtime_api_surface() -> None:
+    facade = execute.PlexusRuntimeModule(FastMCP("test"))
+    catalog = facade.api.list()
+    helpers = {helper_name for helper_name, _, _ in execute.HELPER_BINDINGS}
+
+    expected_helpers = {
+        f"{namespace.removeprefix('plexus.')}_{method}"
+        for namespace, methods in catalog.items()
+        for method in methods
+    }
+
+    assert len(helpers) == len([binding[0] for binding in execute.HELPER_BINDINGS])
+    assert expected_helpers <= helpers
 
 
 def test_plexus_facade_delegates_namespace_call_to_mcp_tool() -> None:
@@ -114,7 +146,7 @@ def test_plexus_facade_delegates_namespace_call_to_mcp_tool() -> None:
             self.calls.append((name, arguments))
             return SimpleNamespace(
                 structured_content={
-                    "id": arguments["id"],
+                    "id": arguments["score_identifier"],
                     "name": "Compliance Tone",
                 }
             )
@@ -125,8 +157,70 @@ def test_plexus_facade_delegates_namespace_call_to_mcp_tool() -> None:
     value = facade.score.info({"id": "score_compliance_tone"})
 
     assert value == {"id": "score_compliance_tone", "name": "Compliance Tone"}
-    assert fake_mcp.calls == [("plexus_score_info", {"id": "score_compliance_tone"})]
+    assert fake_mcp.calls == [
+        ("plexus_score_info", {"score_identifier": "score_compliance_tone"})
+    ]
     assert facade.api_calls == ["plexus.score.info"]
+
+
+def test_runtime_normalizes_friendly_identifiers_for_legacy_mcp_tools() -> None:
+    assert execute._normalize_mcp_tool_args("scorecards", "info", {"id": "card-1"}) == {
+        "scorecard_identifier": "card-1"
+    }
+    assert execute._normalize_mcp_tool_args(
+        "score", "info", {"id": "score-1", "scorecard_id": "card-1"}
+    ) == {
+        "score_identifier": "score-1",
+        "scorecard_identifier": "card-1",
+    }
+    assert execute._normalize_mcp_tool_args("item", "info", {"id": "item-1"}) == {
+        "item_id": "item-1"
+    }
+
+
+def test_runtime_normalizes_procedure_request_models(monkeypatch) -> None:
+    monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "call-criteria")
+
+    assert execute._normalize_mcp_tool_args("procedure", "list", {"limit": 3}) == {
+        "request": {
+            "account_identifier": "call-criteria",
+            "scorecard_identifier": None,
+            "limit": 3,
+        }
+    }
+    assert execute._normalize_mcp_tool_args("procedure", "info", {"id": "proc-1"}) == {
+        "request": {"procedure_id": "proc-1", "include_yaml": False}
+    }
+    assert execute._normalize_mcp_tool_args(
+        "procedure", "chat_sessions", {"id": "proc-1", "limit": 2}
+    ) == {
+        "request": {"procedure_id": "proc-1", "limit": 2}
+    }
+    assert execute._normalize_mcp_tool_args(
+        "procedure", "chat_messages", {"id": "proc-1", "session_id": "session-1"}
+    ) == {
+        "request": {
+            "procedure_id": "proc-1",
+            "session_id": "session-1",
+            "limit": 50,
+            "show_tool_calls": True,
+            "show_tool_responses": True,
+        }
+    }
+
+
+def test_extract_tool_value_parses_structured_json_string() -> None:
+    result = SimpleNamespace(structured_content='{"id": "score-1", "name": "Score"}')
+
+    assert execute._extract_tool_value(result) == {"id": "score-1", "name": "Score"}
+
+
+def test_extract_tool_value_parses_result_json_string() -> None:
+    result = SimpleNamespace(
+        structured_content={"result": '{"id": "score-1", "name": "Score"}'}
+    )
+
+    assert execute._extract_tool_value(result) == {"id": "score-1", "name": "Score"}
 
 
 def test_plexus_docs_get_reads_filesystem_directly(tmp_path) -> None:
@@ -262,6 +356,77 @@ async def test_execute_tactus_streams_runtime_events_to_mcp_context(
 
 
 @pytest.mark.asyncio
+async def test_execute_tactus_ignores_failed_mcp_stream_transport(
+    monkeypatch,
+) -> None:
+    def fake_run_tactus_sync(
+        tactus,
+        mcp,
+        *,
+        trace_id,
+        trace_store,
+        stream_handler=None,
+        budget=None,
+        **kwargs,
+    ):
+        assert stream_handler is not None
+        stream_handler.emit(
+            kind="execution",
+            message="runtime started",
+            payload={"stage": "started"},
+            progress=0,
+            total=1,
+        )
+        return {
+            "ok": True,
+            "value": {"ok": True, "source": tactus},
+            "error": None,
+            "cost": {
+                "usd": 0.0,
+                "wallclock_seconds": 0.01,
+                "tokens": 0,
+                "llm_calls": 0,
+                "tool_calls": 0,
+                "workers": 0,
+                "depth_max_observed": 0,
+            },
+            "trace_id": trace_id,
+            "partial": False,
+            "api_calls": [],
+        }
+
+    monkeypatch.setattr(execute, "_run_tactus_sync", fake_run_tactus_sync)
+
+    result = await execute._execute_tactus_tool(
+        "return { ok = true }",
+        FastMCP("test-failing-stream-context"),
+        ctx=_FailingMCPContext(),
+    )
+
+    assert result["ok"] is True
+
+
+def test_stream_event_payload_falls_back_when_model_dump_json_fails() -> None:
+    class FakeLuaTable:
+        def items(self):
+            return [(1, "a"), (2, "b")]
+
+    class FakeEvent:
+        event_type = "execution_summary"
+        result = FakeLuaTable()
+
+        def model_dump(self, mode):
+            if mode == "json":
+                raise ValueError("cannot serialize Lua table")
+            return {"event_type": self.event_type, "result": self.result}
+
+    assert execute._stream_event_payload(FakeEvent()) == {
+        "event_type": "execution_summary",
+        "result": ["a", "b"],
+    }
+
+
+@pytest.mark.asyncio
 async def test_execute_tactus_tool_returns_structured_contract(monkeypatch) -> None:
     mcp = FastMCP("test-execute-tactus")
     execute.register_tactus_tools(mcp)
@@ -327,8 +492,8 @@ async def test_execute_tactus_runs_helper_call_through_host_module() -> None:
     mcp = FastMCP("test-execute-tactus-runtime")
 
     @mcp.tool()
-    def plexus_score_info(id: str):
-        return {"id": id, "name": "Compliance Tone"}
+    def plexus_score_info(score_identifier: str):
+        return {"id": score_identifier, "name": "Compliance Tone"}
 
     result = await execute._execute_tactus_tool(
         'score{ id = "score_compliance_tone" }',
@@ -343,6 +508,27 @@ async def test_execute_tactus_runs_helper_call_through_host_module() -> None:
     assert result["error"] is None
     assert result["api_calls"] == ["plexus.score.info"]
     assert result["cost"]["tool_calls"] == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_runs_canonical_helper_call_through_host_module() -> None:
+    mcp = FastMCP("test-execute-tactus-canonical-helper")
+
+    @mcp.tool()
+    def plexus_score_info(score_identifier: str):
+        return {"id": score_identifier, "name": "Compliance Tone"}
+
+    result = await execute._execute_tactus_tool(
+        'score_info{ id = "score_compliance_tone" }',
+        mcp,
+    )
+
+    assert result["value"] == {
+        "id": "score_compliance_tone",
+        "name": "Compliance Tone",
+    }
+    assert result["ok"] is True
+    assert result["api_calls"] == ["plexus.score.info"]
 
 
 @pytest.mark.asyncio
@@ -461,8 +647,8 @@ async def test_execute_tactus_implicit_last_helper_result_is_returned() -> None:
     mcp = FastMCP("test-execute-tactus-implicit")
 
     @mcp.tool()
-    def plexus_score_info(id: str):
-        return {"id": id, "name": "Implicit"}
+    def plexus_score_info(score_identifier: str):
+        return {"id": score_identifier, "name": "Implicit"}
 
     result = await execute._execute_tactus_tool(
         'score{ id = "score_implicit" }',
@@ -478,8 +664,8 @@ async def test_execute_tactus_explicit_return_overrides_helper_capture() -> None
     mcp = FastMCP("test-execute-tactus-explicit")
 
     @mcp.tool()
-    def plexus_score_info(id: str):
-        return {"id": id, "name": "Captured"}
+    def plexus_score_info(score_identifier: str):
+        return {"id": score_identifier, "name": "Captured"}
 
     result = await execute._execute_tactus_tool(
         'score{ id = "score_captured" }\nreturn { override = true }',
@@ -496,8 +682,8 @@ async def test_execute_tactus_writes_trace_for_successful_run() -> None:
     mcp = FastMCP("test-execute-tactus-trace-success")
 
     @mcp.tool()
-    def plexus_score_info(id: str):
-        return {"id": id, "name": "Trace"}
+    def plexus_score_info(score_identifier: str):
+        return {"id": score_identifier, "name": "Trace"}
 
     store = _RecordingTraceStore()
     result = await execute._execute_tactus_tool(
@@ -841,7 +1027,7 @@ def test_evaluation_run_async_requires_explicit_child_budget() -> None:
         )
 
     assert called is False
-    assert module.api_calls == []
+    assert module.api_calls == ["plexus.evaluation.run"]
 
 
 def test_async_child_budget_overrun_blocks_dispatch() -> None:
@@ -870,7 +1056,7 @@ def test_async_child_budget_overrun_blocks_dispatch() -> None:
 
     assert called is False
     assert gate.exceeded is True
-    assert module.api_calls == []
+    assert module.api_calls == ["plexus.evaluation.run"]
 
 
 def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
@@ -1138,7 +1324,7 @@ async def test_execute_tactus_async_run_without_budget_returns_clear_error() -> 
     assert result["ok"] is False
     assert result["error"]["code"] == "child_budget_required"
     assert "explicit budget" in result["error"]["message"]
-    assert result["api_calls"] == []
+    assert result["api_calls"] == ["plexus.evaluation.run"]
     assert called is False
 
 
@@ -1370,8 +1556,8 @@ async def test_execute_tactus_cost_envelope_reflects_budget_remaining() -> None:
     mcp = FastMCP("test-execute-tactus-budget-remaining")
 
     @mcp.tool()
-    def plexus_score_info(id: str):
-        return {"id": id, "name": "Tracked"}
+    def plexus_score_info(score_identifier: str):
+        return {"id": score_identifier, "name": "Tracked"}
 
     result = await execute._execute_tactus_tool(
         'score{ id = "score_tracked" }',
