@@ -23,6 +23,52 @@ class _RecordingTraceStore(execute.TactusTraceStore):
         return f"memory://{record['trace_id']}"
 
 
+class _MemoryHandleStore(execute.TactusHandleStore):
+    def __init__(self) -> None:
+        self.records: dict[str, dict] = {}
+        self.created: list[dict] = []
+
+    def create(
+        self,
+        *,
+        kind: str,
+        parent_trace_id: str,
+        api_call: str,
+        args: dict,
+        dispatch_result: dict,
+    ) -> dict:
+        handle_id = f"handle-{len(self.records) + 1}"
+        record = {
+            "id": handle_id,
+            "kind": kind,
+            "status": "running",
+            "status_url": dispatch_result.get("dashboard_url"),
+            "created_at": "2026-04-29T00:00:00Z",
+            "updated_at": "2026-04-29T00:00:00Z",
+            "parent_trace_id": parent_trace_id,
+            "api_call": api_call,
+            "args": args,
+            "dispatch_result": dispatch_result,
+        }
+        self.records[handle_id] = record
+        self.created.append(record)
+        return {
+            "id": handle_id,
+            "kind": kind,
+            "status": "running",
+            "status_url": dispatch_result.get("dashboard_url"),
+            "created_at": record["created_at"],
+            "parent_trace_id": parent_trace_id,
+        }
+
+    def get(self, handle_id: str) -> dict:
+        return dict(self.records[handle_id])
+
+    def update(self, handle_id: str, updates: dict) -> dict:
+        self.records[handle_id].update(updates)
+        return dict(self.records[handle_id])
+
+
 def test_wrap_tactus_snippet_injects_plexus_helpers_and_capture() -> None:
     wrapped = execute._wrap_tactus_snippet(
         'evaluate{ score_id = "score_compliance_tone", item_count = 200 }'
@@ -560,12 +606,15 @@ async def test_execute_tactus_returns_budget_exceeded_when_tool_calls_overrun() 
 
 
 def test_long_running_methods_constant_lists_run_apis() -> None:
-    assert ("evaluation", "run") in execute.LONG_RUNNING_METHODS
-    assert ("report", "run") in execute.LONG_RUNNING_METHODS
-    assert ("procedure", "run") in execute.LONG_RUNNING_METHODS
+    assert ("evaluation", "run") not in execute.LONG_RUNNING_METHODS
+    assert ("evaluation", "run") in execute.DIRECT_HANDLERS
+    assert ("report", "run") not in execute.LONG_RUNNING_METHODS
+    assert ("report", "run") in execute.DIRECT_HANDLERS
+    assert ("procedure", "run") not in execute.LONG_RUNNING_METHODS
+    assert ("procedure", "run") in execute.DIRECT_HANDLERS
 
 
-def test_plexus_runtime_module_marks_long_running_call_and_skips_loopback() -> None:
+def test_plexus_runtime_module_requires_async_for_evaluation_run() -> None:
     class FakeMCP:
         def __init__(self) -> None:
             self.calls: list[tuple[str, dict]] = []
@@ -588,7 +637,7 @@ def test_plexus_runtime_module_marks_long_running_call_and_skips_loopback() -> N
 
 
 @pytest.mark.asyncio
-async def test_execute_tactus_returns_requires_handle_protocol_for_long_running() -> (
+async def test_execute_tactus_returns_requires_handle_protocol_for_blocking_run() -> (
     None
 ):
     mcp = FastMCP("test-execute-tactus-handle")
@@ -610,6 +659,301 @@ async def test_execute_tactus_returns_requires_handle_protocol_for_long_running(
     assert result["api_calls"] == ["plexus.evaluation.run"]
     assert len(store.records) == 1
     assert store.records[0]["error"]["code"] == "requires_handle_protocol"
+
+
+def test_evaluation_run_async_creates_handle_and_records_budget() -> None:
+    seen_args: dict = {}
+    handles = _MemoryHandleStore()
+
+    def fake_runner(args: dict) -> dict:
+        seen_args.update(args)
+        return {
+            "status": "dispatched",
+            "evaluation_id": "eval-1",
+            "dashboard_url": "https://example.test/evaluations/eval-1",
+        }
+
+    gate = execute.BudgetGate()
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        budget=gate,
+        handle_store=handles,
+        evaluation_runner=fake_runner,
+    )
+
+    handle = module.evaluation.run(
+        {"scorecard_name": "Compliance", "score_name": "Tone", "async": True}
+    )
+
+    assert handle == {
+        "id": "handle-1",
+        "kind": "evaluation",
+        "status": "running",
+        "status_url": "https://example.test/evaluations/eval-1",
+        "created_at": "2026-04-29T00:00:00Z",
+        "parent_trace_id": "trace-1",
+    }
+    assert seen_args == {
+        "scorecard_name": "Compliance",
+        "score_name": "Tone",
+        "async": True,
+    }
+    assert gate.tool_calls == 1
+    assert module.api_calls == ["plexus.evaluation.run"]
+    assert handles.created[0]["dispatch_result"]["evaluation_id"] == "eval-1"
+
+
+def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
+    monkeypatch,
+) -> None:
+    captured: dict = {}
+
+    class FakeProcess:
+        pid = 4242
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return FakeProcess()
+
+    class FakeMCP:
+        async def call_tool(self, name, arguments):  # pragma: no cover - must not run
+            raise AssertionError("default evaluation runner must not call MCP tools")
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/plexus")
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+
+    result = execute._default_evaluation_runner(
+        {
+            "evaluation_type": "feedback",
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+            "max_feedback_items": 25,
+            "days": 30,
+        },
+        FakeMCP(),
+    )
+
+    assert result["status"] == "dispatched"
+    assert result["process_id"] == 4242
+    assert captured["cmd"] == [
+        "/usr/local/bin/plexus",
+        "evaluate",
+        "feedback",
+        "--scorecard",
+        "Compliance",
+        "--score",
+        "Tone",
+        "--max-items",
+        "25",
+        "--sampling-mode",
+        "newest",
+        "--days",
+        "30",
+    ]
+    assert captured["kwargs"]["start_new_session"] is True
+
+
+def test_handle_peek_refreshes_evaluation_status() -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"evaluation_id": "eval-1"},
+    )
+
+    def fake_evaluation_info(args: dict) -> dict:
+        return {"id": args["evaluation_id"], "status": "COMPLETED"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "completed"
+    assert snapshot["evaluation"] == {"id": "eval-1", "status": "COMPLETED"}
+    assert module.api_calls == ["plexus.handle.peek"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_evaluation_run_async_returns_handle() -> None:
+    mcp = FastMCP("test-execute-tactus-evaluation-run-handle")
+    handles = _MemoryHandleStore()
+
+    def fake_runner(args: dict) -> dict:
+        return {
+            "status": "dispatched",
+            "evaluation_id": "eval-1",
+            "dashboard_url": "https://example.test/evaluations/eval-1",
+        }
+
+    store = _RecordingTraceStore()
+    result = await execute._execute_tactus_tool(
+        'evaluate{ scorecard_name = "Compliance", score_name = "Tone", async = true }',
+        mcp,
+        trace_store=store,
+        handle_store=handles,
+        evaluation_runner=fake_runner,
+    )
+
+    assert result["ok"] is True
+    assert result["value"]["kind"] == "evaluation"
+    assert result["value"]["id"] == "handle-1"
+    assert result["api_calls"] == ["plexus.evaluation.run"]
+    assert result["cost"]["tool_calls"] == 1
+    assert store.records[0]["value"]["id"] == "handle-1"
+
+
+def test_report_run_async_creates_handle_and_records_budget() -> None:
+    seen_args: dict = {}
+    handles = _MemoryHandleStore()
+
+    def fake_runner(args: dict) -> dict:
+        seen_args.update(args)
+        return {
+            "status": "dispatched",
+            "cache_key": "report-cache",
+            "task_id": "task-1",
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        handle_store=handles,
+        report_runner=fake_runner,
+    )
+
+    handle = module.report.run(
+        {
+            "block_class": "FeedbackContradictions",
+            "cache_key": "report-cache",
+            "async": True,
+        }
+    )
+
+    assert handle["id"] == "handle-1"
+    assert handle["kind"] == "report"
+    assert handle["parent_trace_id"] == "trace-1"
+    assert seen_args == {
+        "block_class": "FeedbackContradictions",
+        "cache_key": "report-cache",
+        "async": True,
+    }
+    assert module.api_calls == ["plexus.report.run"]
+    assert handles.created[0]["dispatch_result"]["task_id"] == "task-1"
+
+
+def test_report_run_blocking_requires_handle_protocol() -> None:
+    module = execute.PlexusRuntimeModule(FastMCP("test"))
+
+    with pytest.raises(execute.RequiresHandleProtocol):
+        module.report.run({"block_class": "FeedbackContradictions"})
+
+    assert module.handle_protocol_required == ("report", "run")
+    assert module.api_calls == ["plexus.report.run"]
+
+
+def test_procedure_run_async_creates_handle_and_records_budget() -> None:
+    seen_args: dict = {}
+    handles = _MemoryHandleStore()
+
+    def fake_runner(args: dict) -> dict:
+        seen_args.update(args)
+        return {
+            "status": "initiated",
+            "procedure_id": "proc-1",
+            "message": "Procedure run initiated",
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        handle_store=handles,
+        procedure_runner=fake_runner,
+    )
+
+    handle = module.procedure.run(
+        {"procedure_id": "proc-1", "max_iterations": 3, "async": True}
+    )
+
+    assert handle["id"] == "handle-1"
+    assert handle["kind"] == "procedure"
+    assert handle["parent_trace_id"] == "trace-1"
+    assert seen_args == {
+        "procedure_id": "proc-1",
+        "max_iterations": 3,
+        "async": True,
+    }
+    assert module.api_calls == ["plexus.procedure.run"]
+    assert handles.created[0]["dispatch_result"]["procedure_id"] == "proc-1"
+
+
+def test_procedure_run_blocking_requires_handle_protocol() -> None:
+    module = execute.PlexusRuntimeModule(FastMCP("test"))
+
+    with pytest.raises(execute.RequiresHandleProtocol):
+        module.procedure.run({"procedure_id": "proc-1"})
+
+    assert module.handle_protocol_required == ("procedure", "run")
+    assert module.api_calls == ["plexus.procedure.run"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_report_run_async_returns_handle() -> None:
+    mcp = FastMCP("test-execute-tactus-report-run-handle")
+    handles = _MemoryHandleStore()
+
+    def fake_runner(args: dict) -> dict:
+        return {
+            "status": "dispatched",
+            "cache_key": args["cache_key"],
+            "task_id": "task-1",
+        }
+
+    result = await execute._execute_tactus_tool(
+        'report{ block_class = "FeedbackContradictions", cache_key = "report-cache", async = true }',
+        mcp,
+        handle_store=handles,
+        report_runner=fake_runner,
+    )
+
+    assert result["ok"] is True
+    assert result["value"]["kind"] == "report"
+    assert result["value"]["id"] == "handle-1"
+    assert result["api_calls"] == ["plexus.report.run"]
+    assert result["cost"]["tool_calls"] == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_procedure_run_async_returns_handle() -> None:
+    mcp = FastMCP("test-execute-tactus-procedure-run-handle")
+    handles = _MemoryHandleStore()
+
+    def fake_runner(args: dict) -> dict:
+        return {
+            "status": "initiated",
+            "procedure_id": args["procedure_id"],
+            "message": "Procedure run initiated",
+        }
+
+    result = await execute._execute_tactus_tool(
+        'return plexus.procedure.run{ procedure_id = "proc-1", async = true }',
+        mcp,
+        handle_store=handles,
+        procedure_runner=fake_runner,
+    )
+
+    assert result["ok"] is True
+    assert result["value"]["kind"] == "procedure"
+    assert result["value"]["id"] == "handle-1"
+    assert result["api_calls"] == ["plexus.procedure.run"]
+    assert result["cost"]["tool_calls"] == 1
 
 
 @pytest.mark.asyncio
