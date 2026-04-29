@@ -114,6 +114,9 @@ Implemented handle calls:
   - `process_id` handles receive `SIGTERM`.
   - `task_id` handles mark the dashboard Task `CANCELLED`.
   - evaluation handles with `evaluation_id` mark the Evaluation `CANCELLED`.
+  Report and procedure workers now check dashboard Task cancellation before
+  entering major execution phases and stop without converting cancellation into
+  a generic failure.
 
 A spawn that would exceed the parent budget is rejected before any remote
 dispatch.
@@ -121,9 +124,9 @@ dispatch.
 ## Remaining Work
 
 - Streaming progress notifications still need to be wired to MCP clients.
-- Deeper worker-side cancellation remains cooperative: dashboard Tasks and
-  Evaluation records are marked cancelled, but any worker already running must
-  honor that status to stop promptly.
+- Evaluation worker-side cancellation remains cooperative beyond process
+  termination and Evaluation record updates; deeper in-process checkpoints can
+  be added if evaluations begin running without a killable process boundary.
 - Report configuration handles currently require a dedicated report task
   dispatch path; the implemented report handle path is for durable
   programmatic report-block tasks.
