@@ -1069,6 +1069,120 @@ async def test_execute_tactus_persists_inference_costs_from_cost_events(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_execute_tactus_fails_when_child_budget_cost_is_exceeded(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _Recorder(SimpleNamespace):
+        async def record_assistant_message(self, _content: str):
+            return "msg-1"
+
+    class _StorageWithState(SimpleNamespace):
+        def __init__(self):
+            super().__init__()
+            self.state = {}
+
+        def state_set(self, _procedure_id, key, value):
+            self.state[key] = value
+
+        def state_get(self, _procedure_id, key, default=None):
+            return self.state.get(key, default)
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithCostEvents)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: _StorageWithState(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: _Recorder(),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-cost-budget",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={
+            "_plexus_child_budget": {
+                "usd": 0.001,
+                "wallclock_seconds": 30,
+                "depth": 1,
+                "tool_calls": 4,
+            }
+        },
+    )
+
+    assert result["success"] is False
+    assert "child USD budget" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_applies_child_depth_budget_to_runtime_source(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _RuntimeCapturesSource(_FakeRuntime):
+        last_source = None
+
+        async def execute(self, source, context, format="yaml"):
+            self.__class__.last_source = source
+            return await super().execute(source, context, format=format)
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeCapturesSource)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-depth-budget",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={
+            "_plexus_child_budget": {
+                "usd": 0.1,
+                "wallclock_seconds": 30,
+                "depth": 2,
+                "tool_calls": 4,
+            }
+        },
+    )
+
+    assert result["success"] is True
+    assert "max_depth: 2" in _RuntimeCapturesSource.last_source
+
+
+@pytest.mark.asyncio
 async def test_execute_tactus_completes_stages_only_on_success(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 

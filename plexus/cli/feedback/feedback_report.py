@@ -5,6 +5,7 @@ Direct feedback report commands (no report template required).
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
@@ -28,6 +29,7 @@ from plexus.reports.service import (
     run_programmatic_block_and_persist,
     run_programmatic_report_and_persist,
 )
+from plexus.runtime_budget import RuntimeBudgetLimitExceeded, RuntimeBudgetMeter, RuntimeBudgetSpec
 
 
 def _print_result(
@@ -149,18 +151,36 @@ def report() -> None:
 def run_programmatic_block(payload_base64: str) -> None:
     """Internal dispatcher entrypoint for durable programmatic report blocks."""
     payload = decode_programmatic_run_payload(payload_base64)
+    child_budget = payload.get("child_budget")
+    try:
+        budget_meter = (
+            RuntimeBudgetMeter(RuntimeBudgetSpec.from_dict(child_budget))
+            if isinstance(child_budget, dict)
+            else None
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     client = create_client()
     if not client:
         raise click.ClickException("Could not create dashboard client.")
 
-    output_data, log_output = run_programmatic_block_and_persist(
-        cache_key=str(payload.get("cache_key") or "").strip(),
-        block_class=str(payload.get("block_class") or "").strip(),
-        block_config=payload.get("block_config") or {},
-        account_id=str(payload.get("account_id") or "").strip(),
-        client=client,
-        persist_required=True,
-    )
+    try:
+        context = (
+            budget_meter.enforce_wallclock("report.run_programmatic_block")
+            if budget_meter
+            else nullcontext()
+        )
+        with context:
+            output_data, log_output = run_programmatic_block_and_persist(
+                cache_key=str(payload.get("cache_key") or "").strip(),
+                block_class=str(payload.get("block_class") or "").strip(),
+                block_config=payload.get("block_config") or {},
+                account_id=str(payload.get("account_id") or "").strip(),
+                client=client,
+                persist_required=True,
+            )
+    except RuntimeBudgetLimitExceeded as exc:
+        raise click.ClickException(str(exc)) from exc
     if output_data is None:
         raise click.ClickException(log_output or "Programmatic report block execution failed.")
 
