@@ -23,6 +23,7 @@ import isEqual from 'lodash/isEqual'
 import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
 import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
+import { RelatedResourceCard } from '@/components/ui/related-resource-card'
 import Link from 'next/link'
 import { getClient } from '@/utils/amplify-client'
 import ReactMarkdown from "react-markdown"
@@ -1975,9 +1976,20 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
 }: EvaluationTaskProps) {
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
   const [scoreVersionInfo, setScoreVersionInfo] = useState<{
+    id: string;
     createdAt: string;
+    note?: string | null;
     isChampion: boolean;
   } | null>(null);
+  const [scoreVersionLoadFailed, setScoreVersionLoadFailed] = useState(false);
+  const [procedureInfo, setProcedureInfo] = useState<{
+    id: string;
+    name: string;
+    description?: string | null;
+    status?: string | null;
+    updatedAt?: string | null;
+  } | null>(null);
+  const [procedureLoadFailed, setProcedureLoadFailed] = useState(false);
   const [baselineMetrics, setBaselineMetrics] = useState<EvaluationMetric[] | null>(null);
   const [baselineAccuracy, setBaselineAccuracy] = useState<number | null>(null);
   const [currentBaselineAccuracy, setCurrentBaselineAccuracy] = useState<number | null>(null);
@@ -2005,9 +2017,11 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   useEffect(() => {
     if (!task.scoreVersionId || variant !== 'detail') {
       setScoreVersionInfo(null);
+      setScoreVersionLoadFailed(false);
       return;
     }
 
+    setScoreVersionLoadFailed(false);
     const fetchScoreVersion = async () => {
       try {
         const client = getClient();
@@ -2017,6 +2031,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
               getScoreVersion(id: $id) {
                 id
                 createdAt
+                note
                 score {
                   championVersionId
                 }
@@ -2029,18 +2044,73 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
         const scoreVersion = (result as any).data?.getScoreVersion;
         if (scoreVersion) {
           setScoreVersionInfo({
+            id: scoreVersion.id,
             createdAt: scoreVersion.createdAt,
+            note: scoreVersion.note ?? null,
             isChampion: scoreVersion.score?.championVersionId === task.scoreVersionId
           });
+        } else {
+          setScoreVersionInfo(null);
+          setScoreVersionLoadFailed(true);
         }
       } catch (error) {
         console.error('Error fetching score version:', error);
         setScoreVersionInfo(null);
+        setScoreVersionLoadFailed(true);
       }
     };
 
     fetchScoreVersion();
   }, [task.scoreVersionId, variant]);
+
+  useEffect(() => {
+    if (!task.procedureId || variant !== 'detail') {
+      setProcedureInfo(null);
+      setProcedureLoadFailed(false);
+      return;
+    }
+
+    setProcedureLoadFailed(false);
+    const fetchProcedure = async () => {
+      try {
+        const client = getClient();
+        const result = await client.graphql({
+          query: `
+            query GetProcedure($id: ID!) {
+              getProcedure(id: $id) {
+                id
+                name
+                description
+                status
+                updatedAt
+              }
+            }
+          `,
+          variables: { id: task.procedureId }
+        });
+
+        const procedure = (result as any).data?.getProcedure;
+        if (procedure) {
+          setProcedureInfo({
+            id: procedure.id,
+            name: procedure.name,
+            description: procedure.description ?? null,
+            status: procedure.status ?? null,
+            updatedAt: procedure.updatedAt ?? null,
+          });
+        } else {
+          setProcedureInfo(null);
+          setProcedureLoadFailed(true);
+        }
+      } catch (error) {
+        console.error('Error fetching procedure:', error);
+        setProcedureInfo(null);
+        setProcedureLoadFailed(true);
+      }
+    };
+
+    fetchProcedure();
+  }, [task.procedureId, variant]);
 
   const baselineEvaluationId = useMemo(() => {
     return typeof data.baseline_evaluation_id === 'string' ? data.baseline_evaluation_id : null
@@ -2693,33 +2763,62 @@ ${categoryLines}${mechanicalLines}
                   )}
               </div>
             )}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Score Version:</span>
-              {scoreVersionInfo ? (
-                <>
-                  <Timestamp time={scoreVersionInfo.createdAt} variant="relative" />
-                  {scoreVersionInfo.isChampion && (
-                    <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
-                      Champion
-                    </span>
-                  )}
-                </>
-              ) : (
-                <span>Unavailable</span>
-              )}
-            </div>
+            {taskWithDefaults.scorecardId && taskWithDefaults.scoreId && taskWithDefaults.scoreVersionId && (
+              <RelatedResourceCard
+                label="Score Version"
+                href={`/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`}
+                linkLabel="Open score version"
+                summary={scoreVersionInfo ? (
+                  <>
+                    <Timestamp time={scoreVersionInfo.createdAt} variant="relative" className="text-xs" />
+                    {scoreVersionInfo.isChampion && (
+                      <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                        Champion
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span>{scoreVersionLoadFailed ? 'Unavailable' : 'Loading version details...'}</span>
+                )}
+              >
+                {scoreVersionInfo ? (
+                  <div className="space-y-1">
+                    <div>{scoreVersionInfo.note || 'No note'}</div>
+                    <div className="font-mono text-xs">{scoreVersionInfo.id}</div>
+                  </div>
+                ) : (
+                  <span>{scoreVersionLoadFailed ? 'This score version could not be loaded.' : 'Loading score version details...'}</span>
+                )}
+              </RelatedResourceCard>
+            )}
             {taskWithDefaults.procedureId && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
-                <span>Procedure:</span>
-                <span className="truncate font-mono">{taskWithDefaults.procedureId}</span>
-                <Link
-                  href={`/lab/procedures/${taskWithDefaults.procedureId}`}
-                  className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Link>
-              </div>
+              <RelatedResourceCard
+                label="Procedure"
+                href={`/lab/procedures/${taskWithDefaults.procedureId}`}
+                linkLabel="Open procedure"
+                summary={
+                  <span className="truncate">
+                    {procedureInfo?.name || (procedureLoadFailed ? 'Unavailable' : taskWithDefaults.procedureId)}
+                  </span>
+                }
+              >
+                {procedureInfo ? (
+                  <div className="space-y-1">
+                    <div>{procedureInfo.description || 'No description'}</div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      {procedureInfo.status && <span>Status: {procedureInfo.status}</span>}
+                      {procedureInfo.updatedAt && (
+                        <span>
+                          Updated <Timestamp time={procedureInfo.updatedAt} variant="relative" className="text-xs" />
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-mono text-xs">{procedureInfo.id}</div>
+                  </div>
+                ) : (
+                  <span>{procedureLoadFailed ? 'This procedure could not be loaded.' : 'Loading procedure details...'}</span>
+                )}
+              </RelatedResourceCard>
             )}
             {taskWithDefaults.dataSetId && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
