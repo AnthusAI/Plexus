@@ -43,6 +43,33 @@ def test_run_programmatic_block_executes_hidden_dispatcher_entrypoint(
     mock_run_and_persist.assert_called_once()
 
 
+@patch("plexus.cli.feedback.feedback_report.run_programmatic_block_and_persist")
+@patch("plexus.cli.feedback.feedback_report.create_client")
+def test_run_programmatic_block_rejects_invalid_child_budget(
+    mock_create_client,
+    mock_run_and_persist,
+):
+    runner = CliRunner()
+    mock_create_client.return_value = MagicMock()
+    payload = encode_programmatic_run_payload(
+        {
+            "cache_key": "cache-1",
+            "block_class": "AcceptanceRate",
+            "block_config": {"scorecard": "sc-1"},
+            "account_id": "acct-1",
+            "ttl_hours": 24,
+            "fresh": False,
+            "child_budget": {"usd": 0.1, "depth": 1, "tool_calls": 2},
+        }
+    )
+
+    result = runner.invoke(report, ["run-programmatic-block", "--payload-base64", payload])
+
+    assert result.exit_code != 0
+    assert "wallclock_seconds" in result.output
+    mock_run_and_persist.assert_not_called()
+
+
 @patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
 def test_acceptance_rate_passes_parallel_fetch_options(mock_run_feedback_report_block):
     runner = CliRunner()

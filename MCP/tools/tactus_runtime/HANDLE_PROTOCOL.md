@@ -134,6 +134,15 @@ dispatch. Evaluation dispatch receives the child allocation in
 programmatic payload, and procedure dispatch passes it in Tactus context as
 `_plexus_child_budget`.
 
+Workers now enforce those propagated budgets at their execution boundary:
+
+- evaluation CLI workers load `PLEXUS_CHILD_BUDGET`, enforce wallclock, and
+  reject known scorecard cost totals that exceed the child USD budget.
+- durable programmatic report-block workers enforce wallclock from the
+  `child_budget` payload before running the block.
+- procedure workers enforce wallclock, apply `depth` as Tactus `max_depth`, and
+  reject LLM cost events that exceed the child USD budget.
+
 ## Remaining Work
 
 - Evaluation worker-side cancellation remains cooperative beyond process
@@ -142,8 +151,9 @@ programmatic payload, and procedure dispatch passes it in Tactus context as
 - Report configuration handles currently require a dedicated report task
   dispatch path; the implemented report handle path is for durable
   programmatic report-block tasks.
-- Worker-side enforcement of propagated child budgets remains the next step
-  after dispatch-boundary propagation.
+- Full child tool-call accounting remains limited by worker-specific telemetry;
+  current enforcement covers dispatch reservation, worker wallclock/depth, and
+  known USD cost emissions.
 
 ## Removing Gates
 

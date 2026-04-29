@@ -14,7 +14,14 @@ import queue
 import threading
 import uuid
 import yaml
+from contextlib import nullcontext
 from typing import Dict, Any, Optional, List
+
+from plexus.runtime_budget import (
+    RuntimeBudgetLimitExceeded,
+    RuntimeBudgetMeter,
+    RuntimeBudgetSpec,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -513,6 +520,8 @@ class _PlexusTraceLogBridge:
             if callable(self._on_cost_event):
                 try:
                     self._on_cost_event(event)
+                except RuntimeBudgetLimitExceeded:
+                    raise
                 except Exception as exc:
                     logger.warning("Failed processing incremental cost event: %s", exc)
             # Also forward cost events to the trace sink so assistant/tool chat
@@ -1004,6 +1013,32 @@ async def _execute_tactus(
         # Create Plexus adapters
         storage = PlexusStorageAdapter(client, procedure_id)
         chat_recorder = ProcedureChatRecorder(client, procedure_id)
+        child_budget = (
+            context.get("_plexus_child_budget")
+            if isinstance(context, dict)
+            else None
+        )
+        try:
+            child_budget_meter = (
+                RuntimeBudgetMeter(RuntimeBudgetSpec.from_dict(child_budget))
+                if isinstance(child_budget, dict)
+                else None
+            )
+        except ValueError as budget_error:
+            raise RuntimeBudgetLimitExceeded(str(budget_error)) from budget_error
+
+        if child_budget_meter is not None:
+            try:
+                parsed_source = yaml.safe_load(procedure_source)
+                if isinstance(parsed_source, dict):
+                    parsed_source = dict(parsed_source)
+                    parsed_source["max_depth"] = child_budget_meter.spec.depth
+                    procedure_source = yaml.safe_dump(parsed_source, sort_keys=False)
+            except Exception as budget_depth_error:  # noqa: BLE001
+                raise RuntimeBudgetLimitExceeded(
+                    f"Could not apply child depth budget: {budget_depth_error}"
+                ) from budget_depth_error
+
         # Allow callers to inject a custom HITL adapter (e.g. TerminalHITLAdapter for CLI)
         hitl = options.pop("hitl_adapter", None)
         if hitl is None:
@@ -1013,6 +1048,11 @@ async def _execute_tactus(
         def _on_incremental_cost_event(event: Any) -> None:
             # Persist each inference cost event as it arrives so dashboards can
             # display near-real-time optimizer spend during long-running cycles.
+            if child_budget_meter is not None:
+                child_budget_meter.record_usd(
+                    "procedure.llm",
+                    getattr(event, "total_cost", None) or getattr(event, "cost", None),
+                )
             _persist_inference_costs_to_state(storage, procedure_id, [event])
 
         log_bridge = _PlexusTraceLogBridge(
@@ -1234,9 +1274,15 @@ async def _execute_tactus(
             )
 
         # Execute the full Tactus YAML source so params/agents/stages are preserved.
-        result = _normalize_tactus_result(
-            await runtime.execute(procedure_source, runtime_context, format="yaml")
+        budget_context = (
+            child_budget_meter.enforce_wallclock("procedure.run")
+            if child_budget_meter is not None
+            else nullcontext()
         )
+        with budget_context:
+            result = _normalize_tactus_result(
+                await runtime.execute(procedure_source, runtime_context, format="yaml")
+            )
         if log_bridge:
             await log_bridge.flush()
             _persist_inference_costs_to_state(storage, procedure_id, log_bridge.cost_events)
