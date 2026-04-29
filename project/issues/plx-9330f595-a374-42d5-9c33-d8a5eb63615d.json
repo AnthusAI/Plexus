@@ -262,10 +262,19 @@
       "author": "ryan",
       "text": "Implemented and verified Console's single model-facing Plexus MCP dispatcher tool. For builtin:console/chat, tools: [plexus] now exposes one Tactus tool named plexus; its tool_name argument dispatches to the selected underlying MCP tool and arguments are passed as JSON. Kept non-Console Tactus MCP bridging unchanged. Live IAM/local-worker smoke against session 64d67ced-c0d9-4cb8-b62a-e288abde2195 succeeded: internal TOOL_CALL is now 'Tool call: plexus' and assistant answered from plexus_scorecards_list results. Focused tests passed: PYTHONPATH=. pytest -q plexus/cli/procedure/test_procedure_executor_compat.py plexus/cli/procedure/test_builtin_procedures.py plexus/console/test_chat_runtime.py -q (51 passed).",
       "created_at": "2026-04-29T03:39:44.209922Z"
+    },
+    {
+      "id": "f72709fd-92c7-4d0a-9bc3-0cc70b1f7fa1",
+      "author": "ryan",
+      "text": "Prepared Console Plexus tool dispatcher for fresh develop PR. Tactus import resolves to 0.46.3 from /Users/ryan/Projects/Tactus. Focused verification passed: python -m pytest -q plexus/cli/procedure/test_procedure_executor_compat.py plexus/cli/procedure/test_builtin_procedures.py plexus/console/test_chat_runtime.py plexus/cli/procedure/lua_dsl/test_runtime_basic.py plexus/cli/procedure/lua_dsl/tests/test_agent_primitives.py (84 passed).",
+      "created_at": "2026-04-29T17:45:02.636604Z"
     }
   ],
   "created_at": "2026-04-27T12:42:41.687340Z",
-  "updated_at": "2026-04-29T03:39:44.209922Z",
+  "updated_at": "2026-04-29T17:45:02.636604Z",
   "closed_at": null,
-  "custom": {}
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }
