@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from rubric_memory.rubric_memory import (
     _coerce_citation_context,
     _coerce_json_object,
@@ -123,4 +127,125 @@ def test_register_rubric_memory_tools_includes_sme_question_gate():
     register_rubric_memory_tools(server)
 
     assert "plexus_rubric_memory_evidence_pack" in server.tools
+    assert "plexus_rubric_memory_recent_entries" in server.tools
     assert "plexus_rubric_memory_sme_question_gate" in server.tools
+
+
+@pytest.mark.asyncio
+async def test_evidence_pack_tool_defaults_to_retrieval_only_context(monkeypatch):
+    class FakeServer:
+        def __init__(self):
+            self.tools = {}
+
+        def tool(self):
+            def decorator(func):
+                self.tools[func.__name__] = func
+                return func
+            return decorator
+
+    class FakeCitation:
+        def model_dump(self, mode="json"):
+            return {"id": "evidence:01:test", "kind": "corpus_evidence"}
+
+    class FakeContext:
+        markdown_context = "retrieval context"
+        citation_index = [FakeCitation()]
+        machine_context = {"context_kind": "retrieval_only"}
+        diagnostics = [{"kind": "query_plan"}]
+
+    class FakeProvider:
+        def __init__(self, api_client):
+            self.api_client = api_client
+
+        async def retrieve_for_score_item(self, **kwargs):
+            assert kwargs["score_id"] == "score-1"
+            return FakeContext()
+
+        async def generate_for_score_item(self, **_kwargs):
+            pytest.fail("default evidence-pack MCP call must not run synthesis")
+
+    import shared.utils
+    import plexus.rubric_memory
+
+    monkeypatch.setattr(shared.utils, "create_dashboard_client", lambda: object())
+    monkeypatch.setattr(
+        plexus.rubric_memory,
+        "RubricMemoryContextProvider",
+        FakeProvider,
+    )
+
+    server = FakeServer()
+    register_rubric_memory_tools(server)
+
+    payload = json.loads(
+        await server.tools["plexus_rubric_memory_evidence_pack"](
+            scorecard_identifier="Scorecard A",
+            score_identifier="Medication Review: Dosage",
+            score_id="score-1",
+        )
+    )
+
+    assert payload["success"] is True
+    assert payload["synthesized"] is False
+    assert payload["markdown_context"] == "retrieval context"
+    assert payload["machine_context"]["context_kind"] == "retrieval_only"
+
+
+@pytest.mark.asyncio
+async def test_recent_entries_tool_returns_recent_briefing_context(monkeypatch):
+    class FakeServer:
+        def __init__(self):
+            self.tools = {}
+
+        def tool(self):
+            def decorator(func):
+                self.tools[func.__name__] = func
+                return func
+            return decorator
+
+    class FakeCitation:
+        def model_dump(self, mode="json"):
+            return {"id": "evidence:01:recent", "kind": "corpus_evidence"}
+
+    class FakeContext:
+        markdown_context = "recent rubric memory"
+        citation_index = [FakeCitation()]
+        machine_context = {"context_kind": "recent_briefing"}
+        diagnostics = [{"kind": "recent_rubric_memory"}]
+
+    class FakeProvider:
+        def __init__(self, api_client):
+            self.api_client = api_client
+
+        async def retrieve_recent(self, **kwargs):
+            assert kwargs["score_id"] == "score-1"
+            assert kwargs["days"] == 30
+            assert kwargs["query"] == "recent SME update"
+            return FakeContext()
+
+    import shared.utils
+    import plexus.rubric_memory
+
+    monkeypatch.setattr(shared.utils, "create_dashboard_client", lambda: object())
+    monkeypatch.setattr(
+        plexus.rubric_memory,
+        "RubricMemoryRecentBriefingProvider",
+        FakeProvider,
+    )
+
+    server = FakeServer()
+    register_rubric_memory_tools(server)
+
+    payload = json.loads(
+        await server.tools["plexus_rubric_memory_recent_entries"](
+            scorecard_identifier="Scorecard A",
+            score_identifier="Medication Review: Dosage",
+            score_id="score-1",
+            query="recent SME update",
+            days=30,
+        )
+    )
+
+    assert payload["success"] is True
+    assert payload["markdown_context"] == "recent rubric memory"
+    assert payload["machine_context"]["context_kind"] == "recent_briefing"
