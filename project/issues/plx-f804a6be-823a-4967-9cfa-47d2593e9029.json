@@ -1,0 +1,79 @@
+{
+  "id": "plx-f804a6be-823a-4967-9cfa-47d2593e9029",
+  "title": "Harden execute_tactus MCP contract",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-07dc0d44-08df-4248-97af-1f928bc2e19d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7df6cc4b-3446-4b96-ae2b-2aa7591e4e62",
+      "author": "ryan",
+      "text": "Beginning contract-hardening pass for the Plexus execute_tactus MCP tool. Scope: preserve the single required tactus string input, return structured success/error metadata, expose docs discovery through the Plexus host module, and verify with focused MCP/runtime tests.",
+      "created_at": "2026-04-29T03:50:16.951291Z"
+    },
+    {
+      "id": "ac9e8273-221b-4c66-a4a7-139e364e5ebb",
+      "author": "ryan",
+      "text": "Implemented the first contract-hardening pass: execute_tactus now returns ok/value/error/cost/trace_id/partial/api_calls, invalid requests and runtime failures are structured errors, and Tactus/Lua line numbers are extracted into error.tactus_lineno when present. Verified with focused execute_tactus tests and py_compile.",
+      "created_at": "2026-04-29T03:52:47.574743Z"
+    },
+    {
+      "id": "72424ea3-10da-48d0-9e0d-547f7604b538",
+      "author": "ryan",
+      "text": "Follow-up hardening: mapped wrapped Tactus/Lua line numbers back to submitted snippet line numbers for error.tactus_lineno. Verified with MCP documentation + execute_tactus focused tests: 21 passed.",
+      "created_at": "2026-04-29T03:53:45.872689Z"
+    },
+    {
+      "id": "7a5d98c9-63cf-4220-9a3b-527ecfd94aa8",
+      "author": "ryan",
+      "text": "Finished v0 contract task. Added focused tests covering Tactus syntax errors, unsupported plexus.* calls, plexus.api.list catalog, plexus.docs.list/get end to end through the host module, implicit-last-helper-result capture, and explicit-return overriding capture. Normalized Lupa Lua sequences and FastMCP single-key {result: ...} envelopes in the response converter. 15 of 15 focused tests pass.",
+      "created_at": "2026-04-29T04:27:39.349268Z"
+    },
+    {
+      "id": "b2d69aaa-b611-4989-98a3-0b102260c2d8",
+      "author": "ryan",
+      "text": "Started service-layer facade boundary work. Renamed PlexusMCPFacade to PlexusRuntimeModule and made plexus.docs.list/get and plexus.api.list direct (no MCP loopback). Tests now exercise filesystem-backed docs paths and reject unsafe keys. Added follow-up tasks (4294e7, 803025, 63d935) for wiring feedback.find, evaluation.info, and score.info/item.info onto direct service-layer calls. 17 of 17 focused tests pass.",
+      "created_at": "2026-04-29T04:32:37.614487Z"
+    },
+    {
+      "id": "bc24b5e3-6984-465c-8e49-29b5e2dde839",
+      "author": "ryan",
+      "text": "Added first-class runtime trace persistence. Defined a TactusTraceStore protocol with a default FileTactusTraceStore that writes one JSON file per run under PLEXUS_TACTUS_TRACE_DIR (defaults to tmp/tactus_traces). _execute_tactus_tool now writes a trace for every outcome: invalid request, syntax error, runtime error, and success. Each record includes trace_id, ISO timestamps, duration, ok, value, structured error, cost, partial flag, api_calls, submitted Tactus, wrapped Tactus, and the raw runtime result. Tests cover all four outcome paths plus the env-var override and file format. 23 of 23 focused tests pass.",
+      "created_at": "2026-04-29T04:36:18.510911Z"
+    },
+    {
+      "id": "6cf0356f-a4f1-41b7-a02d-606992aca71e",
+      "author": "ryan",
+      "text": "Added conservative default budget enforcement. New BudgetSpec defaults to 0.25 USD, 60 wallclock seconds, depth 3, and 50 tool calls. New BudgetGate is the single choke point: PlexusRuntimeModule._call/_call_docs/_call_api each check_before and record_after. The cost envelope now reflects real spend (usd, tool_calls, depth_max_observed) and adds budget_remaining_* fields. Budget exhaustion surfaces as a structured error with code budget_exceeded in both the response envelope and the trace record. 30 of 30 focused tests pass.",
+      "created_at": "2026-04-29T04:40:45.160021Z"
+    },
+    {
+      "id": "ba4fbc00-b11d-4dc9-9a95-3e0ad29910cc",
+      "author": "ryan",
+      "text": "Specified the long-running handle/streaming protocol for execute_tactus. plexus.evaluation.run, plexus.report.run, and plexus.procedure.run are now classified as LONG_RUNNING_METHODS and short-circuit with structured error code requires_handle_protocol; no MCP loopback dispatches them in v0. Wrote MCP/tools/tactus_runtime/HANDLE_PROTOCOL.md with the streaming + handle-based async target shape, the sub-budget carving rule, and the rationale for blocking these APIs until the real implementation lands. Filed implementation task under plx-247588. 33 of 33 focused tests pass.",
+      "created_at": "2026-04-29T04:43:46.904709Z"
+    },
+    {
+      "id": "e8429c04-aaa2-407c-9ebc-171486bb845c",
+      "author": "ryan",
+      "text": "Promoted spike artifacts into repeatable tests: spikes/runtime-mcp-validation/test_harness_report.py is discoverable from the repo root pytest config (pytest.ini does not exclude spikes/) and runs 37 of 37 cases. MCP/tools/tactus_runtime/execute_test.py adds 33 production tests (contract, facade boundary, trace persistence, budget gate, requires_handle_protocol). Closed plx-8e009e by writing spikes/runtime-mcp-validation/go_no_go_report.md with a GO recommendation and instructions for refreshing it after the next budgeted readiness run. Combined run is 70 passed.",
+      "created_at": "2026-04-29T04:46:57.437656Z"
+    },
+    {
+      "id": "764aa411-2ed9-42d3-a7fc-073dfbc071ce",
+      "author": "ryan",
+      "text": "plx-4294e7 closed: plexus.feedback.find now calls FeedbackService.search_feedback directly via the new DIRECT_HANDLERS registry; the (feedback, find) MCP loopback is gone with no fallback. PlexusRuntimeModule._call_feedback budgets exactly one tool_call, plexus.api.list still advertises feedback.find through the merged catalog, and _execute_tactus_tool exposes an injectable feedback_finder parameter for tests. 41 of 41 focused tests pass.",
+      "created_at": "2026-04-29T05:26:28.987942Z"
+    }
+  ],
+  "created_at": "2026-04-29T03:50:13.779251Z",
+  "updated_at": "2026-04-29T05:26:28.987942Z",
+  "closed_at": null,
+  "custom": {}
+}

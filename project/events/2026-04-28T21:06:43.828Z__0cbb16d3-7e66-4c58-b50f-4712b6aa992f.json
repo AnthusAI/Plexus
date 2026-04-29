@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0cbb16d3-7e66-4c58-b50f-4712b6aa992f",
+  "issue_id": "plx-724038c7-f8d7-4d98-a0f8-28c8b8a7957a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T21:06:43.828Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "# Run the spike across 4 frontier models\n\n## What\n\nExecute the harness against all curated tasks × all models, capture results, organize for analysis.\n\n## Models\n\n- claude-4.6-sonnet (Anthropic)\n- claude-4.7-opus (Anthropic)\n- gpt-5.3-codex (OpenAI)\n- gemini-3.1-pro (Google)\n\n(Substitute current frontier-equivalent if any of these are unavailable when the spike runs.)\n\n## What to record\n\nPer task × model pair:\n- All metrics from the harness output (tokens, latency, cost, success).\n- Full transcripts (prompt, response, tool invocations, Lua source generated, runtime results).\n\n## Storage\n\nResults land under `spikes/runtime-mcp-validation/results/<run-id>/<model>/<task>.json` plus an aggregate summary at `spikes/runtime-mcp-validation/results/<run-id>/summary.csv`.\n\n## Cost budget for the spike itself\n\nThe spike makes real API calls. Each model × task pair is small (<$0.20). Across ~15 tasks × 4 models, expect ~$10–20 total. Hard cap: $50 across the spike. If approaching, halt and reassess.\n\n## Deliverable\n\nA `run-id` results directory with all transcripts, a summary CSV, and confirmation that the harness completed all combinations (or documented exclusions if any model was unavailable / refused / errored systematically).",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+    "priority": 1,
+    "status": "open",
+    "title": "Run the spike across 4 frontier models and capture results"
+  }
+}

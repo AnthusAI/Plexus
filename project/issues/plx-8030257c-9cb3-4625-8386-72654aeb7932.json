@@ -1,0 +1,18 @@
+{
+  "id": "plx-8030257c-9cb3-4625-8386-72654aeb7932",
+  "title": "Wire plexus.evaluation.info to Evaluation.get_evaluation_info directly",
+  "description": "Replace the current MCP-loopback implementation of plexus.evaluation.info inside PlexusRuntimeModule with a direct call to Evaluation.get_evaluation_info / Evaluation.get_latest_evaluation. Replicate the include_examples GraphQL slice currently inlined in MCP/tools/evaluation/evaluations.py inside a small helper. Add focused tests with an injectable service. Remove the MCP-backed path with no fallback.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-07dc0d44-08df-4248-97af-1f928bc2e19d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-29T04:32:30.398796Z",
+  "updated_at": "2026-04-29T04:32:30.398796Z",
+  "closed_at": null,
+  "custom": {}
+}
