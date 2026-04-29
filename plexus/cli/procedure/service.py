@@ -1254,6 +1254,11 @@ Based on this data, you should prioritize examining error types with the highest
         scorecard_name = experiment_context.get('scorecard_name')
         score_name = experiment_context.get('score_name')
         score_id = experiment_context.get('score_id')
+        score_version_id = (
+            experiment_context.get('score_version_id')
+            or experiment_context.get('start_version')
+            or experiment_context.get('version')
+        )
         if not scorecard_name or not score_name or not score_id:
             return None
         try:
@@ -1276,6 +1281,7 @@ Based on this data, you should prioritize examining error types with the highest
                 scorecard_identifier=scorecard_name,
                 score_identifier=score_name,
                 score_id=score_id,
+                score_version_id=score_version_id,
                 topic_hint="Score-level optimizer rubric-memory briefing",
             )
             return context.markdown_context
@@ -1291,6 +1297,11 @@ Based on this data, you should prioritize examining error types with the highest
         scorecard_name = experiment_context.get('scorecard_name')
         score_name = experiment_context.get('score_name')
         score_id = experiment_context.get('score_id')
+        score_version_id = (
+            experiment_context.get('score_version_id')
+            or experiment_context.get('start_version')
+            or experiment_context.get('version')
+        )
         if not scorecard_name or not score_name or not score_id:
             return None
         try:
@@ -1302,6 +1313,7 @@ Based on this data, you should prioritize examining error types with the highest
                 scorecard_identifier=scorecard_name,
                 score_identifier=score_name,
                 score_id=score_id,
+                score_version_id=score_version_id,
                 query=(
                     "recent SME stakeholder policy update rubric guideline "
                     "change clarification before optimization"

@@ -104,6 +104,22 @@ class RubricMemorySMEQuestionGateSynthesizer(Protocol):
         """Classify candidate SME agenda items against rubric-memory evidence."""
 
 
+class _NoOpHITLHandler:
+    """Prevent Tactus from auto-starting control-loop channels for this local synthesis."""
+
+    def request_interaction(self, procedure_id: str, request: Any, execution_context=None):
+        raise RuntimeError(
+            f"Rubric-memory SME question gate does not support HITL interaction "
+            f"for procedure {procedure_id}."
+        )
+
+    def check_pending_response(self, procedure_id: str, message_id: str):
+        return None
+
+    def cancel_pending_request(self, procedure_id: str, message_id: str) -> None:
+        return None
+
+
 class TactusRubricMemorySMEQuestionGateSynthesizer:
     """Run the repo-owned Tactus procedure for SME question gating."""
 
@@ -133,6 +149,7 @@ class TactusRubricMemorySMEQuestionGateSynthesizer:
         runtime = TactusRuntime(
             procedure_id=self.procedure_id,
             storage_backend=MemoryStorage(),
+            hitl_handler=_NoOpHITLHandler(),
             openai_api_key=os.environ.get("OPENAI_API_KEY"),
         )
         result = await runtime.execute(

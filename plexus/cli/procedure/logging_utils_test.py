@@ -66,6 +66,27 @@ def test_capture_llm_context_writes_markdown_and_json(monkeypatch, tmp_path):
     assert long_content in markdown
 
 
+def test_capture_llm_context_filter_includes_matching_call(monkeypatch, tmp_path):
+    monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_DIR", str(tmp_path))
+    monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_FILTER", "worker,sme_gate")
+
+    included = capture_llm_context_for_agent(
+        "CODING_ASSISTANT (Worker)",
+        [HumanMessage(content="Worker context")],
+        call_site="sop_worker_round",
+    )
+    skipped = capture_llm_context_for_agent(
+        "Report Writer",
+        [HumanMessage(content="Report context")],
+        call_site="final_summary",
+    )
+
+    assert included is not None
+    assert skipped is None
+    assert len(list(tmp_path.glob("*.json"))) == 1
+    assert len(list(tmp_path.glob("*.md"))) == 1
+
+
 def test_capture_llm_context_preserves_rubric_memory_briefing(monkeypatch, tmp_path):
     monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_DIR", str(tmp_path))
     briefing = (

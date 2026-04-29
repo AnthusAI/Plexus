@@ -2938,6 +2938,8 @@ code: |
 
   Human.notify({message = "Resolved: scorecard_id=" .. scorecard_id .. ", score_id=" .. score_id, level = "info"})
 
+  local active_rubric_memory_score_version_id = has_text(params.start_version) and params.start_version or nil
+
   local recent_rubric_memory_briefing = ""
   local recent_rubric_memory_context = nil
   do
@@ -2945,6 +2947,7 @@ code: |
       scorecard_identifier = params.scorecard,
       score_identifier = params.score,
       score_id = score_id,
+      score_version_id = active_rubric_memory_score_version_id,
       query = "recent SME stakeholder policy update rubric guideline change clarification before optimization",
       days = 30,
       limit = 16
@@ -2968,6 +2971,7 @@ code: |
       scorecard_identifier = params.scorecard,
       score_identifier = params.score,
       score_id = score_id,
+      score_version_id = active_rubric_memory_score_version_id,
       topic_hint = "Score-level optimizer rubric-memory briefing",
       synthesize = false
     }, {max_retries = 1})
@@ -2998,8 +3002,14 @@ code: |
       return raw_agenda, nil
     end
     local score_version_id = ""
+    local active_version = State.get("last_accepted_version_id") or active_rubric_memory_score_version_id
+    if has_text(active_version) then
+      score_version_id = active_version
+    end
     if type(rubric_memory_context.machine_context) == "table" then
-      score_version_id = rubric_memory_context.machine_context.score_version_id or ""
+      score_version_id = score_version_id ~= "" and score_version_id
+        or rubric_memory_context.machine_context.score_version_id
+        or ""
     end
     if not has_text(score_version_id) then
       Human.notify({message = "SME question gate skipped: rubric-memory context has no score_version_id.", level = "warning"})
@@ -3273,6 +3283,8 @@ code: |
     -- Restore all init-phase variables from durable State
     dataset_id              = State.get("dataset_id")
     champion_version_id     = State.get("last_accepted_version_id") or State.get("baseline_version_id")
+    active_rubric_memory_score_version_id = champion_version_id
+    State.set("active_rubric_memory_score_version_id", active_rubric_memory_score_version_id)
     regression_baseline_id    = State.get("last_accepted_acc_eval_id") or State.get("regression_baseline_id")
     regression_baseline_metrics = State.get("last_accepted_acc_metrics") or State.get("regression_baseline_metrics")
     regression_baseline_cost_per_item = State.get("regression_baseline_cost_per_item")
@@ -3372,9 +3384,11 @@ code: |
 
     local selected_dataset_id = nil
     local selected_feedback_target_hash = dataset_check and dataset_check.feedback_target_hash or nil
+    local selected_row_count = nil
 
     if dataset_adequate then
       selected_dataset_id = dataset_check.dataset_id
+      selected_row_count = dataset_check.row_count
       Human.notify({message = string.format(
         "Found adequate associated dataset for version %s: %s (%s rows)",
         tostring(version_id or "champion"),
@@ -3422,6 +3436,7 @@ code: |
       if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
         selected_dataset_id = build_result.dataset_id
         selected_feedback_target_hash = build_result.feedback_target_hash
+        selected_row_count = build_result.rows_written
         Human.notify({message = "Created balanced dataset: " .. selected_dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
       else
         local rows_so_far = (build_result and build_result.rows_written) or 0
@@ -3440,6 +3455,7 @@ code: |
         if final_build_result and final_build_result.rows_written and final_build_result.rows_written >= min_acceptable then
           selected_dataset_id = final_build_result.dataset_id
           selected_feedback_target_hash = final_build_result.feedback_target_hash
+          selected_row_count = final_build_result.rows_written
           Human.notify({message = "Created unbalanced dataset: " .. selected_dataset_id .. " (" .. final_build_result.rows_written .. " rows)", level = "info"})
         else
           local final_rows = (final_build_result and final_build_result.rows_written) or 0
@@ -3452,6 +3468,26 @@ code: |
           ))
         end
       end
+    end
+
+    if selected_row_count and selected_row_count < min_dataset_rows then
+      local diagnostic = {
+        version_id = version_id,
+        dataset_id = selected_dataset_id,
+        requested_max_samples = min_dataset_rows,
+        available_rows = selected_row_count,
+        days = params.days,
+        message = string.format(
+          "Requested %d evaluation samples but only %d qualifying feedback items were available.",
+          min_dataset_rows,
+          selected_row_count
+        )
+      }
+      local sample_size_diagnostics = State.get("sample_size_diagnostics") or {}
+      table.insert(sample_size_diagnostics, diagnostic)
+      State.set("sample_size_diagnostics", sample_size_diagnostics)
+      Human.notify({message = diagnostic.message, level = "warning"})
+      diag("Sample size diagnostic: " .. tostring(Json.encode(diagnostic)))
     end
 
     dataset_cache_by_version[version_key] = {
@@ -3515,6 +3551,10 @@ code: |
   end
   -- champion_version_id and baseline variables are pre-declared above the continuation check
   champion_version_id = initial_pull.versionId
+  if not has_text(active_rubric_memory_score_version_id) then
+    active_rubric_memory_score_version_id = champion_version_id
+  end
+  State.set("active_rubric_memory_score_version_id", active_rubric_memory_score_version_id)
   dataset_cache_by_version[tostring(champion_version_id)] = {
     dataset_id = dataset_id
   }
@@ -3893,6 +3933,12 @@ code: |
   -- Classify an error string to determine recovery strategy
   local function classify_error(err_str)
     local s = string.lower(tostring(err_str))
+    if string.find(s, "procedure run interrupted")
+      or string.find(s, "keyboardinterrupt")
+      or string.find(s, "sigint")
+      or string.find(s, "sigterm") then
+      return "interrupted"
+    end
     if string.find(s, "contextwindowexceeded")
       or string.find(s, "context_length_exceeded")
       or string.find(s, "maximum context length")
@@ -4051,6 +4097,10 @@ code: |
       local err_type = classify_error(err)
       diag(string.format("%s error (attempt %d/%d, type=%s): %s",
         agent_name, attempt, MAX_EDITOR_RETRIES + 1, err_type, trunc(tostring(err), 300)))
+
+      if err_type == "interrupted" then
+        error(tostring(err))
+      end
 
       if err_type == "permanent" then
         return false, tostring(err)
@@ -4441,6 +4491,9 @@ code: |
       end)
 
       if not slot_ok then
+        if classify_error(slot_err) == "interrupted" then
+          error(tostring(slot_err))
+        end
         -- Encoding errors (e.g. UnicodeDecodeError from lupa), OOM, or other unexpected
         -- failures that bypassed safe_editor_call's pcall.  Log and continue — losing one
         -- slot should not skip the whole cycle.
@@ -4471,8 +4524,16 @@ code: |
     -- ================================================================
     local submitted_versions = {}
     local submitted_version_keys = {}
+    local submitted_version_ids = {}
     local function record_submitted_version(entry)
       local key = tostring(entry.index or "") .. ":" .. tostring(entry.version_id or "")
+      local version_key = tostring(entry.version_id or "")
+      if has_text(version_key) and submitted_version_ids[version_key] then
+        diag(string.format(
+          "Skipping duplicate submitted candidate version %s",
+          tostring(entry.version_id)))
+        return false
+      end
       if submitted_version_keys[key] then
         diag(string.format(
           "Skipping duplicate submitted version record for hypothesis %s version %s",
@@ -4480,6 +4541,7 @@ code: |
         return false
       end
       submitted_version_keys[key] = true
+      if has_text(version_key) then submitted_version_ids[version_key] = true end
       table.insert(submitted_versions, entry)
       return true
     end
@@ -6224,6 +6286,8 @@ code: |
             end
             -- Persist so a continuation run can restore the last-accepted state
             State.set("last_accepted_version_id",  last_accepted_version_id)
+            active_rubric_memory_score_version_id = last_accepted_version_id
+            State.set("active_rubric_memory_score_version_id", active_rubric_memory_score_version_id)
             State.set("last_accepted_fb_metrics",  last_accepted_fb_metrics)
             State.set("last_accepted_fb_eval_id",  last_accepted_fb_eval_id)
             State.set("last_accepted_acc_metrics", last_accepted_acc_metrics)
@@ -7036,6 +7100,10 @@ code: |
     end  -- end of else (submitted_versions > 0)
     end)  -- end of pcall wrapper
     if not cycle_ok then
+      if classify_error(cycle_err) == "interrupted" then
+        stop_reason = "interrupted"
+        error(tostring(cycle_err))
+      end
       diag(string.format("ERROR in cycle %d: %s", cycle, tostring(cycle_err)))
       Human.notify({message = string.format(
         "ERROR in cycle %d: %s — stopping run", cycle, trunc(tostring(cycle_err), 500)), level = "error"})
