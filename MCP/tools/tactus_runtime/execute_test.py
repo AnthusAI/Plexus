@@ -781,6 +781,139 @@ def test_handle_peek_refreshes_evaluation_status() -> None:
     assert module.api_calls == ["plexus.handle.peek"]
 
 
+def test_handle_cancel_terminates_process() -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"process_id": 4242},
+    )
+    killed: list[tuple[int, int]] = []
+
+    def fake_kill(pid: int, sig: int) -> None:
+        killed.append((pid, sig))
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+    )
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(execute.os, "kill", fake_kill)
+    try:
+        result = module.handle.cancel({"id": handle["id"]})
+    finally:
+        monkeypatch.undo()
+
+    assert result["status"] == "cancelled"
+    assert result["cancel_requested"] is True
+    assert result["cancel_propagated"] is True
+    assert result["cancel_actions"] == [
+        {"kind": "process", "id": "4242", "status": "terminated"}
+    ]
+    assert killed == [(4242, execute.signal.SIGTERM)]
+    assert module.api_calls == ["plexus.handle.cancel"]
+
+
+def test_handle_cancel_marks_dashboard_task_cancelled(monkeypatch) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="report",
+        parent_trace_id="trace-1",
+        api_call="plexus.report.run",
+        args={"async": True},
+        dispatch_result={"task_id": "task-1"},
+    )
+    updates: list[dict] = []
+
+    class FakeTask:
+        def update(self, **kwargs):
+            updates.append(kwargs)
+
+    class FakeTaskModel:
+        @staticmethod
+        def get_by_id(task_id, client):
+            assert task_id == "task-1"
+            assert client == "client"
+            return FakeTask()
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: "client"
+    )
+    monkeypatch.setattr("plexus.dashboard.api.models.task.Task", FakeTaskModel)
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+    )
+
+    result = module.handle.cancel({"id": handle["id"]})
+
+    assert result["status"] == "cancelled"
+    assert result["cancel_propagated"] is True
+    assert result["cancel_actions"] == [
+        {"kind": "task", "id": "task-1", "status": "cancelled"}
+    ]
+    assert updates == [
+        {
+            "status": "CANCELLED",
+            "errorMessage": "Cancellation requested by execute_tactus handle.",
+            "completedAt": updates[0]["completedAt"],
+        }
+    ]
+
+
+def test_handle_cancel_marks_evaluation_cancelled(monkeypatch) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"evaluation_id": "eval-1"},
+    )
+    updates: list[dict] = []
+
+    class FakeEvaluation:
+        def update(self, **kwargs):
+            updates.append(kwargs)
+
+    class FakeEvaluationModel:
+        @staticmethod
+        def get_by_id(evaluation_id, client):
+            assert evaluation_id == "eval-1"
+            assert client == "client"
+            return FakeEvaluation()
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: "client"
+    )
+    monkeypatch.setattr(
+        "plexus.dashboard.api.models.evaluation.Evaluation",
+        FakeEvaluationModel,
+    )
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+    )
+
+    result = module.handle.cancel({"id": handle["id"]})
+
+    assert result["status"] == "cancelled"
+    assert result["cancel_propagated"] is True
+    assert result["cancel_actions"] == [
+        {"kind": "evaluation", "id": "eval-1", "status": "cancelled"}
+    ]
+    assert updates == [
+        {
+            "status": "CANCELLED",
+            "errorMessage": "Cancellation requested by execute_tactus handle.",
+        }
+    ]
+
+
 @pytest.mark.asyncio
 async def test_execute_tactus_evaluation_run_async_returns_handle() -> None:
     mcp = FastMCP("test-execute-tactus-evaluation-run-handle")
