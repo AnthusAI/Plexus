@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0638675d-5f5e-4198-aecb-9a07c10d732e",
+  "issue_id": "plx-cc9f74f9-d0e6-4ef3-9359-133342622879",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T00:32:51.593Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "Close blocked PR #239 and recreate an equivalent develop-to-main release PR under Derek so Ryan can review under branch protection rules. Preserve title/body/context and verify checks on the replacement PR.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Recreate develop to main release PR for reviewability"
+  }
+}
