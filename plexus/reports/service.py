@@ -1,4 +1,3 @@
-import importlib
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 import base64
@@ -15,11 +14,10 @@ import asyncio # Add asyncio import
 
 import mistune
 import yaml
-import jinja2
 
 # Import S3 utils explicitly at the top level to ensure it's loaded
 try:
-    from plexus.reports.s3_utils import upload_report_block_file, get_bucket_name
+    from plexus.reports.s3_utils import upload_report_block_file
     logger = logging.getLogger(__name__)
     logger.debug("Successfully imported S3 utils at module level")
     S3_UTILS_AVAILABLE = True
@@ -796,8 +794,9 @@ def _build_programmatic_run_payload(
     account_id: str,
     ttl_hours: float,
     fresh: bool,
+    child_budget: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    return {
+    payload = {
         "cache_key": cache_key,
         "block_class": block_class,
         "block_config": block_config,
@@ -805,6 +804,9 @@ def _build_programmatic_run_payload(
         "ttl_hours": ttl_hours,
         "fresh": fresh,
     }
+    if child_budget is not None:
+        payload["child_budget"] = child_budget
+    return payload
 
 
 def encode_programmatic_run_payload(payload: Dict[str, Any]) -> str:
@@ -983,6 +985,7 @@ def _create_programmatic_report_task(
     client: PlexusDashboardClient,
     ttl_hours: float,
     fresh: bool,
+    child_budget: Optional[Dict[str, Any]] = None,
 ) -> Task:
     payload = _build_programmatic_run_payload(
         cache_key=cache_key,
@@ -991,6 +994,7 @@ def _create_programmatic_report_task(
         account_id=account_id,
         ttl_hours=ttl_hours,
         fresh=fresh,
+        child_budget=child_budget,
     )
     metadata = {
         **payload,
@@ -1367,7 +1371,6 @@ def run_programmatic_report_and_persist(
     for block in normalized_blocks:
         block_class_name = block["class_name"]
         block_display_name = block["block_name"]
-        block_config = block["config"]
         position = int(block["position"])
 
         report_block = ReportBlock.create(
@@ -1558,6 +1561,7 @@ def run_block_cached(
     ttl_hours: float = 24,
     fresh: bool = False,
     background: bool = False,
+    child_budget: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[Any], Optional[str], bool]:
     """Run a report block, returning cached results when available.
 
@@ -1620,6 +1624,7 @@ def run_block_cached(
             client=client,
             ttl_hours=ttl_hours,
             fresh=fresh,
+            child_budget=child_budget,
         )
         logger.info("Queued durable programmatic report task %s for %s", task.id, cache_key)
         return {

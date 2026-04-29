@@ -75,6 +75,7 @@ class TactusHandleStore:
         api_call: str,
         args: dict[str, Any],
         dispatch_result: dict[str, Any],
+        child_budget: dict[str, Any] | None = None,
     ) -> dict[str, Any]:  # pragma: no cover - interface
         raise NotImplementedError
 
@@ -111,6 +112,7 @@ class FileTactusHandleStore(TactusHandleStore):
         api_call: str,
         args: dict[str, Any],
         dispatch_result: dict[str, Any],
+        child_budget: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         os.makedirs(self._directory, exist_ok=True)
         handle_id = str(uuid.uuid4())
@@ -132,6 +134,7 @@ class FileTactusHandleStore(TactusHandleStore):
             "api_call": api_call,
             "args": _jsonable(args),
             "dispatch_result": _jsonable(dispatch_result),
+            "child_budget": _jsonable(child_budget),
         }
         with open(self._path(handle_id), "w", encoding="utf-8") as handle:
             json.dump(record, handle, indent=2, sort_keys=True, default=str)
@@ -442,11 +445,17 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: FastMCP) -> dict[str, 
     _append_optional_cli_arg(cmd, "--current-baseline", args.get("current_baseline"))
     _append_optional_cli_arg(cmd, "--notes", args.get("notes"))
 
+    child_budget = args.get("budget")
+    env = os.environ.copy()
+    if isinstance(child_budget, dict):
+        env["PLEXUS_CHILD_BUDGET"] = json.dumps(_jsonable(child_budget), sort_keys=True)
+
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
+        env=env,
     )
     return {
         "status": "dispatched",
@@ -455,6 +464,7 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: FastMCP) -> dict[str, 
         "evaluation_type": evaluation_type,
         "scorecard": scorecard_name,
         "score": args.get("score_name") or args.get("score"),
+        "child_budget": _jsonable(child_budget),
         "message": "Evaluation dispatched in background.",
         "dashboard_url": "https://lab.callcriteria.com/lab/evaluations",
     }
@@ -477,14 +487,14 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
     if not block_class:
         raise ValueError("plexus.report.run async requires block_class")
 
-    from plexus.cli.report.utils import get_default_account_id
+    from plexus.cli.report.utils import resolve_account_id_for_command
     from plexus.cli.shared.client_utils import create_client as create_dashboard_client
     from plexus.reports.service import run_block_cached
 
     client = create_dashboard_client()
     if not client:
         raise ValueError("Could not create dashboard client")
-    account_id = get_default_account_id()
+    account_id = resolve_account_id_for_command(client, args.get("account"))
     if not account_id:
         raise ValueError("Could not determine default account ID")
 
@@ -497,6 +507,7 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
         ttl_hours=args.get("ttl_hours") if args.get("ttl_hours") is not None else 24,
         fresh=bool(args.get("fresh", False)),
         background=True,
+        child_budget=args.get("budget"),
     )
     if not isinstance(output_data, dict):
         raise ValueError(log_output or "Report block background dispatch failed")
@@ -506,6 +517,7 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
         **output_data,
         "cached": was_cached,
         "block_class": block_class,
+        "child_budget": _jsonable(args.get("budget")),
     }
 
 
@@ -531,6 +543,12 @@ def _default_procedure_runner(args: dict[str, Any]) -> dict[str, Any]:
         options["max_iterations"] = int(args["max_iterations"])
     if args.get("timeout") is not None:
         options["timeout"] = int(args["timeout"])
+    if isinstance(args.get("budget"), dict):
+        context = args.get("context") if isinstance(args.get("context"), dict) else {}
+        options["context"] = {
+            **context,
+            "_plexus_child_budget": _jsonable(args["budget"]),
+        }
 
     service = ProcedureService(client)
     result = _run_async_from_sync(service.run_procedure(str(procedure_id), **options))
@@ -595,7 +613,7 @@ def _jsonable(value: Any) -> Any:
 
 
 def _public_handle(record: dict[str, Any]) -> dict[str, Any]:
-    return {
+    public = {
         "id": record["id"],
         "kind": record["kind"],
         "status": record["status"],
@@ -603,6 +621,9 @@ def _public_handle(record: dict[str, Any]) -> dict[str, Any]:
         "created_at": record["created_at"],
         "parent_trace_id": record["parent_trace_id"],
     }
+    if record.get("child_budget") is not None:
+        public["child_budget"] = record.get("child_budget")
+    return public
 
 
 TERMINAL_HANDLE_STATUSES = frozenset(
@@ -722,6 +743,10 @@ class BudgetExceeded(RuntimeError):
     """Raised when a Plexus runtime API call would exceed the active budget."""
 
 
+class ChildBudgetRequired(ValueError):
+    """Raised when async work is spawned without an explicit child budget."""
+
+
 class BudgetSpec:
     """Conservative default budget for execute_tactus runs."""
 
@@ -740,6 +765,37 @@ class BudgetSpec:
         self.depth = int(depth)
         self.tool_calls = int(tool_calls)
 
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "BudgetSpec":
+        wallclock_value = value.get("wallclock_seconds")
+        if wallclock_value is None:
+            wallclock_value = value.get("wallclock")
+        required = {
+            "usd": value.get("usd"),
+            "wallclock_seconds": wallclock_value,
+            "depth": value.get("depth"),
+            "tool_calls": value.get("tool_calls"),
+        }
+        missing = [key for key, item in required.items() if item is None]
+        if missing:
+            raise ValueError(
+                "budget requires explicit " + ", ".join(sorted(missing))
+            )
+        return cls(
+            usd=required["usd"],
+            wallclock_seconds=required["wallclock_seconds"],
+            depth=required["depth"],
+            tool_calls=required["tool_calls"],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "usd": self.usd,
+            "wallclock_seconds": self.wallclock_seconds,
+            "depth": self.depth,
+            "tool_calls": self.tool_calls,
+        }
+
 
 class BudgetGate:
     """Single choke point that enforces a BudgetSpec around every Plexus runtime API call."""
@@ -755,8 +811,10 @@ class BudgetGate:
         self._start = self._clock()
         self.spent_usd = 0.0
         self.tool_calls = 0
+        self.reserved_wallclock_seconds = 0.0
         self.depth_max_observed = 0
         self.exceeded_reason: str | None = None
+        self.child_budget_required_reason: str | None = None
 
     @property
     def exceeded(self) -> bool:
@@ -773,10 +831,11 @@ class BudgetGate:
         self, namespace: str, method: str, *, estimated_usd: float = 0.0
     ) -> None:
         elapsed = self.elapsed_seconds()
-        if elapsed >= self.spec.wallclock_seconds:
+        if elapsed + self.reserved_wallclock_seconds >= self.spec.wallclock_seconds:
             raise self._trip(
                 f"wallclock budget exceeded before plexus.{namespace}.{method}: "
-                f"{elapsed:.3f}s >= {self.spec.wallclock_seconds:.3f}s"
+                f"{elapsed + self.reserved_wallclock_seconds:.3f}s >= "
+                f"{self.spec.wallclock_seconds:.3f}s"
             )
         if self.spent_usd + estimated_usd > self.spec.usd:
             raise self._trip(
@@ -792,6 +851,51 @@ class BudgetGate:
     def record_after(self, namespace: str, method: str, *, usd: float = 0.0) -> None:
         self.tool_calls += 1
         self.spent_usd += float(usd)
+
+    def carve_child(
+        self,
+        namespace: str,
+        method: str,
+        budget_value: Any,
+    ) -> dict[str, Any]:
+        if not isinstance(budget_value, dict):
+            self.child_budget_required_reason = (
+                f"plexus.{namespace}.{method} async requires explicit budget"
+            )
+            raise ChildBudgetRequired(self.child_budget_required_reason)
+        child_spec = BudgetSpec.from_dict(budget_value)
+        elapsed = self.elapsed_seconds()
+        remaining_usd = max(self.spec.usd - self.spent_usd, 0.0)
+        remaining_seconds = max(
+            self.spec.wallclock_seconds - elapsed - self.reserved_wallclock_seconds,
+            0.0,
+        )
+        remaining_tool_calls = max(self.spec.tool_calls - self.tool_calls - 1, 0)
+        if child_spec.usd > remaining_usd:
+            raise self._trip(
+                f"child USD budget exceeded before plexus.{namespace}.{method}: "
+                f"${child_spec.usd:.4f} > ${remaining_usd:.4f}"
+            )
+        if child_spec.wallclock_seconds > remaining_seconds:
+            raise self._trip(
+                f"child wallclock budget exceeded before plexus.{namespace}.{method}: "
+                f"{child_spec.wallclock_seconds:.3f}s > {remaining_seconds:.3f}s"
+            )
+        if child_spec.tool_calls > remaining_tool_calls:
+            raise self._trip(
+                f"child tool_calls budget exceeded before plexus.{namespace}.{method}: "
+                f"{child_spec.tool_calls} > {remaining_tool_calls}"
+            )
+        if child_spec.depth > max(self.spec.depth - 1, 0):
+            raise self._trip(
+                f"child depth budget exceeded before plexus.{namespace}.{method}: "
+                f"{child_spec.depth} > {max(self.spec.depth - 1, 0)}"
+            )
+        self.spent_usd += child_spec.usd
+        self.reserved_wallclock_seconds += child_spec.wallclock_seconds
+        self.tool_calls += child_spec.tool_calls
+        self.depth_max_observed = max(self.depth_max_observed, child_spec.depth)
+        return child_spec.to_dict()
 
 
 def _cost_envelope(
@@ -813,7 +917,13 @@ def _cost_envelope(
                 max(budget.spec.usd - budget.spent_usd, 0.0), 6
             ),
             "budget_remaining_seconds": round(
-                max(budget.spec.wallclock_seconds - wallclock_seconds, 0.0), 3
+                max(
+                    budget.spec.wallclock_seconds
+                    - wallclock_seconds
+                    - budget.reserved_wallclock_seconds,
+                    0.0,
+                ),
+                3,
             ),
             "budget_remaining_tool_calls": max(
                 budget.spec.tool_calls - budget.tool_calls, 0
@@ -1174,6 +1284,10 @@ class PlexusRuntimeModule:
             raise RequiresHandleProtocol("evaluation", "run")
 
         self._budget.check_before("evaluation", "run")
+        child_budget = self._budget.carve_child(
+            "evaluation", "run", parsed.get("budget")
+        )
+        parsed["budget"] = child_budget
         self._record_api_call("evaluation", "run")
         try:
             dispatch_result = self._evaluation_runner(parsed)
@@ -1183,6 +1297,7 @@ class PlexusRuntimeModule:
                 api_call="plexus.evaluation.run",
                 args=parsed,
                 dispatch_result=dispatch_result,
+                child_budget=child_budget,
             )
         finally:
             self._budget.record_after("evaluation", "run")
@@ -1199,6 +1314,8 @@ class PlexusRuntimeModule:
             raise RequiresHandleProtocol("report", "run")
 
         self._budget.check_before("report", "run")
+        child_budget = self._budget.carve_child("report", "run", parsed.get("budget"))
+        parsed["budget"] = child_budget
         self._record_api_call("report", "run")
         try:
             dispatch_result = self._report_runner(parsed)
@@ -1208,6 +1325,7 @@ class PlexusRuntimeModule:
                 api_call="plexus.report.run",
                 args=parsed,
                 dispatch_result=dispatch_result,
+                child_budget=child_budget,
             )
         finally:
             self._budget.record_after("report", "run")
@@ -1224,6 +1342,10 @@ class PlexusRuntimeModule:
             raise RequiresHandleProtocol("procedure", "run")
 
         self._budget.check_before("procedure", "run")
+        child_budget = self._budget.carve_child(
+            "procedure", "run", parsed.get("budget")
+        )
+        parsed["budget"] = child_budget
         self._record_api_call("procedure", "run")
         try:
             dispatch_result = self._procedure_runner(parsed)
@@ -1233,6 +1355,7 @@ class PlexusRuntimeModule:
                 api_call="plexus.procedure.run",
                 args=parsed,
                 dispatch_result=dispatch_result,
+                child_budget=child_budget,
             )
         finally:
             self._budget.record_after("procedure", "run")
@@ -1578,6 +1701,19 @@ def _run_tactus_sync(
                         f"plexus.{ns}.{mt} requires the long-running handle/streaming "
                         "protocol from Kanbus epic plx-247588 and is not enabled in "
                         "this execute_tactus build.",
+                    ),
+                    budget=gate,
+                )
+            elif gate.child_budget_required_reason:
+                envelope = _response_envelope(
+                    ok=False,
+                    value=None,
+                    trace_id=trace_id,
+                    api_calls=api_calls,
+                    started_at=started_mono,
+                    error=_structured_error(
+                        "child_budget_required",
+                        gate.child_budget_required_reason,
                     ),
                     budget=gate,
                 )
