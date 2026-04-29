@@ -98,8 +98,10 @@ def test_optimizer_yaml_deduplicates_submitted_candidate_records():
     code = config["code"]
 
     assert "local submitted_version_keys = {}" in code
+    assert "local submitted_version_ids = {}" in code
     assert "local function record_submitted_version(entry)" in code
     assert "Skipping duplicate submitted version record" in code
+    assert "Skipping duplicate submitted candidate version" in code
     assert code.count("table.insert(submitted_versions") == 1
 
 
@@ -143,9 +145,32 @@ def test_optimizer_startup_requests_recent_rubric_memory():
     code = config["code"]
 
     assert '"plexus_rubric_memory_recent_entries"' in code
+    assert "active_rubric_memory_score_version_id = has_text(params.start_version) and params.start_version or nil" in code
+    assert "score_version_id = active_rubric_memory_score_version_id" in code
     assert "=== RECENT RUBRIC MEMORY ===" in code
     assert "recent_rubric_memory_briefing = recent_result.markdown_context" in code
     assert 'State.set("recent_rubric_memory_context", recent_result)' in code
+
+
+def test_optimizer_yaml_treats_interruption_as_terminal_not_retryable():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert 'return "interrupted"' in code
+    assert 'if err_type == "interrupted" then' in code
+    assert "error(tostring(err))" in code
+    assert 'if classify_error(slot_err) == "interrupted" then' in code
+    assert 'if classify_error(cycle_err) == "interrupted" then' in code
+
+
+def test_optimizer_yaml_records_sample_size_diagnostics():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert 'State.get("sample_size_diagnostics")' in code
+    assert 'State.set("sample_size_diagnostics", sample_size_diagnostics)' in code
+    assert "requested_max_samples = min_dataset_rows" in code
+    assert "available_rows = selected_row_count" in code
 
 
 def test_optimizer_yaml_bounds_report_context_and_output_shapes():

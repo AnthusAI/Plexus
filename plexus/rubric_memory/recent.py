@@ -50,6 +50,7 @@ class RubricMemoryRecentBriefingProvider:
         scorecard_identifier: str,
         score_identifier: str,
         score_id: str,
+        score_version_id: str | None = None,
         query: str = "",
         days: int = DEFAULT_DAYS,
         since: date | str | None = None,
@@ -60,7 +61,12 @@ class RubricMemoryRecentBriefingProvider:
         if limit <= 0:
             raise ValueError("limit must be a positive integer.")
 
-        authority = await RubricAuthorityResolver(self.api_client).resolve(score_id)
+        authority_resolver = RubricAuthorityResolver(self.api_client)
+        authority = (
+            await authority_resolver.resolve_score_version(score_version_id)
+            if score_version_id
+            else await authority_resolver.resolve(score_id)
+        )
         paths = S3RubricMemoryCorpusResolver(s3_client=self.s3_client).resolve(
             scorecard_name=scorecard_identifier,
             score_name=score_identifier,
