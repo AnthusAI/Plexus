@@ -63,6 +63,99 @@ def _default_trace_store() -> TactusTraceStore:
     return FileTactusTraceStore(_resolve_trace_dir())
 
 
+class TactusHandleStore:
+    """Pluggable persistence for long-running execute_tactus handles."""
+
+    def create(
+        self,
+        *,
+        kind: str,
+        parent_trace_id: str,
+        api_call: str,
+        args: dict[str, Any],
+        dispatch_result: dict[str, Any],
+    ) -> dict[str, Any]:  # pragma: no cover - interface
+        raise NotImplementedError
+
+    def get(self, handle_id: str) -> dict[str, Any]:  # pragma: no cover - interface
+        raise NotImplementedError
+
+    def update(
+        self, handle_id: str, updates: dict[str, Any]
+    ) -> dict[str, Any]:  # pragma: no cover - interface
+        raise NotImplementedError
+
+
+class FileTactusHandleStore(TactusHandleStore):
+    """Default handle store backed by JSON files next to Tactus traces."""
+
+    def __init__(self, directory: str) -> None:
+        self._directory = directory
+
+    def _path(self, handle_id: str) -> str:
+        if (
+            not handle_id
+            or "/" in handle_id
+            or "\\" in handle_id
+            or handle_id.startswith(".")
+        ):
+            raise ValueError(f"Invalid execute_tactus handle id: {handle_id!r}")
+        return os.path.join(self._directory, f"{handle_id}.json")
+
+    def create(
+        self,
+        *,
+        kind: str,
+        parent_trace_id: str,
+        api_call: str,
+        args: dict[str, Any],
+        dispatch_result: dict[str, Any],
+    ) -> dict[str, Any]:
+        os.makedirs(self._directory, exist_ok=True)
+        handle_id = str(uuid.uuid4())
+        created_at = _iso(time.time())
+        dashboard_url = dispatch_result.get("dashboard_url") or dispatch_result.get(
+            "status_url"
+        )
+        status = str(dispatch_result.get("status") or "running")
+        if status == "dispatched":
+            status = "running"
+        record = {
+            "id": handle_id,
+            "kind": kind,
+            "status": status,
+            "status_url": dashboard_url,
+            "created_at": created_at,
+            "updated_at": created_at,
+            "parent_trace_id": parent_trace_id,
+            "api_call": api_call,
+            "args": _jsonable(args),
+            "dispatch_result": _jsonable(dispatch_result),
+        }
+        with open(self._path(handle_id), "w", encoding="utf-8") as handle:
+            json.dump(record, handle, indent=2, sort_keys=True, default=str)
+        return _public_handle(record)
+
+    def get(self, handle_id: str) -> dict[str, Any]:
+        path = self._path(handle_id)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"Unknown execute_tactus handle: {handle_id}")
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def update(self, handle_id: str, updates: dict[str, Any]) -> dict[str, Any]:
+        record = self.get(handle_id)
+        record.update(_jsonable(updates))
+        record["updated_at"] = _iso(time.time())
+        with open(self._path(handle_id), "w", encoding="utf-8") as handle:
+            json.dump(record, handle, indent=2, sort_keys=True, default=str)
+        return record
+
+
+def _default_handle_store() -> TactusHandleStore:
+    return FileTactusHandleStore(os.path.join(_resolve_trace_dir(), "handles"))
+
+
 def _build_trace_record(
     *,
     trace_id: str,
@@ -121,13 +214,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
 # for the contract these will follow. Until that lands, these calls short-circuit
 # with a structured `requires_handle_protocol` error rather than blocking the
 # synchronous Tactus runtime for tens of minutes or hours.
-LONG_RUNNING_METHODS: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("evaluation", "run"),
-        ("report", "run"),
-        ("procedure", "run"),
-    }
-)
+LONG_RUNNING_METHODS: frozenset[tuple[str, str]] = frozenset({})
 
 
 class RequiresHandleProtocol(RuntimeError):
@@ -155,17 +242,14 @@ MCP_TOOL_MAP: dict[tuple[str, str], str] = {
     ("feedback", "alignment"): "plexus_feedback_alignment",
     ("evaluation", "find_recent"): "plexus_evaluation_find_recent",
     ("evaluation", "compare"): "plexus_evaluation_compare",
-    ("evaluation", "run"): "plexus_evaluation_run",
     (
         "dataset",
         "build_from_feedback_window",
     ): "plexus_dataset_build_from_feedback_window",
     ("dataset", "check_associated"): "plexus_dataset_check_associated",
     ("report", "configurations_list"): "plexus_report_configurations_list",
-    ("report", "run"): "plexus_report_run",
     ("procedure", "info"): "plexus_procedure_info",
     ("procedure", "list"): "plexus_procedure_list",
-    ("procedure", "run"): "plexus_procedure_run",
     ("procedure", "chat_sessions"): "plexus_procedure_chat_sessions",
     ("procedure", "chat_messages"): "plexus_procedure_chat_messages",
 }
@@ -177,6 +261,13 @@ MCP_TOOL_MAP: dict[tuple[str, str], str] = {
 DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("feedback", "find"): "_call_feedback",
     ("evaluation", "info"): "_call_evaluation_info",
+    ("evaluation", "run"): "_call_evaluation_run",
+    ("report", "run"): "_call_report_run",
+    ("procedure", "run"): "_call_procedure_run",
+    ("handle", "peek"): "_call_handle",
+    ("handle", "status"): "_call_handle",
+    ("handle", "await"): "_call_handle",
+    ("handle", "cancel"): "_call_handle",
 }
 
 
@@ -277,6 +368,180 @@ def _default_evaluation_info(args: dict[str, Any]) -> dict[str, Any]:
     return Evaluation.get_evaluation_info(evaluation_id, include_score_results)
 
 
+def _default_evaluation_runner(args: dict[str, Any], mcp: FastMCP) -> dict[str, Any]:
+    """Dispatch evaluation.run directly through the Plexus CLI in async mode."""
+
+    import shutil
+    import subprocess
+
+    scorecard_name = args.get("scorecard_name") or args.get("scorecard")
+    if not scorecard_name:
+        raise ValueError("plexus.evaluation.run requires scorecard_name")
+
+    evaluation_type = str(args.get("evaluation_type") or "accuracy").strip().lower()
+    plexus_bin = shutil.which("plexus") or "plexus"
+
+    if evaluation_type == "feedback":
+        score_name = args.get("score_name") or args.get("score")
+        if not score_name:
+            raise ValueError("plexus.evaluation.run feedback requires score_name")
+        cmd = [
+            plexus_bin,
+            "evaluate",
+            "feedback",
+            "--scorecard",
+            str(scorecard_name),
+            "--score",
+            str(score_name),
+            "--max-items",
+            str(int(args.get("max_feedback_items") or 200)),
+            "--sampling-mode",
+            str(args.get("sampling_mode") or "newest"),
+        ]
+        _append_optional_cli_arg(cmd, "--days", args.get("days"))
+        _append_optional_cli_arg(cmd, "--version", args.get("version"))
+        _append_optional_cli_arg(cmd, "--sample-seed", args.get("sample_seed"))
+        _append_optional_cli_arg(
+            cmd, "--max-category-summary-items", args.get("max_category_summary_items")
+        )
+    elif evaluation_type == "accuracy":
+        cmd = [
+            plexus_bin,
+            "evaluate",
+            "accuracy",
+            "--scorecard",
+            str(scorecard_name),
+            "--number-of-samples",
+            str(int(args.get("n_samples") or 10)),
+            "--json-only",
+        ]
+        _append_optional_cli_arg(
+            cmd, "--score", args.get("score_name") or args.get("score")
+        )
+        _append_optional_cli_arg(cmd, "--version", args.get("version"))
+        _append_optional_cli_arg(cmd, "--dataset-id", args.get("dataset_id"))
+        if args.get("latest"):
+            cmd.append("--latest")
+        if args.get("fresh"):
+            cmd.append("--fresh")
+        if args.get("reload"):
+            cmd.append("--reload")
+        if args.get("allow_no_labels"):
+            cmd.append("--allow-no-labels")
+        if args.get("use_score_associated_dataset"):
+            cmd.append("--use-score-associated-dataset")
+        if args.get("yaml", True):
+            cmd.append("--yaml")
+    else:
+        raise ValueError(
+            "plexus.evaluation.run evaluation_type must be 'accuracy' or 'feedback'"
+        )
+
+    _append_optional_cli_arg(cmd, "--baseline", args.get("baseline"))
+    _append_optional_cli_arg(cmd, "--current-baseline", args.get("current_baseline"))
+    _append_optional_cli_arg(cmd, "--notes", args.get("notes"))
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    return {
+        "status": "dispatched",
+        "process_id": process.pid,
+        "command": cmd,
+        "evaluation_type": evaluation_type,
+        "scorecard": scorecard_name,
+        "score": args.get("score_name") or args.get("score"),
+        "message": "Evaluation dispatched in background.",
+        "dashboard_url": "https://lab.callcriteria.com/lab/evaluations",
+    }
+
+
+def _append_optional_cli_arg(cmd: list[str], flag: str, value: Any) -> None:
+    if value is not None and value != "":
+        cmd.extend([flag, str(value)])
+
+
+def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
+    """Dispatch report.run directly for durable background report-block work."""
+
+    if args.get("config_id"):
+        raise ValueError(
+            "plexus.report.run async handles currently require block_class; "
+            "configuration report handles need a dedicated report task dispatch path"
+        )
+    block_class = args.get("block_class")
+    if not block_class:
+        raise ValueError("plexus.report.run async requires block_class")
+
+    from plexus.cli.report.utils import get_default_account_id
+    from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+    from plexus.reports.service import run_block_cached
+
+    client = create_dashboard_client()
+    if not client:
+        raise ValueError("Could not create dashboard client")
+    account_id = get_default_account_id()
+    if not account_id:
+        raise ValueError("Could not determine default account ID")
+
+    output_data, log_output, was_cached = run_block_cached(
+        block_class=str(block_class),
+        block_config=args.get("block_config") or {},
+        account_id=account_id,
+        client=client,
+        cache_key=args.get("cache_key"),
+        ttl_hours=args.get("ttl_hours") if args.get("ttl_hours") is not None else 24,
+        fresh=bool(args.get("fresh", False)),
+        background=True,
+    )
+    if not isinstance(output_data, dict):
+        raise ValueError(log_output or "Report block background dispatch failed")
+    if output_data.get("status") not in {"dispatched", "already_dispatched"}:
+        raise ValueError(f"Unexpected report dispatch status: {output_data!r}")
+    return {
+        **output_data,
+        "cached": was_cached,
+        "block_class": block_class,
+    }
+
+
+def _default_procedure_runner(args: dict[str, Any]) -> dict[str, Any]:
+    """Dispatch procedure.run directly through ProcedureService async mode."""
+
+    procedure_id = args.get("procedure_id") or args.get("id")
+    if not procedure_id:
+        raise ValueError("plexus.procedure.run requires procedure_id")
+
+    from plexus.cli.procedure.service import ProcedureService
+    from plexus.cli.shared.client_utils import create_client
+
+    client = create_client()
+    if not client:
+        raise ValueError("Could not create API client")
+
+    options: dict[str, Any] = {
+        "async_mode": True,
+        "dry_run": bool(args.get("dry_run", False)),
+    }
+    if args.get("max_iterations") is not None:
+        options["max_iterations"] = int(args["max_iterations"])
+    if args.get("timeout") is not None:
+        options["timeout"] = int(args["timeout"])
+
+    service = ProcedureService(client)
+    result = _run_async_from_sync(service.run_procedure(str(procedure_id), **options))
+    if not isinstance(result, dict):
+        raise ValueError(
+            f"plexus.procedure.run async dispatch returned {type(result).__name__}"
+        )
+    if result.get("status") == "error" or result.get("error"):
+        raise ValueError(str(result.get("error") or result))
+    return result
+
+
 def _plain_value(value: Any) -> Any:
     """Convert Tactus/Lupa table values into plain Python containers."""
 
@@ -326,6 +591,54 @@ def _jsonable(value: Any) -> Any:
         as_dict = {key: item for key, item in pairs}
         return _jsonable(as_dict)
     return repr(value)
+
+
+def _public_handle(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": record["id"],
+        "kind": record["kind"],
+        "status": record["status"],
+        "status_url": record.get("status_url"),
+        "created_at": record["created_at"],
+        "parent_trace_id": record["parent_trace_id"],
+    }
+
+
+TERMINAL_HANDLE_STATUSES = frozenset(
+    {"completed", "completed_unknown", "failed", "cancelled"}
+)
+
+
+def _normalize_handle_status(status: Any) -> str:
+    normalized = str(status or "running").strip().lower()
+    status_map = {
+        "complete": "completed",
+        "completed": "completed",
+        "failed": "failed",
+        "error": "failed",
+        "cancelled": "cancelled",
+        "canceled": "cancelled",
+        "running": "running",
+        "pending": "running",
+        "dispatched": "running",
+    }
+    return status_map.get(normalized, normalized or "running")
+
+
+def _timeout_seconds(value: Any, default: float = 0.0) -> float:
+    if value is None:
+        return default
+    if isinstance(value, int | float):
+        return max(float(value), 0.0)
+    text = str(value).strip().upper()
+    if not text:
+        return default
+    match = re.fullmatch(r"PT(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?", text)
+    if match:
+        minutes = float(match.group(1) or 0.0)
+        seconds = float(match.group(2) or 0.0)
+        return max((minutes * 60.0) + seconds, 0.0)
+    return max(float(text), 0.0)
 
 
 def _dict_as_lua_sequence(value: dict) -> list | None:
@@ -596,19 +909,41 @@ class PlexusRuntimeModule:
     def __init__(
         self,
         mcp: FastMCP,
+        trace_id: str | None = None,
         docs_dir: str | None = None,
         budget: BudgetGate | None = None,
+        handle_store: TactusHandleStore | None = None,
         feedback_finder: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         evaluation_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        evaluation_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        report_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> None:
         self._mcp = mcp
+        self._trace_id = trace_id or str(uuid.uuid4())
         self._docs_dir = docs_dir if docs_dir is not None else PLEXUS_DOCS_DIR
         self._budget = budget if budget is not None else BudgetGate()
+        self._handle_store = (
+            handle_store if handle_store is not None else _default_handle_store()
+        )
         self._feedback_finder = (
             feedback_finder if feedback_finder is not None else _default_feedback_finder
         )
         self._evaluation_info = (
             evaluation_info if evaluation_info is not None else _default_evaluation_info
+        )
+        self._evaluation_runner = (
+            evaluation_runner
+            if evaluation_runner is not None
+            else lambda args: _default_evaluation_runner(args, self._mcp)
+        )
+        self._report_runner = (
+            report_runner if report_runner is not None else _default_report_runner
+        )
+        self._procedure_runner = (
+            procedure_runner
+            if procedure_runner is not None
+            else _default_procedure_runner
         )
         self._api_calls: list[str] = []
         self.handle_protocol_required: tuple[str, str] | None = None
@@ -676,6 +1011,168 @@ class PlexusRuntimeModule:
             return self._evaluation_info(_args(args))
         finally:
             self._budget.record_after("evaluation", "info")
+
+    def _call_evaluation_run(
+        self, namespace: str, method: str, args: Any = None
+    ) -> Any:
+        if (namespace, method) != ("evaluation", "run"):
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        parsed = _args(args)
+        if not bool(parsed.get("async")):
+            self._api_calls.append("plexus.evaluation.run")
+            self.handle_protocol_required = ("evaluation", "run")
+            raise RequiresHandleProtocol("evaluation", "run")
+
+        self._budget.check_before("evaluation", "run")
+        self._api_calls.append("plexus.evaluation.run")
+        try:
+            dispatch_result = self._evaluation_runner(parsed)
+            return self._handle_store.create(
+                kind="evaluation",
+                parent_trace_id=self._trace_id,
+                api_call="plexus.evaluation.run",
+                args=parsed,
+                dispatch_result=dispatch_result,
+            )
+        finally:
+            self._budget.record_after("evaluation", "run")
+
+    def _call_report_run(self, namespace: str, method: str, args: Any = None) -> Any:
+        if (namespace, method) != ("report", "run"):
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        parsed = _args(args)
+        if not bool(parsed.get("async")):
+            self._api_calls.append("plexus.report.run")
+            self.handle_protocol_required = ("report", "run")
+            raise RequiresHandleProtocol("report", "run")
+
+        self._budget.check_before("report", "run")
+        self._api_calls.append("plexus.report.run")
+        try:
+            dispatch_result = self._report_runner(parsed)
+            return self._handle_store.create(
+                kind="report",
+                parent_trace_id=self._trace_id,
+                api_call="plexus.report.run",
+                args=parsed,
+                dispatch_result=dispatch_result,
+            )
+        finally:
+            self._budget.record_after("report", "run")
+
+    def _call_procedure_run(self, namespace: str, method: str, args: Any = None) -> Any:
+        if (namespace, method) != ("procedure", "run"):
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        parsed = _args(args)
+        if not bool(parsed.get("async")):
+            self._api_calls.append("plexus.procedure.run")
+            self.handle_protocol_required = ("procedure", "run")
+            raise RequiresHandleProtocol("procedure", "run")
+
+        self._budget.check_before("procedure", "run")
+        self._api_calls.append("plexus.procedure.run")
+        try:
+            dispatch_result = self._procedure_runner(parsed)
+            return self._handle_store.create(
+                kind="procedure",
+                parent_trace_id=self._trace_id,
+                api_call="plexus.procedure.run",
+                args=parsed,
+                dispatch_result=dispatch_result,
+            )
+        finally:
+            self._budget.record_after("procedure", "run")
+
+    def _call_handle(self, namespace: str, method: str, args: Any = None) -> Any:
+        if namespace != "handle":
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        parsed = _args(args)
+        handle_id = parsed.get("id")
+        if not handle_id:
+            raise ValueError(f"plexus.handle.{method} requires id")
+
+        self._budget.check_before("handle", method)
+        self._api_calls.append(f"plexus.handle.{method}")
+        try:
+            if method in {"peek", "status"}:
+                return self._refresh_handle(str(handle_id))
+            if method == "cancel":
+                return self._handle_store.update(
+                    str(handle_id),
+                    {
+                        "status": "cancelled",
+                        "cancel_requested": True,
+                        "cancelled_at": _iso(time.time()),
+                    },
+                )
+            if method == "await":
+                timeout = _timeout_seconds(parsed.get("timeout"), default=0.0)
+                poll_interval = _timeout_seconds(
+                    parsed.get("poll_interval"), default=2.0
+                )
+                deadline = time.monotonic() + timeout
+                while True:
+                    record = self._refresh_handle(str(handle_id))
+                    if record["status"] in TERMINAL_HANDLE_STATUSES:
+                        return record
+                    if time.monotonic() >= deadline:
+                        return record
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        return record
+                    time.sleep(min(max(poll_interval, 0.1), remaining))
+            raise ValueError(f"Unsupported Plexus runtime API: plexus.handle.{method}")
+        finally:
+            self._budget.record_after("handle", method)
+
+    def _refresh_handle(self, handle_id: str) -> dict[str, Any]:
+        record = self._handle_store.get(handle_id)
+        dispatch_result = record.get("dispatch_result") or {}
+        evaluation_id = dispatch_result.get("evaluation_id") or dispatch_result.get(
+            "id"
+        )
+        if record.get("kind") == "evaluation" and not evaluation_id:
+            process_id = dispatch_result.get("process_id")
+            if process_id:
+                try:
+                    os.kill(int(process_id), 0)
+                except ProcessLookupError:
+                    return self._handle_store.update(
+                        handle_id, {"status": "completed_unknown"}
+                    )
+                except PermissionError:
+                    return self._handle_store.update(
+                        handle_id, {"status": "running_unknown"}
+                    )
+                return self._handle_store.update(handle_id, {"status": "running"})
+        if record.get("kind") != "evaluation" or not evaluation_id:
+            return record
+
+        try:
+            evaluation = self._evaluation_info({"evaluation_id": evaluation_id})
+        except Exception as exc:  # noqa: BLE001
+            return self._handle_store.update(handle_id, {"last_status_error": str(exc)})
+
+        status = _normalize_handle_status(evaluation.get("status"))
+        return self._handle_store.update(
+            handle_id,
+            {
+                "status": status,
+                "evaluation_id": evaluation_id,
+                "evaluation": evaluation,
+                "status_url": record.get("status_url")
+                or evaluation.get("dashboard_url")
+                or f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}",
+            },
+        )
 
     def _call_docs(self, namespace: str, method: str, args: Any = None) -> Any:
         if method == "list":
@@ -778,8 +1275,12 @@ def _run_tactus_sync(
     trace_id: str,
     trace_store: TactusTraceStore,
     budget: BudgetGate | None = None,
+    handle_store: TactusHandleStore | None = None,
     feedback_finder: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     evaluation_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    evaluation_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    report_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     gate = budget if budget is not None else BudgetGate()
 
@@ -805,9 +1306,14 @@ def _run_tactus_sync(
                 )
             plexus = PlexusRuntimeModule(
                 mcp,
+                trace_id=trace_id,
                 budget=gate,
+                handle_store=handle_store,
                 feedback_finder=feedback_finder,
                 evaluation_info=evaluation_info,
+                evaluation_runner=evaluation_runner,
+                report_runner=report_runner,
+                procedure_runner=procedure_runner,
             )
             runtime.register_python_module("plexus", plexus)
             runtime_result = await runtime.execute(wrapped, context={}, format="lua")
@@ -911,8 +1417,12 @@ async def _execute_tactus_tool(
     *,
     trace_store: TactusTraceStore | None = None,
     budget: BudgetGate | None = None,
+    handle_store: TactusHandleStore | None = None,
     feedback_finder: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     evaluation_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    evaluation_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    report_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     store = trace_store if trace_store is not None else _default_trace_store()
     started_mono = time.monotonic()
@@ -950,8 +1460,12 @@ async def _execute_tactus_tool(
             trace_id=trace_id,
             trace_store=store,
             budget=budget,
+            handle_store=handle_store,
             feedback_finder=feedback_finder,
             evaluation_info=evaluation_info,
+            evaluation_runner=evaluation_runner,
+            report_runner=report_runner,
+            procedure_runner=procedure_runner,
         )
     except Exception as exc:
         logger.error("execute_tactus failed: %s", exc, exc_info=True)

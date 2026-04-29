@@ -1,35 +1,49 @@
-# execute_tactus long-running handle protocol (v0 specification)
+# execute_tactus long-running handle protocol
 
 This file documents the contract for long-running Plexus runtime APIs called
 from `execute_tactus`. The full design lives in Kanbus epic `plx-247588`
 (streaming + handle ergonomics for long-running operations) and depends on
 the budget plumbing from `plx-a4b033`.
 
-The current `execute_tactus` build deliberately does **not** implement the
-handle/streaming model. Instead, it short-circuits the long-running calls
-with a structured error so an MCP client cannot accidentally tie up the
-synchronous Tactus runtime for tens of minutes or hours and cannot bypass
-the budget gate by hiding cost behind a dispatched task.
+The current `execute_tactus` build implements handle-based async paths for
+`plexus.evaluation.run{ async = true }`, `plexus.report.run{ async = true }`,
+and `plexus.procedure.run{ async = true }`. Blocking long-running calls still
+short-circuit with a structured error so an MCP client cannot accidentally tie
+up the synchronous Tactus runtime for tens of minutes or hours.
 
 ## Long-running APIs
 
-The following entries in `MCP_TOOL_MAP` are classified as long-running and
-gated by `LONG_RUNNING_METHODS` in `execute.py`:
+The following APIs are long-running:
 
-- `plexus.evaluation.run`
-- `plexus.report.run`
-- `plexus.procedure.run`
+- `plexus.evaluation.run` — direct handler; `async = true` dispatches a
+  background CLI evaluation and creates an evaluation handle.
+- `plexus.report.run` — direct handler; `async = true` dispatches a durable
+  background report-block task and creates a report handle.
+- `plexus.procedure.run` — direct handler; `async = true` dispatches through
+  `ProcedureService.run_procedure(..., async_mode=True)` and creates a
+  procedure handle.
 
-When called in v0, `PlexusRuntimeModule._call`:
+`LONG_RUNNING_METHODS` is now empty. When a direct long-running handler is
+called without `async = true`, it:
 
 1. Records the attempt on `api_calls` so the trace shows the intent.
 2. Sets `handle_protocol_required = (namespace, method)`.
 3. Raises `RequiresHandleProtocol`, which surfaces in the response envelope
    as `error.code = "requires_handle_protocol"`.
 
-No MCP-loopback call is made and no remote dispatch is started.
+No MCP-loopback call is made and no remote dispatch is started for blocking
+forms.
 
-## Required protocol (target shape, not yet implemented)
+For `async = true`, `PlexusRuntimeModule`:
+
+1. Checks the active budget before dispatch.
+2. Dispatches the operation in non-blocking mode.
+3. Creates a persisted handle record through `TactusHandleStore`.
+4. Returns the public handle table to Tactus.
+5. Records exactly one `plexus.<namespace>.run` API call in the response and
+   trace cost envelope.
+
+## Protocol
 
 Two complementary mechanisms (per `plx-247588`):
 
@@ -80,26 +94,40 @@ local snapshot = plexus.handle.peek{ id = "<id>" }
 plexus.handle.cancel{ id = "<id>" }
 ```
 
-Handle storage and lifecycle are owned by the same trace persistence layer
-introduced in this PR (`TactusTraceStore`). Each handle carves a sub-budget
-out of the parent's `BudgetGate` envelope at creation time. A spawn that
-would exceed the parent budget is rejected before any remote dispatch.
+Handle storage and lifecycle are owned by `TactusHandleStore`, which defaults
+to JSON files next to the Tactus trace directory. Each handle records the
+parent trace, original args, dispatch result, status URL, and refreshed status
+data when available. Evaluation handles refresh from `plexus.evaluation.info`
+when the dispatch result includes an `evaluation_id`; process-backed
+evaluation handles fall back to process liveness.
 
-## Why this gate exists in v0
+Implemented handle calls:
 
-- The synchronous `_run_async_from_sync` bridge cannot honour wallclock
-  budgets sensibly for runs that intentionally take an hour.
-- Running these APIs through the v0 MCP-loopback path would create
-  unbudgeted dispatched workers, exactly the failure mode `plx-a4b033`
-  ("distributed budget infrastructure", priority 0) was filed to prevent.
-- The handle protocol must own its own trace records, sub-budget carving,
-  and cancellation semantics; bolting it onto the synchronous path now
-  would create a design we would have to rip out.
+- `plexus.handle.peek{ id = "..." }` refreshes and returns the latest stored
+  status.
+- `plexus.handle.status{ id = "..." }` is an alias for `peek`.
+- `plexus.handle.await{ id = "...", timeout = "PT10M" }` polls until a terminal
+  status or timeout.
+- `plexus.handle.cancel{ id = "..." }` records cancellation intent in the
+  handle store. Underlying dispatch cancellation still belongs to the next
+  `plx-247588` slice.
 
-## Removing the gate
+A spawn that would exceed the parent budget is rejected before any remote
+dispatch.
 
-When the implementation tasks for `plx-247588` and `plx-a4b033` ship, the
-`LONG_RUNNING_METHODS` set in `execute.py` should shrink as each API gains
-its handle/streaming wiring. There is intentionally no fallback: each
-removal must come with the real handle/streaming integration and updated
-tests that exercise the new contract end to end.
+## Remaining Work
+
+- Streaming progress notifications still need to be wired to MCP clients.
+- `plexus.handle.cancel` records cancellation intent, but underlying
+  cancellation propagation still needs per-operation support.
+- Report configuration handles currently require a dedicated report task
+  dispatch path; the implemented report handle path is for durable
+  programmatic report-block tasks.
+- Distributed budget sub-carving from `plx-a4b033` still needs to attach
+  child work to parent budgets across dispatch boundaries.
+
+## Removing Gates
+
+There is intentionally no fallback: each long-running API is either a direct
+handler with an async handle path or rejects blocking calls with
+`requires_handle_protocol`.
