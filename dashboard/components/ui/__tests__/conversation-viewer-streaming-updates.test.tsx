@@ -35,9 +35,11 @@ jest.mock("react-virtuoso", () => {
 })
 
 const mockChatSessionList = jest.fn()
+const mockChatSessionGet = jest.fn()
 const mockChatMessageList = jest.fn()
 const mockChatMessageCreate = jest.fn()
 const mockChatSessionOnCreate = jest.fn()
+const mockChatSessionOnUpdate = jest.fn()
 const mockChatMessageOnCreate = jest.fn()
 const mockChatMessageOnUpdate = jest.fn()
 const mockGraphql = jest.fn()
@@ -47,7 +49,9 @@ const mockClient = {
   models: {
     ChatSession: {
       listChatSessionByProcedureIdAndCreatedAt: mockChatSessionList,
+      get: mockChatSessionGet,
       onCreate: mockChatSessionOnCreate,
+      onUpdate: mockChatSessionOnUpdate,
     },
     ChatMessage: {
       listChatMessageByProcedureIdAndCreatedAt: mockChatMessageList,
@@ -209,19 +213,23 @@ if (typeof window !== "undefined" && !("ResizeObserver" in window)) {
 
 describe("ConversationViewer streaming updates", () => {
   const subscriptions = {
+    sessionUpdate: null as null | { next: (payload: any) => void; error?: (error: Error) => void },
     messageCreate: null as null | { next: (payload: any) => void; error?: (error: Error) => void },
     messageUpdate: null as null | { next: (payload: any) => void; error?: (error: Error) => void },
   }
 
   beforeEach(() => {
     mockScrollToIndex.mockReset()
+    subscriptions.sessionUpdate = null
     subscriptions.messageCreate = null
     subscriptions.messageUpdate = null
 
     mockChatSessionList.mockReset()
     mockChatMessageList.mockReset()
     mockChatMessageCreate.mockReset()
+    mockChatSessionGet.mockReset()
     mockChatSessionOnCreate.mockReset()
+    mockChatSessionOnUpdate.mockReset()
     mockChatMessageOnCreate.mockReset()
     mockChatMessageOnUpdate.mockReset()
     mockGraphql.mockReset()
@@ -240,6 +248,7 @@ describe("ConversationViewer streaming updates", () => {
       ],
       nextToken: null,
     })
+    mockChatSessionGet.mockResolvedValue({ data: null })
 
     mockChatMessageList.mockResolvedValue({
       data: [
@@ -268,6 +277,12 @@ describe("ConversationViewer streaming updates", () => {
 
     mockChatSessionOnCreate.mockReturnValue({
       subscribe: () => ({ unsubscribe: jest.fn() }),
+    })
+    mockChatSessionOnUpdate.mockReturnValue({
+      subscribe: (handlers: { next: (payload: any) => void; error?: (error: Error) => void }) => {
+        subscriptions.sessionUpdate = handlers
+        return { unsubscribe: jest.fn() }
+      },
     })
 
     mockChatMessageOnCreate.mockReturnValue({
@@ -526,6 +541,108 @@ describe("ConversationViewer streaming updates", () => {
     const metadata = JSON.parse(createdMessage.metadata)
     expect(metadata.model.id).toBe("gpt-5.3")
     expect(metadata.instrumentation.client_selected_model).toBe("gpt-5.3")
+  })
+
+  it("reveals hidden-until-named sessions after session update notifications", async () => {
+    let currentSessionRows = [
+      {
+        id: "sess-hidden",
+        accountId: "acct-1",
+        procedureId: "proc-1",
+        category: "Optimize",
+        metadata: JSON.stringify({ console: { hidden_until_named: true } }),
+        createdAt: "2026-03-27T00:00:00.000Z",
+        updatedAt: "2026-03-27T00:00:00.000Z",
+      },
+    ]
+    mockChatSessionList.mockImplementation(async () => ({
+      data: currentSessionRows,
+      nextToken: null,
+    }))
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("Chat Sessions (0)")).toBeInTheDocument()
+    })
+
+    currentSessionRows = [
+      {
+        id: "sess-hidden",
+        accountId: "acct-1",
+        procedureId: "proc-1",
+        name: "Coverage Session",
+        category: "Optimize",
+        metadata: JSON.stringify({ console: { hidden_until_named: false } }),
+        createdAt: "2026-03-27T00:00:00.000Z",
+        updatedAt: "2026-03-27T00:00:30.000Z",
+      },
+    ]
+
+    await act(async () => {
+      subscriptions.sessionUpdate?.next({ data: { id: "sess-hidden" } })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText("Chat Sessions (1)")).toBeInTheDocument()
+      expect(screen.getAllByText("Coverage Session").length).toBeGreaterThan(0)
+    })
+  })
+
+  it("clears selection instead of auto-selecting a different session when active session disappears", async () => {
+    let currentSessionRows = [
+      {
+        id: "sess-1",
+        accountId: "acct-1",
+        procedureId: "proc-1",
+        name: "Current Session",
+        category: "Optimize",
+        createdAt: "2026-03-27T00:00:00.000Z",
+        updatedAt: "2026-03-27T00:00:00.000Z",
+      },
+    ]
+    mockChatSessionList.mockImplementation(async () => ({
+      data: currentSessionRows,
+      nextToken: null,
+    }))
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Current Session").length).toBeGreaterThan(0)
+    })
+
+    currentSessionRows = [
+      {
+        id: "sess-2",
+        accountId: "acct-1",
+        procedureId: "proc-1",
+        name: "Different Session",
+        category: "Optimize",
+        createdAt: "2026-03-27T00:01:00.000Z",
+        updatedAt: "2026-03-27T00:01:00.000Z",
+      },
+    ]
+
+    await act(async () => {
+      subscriptions.sessionUpdate?.next({ data: { id: "sess-2" } })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText("No session selected")).toBeInTheDocument()
+      expect(screen.getByText("Chat Sessions (1)")).toBeInTheDocument()
+      expect(screen.queryByText("Different Session")).toBeInTheDocument()
+    })
   })
 
   it("renders TOOL_CALL and TOOL_RESPONSE as separate Tool components", async () => {
