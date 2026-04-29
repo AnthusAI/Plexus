@@ -1267,7 +1267,7 @@ Based on this data, you should prioritize examining error types with the highest
                     ),
                 )
                 return None
-            context = await provider.generate_for_score_item(
+            context = await provider.retrieve_for_score_item(
                 scorecard_identifier=scorecard_name,
                 score_identifier=score_name,
                 score_id=score_id,

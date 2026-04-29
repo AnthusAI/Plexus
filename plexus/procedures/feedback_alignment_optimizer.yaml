@@ -179,6 +179,7 @@ agents:
     provider: openai
     model: gpt-5-mini
     temperature: 1
+    disable_streaming: true
     system_prompt: |
       You are an optimizer for a Plexus score configuration.
 
@@ -187,7 +188,7 @@ agents:
 
       PHASE 1 — IMPLEMENTATION:
       For each hypothesis, you edit score_config.yaml to test it. The current file content
-      appears in a system message before each task message. After editing, submit with
+      appears inline in the task message for that turn. After editing, submit with
       submit_score_version(version_note="..."). The system evaluates your version and reports
       results. Then you move to the next hypothesis, starting from the original baseline.
 
@@ -198,9 +199,9 @@ agents:
       that incorporates the best ideas. If nothing improved, explain what you learned
       and what to try differently next cycle.
 
-      You maintain full context across all phases and cycles — every result, whether
-      it improved things or not, is valuable signal. Use the accumulated history to
-      avoid repeating approaches that didn't work and to build on approaches that did.
+      Do not rely on hidden chat history for required context. Optimizer state, explicit
+      task messages, cycle summaries, submitted_versions, iterations, diagnostics, and
+      accumulated lessons are the source of truth across hypotheses and cycles.
 
       TWO DATASETS:
       1. REGRESSION: Deterministic regression dataset (accuracy eval type). Measures overall correctness.
@@ -2914,7 +2915,8 @@ code: |
       scorecard_identifier = params.scorecard,
       score_identifier = params.score,
       score_id = score_id,
-      topic_hint = "Score-level optimizer rubric-memory briefing"
+      topic_hint = "Score-level optimizer rubric-memory briefing",
+      synthesize = false
     }, {max_retries = 1})
     if rm_ok and type(rm_result) == "table" and rm_result.success and has_text(rm_result.markdown_context) then
       rubric_memory_context = rm_result
@@ -3969,6 +3971,23 @@ code: |
   local MAX_EDITOR_RETRIES = 2
 
   safe_agent_call = function(agent, agent_name, msg, recovery_context)
+    local function recovery_message(base_msg, context)
+      if not context then return base_msg end
+      local parts = {}
+      if context.file_content then
+        table.insert(parts, "=== CURRENT score_config.yaml ===\n"
+          .. context.file_content
+          .. "\n=== END OF score_config.yaml ===")
+      end
+      if context.task_description then
+        table.insert(parts, context.task_description)
+      elseif base_msg then
+        table.insert(parts, base_msg)
+      end
+      if #parts == 0 then return base_msg end
+      return table.concat(parts, "\n\n")
+    end
+
     for attempt = 1, MAX_EDITOR_RETRIES + 1 do
       Tool.reset()
       local ok, err = pcall(function()
@@ -3989,23 +4008,11 @@ code: |
       end
 
       if err_type == "context_window" then
-        -- Recovery: clear history, re-inject just essential context
+        -- Recovery: clear history and put essential context directly in the next turn.
         agent.clear_history()
-        if recovery_context then
-          if recovery_context.file_content then
-            agent.history:add({
-              role = "system",
-              content = "=== CURRENT score_config.yaml ===\n"
-                .. recovery_context.file_content
-                .. "\n=== END OF score_config.yaml ==="
-            })
-          end
-          if recovery_context.task_description then
-            msg = recovery_context.task_description
-          end
-        end
+        msg = recovery_message(msg, recovery_context)
         diag(string.format(
-          "Recovered from %s context window error: cleared history, re-injected context",
+          "Recovered from %s context window error: cleared history, rebuilt inline context",
           agent_name))
 
       elseif err_type == "rate_limit" or err_type == "transient" then
@@ -4015,16 +4022,9 @@ code: |
         while os.clock() < t do end
 
       else
-        -- Unknown error: clear history and retry with context
+        -- Unknown error: clear history and retry with inline context.
         agent.clear_history()
-        if recovery_context and recovery_context.file_content then
-          agent.history:add({
-            role = "system",
-            content = "=== CURRENT score_config.yaml ===\n"
-              .. recovery_context.file_content
-              .. "\n=== END OF score_config.yaml ==="
-          })
-        end
+        msg = recovery_message(msg, recovery_context)
       end
     end
     return false, "max retries exceeded"
@@ -4414,6 +4414,19 @@ code: |
     -- PHASE 2: Implement each hypothesis (continuous conversation)
     -- ================================================================
     local submitted_versions = {}
+    local submitted_version_keys = {}
+    local function record_submitted_version(entry)
+      local key = tostring(entry.index or "") .. ":" .. tostring(entry.version_id or "")
+      if submitted_version_keys[key] then
+        diag(string.format(
+          "Skipping duplicate submitted version record for hypothesis %s version %s",
+          tostring(entry.index), tostring(entry.version_id)))
+        return false
+      end
+      submitted_version_keys[key] = true
+      table.insert(submitted_versions, entry)
+      return true
+    end
     local any_cannot_improve = false
 
     for h = 1, #hypotheses do
@@ -4437,16 +4450,6 @@ code: |
       Tool.reset()
       code_editor.clear_history()
 
-      -- Inject class-specific YAML format reference for the editor agent
-      if has_text(SCORE_CLASS_DOC) then
-        code_editor.history:add({
-          role = "system",
-          content = string.format("=== SCORE YAML FORMAT REFERENCE (%s) ===\n", score_class)
-            .. SCORE_CLASS_DOC
-            .. "\n=== END SCORE YAML FORMAT REFERENCE ==="
-        })
-      end
-
       -- Inner ReAct loop for this hypothesis.
       -- Failed str_replace attempts do NOT count as logical steps — the LLM gets
       -- unlimited retries for mechanical editing failures (up to max_edit_retries).
@@ -4469,21 +4472,24 @@ code: |
         react_step = react_step + 1
         local msg
         if react_step == 1 and total_edit_failures == 0 then
-          -- First step for this hypothesis — inject current file as system message
+          -- First step for this hypothesis — include required context inline.
+          local first_turn_context = {}
+          if has_text(SCORE_CLASS_DOC) then
+            table.insert(first_turn_context, string.format("=== SCORE YAML FORMAT REFERENCE (%s) ===\n", score_class)
+              .. SCORE_CLASS_DOC
+              .. "\n=== END SCORE YAML FORMAT REFERENCE ===")
+          end
           local editor_content = call_plexus_tool("score_editor_get_content", {})
           if editor_content and editor_content.file_content then
-            code_editor.history:add({
-              role = "system",
-              content = "=== CURRENT score_config.yaml (the file you are editing) ===\n"
-                .. editor_content.file_content
-                .. "\n=== END OF score_config.yaml ==="
-            })
+            table.insert(first_turn_context, "=== CURRENT score_config.yaml (the file you are editing) ===\n"
+              .. editor_content.file_content
+              .. "\n=== END OF score_config.yaml ===")
           end
 
           msg = string.format(
             "Implement hypothesis %d of %d: %s\n\n%s\n\n"
             .. "Edit score_config.yaml to test this hypothesis. "
-            .. "The current file content is shown in the system message above.\n"
+            .. "The current file content is included above in this message.\n"
             .. "For prompt-only hypotheses, prefer the SMALLEST UNIQUE replacement inside system_message or user_message.\n"
             .. "Do NOT replace the entire prompt block unless the hypothesis truly requires a full rewrite.\n"
             .. "IMPORTANT: Your str_replace old_str MUST be copied exactly from score_config.yaml.\n"
@@ -4492,6 +4498,9 @@ code: |
             .. "The version_note is your future self's primary learning signal — be specific about WHAT, WHY, and EXPECTED EFFECT.\n"
             .. "Call done(reason='cannot_improve: ...') if you cannot find a viable edit.",
             h, #hypotheses, hyp.name, hyp.description)
+          if #first_turn_context > 0 then
+            msg = table.concat(first_turn_context, "\n\n") .. "\n\n" .. msg
+          end
         else
           -- Subsequent turns: provide feedback on what just happened
           local last_edit = Tool.last_call("str_replace_editor")
@@ -4768,7 +4777,7 @@ code: |
 
         -- Record submitted version
         if version_id then
-          table.insert(submitted_versions, {
+          record_submitted_version({
             index = h,
             version_id = version_id,
             done_reason = hyp_done_reason,
@@ -4783,25 +4792,7 @@ code: |
             has_text(hyp_done_reason) and trunc(hyp_done_reason, 100) or "unknown",
             trunc(hyp.name .. ": " .. (hyp.description or ""), 200)))
         end
-
-        -- Transition message to conversation history (so agent has full context)
-        if version_id then
-          code_editor.history:add({role = "user", content = string.format(
-            "Hypothesis %d ('%s') submitted as version %s. Evaluation will run after all hypotheses are complete.",
-            h, hyp.name, version_id)})
-        else
-          code_editor.history:add({role = "user", content = string.format(
-            "Hypothesis %d ('%s') was not submitted (no viable edit found). Reason: %s",
-            h, hyp.name, has_text(hyp_done_reason) and hyp_done_reason or "unknown")})
-        end
-
-        -- Preview next hypothesis in conversation
-        if h < #hypotheses then
-          code_editor.history:add({role = "user", content = string.format(
-            "Moving to hypothesis %d of %d: %s\n%s",
-            h+1, #hypotheses, hypotheses[h+1].name, hypotheses[h+1].description)})
-        end
-      end)
+        end)
 
       if not post_ok then
         diag(string.format("ERROR in Hyp %d post-processing: %s", h, trunc(tostring(post_err), 500)))
@@ -4810,7 +4801,7 @@ code: |
           h, trunc(tostring(post_err), 200)), level = "error"})
         -- If we have a version_id, still record it despite the error
         if version_id then
-          table.insert(submitted_versions, {
+          record_submitted_version({
             index = h,
             version_id = version_id,
             done_reason = hyp_done_reason or "(post-processing error)",
@@ -4977,17 +4968,13 @@ code: |
         })
 
         code_editor.clear_history()
-
-        -- Inject class-specific YAML format reference for the editor agent
+        local synthesis_context_parts = {}
         if has_text(SCORE_CLASS_DOC) then
-          code_editor.history:add({
-            role = "system",
-            content = string.format("=== SCORE YAML FORMAT REFERENCE (%s) ===\n", score_class)
-              .. SCORE_CLASS_DOC
-              .. "\n=== END SCORE YAML FORMAT REFERENCE ==="
-          })
+          table.insert(synthesis_context_parts, string.format("=== SCORE YAML FORMAT REFERENCE (%s) ===\n", score_class)
+            .. SCORE_CLASS_DOC
+            .. "\n=== END SCORE YAML FORMAT REFERENCE ===")
         end
-        -- Inject ALL prior cycles' synthesis reasoning + accumulated lessons
+        -- Include ALL prior cycles' synthesis reasoning + accumulated lessons inline.
         do
           local prior_insights = State.get("cycle_insights") or {}
           local reasoning_parts = {}
@@ -4998,31 +4985,23 @@ code: |
             end
           end
           if #reasoning_parts > 0 then
-            code_editor.history:add({
-              role = "system",
-              content = "=== SYNTHESIS REASONING FROM ALL PRIOR CYCLES ===\n"
-                .. table.concat(reasoning_parts, "\n\n")
-                .. "\n=== END SYNTHESIS REASONING ==="
-            })
+            table.insert(synthesis_context_parts, "=== SYNTHESIS REASONING FROM ALL PRIOR CYCLES ===\n"
+              .. table.concat(reasoning_parts, "\n\n")
+              .. "\n=== END SYNTHESIS REASONING ===")
             Human.notify({message = string.format(
               "    [synthesis context] Injected %d cycles of synthesis reasoning",
               #reasoning_parts), level = "info"})
           end
           local acc_lessons = State.get("accumulated_lessons")
           if has_text(acc_lessons) then
-            code_editor.history:add({
-              role = "system",
-              content = "=== ACCUMULATED LESSONS (LLM-synthesized summary) ===\n"
-                .. trunc(acc_lessons, 3000)
-                .. "\n=== END ACCUMULATED LESSONS ==="
-            })
+            table.insert(synthesis_context_parts, "=== ACCUMULATED LESSONS (LLM-synthesized summary) ===\n"
+              .. trunc(acc_lessons, 3000)
+              .. "\n=== END ACCUMULATED LESSONS ===")
           end
         end
-        code_editor.history:add({
-          role = "system",
-          content = string.format("=== CURRENT score_config.yaml (starting from %s — apply your synthesis here) ===\n", start_label)
-            .. start_code .. "\n=== END OF score_config.yaml ==="
-        })
+        table.insert(synthesis_context_parts,
+          string.format("=== CURRENT score_config.yaml (starting from %s — apply your synthesis here) ===\n", start_label)
+            .. start_code .. "\n=== END OF score_config.yaml ===")
 
         local max_edit_retries = 10
         local max_smoke_failures = 3
@@ -5038,7 +5017,7 @@ code: |
           step = step + 1
           local msg
           if step == 1 and edit_failures == 0 then
-            msg = prompt_text
+            msg = table.concat(synthesis_context_parts, "\n\n") .. "\n\n" .. prompt_text
           else
             local recent_parts = {}
             if smoke_failure then
@@ -5866,12 +5845,9 @@ code: |
           -- Compact history even on failed cycles
           if cycle < max_cycles then
             code_editor.clear_history()
-            code_editor.history:add({
-              role = "system",
-              content = string.format("=== CYCLE %d SUMMARY ===\nStatus: FAILED (no hypothesis succeeded)\nCurrent base version: %s",
-                cycle, tostring(last_accepted_version_id))
-            })
-            diag(string.format("Cycle %d (failed) history compacted", cycle))
+            diag(string.format(
+              "Cycle %d (failed) editor history cleared; state summary retained",
+              cycle))
           end
 
           if Stop.requested() then stop_reason = "user_stopped"; return "break_cycle" end
@@ -6382,13 +6358,9 @@ code: |
             tostring(last_accepted_version_id)))
 
           code_editor.clear_history()
-          code_editor.history:add({
-            role = "system",
-            content = table.concat(summary_parts, "\n")
-          })
-          diag(string.format("Cycle %d history compacted to summary (%d chars)",
+          diag(string.format("Cycle %d editor history cleared; state summary retained (%d chars)",
             cycle, #table.concat(summary_parts, "\n")))
-        end
+          end
 
         diag(string.format("Cycle %d complete, entering next iteration", cycle))
       end  -- end of if final_version_id (synthesis produced a version to evaluate)
