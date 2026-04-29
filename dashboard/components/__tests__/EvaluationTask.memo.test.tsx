@@ -203,9 +203,15 @@ describe('EvaluationTask memo behavior', () => {
       />
     )
 
-    expect(screen.getByText('Original baseline:')).toBeInTheDocument()
-    expect(screen.getByText('eval-original')).toBeInTheDocument()
-    expect(screen.getByText('Current best baseline:')).toBeInTheDocument()
-    expect(screen.getByText('eval-current')).toBeInTheDocument()
+    expect(screen.getByText('Original baseline')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open original baseline evaluation' })).toHaveAttribute(
+      'href',
+      '/lab/evaluations/eval-original'
+    )
+    expect(screen.getByText('Current best baseline')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open current best baseline evaluation' })).toHaveAttribute(
+      'href',
+      '/lab/evaluations/eval-current'
+    )
   })
 })
