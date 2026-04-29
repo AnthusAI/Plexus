@@ -1,0 +1,18 @@
+{
+  "id": "plx-0e38eb7b-5f52-48a9-bf56-f4b152ba840e",
+  "title": "Production credential hygiene",
+  "description": "",
+  "type": "initiative",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-28T22:50:21.420718123Z",
+  "updated_at": "2026-04-28T22:50:21.420718123Z",
+  "closed_at": null,
+  "custom": {}
+}
