@@ -1,15 +1,26 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import io
+import json
 import os
 from pathlib import Path
 
 import click
+import yaml
 
+from plexus.cli.shared.client_utils import create_client
+from plexus.cli.shared.memoized_resolvers import (
+    memoized_resolve_score_identifier,
+    memoized_resolve_scorecard_identifier,
+)
 from plexus.cli.shared.shared import sanitize_path_name
 from plexus.rubric_memory import (
     LocalRubricMemoryCorpusResolver,
     RUBRIC_MEMORY_BUCKET_ENV_VAR,
     RubricMemoryPreparedCorpusManager,
+    RubricMemoryRecentBriefingProvider,
     S3RubricMemoryCorpusResolver,
 )
 
@@ -111,6 +122,81 @@ def prewarm(
         f"score_knowledge_base: "
         f"s3://{paths.bucket_name}/{paths.score_knowledge_base_prefix}"
     )
+
+
+@rubric_memory.command(name="recent")
+@click.option("--scorecard", "scorecard_name", required=True, help="Scorecard name.")
+@click.option("--score", "score_name", required=True, help="Score name.")
+@click.option(
+    "--days",
+    type=int,
+    default=RubricMemoryRecentBriefingProvider.DEFAULT_DAYS,
+    show_default=True,
+    help="Trailing source-date window.",
+)
+@click.option("--since", help="Inclusive source date in YYYY-MM-DD.")
+@click.option("--query", default="", help="Optional topic query.")
+@click.option("--limit", type=int, default=16, show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["markdown", "json", "yaml"]),
+    default="markdown",
+    show_default=True,
+)
+def recent(
+    *,
+    scorecard_name: str,
+    score_name: str,
+    days: int,
+    since: str | None,
+    query: str,
+    limit: int,
+    output_format: str,
+) -> None:
+    """Retrieve recent rubric-memory entries for optimizer preflight review."""
+
+    _rubric_memory_bucket_name()
+    client = create_client()
+    with contextlib.redirect_stdout(io.StringIO()):
+        scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_name)
+        score_id = (
+            memoized_resolve_score_identifier(client, scorecard_id, score_name)
+            if scorecard_id
+            else None
+        )
+    if not scorecard_id:
+        raise click.ClickException(f"Could not resolve scorecard: {scorecard_name}")
+    if not score_id:
+        raise click.ClickException(
+            f"Could not resolve score '{score_name}' in scorecard '{scorecard_name}'"
+        )
+
+    context = asyncio.run(
+        RubricMemoryRecentBriefingProvider(api_client=client).retrieve_recent(
+            scorecard_identifier=scorecard_name,
+            score_identifier=score_name,
+            score_id=score_id,
+            query=query,
+            days=days,
+            since=since,
+            limit=limit,
+        )
+    )
+    payload = {
+        "markdown_context": context.markdown_context,
+        "citation_index": [
+            citation.model_dump(mode="json") for citation in context.citation_index
+        ],
+        "machine_context": context.machine_context,
+        "diagnostics": context.diagnostics,
+    }
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, default=str))
+    elif output_format == "yaml":
+        click.echo(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
+    else:
+        click.echo(context.markdown_context)
 
 
 def _rubric_memory_bucket_name() -> str:
