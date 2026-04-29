@@ -132,6 +132,28 @@ class ScoreEditorToolset:
         except Exception as exc:
             raise ValueError(f"Failed to normalize score YAML from {source}: {exc}") from exc
 
+    def _parse_yaml_for_semantic_compare(self, yaml_content: str) -> Any:
+        yaml = YAML(typ="safe")
+        parsed = yaml.load(yaml_content or "")
+        if isinstance(parsed, dict):
+            shadow_ids = normalize_shadow_invalid_feedback_item_ids(
+                parsed.get(OPTIMIZER_SHADOW_INVALID_FIELD)
+            )
+            if shadow_ids:
+                parsed[OPTIMIZER_SHADOW_INVALID_FIELD] = shadow_ids
+            else:
+                parsed.pop(OPTIMIZER_SHADOW_INVALID_FIELD, None)
+        return parsed
+
+    def _yaml_semantically_equal(self, left: str, right: str) -> bool:
+        try:
+            return (
+                self._parse_yaml_for_semantic_compare(left)
+                == self._parse_yaml_for_semantic_compare(right)
+            )
+        except Exception:
+            return False
+
     def setup(self, arguments: dict) -> dict:
         """
         Set up the score editor for a new iteration.
@@ -534,6 +556,18 @@ class ScoreEditorToolset:
                 "error": (
                     "Cannot submit: the score configuration is unchanged from the original champion version. "
                     "Use str_replace_editor to make a meaningful change, then call submit_score_version again."
+                ),
+            }
+
+        # Guard 2b: reject YAML-equivalent changes, such as comments, key order, or block-scalar rendering only.
+        if self._original and self._yaml_semantically_equal(self._content, self._original):
+            return {
+                "success": False,
+                "error": (
+                    "Cannot submit: the score configuration is semantically unchanged from the original "
+                    "champion version. Formatting, comments, or key order do not count as optimizer evidence. "
+                    "Use str_replace_editor to make a meaningful rubric or score-logic change, then call "
+                    "submit_score_version again."
                 ),
             }
 

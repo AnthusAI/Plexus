@@ -108,6 +108,14 @@ def test_optimizer_yaml_ignores_code_editor_prose_after_terminal_tools():
     assert code.count("Ignoring agent prose after terminal tool call") == 2
 
 
+def test_optimizer_yaml_handles_semantically_unchanged_submit_errors():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "semantically unchanged" in code
+    assert "Formatting/comment-only changes do not count" in code
+
+
 def test_optimizer_startup_requests_retrieval_only_rubric_memory():
     config = _load_optimizer_config()
     code = config["code"]
