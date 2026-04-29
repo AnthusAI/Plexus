@@ -10,16 +10,33 @@ jest.mock('@/components/EvaluationTaskScoreResults', () => ({
 
 jest.mock('@/utils/amplify-client', () => ({
   getClient: () => ({
-    graphql: jest.fn().mockResolvedValue({
-      data: {
-        getScoreVersion: {
-          id: 'version-1',
-          createdAt: '2024-01-01T00:00:00Z',
-          score: {
-            championVersionId: 'version-1',
+    graphql: jest.fn(({ query }: { query: string }) => {
+      if (query.includes('getProcedure')) {
+        return Promise.resolve({
+          data: {
+            getProcedure: {
+              id: 'procedure-1',
+              name: 'Optimizer run',
+              description: 'Procedure workflow for evaluation refinement.',
+              status: 'COMPLETED',
+              updatedAt: '2024-01-02T00:00:00Z',
+            },
+          },
+        })
+      }
+
+      return Promise.resolve({
+        data: {
+          getScoreVersion: {
+            id: 'version-1',
+            createdAt: '2024-01-01T00:00:00Z',
+            note: 'Evaluation candidate version',
+            score: {
+              championVersionId: 'version-1',
+            },
           },
         },
-      },
+      })
     }),
   }),
 }))
@@ -112,7 +129,7 @@ const makeTask = () => {
 }
 
 describe('EvaluationTask category summary drill-down', () => {
-  test('applies category filter and auto-selects first matching score result', () => {
+  test('applies category filter and auto-selects first matching score result', async () => {
     const onSelectScoreResult = jest.fn()
     render(<EvaluationTask variant="detail" task={makeTask()} onSelectScoreResult={onSelectScoreResult} />)
 
@@ -124,17 +141,35 @@ describe('EvaluationTask category summary drill-down', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Clear category filter/i }))
     expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('null')
+
+    await waitFor(() => {
+      expect(screen.getByText('Champion')).toBeInTheDocument()
+    })
   })
 
-  test('renders score version and procedure links in detail view', async () => {
+  test('renders score version and procedure related-resource cards in detail view', async () => {
     const { container } = render(<EvaluationTask variant="detail" task={makeTask()} />)
 
     await waitFor(() => {
-      expect(container.querySelector('a[href="/lab/procedures/procedure-1"]')).toBeTruthy()
+      expect(screen.getByText('Champion')).toBeInTheDocument()
     })
 
+    expect(screen.getByText('Score Version')).toBeInTheDocument()
+    expect(screen.getByText('Procedure')).toBeInTheDocument()
+    expect(screen.getByText('Optimizer run')).toBeInTheDocument()
     expect(container.querySelector('a[href="/lab/scorecards/scorecard-1"]')).toBeTruthy()
     expect(container.querySelector('a[href="/lab/scorecards/scorecard-1/scores/score-1/versions/version-1"]')).toBeTruthy()
     expect(container.querySelector('a[href="/lab/procedures/procedure-1"]')).toBeTruthy()
+  })
+
+  test('omits procedure related-resource card when no procedure is associated', async () => {
+    render(<EvaluationTask variant="detail" task={{ ...makeTask(), procedureId: undefined }} />)
+
+    expect(screen.getByText('Score Version')).toBeInTheDocument()
+    expect(screen.queryByText('Procedure')).not.toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(screen.getByText('Champion')).toBeInTheDocument()
+    })
   })
 })

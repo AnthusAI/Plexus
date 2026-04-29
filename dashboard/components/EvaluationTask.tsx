@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2, ExternalLink, AlertTriangle } from 'lucide-react'
+import { FlaskConical, Square, X, Split, ChevronLeft, MoreHorizontal, MessageSquareCode, Share, Trash2, Link as LinkIcon, AlertTriangle } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,7 @@ import isEqual from 'lodash/isEqual'
 import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
 import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
+import { RelatedResourceCard } from '@/components/ui/related-resource-card'
 import Link from 'next/link'
 import { getClient } from '@/utils/amplify-client'
 import ReactMarkdown from "react-markdown"
@@ -1975,9 +1976,20 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
 }: EvaluationTaskProps) {
   const [commandDisplay, setCommandDisplay] = useState(initialCommandDisplay);
   const [scoreVersionInfo, setScoreVersionInfo] = useState<{
+    id: string;
     createdAt: string;
+    note?: string | null;
     isChampion: boolean;
   } | null>(null);
+  const [scoreVersionLoadFailed, setScoreVersionLoadFailed] = useState(false);
+  const [procedureInfo, setProcedureInfo] = useState<{
+    id: string;
+    name: string;
+    description?: string | null;
+    status?: string | null;
+    updatedAt?: string | null;
+  } | null>(null);
+  const [procedureLoadFailed, setProcedureLoadFailed] = useState(false);
   const [baselineMetrics, setBaselineMetrics] = useState<EvaluationMetric[] | null>(null);
   const [baselineAccuracy, setBaselineAccuracy] = useState<number | null>(null);
   const [currentBaselineAccuracy, setCurrentBaselineAccuracy] = useState<number | null>(null);
@@ -2005,9 +2017,11 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   useEffect(() => {
     if (!task.scoreVersionId || variant !== 'detail') {
       setScoreVersionInfo(null);
+      setScoreVersionLoadFailed(false);
       return;
     }
 
+    setScoreVersionLoadFailed(false);
     const fetchScoreVersion = async () => {
       try {
         const client = getClient();
@@ -2017,6 +2031,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
               getScoreVersion(id: $id) {
                 id
                 createdAt
+                note
                 score {
                   championVersionId
                 }
@@ -2029,18 +2044,73 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
         const scoreVersion = (result as any).data?.getScoreVersion;
         if (scoreVersion) {
           setScoreVersionInfo({
+            id: scoreVersion.id,
             createdAt: scoreVersion.createdAt,
+            note: scoreVersion.note ?? null,
             isChampion: scoreVersion.score?.championVersionId === task.scoreVersionId
           });
+        } else {
+          setScoreVersionInfo(null);
+          setScoreVersionLoadFailed(true);
         }
       } catch (error) {
         console.error('Error fetching score version:', error);
         setScoreVersionInfo(null);
+        setScoreVersionLoadFailed(true);
       }
     };
 
     fetchScoreVersion();
   }, [task.scoreVersionId, variant]);
+
+  useEffect(() => {
+    if (!task.procedureId || variant !== 'detail') {
+      setProcedureInfo(null);
+      setProcedureLoadFailed(false);
+      return;
+    }
+
+    setProcedureLoadFailed(false);
+    const fetchProcedure = async () => {
+      try {
+        const client = getClient();
+        const result = await client.graphql({
+          query: `
+            query GetProcedure($id: ID!) {
+              getProcedure(id: $id) {
+                id
+                name
+                description
+                status
+                updatedAt
+              }
+            }
+          `,
+          variables: { id: task.procedureId }
+        });
+
+        const procedure = (result as any).data?.getProcedure;
+        if (procedure) {
+          setProcedureInfo({
+            id: procedure.id,
+            name: procedure.name,
+            description: procedure.description ?? null,
+            status: procedure.status ?? null,
+            updatedAt: procedure.updatedAt ?? null,
+          });
+        } else {
+          setProcedureInfo(null);
+          setProcedureLoadFailed(true);
+        }
+      } catch (error) {
+        console.error('Error fetching procedure:', error);
+        setProcedureInfo(null);
+        setProcedureLoadFailed(true);
+      }
+    };
+
+    fetchProcedure();
+  }, [task.procedureId, variant]);
 
   const baselineEvaluationId = useMemo(() => {
     return typeof data.baseline_evaluation_id === 'string' ? data.baseline_evaluation_id : null
@@ -2443,6 +2513,11 @@ ${categoryLines}${mechanicalLines}
     };
   }, [task, taskData, variant, dataSetIdFromParameters]);
 
+  const shortHash = (value?: string | null) => {
+    if (!value) return '—'
+    return value.length > 8 ? `${value.slice(0, 8)}…` : value
+  }
+
   // Type assertion to ensure all properties match BaseTaskProps
   const typedTask = {
     ...taskWithDefaults,
@@ -2633,7 +2708,9 @@ ${categoryLines}${mechanicalLines}
             </div>
           </div>
           {variant !== 'detail' && evaluationNotes && (
-            <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
+            <div className="mt-1">
+              <div className="mb-1 text-xs font-medium text-foreground">Note</div>
+              <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                 p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
                 strong: ({children}) => <strong className="font-semibold text-foreground">{children}</strong>,
@@ -2647,6 +2724,7 @@ ${categoryLines}${mechanicalLines}
               }}>
                 {evaluationNotes}
               </ReactMarkdown>
+              </div>
             </div>
           )}
         </div>
@@ -2654,7 +2732,7 @@ ${categoryLines}${mechanicalLines}
       renderContent={(props) => {
         // Detail variant: metadata section that scrolls with content
         const detailMetadata = variant === 'detail' ? (
-          <div className="px-4 flex flex-col leading-none">
+          <div className="px-4 flex flex-col space-y-1">
             {props.task.name && (
               <div className="font-semibold text-sm">{props.task.name}</div>
             )}
@@ -2669,10 +2747,10 @@ ${categoryLines}${mechanicalLines}
                 {taskWithDefaults.scorecardId && (
                   <Link
                     href={`/lab/scorecards/${taskWithDefaults.scorecardId}`}
-                    className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex-shrink-0 text-foreground hover:text-foreground transition-colors"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <ExternalLink className="h-3.5 w-3.5" />
+                    <LinkIcon className="h-4 w-4" />
                   </Link>
                 )}
               </div>
@@ -2685,41 +2763,43 @@ ${categoryLines}${mechanicalLines}
                   taskWithDefaults.scoreVersionId && (
                     <Link
                       href={`/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`}
-                      className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      className="flex-shrink-0 text-foreground hover:text-foreground transition-colors"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      <LinkIcon className="h-4 w-4" />
                     </Link>
                   )}
               </div>
             )}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Score Version:</span>
-              {scoreVersionInfo ? (
-                <>
-                  <Timestamp time={scoreVersionInfo.createdAt} variant="relative" />
-                  {scoreVersionInfo.isChampion && (
-                    <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
-                      Champion
-                    </span>
-                  )}
-                </>
-              ) : (
-                <span>Unavailable</span>
-              )}
-            </div>
             {taskWithDefaults.procedureId && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
-                <span>Procedure:</span>
-                <span className="truncate font-mono">{taskWithDefaults.procedureId}</span>
-                <Link
-                  href={`/lab/procedures/${taskWithDefaults.procedureId}`}
-                  className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Link>
-              </div>
+              <RelatedResourceCard
+                label="Procedure"
+                className="bg-card-selected"
+                href={`/lab/procedures/${taskWithDefaults.procedureId}`}
+                linkLabel="Open procedure"
+                summary={
+                  <span className="truncate">
+                    {procedureInfo?.name || (procedureLoadFailed ? 'Unavailable' : taskWithDefaults.procedureId)}
+                  </span>
+                }
+              >
+                {procedureInfo ? (
+                  <div className="space-y-1">
+                    <div>{procedureInfo.description || 'No description'}</div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      {procedureInfo.status && <span>Status: {procedureInfo.status}</span>}
+                      {procedureInfo.updatedAt && (
+                        <span>
+                          Updated <Timestamp time={procedureInfo.updatedAt} variant="relative" className="text-xs" />
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-mono text-xs">{procedureInfo.id}</div>
+                  </div>
+                ) : (
+                  <span>{procedureLoadFailed ? 'This procedure could not be loaded.' : 'Loading procedure details...'}</span>
+                )}
+              </RelatedResourceCard>
             )}
             {taskWithDefaults.dataSetId && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -2730,35 +2810,35 @@ ${categoryLines}${mechanicalLines}
                   className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <ExternalLink className="h-3.5 w-3.5" />
+                  <LinkIcon className="h-3.5 w-3.5" />
                 </Link>
               </div>
             )}
             {baselineEvaluationId && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>Original baseline:</span>
-                <span className="font-mono truncate max-w-[22rem]">{baselineEvaluationId}</span>
-                <Link
-                  href={`/lab/evaluations/${baselineEvaluationId}`}
-                  className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Link>
-              </div>
+              <RelatedResourceCard
+                label="Original baseline"
+                className="bg-card-selected"
+                collapsible={false}
+                rowDensity="dense"
+                href={`/lab/evaluations/${baselineEvaluationId}`}
+                linkLabel="Open original baseline evaluation"
+                summary={<span className="font-mono truncate">{shortHash(baselineEvaluationId)}</span>}
+              >
+                {null}
+              </RelatedResourceCard>
             )}
             {currentBaselineEvaluationId && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>Current best baseline:</span>
-                <span className="font-mono truncate max-w-[22rem]">{currentBaselineEvaluationId}</span>
-                <Link
-                  href={`/lab/evaluations/${currentBaselineEvaluationId}`}
-                  className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Link>
-              </div>
+              <RelatedResourceCard
+                label="Current best baseline"
+                className="bg-card-selected"
+                collapsible={false}
+                rowDensity="dense"
+                href={`/lab/evaluations/${currentBaselineEvaluationId}`}
+                linkLabel="Open current best baseline evaluation"
+                summary={<span className="font-mono truncate">{shortHash(currentBaselineEvaluationId)}</span>}
+              >
+                {null}
+              </RelatedResourceCard>
             )}
             {task.data?.cost != null && task.data.cost > 0 && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -2778,8 +2858,35 @@ ${categoryLines}${mechanicalLines}
               isInProgress={data.status?.toUpperCase() === 'RUNNING'}
               className="text-muted-foreground"
             />
+            {taskWithDefaults.scorecardId && taskWithDefaults.scoreId && taskWithDefaults.scoreVersionId && (
+              <RelatedResourceCard
+                label="Score Version"
+                className="bg-card-selected"
+                collapsible={false}
+                href={`/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`}
+                linkLabel="Open score version"
+                summary={<span className="font-mono truncate">{shortHash(taskWithDefaults.scoreVersionId)}</span>}
+              >
+                {scoreVersionInfo ? (
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <Timestamp time={scoreVersionInfo.createdAt} variant="relative" className="text-xs" />
+                      {scoreVersionInfo.isChampion && (
+                        <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                          Champion
+                        </span>
+                      )}
+                    </div>
+                    <div>{scoreVersionInfo.note || 'No note'}</div>
+                  </div>
+                ) : (
+                  <span>{scoreVersionLoadFailed ? 'This score version could not be loaded.' : 'Loading score version details...'}</span>
+                )}
+              </RelatedResourceCard>
+            )}
             {evaluationNotes && (
-              <div className="mt-3 mb-0 prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
+              <div className="mt-1">
+                <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                   p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
                   strong: ({children}) => <strong className="font-semibold text-foreground">{children}</strong>,
@@ -2793,6 +2900,7 @@ ${categoryLines}${mechanicalLines}
                 }}>
                   {evaluationNotes}
                 </ReactMarkdown>
+                </div>
               </div>
             )}
           </div>

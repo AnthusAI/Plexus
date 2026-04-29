@@ -419,6 +419,7 @@ mcp = FastMCP(
     - plexus_feedback_alignment: Generate comprehensive feedback alignment with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
     - plexus_feedback_find: Find feedback items where human reviewers corrected predictions to identify score improvement opportunities
     - plexus_feedback_invalidate: Invalidate exactly one approved feedback item by feedback ID or item identifier
+    - plexus_feedback_uninvalidate: Mark exactly one invalidated feedback item valid again by feedback ID or item identifier
     - plexus_predict: Run predictions on single or multiple items using specific score configurations for testing and validation
     
     ## Documentation Tools
