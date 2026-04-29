@@ -3,7 +3,7 @@
 import React, { useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { FileText, Upload, Trash2, ExternalLink, Plus, Loader2, AlertCircle, Eye, X, MoreHorizontal } from 'lucide-react'
+import { FileText, Upload, Trash2, Link as LinkIcon, Plus, Loader2, AlertCircle, Eye, X, MoreHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
 import { toast } from 'sonner'
@@ -297,7 +297,7 @@ export const FileAttachments = React.forwardRef<HTMLDivElement, FileAttachmentsP
                                           className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                                           onSelect={() => window.open(file.path, '_blank')}
                                         >
-                                          <ExternalLink className="mr-2 h-4 w-4" />
+                                          <LinkIcon className="mr-2 h-4 w-4" />
                                           Open Link
                                         </DropdownMenu.Item>
                                       )}

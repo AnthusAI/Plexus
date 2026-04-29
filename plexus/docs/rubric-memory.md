@@ -134,6 +134,20 @@ AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME=<bucket> plexus rubric-memory prewarm \
 
 Prewarming does not generate analysis. It only prepares the corpus so later retrieval starts faster and uses the same prepared state.
 
+## Recent Rubric-Memory Review
+
+Score optimization should begin with a recency-biased review of recent knowledge-base entries. This catches newly added SME decisions, client clarifications, meeting notes, or policy shifts before an optimizer treats older feedback as the target.
+
+```bash
+plexus rubric-memory recent \
+  --scorecard "SelectQuote HCS Medium-Risk" \
+  --score "Medication Review: Dosage" \
+  --days 30 \
+  --query "recent SME stakeholder policy update rubric guideline change clarification"
+```
+
+The recent briefing reads from S3 only, filters by inferred `YYYY-MM-DD` source date, and returns retrieval-only citation context. Results are ranked newest first with scope counts for score, prefix, and scorecard evidence. Unknown-date files are skipped from the default recent window because they cannot support temporal policy reasoning.
+
 ## Product 1: Retrieval-Only Citation Context
 
 The retrieval-only citation context is input to an LLM call. It is deterministic Python/Biblicus work, not an extra synthesis call.
