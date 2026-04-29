@@ -13,6 +13,11 @@ from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
 from plexus.cli.report.utils import resolve_account_id_for_command
 import json
+from plexus.cli.shared.identifier_resolution import (
+    resolve_score_identifier,
+    resolve_scorecard_identifier,
+)
+from plexus.score_rubric_consistency import ScoreRubricConsistencyService
 
 def format_datetime(dt: Optional[datetime]) -> str:
     """Format datetime with proper handling of None values"""
@@ -471,6 +476,54 @@ def create(account: Optional[str], evaluation_id: Optional[str], text: Optional[
         import traceback
         print(traceback.format_exc())
 
+
+@items.command(name="contradictions")
+@click.option("--scorecard", "scorecard_identifier", required=True)
+@click.option("--score", "score_identifier", required=True)
+@click.option("--version", "score_version_id", required=True)
+@click.option("--item", "item_identifier", default=None, help="Optional item id or identifier for spot-check context.")
+@click.option("--format", "output_format", type=click.Choice(["markdown", "json"]), default="markdown")
+def contradictions(
+    scorecard_identifier: str,
+    score_identifier: str,
+    score_version_id: str,
+    item_identifier: Optional[str],
+    output_format: str,
+):
+    """Check whether one ScoreVersion's code is consistent with its rubric."""
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, None)
+    scorecard_id = resolve_scorecard_identifier(client, scorecard_identifier)
+    if not scorecard_id:
+        raise click.ClickException(f"Could not resolve scorecard: {scorecard_identifier}")
+    score_id = resolve_score_identifier(client, scorecard_id, score_identifier)
+    if not score_id:
+        raise click.ClickException(
+            f"Could not resolve score '{score_identifier}' in scorecard '{scorecard_identifier}'"
+        )
+
+    item_text = ""
+    if item_identifier:
+        item = find_item_by_any_identifier(client, item_identifier, account_id)
+        if not item:
+            raise click.ClickException(f"Could not resolve item: {item_identifier}")
+        item_text = item.text or ""
+
+    result = ScoreRubricConsistencyService().generate_from_api(
+        client=client,
+        scorecard_identifier=scorecard_identifier,
+        score_identifier=score_identifier,
+        score_id=score_id,
+        score_version_id=score_version_id,
+        item_text=item_text,
+    )
+    payload = result.to_parameters_payload()
+    if output_format == "json":
+        console.print_json(json.dumps(payload))
+    else:
+        console.print(f"[bold]Status:[/bold] {result.status}")
+        console.print(result.paragraph)
+
 @items.command()
 @click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
 @click.option('--evaluation-id', help='Filter by evaluation ID')
@@ -878,7 +931,10 @@ def upsert(account: Optional[str], json_file: Optional[str], data: Optional[str]
         batch_end = min(batch_start + batch_size, len(items_data))
         batch = items_data[batch_start:batch_end]
         
-        console.print(f"\n[bold]Processing batch {batch_start//batch_size + 1} ({batch_start + 1}-{batch_end} of {len(items_data)})[/bold]")
+        console.print(
+            f"\n[bold]Processing batch {batch_start // batch_size + 1} "
+            f"({batch_start + 1}-{batch_end} of {len(items_data)})[/bold]"
+        )
         
         for i, item_data in enumerate(batch, batch_start + 1):
             try:
@@ -975,6 +1031,7 @@ item.add_command(create)
 item.add_command(list)
 item.add_command(last)
 item.add_command(info)
+item.add_command(contradictions)
 item.add_command(update)
 item.add_command(upsert)
-item.add_command(delete) 
+item.add_command(delete)
