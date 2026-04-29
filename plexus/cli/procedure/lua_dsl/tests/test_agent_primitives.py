@@ -198,6 +198,32 @@ class TestAgentTurn:
         assert result['tool_calls'][0]['name'] == 'test_tool'
         assert result['tool_calls'][0]['result'] == 'Tool result'
 
+    def test_turn_appends_tool_result_when_tool_call_has_no_id(
+        self, agent_primitive, mock_llm, mock_tool_primitive
+    ):
+        """Tool results must still enter conversation history even without tool_call_id."""
+        mock_tool = Mock()
+        type(mock_tool).name = 'test_tool'
+        mock_tool.func = Mock(return_value='Tool result')
+        agent_primitive.available_tools = [mock_tool]
+
+        mock_response = Mock()
+        mock_response.content = 'Using tool'
+        tool_call = Mock()
+        tool_call.name = 'test_tool'
+        tool_call.args = {'param': 'value'}
+        tool_call.id = None
+        mock_response.tool_calls = [tool_call]
+        mock_llm.invoke.return_value = mock_response
+
+        agent_primitive.turn()
+
+        mock_tool_primitive.record_call.assert_called_once_with('test_tool', {'param': 'value'}, 'Tool result')
+        # system + initial + ai response + synthetic tool result message
+        assert len(agent_primitive._conversation) == 4
+        synthetic_tool_result = agent_primitive._conversation[-1]
+        assert getattr(synthetic_tool_result, 'content', '') == "Tool 'test_tool' result: Tool result"
+
     def test_turn_handles_multiple_tool_calls(
         self, agent_primitive, mock_llm, mock_tool_primitive
     ):

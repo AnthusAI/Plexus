@@ -564,7 +564,7 @@ def test_run_console_chat_response_passes_console_context_to_builtin(monkeypatch
         "role": "USER",
         "content": "Multiply 6 by 7",
     }
-    assert kwargs["enable_mcp"] is False
+    assert kwargs["enable_mcp"] is True
     assert kwargs["context"] == {
         "account_id": "acct-1",
         "chat_session_id": "sess-1",
