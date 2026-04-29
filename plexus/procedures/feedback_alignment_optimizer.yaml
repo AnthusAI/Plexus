@@ -4623,9 +4623,12 @@ code: |
           hyp_done = true
         end
 
-        -- Record agent's text response to session
+        -- Record agent's text response to session. If this turn ended with a
+        -- terminal tool call, the tool args/result are the canonical outcome;
+        -- provider final prose can be stale or misleading after tool execution.
+        local terminal_tool_call = Tool.last_call("submit_score_version") or Tool.last_call("done")
         local agent_text = code_editor.output or ""
-        if has_text(agent_text) then
+        if has_text(agent_text) and not terminal_tool_call then
           Human.notify({message = string.format(
             "  [Hyp %d, step %d] Agent: %s",
             h, react_step, trunc(agent_text, 500)), level = "info"})
@@ -4634,6 +4637,10 @@ code: |
              and not string.find(agent_text, "^name:") and not string.find(agent_text, "^tactus_code:") then
             table.insert(hyp_reasoning_parts, agent_text)
           end
+        elseif has_text(agent_text) and terminal_tool_call then
+          diag(string.format(
+            "  [Hyp %d] Ignoring agent prose after terminal tool call: %s",
+            h, trunc(agent_text, 200)))
         end
 
         -- Capture reasoning from tool calls (agent often produces no text during tool use)
@@ -5123,8 +5130,9 @@ code: |
             done = true
           end
 
+          local terminal_tool_call = Tool.last_call("submit_score_version") or Tool.last_call("done")
           local agent_text = code_editor.output or ""
-          if has_text(agent_text) then
+          if has_text(agent_text) and not terminal_tool_call then
             Human.notify({message = string.format(
               "  [%s, step %d] Agent: %s",
               strategy_label, step, trunc(agent_text, 500)), level = "info"})
@@ -5132,6 +5140,10 @@ code: |
                and not string.find(agent_text, "^name:") and not string.find(agent_text, "^tactus_code:") then
               table.insert(react_reasoning, agent_text)
             end
+          elseif has_text(agent_text) and terminal_tool_call then
+            diag(string.format(
+              "  [%s] Ignoring agent prose after terminal tool call: %s",
+              strategy_label, trunc(agent_text, 200)))
           end
 
           -- Capture reasoning from tool calls
