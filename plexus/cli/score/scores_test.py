@@ -1,6 +1,8 @@
 import pytest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
-from plexus.cli.score.scores import optimize
+from click.testing import CliRunner
+from plexus.cli.score.scores import optimize, scores
 from plexus.cli.shared.file_editor import FileEditor
 
 @pytest.fixture
@@ -202,4 +204,92 @@ def test_cli_create_missing_path(mock_file_editor):
     
     assert tool_result_content == "Error: Missing parameters or file not found (file_path missing)"
     assert file_edited is False
-    mock_file_editor.create.assert_called_once_with("", "New content\n") 
+    mock_file_editor.create.assert_called_once_with("", "New content\n")
+
+
+def test_score_contradictions_runs_score_rubric_consistency_check():
+    runner = CliRunner()
+    payload = {
+        "status": "potential_conflict",
+        "paragraph": "The prompt is more lenient than the rubric.",
+    }
+    result_obj = Mock()
+    result_obj.to_parameters_payload.return_value = payload
+
+    with patch("plexus.cli.score.scores.create_client", return_value=Mock()) as create_client, \
+         patch("plexus.cli.score.scores.memoized_resolve_scorecard_identifier", return_value="scorecard-1"), \
+         patch("plexus.cli.score.scores.memoized_resolve_score_identifier", return_value="score-1"), \
+         patch("plexus.cli.score.scores.ScoreRubricConsistencyService") as service_class:
+        service_class.return_value.generate_from_api.return_value = result_obj
+
+        result = runner.invoke(
+            scores,
+            [
+                "contradictions",
+                "--scorecard",
+                "Scorecard",
+                "--score",
+                "Score",
+                "--version",
+                "version-1",
+                "--format",
+                "json",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "potential_conflict" in result.output
+    service_class.return_value.generate_from_api.assert_called_once_with(
+        client=create_client.return_value,
+        scorecard_identifier="Scorecard",
+        score_identifier="Score",
+        score_id="score-1",
+        score_version_id="version-1",
+        item_text="",
+    )
+
+
+def test_score_contradictions_can_include_optional_item_context():
+    runner = CliRunner()
+    result_obj = Mock()
+    result_obj.to_parameters_payload.return_value = {
+        "status": "consistent",
+        "paragraph": "The prompt follows the rubric.",
+    }
+
+    with patch("plexus.cli.score.scores.create_client", return_value=Mock()), \
+         patch("plexus.cli.score.scores.memoized_resolve_scorecard_identifier", return_value="scorecard-1"), \
+         patch("plexus.cli.score.scores.memoized_resolve_score_identifier", return_value="score-1"), \
+         patch("plexus.cli.score.scores.resolve_account_id_for_command", return_value="account-1"), \
+         patch("plexus.cli.item.items.find_item_by_any_identifier", return_value=SimpleNamespace(text="item text")), \
+         patch("plexus.cli.score.scores.ScoreRubricConsistencyService") as service_class:
+        service_class.return_value.generate_from_api.return_value = result_obj
+
+        result = runner.invoke(
+            scores,
+            [
+                "contradictions",
+                "--scorecard",
+                "Scorecard",
+                "--score",
+                "Score",
+                "--version",
+                "version-1",
+                "--item",
+                "item-1",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Status:" in result.output
+    service_class.return_value.generate_from_api.assert_called_once()
+    assert service_class.return_value.generate_from_api.call_args.kwargs["item_text"] == "item text"
+
+
+def test_item_contradictions_is_not_registered():
+    from plexus.cli.item.items import item
+
+    result = CliRunner().invoke(item, ["contradictions"])
+
+    assert result.exit_code != 0
+    assert "No such command 'contradictions'" in result.output
