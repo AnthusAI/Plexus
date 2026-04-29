@@ -4573,7 +4573,8 @@ code: |
               table.insert(recent_parts, "submit_score_version returned an error:\n  " .. err_text)
               if string.find(err_text, "most recent str_replace_editor") then
                 table.insert(recent_parts, "\nTo recover: call str_replace_editor(command='view', path='score_config.yaml') to clear the error state, then call submit_score_version again.")
-              elseif string.find(err_text, "unchanged from the original") then
+              elseif string.find(err_text, "unchanged from the original")
+                  or string.find(err_text, "semantically unchanged") then
                 table.insert(recent_parts, "\nThe file has not been modified. You must use str_replace_editor(command='str_replace', ...) to make actual changes before submitting.")
               else
                 table.insert(recent_parts, "\nFix the issue and try submit_score_version again.")
@@ -5078,10 +5079,13 @@ code: |
               end
               if last_submit then
                 local ok_sub, sub_result = pcall(function() return safe_decode(last_submit.result) end)
-                if ok_sub and sub_result and sub_result.error then
-                  table.insert(recent_parts, "submit_score_version error:\n  " .. tostring(sub_result.error))
+              if ok_sub and sub_result and sub_result.error then
+                table.insert(recent_parts, "submit_score_version error:\n  " .. tostring(sub_result.error))
+                if string.find(tostring(sub_result.error), "semantically unchanged") then
+                  table.insert(recent_parts, "\nFormatting/comment-only changes do not count. Make a meaningful rubric or score-logic edit before submitting.")
                 end
               end
+            end
             end
             if #recent_parts == 0 then
               table.insert(recent_parts, "You must call str_replace_editor or submit_score_version.")
