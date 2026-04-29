@@ -1,0 +1,37 @@
+{
+  "id": "plx-cc9f74f9-d0e6-4ef3-9359-133342622879",
+  "title": "Recreate develop to main release PR for reviewability",
+  "description": "Close blocked PR #239 and recreate an equivalent develop-to-main release PR under Derek so Ryan can review under branch protection rules. Preserve title/body/context and verify checks on the replacement PR.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "48c8fe56-9085-47e5-9cca-034b1d3ecd3f",
+      "author": "derek",
+      "text": "Closed blocked release PR #239 and opened replacement PR #244 preserving the same develop-to-main release context. Replacement PR: https://github.com/AnthusAI/Plexus/pull/244. Next: monitor CI and leave task open until the PR lands.",
+      "created_at": "2026-04-29T00:33:21.035373477Z"
+    },
+    {
+      "id": "0e9cc6f1-ca20-4239-82ed-6b8f9a584964",
+      "author": "derek",
+      "text": "Replacement release PR #244 is open and CI is green. Fresh checks passing: CodeQL actions/python/javascript-typescript, Snyk, Version Sync, Dashboard Storybook Tests, Dashboard Unit Tests, Python Tests 3.11, and Python Tests 3.12. Task remains in_progress until PR #244 is approved and merged.",
+      "created_at": "2026-04-29T00:43:15.800704416Z"
+    },
+    {
+      "id": "5e5bd908-1736-4d27-8b35-af09730cdb8d",
+      "author": "derek",
+      "text": "Replacement PR #244 landed in main at merge commit 1385827508adfc22b2a43104a8e12e6a57c32df5. Original blocked PR #239 was closed, equivalent develop-to-main PR was recreated under Derek, CI passed, and branch protection review path was restored.",
+      "created_at": "2026-04-29T01:06:16.666138981Z"
+    }
+  ],
+  "created_at": "2026-04-29T00:32:51.593621398Z",
+  "updated_at": "2026-04-29T01:06:16.678402150Z",
+  "closed_at": "2026-04-29T01:06:16.678402150Z",
+  "custom": {}
+}
