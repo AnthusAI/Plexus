@@ -19,6 +19,26 @@ from typing import Dict, Any, Optional, List
 logger = logging.getLogger(__name__)
 
 
+class ProcedureExecutionCancelled(RuntimeError):
+    """Raised when a procedure worker observes a dashboard cancellation request."""
+
+
+def _is_dashboard_task_cancelled(client: Any, task_id: Optional[str]) -> bool:
+    if not task_id:
+        return False
+    try:
+        from plexus.dashboard.api.models.task import Task
+
+        task = Task.get_by_id(task_id, client)
+        return str(getattr(task, "status", "") or "").upper() in {
+            "CANCELLED",
+            "CANCELED",
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Could not check cancellation status for task %s: %s", task_id, exc)
+        return False
+
+
 def _install_tactus_dspy_context_capture_patch() -> None:
     """Capture Tactus DSPy agent prompt_context before model invocation."""
     try:
@@ -1191,6 +1211,10 @@ async def _execute_tactus(
         # Advance task stage to the second stage (e.g. "Baseline Evaluation") now
         # that the procedure is actually executing, giving the dashboard live feedback.
         _task_id = options.pop("_task_id_for_stage_tracking", None)
+        if _is_dashboard_task_cancelled(client, _task_id):
+            raise ProcedureExecutionCancelled(
+                f"Procedure execution cancelled for task {_task_id}"
+            )
         if _task_id:
             try:
                 _advance_task_to_running_stage(client, _task_id, target_order=2)
@@ -1203,6 +1227,11 @@ async def _execute_tactus(
             storage.state_set(procedure_id, "_procedure_id", procedure_id)
         except Exception as _inject_err:
             logger.debug("Could not inject _procedure_id into State: %s", _inject_err)
+
+        if _is_dashboard_task_cancelled(client, _task_id):
+            raise ProcedureExecutionCancelled(
+                f"Procedure execution cancelled for task {_task_id}"
+            )
 
         # Execute the full Tactus YAML source so params/agents/stages are preserved.
         result = _normalize_tactus_result(
@@ -1247,6 +1276,24 @@ async def _execute_tactus(
 
         logger.info(f"Tactus execution complete: {result.get('success')}")
         return result
+
+    except ProcedureExecutionCancelled as e:
+        if log_bridge:
+            try:
+                await log_bridge.flush()
+            except Exception as flush_error:
+                logger.warning("Failed flushing trace log bridge after cancellation: %s", flush_error)
+            try:
+                await log_bridge.close()
+            except Exception as close_error:
+                logger.warning("Failed closing trace log bridge after cancellation: %s", close_error)
+        logger.info("Tactus procedure execution cancelled: %s", e)
+        return {
+            'success': False,
+            'procedure_id': procedure_id,
+            'status': 'CANCELLED',
+            'error': str(e),
+        }
 
     except Exception as e:
         if log_bridge:
