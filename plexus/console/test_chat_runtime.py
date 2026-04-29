@@ -105,6 +105,82 @@ class FakeHistoryClient(FakeClient):
         return super().execute(query, variables, **_kwargs)
 
 
+class FakeSessionTitleClient(FakeClient):
+    def __init__(self, *, turns=None, session_metadata=None, assistant_messages=None):
+        super().__init__()
+        self.turns = list(turns or [])
+        self.session_metadata = session_metadata
+        self.assistant_messages = list(assistant_messages or [])
+        self.updated_title_payloads = []
+
+    def execute(self, query, variables=None, **_kwargs):
+        if "GetConsoleChatSession" in query:
+            return {
+                "data": {
+                    "getChatSession": {
+                        "id": "sess-1",
+                        "name": None,
+                        "metadata": self.session_metadata,
+                    }
+                }
+            }
+        if "ListRecentUserChatTurns" in query:
+            items = []
+            for index, turn in enumerate(self.turns):
+                items.append(
+                    {
+                        "id": turn.get("id", f"user-{index + 1}"),
+                        "role": "USER",
+                        "humanInteraction": "CHAT",
+                        "messageType": "MESSAGE",
+                        "content": turn["content"],
+                        "createdAt": turn.get("createdAt", f"2026-04-27T00:00:0{index}.000Z"),
+                    }
+                )
+            return {
+                "data": {
+                    "listChatMessageBySessionIdAndCreatedAt": {
+                        "items": items,
+                        "nextToken": None,
+                    }
+                }
+            }
+        if "ListAssistantMessagesForTitle" in query:
+            items = []
+            for index, text in enumerate(self.assistant_messages):
+                items.append(
+                    {
+                        "id": f"assistant-{index + 1}",
+                        "role": "ASSISTANT",
+                        "humanInteraction": "CHAT_ASSISTANT",
+                        "messageType": "MESSAGE",
+                        "content": text,
+                        "createdAt": f"2026-04-27T00:00:0{index + 1}.500Z",
+                    }
+                )
+            return {
+                "data": {
+                    "listChatMessageBySessionIdAndCreatedAt": {
+                        "items": items,
+                        "nextToken": None,
+                    }
+                }
+            }
+        if "UpdateConsoleChatSessionTitle" in query:
+            payload = (variables or {}).get("input", {})
+            self.updated_title_payloads.append(payload)
+            return {
+                "data": {
+                    "updateChatSession": {
+                        "id": payload.get("id"),
+                        "name": payload.get("name"),
+                        "updatedAt": payload.get("updatedAt"),
+                    }
+                }
+            }
+        return super().execute(query, variables, **_kwargs)
+
+
 def test_should_handle_only_matching_pending_user_chat_message():
     message = chat_runtime.parse_chat_message(_raw_message())
 
@@ -238,6 +314,27 @@ def test_process_console_message_runs_harness_and_marks_completed(monkeypatch):
     )
     assert complete_call["input"]["createdAt"] == "2026-04-27T00:00:00.000Z"
     assert complete_call["input"]["responseStatus"] == "COMPLETED"
+
+
+def test_process_console_message_ignores_auto_title_failures(monkeypatch):
+    client = FakeClient()
+    monkeypatch.setattr(
+        chat_runtime,
+        "run_console_chat_response",
+        lambda *_args, **_kwargs: {"success": True},
+    )
+    monkeypatch.setattr(
+        chat_runtime,
+        "maybe_auto_title_session",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("title-fail")),
+    )
+
+    assert chat_runtime.process_console_message(
+        client,
+        _raw_message(),
+        expected_target="cloud",
+        owner="cloud:test",
+    ) is True
 
 
 def test_process_console_message_logs_latency_summary(monkeypatch):
@@ -505,6 +602,109 @@ def test_run_console_chat_response_passes_selected_model_override(monkeypatch):
     assert procedure_id == "builtin:console/chat"
     assert service_client is client
     assert kwargs["context"]["agent_models"] == {"assistant": "gpt-5.3"}
+
+
+def test_maybe_auto_title_session_sets_title_on_first_user_turn(monkeypatch):
+    client = FakeSessionTitleClient(turns=[{"id": "msg-1", "content": "Need help with dosage guidelines"}])
+    message = chat_runtime.parse_chat_message(_raw_message())
+    assert message is not None
+
+    monkeypatch.setattr(
+        chat_runtime,
+        "_generate_session_title_with_llm",
+        lambda **kwargs: "Dosage Guidelines Help",
+    )
+
+    chat_runtime.maybe_auto_title_session(client, message=message)
+
+    assert len(client.updated_title_payloads) == 1
+    payload = client.updated_title_payloads[0]
+    assert payload["name"] == "Dosage Guidelines Help"
+    metadata = json.loads(payload["metadata"])
+    assert metadata["title_source"] == "auto"
+    assert metadata["auto_title_turn"] == 1
+    assert metadata["auto_title_message_id"] == "msg-1"
+    assert metadata["console"]["hidden_until_named"] is False
+
+
+def test_maybe_auto_title_session_replaces_title_on_second_user_turn(monkeypatch):
+    client = FakeSessionTitleClient(
+        turns=[
+            {"id": "msg-2", "content": "Also include prior authorization edge cases", "createdAt": "2026-04-27T00:00:02.000Z"},
+            {"id": "msg-1", "content": "Need help with dosage guidelines", "createdAt": "2026-04-27T00:00:00.000Z"},
+        ],
+        assistant_messages=["Here's a first draft plan you can use."],
+    )
+    message = chat_runtime.parse_chat_message(_raw_message(id="msg-2", metadata='{"model":{"id":"gpt-5.3"}}'))
+    assert message is not None
+
+    calls = []
+
+    def fake_title_generator(**kwargs):
+        calls.append(kwargs)
+        return "Dosage + Prior Authorization"
+
+    monkeypatch.setattr(chat_runtime, "_generate_session_title_with_llm", fake_title_generator)
+
+    chat_runtime.maybe_auto_title_session(client, message=message)
+
+    assert len(client.updated_title_payloads) == 1
+    payload = client.updated_title_payloads[0]
+    metadata = json.loads(payload["metadata"])
+    assert metadata["auto_title_turn"] == 2
+    assert metadata["console"]["hidden_until_named"] is False
+    assert payload["name"] == "Dosage + Prior Authorization"
+    assert calls[0]["selected_model"] == "gpt-5.3"
+    assert calls[0]["conversation_messages"] == [
+        {"role": "USER", "content": "Need help with dosage guidelines"},
+        {"role": "ASSISTANT", "content": "Here's a first draft plan you can use."},
+        {"role": "USER", "content": "Also include prior authorization edge cases"},
+    ]
+
+
+def test_maybe_auto_title_session_skips_third_and_later_turns(monkeypatch):
+    client = FakeSessionTitleClient(
+        turns=[
+            {"id": "msg-3", "content": "third message"},
+            {"id": "msg-2", "content": "second message"},
+            {"id": "msg-1", "content": "first message"},
+        ]
+    )
+    message = chat_runtime.parse_chat_message(_raw_message(id="msg-3"))
+    assert message is not None
+
+    generator_calls = []
+    monkeypatch.setattr(
+        chat_runtime,
+        "_generate_session_title_with_llm",
+        lambda **kwargs: generator_calls.append(kwargs) or "Should Not Be Used",
+    )
+
+    chat_runtime.maybe_auto_title_session(client, message=message)
+
+    assert client.updated_title_payloads == []
+    assert generator_calls == []
+
+
+def test_maybe_auto_title_session_respects_manual_title_lock(monkeypatch):
+    client = FakeSessionTitleClient(
+        turns=[{"id": "msg-1", "content": "first message"}],
+        session_metadata={"title_source": "manual"},
+    )
+    message = chat_runtime.parse_chat_message(_raw_message())
+    assert message is not None
+
+    generator_calls = []
+    monkeypatch.setattr(
+        chat_runtime,
+        "_generate_session_title_with_llm",
+        lambda **kwargs: generator_calls.append(kwargs) or "Should Not Be Used",
+    )
+
+    chat_runtime.maybe_auto_title_session(client, message=message)
+
+    assert client.updated_title_payloads == []
+    assert generator_calls == []
 
 
 def test_fetch_session_history_filters_and_sorts_messages():
