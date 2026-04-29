@@ -86,7 +86,9 @@ def _build_trace_record(
         "api_calls": envelope.get("api_calls", []),
         "submitted_tactus": submitted_tactus,
         "wrapped_tactus": wrapped_tactus,
-        "tactus_runtime_result": _jsonable(runtime_result) if runtime_result is not None else None,
+        "tactus_runtime_result": (
+            _jsonable(runtime_result) if runtime_result is not None else None
+        ),
     }
 
 
@@ -151,11 +153,13 @@ MCP_TOOL_MAP: dict[tuple[str, str], str] = {
     ("item", "info"): "plexus_item_info",
     ("item", "last"): "plexus_item_last",
     ("feedback", "alignment"): "plexus_feedback_alignment",
-    ("evaluation", "info"): "plexus_evaluation_info",
     ("evaluation", "find_recent"): "plexus_evaluation_find_recent",
     ("evaluation", "compare"): "plexus_evaluation_compare",
     ("evaluation", "run"): "plexus_evaluation_run",
-    ("dataset", "build_from_feedback_window"): "plexus_dataset_build_from_feedback_window",
+    (
+        "dataset",
+        "build_from_feedback_window",
+    ): "plexus_dataset_build_from_feedback_window",
     ("dataset", "check_associated"): "plexus_dataset_check_associated",
     ("report", "configurations_list"): "plexus_report_configurations_list",
     ("report", "run"): "plexus_report_run",
@@ -172,6 +176,7 @@ MCP_TOOL_MAP: dict[tuple[str, str], str] = {
 # method has exactly one dispatcher.
 DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("feedback", "find"): "_call_feedback",
+    ("evaluation", "info"): "_call_evaluation_info",
 }
 
 
@@ -193,9 +198,7 @@ def _default_feedback_finder(args: dict[str, Any]) -> dict[str, Any]:
     scorecard_name = args.get("scorecard_name") or args.get("scorecard")
     score_name = args.get("score_name") or args.get("score")
     if not scorecard_name or not score_name:
-        raise ValueError(
-            "plexus.feedback.find requires scorecard_name and score_name"
-        )
+        raise ValueError("plexus.feedback.find requires scorecard_name and score_name")
 
     days = int(args["days"]) if args.get("days") is not None else 7
     limit = int(args["limit"]) if args.get("limit") is not None else None
@@ -205,9 +208,7 @@ def _default_feedback_finder(args: dict[str, Any]) -> dict[str, Any]:
     client = create_client()
     account_id = resolve_account_id_for_command(client, None)
     scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_name)
-    score_id = memoized_resolve_score_identifier(
-        client, scorecard_id, score_name
-    )
+    score_id = memoized_resolve_score_identifier(client, scorecard_id, score_name)
 
     result = _run_async_from_sync(
         FeedbackService.search_feedback(
@@ -226,6 +227,54 @@ def _default_feedback_finder(args: dict[str, Any]) -> dict[str, Any]:
         )
     )
     return FeedbackService.format_search_result_as_dict(result)
+
+
+def _default_evaluation_info(args: dict[str, Any]) -> dict[str, Any]:
+    """Run the production plexus.evaluation.info chain directly.
+
+    Bypasses MCP loopback by calling Evaluation.get_evaluation_info or
+    Evaluation.get_latest_evaluation in plexus/Evaluation.py. Returns a
+    structured dict; callers that need a JSON string should serialize it.
+
+    include_examples is intentionally not implemented in this slice; that
+    GraphQL example-loop logic lives in MCP/tools/evaluation/evaluations.py
+    and will be lifted in a follow-up so it remains unit-testable.
+    """
+
+    from plexus.Evaluation import Evaluation
+
+    raw_id = args.get("evaluation_id")
+    evaluation_id = raw_id.strip() if isinstance(raw_id, str) else raw_id
+    use_latest = bool(args.get("use_latest", False))
+
+    if bool(evaluation_id) == use_latest:
+        raise ValueError(
+            "plexus.evaluation.info requires exactly one of evaluation_id or use_latest"
+        )
+
+    if args.get("include_examples"):
+        raise ValueError(
+            "plexus.evaluation.info include_examples is not yet supported in the "
+            "Tactus runtime; use plexus.evaluation.info without include_examples or "
+            "the MCP plexus_evaluation_info tool until the example-fetching helper "
+            "is lifted out of MCP/tools/evaluation/evaluations.py."
+        )
+
+    include_score_results = bool(args.get("include_score_results", False))
+
+    if use_latest:
+        account_key = args.get("account_key") or os.environ.get("PLEXUS_ACCOUNT_KEY")
+        if not account_key:
+            raise ValueError(
+                "plexus.evaluation.info use_latest requires account_key or "
+                "PLEXUS_ACCOUNT_KEY environment variable"
+            )
+        evaluation_type = args.get("evaluation_type")
+        if isinstance(evaluation_type, str):
+            evaluation_type = evaluation_type.strip() or None
+        return Evaluation.get_latest_evaluation(account_key, evaluation_type)
+
+    return Evaluation.get_evaluation_info(evaluation_id, include_score_results)
 
 
 def _plain_value(value: Any) -> Any:
@@ -252,7 +301,9 @@ def _args(value: Any = None) -> dict[str, Any]:
         return {}
     converted = _plain_value(value)
     if not isinstance(converted, dict):
-        raise ValueError(f"Expected Tactus table arguments, got {type(converted).__name__}")
+        raise ValueError(
+            f"Expected Tactus table arguments, got {type(converted).__name__}"
+        )
     return converted
 
 
@@ -321,7 +372,9 @@ def _extract_tool_value(result: Any) -> Any:
     return _jsonable(result)
 
 
-def _structured_error(code: str, message: str, exc: BaseException | None = None) -> dict[str, Any]:
+def _structured_error(
+    code: str, message: str, exc: BaseException | None = None
+) -> dict[str, Any]:
     line_match = re.search(r":(\d+):", message)
     raw_lineno = int(line_match.group(1)) if line_match else None
     error: dict[str, Any] = {
@@ -377,7 +430,12 @@ class BudgetSpec:
 class BudgetGate:
     """Single choke point that enforces a BudgetSpec around every Plexus runtime API call."""
 
-    def __init__(self, spec: BudgetSpec | None = None, *, clock: Callable[[], float] | None = None) -> None:
+    def __init__(
+        self,
+        spec: BudgetSpec | None = None,
+        *,
+        clock: Callable[[], float] | None = None,
+    ) -> None:
         self.spec = spec or BudgetSpec()
         self._clock = clock or time.monotonic
         self._start = self._clock()
@@ -397,7 +455,9 @@ class BudgetGate:
         self.exceeded_reason = reason
         return BudgetExceeded(reason)
 
-    def check_before(self, namespace: str, method: str, *, estimated_usd: float = 0.0) -> None:
+    def check_before(
+        self, namespace: str, method: str, *, estimated_usd: float = 0.0
+    ) -> None:
         elapsed = self.elapsed_seconds()
         if elapsed >= self.spec.wallclock_seconds:
             raise self._trip(
@@ -435,11 +495,15 @@ def _cost_envelope(
             "tool_calls": budget.tool_calls,
             "workers": 0,
             "depth_max_observed": budget.depth_max_observed,
-            "budget_remaining_usd": round(max(budget.spec.usd - budget.spent_usd, 0.0), 6),
+            "budget_remaining_usd": round(
+                max(budget.spec.usd - budget.spent_usd, 0.0), 6
+            ),
             "budget_remaining_seconds": round(
                 max(budget.spec.wallclock_seconds - wallclock_seconds, 0.0), 3
             ),
-            "budget_remaining_tool_calls": max(budget.spec.tool_calls - budget.tool_calls, 0),
+            "budget_remaining_tool_calls": max(
+                budget.spec.tool_calls - budget.tool_calls, 0
+            ),
         }
     return {
         "usd": 0.0,
@@ -470,9 +534,7 @@ def _response_envelope(
         "ok": ok,
         "value": _jsonable(value),
         "error": error,
-        "cost": _cost_envelope(
-            api_calls, time.monotonic() - started_at, budget=budget
-        ),
+        "cost": _cost_envelope(api_calls, time.monotonic() - started_at, budget=budget),
         "trace_id": trace_id,
         "partial": partial,
         "api_calls": api_calls,
@@ -537,12 +599,16 @@ class PlexusRuntimeModule:
         docs_dir: str | None = None,
         budget: BudgetGate | None = None,
         feedback_finder: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        evaluation_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> None:
         self._mcp = mcp
         self._docs_dir = docs_dir if docs_dir is not None else PLEXUS_DOCS_DIR
         self._budget = budget if budget is not None else BudgetGate()
         self._feedback_finder = (
             feedback_finder if feedback_finder is not None else _default_feedback_finder
+        )
+        self._evaluation_info = (
+            evaluation_info if evaluation_info is not None else _default_evaluation_info
         )
         self._api_calls: list[str] = []
         self.handle_protocol_required: tuple[str, str] | None = None
@@ -570,7 +636,9 @@ class PlexusRuntimeModule:
             return getattr(self, direct_handler)(namespace, method, args)
         tool_name = MCP_TOOL_MAP.get((namespace, method))
         if tool_name is None:
-            raise ValueError(f"Unsupported Plexus runtime API: plexus.{namespace}.{method}")
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
         if (namespace, method) in LONG_RUNNING_METHODS:
             self._api_calls.append(f"plexus.{namespace}.{method}")
             self.handle_protocol_required = (namespace, method)
@@ -585,13 +653,29 @@ class PlexusRuntimeModule:
 
     def _call_feedback(self, namespace: str, method: str, args: Any = None) -> Any:
         if (namespace, method) != ("feedback", "find"):
-            raise ValueError(f"Unsupported Plexus runtime API: plexus.{namespace}.{method}")
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
         self._budget.check_before("feedback", "find")
         self._api_calls.append("plexus.feedback.find")
         try:
             return self._feedback_finder(_args(args))
         finally:
             self._budget.record_after("feedback", "find")
+
+    def _call_evaluation_info(
+        self, namespace: str, method: str, args: Any = None
+    ) -> Any:
+        if (namespace, method) != ("evaluation", "info"):
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("evaluation", "info")
+        self._api_calls.append("plexus.evaluation.info")
+        try:
+            return self._evaluation_info(_args(args))
+        finally:
+            self._budget.record_after("evaluation", "info")
 
     def _call_docs(self, namespace: str, method: str, args: Any = None) -> Any:
         if method == "list":
@@ -633,7 +717,9 @@ class PlexusRuntimeModule:
 
     def _docs_list(self) -> list[str]:
         if not os.path.isdir(self._docs_dir):
-            raise FileNotFoundError(f"Plexus docs directory not found: {self._docs_dir}")
+            raise FileNotFoundError(
+                f"Plexus docs directory not found: {self._docs_dir}"
+            )
         entries = []
         for name in os.listdir(self._docs_dir):
             stem, ext = os.path.splitext(name)
@@ -654,7 +740,7 @@ class PlexusRuntimeModule:
 
 def _wrap_tactus_snippet(tactus: str) -> str:
     helper_lines = [
-        "local plexus = require(\"plexus\")",
+        'local plexus = require("plexus")',
         "local __plexus_last_result = nil",
         "local function __plexus_capture(value)",
         "  __plexus_last_result = value",
@@ -693,6 +779,7 @@ def _run_tactus_sync(
     trace_store: TactusTraceStore,
     budget: BudgetGate | None = None,
     feedback_finder: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    evaluation_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     gate = budget if budget is not None else BudgetGate()
 
@@ -717,7 +804,10 @@ def _run_tactus_sync(
                     "update the installed tactus package to the version specified by pyproject.toml."
                 )
             plexus = PlexusRuntimeModule(
-                mcp, budget=gate, feedback_finder=feedback_finder
+                mcp,
+                budget=gate,
+                feedback_finder=feedback_finder,
+                evaluation_info=evaluation_info,
             )
             runtime.register_python_module("plexus", plexus)
             runtime_result = await runtime.execute(wrapped, context={}, format="lua")
@@ -745,7 +835,9 @@ def _run_tactus_sync(
                     trace_id=trace_id,
                     api_calls=api_calls,
                     started_at=started_mono,
-                    error=_structured_error("budget_exceeded", gate.exceeded_reason or "Budget exceeded"),
+                    error=_structured_error(
+                        "budget_exceeded", gate.exceeded_reason or "Budget exceeded"
+                    ),
                     budget=gate,
                 )
             elif not isinstance(runtime_result, dict):
@@ -770,7 +862,9 @@ def _run_tactus_sync(
                         budget=gate,
                     )
                 else:
-                    message = str(runtime_result.get("error") or "Tactus execution failed")
+                    message = str(
+                        runtime_result.get("error") or "Tactus execution failed"
+                    )
                     envelope = _response_envelope(
                         ok=False,
                         value=value,
@@ -784,15 +878,21 @@ def _run_tactus_sync(
             ended_wall = time.time()
             record = _build_trace_record(
                 trace_id=trace_id,
-                envelope=locals().get("envelope", _response_envelope(
-                    ok=False,
-                    value=None,
-                    trace_id=trace_id,
-                    api_calls=[],
-                    started_at=started_mono,
-                    error=_structured_error("runtime_error", "execute_tactus aborted before envelope was built"),
-                    budget=gate,
-                )),
+                envelope=locals().get(
+                    "envelope",
+                    _response_envelope(
+                        ok=False,
+                        value=None,
+                        trace_id=trace_id,
+                        api_calls=[],
+                        started_at=started_mono,
+                        error=_structured_error(
+                            "runtime_error",
+                            "execute_tactus aborted before envelope was built",
+                        ),
+                        budget=gate,
+                    ),
+                ),
                 submitted_tactus=tactus,
                 wrapped_tactus=wrapped,
                 runtime_result=runtime_result,
@@ -812,6 +912,7 @@ async def _execute_tactus_tool(
     trace_store: TactusTraceStore | None = None,
     budget: BudgetGate | None = None,
     feedback_finder: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    evaluation_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     store = trace_store if trace_store is not None else _default_trace_store()
     started_mono = time.monotonic()
@@ -850,6 +951,7 @@ async def _execute_tactus_tool(
             trace_store=store,
             budget=budget,
             feedback_finder=feedback_finder,
+            evaluation_info=evaluation_info,
         )
     except Exception as exc:
         logger.error("execute_tactus failed: %s", exc, exc_info=True)
