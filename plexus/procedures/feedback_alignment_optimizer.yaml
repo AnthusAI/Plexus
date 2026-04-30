@@ -847,48 +847,208 @@ code: |
   -- before the full diag implementation is defined at the start of the main body
   local diag = function(msg) end  -- no-op until overwritten at line ~1415
 
+  -- Budget for dispatched evaluations (each evaluation can take up to 90 minutes)
+  local EVAL_BUDGET = {usd = 5.0, wallclock_seconds = 5400, depth = 0, tool_calls = 1000}
+  local REPORT_BUDGET = {usd = 2.0, wallclock_seconds = 3600, depth = 0, tool_calls = 200}
+  local EVAL_AWAIT_TIMEOUT = "PT90M"
+
+  -- Await a single evaluation handle and return the evaluation data dict.
+  local function _await_eval_handle(h, label)
+    label = label or tostring(h and h.id or "?")
+    diag("Awaiting evaluation handle " .. label .. " (timeout=" .. EVAL_AWAIT_TIMEOUT .. ")...")
+    local waited = plexus.handle.await({id = h.id, timeout = EVAL_AWAIT_TIMEOUT})
+    -- After await, the evaluation data lives in waited.evaluation
+    local eval_data = waited.evaluation
+    if not eval_data then
+      -- If evaluation_id is available, fetch directly
+      local eval_id = waited.evaluation_id
+        or (type(waited.dispatch_result) == "table" and waited.dispatch_result.evaluation_id)
+      if eval_id then
+        local ok, info = pcall(function() return plexus.evaluation.info({evaluation_id = eval_id}) end)
+        if ok and type(info) == "table" then eval_data = info end
+      end
+    end
+    if not eval_data then
+      return {error = "Evaluation handle did not resolve: status=" .. tostring(waited.status)}
+    end
+    return eval_data
+  end
+
+  -- Dispatch a batch of evaluations (runs in parallel background procs),
+  -- await each, and return a list of evaluation data tables.
+  local function _dispatch_evaluation_batch(batch)
+    -- Normalize Lua numeric-key dict to ordered list
+    local batch_list = {}
+    if type(batch) == "table" then
+      local keys = {}
+      for k in pairs(batch) do table.insert(keys, k) end
+      table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+      for _, k in ipairs(keys) do table.insert(batch_list, batch[k]) end
+    end
+
+    -- Dispatch all evaluations (they run in parallel as background processes)
+    local handles = {}
+    for i, item in ipairs(batch_list) do
+      local dispatch_args = {}
+      for k, v in pairs(item) do dispatch_args[k] = v end
+      dispatch_args.async = true
+      dispatch_args.budget = dispatch_args.budget or EVAL_BUDGET
+      dispatch_args.wait = nil
+      local ok, h = pcall(function() return plexus.evaluation.run(dispatch_args) end)
+      if ok and type(h) == "table" and h.id then
+        table.insert(handles, {handle = h, idx = i})
+        diag(string.format("Dispatched evaluation %d/%d: %s (handle=%s)",
+          i, #batch_list, tostring(dispatch_args.evaluation_type), tostring(h.id)))
+      else
+        table.insert(handles, {handle = nil, error = tostring(h), idx = i})
+        diag(string.format("Failed to dispatch evaluation %d/%d: %s", i, #batch_list, tostring(h)))
+      end
+    end
+
+    -- Await all handles (sequential poll; actual evaluations ran in parallel)
+    local results = {}
+    for _, entry in ipairs(handles) do
+      if entry.handle then
+        local eval_data = _await_eval_handle(entry.handle, tostring(entry.idx))
+        table.insert(results, eval_data)
+      else
+        table.insert(results, {error = entry.error})
+      end
+    end
+    return results
+  end
+
+  -- Dispatch and await a single evaluation; returns evaluation data dict.
+  local function _dispatch_single_evaluation(args)
+    local dispatch_args = {}
+    for k, v in pairs(args) do dispatch_args[k] = v end
+    dispatch_args.async = true
+    dispatch_args.budget = dispatch_args.budget or EVAL_BUDGET
+    dispatch_args.wait = nil
+    local h = plexus.evaluation.run(dispatch_args)
+    if not h or not h.id then
+      return {error = "plexus.evaluation.run returned no handle: " .. tostring(h)}
+    end
+    return _await_eval_handle(h, dispatch_args.evaluation_type)
+  end
+
   local function call_plexus_tool(tool_name, args_table, opts)
-    -- Direct programmatic tool invocation via Tactus Tool.get() API
-    -- No LLM agent involved — calls MCP tools directly from Lua
-    -- Includes retry with exponential backoff for transient failures
+    -- Dispatch to plexus.* API directly (no MCP Tool.get() round-trip).
+    -- plexus.* calls return Lua tables; JSON decode is not needed.
     opts = opts or {}
     local max_retries = opts.max_retries or 3
-    local base_delay = opts.base_delay or 5  -- seconds
+    local base_delay = opts.base_delay or 5
+
+    -- Build the dispatch function for this tool name
+    local dispatch
+    if tool_name == "plexus_scorecard_info" then
+      dispatch = function(a) return plexus.scorecards.info(a) end
+    elseif tool_name == "plexus_score_info" then
+      dispatch = function(a) return plexus.score.info(a) end
+    elseif tool_name == "plexus_score_pull" then
+      dispatch = function(a)
+        local result = plexus.score.pull(a)
+        if not result or not result.success then return result end
+        -- Write YAML and guidelines to temp files so File.read() calls work
+        local version_id = result.version_id or "unknown"
+        local code_path  = "/tmp/plexus_score_"   .. version_id .. ".yaml"
+        local guide_path = "/tmp/plexus_guide_"   .. version_id .. ".md"
+        local f_c = io.open(code_path,  "w")
+        if f_c then f_c:write(result.yaml_content or "") ; f_c:close() end
+        local f_g = io.open(guide_path, "w")
+        if f_g then f_g:write(result.guidelines  or "") ; f_g:close() end
+        return {
+          success          = true,
+          scoreId          = result.score_id,
+          versionId        = result.version_id,
+          codeFilePath     = code_path,
+          guidelinesFilePath = guide_path,
+        }
+      end
+    elseif tool_name == "plexus_evaluation_info" then
+      dispatch = function(a) return plexus.evaluation.info(a) end
+    elseif tool_name == "plexus_evaluation_find_recent" then
+      dispatch = function(a) return plexus.evaluation.find_recent(a) end
+    elseif tool_name == "plexus_evaluation_run" then
+      dispatch = function(a)
+        if a.batch then
+          return _dispatch_evaluation_batch(a.batch)
+        else
+          return _dispatch_single_evaluation(a)
+        end
+      end
+    elseif tool_name == "plexus_report_run" then
+      -- Run report synchronously (blocks until output is ready)
+      dispatch = function(a)
+        local report_args = {}
+        for k, v in pairs(a) do report_args[k] = v end
+        report_args.sync = true
+        return plexus.report.run(report_args)
+      end
+    elseif tool_name == "plexus_dataset_check_associated" then
+      dispatch = function(a) return plexus.dataset.check_associated(a) end
+    elseif tool_name == "plexus_dataset_build_from_feedback_window" then
+      dispatch = function(a) return plexus.dataset.build_from_feedback_window(a) end
+    elseif tool_name == "plexus_item_info" then
+      dispatch = function(a) return plexus.item.info(a) end
+    elseif tool_name == "plexus_procedure_chat_messages" then
+      dispatch = function(a) return plexus.procedure.chat_messages(a) end
+    elseif tool_name == "plexus_feedback_latest_update" then
+      dispatch = function(a) return plexus.feedback.latest_update(a) end
+    elseif tool_name == "plexus_rubric_memory_recent_entries" then
+      dispatch = function(a) return plexus.rubric_memory.recent_entries(a) end
+    elseif tool_name == "plexus_rubric_memory_evidence_pack" then
+      dispatch = function(a) return plexus.rubric_memory.evidence_pack(a) end
+    elseif tool_name == "plexus_rubric_memory_sme_question_gate" then
+      dispatch = function(a) return plexus.rubric_memory.sme_question_gate(a) end
+    elseif tool_name == "get_plexus_documentation" then
+      dispatch = function(a)
+        -- Accept name, filename, or key (all used by different call sites)
+        local key = a.name or a.filename or a.key or ""
+        local result = plexus.docs.get({key = key})
+        -- Return the raw content string (callers use raw_string=true)
+        if type(result) == "table" then
+          return result.content or ""
+        end
+        return tostring(result)
+      end
+    elseif tool_name == "plexus_score_test" then
+      dispatch = function(a) return plexus.score.test(a) end
+    elseif tool_name == "score_editor_setup"
+        or tool_name == "score_editor_get_result"
+        or tool_name == "score_editor_get_content" then
+      -- These are custom in-process MCP tools (ScoreEditorToolset); use Tool.get()
+      dispatch = function(a)
+        local handle = Tool.get(tool_name)
+        local raw = handle(a or {})
+        if type(raw) == "string" then
+          local decoded, _ = safe_decode(raw)
+          return decoded or raw
+        end
+        return raw
+      end
+    else
+      error("call_plexus_tool: unknown tool: " .. tostring(tool_name))
+    end
 
     for attempt = 1, max_retries do
-      local ok, raw_result = pcall(function()
-        local tool_handle = Tool.get(tool_name)
-        return tool_handle(args_table or {})
-      end)
-
+      local ok, result = pcall(dispatch, args_table or {})
       if ok then
-        -- For tools that return plain strings (not JSON), skip decoding
-        if opts.raw_string and type(raw_result) == "string" then
-          return raw_result
-        end
-        local decoded_result, decode_err = safe_decode(raw_result)
-        if decoded_result then
-          -- Check for API-level errors (e.g. {error: "Scorecard not found"})
-          if type(decoded_result) == "table" and decoded_result.error then
-            local err_msg = tostring(decoded_result.error)
-            if attempt == max_retries then
-              error(tool_name .. " returned error after " .. max_retries .. " attempts: " .. err_msg)
-            end
-            diag(string.format("%s API error (attempt %d/%d): %s", tool_name, attempt, max_retries, err_msg))
-          else
-            return decoded_result
-          end
-        else
+        -- plexus.* returns tables directly (no JSON encoding/decoding needed)
+        if type(result) == "table" and result.error then
+          local err_msg = tostring(result.error)
           if attempt == max_retries then
-            error("Failed to decode " .. tool_name .. " result: " .. tostring(decode_err))
+            error(tool_name .. " returned error after " .. max_retries .. " attempts: " .. err_msg)
           end
-          diag(string.format("%s decode error (attempt %d/%d): %s", tool_name, attempt, max_retries, tostring(decode_err)))
+          diag(string.format("%s API error (attempt %d/%d): %s", tool_name, attempt, max_retries, err_msg))
+        else
+          return result
         end
       else
         if attempt == max_retries then
-          error("Failed to call " .. tool_name .. " after " .. max_retries .. " attempts: " .. tostring(raw_result))
+          error("Failed to call " .. tool_name .. " after " .. max_retries .. " attempts: " .. tostring(result))
         end
-        diag(string.format("%s error (attempt %d/%d): %s", tool_name, attempt, max_retries, tostring(raw_result)))
+        diag(string.format("%s error (attempt %d/%d): %s", tool_name, attempt, max_retries, tostring(result)))
       end
 
       -- Exponential backoff: 5s, 10s, 20s
