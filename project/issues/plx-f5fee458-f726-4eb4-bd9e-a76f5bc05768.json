@@ -40,10 +40,85 @@
       "author": "derek",
       "text": "Implemented full DRY refactor: added shared transformScoreResultForDisplay + parseScoreResultMetadata in dashboard/utils/data-operations.ts; transformEvaluation now uses shared helper; evaluations-dashboard lazy-load transform now delegates to shared helper (removed duplicate mapping logic). Added tests for shared lazy-load transform and object-map identifier normalization. Targeted test suite pass: npm --prefix dashboard test -- --runInBand dashboard/utils/data-operations.test.ts.",
       "created_at": "2026-04-30T00:13:47.557658200Z"
+    },
+    {
+      "id": "b41a4c38-2f91-42ea-8306-da7b0d70bdab",
+      "author": "derek",
+      "text": "Pushed branch bugfix/evaluations-shared-identifier-display with commits for DRY refactor + required Kanbus artifact sync. GitHub Actions check on this branch: gh run list returned no runs ([]), so there are currently no branch-triggered workflow results to report.",
+      "created_at": "2026-04-30T00:14:31.753442444Z"
+    },
+    {
+      "id": "ae08eae6-93c9-4a15-b92c-61e1a291daba",
+      "author": "derek",
+      "text": "User reports only one identifier still showing in evaluation detail. Investigating GraphQL selection sets for score-result lazy fetch/subscription to confirm whether legacy/multi identifiers are actually fetched from Item model.",
+      "created_at": "2026-04-30T00:22:12.028877066Z"
+    },
+    {
+      "id": "fcdc9460-9076-469b-8da6-92eaf7430ee2",
+      "author": "derek",
+      "text": "Follow-up fix for user repro: evaluations score-result fetch/subscription GraphQL selections were only requesting item.itemIdentifiers; added item.identifiers and item.externalId to both dashboard/components/evaluations-dashboard.tsx and dashboard/utils/amplify-helpers.ts so shared transformer can parse legacy/object-map IDs. Re-ran targeted dashboard/utils/data-operations.test.ts (pass).",
+      "created_at": "2026-04-30T00:22:47.767266858Z"
+    },
+    {
+      "id": "08e51e32-411e-4be3-99c7-ad9c2b6f899a",
+      "author": "derek",
+      "text": "Implemented evaluations-level identifier hydration to handle dataset differences: in dashboard/components/evaluations-dashboard.tsx, after score-results transform we now detect results missing itemIdentifiers and fetch Item by itemId (getItem with externalId/identifiers/itemIdentifiers), cache by itemId, and merge identifiers into score results before render. Applied in both initial paginated fetch and live subscription updates. Targeted tests still pass.",
+      "created_at": "2026-04-30T00:28:25.468330362Z"
+    },
+    {
+      "id": "375e5187-2a87-4737-bcb0-abb7dec7b25d",
+      "author": "derek",
+      "text": "Validated DB data for user-provided score result 0c14ee36-4e39-41ea-910d-fd01bca5ab64 via MCP: score_result_investigate returned item_id=309517289 and identifiers=[]; item lookup by that identifier returns canonical Item id 9c929f25-a91f-4db7-8943-5aa93498b8e9--309517289 with 7 identifiers. Root cause: some evaluations persist ScoreResult.itemId as externalId (not Item.id), so direct getItem(id=itemId) misses. Implemented evaluations-level resolver in dashboard/components/evaluations-dashboard.tsx to resolve item by id OR by externalId (listItemByExternalId) and then hydrate identifiers. Added account-aware candidate selection.",
+      "created_at": "2026-04-30T00:33:01.577882854Z"
+    },
+    {
+      "id": "e445a131-b98c-48e0-af91-2d6ca1149a53",
+      "author": "derek",
+      "text": "User requested upstream fix at evaluation generation layer. Investigating Python evaluation write path for ScoreResult.itemId assignment (id vs externalId) and implementing canonical Item.id persistence for all dataset evaluation sources.",
+      "created_at": "2026-04-30T00:35:28.030771613Z"
+    },
+    {
+      "id": "72c828a7-77e3-4f03-a487-470f93f663b4",
+      "author": "derek",
+      "text": "Implemented upstream accuracy-evaluation persistence fix in plexus/Evaluation.py: _create_score_result now writes canonical item ID (resolved_item_id/item_id) instead of raw content_id, and score_text now passes resolved_item_id when Item lookup resolves via reportId. Added regression test in plexus/test_evaluation_metrics.py for searches-dataset reportId path; ran .venv/bin/pytest -q plexus/test_evaluation_metrics.py -k 'score_text_resolves_item_id_from_report_identifier or score_text_prefers_top_level_linkage_fields' (2 passed). Important: existing evaluation rows remain unchanged; only newly-run evaluations persist corrected itemId values unless backfilled.",
+      "created_at": "2026-04-30T00:37:31.164303906Z"
+    },
+    {
+      "id": "5909debc-99e3-4b13-930e-276af85679f4",
+      "author": "derek",
+      "text": "Follow-up: share-link evaluation route still shows only canonical itemId string. Investigating /evaluations/<token> data path and aligning its score-result identifier fetch/transform with fixed main evaluations flow.",
+      "created_at": "2026-04-30T00:42:01.013126383Z"
+    },
+    {
+      "id": "4019551a-9c74-4cd7-a176-5cbe02cce707",
+      "author": "derek",
+      "text": "Patched shared evaluation page service (dashboard/app/evaluations/[id]/page.tsx): added identifier hydration for score results in share-link path. Service now resolves missing identifiers by Item.id first, then listItemByExternalId fallback, account-scoped when possible, and merges into scoreResults before render. Also expanded score-result query selection to include item.externalId/identifiers/accountId and fetches full scoreResults for share payloads that omit them.",
+      "created_at": "2026-04-30T00:42:46.698479849Z"
+    },
+    {
+      "id": "75ce0527-5647-49af-9f19-3b1c9160574c",
+      "author": "derek",
+      "text": "Share-route follow-up: updated EvaluationService.fetchEvaluationByShareToken to always fetch canonical score-results via listScoreResultByEvaluationId(resourceId) (with resolved authMode) and overwrite share payload scoreResults before transform/hydration. This avoids partial share payloads that may include only itemId and omit nested item identifiers.",
+      "created_at": "2026-04-30T00:45:48.374362226Z"
+    },
+    {
+      "id": "d14ba616-643d-4a70-bda5-d279994e0a72",
+      "author": "derek",
+      "text": "Removing dashboard/public rehydration fallback now that producer writes canonical itemId and identifiers.",
+      "created_at": "2026-04-30T00:57:43.640897371Z"
+    },
+    {
+      "id": "8d7a8e72-08ca-4ecf-8dcb-e1d27d1b4f7e",
+      "author": "derek",
+      "text": "Committed producer-first canonical identifier fix + removed UI rehydration fallback. Commit c4728115 includes Evaluation.py itemId canonicalization, dashboard canonical score-result fetch/transform, and regression test coverage.",
+      "created_at": "2026-04-30T01:29:22.158538632Z"
     }
   ],
   "created_at": "2026-04-30T00:09:48.433406318Z",
-  "updated_at": "2026-04-30T00:13:47.557658200Z",
+  "updated_at": "2026-04-30T01:29:22.158538632Z",
   "closed_at": null,
-  "custom": {}
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }
