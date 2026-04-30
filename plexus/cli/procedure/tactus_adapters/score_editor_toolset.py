@@ -572,8 +572,14 @@ class ScoreEditorToolset:
             }
 
         # Fix common YAML issues before validation
-        # externalId must be a string, not an integer
+        # external_id / externalId must be a string, not an integer
         import re
+        self._content = re.sub(
+            r'^(external_id:\s*)(\d+)\s*$',
+            r'\1"\2"',
+            self._content,
+            flags=re.MULTILINE,
+        )
         self._content = re.sub(
             r'^(externalId:\s*)(\d+)\s*$',
             r'\1"\2"',
