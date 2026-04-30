@@ -2745,38 +2745,57 @@ def _append_optional_cli_arg(cmd: list[str], flag: str, value: Any) -> None:
 
 
 def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
-    """Dispatch report.run directly for durable background report-block work."""
+    """Dispatch report.run async.
+
+    PLEXUS_REPORT_DISPATCH=local  (default) — run directly in a local thread.
+    PLEXUS_REPORT_DISPATCH=remote           — enqueue via the remote task dispatcher.
+    """
+    import os
+    import threading
+
+    remote = os.environ.get("PLEXUS_REPORT_DISPATCH", "local") == "remote"
+
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+
+    client = create_dashboard_client()
+    if not client:
+        raise ValueError("Could not create dashboard client")
+    account_id = resolve_account_id_for_command(client, args.get("account"))
+    if not account_id:
+        raise ValueError("Could not determine default account ID")
 
     configuration_id = args.get("configuration_id") or args.get("config_id")
     if configuration_id:
-        from plexus.cli.report.utils import resolve_account_id_for_command
-        from plexus.cli.shared.client_utils import create_client as create_dashboard_client
         from plexus.reports.service import generate_report_with_parameters
-        import threading
-
-        client = create_dashboard_client()
-        if not client:
-            raise ValueError("Could not create dashboard client")
-        account_id = resolve_account_id_for_command(client, args.get("account"))
-        if not account_id:
-            raise ValueError("Could not determine default account ID")
 
         parameters = args.get("parameters") or {}
 
-        def _run():
-            try:
-                generate_report_with_parameters(
-                    config_id=configuration_id,
-                    parameters=parameters,
-                    account_id=account_id,
-                    client=client,
-                    trigger="mcp",
-                )
-            except Exception:
-                pass
+        if remote:
+            # Remote: generate_report_with_parameters creates a Task with
+            # dispatchStatus=SYNC; the cloud dispatcher picks it up.
+            generate_report_with_parameters(
+                config_id=configuration_id,
+                parameters=parameters,
+                account_id=account_id,
+                client=client,
+                trigger="mcp_remote",
+            )
+        else:
+            def _run():
+                try:
+                    generate_report_with_parameters(
+                        config_id=configuration_id,
+                        parameters=parameters,
+                        account_id=account_id,
+                        client=client,
+                        trigger="mcp",
+                    )
+                except Exception:
+                    pass
 
-        thread = threading.Thread(target=_run, daemon=True)
-        thread.start()
+            threading.Thread(target=_run, daemon=False).start()
+
         return {
             "status": "dispatched",
             "configuration_id": configuration_id,
@@ -2787,38 +2806,50 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
     if not block_class:
         raise ValueError("plexus.report.run async requires block_class or configuration_id")
 
-    from plexus.cli.report.utils import resolve_account_id_for_command
-    from plexus.cli.shared.client_utils import create_client as create_dashboard_client
     from plexus.reports.service import run_block_cached
 
-    client = create_dashboard_client()
-    if not client:
-        raise ValueError("Could not create dashboard client")
-    account_id = resolve_account_id_for_command(client, args.get("account"))
-    if not account_id:
-        raise ValueError("Could not determine default account ID")
+    block_config = args.get("block_config") or {}
+    cache_key = args.get("cache_key")
+    ttl_hours = args.get("ttl_hours") if args.get("ttl_hours") is not None else 24
+    fresh = bool(args.get("fresh", False))
 
-    output_data, log_output, was_cached = run_block_cached(
-        block_class=str(block_class),
-        block_config=args.get("block_config") or {},
-        account_id=account_id,
-        client=client,
-        cache_key=args.get("cache_key"),
-        ttl_hours=args.get("ttl_hours") if args.get("ttl_hours") is not None else 24,
-        fresh=bool(args.get("fresh", False)),
-        background=True,
-        child_budget=args.get("budget"),
-    )
-    if not isinstance(output_data, dict):
-        raise ValueError(log_output or "Report block background dispatch failed")
-    if output_data.get("status") not in {"dispatched", "already_dispatched"}:
-        raise ValueError(f"Unexpected report dispatch status: {output_data!r}")
-    return {
-        **output_data,
-        "cached": was_cached,
-        "block_class": block_class,
-        "child_budget": _jsonable(args.get("budget")),
-    }
+    if remote:
+        output_data, log_output, was_cached = run_block_cached(
+            block_class=str(block_class),
+            block_config=block_config,
+            account_id=account_id,
+            client=client,
+            cache_key=cache_key,
+            ttl_hours=ttl_hours,
+            fresh=fresh,
+            background=True,
+            child_budget=None,
+        )
+        if not isinstance(output_data, dict):
+            raise ValueError(log_output or "Report block remote dispatch failed")
+        return {**output_data, "block_class": block_class}
+    else:
+        def _run():
+            try:
+                run_block_cached(
+                    block_class=str(block_class),
+                    block_config=block_config,
+                    account_id=account_id,
+                    client=client,
+                    cache_key=cache_key,
+                    ttl_hours=ttl_hours,
+                    fresh=fresh,
+                    background=False,
+                    child_budget=None,
+                )
+            except Exception:
+                pass
+
+        threading.Thread(target=_run, daemon=False).start()
+        return {
+            "status": "dispatched",
+            "block_class": block_class,
+        }
 
 
 def _default_report_runner_sync(args: dict[str, Any]) -> dict[str, Any]:
