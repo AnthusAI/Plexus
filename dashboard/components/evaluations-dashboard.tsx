@@ -53,7 +53,7 @@ import type { EvaluationTaskProps } from '@/components/EvaluationTask'
 import type { TaskData } from '@/types/evaluation'
 import { transformAmplifyTask } from '@/utils/data-operations'
 import { AmplifyTask, ProcessedTask, ProcessedEvaluation, Evaluation, TaskStageType } from '@/utils/data-operations'
-import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData, transformEvaluation, fetchEvaluationById } from '@/utils/data-operations'
+import { listRecentEvaluations, transformAmplifyTask as transformEvaluationData, transformEvaluation, fetchEvaluationById, transformScoreResultForDisplay } from '@/utils/data-operations'
 import { TaskDisplay } from "@/components/TaskDisplay"
 import { getValueFromLazyLoader, unwrapLazyLoader } from '@/utils/data-operations'
 import type { LazyLoader } from '@/utils/types'
@@ -606,44 +606,8 @@ export default function EvaluationsDashboard({
     }
 
     // Helper to transform raw items into UI-friendly format
-    const transformItems = (items: any[]): any[] => (items || []).map((item: any) => {
-      let parsedMetadata: any;
-      try {
-        if (typeof item.metadata === 'string') {
-          parsedMetadata = JSON.parse(item.metadata);
-          if (typeof parsedMetadata === 'string') {
-            parsedMetadata = JSON.parse(parsedMetadata);
-          }
-        } else {
-          parsedMetadata = item.metadata || {};
-        }
-      } catch (e) {
-        parsedMetadata = {};
-      }
-      const firstResultKey = parsedMetadata?.results ? Object.keys(parsedMetadata.results)[0] : null;
-      const scoreResult = firstResultKey && parsedMetadata.results ? parsedMetadata.results[firstResultKey] : null;
-      return {
-        id: item.id,
-        value: item.value,
-        confidence: item.confidence ?? null,
-        explanation: item.explanation ?? scoreResult?.explanation ?? null,
-        metadata: {
-          human_label: scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? (typeof item.metadata === 'object' ? (item.metadata as any).human_label : null) ?? null,
-          correct: Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct ?? (typeof item.metadata === 'object' ? (item.metadata as any).correct : null)),
-          human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? (typeof item.metadata === 'object' ? (item.metadata as any).human_explanation : null) ?? null,
-          text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? (typeof item.metadata === 'object' ? (item.metadata as any).text : null) ?? null
-        },
-        itemId: item.itemId ?? parsedMetadata.item_id?.toString() ?? null,
-        createdAt: item.createdAt || new Date().toISOString(),
-        trace: item.trace ?? null,
-        feedbackItem: item.feedbackItem ?? null,
-        itemIdentifiers: item.item?.itemIdentifiers?.items?.map((identifier: any) => ({
-          name: identifier.name,
-          value: identifier.value,
-          url: identifier.url || undefined
-        })) || undefined
-      };
-    });
+    const transformItems = (items: any[]): any[] =>
+      (items || []).map((item: any) => transformScoreResultForDisplay(item));
 
     // One-shot paginated fetch to populate immediately
     (async () => {
