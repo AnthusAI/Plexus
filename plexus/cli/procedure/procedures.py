@@ -727,9 +727,9 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
     
     # Run the procedure with task tracking (async)
     import asyncio
-    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
     
-    result = asyncio.run(run_experiment_with_task_tracking(
+    result = asyncio.run(run_procedure_with_task_tracking(
         procedure_id=procedure_id,
         client=client,
         account_id=account_id,
@@ -1181,13 +1181,13 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
 
     # Run with task tracking
     import asyncio
-    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
 
     options = {
         'context': params,
     }
 
-    exec_result = asyncio.run(run_experiment_with_task_tracking(
+    exec_result = asyncio.run(run_procedure_with_task_tracking(
         procedure_id=procedure_id,
         client=client,
         account_id=account_id,
@@ -1379,7 +1379,7 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
     account_id = resolve_account_id_for_command(client, None)
 
     import asyncio
-    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
     context = build_continuation_context(
         client,
         procedure_id,
@@ -1388,7 +1388,7 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
     )
 
     try:
-        result = asyncio.run(run_experiment_with_task_tracking(
+        result = asyncio.run(run_procedure_with_task_tracking(
             procedure_id=procedure_id,
             client=client,
             account_id=account_id,
@@ -1478,7 +1478,7 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
     account_id = resolve_account_id_for_command(client, None)
 
     import asyncio
-    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
     context = build_continuation_context(
         client,
         target_id,
@@ -1487,7 +1487,7 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
     )
 
     try:
-        result = asyncio.run(run_experiment_with_task_tracking(
+        result = asyncio.run(run_procedure_with_task_tracking(
             procedure_id=target_id,
             client=client,
             account_id=account_id,

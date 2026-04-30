@@ -210,6 +210,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("score_evaluations", "score", "evaluations"),
     ("score_predict", "score", "predict"),
     ("score_set_champion", "score", "set_champion"),
+    ("score_contradictions", "score", "contradictions"),
     ("set_champion", "score", "set_champion"),
     ("item_info", "item", "info"),
     ("item_last", "item", "last"),
@@ -228,6 +229,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("procedure_chat_sessions", "procedure", "chat_sessions"),
     ("procedure_chat_messages", "procedure", "chat_messages"),
     ("procedure_run", "procedure", "run"),
+    ("procedure_optimize", "procedure", "optimize"),
     ("handle_peek", "handle", "peek"),
     ("handle_status", "handle", "status"),
     ("handle_await", "handle", "await"),
@@ -277,45 +279,620 @@ class RequiresHandleProtocol(RuntimeError):
         self.method = method
 
 
-MCP_TOOL_MAP: dict[tuple[str, str], str] = {
-    ("scorecards", "list"): "plexus_scorecards_list",
-    ("scorecards", "info"): "plexus_scorecard_info",
-    ("score", "info"): "plexus_score_info",
-    ("score", "evaluations"): "plexus_score_evaluations",
-    ("score", "predict"): "plexus_predict",
-    ("score", "set_champion"): "plexus_score_set_champion",
-    ("item", "info"): "plexus_item_info",
-    ("item", "last"): "plexus_item_last",
-    ("feedback", "alignment"): "plexus_feedback_alignment",
-    ("evaluation", "find_recent"): "plexus_evaluation_find_recent",
-    ("evaluation", "compare"): "plexus_evaluation_compare",
-    (
-        "dataset",
-        "build_from_feedback_window",
-    ): "plexus_dataset_build_from_feedback_window",
-    ("dataset", "check_associated"): "plexus_dataset_check_associated",
-    ("report", "configurations_list"): "plexus_report_configurations_list",
-    ("procedure", "info"): "plexus_procedure_info",
-    ("procedure", "list"): "plexus_procedure_list",
-    ("procedure", "chat_sessions"): "plexus_procedure_chat_sessions",
-    ("procedure", "chat_messages"): "plexus_procedure_chat_messages",
-}
+MCP_TOOL_MAP: dict[tuple[str, str], str] = {}
 
 
 # Per-method handlers implemented directly on PlexusRuntimeModule (no MCP loopback).
 # Each (namespace, method) here MUST NOT also appear in MCP_TOOL_MAP — every
 # method has exactly one dispatcher.
 DIRECT_HANDLERS: dict[tuple[str, str], str] = {
+    ("scorecards", "list"): "_call_scorecards",
+    ("scorecards", "info"): "_call_scorecards",
+    ("score", "info"): "_call_score",
+    ("score", "evaluations"): "_call_score",
+    ("score", "predict"): "_call_score",
+    ("score", "set_champion"): "_call_score",
+    ("score", "contradictions"): "_call_score",
+    ("item", "info"): "_call_item",
+    ("item", "last"): "_call_item",
     ("feedback", "find"): "_call_feedback",
-    ("evaluation", "info"): "_call_evaluation_info",
+    ("feedback", "alignment"): "_call_feedback",
+    ("evaluation", "info"): "_call_evaluation_read",
+    ("evaluation", "find_recent"): "_call_evaluation_read",
+    ("evaluation", "compare"): "_call_evaluation_read",
     ("evaluation", "run"): "_call_evaluation_run",
     ("report", "run"): "_call_report_run",
+    ("report", "configurations_list"): "_call_report_read",
+    ("dataset", "build_from_feedback_window"): "_call_dataset",
+    ("dataset", "check_associated"): "_call_dataset",
+    ("procedure", "list"): "_call_procedure_read",
+    ("procedure", "info"): "_call_procedure_read",
+    ("procedure", "chat_sessions"): "_call_procedure_read",
+    ("procedure", "chat_messages"): "_call_procedure_read",
     ("procedure", "run"): "_call_procedure_run",
+    ("procedure", "optimize"): "_call_procedure_run",
     ("handle", "peek"): "_call_handle",
     ("handle", "status"): "_call_handle",
     ("handle", "await"): "_call_handle",
     ("handle", "cancel"): "_call_handle",
 }
+
+
+def _default_scorecards_list(args: dict[str, Any]) -> Any:
+    """Run plexus.scorecards.list directly against the dashboard.
+
+    Equivalent to the legacy `plexus_scorecards_list` MCP tool but native
+    Python so the runtime no longer depends on the legacy tool registration.
+    """
+
+    import json as _json
+
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.memoized_resolvers import (
+        memoized_resolve_scorecard_identifier,
+    )
+    from shared.utils import get_default_account_id
+
+    identifier = args.get("identifier") or args.get("name") or args.get("key")
+    next_token = args.get("next_token") or args.get("nextToken")
+    return_metadata = bool(args.get("return_metadata", False))
+
+    raw_limit = args.get("limit")
+    if raw_limit is None:
+        fetch_limit = 1000
+    else:
+        try:
+            fetch_limit = int(raw_limit)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"plexus.scorecards.list limit must be an integer, got {raw_limit!r}"
+            ) from exc
+        if fetch_limit < 1:
+            raise ValueError(
+                "plexus.scorecards.list limit must be a positive integer"
+            )
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.scorecards.list: could not create dashboard client")
+
+    if identifier:
+        scorecard_id = memoized_resolve_scorecard_identifier(client, str(identifier))
+        if scorecard_id:
+            query = (
+                'query GetScorecard { '
+                f'getScorecard(id: "{scorecard_id}") {{ '
+                "id name key description externalId createdAt updatedAt "
+                "} }"
+            )
+            response = client.execute(query)
+            if "errors" in response:
+                raise RuntimeError(
+                    "plexus.scorecards.list dashboard error: "
+                    + _json.dumps(response["errors"])
+                )
+            scorecard_data = response.get("getScorecard")
+            items = [scorecard_data] if scorecard_data else []
+            if return_metadata:
+                return {"items": items, "nextToken": None}
+            return items
+
+    filter_parts: list[str] = []
+    default_account_id = get_default_account_id()
+    if default_account_id:
+        filter_parts.append(f'accountId: {{ eq: "{default_account_id}" }}')
+    if identifier:
+        ident = str(identifier)
+        if " " in ident or not ident.islower():
+            filter_parts.append(f'name: {{ contains: "{ident}" }}')
+        else:
+            filter_parts.append(
+                f'or: [{{name: {{ contains: "{ident}" }}}}, '
+                f'{{key: {{ contains: "{ident}" }}}}]'
+            )
+
+    filter_str = ", ".join(filter_parts)
+    next_token_arg = f', nextToken: "{next_token}"' if next_token else ""
+    query = (
+        "query ListScorecards { "
+        f"listScorecards(filter: {{ {filter_str} }}, limit: {fetch_limit}{next_token_arg}) {{ "
+        "items { id name key description externalId createdAt updatedAt } "
+        "nextToken } }"
+    )
+    response = client.execute(query)
+    if "errors" in response:
+        raise RuntimeError(
+            "plexus.scorecards.list dashboard error: "
+            + _json.dumps(response["errors"])
+        )
+
+    list_scorecards = response.get("listScorecards") or {}
+    items = list_scorecards.get("items") or []
+    next_token_value = list_scorecards.get("nextToken")
+    if return_metadata:
+        return {"items": items, "nextToken": next_token_value}
+    return items
+
+
+def _default_scorecards_info(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.scorecards.info directly against the dashboard."""
+
+    import json as _json
+
+    from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
+    from plexus.cli.shared.client_utils import create_client
+
+    identifier = (
+        args.get("identifier")
+        or args.get("scorecard_identifier")
+        or args.get("id")
+        or args.get("name")
+        or args.get("key")
+        or args.get("external_id")
+        or args.get("externalId")
+    )
+    if not identifier:
+        raise ValueError(
+            "plexus.scorecards.info requires identifier (id, name, key, or external_id)"
+        )
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.scorecards.info: could not create dashboard client")
+
+    scorecard_id = resolve_scorecard_identifier(client, str(identifier))
+    if not scorecard_id:
+        raise ValueError(
+            f"plexus.scorecards.info: scorecard {identifier!r} not found"
+        )
+
+    query = (
+        "query GetScorecard { "
+        f'getScorecard(id: "{scorecard_id}") {{ '
+        "id name key description guidelines externalId createdAt updatedAt "
+        "sections { items { id name order scores { items { "
+        "id name key description type order externalId } } } } "
+        "} }"
+    )
+    response = client.execute(query)
+    if "errors" in response:
+        raise RuntimeError(
+            "plexus.scorecards.info dashboard error: "
+            + _json.dumps(response["errors"])
+        )
+
+    data = response.get("getScorecard")
+    if not data:
+        raise ValueError(
+            f"plexus.scorecards.info: scorecard {identifier!r} (id {scorecard_id}) "
+            "not found after query"
+        )
+
+    return {
+        "name": data.get("name"),
+        "key": data.get("key"),
+        "externalId": data.get("externalId"),
+        "description": data.get("description"),
+        "guidelines": data.get("guidelines"),
+        "additionalDetails": {
+            "id": data.get("id"),
+            "createdAt": data.get("createdAt"),
+            "updatedAt": data.get("updatedAt"),
+        },
+        "sections": data.get("sections"),
+    }
+
+
+def _make_procedure_service():
+    """Build a ProcedureService bound to a fresh dashboard client."""
+
+    from plexus.cli.procedure.service import ProcedureService
+    from plexus.cli.shared.client_utils import create_client
+
+    client = create_client()
+    if not client:
+        raise RuntimeError(
+            "plexus.procedure.*: could not create dashboard client"
+        )
+    return ProcedureService(client)
+
+
+def _default_procedure_list(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.procedure.list directly via ProcedureService."""
+
+    account_identifier = (
+        args.get("account_identifier")
+        or args.get("account")
+        or os.environ.get("PLEXUS_ACCOUNT_KEY")
+    )
+    if not account_identifier:
+        raise ValueError(
+            "plexus.procedure.list requires account_identifier or "
+            "PLEXUS_ACCOUNT_KEY environment variable"
+        )
+
+    scorecard_identifier = args.get("scorecard_identifier") or args.get("scorecard")
+    limit = int(args.get("limit") or 20)
+
+    service = _make_procedure_service()
+    procedures = service.list_procedures(
+        account_identifier=account_identifier,
+        scorecard_identifier=scorecard_identifier,
+        limit=limit,
+    )
+    return {
+        "success": True,
+        "count": len(procedures),
+        "procedures": [
+            {
+                "id": exp.id,
+                "name": getattr(exp, "name", None),
+                "status": getattr(exp, "status", None),
+                "featured": exp.featured,
+                "created_at": exp.createdAt.isoformat(),
+                "updated_at": exp.updatedAt.isoformat(),
+                "scorecard_id": exp.scorecardId,
+                "score_id": exp.scoreId,
+            }
+            for exp in procedures
+        ],
+    }
+
+
+def _default_procedure_info(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.procedure.info directly via ProcedureService."""
+
+    procedure_id = args.get("procedure_id") or args.get("id")
+    if not procedure_id:
+        raise ValueError("plexus.procedure.info requires id or procedure_id")
+    include_yaml = bool(args.get("include_yaml", False))
+
+    service = _make_procedure_service()
+    info = service.get_procedure_info(str(procedure_id))
+    if not info:
+        return {
+            "success": False,
+            "error": f"Procedure {procedure_id} not found",
+        }
+
+    result: dict[str, Any] = {
+        "success": True,
+        "procedure": {
+            "id": info.procedure.id,
+            "status": getattr(info.procedure, "status", None),
+            "featured": info.procedure.featured,
+            "created_at": info.procedure.createdAt.isoformat(),
+            "updated_at": info.procedure.updatedAt.isoformat(),
+            "account_id": info.procedure.accountId,
+            "scorecard_id": info.procedure.scorecardId,
+            "score_id": info.procedure.scoreId,
+        },
+        "summary": {
+            "scorecard_name": info.scorecard_name,
+            "score_name": info.score_name,
+        },
+    }
+    if include_yaml:
+        yaml_config = service.get_procedure_yaml(str(procedure_id))
+        if yaml_config:
+            result["yaml_config"] = yaml_config
+    return result
+
+
+def _default_procedure_chat_sessions(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.procedure.chat_sessions directly via dashboard GraphQL."""
+
+    from plexus.dashboard.api.client import PlexusDashboardClient
+
+    procedure_id = args.get("procedure_id") or args.get("id")
+    if not procedure_id:
+        raise ValueError(
+            "plexus.procedure.chat_sessions requires id or procedure_id"
+        )
+    limit = int(args.get("limit") or 10)
+
+    client = PlexusDashboardClient()
+    query = """
+    query ListChatSessionByProcedureId($procedureId: String!, $limit: Int!) {
+        listChatSessionByProcedureIdAndCreatedAt(
+            procedureId: $procedureId
+            sortDirection: DESC
+            limit: $limit
+        ) {
+            items {
+                id status procedureId createdAt updatedAt
+                messages { items { id messageType } }
+            }
+        }
+    }
+    """
+    result = client.execute(query, {"procedureId": str(procedure_id), "limit": limit})
+    if "errors" in result:
+        raise RuntimeError(
+            f"plexus.procedure.chat_sessions GraphQL errors: {result['errors']}"
+        )
+
+    sessions: list = []
+    if "data" in result:
+        sessions = (
+            result["data"]
+            .get("listChatSessionByProcedureIdAndCreatedAt", {})
+            .get("items", [])
+        )
+    elif "listChatSessionByProcedureIdAndCreatedAt" in result:
+        sessions = result["listChatSessionByProcedureIdAndCreatedAt"].get("items", [])
+
+    processed: list[dict[str, Any]] = []
+    for session in sessions:
+        messages = session.get("messages", {}).get("items", []) or []
+        message_types: dict[str, int] = {}
+        for msg in messages:
+            mt = msg.get("messageType", "MESSAGE")
+            message_types[mt] = message_types.get(mt, 0) + 1
+        processed.append(
+            {
+                "id": session["id"],
+                "status": session["status"],
+                "created_at": session["createdAt"],
+                "updated_at": session.get("updatedAt"),
+                "message_count": len(messages),
+                "message_types": message_types,
+            }
+        )
+
+    return {
+        "success": True,
+        "procedure_id": str(procedure_id),
+        "session_count": len(processed),
+        "sessions": processed,
+    }
+
+
+def _default_procedure_chat_messages(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.procedure.chat_messages directly via dashboard GraphQL."""
+
+    import json as _json
+
+    from plexus.dashboard.api.client import PlexusDashboardClient
+
+    procedure_id = args.get("procedure_id") or args.get("id")
+    session_id = args.get("session_id")
+    if not procedure_id and not session_id:
+        raise ValueError(
+            "plexus.procedure.chat_messages requires id (procedure_id) or session_id"
+        )
+    limit = int(args.get("limit") or 50)
+    show_tool_calls = bool(args.get("show_tool_calls", True))
+    show_tool_responses = bool(args.get("show_tool_responses", True))
+
+    client = PlexusDashboardClient()
+    if session_id:
+        query = """
+        query GetChatSession($id: ID!) {
+            getChatSession(id: $id) {
+                id status procedureId createdAt
+                messages { items { id role messageType toolName content
+                    toolResponse sequenceNumber parentMessageId createdAt } }
+            }
+        }
+        """
+        result = client.execute(query, {"id": str(session_id)})
+        if "errors" in result:
+            raise RuntimeError(
+                f"plexus.procedure.chat_messages GraphQL errors: {result['errors']}"
+            )
+        session = None
+        if "data" in result:
+            session = result["data"].get("getChatSession")
+        elif "getChatSession" in result:
+            session = result["getChatSession"]
+        if not session:
+            return {
+                "success": False,
+                "error": f"Session {session_id} not found",
+            }
+        sessions = [session]
+    else:
+        query = """
+        query ListChatSessionByProcedureId($procedureId: String!, $limit: Int!) {
+            listChatSessionByProcedureIdAndCreatedAt(
+                procedureId: $procedureId sortDirection: DESC limit: $limit
+            ) {
+                items {
+                    id status procedureId createdAt
+                    messages { items { id role messageType toolName content
+                        toolResponse sequenceNumber parentMessageId createdAt } }
+                }
+            }
+        }
+        """
+        result = client.execute(
+            query, {"procedureId": str(procedure_id), "limit": limit}
+        )
+        if "errors" in result:
+            raise RuntimeError(
+                f"plexus.procedure.chat_messages GraphQL errors: {result['errors']}"
+            )
+        sessions = []
+        if "data" in result:
+            sessions = (
+                result["data"]
+                .get("listChatSessionByProcedureIdAndCreatedAt", {})
+                .get("items", [])
+            )
+        elif "listChatSessionByProcedureIdAndCreatedAt" in result:
+            sessions = result["listChatSessionByProcedureIdAndCreatedAt"].get(
+                "items", []
+            )
+
+    processed_sessions: list[dict[str, Any]] = []
+    total_messages = 0
+    tool_calls = 0
+    tool_responses = 0
+    missing_responses = 0
+
+    for session in sessions:
+        messages = session.get("messages", {}).get("items", []) or []
+        messages.sort(key=lambda m: m.get("sequenceNumber", 0))
+        session_tool_calls: list[str] = []
+        session_tool_responses: list[str] = []
+        processed_messages: list[dict[str, Any]] = []
+
+        for msg in messages[:limit]:
+            msg_type = msg.get("messageType", "MESSAGE")
+            role = msg.get("role", "")
+
+            raw_content = msg.get("content", "") or ""
+            parsed_content: Any = raw_content
+            if isinstance(raw_content, str) and raw_content.startswith("{") and raw_content.endswith("}"):
+                try:
+                    parsed_content = _json.loads(raw_content)
+                except (ValueError, TypeError):
+                    parsed_content = raw_content
+
+            processed_msg: dict[str, Any] = {
+                "id": msg["id"],
+                "sequence_number": msg.get("sequenceNumber", 0),
+                "role": role,
+                "message_type": msg_type,
+                "content": parsed_content,
+                "created_at": msg["createdAt"],
+                "parent_message_id": msg.get("parentMessageId"),
+            }
+            is_tool_response = role == "SYSTEM" and msg.get("parentMessageId")
+
+            if msg_type == "TOOL_CALL":
+                processed_msg["tool_name"] = msg.get("toolName")
+                session_tool_calls.append(msg["id"])
+                tool_calls += 1
+                tool_response_raw = msg.get("toolResponse") or ""
+                if show_tool_responses and tool_response_raw:
+                    tool_response_parsed: Any = tool_response_raw
+                    if (
+                        isinstance(tool_response_raw, str)
+                        and tool_response_raw.startswith("{")
+                        and tool_response_raw.endswith("}")
+                    ):
+                        try:
+                            tool_response_parsed = _json.loads(tool_response_raw)
+                        except (ValueError, TypeError):
+                            tool_response_parsed = tool_response_raw
+                    processed_msg["tool_response"] = tool_response_parsed
+                    session_tool_responses.append(msg["id"])
+                    tool_responses += 1
+            elif (msg_type == "TOOL_RESPONSE" or is_tool_response) and show_tool_responses:
+                processed_msg["tool_name"] = msg.get("toolName", "Unknown")
+                session_tool_responses.append(msg["id"])
+                tool_responses += 1
+
+            if not show_tool_calls and msg_type == "TOOL_CALL":
+                continue
+
+            processed_messages.append(processed_msg)
+            total_messages += 1
+
+        session_missing = 0
+        for call_id in session_tool_calls:
+            call_msg = next((m for m in messages if m.get("id") == call_id), None)
+            has_inline_response = bool(call_msg and (call_msg.get("toolResponse") or ""))
+            has_child_response = any(
+                resp_msg.get("parentMessageId") == call_id
+                for resp_msg in messages
+                if resp_msg.get("messageType") == "TOOL_RESPONSE"
+                or (resp_msg.get("role") == "SYSTEM" and resp_msg.get("parentMessageId"))
+            )
+            if not (has_inline_response or has_child_response):
+                session_missing += 1
+
+        missing_responses += session_missing
+
+        processed_sessions.append(
+            {
+                "session_id": session["id"],
+                "status": session["status"],
+                "created_at": session["createdAt"],
+                "message_count": len(processed_messages),
+                "tool_calls": len(session_tool_calls),
+                "tool_responses": len(session_tool_responses),
+                "missing_responses": session_missing,
+                "messages": processed_messages,
+            }
+        )
+
+    return {
+        "success": True,
+        "procedure_id": str(procedure_id),
+        "session_count": len(processed_sessions),
+        "total_messages": total_messages,
+        "summary": {
+            "tool_calls": tool_calls,
+            "tool_responses": tool_responses,
+            "missing_responses": missing_responses,
+            "response_rate": (
+                f"{((tool_responses / tool_calls) * 100):.1f}%"
+                if tool_calls > 0
+                else "N/A"
+            ),
+        },
+        "sessions": processed_sessions,
+    }
+
+
+def _default_feedback_alignment(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.feedback.alignment directly via FeedbackService.
+
+    Mirrors the legacy plexus_feedback_alignment MCP tool but native Python,
+    using memoized resolvers for scorecard/score lookup.
+    """
+
+    from plexus.cli.feedback.feedback_service import FeedbackService
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.memoized_resolvers import (
+        memoized_resolve_score_identifier,
+        memoized_resolve_scorecard_identifier,
+    )
+
+    scorecard_name = args.get("scorecard_name") or args.get("scorecard")
+    score_name = args.get("score_name") or args.get("score")
+    if not scorecard_name or not score_name:
+        raise ValueError(
+            "plexus.feedback.alignment requires scorecard_name and score_name"
+        )
+    days = int(float(args.get("days", 7)))
+
+    client = create_client()
+    if not client:
+        raise RuntimeError(
+            "plexus.feedback.alignment: could not create dashboard client"
+        )
+    account_id = resolve_account_id_for_command(client, None)
+    scorecard_id = memoized_resolve_scorecard_identifier(client, str(scorecard_name))
+    if not scorecard_id:
+        raise ValueError(
+            f"plexus.feedback.alignment: scorecard {scorecard_name!r} not found"
+        )
+    score_id = memoized_resolve_score_identifier(
+        client, scorecard_id, str(score_name)
+    )
+    if not score_id:
+        raise ValueError(
+            f"plexus.feedback.alignment: score {score_name!r} not found in "
+            f"scorecard {scorecard_name!r}"
+        )
+
+    summary = _run_async_from_sync(
+        FeedbackService.summarize_feedback(
+            client=client,
+            scorecard_name=str(scorecard_name),
+            score_name=str(score_name),
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            account_id=account_id,
+            days=days,
+        )
+    )
+    return FeedbackService.format_summary_result_as_dict(summary)
 
 
 def _default_feedback_finder(args: dict[str, Any]) -> dict[str, Any]:
@@ -415,6 +992,1594 @@ def _default_evaluation_info(args: dict[str, Any]) -> dict[str, Any]:
     return Evaluation.get_evaluation_info(evaluation_id, include_score_results)
 
 
+def _default_score_info(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.score.info directly — mirrors plexus_score_info."""
+
+    import os as _os
+
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
+    from plexus.cli.shared.client_utils import create_client
+
+    score_identifier = (
+        args.get("score_identifier")
+        or args.get("id")
+        or args.get("score")
+        or args.get("name")
+        or args.get("key")
+    )
+    if not score_identifier:
+        raise ValueError("plexus.score.info requires score_identifier (id/name/key)")
+
+    scorecard_identifier = (
+        args.get("scorecard_identifier")
+        or args.get("scorecard")
+        or args.get("scorecard_id")
+    )
+    version_id = args.get("version_id")
+
+    plexus_url_base = _os.environ.get("PLEXUS_APP_URL", "https://capacity-plexus.anth.us").rstrip("/")
+
+    def _plexus_url(path: str) -> str:
+        return f"{plexus_url_base}/{path.lstrip('/')}"
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.score.info: could not create dashboard client")
+
+    found_scores: list[dict] = []
+
+    if scorecard_identifier:
+        scorecard_id = resolve_scorecard_identifier(client, str(scorecard_identifier))
+        if not scorecard_id:
+            raise ValueError(
+                f"plexus.score.info: scorecard {scorecard_identifier!r} not found"
+            )
+        result = client.execute(
+            f"""query GetScorecardWithScores {{
+                getScorecard(id: "{scorecard_id}") {{
+                    id name key
+                    sections {{ items {{ id name scores {{ items {{
+                        id name key externalId description type
+                        championVersionId isDisabled
+                    }} }} }} }}
+                }}
+            }}"""
+        )
+        scorecard_data = result.get("getScorecard")
+        if scorecard_data:
+            for section in scorecard_data.get("sections", {}).get("items", []):
+                for score in section.get("scores", {}).get("items", []):
+                    sid = str(score_identifier).lower()
+                    if (
+                        score.get("id") == str(score_identifier)
+                        or score.get("name", "").lower() == sid
+                        or score.get("key") == str(score_identifier)
+                        or score.get("externalId") == str(score_identifier)
+                        or sid in score.get("name", "").lower()
+                    ):
+                        found_scores.append({"score": score, "section": section, "scorecard": scorecard_data})
+    else:
+        account_id = resolve_account_id_for_command(client, None)
+        if not account_id:
+            raise RuntimeError(
+                "plexus.score.info: no default account — is PLEXUS_ACCOUNT_KEY set?"
+            )
+        result = client.execute(
+            f"""query ListScorecardsForSearch {{
+                listScorecards(filter: {{ accountId: {{ eq: "{account_id}" }} }}, limit: 100) {{
+                    items {{
+                        id name key
+                        sections {{ items {{ id name scores {{ items {{
+                            id name key externalId description type
+                            championVersionId isDisabled
+                        }} }} }} }}
+                    }}
+                }}
+            }}"""
+        )
+        for scorecard in result.get("listScorecards", {}).get("items", []):
+            for section in scorecard.get("sections", {}).get("items", []):
+                for score in section.get("scores", {}).get("items", []):
+                    sid = str(score_identifier).lower()
+                    if (
+                        score.get("id") == str(score_identifier)
+                        or score.get("name", "").lower() == sid
+                        or score.get("key") == str(score_identifier)
+                        or score.get("externalId") == str(score_identifier)
+                        or sid in score.get("name", "").lower()
+                    ):
+                        found_scores.append({"score": score, "section": section, "scorecard": scorecard})
+
+    if not found_scores:
+        scope = f" within scorecard {scorecard_identifier!r}" if scorecard_identifier else ""
+        raise ValueError(
+            f"plexus.score.info: no scores found matching {score_identifier!r}{scope}"
+        )
+
+    if len(found_scores) > 1:
+        return {
+            "found": True,
+            "multiple": True,
+            "count": len(found_scores),
+            "matches": [
+                {
+                    "scoreId": m["score"]["id"],
+                    "scoreName": m["score"]["name"],
+                    "scorecardName": m["scorecard"]["name"],
+                    "sectionName": m["section"]["name"],
+                    "isDisabled": m["score"].get("isDisabled", False),
+                    "dashboardUrl": _plexus_url(
+                        f"lab/scorecards/{m['scorecard']['id']}/scores/{m['score']['id']}"
+                    ),
+                }
+                for m in found_scores
+            ],
+            "message": (
+                f"Found {len(found_scores)} scores matching {score_identifier!r}. "
+                "Use a more specific identifier."
+            ),
+        }
+
+    m = found_scores[0]
+    score = m["score"]
+    section = m["section"]
+    scorecard = m["scorecard"]
+    score_id = score["id"]
+    scorecard_id = scorecard["id"]
+
+    response: dict[str, Any] = {
+        "found": True,
+        "scoreId": score_id,
+        "scoreName": score["name"],
+        "scoreKey": score.get("key"),
+        "externalId": score.get("externalId"),
+        "type": score.get("type"),
+        "championVersionId": score.get("championVersionId"),
+        "isDisabled": score.get("isDisabled", False),
+        "location": {
+            "scorecardId": scorecard_id,
+            "scorecardName": scorecard["name"],
+            "sectionId": section["id"],
+            "sectionName": section["name"],
+        },
+        "dashboardUrl": _plexus_url(f"lab/scorecards/{scorecard_id}/scores/{score_id}"),
+    }
+
+    versions_result = client.execute(
+        f"""query GetScoreVersions {{
+            getScore(id: "{score_id}") {{
+                id name key externalId championVersionId
+                versions(sortDirection: DESC, limit: 20) {{
+                    items {{ id createdAt isFeatured parentVersionId note metadata }}
+                }}
+            }}
+        }}"""
+    )
+    if "errors" in versions_result:
+        response["versions"] = []
+        response["versionsError"] = str(versions_result["errors"])
+    else:
+        score_data = versions_result.get("getScore") or {}
+        all_versions = score_data.get("versions", {}).get("items", []) or []
+        response["versions"] = [
+            {
+                "id": v.get("id"),
+                "createdAt": v.get("createdAt"),
+                "note": v.get("note"),
+                "isFeatured": v.get("isFeatured"),
+                "parentVersionId": v.get("parentVersionId"),
+                "isChampion": v.get("id") == score.get("championVersionId"),
+                "metadata": v.get("metadata"),
+            }
+            for v in all_versions
+        ]
+
+    target_version_id = version_id or score.get("championVersionId")
+    if target_version_id:
+        ver_result = client.execute(
+            f"""query GetScoreVersionForInfo {{
+                getScoreVersion(id: "{target_version_id}") {{
+                    id configuration guidelines createdAt updatedAt
+                    note isFeatured parentVersionId metadata
+                }}
+            }}"""
+        )
+        version_data = ver_result.get("getScoreVersion") if "errors" not in ver_result else None
+        if version_data:
+            response["code"] = version_data.get("configuration")
+            response["guidelines"] = version_data.get("guidelines")
+            response["description"] = score.get("description")
+            response["targetVersionId"] = target_version_id
+            response["isChampionVersion"] = target_version_id == score.get("championVersionId")
+            response["versionDetails"] = {
+                "id": target_version_id,
+                "createdAt": version_data.get("createdAt"),
+                "updatedAt": version_data.get("updatedAt"),
+                "note": version_data.get("note"),
+                "isFeatured": version_data.get("isFeatured"),
+                "parentVersionId": version_data.get("parentVersionId"),
+                "metadata": version_data.get("metadata"),
+                "isChampion": target_version_id == score.get("championVersionId"),
+            }
+            response["isSpecificVersion"] = bool(
+                version_id and version_id != score.get("championVersionId")
+            )
+        else:
+            response.update({"description": score.get("description"), "code": None,
+                             "guidelines": None, "targetVersionId": None,
+                             "isChampionVersion": False, "versionDetails": None})
+    else:
+        response.update({"description": score.get("description"), "code": None,
+                         "guidelines": None, "targetVersionId": None,
+                         "isChampionVersion": False, "versionDetails": None})
+
+    return response
+
+
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+
+
+def _default_score_evaluations(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.score.evaluations directly via OptimizerResultsService.
+
+    Accepts either:
+      - { id = "<score-uuid>" }  — direct score ID, no scorecard lookup needed
+      - { scorecard = "...", score = "..." }  — resolved via memoized resolvers
+    """
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+    version_id = args.get("version_id")
+    sort_by = str(args.get("sort_by") or "updated")
+    limit = int(args.get("limit") or 25)
+
+    client = create_client()
+    if not client:
+        raise RuntimeError(
+            "plexus.score.evaluations: could not create dashboard client"
+        )
+
+    # Fast path: direct UUID provided — no resolution needed.
+    direct_id = args.get("id")
+    if direct_id and _UUID_RE.match(str(direct_id)):
+        score_id = str(direct_id)
+    else:
+        from plexus.cli.shared.memoized_resolvers import (
+            memoized_resolve_score_identifier,
+            memoized_resolve_scorecard_identifier,
+        )
+
+        scorecard_identifier = args.get("scorecard_identifier") or args.get("scorecard")
+        score_identifier = (
+            args.get("score_identifier") or args.get("score") or direct_id
+        )
+        if not scorecard_identifier or not score_identifier:
+            raise ValueError(
+                "plexus.score.evaluations requires either { id = '<score-uuid>' } "
+                "or { scorecard = '...', score = '...' }"
+            )
+
+        scorecard_id = memoized_resolve_scorecard_identifier(client, str(scorecard_identifier))
+        if not scorecard_id:
+            raise ValueError(
+                f"plexus.score.evaluations: scorecard {scorecard_identifier!r} not found"
+            )
+        score_id = memoized_resolve_score_identifier(client, scorecard_id, str(score_identifier))
+        if not score_id:
+            raise ValueError(
+                f"plexus.score.evaluations: score {score_identifier!r} not found"
+            )
+
+    service = OptimizerResultsService(client)
+    evaluations = service.list_score_evaluations(
+        score_id, version_id=version_id, sort_by=sort_by, limit=limit
+    )
+    return {"success": True, "score_id": score_id, "evaluations": evaluations}
+
+
+def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.score.predict directly — mirrors plexus_predict."""
+
+    import asyncio
+    import json as _json
+    import traceback as _traceback
+    from decimal import Decimal
+
+    from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.dashboard.api.models.item import Item as PlexusItem
+    from plexus.scores.Score import Score
+
+    def _sanitize_dec(obj: Any) -> Any:
+        if isinstance(obj, Decimal):
+            return float(obj)
+        if isinstance(obj, dict):
+            return {k: _sanitize_dec(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [_sanitize_dec(v) for v in obj]
+        return obj
+
+    scorecard_name = args.get("scorecard_name") or args.get("scorecard")
+    score_name = args.get("score_name") or args.get("score")
+    if not scorecard_name or not score_name:
+        raise ValueError("plexus.score.predict requires scorecard_name and score_name")
+
+    item_id = args.get("item_id") or args.get("id") or args.get("item")
+    item_ids_raw = args.get("item_ids")
+    include_input = bool(args.get("include_input", False))
+    include_trace = bool(args.get("include_trace", False))
+    no_cache = bool(args.get("no_cache", False))
+    yaml_mode = bool(args.get("yaml", False))
+    version = args.get("version") or args.get("version_id")
+    latest = bool(args.get("latest", False))
+    yaml_path = args.get("yaml_path")
+
+    if not item_id and not item_ids_raw:
+        raise ValueError("plexus.score.predict requires item_id or item_ids")
+    if item_id and item_ids_raw:
+        raise ValueError("plexus.score.predict: specify item_id or item_ids, not both")
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.score.predict: could not create dashboard client")
+
+    if yaml_mode:
+        scorecard_id = "yaml-mode-scorecard"
+        resolved_score: dict[str, Any] = {"id": "yaml-mode-score", "name": str(score_name),
+                                           "key": str(score_name).lower().replace(" ", "-"),
+                                           "championVersionId": "yaml-mode-version"}
+    else:
+        scorecard_id_resolved = resolve_scorecard_identifier(client, str(scorecard_name))
+        if not scorecard_id_resolved:
+            raise ValueError(
+                f"plexus.score.predict: scorecard {scorecard_name!r} not found"
+            )
+        scorecard_id = scorecard_id_resolved
+        sc_result = client.execute(
+            f"""query GetScorecardForPrediction {{
+                getScorecard(id: "{scorecard_id}") {{
+                    id name
+                    sections {{ items {{ id scores {{ items {{
+                        id name key externalId championVersionId isDisabled
+                    }} }} }} }}
+                }}
+            }}"""
+        )
+        scorecard_data = sc_result.get("getScorecard")
+        if not scorecard_data:
+            raise ValueError(
+                f"plexus.score.predict: could not load scorecard {scorecard_name!r}"
+            )
+
+        try:
+            from plexus.cli.shared.identifier_resolution import (
+                resolve_score_identifier as _rsi,
+            )
+            resolved_score_id = _rsi(client, scorecard_id, str(score_name))
+        except Exception:
+            resolved_score_id = None
+
+        resolved_score = None
+        for section in scorecard_data.get("sections", {}).get("items", []):
+            for sc in section.get("scores", {}).get("items", []):
+                if (
+                    (resolved_score_id and sc.get("id") == resolved_score_id)
+                    or sc.get("id") == str(score_name)
+                    or sc.get("externalId") == str(score_name)
+                    or sc.get("key") == str(score_name)
+                    or sc.get("name") == str(score_name)
+                ):
+                    resolved_score = sc
+                    break
+            if resolved_score:
+                break
+        if not resolved_score:
+            raise ValueError(
+                f"plexus.score.predict: score {score_name!r} not found in "
+                f"scorecard {scorecard_name!r}"
+            )
+
+    resolved_version = version if not latest else None
+    if latest and not yaml_mode:
+        try:
+            from plexus.cli.evaluation.evaluations import get_latest_score_version
+            v = get_latest_score_version(client, resolved_score["id"])
+            if v:
+                resolved_version = v
+        except Exception:
+            pass
+
+    if item_id:
+        target_item_ids: list[str] = [str(item_id)]
+    else:
+        target_item_ids = [x.strip() for x in str(item_ids_raw).split(",")]
+
+    if not yaml_mode:
+        try:
+            import os as _os
+            from plexus.cli.shared.identifier_resolution import (
+                resolve_item_identifier as _rii,
+            )
+            from plexus.dashboard.api.models.account import Account as _Account
+            account_id = None
+            try:
+                ak = _os.getenv("PLEXUS_ACCOUNT_KEY")
+                if ak:
+                    acc = _Account.list_by_key(key=ak, client=client)
+                    if acc:
+                        account_id = acc.id
+            except Exception:
+                pass
+            resolved_ids = []
+            for raw_id in target_item_ids:
+                try:
+                    r = _rii(client, raw_id, account_id)
+                except Exception:
+                    r = None
+                resolved_ids.append(r or raw_id)
+            target_item_ids = resolved_ids
+        except Exception:
+            pass
+
+    if yaml_mode and yaml_path:
+        import yaml as _yaml
+        from plexus.scores.Scorecard import Scorecard
+        with open(yaml_path, "r") as f:
+            sc_cfg = _yaml.safe_load(f.read())
+        scorecard_instance = Scorecard({"name": scorecard_name, "sections": [{"name": "Custom", "scores": [sc_cfg]}]})
+        scorecard_instance.yaml_only = True
+    elif yaml_mode:
+        from plexus.cli.evaluation.evaluations import load_scorecard_from_yaml_files
+        scorecard_instance = load_scorecard_from_yaml_files(str(scorecard_name), score_names=[str(score_name)])
+        scorecard_instance.yaml_only = True
+    else:
+        from plexus.cli.evaluation.evaluations import load_scorecard_from_api
+        scorecard_instance = load_scorecard_from_api(
+            str(scorecard_name), score_names=[str(score_name)],
+            use_cache=not no_cache, specific_version=resolved_version
+        )
+
+    resolved_score_name = str(score_name)
+    if hasattr(scorecard_instance, "scores") and isinstance(scorecard_instance.scores, list):
+        for s in scorecard_instance.scores:
+            sn = s.get("name")
+            if sn and (
+                sn == str(score_name) or str(s.get("id", "")) == str(score_name)
+                or str(s.get("key", "")) == str(score_name)
+                or str(s.get("externalId", "")) == str(score_name)
+            ):
+                resolved_score_name = sn
+                break
+
+    try:
+        _, name_to_id = scorecard_instance.build_dependency_graph([resolved_score_name])
+    except Exception:
+        name_to_id = {}
+
+    item_query_fields = """id text description metadata attachedFiles externalId createdAt updatedAt"""
+
+    async def _predict_one(target_id: str) -> dict:
+        try:
+            item_result = client.execute(
+                f'query GetItem {{ getItem(id: "{target_id}") {{ {item_query_fields} }} }}'
+            )
+            item_data = item_result.get("getItem")
+            if not item_data:
+                return {"item_id": target_id, "error": f"Item {target_id!r} not found"}
+
+            item_text = item_data.get("text", "") or item_data.get("description", "")
+            if not item_text:
+                return {"item_id": target_id, "error": "No text content found in item"}
+
+            meta_raw = item_data.get("metadata", {})
+            item_metadata: dict = {}
+            if isinstance(meta_raw, dict):
+                item_metadata = meta_raw
+            else:
+                try:
+                    item_metadata = _json.loads(meta_raw)
+                except Exception:
+                    pass
+
+            try:
+                item_obj = PlexusItem.from_dict(item_data, client)
+            except Exception:
+                item_obj = None
+
+            try:
+                results = await scorecard_instance.score_entire_text(
+                    text=item_text, metadata=item_metadata, modality=None,
+                    subset_of_score_names=[resolved_score_name], item=item_obj
+                )
+                target_result_id = name_to_id.get(resolved_score_name)
+                score_result_obj = None
+                if results:
+                    if target_result_id and target_result_id in results:
+                        score_result_obj = results[target_result_id]
+                    elif resolved_score_name in results:
+                        score_result_obj = results[resolved_score_name]
+
+                if score_result_obj is None:
+                    if results and any(isinstance(v, Score.Result) and v.value == "SKIPPED" for v in results.values()):
+                        return {"item_id": target_id, "scores": [{"name": score_name, "value": None,
+                                "explanation": "Not applicable — unmet dependency conditions", "cost": {}}]}
+                    return {"item_id": target_id, "error": f"No result for score {resolved_score_name!r}"}
+
+                explanation = (
+                    getattr(score_result_obj, "explanation", None)
+                    or (score_result_obj.metadata.get("explanation", "") if hasattr(score_result_obj, "metadata") and score_result_obj.metadata else "")
+                )
+                costs = {}
+                if hasattr(score_result_obj, "cost"):
+                    costs = score_result_obj.cost
+                elif hasattr(score_result_obj, "metadata") and score_result_obj.metadata:
+                    costs = score_result_obj.metadata.get("cost", {})
+
+                prediction_result: dict = {"item_id": target_id, "scores": [{
+                    "name": score_name, "value": score_result_obj.value,
+                    "explanation": explanation, "cost": costs
+                }]}
+                if include_trace:
+                    trace = getattr(score_result_obj, "trace", None) or (
+                        score_result_obj.metadata.get("trace") if hasattr(score_result_obj, "metadata") and score_result_obj.metadata else None
+                    )
+                    prediction_result["scores"][0]["trace"] = trace
+            except Exception as exc:
+                prediction_result = {"item_id": target_id, "scores": [{
+                    "name": score_name, "value": "ERROR",
+                    "explanation": f"Prediction failed: {exc}",
+                    "error_details": {"error_message": str(exc), "error_type": type(exc).__name__,
+                                      "traceback": _traceback.format_exc()},
+                    "cost": {}
+                }]}
+
+            if include_input:
+                prediction_result["input"] = {"description": item_data.get("description"),
+                                               "metadata": item_data.get("metadata"),
+                                               "attachedFiles": item_data.get("attachedFiles"),
+                                               "externalId": item_data.get("externalId")}
+            return prediction_result
+        except Exception as e:
+            return {"item_id": target_id, "error": str(e)}
+
+    async def _gather_all() -> list:
+        return list(await asyncio.gather(*[_predict_one(tid) for tid in target_item_ids]))
+
+    prediction_results_list = _run_async_from_sync(_gather_all())
+    return _sanitize_dec({
+        "success": True,
+        "scorecard_name": scorecard_name,
+        "score_name": score_name,
+        "scorecard_id": scorecard_id,
+        "score_id": resolved_score["id"],
+        "item_count": len(target_item_ids),
+        "predictions": prediction_results_list,
+    })
+
+
+def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.score.set_champion directly — mirrors plexus_score_set_champion."""
+
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.optimizer_shadow_invalidation import (
+        extract_shadow_invalid_feedback_item_ids_from_yaml_text,
+    )
+
+    score_id = args.get("score_id") or args.get("id")
+    version_id = args.get("version_id") or args.get("version")
+    if not score_id or not version_id:
+        raise ValueError(
+            "plexus.score.set_champion requires score_id and version_id"
+        )
+
+    client = create_client()
+    if not client:
+        raise RuntimeError(
+            "plexus.score.set_champion: could not create dashboard client"
+        )
+
+    check_result = client.execute(
+        """
+        query GetScoreVersionForChampionGuard($scoreId: ID!, $versionId: ID!) {
+            getScore(id: $scoreId) { id championVersionId }
+            getScoreVersion(id: $versionId) { id scoreId configuration metadata }
+        }
+        """,
+        {"scoreId": str(score_id), "versionId": str(version_id)},
+    )
+    score_data = check_result.get("getScore") or {}
+    version_data = check_result.get("getScoreVersion") or {}
+
+    shadow_ids = extract_shadow_invalid_feedback_item_ids_from_yaml_text(
+        version_data.get("configuration") or ""
+    )
+    if shadow_ids:
+        return {
+            "success": False,
+            "error": "SHADOW_INVALIDATION_PRESENT",
+            "message": (
+                "Cannot promote: version still contains "
+                "optimizer_shadow_invalid_feedback_item_ids. "
+                "Remove that field in a cleanup version first."
+            ),
+            "scoreId": str(score_id),
+            "versionId": str(version_id),
+            "optimizer_shadow_invalid_feedback_item_ids": shadow_ids,
+        }
+    if version_data.get("scoreId") != str(score_id):
+        return {
+            "success": False,
+            "error": "VERSION_SCORE_MISMATCH",
+            "message": (
+                f"Version {version_id} belongs to score "
+                f"{version_data.get('scoreId')}, not {score_id}."
+            ),
+            "scoreId": str(score_id),
+            "versionId": str(version_id),
+        }
+
+    previous_champion_version_id = score_data.get("championVersionId")
+    previous_version_meta: dict[str, Any] = {}
+    if previous_champion_version_id and previous_champion_version_id != str(version_id):
+        prev_result = client.execute(
+            """
+            query GetScoreVersionForManagement($id: ID!) {
+              getScoreVersion(id: $id) { id scoreId configuration guidelines isFeatured
+                note branch parentVersionId metadata createdAt updatedAt }
+            }
+            """,
+            {"id": previous_champion_version_id},
+        )
+        previous_version_meta = prev_result.get("getScoreVersion") or {}
+
+    promo_result = client.execute(
+        "mutation UpdateScore($input: UpdateScoreInput!) { "
+        "updateScore(input: $input) { id championVersionId } }",
+        {"input": {"id": str(score_id), "championVersionId": str(version_id)}},
+    )
+    if not promo_result or "updateScore" not in promo_result:
+        raise RuntimeError(
+            f"plexus.score.set_champion: mutation failed: {promo_result}"
+        )
+
+    updated = promo_result["updateScore"]
+    promoted_at = datetime.now(timezone.utc).isoformat()
+    transition_id = str(_uuid.uuid4())
+
+    def _build_meta(
+        metadata: Any,
+        *,
+        score_id: str,
+        version_id: str,
+        transition_id: str,
+        incoming: bool,
+        entered_at: str | None = None,
+        exited_at: str | None = None,
+        previous_champion_version_id: str | None = None,
+        next_champion_version_id: str | None = None,
+    ) -> dict:
+        next_meta: dict = dict(metadata or {})
+        history: list = list(next_meta.get("championHistory") or [])
+        if incoming:
+            history.append({
+                "scoreId": score_id, "versionId": version_id,
+                "enteredAt": entered_at, "exitedAt": None,
+                "previousChampionVersionId": previous_champion_version_id,
+                "nextChampionVersionId": None, "transitionId": transition_id,
+            })
+        else:
+            open_idx = next((i for i in range(len(history) - 1, -1, -1)
+                             if not history[i].get("exitedAt")), None)
+            if open_idx is None:
+                history.append({
+                    "scoreId": score_id, "versionId": version_id,
+                    "enteredAt": None, "exitedAt": exited_at,
+                    "previousChampionVersionId": None,
+                    "nextChampionVersionId": next_champion_version_id,
+                    "transitionId": transition_id, "inferred": True,
+                })
+            else:
+                history[open_idx] = {
+                    **history[open_idx],
+                    "exitedAt": exited_at,
+                    "nextChampionVersionId": next_champion_version_id,
+                    "transitionId": transition_id,
+                }
+        next_meta["championHistory"] = history
+        return next_meta
+
+    update_version_mutation = (
+        "mutation UpdateScoreVersionMetadata($input: UpdateScoreVersionInput!) { "
+        "updateScoreVersion(input: $input) { id isFeatured metadata } }"
+    )
+    incoming_meta = _build_meta(
+        version_data.get("metadata"),
+        score_id=str(score_id), version_id=str(version_id),
+        transition_id=transition_id, incoming=True, entered_at=promoted_at,
+        previous_champion_version_id=(
+            previous_champion_version_id
+            if previous_champion_version_id != str(version_id) else None
+        ),
+    )
+    client.execute(update_version_mutation, {"input": {
+        "id": str(version_id), "metadata": incoming_meta, "isFeatured": "true"
+    }})
+    if previous_champion_version_id and previous_champion_version_id != str(version_id):
+        outgoing_meta = _build_meta(
+            previous_version_meta.get("metadata"),
+            score_id=str(score_id), version_id=previous_champion_version_id,
+            transition_id=transition_id, incoming=False, exited_at=promoted_at,
+            next_champion_version_id=str(version_id),
+        )
+        client.execute(update_version_mutation, {"input": {
+            "id": previous_champion_version_id, "metadata": outgoing_meta
+        }})
+
+    return {
+        "success": True,
+        "scoreId": updated["id"],
+        "championVersionId": updated["championVersionId"],
+        "previousChampionVersionId": previous_champion_version_id,
+        "transitionId": transition_id,
+        "promotedAt": promoted_at,
+    }
+
+
+def _default_score_contradictions(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.score.contradictions — checks ScoreVersion code vs. rubric for consistency.
+
+    Required args:
+        scorecard (str): Scorecard name, key, or ID.
+        score (str): Score name, key, or ID.
+        version (str): ScoreVersion UUID to check.
+
+    Optional args:
+        item_id (str): Item UUID whose transcript text is included as spot-check context.
+        output_format (str): 'json' (default) or 'markdown'.
+
+    Returns dict with keys: status ('consistent'|'potential_conflict'|'inconclusive'),
+    paragraph, scorecard_identifier, score_identifier, score_version_id,
+    checked_at, model, diagnostics.
+    """
+
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.score.scores import (
+        memoized_resolve_scorecard_identifier,
+        memoized_resolve_score_identifier,
+    )
+    from plexus.score_rubric_consistency import ScoreRubricConsistencyService
+
+    scorecard_identifier = args.get("scorecard") or args.get("scorecard_identifier") or args.get("scorecard_name")
+    score_identifier = args.get("score") or args.get("score_identifier") or args.get("score_name")
+    score_version_id = args.get("version") or args.get("version_id") or args.get("score_version_id")
+
+    if not scorecard_identifier:
+        raise ValueError("plexus.score.contradictions requires 'scorecard'")
+    if not score_identifier:
+        raise ValueError("plexus.score.contradictions requires 'score'")
+    if not score_version_id:
+        raise ValueError("plexus.score.contradictions requires 'version' (ScoreVersion UUID)")
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.score.contradictions: could not create dashboard client")
+
+    scorecard_id = memoized_resolve_scorecard_identifier(client, str(scorecard_identifier))
+    if not scorecard_id:
+        raise ValueError(f"Could not resolve scorecard: {scorecard_identifier}")
+    score_id = memoized_resolve_score_identifier(client, scorecard_id, str(score_identifier))
+    if not score_id:
+        raise ValueError(f"Could not resolve score '{score_identifier}' in scorecard '{scorecard_identifier}'")
+
+    item_text = ""
+    item_id = args.get("item_id") or args.get("item")
+    if item_id:
+        from MCP.tools.tactus_runtime._item_helpers import _get_identifiers_for_item
+        from plexus.cli.shared.client_utils import create_client as _cc
+
+        _client2 = _cc()
+        try:
+            item_data = _get_identifiers_for_item(_client2, str(item_id))
+            item_text = item_data.get("text") or ""
+        except Exception:
+            pass
+
+    result = ScoreRubricConsistencyService().generate_from_api(
+        client=client,
+        scorecard_identifier=str(scorecard_identifier),
+        score_identifier=str(score_identifier),
+        score_id=str(score_id),
+        score_version_id=str(score_version_id),
+        item_text=item_text,
+    )
+    return result.to_parameters_payload()
+
+
+def _default_item_last(args: dict[str, Any]) -> Any:
+    """Run plexus.item.last directly using Item dashboard API."""
+
+    import asyncio
+
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.dashboard.api.models.item import Item
+    from MCP.tools.tactus_runtime._item_helpers import (
+        _get_feedback_items_for_item,
+        _get_identifiers_for_item,
+        _get_score_results_for_item,
+        _get_item_url,
+    )
+
+    minimal = bool(args.get("minimal", False))
+    count = min(max(1, int(args.get("count", 1))), 20)
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.item.last: could not create dashboard client")
+
+    account_id = resolve_account_id_for_command(client, None)
+    if not account_id:
+        raise RuntimeError(
+            "plexus.item.last: could not resolve account ID — is PLEXUS_ACCOUNT_KEY set?"
+        )
+
+    query = f"""
+    query ListItemByAccountIdAndCreatedAt($accountId: String!, $limit: Int!) {{
+        listItemByAccountIdAndCreatedAt(
+            accountId: $accountId, sortDirection: DESC, limit: $limit
+        ) {{
+            items {{ {Item.fields()} }}
+        }}
+    }}
+    """
+    response = client.execute(query, {"accountId": account_id, "limit": count})
+    if "errors" in response:
+        raise RuntimeError(
+            f"plexus.item.last dashboard error: {response['errors']}"
+        )
+
+    items = (
+        response.get("listItemByAccountIdAndCreatedAt") or {}
+    ).get("items") or []
+
+    if not items:
+        return {"items": [], "count": 0}
+
+    async def _build(item_data: dict) -> dict:
+        item = Item.from_dict(item_data, client)
+        d: dict = {
+            "id": item.id,
+            "accountId": item.accountId,
+            "evaluationId": item.evaluationId,
+            "scoreId": item.scoreId,
+            "description": item.description,
+            "externalId": item.externalId,
+            "isEvaluation": item.isEvaluation,
+            "createdByType": item.createdByType,
+            "metadata": item.metadata,
+            "identifiers": await _get_identifiers_for_item(item.id, client) or item.identifiers,
+            "attachedFiles": item.attachedFiles,
+            "createdAt": item.createdAt.isoformat() if item.createdAt else None,
+            "updatedAt": item.updatedAt.isoformat() if item.updatedAt else None,
+            "url": _get_item_url(item.id),
+        }
+        if not minimal:
+            d["scoreResults"] = await _get_score_results_for_item(item.id, client)
+            d["feedbackItems"] = await _get_feedback_items_for_item(item.id, client)
+        return d
+
+    async def _build_all() -> list:
+        return [await _build(item_data) for item_data in items]
+
+    built = _run_async_from_sync(_build_all())
+    if count == 1:
+        return built[0]
+    return {"items": built, "count": len(built)}
+
+
+def _default_item_info(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.item.info directly using Item dashboard API."""
+
+    from datetime import datetime
+
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.dashboard.api.models.item import Item
+    from plexus.utils.identifier_search import find_item_by_identifier
+    from MCP.tools.tactus_runtime._item_helpers import (
+        _get_feedback_items_for_item,
+        _get_identifiers_for_item,
+        _get_score_results_for_item,
+        _get_item_url,
+        _get_default_account_id,
+    )
+
+    item_id = (
+        args.get("item_id")
+        or args.get("id")
+        or args.get("item")
+    )
+    if not item_id:
+        raise ValueError("plexus.item.info requires id or item_id")
+    minimal = bool(args.get("minimal", False))
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.item.info: could not create dashboard client")
+
+    item = None
+    lookup_method = "unknown"
+
+    try:
+        item = Item.get_by_id(str(item_id), client)
+        if item:
+            lookup_method = "direct_id"
+    except ValueError:
+        pass
+    except Exception:
+        pass
+
+    if not item:
+        default_account_id = _get_default_account_id()
+        if default_account_id:
+            try:
+                item = find_item_by_identifier(str(item_id), default_account_id, client)
+                if item:
+                    lookup_method = "identifier_search"
+            except Exception:
+                pass
+
+    if not item:
+        default_account_id = _get_default_account_id()
+        if default_account_id:
+            try:
+                gsi_query = """
+                query GetIdentifierByAccountAndValue($accountId: String!, $value: String!) {
+                    listIdentifierByAccountIdAndValue(
+                        accountId: $accountId, value: {eq: $value}, limit: 1
+                    ) {
+                        items {
+                            itemId name value url position
+                            item {
+                                id accountId evaluationId scoreId description
+                                externalId isEvaluation text metadata identifiers
+                                attachedFiles createdAt updatedAt
+                            }
+                        }
+                    }
+                }
+                """
+                result = client.execute(gsi_query, {"accountId": default_account_id, "value": str(item_id)})
+                identifiers = (
+                    result.get("listIdentifierByAccountIdAndValue") or {}
+                ).get("items") or []
+                if identifiers:
+                    ident_data = identifiers[0]
+                    item_data = ident_data.get("item") or {}
+                    if item_data:
+                        class _MockItem:
+                            def __init__(self, data: dict) -> None:
+                                for k, v in data.items():
+                                    setattr(self, k, v)
+                                for ts_field in ("createdAt", "updatedAt"):
+                                    raw = getattr(self, ts_field, None)
+                                    if raw and isinstance(raw, str):
+                                        try:
+                                            setattr(self, ts_field, datetime.fromisoformat(raw.replace("Z", "+00:00")))
+                                        except Exception:
+                                            pass
+                        item = _MockItem(item_data)
+                        lookup_method = f"identifiers_table_gsi (name: {ident_data.get('name', 'N/A')})"
+            except Exception:
+                pass
+
+    if not item:
+        raise ValueError(
+            f"plexus.item.info: item {item_id!r} not found "
+            "(tried direct ID, identifier search, identifiers table GSI)"
+        )
+
+    def _trunc(value: Any, max_chars: int = 5000) -> Any:
+        if isinstance(value, str) and len(value) > max_chars:
+            return f"{value[:max_chars]}... (truncated from {len(value):,} to {max_chars:,} chars)"
+        return value
+
+    item_dict: dict = {
+        "id": item.id,
+        "accountId": item.accountId,
+        "evaluationId": item.evaluationId,
+        "scoreId": item.scoreId,
+        "description": _trunc(item.description, 1000),
+        "externalId": item.externalId,
+        "isEvaluation": item.isEvaluation,
+        "createdByType": getattr(item, "createdByType", None),
+        "text": _trunc(getattr(item, "text", None), 5000),
+        "metadata": item.metadata,
+        "identifiers": _run_async_from_sync(
+            _get_identifiers_for_item(item.id, client)
+        ) or item.identifiers,
+        "attachedFiles": item.attachedFiles,
+        "createdAt": (
+            item.createdAt.isoformat()
+            if hasattr(item.createdAt, "isoformat")
+            else item.createdAt
+        ),
+        "updatedAt": (
+            item.updatedAt.isoformat()
+            if hasattr(item.updatedAt, "isoformat")
+            else item.updatedAt
+        ),
+        "url": _get_item_url(item.id),
+        "lookupMethod": lookup_method,
+    }
+
+    if not minimal:
+        item_dict["scoreResults"] = _run_async_from_sync(
+            _get_score_results_for_item(item.id, client)
+        )
+        item_dict["feedbackItems"] = _run_async_from_sync(
+            _get_feedback_items_for_item(item.id, client)
+        )
+
+    return item_dict
+
+
+def _default_dataset_build_from_feedback_window(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.dataset.build_from_feedback_window directly via curation."""
+
+    from plexus.cli.dataset.curation import (
+        build_associated_dataset_from_feedback_window,
+    )
+    from plexus.cli.dataset.datasets import create_client
+    from plexus.cli.evaluation.evaluations import validate_dataset_materialization
+    from plexus.cli.shared.identifier_resolution import (
+        resolve_score_identifier,
+        resolve_scorecard_identifier,
+    )
+
+    scorecard = args.get("scorecard") or args.get("scorecard_identifier")
+    score = args.get("score") or args.get("score_identifier")
+    if not scorecard or not score:
+        raise ValueError(
+            "plexus.dataset.build_from_feedback_window requires scorecard and score"
+        )
+
+    max_items = int(args.get("max_items", 100))
+    days = args.get("days")
+    balance = bool(args.get("balance", True))
+    score_version_id = args.get("score_version_id")
+
+    client = create_client()
+    scorecard_id = resolve_scorecard_identifier(client, str(scorecard))
+    if not scorecard_id:
+        raise ValueError(
+            f"plexus.dataset.build_from_feedback_window: scorecard {scorecard!r} not found"
+        )
+    score_id = resolve_score_identifier(client, scorecard_id, str(score))
+    if not score_id:
+        raise ValueError(
+            f"plexus.dataset.build_from_feedback_window: score {score!r} not found"
+        )
+
+    result = build_associated_dataset_from_feedback_window(
+        client=client,
+        scorecard_id=scorecard_id,
+        score_id=score_id,
+        max_items=max_items,
+        days=days,
+        balance=balance,
+        class_source_score_version_id=score_version_id or None,
+    )
+    dataset_id = result.get("dataset_id")
+    dataset_file = result.get("dataset_file") or result.get("s3_key")
+    readiness = validate_dataset_materialization(
+        {"id": dataset_id, "file": dataset_file}
+    )
+    if not readiness.get("is_materialized"):
+        reason = readiness.get("materialization_error") or "unknown"
+        raise RuntimeError(
+            "plexus.dataset.build_from_feedback_window completed without a "
+            f"materialized file pointer. dataset_id={dataset_id} reason={reason}"
+        )
+
+    result["dataset_file"] = dataset_file
+    result["is_materialized"] = True
+    result["materialization_error"] = None
+    return result
+
+
+def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.dataset.check_associated directly."""
+
+    from plexus.cli.dataset.datasets import create_client
+    from plexus.cli.evaluation.evaluations import (
+        list_associated_datasets_for_score,
+        validate_dataset_materialization,
+    )
+    from plexus.cli.shared.identifier_resolution import (
+        resolve_score_identifier,
+        resolve_scorecard_identifier,
+    )
+    from plexus.cli.shared.optimizer_shadow_invalidation import (
+        resolve_score_version_shadow_invalidation_metadata,
+    )
+
+    scorecard = args.get("scorecard") or args.get("scorecard_identifier")
+    score = args.get("score") or args.get("score_identifier")
+    if not scorecard or not score:
+        raise ValueError(
+            "plexus.dataset.check_associated requires scorecard and score"
+        )
+    score_version_id = args.get("score_version_id")
+    days = args.get("days")
+
+    client = create_client()
+    scorecard_id = resolve_scorecard_identifier(client, str(scorecard))
+    if not scorecard_id:
+        raise ValueError(
+            f"plexus.dataset.check_associated: scorecard {scorecard!r} not found"
+        )
+    score_id = resolve_score_identifier(client, scorecard_id, str(score))
+    if not score_id:
+        raise ValueError(
+            f"plexus.dataset.check_associated: score {score!r} not found"
+        )
+
+    expected_feedback_target_hash: str | None = None
+    if score_version_id is not None or days is not None:
+        target_metadata = resolve_score_version_shadow_invalidation_metadata(
+            client,
+            score_id=score_id,
+            score_version_id=score_version_id,
+            days=days,
+        )
+        expected_feedback_target_hash = target_metadata.get(
+            "feedback_target_hash"
+        )
+
+    datasets = list_associated_datasets_for_score(client, score_id)
+    if not datasets:
+        return {
+            "has_dataset": False,
+            "dataset_id": None,
+            "dataset_name": None,
+            "created_at": None,
+            "row_count": None,
+            "is_materialized": False,
+            "dataset_file": None,
+            "materialization_error": None,
+            "feedback_target_hash": expected_feedback_target_hash,
+        }
+
+    dataset = None
+    row_count: Any = None
+    stored_feedback_target_hash: str | None = None
+    for candidate in datasets:
+        candidate_row_count: Any = None
+        candidate_feedback_target_hash: str | None = None
+        if candidate.get("dataSourceVersionId"):
+            try:
+                dsv_result = client.execute(
+                    """
+                    query GetDataSourceVersion($id: ID!) {
+                        getDataSourceVersion(id: $id) { id yamlConfiguration }
+                    }
+                    """,
+                    {"id": candidate["dataSourceVersionId"]},
+                )
+                dsv = dsv_result.get("getDataSourceVersion")
+                if dsv and dsv.get("yamlConfiguration"):
+                    import yaml
+
+                    config = yaml.safe_load(dsv["yamlConfiguration"])
+                    if isinstance(config, dict):
+                        stats = config.get("dataset_stats", {}) or {}
+                        candidate_row_count = stats.get("row_count")
+                        candidate_feedback_target_hash = stats.get(
+                            "feedback_target_hash"
+                        )
+            except Exception:
+                pass
+
+        if (
+            expected_feedback_target_hash
+            and candidate_feedback_target_hash != expected_feedback_target_hash
+        ):
+            continue
+
+        dataset = candidate
+        row_count = candidate_row_count
+        stored_feedback_target_hash = candidate_feedback_target_hash
+        break
+
+    if not dataset:
+        return {
+            "has_dataset": False,
+            "dataset_id": None,
+            "dataset_name": None,
+            "created_at": None,
+            "row_count": None,
+            "is_materialized": False,
+            "dataset_file": None,
+            "materialization_error": None,
+            "feedback_target_hash": expected_feedback_target_hash,
+        }
+
+    readiness = validate_dataset_materialization(dataset)
+    return {
+        "has_dataset": True,
+        "dataset_id": dataset.get("id"),
+        "dataset_name": dataset.get("name"),
+        "created_at": dataset.get("createdAt"),
+        "row_count": row_count,
+        "is_materialized": bool(readiness.get("is_materialized")),
+        "dataset_file": readiness.get("dataset_file"),
+        "materialization_error": readiness.get("materialization_error"),
+        "feedback_target_hash": stored_feedback_target_hash
+        or expected_feedback_target_hash,
+    }
+
+
+def _default_report_configurations_list(args: dict[str, Any]) -> Any:
+    """Run plexus.report.configurations_list directly via dashboard GraphQL."""
+
+    from plexus.cli.shared.client_utils import create_client
+    from shared.utils import get_default_account_id
+
+    client = create_client()
+    if not client:
+        raise RuntimeError(
+            "plexus.report.configurations_list: could not create dashboard client"
+        )
+
+    account_id = get_default_account_id()
+    if not account_id:
+        raise RuntimeError(
+            "plexus.report.configurations_list: PLEXUS_ACCOUNT_KEY not set or "
+            "default account could not be resolved"
+        )
+
+    query = (
+        "query MyQuery { "
+        f'listReportConfigurationByAccountIdAndUpdatedAt(accountId: "{account_id}", '
+        "sortDirection: DESC) { items { description name id updatedAt } "
+        "nextToken } }"
+    )
+    response = client.execute(query)
+    if "errors" in response:
+        raise RuntimeError(
+            f"plexus.report.configurations_list dashboard error: {response['errors']}"
+        )
+
+    configs = (
+        response.get("listReportConfigurationByAccountIdAndUpdatedAt") or {}
+    ).get("items") or []
+
+    if not configs:
+        retry_query = (
+            "query RetryQuery { "
+            f'listReportConfigurations(filter: {{ accountId: {{ eq: "{account_id}" }} }}, '
+            "limit: 20) { items { id name description updatedAt } } }"
+        )
+        retry_response = client.execute(retry_query)
+        configs = (retry_response.get("listReportConfigurations") or {}).get(
+            "items"
+        ) or []
+
+    return [
+        {
+            "id": cfg.get("id"),
+            "name": cfg.get("name"),
+            "description": cfg.get("description"),
+            "updatedAt": cfg.get("updatedAt"),
+        }
+        for cfg in configs
+    ]
+
+
+def _default_evaluation_compare(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.evaluation.compare directly via Evaluation.get_evaluation_info."""
+
+    from plexus.Evaluation import Evaluation
+
+    evaluation_id = args.get("evaluation_id")
+    baseline_evaluation_id = (
+        args.get("baseline_evaluation_id") or args.get("baseline_id")
+    )
+    if not evaluation_id or not str(evaluation_id).strip():
+        raise ValueError("plexus.evaluation.compare requires evaluation_id")
+    if not baseline_evaluation_id or not str(baseline_evaluation_id).strip():
+        raise ValueError(
+            "plexus.evaluation.compare requires baseline_evaluation_id"
+        )
+
+    current_eval = Evaluation.get_evaluation_info(
+        str(evaluation_id).strip(), include_score_results=False
+    )
+    baseline_eval = Evaluation.get_evaluation_info(
+        str(baseline_evaluation_id).strip(), include_score_results=False
+    )
+    if not current_eval:
+        raise ValueError(f"Current evaluation not found: {evaluation_id}")
+    if not baseline_eval:
+        raise ValueError(
+            f"Baseline evaluation not found: {baseline_evaluation_id}"
+        )
+
+    def extract(eval_info: dict[str, Any]) -> dict[str, float]:
+        out: dict[str, float] = {}
+        metrics = eval_info.get("metrics")
+        if isinstance(metrics, list):
+            for metric in metrics:
+                if (
+                    isinstance(metric, dict)
+                    and "name" in metric
+                    and "value" in metric
+                ):
+                    try:
+                        out[metric["name"]] = float(metric["value"])
+                    except (TypeError, ValueError):
+                        continue
+        return out
+
+    current_metrics = extract(current_eval)
+    baseline_metrics = extract(baseline_eval)
+    deltas = {
+        k: current_metrics[k] - baseline_metrics[k]
+        for k in current_metrics
+        if k in baseline_metrics
+    }
+    return {
+        "evaluation_id": str(evaluation_id),
+        "baseline_evaluation_id": str(baseline_evaluation_id),
+        "current_metrics": current_metrics,
+        "baseline_metrics": baseline_metrics,
+        "deltas": deltas,
+        "improved": deltas.get("Alignment", 0) > 0,
+    }
+
+
+def _default_evaluation_find_recent(args: dict[str, Any]) -> dict[str, Any]:
+    """Run plexus.evaluation.find_recent directly against the dashboard."""
+
+    from datetime import datetime, timedelta, timezone
+
+    from plexus.dashboard.api.client import PlexusDashboardClient
+    from plexus.Evaluation import Evaluation
+
+    score_version_id = args.get("score_version_id")
+    evaluation_type = args.get("evaluation_type")
+
+    # Auto-resolve score_version_id when scorecard/score names are supplied.
+    if not score_version_id:
+        scorecard_id_or_name = args.get("scorecard") or args.get("scorecard_identifier")
+        score_id_or_name = args.get("score") or args.get("score_identifier") or args.get("id")
+        if scorecard_id_or_name and score_id_or_name:
+            try:
+                from plexus.cli.shared.client_utils import create_client as _cc
+                from plexus.cli.shared.memoized_resolvers import (
+                    memoized_resolve_scorecard_identifier,
+                )
+
+                _client = _cc()
+                if _client:
+                    _sc_id = memoized_resolve_scorecard_identifier(_client, str(scorecard_id_or_name))
+                    if _sc_id:
+                        # Fetch championVersionId directly via GraphQL — it's a
+                        # scorecard-level field not exposed on the Python Score model.
+                        _sid_needle = str(score_id_or_name).lower()
+                        _sc_result = _client.execute(
+                            f"""query GetScorecardChampionVersion {{
+                                getScorecard(id: "{_sc_id}") {{
+                                    sections {{ items {{ scores {{ items {{
+                                        id name key externalId championVersionId
+                                    }} }} }} }}
+                                }}
+                            }}"""
+                        )
+                        _sc_data = _sc_result.get("getScorecard") or {}
+                        for _sec in (_sc_data.get("sections") or {}).get("items", []):
+                            for _s in (_sec.get("scores") or {}).get("items", []):
+                                if (
+                                    _s.get("id") == str(score_id_or_name)
+                                    or _s.get("key") == str(score_id_or_name)
+                                    or (_s.get("name") or "").lower() == _sid_needle
+                                    or _sid_needle in (_s.get("name") or "").lower()
+                                ):
+                                    score_version_id = _s.get("championVersionId")
+                                    break
+                            if score_version_id:
+                                break
+            except Exception:
+                pass
+
+    if not score_version_id:
+        raise ValueError(
+            "plexus.evaluation.find_recent requires score_version_id "
+            "(or { scorecard = '...', score = '...' } to auto-resolve it)"
+        )
+    if not evaluation_type:
+        raise ValueError("plexus.evaluation.find_recent requires evaluation_type")
+
+    max_age_hours = float(args.get("max_age_hours", 24.0))
+    min_items = int(args.get("min_items", 0))
+    dataset_id = args.get("dataset_id")
+    days = args.get("days")
+    max_feedback_items = args.get("max_feedback_items")
+    sampling_mode = args.get("sampling_mode")
+    latest_feedback_updated_at = args.get("latest_feedback_updated_at")
+
+    client = PlexusDashboardClient()
+    query = """
+    query FindRecentEvalByVersion($scoreVersionId: String!, $limit: Int) {
+      listEvaluationByScoreVersionIdAndCreatedAt(
+        scoreVersionId: $scoreVersionId sortDirection: DESC limit: $limit
+      ) { items { id type status scoreVersionId totalItems createdAt } }
+    }
+    """
+    result = client.execute(
+        query, {"scoreVersionId": str(score_version_id), "limit": 20}
+    )
+    items = (
+        (result.get("listEvaluationByScoreVersionIdAndCreatedAt") or {})
+        .get("items", [])
+    )
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    normalized_eval_type = str(evaluation_type or "").strip().lower()
+    normalized_sampling_mode = (
+        str(sampling_mode or "").strip().lower()
+        if sampling_mode is not None
+        else None
+    )
+    latest_feedback_dt = None
+    if latest_feedback_updated_at:
+        try:
+            latest_feedback_dt = datetime.fromisoformat(
+                str(latest_feedback_updated_at).replace("Z", "+00:00")
+            )
+            if latest_feedback_dt.tzinfo is None:
+                latest_feedback_dt = latest_feedback_dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            latest_feedback_dt = None
+
+    for item in items:
+        if item.get("status") != "COMPLETED":
+            continue
+        if item.get("type", "").lower() != normalized_eval_type:
+            continue
+        if (item.get("totalItems") or 0) < min_items:
+            continue
+        created_raw = item.get("createdAt")
+        if not created_raw:
+            continue
+        try:
+            if isinstance(created_raw, str):
+                created_at = datetime.fromisoformat(
+                    created_raw.replace("Z", "+00:00")
+                )
+            else:
+                created_at = created_raw
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            if created_at < cutoff:
+                continue
+        except Exception:
+            continue
+
+        eval_id = item["id"]
+        try:
+            eval_info = Evaluation.get_evaluation_info(eval_id)
+        except Exception:
+            continue
+
+        parameters = eval_info.get("parameters") or {}
+        if not isinstance(parameters, dict):
+            parameters = {}
+
+        if normalized_eval_type == "accuracy" and dataset_id is not None:
+            eval_dataset_id = parameters.get("dataset_id")
+            if (
+                not eval_dataset_id
+                and isinstance(parameters.get("metadata"), dict)
+            ):
+                eval_dataset_id = parameters["metadata"].get("dataset_id")
+            if str(eval_dataset_id or "") != str(dataset_id):
+                continue
+
+        if normalized_eval_type == "feedback":
+            if days is not None:
+                try:
+                    requested_days = int(days)
+                    eval_days_int = (
+                        int(parameters.get("days"))
+                        if parameters.get("days") is not None
+                        else None
+                    )
+                except Exception:
+                    eval_days_int = None
+                    requested_days = int(days)
+                if eval_days_int is None or eval_days_int != requested_days:
+                    continue
+            if max_feedback_items is not None:
+                try:
+                    requested_max_items = int(max_feedback_items)
+                    eval_max_items_int = (
+                        int(parameters.get("max_feedback_items"))
+                        if parameters.get("max_feedback_items") is not None
+                        else None
+                    )
+                except Exception:
+                    eval_max_items_int = None
+                    requested_max_items = int(max_feedback_items)
+                if (
+                    eval_max_items_int is None
+                    or eval_max_items_int != requested_max_items
+                ):
+                    continue
+            if normalized_sampling_mode is not None:
+                eval_sampling_mode = (
+                    str(parameters.get("sampling_mode") or "").strip().lower()
+                )
+                if eval_sampling_mode != normalized_sampling_mode:
+                    continue
+            if latest_feedback_dt is not None:
+                created_text = eval_info.get("created_at") or item.get("createdAt")
+                try:
+                    created_dt = datetime.fromisoformat(
+                        str(created_text).replace("Z", "+00:00")
+                    )
+                    if created_dt.tzinfo is None:
+                        created_dt = created_dt.replace(tzinfo=timezone.utc)
+                except Exception:
+                    continue
+                if created_dt < latest_feedback_dt:
+                    continue
+
+        return {
+            "_from_cache": True,
+            "evaluation_id": eval_id,
+            "id": eval_id,
+            "type": eval_info.get("type"),
+            "status": eval_info.get("status"),
+            "scorecard": eval_info.get("scorecard_name")
+            or eval_info.get("scorecard_id"),
+            "score": eval_info.get("score_name") or eval_info.get("score_id"),
+            "score_version_id": eval_info.get("score_version_id"),
+            "total_items": eval_info.get("total_items"),
+            "processed_items": eval_info.get("processed_items"),
+            "metrics": eval_info.get("metrics"),
+            "accuracy": eval_info.get("accuracy"),
+            "confusionMatrix": eval_info.get("confusion_matrix"),
+            "predictedClassDistribution": eval_info.get(
+                "predicted_class_distribution"
+            ),
+            "datasetClassDistribution": eval_info.get(
+                "dataset_class_distribution"
+            ),
+            "baselineEvaluationId": eval_info.get("baseline_evaluation_id"),
+            "currentBaselineEvaluationId": eval_info.get(
+                "current_baseline_evaluation_id"
+            ),
+            "cost": eval_info.get("cost"),
+            "cost_details": eval_info.get("cost_details"),
+            "started_at": eval_info.get("started_at"),
+            "created_at": eval_info.get("created_at"),
+            "updated_at": eval_info.get("updated_at"),
+            "root_cause": eval_info.get("root_cause"),
+            "misclassification_analysis": eval_info.get(
+                "misclassification_analysis"
+            ),
+        }
+
+    return {"found": False}
+
+
 def _default_evaluation_runner(args: dict[str, Any], mcp: FastMCP) -> dict[str, Any]:
     """Dispatch evaluation.run directly through the Plexus CLI in async mode."""
 
@@ -451,6 +2616,8 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: FastMCP) -> dict[str, 
         _append_optional_cli_arg(
             cmd, "--max-category-summary-items", args.get("max_category_summary_items")
         )
+        if args.get("score_rubric_consistency_check"):
+            cmd.append("--score-rubric-consistency-check")
     elif evaluation_type == "accuracy":
         cmd = [
             plexus_bin,
@@ -604,6 +2771,132 @@ def _default_procedure_runner(args: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
+    """Start a Feedback Alignment Optimizer run for a given score.
+
+    Creates a new procedure from the built-in feedback_alignment_optimizer.yaml,
+    injects the supplied parameters, and dispatches it asynchronously.
+
+    Required args:
+        scorecard (str): Scorecard name, key, or ID.
+        score (str): Score name, key, or ID.
+
+    Optional args (all optimizer params):
+        days (int): Feedback lookback window in days. Default 90.
+        max_iterations (int): Maximum optimization cycles. Default 3.
+        max_samples (int): Max feedback items per evaluation. Default 100.
+        improvement_threshold (float): Min per-cycle AC1 gain. Default 0.02.
+        target_accuracy (float): Stop early if AC1 reaches this. Default 0.95.
+        num_candidates (int): Hypotheses per cycle. Default 3.
+        optimization_objective (str): 'alignment'|'precision_safe'|'precision'|
+            'recall_safe'|'recall'. Default 'alignment'.
+        hint (str): Expert guidance injected into planning context.
+        start_version (str): ScoreVersion UUID to start from instead of champion.
+        resume_regression_eval (str): Reuse a prior regression baseline eval ID.
+        resume_recent_eval (str): Reuse a prior recent baseline eval ID.
+        prior_run_prescription (str): Prescription text from a prior run.
+        dry_run (bool): Analyse only; never promote. Default false.
+        context_window (int): Model context window in tokens. Default 180000.
+        agent_models (dict): Per-agent model overrides.
+
+    Returns dict with: procedure_id, status, message.
+    """
+    import os
+    import yaml as yaml_lib
+
+    from plexus.cli.procedure.service import ProcedureService
+    from plexus.cli.shared.client_utils import create_client
+
+    scorecard_identifier = args.get("scorecard") or args.get("scorecard_name") or args.get("scorecard_identifier")
+    score_identifier = args.get("score") or args.get("score_name") or args.get("score_identifier")
+    if not scorecard_identifier:
+        raise ValueError("plexus.procedure.optimize requires 'scorecard'")
+    if not score_identifier:
+        raise ValueError("plexus.procedure.optimize requires 'score'")
+
+    # Load the built-in optimizer YAML from the installed package.
+    optimizer_yaml_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..", "..", "..", "plexus", "procedures", "feedback_alignment_optimizer.yaml",
+    )
+    optimizer_yaml_path = os.path.normpath(optimizer_yaml_path)
+    if not os.path.exists(optimizer_yaml_path):
+        raise FileNotFoundError(
+            f"feedback_alignment_optimizer.yaml not found at {optimizer_yaml_path}"
+        )
+    with open(optimizer_yaml_path) as fh:
+        yaml_text = fh.read()
+
+    # Inject caller-supplied params into the YAML params block.
+    OPTIMIZER_PARAMS = {
+        "scorecard", "score", "days", "max_iterations", "max_samples",
+        "improvement_threshold", "target_accuracy", "num_candidates",
+        "optimization_objective", "hint", "start_version",
+        "resume_regression_eval", "resume_recent_eval",
+        "prior_run_prescription", "dry_run", "context_window", "agent_models",
+    }
+    config = yaml_lib.safe_load(yaml_text)
+    params_def = config.get("params", {}) if isinstance(config, dict) else {}
+    for key in OPTIMIZER_PARAMS:
+        val = args.get(key)
+        if val is None:
+            continue
+        if key in params_def and isinstance(params_def[key], dict):
+            params_def[key]["value"] = val
+        else:
+            params_def[key] = {"value": val}
+    # Always inject the required scorecard/score.
+    if "scorecard" in params_def and isinstance(params_def["scorecard"], dict):
+        params_def["scorecard"]["value"] = str(scorecard_identifier)
+    if "score" in params_def and isinstance(params_def["score"], dict):
+        params_def["score"]["value"] = str(score_identifier)
+    yaml_text = yaml_lib.dump(config, allow_unicode=True, default_flow_style=False)
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.procedure.optimize: could not create dashboard client")
+
+    service = ProcedureService(client)
+    account = os.environ.get("PLEXUS_ACCOUNT_KEY") or ""
+    if not account:
+        raise RuntimeError(
+            "plexus.procedure.optimize: PLEXUS_ACCOUNT_KEY environment variable is required"
+        )
+
+    result = service.create_procedure(
+        account_identifier=account,
+        scorecard_identifier=str(scorecard_identifier),
+        score_identifier=str(score_identifier),
+        yaml_config=yaml_text,
+        featured=False,
+    )
+    if not result.success:
+        raise RuntimeError(f"plexus.procedure.optimize: failed to create procedure — {result.message}")
+
+    procedure_id = result.procedure.id
+
+    options: dict[str, Any] = {
+        "async_mode": True,
+        "dry_run": bool(args.get("dry_run", False)),
+    }
+    run_result = _run_async_from_sync(service.run_procedure(str(procedure_id), **options))
+    if not isinstance(run_result, dict):
+        raise ValueError(
+            f"plexus.procedure.optimize async dispatch returned {type(run_result).__name__}"
+        )
+    if run_result.get("status") == "error" or run_result.get("error"):
+        raise ValueError(str(run_result.get("error") or run_result))
+
+    return {
+        "procedure_id": procedure_id,
+        "status": run_result.get("status", "dispatched"),
+        "message": run_result.get("message") or "Optimizer procedure dispatched asynchronously.",
+        "scorecard": str(scorecard_identifier),
+        "score": str(score_identifier),
+        "dashboard_url": f"https://lab.callcriteria.com/lab/procedures/{procedure_id}",
+    }
+
+
 def _plain_value(value: Any) -> Any:
     """Convert Tactus/Lupa table values into plain Python containers."""
 
@@ -661,107 +2954,6 @@ def _normalize_mcp_tool_args(
     """Translate runtime-friendly Tactus names to legacy MCP tool parameters."""
 
     normalized = dict(args)
-    if (namespace, method) == ("scorecards", "info"):
-        if "scorecard_identifier" not in normalized:
-            for key in ("id", "name", "key", "external_id", "externalId"):
-                if normalized.get(key):
-                    normalized["scorecard_identifier"] = normalized[key]
-                    break
-        for key in ("id", "name", "key", "external_id", "externalId"):
-            normalized.pop(key, None)
-    elif (namespace, method) == ("score", "info"):
-        if "score_identifier" not in normalized:
-            for key in ("id", "score_id", "score", "name", "key", "external_id", "externalId"):
-                if normalized.get(key):
-                    normalized["score_identifier"] = normalized[key]
-                    break
-        if "scorecard_identifier" not in normalized:
-            for key in (
-                "scorecard_id",
-                "scorecard",
-                "scorecard_name",
-                "scorecard_key",
-            ):
-                if normalized.get(key):
-                    normalized["scorecard_identifier"] = normalized[key]
-                    break
-        for key in (
-            "id",
-            "score_id",
-            "score",
-            "name",
-            "key",
-            "external_id",
-            "externalId",
-            "scorecard_id",
-            "scorecard",
-            "scorecard_name",
-            "scorecard_key",
-        ):
-            normalized.pop(key, None)
-    elif (namespace, method) == ("item", "info"):
-        if "item_id" not in normalized:
-            for key in ("id", "item"):
-                if normalized.get(key):
-                    normalized["item_id"] = normalized[key]
-                    break
-        for key in ("id", "item"):
-            normalized.pop(key, None)
-    elif namespace == "procedure" and method in {
-        "list",
-        "info",
-        "chat_sessions",
-        "chat_messages",
-    }:
-        if "request" in normalized and isinstance(normalized["request"], dict):
-            return normalized
-        if method == "list":
-            account_identifier = (
-                normalized.get("account_identifier")
-                or normalized.get("account")
-                or os.environ.get("PLEXUS_ACCOUNT_KEY")
-            )
-            if not account_identifier:
-                raise ValueError(
-                    "plexus.procedure.list requires account_identifier or "
-                    "PLEXUS_ACCOUNT_KEY"
-                )
-            request = {
-                "account_identifier": account_identifier,
-                "scorecard_identifier": normalized.get("scorecard_identifier")
-                or normalized.get("scorecard"),
-                "limit": int(normalized.get("limit") or 20),
-            }
-            normalized = {"request": request}
-        elif method == "info":
-            procedure_id = normalized.get("procedure_id") or normalized.get("id")
-            normalized = {
-                "request": {
-                    "procedure_id": procedure_id,
-                    "include_yaml": bool(normalized.get("include_yaml", False)),
-                }
-            }
-        elif method == "chat_sessions":
-            procedure_id = normalized.get("procedure_id") or normalized.get("id")
-            normalized = {
-                "request": {
-                    "procedure_id": procedure_id,
-                    "limit": int(normalized.get("limit") or 10),
-                }
-            }
-        elif method == "chat_messages":
-            procedure_id = normalized.get("procedure_id") or normalized.get("id")
-            normalized = {
-                "request": {
-                    "procedure_id": procedure_id,
-                    "session_id": normalized.get("session_id"),
-                    "limit": int(normalized.get("limit") or 50),
-                    "show_tool_calls": bool(normalized.get("show_tool_calls", True)),
-                    "show_tool_responses": bool(
-                        normalized.get("show_tool_responses", True)
-                    ),
-                }
-            }
     return normalized
 
 
@@ -1325,11 +3517,27 @@ class PlexusRuntimeModule:
         docs_dir: str | None = None,
         budget: BudgetGate | None = None,
         handle_store: TactusHandleStore | None = None,
+        scorecards_lister: Callable[[dict[str, Any]], Any] | None = None,
+        scorecards_infoer: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_evaluations: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_predict: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_set_champion: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_contradictions: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        item_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        item_last: Callable[[dict[str, Any]], Any] | None = None,
+        procedure_listers: dict[str, Callable[[dict[str, Any]], Any]] | None = None,
         feedback_finder: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        feedback_aligner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         evaluation_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        evaluation_compare: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        evaluation_find_recent: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         evaluation_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         report_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        report_configurations_list: Callable[[dict[str, Any]], Any] | None = None,
+        dataset_handlers: dict[str, Callable[[dict[str, Any]], Any]] | None = None,
         procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        procedure_optimize: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         stream_handler: _MCPStreamEmitter | None = None,
     ) -> None:
         self._mcp = mcp
@@ -1339,11 +3547,64 @@ class PlexusRuntimeModule:
         self._handle_store = (
             handle_store if handle_store is not None else _default_handle_store()
         )
+        self._scorecards_lister = (
+            scorecards_lister
+            if scorecards_lister is not None
+            else _default_scorecards_list
+        )
+        self._scorecards_infoer = (
+            scorecards_infoer
+            if scorecards_infoer is not None
+            else _default_scorecards_info
+        )
+        self._score_info = score_info if score_info is not None else _default_score_info
+        self._score_evaluations = (
+            score_evaluations if score_evaluations is not None else _default_score_evaluations
+        )
+        self._score_predict = score_predict if score_predict is not None else _default_score_predict
+        self._score_set_champion = (
+            score_set_champion if score_set_champion is not None else _default_score_set_champion
+        )
+        self._score_contradictions = (
+            score_contradictions if score_contradictions is not None else _default_score_contradictions
+        )
+        self._item_info = (
+            item_info if item_info is not None else _default_item_info
+        )
+        self._item_last = (
+            item_last if item_last is not None else _default_item_last
+        )
+        default_procedure_readers = {
+            "list": _default_procedure_list,
+            "info": _default_procedure_info,
+            "chat_sessions": _default_procedure_chat_sessions,
+            "chat_messages": _default_procedure_chat_messages,
+        }
+        if procedure_listers:
+            default_procedure_readers.update(procedure_listers)
+        self._procedure_readers: dict[str, Callable[[dict[str, Any]], Any]] = (
+            default_procedure_readers
+        )
         self._feedback_finder = (
             feedback_finder if feedback_finder is not None else _default_feedback_finder
         )
+        self._feedback_aligner = (
+            feedback_aligner
+            if feedback_aligner is not None
+            else _default_feedback_alignment
+        )
         self._evaluation_info = (
             evaluation_info if evaluation_info is not None else _default_evaluation_info
+        )
+        self._evaluation_compare = (
+            evaluation_compare
+            if evaluation_compare is not None
+            else _default_evaluation_compare
+        )
+        self._evaluation_find_recent = (
+            evaluation_find_recent
+            if evaluation_find_recent is not None
+            else _default_evaluation_find_recent
         )
         self._evaluation_runner = (
             evaluation_runner
@@ -1353,10 +3614,27 @@ class PlexusRuntimeModule:
         self._report_runner = (
             report_runner if report_runner is not None else _default_report_runner
         )
+        self._report_configurations_list = (
+            report_configurations_list
+            if report_configurations_list is not None
+            else _default_report_configurations_list
+        )
+        default_dataset_handlers: dict[str, Callable[[dict[str, Any]], Any]] = {
+            "build_from_feedback_window": _default_dataset_build_from_feedback_window,
+            "check_associated": _default_dataset_check_associated,
+        }
+        if dataset_handlers:
+            default_dataset_handlers.update(dataset_handlers)
+        self._dataset_handlers = default_dataset_handlers
         self._procedure_runner = (
             procedure_runner
             if procedure_runner is not None
             else _default_procedure_runner
+        )
+        self._procedure_optimize = (
+            procedure_optimize
+            if procedure_optimize is not None
+            else _default_procedure_optimize
         )
         self._stream_handler = stream_handler
         self._api_calls: list[str] = []
@@ -1411,31 +3689,108 @@ class PlexusRuntimeModule:
             self._budget.record_after(namespace, method)
         return _extract_tool_value(result)
 
-    def _call_feedback(self, namespace: str, method: str, args: Any = None) -> Any:
-        if (namespace, method) != ("feedback", "find"):
+    def _call_score(self, namespace: str, method: str, args: Any = None) -> Any:
+        if namespace != "score" or method not in {"info", "evaluations", "predict", "set_champion", "contradictions"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
-        self._budget.check_before("feedback", "find")
-        self._record_api_call("feedback", "find")
+        self._budget.check_before("score", method)
+        self._record_api_call("score", method)
         try:
-            return self._feedback_finder(_args(args))
+            parsed = _args(args)
+            if method == "info":
+                return self._score_info(parsed)
+            if method == "evaluations":
+                return self._score_evaluations(parsed)
+            if method == "predict":
+                return self._score_predict(parsed)
+            if method == "contradictions":
+                return self._score_contradictions(parsed)
+            return self._score_set_champion(parsed)
         finally:
-            self._budget.record_after("feedback", "find")
+            self._budget.record_after("score", method)
 
-    def _call_evaluation_info(
+    def _call_item(self, namespace: str, method: str, args: Any = None) -> Any:
+        if namespace != "item" or method not in {"info", "last"}:
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("item", method)
+        self._record_api_call("item", method)
+        try:
+            parsed = _args(args)
+            if method == "info":
+                return self._item_info(parsed)
+            return self._item_last(parsed)
+        finally:
+            self._budget.record_after("item", method)
+
+    def _call_procedure_read(
         self, namespace: str, method: str, args: Any = None
     ) -> Any:
-        if (namespace, method) != ("evaluation", "info"):
+        if namespace != "procedure" or method not in self._procedure_readers:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
-        self._budget.check_before("evaluation", "info")
-        self._record_api_call("evaluation", "info")
+        self._budget.check_before("procedure", method)
+        self._record_api_call("procedure", method)
         try:
-            return self._evaluation_info(_args(args))
+            return self._procedure_readers[method](_args(args))
         finally:
-            self._budget.record_after("evaluation", "info")
+            self._budget.record_after("procedure", method)
+
+    def _call_scorecards(self, namespace: str, method: str, args: Any = None) -> Any:
+        if namespace != "scorecards" or method not in {"list", "info"}:
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("scorecards", method)
+        self._record_api_call("scorecards", method)
+        try:
+            parsed = _args(args)
+            if method == "list":
+                return self._scorecards_lister(parsed)
+            return self._scorecards_infoer(parsed)
+        finally:
+            self._budget.record_after("scorecards", method)
+
+    def _call_feedback(self, namespace: str, method: str, args: Any = None) -> Any:
+        if namespace != "feedback" or method not in {"find", "alignment"}:
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("feedback", method)
+        self._record_api_call("feedback", method)
+        try:
+            parsed = _args(args)
+            if method == "find":
+                return self._feedback_finder(parsed)
+            return self._feedback_aligner(parsed)
+        finally:
+            self._budget.record_after("feedback", method)
+
+    def _call_evaluation_read(
+        self, namespace: str, method: str, args: Any = None
+    ) -> Any:
+        if namespace != "evaluation" or method not in {
+            "info",
+            "compare",
+            "find_recent",
+        }:
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("evaluation", method)
+        self._record_api_call("evaluation", method)
+        try:
+            parsed = _args(args)
+            if method == "info":
+                return self._evaluation_info(parsed)
+            if method == "compare":
+                return self._evaluation_compare(parsed)
+            return self._evaluation_find_recent(parsed)
+        finally:
+            self._budget.record_after("evaluation", method)
 
     def _call_evaluation_run(
         self, namespace: str, method: str, args: Any = None
@@ -1469,6 +3824,32 @@ class PlexusRuntimeModule:
         finally:
             self._budget.record_after("evaluation", "run")
 
+    def _call_dataset(self, namespace: str, method: str, args: Any = None) -> Any:
+        if namespace != "dataset" or method not in self._dataset_handlers:
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("dataset", method)
+        self._record_api_call("dataset", method)
+        try:
+            return self._dataset_handlers[method](_args(args))
+        finally:
+            self._budget.record_after("dataset", method)
+
+    def _call_report_read(
+        self, namespace: str, method: str, args: Any = None
+    ) -> Any:
+        if (namespace, method) != ("report", "configurations_list"):
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("report", "configurations_list")
+        self._record_api_call("report", "configurations_list")
+        try:
+            return self._report_configurations_list(_args(args))
+        finally:
+            self._budget.record_after("report", "configurations_list")
+
     def _call_report_run(self, namespace: str, method: str, args: Any = None) -> Any:
         if (namespace, method) != ("report", "run"):
             raise ValueError(
@@ -1498,11 +3879,23 @@ class PlexusRuntimeModule:
             self._budget.record_after("report", "run")
 
     def _call_procedure_run(self, namespace: str, method: str, args: Any = None) -> Any:
-        if (namespace, method) != ("procedure", "run"):
+        if namespace != "procedure" or method not in {"run", "optimize"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
         parsed = _args(args)
+
+        if method == "optimize":
+            # plexus.procedure.optimize always runs asynchronously — no handle protocol needed.
+            self._budget.check_before("procedure", "optimize")
+            self._record_api_call("procedure", "optimize")
+            child_budget = self._budget.carve_child("procedure", "optimize", parsed.get("budget"))
+            parsed["budget"] = child_budget
+            try:
+                return self._procedure_optimize(parsed)
+            finally:
+                self._budget.record_after("procedure", "optimize")
+
         if not bool(parsed.get("async")):
             self._record_api_call("procedure", "run")
             self.handle_protocol_required = ("procedure", "run")
@@ -1743,22 +4136,49 @@ class PlexusRuntimeModule:
             raise FileNotFoundError(
                 f"Plexus docs directory not found: {self._docs_dir}"
             )
-        entries = []
-        for name in os.listdir(self._docs_dir):
-            stem, ext = os.path.splitext(name)
-            if ext.lower() != ".md" or stem.lower() == "readme":
-                continue
-            entries.append(stem)
+        entries: list[str] = []
+        for dirpath, _dirnames, filenames in os.walk(self._docs_dir):
+            for name in filenames:
+                stem, ext = os.path.splitext(name)
+                if ext.lower() != ".md" or stem.lower() == "readme":
+                    continue
+                full = os.path.join(dirpath, name)
+                rel = os.path.relpath(full, self._docs_dir)
+                rel_no_ext, _ = os.path.splitext(rel)
+                key = rel_no_ext.replace(os.sep, "/")
+                entries.append(key)
         return sorted(entries)
 
     def _docs_read(self, key: str) -> str:
-        if "/" in key or "\\" in key or key.startswith(".") or key == "":
+        if (
+            key == ""
+            or "\\" in key
+            or key.startswith(".")
+            or key.startswith("/")
+            or ".." in key.split("/")
+        ):
             raise ValueError(f"Invalid plexus.docs key: {key!r}")
-        path = os.path.join(self._docs_dir, f"{key}.md")
-        if not os.path.isfile(path):
-            raise FileNotFoundError(f"Unknown plexus docs key: {key}")
-        with open(path, "r", encoding="utf-8") as handle:
-            return handle.read()
+
+        nested_path = os.path.normpath(os.path.join(self._docs_dir, f"{key}.md"))
+        docs_root = os.path.normpath(self._docs_dir) + os.sep
+        if not nested_path.startswith(docs_root):
+            raise ValueError(f"Invalid plexus.docs key: {key!r}")
+        if os.path.isfile(nested_path):
+            with open(nested_path, "r", encoding="utf-8") as handle:
+                return handle.read()
+
+        if "/" not in key:
+            for dirpath, _dirnames, filenames in os.walk(self._docs_dir):
+                for name in filenames:
+                    stem, ext = os.path.splitext(name)
+                    if ext.lower() != ".md" or stem.lower() == "readme":
+                        continue
+                    if stem == key:
+                        full = os.path.join(dirpath, name)
+                        with open(full, "r", encoding="utf-8") as handle:
+                            return handle.read()
+
+        raise FileNotFoundError(f"Unknown plexus docs key: {key}")
 
 
 def _wrap_tactus_snippet(tactus: str) -> str:
@@ -1808,6 +4228,7 @@ def _run_tactus_sync(
     report_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     stream_handler: _MCPStreamEmitter | None = None,
+    score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     gate = budget if budget is not None else BudgetGate()
 
@@ -1843,6 +4264,7 @@ def _run_tactus_sync(
                 report_runner=report_runner,
                 procedure_runner=procedure_runner,
                 stream_handler=stream_handler,
+                score_info=score_info,
             )
             runtime.register_python_module("plexus", plexus)
             if stream_handler is not None:
@@ -1989,6 +4411,7 @@ async def _execute_tactus_tool(
     evaluation_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     report_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     store = trace_store if trace_store is not None else _default_trace_store()
     started_mono = time.monotonic()
@@ -2039,6 +4462,7 @@ async def _execute_tactus_tool(
                 report_runner=report_runner,
                 procedure_runner=procedure_runner,
                 stream_handler=stream_handler,
+                score_info=score_info,
             )
         )
         if stream_handler is None:
@@ -2078,33 +4502,124 @@ async def _execute_tactus_tool(
         return envelope
 
 
+EXECUTE_TACTUS_DESCRIPTION = """\
+Execute a short Tactus (Lua) snippet inside the Plexus runtime. This is the
+single Plexus MCP tool; use it for every Plexus operation.
+
+Runtime ground rules:
+- `plexus` is a global. Do NOT write `local plexus = require("plexus")`.
+- The runtime captures the result of the last Plexus operation your snippet
+  calls and returns it as the value of this tool call. Use an explicit
+  `return` only when you want a custom output shape.
+- Always use table arguments: `plexus.score.info{ id = "..." }`.
+- Errors are structured (`error.code`, `error.message`, `error.retryable`).
+- Destructive ops (champion promotion, score updates, deletes, feedback
+  invalidation) request `Human.approve` automatically; pass
+  `no_confirm = true` only when the user explicitly approved.
+- Long-running async calls (`plexus.evaluation.run`, `plexus.report.run`,
+  `plexus.procedure.run` with `async = true`) require an explicit child
+  budget table:
+  `budget = { usd = <n>, wallclock_seconds = <n>, depth = <int>, tool_calls = <int> }`.
+
+Helper aliases injected before your snippet runs:
+- High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,
+  `item`, `last_item`, `feedback`, `feedback_alignment`, `dataset`,
+  `report`, `report_configs`, `procedure`, `procedures`,
+  `procedure_sessions`, `procedure_messages`.
+- Canonical `namespace_method`: `scorecards_list`, `score_info`,
+  `evaluation_info`, `evaluation_run`, `handle_status`, `handle_await`,
+  `handle_cancel`, `docs_list`, `docs_get`, `api_list`, plus one helper
+  per advertised API.
+- Fall back to `plexus.<namespace>.<method>{...}` for anything else.
+
+Examples:
+
+1) Find a scorecard by name:
+```tactus
+local cards = scorecards{}
+for _, card in ipairs(cards) do
+  if card.name == "SelectQuote HCS Medium-Risk" then
+    return { id = card.id, key = card.key, external_id = card.externalId }
+  end
+end
+return { error = { code = "SCORECARD_NOT_FOUND", retryable = false } }
+```
+
+2) Inspect a score:
+```tactus
+return score{ id = "score_compliance_tone" }
+```
+
+3) Get an item's info:
+```tactus
+return item{ id = "item_1007" }
+```
+
+4) Run a single prediction:
+```tactus
+return predict{ score_id = "score_compliance_tone", item_id = "item_1007" }
+```
+
+5) Run a bounded synchronous evaluation:
+```tactus
+evaluate{ score_id = "score_compliance_tone", item_count = 200 }
+```
+
+6) Discover what's available (always do this when unsure):
+```tactus
+local apis = api_list()
+local topics = docs_list()
+local overview = docs_get{ key = "overview" }
+return { apis = apis, topics = topics, overview = overview.content }
+```
+
+7) Long-running async with explicit budget and a handle:
+```tactus
+local handle = evaluate{
+  score_id = "score_compliance_tone",
+  item_count = 1000,
+  async = true,
+  budget = { usd = 0.50, wallclock_seconds = 1800, depth = 1, tool_calls = 10 },
+}
+return { handle_id = handle.id, status = handle.status }
+```
+
+Then poll, await, or cancel from a later `execute_tactus` call:
+`handle_status{ id = "<id>" }`,
+`handle_await{ id = "<id>", timeout = "PT10M" }`,
+`handle_cancel{ id = "<id>" }`.
+
+Read the canonical long form at any time with
+`plexus.docs.get{ key = "overview" }`. Themed docs include `discovery`,
+`read-apis`, `long-running-apis`, `handles-and-budgets`,
+`score-and-dataset-authoring/`, `evaluation-and-feedback/`, `procedures/`,
+`reports/`. Use `plexus.docs.list()` to see every available key.
+
+The response envelope always has `ok`, `value`, `error`, `cost`, `trace_id`,
+`partial`, and `api_calls`.
+"""
+
+
 def register_tactus_tools(mcp: FastMCP) -> None:
     """Register Tactus runtime tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(description=EXECUTE_TACTUS_DESCRIPTION)
     async def execute_tactus(
         tactus: Annotated[
             str,
             Field(
                 description=(
-                    "Tactus code to execute inside the Plexus runtime. The runtime "
-                    "injects `plexus`, short helper aliases such as evaluate and "
-                    "predict, and canonical namespace_method helpers such as "
-                    "evaluation_info, handle_status, docs_get, and api_list."
+                    "Tactus (Lua) snippet to execute. `plexus` is global; helper "
+                    "aliases like `evaluate`, `predict`, `score`, `item`, "
+                    "`scorecards`, `api_list`, `docs_list`, `docs_get`, "
+                    "`handle_status` are injected. Async long-running calls "
+                    "(`evaluation.run`, `report.run`, `procedure.run` with "
+                    "`async = true`) require an explicit child `budget = { usd, "
+                    "wallclock_seconds, depth, tool_calls }`. Read "
+                    "`plexus.docs.get{ key = \"overview\" }` for the full guide."
                 )
             ),
         ],
         ctx: Context,
     ) -> dict[str, Any]:
-        """
-        Execute Tactus code inside the Plexus runtime.
-
-        This single tool is the prototype replacement for broad Plexus MCP tool
-        catalogs. The submitted Tactus code receives a host-provided `plexus`
-        module, short helper aliases, and canonical namespace_method helper aliases
-        for the advertised Plexus runtime APIs. The response envelope returns a
-        single structured contract with ok/value/error, conservative cost metadata,
-        a trace identifier, partial status, and called Plexus APIs.
-        """
-
         return await _execute_tactus_tool(tactus, mcp, ctx=ctx)

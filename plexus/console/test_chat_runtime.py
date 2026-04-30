@@ -545,7 +545,7 @@ def test_run_console_chat_response_passes_console_context_to_builtin(monkeypatch
         def __init__(self, service_client):
             self.service_client = service_client
 
-        async def run_experiment(self, procedure_id, **kwargs):
+        async def run_procedure(self, procedure_id, **kwargs):
             calls.append((procedure_id, kwargs, self.service_client))
             return {"success": True, "response": "42"}
 
@@ -588,7 +588,7 @@ def test_run_console_chat_response_passes_selected_model_override(monkeypatch):
         def __init__(self, service_client):
             self.service_client = service_client
 
-        async def run_experiment(self, procedure_id, **kwargs):
+        async def run_procedure(self, procedure_id, **kwargs):
             calls.append((procedure_id, kwargs, self.service_client))
             return {"success": True, "response": "ok"}
 

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "aee3e90a-f1c7-4071-8851-0fd057cd603a",
+  "issue_id": "plx-51488a8b-15e2-45a9-9fa5-f4cabba0eff4",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-29T19:44:09.995Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Set up and debug Cursor MCP configuration so this workspace can launch the local Plexus MCP server and exercise execute_tactus as an actual Cursor MCP tool during real hardening runs. Current blocker: Cursor reports a cursor-app-control MCP JSON parse error after restart.",
+        "to": "Set up and debug Cursor MCP configuration so Cursor can launch the local Plexus MCP server and exercise execute_tactus as an actual MCP tool. Workspace config works over stdio, but Cursor UI is showing no User MCP tools, so mirror the Plexus entry into the user MCP config as well."
+      }
+    }
+  }
+}
