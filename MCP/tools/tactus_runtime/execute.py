@@ -2675,7 +2675,7 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
             cmd.append("--allow-no-labels")
         if args.get("use_score_associated_dataset"):
             cmd.append("--use-score-associated-dataset")
-        if args.get("yaml", True):
+        if args.get("yaml", False):
             cmd.append("--yaml")
     else:
         raise ValueError(
