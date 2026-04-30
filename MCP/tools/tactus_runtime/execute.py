@@ -2931,7 +2931,7 @@ def _default_procedure_runner(args: dict[str, Any]) -> dict[str, Any]:
 
     cmd = [
         sys.executable, "-m", "plexus", "procedure", "run",
-        "--id", str(procedure_id),
+        str(procedure_id),
     ]
     if args.get("max_iterations") is not None:
         cmd += ["--max-iterations", str(int(args["max_iterations"]))]
@@ -3056,7 +3056,7 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
 
     cmd = [
         sys.executable, "-m", "plexus", "procedure", "run",
-        "--id", procedure_id,
+        procedure_id,
     ]
     if args.get("max_iterations") is not None:
         cmd += ["--max-iterations", str(int(args["max_iterations"]))]
