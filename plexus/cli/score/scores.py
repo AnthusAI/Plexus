@@ -1631,13 +1631,13 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
 
     # Run with task tracking
     import asyncio
-    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
 
     options = {
         'context': params,
     }
 
-    exec_result = asyncio.run(run_experiment_with_task_tracking(
+    exec_result = asyncio.run(run_procedure_with_task_tracking(
         procedure_id=procedure_id,
         client=client,
         account_id=account_id,

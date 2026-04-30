@@ -137,76 +137,160 @@ def test_helper_bindings_cover_advertised_runtime_api_surface() -> None:
     assert expected_helpers <= helpers
 
 
-def test_plexus_facade_delegates_namespace_call_to_mcp_tool() -> None:
+def test_plexus_facade_delegates_score_info_call_to_direct_handler() -> None:
+    """plexus.score.info must go through DIRECT_HANDLERS, not MCP loopback."""
+
     class FakeMCP:
         def __init__(self) -> None:
-            self.calls = []
+            self.calls: list = []
 
         async def call_tool(self, name, arguments):
             self.calls.append((name, arguments))
-            return SimpleNamespace(
-                structured_content={
-                    "id": arguments["score_identifier"],
-                    "name": "Compliance Tone",
-                }
+            raise AssertionError(
+                "score.info must not loop back through MCP; "
+                f"got {name!r} with {arguments!r}"
             )
 
+    info_args: list = []
+
+    def fake_info(args):
+        info_args.append(args)
+        return {"id": args.get("id"), "name": "Compliance Tone"}
+
     fake_mcp = FakeMCP()
-    facade = execute.PlexusRuntimeModule(fake_mcp)
+    facade = execute.PlexusRuntimeModule(fake_mcp, score_info=fake_info)
 
     value = facade.score.info({"id": "score_compliance_tone"})
 
     assert value == {"id": "score_compliance_tone", "name": "Compliance Tone"}
-    assert fake_mcp.calls == [
-        ("plexus_score_info", {"score_identifier": "score_compliance_tone"})
-    ]
+    assert info_args == [{"id": "score_compliance_tone"}]
+    assert fake_mcp.calls == []
     assert facade.api_calls == ["plexus.score.info"]
 
 
-def test_runtime_normalizes_friendly_identifiers_for_legacy_mcp_tools() -> None:
-    assert execute._normalize_mcp_tool_args("scorecards", "info", {"id": "card-1"}) == {
-        "scorecard_identifier": "card-1"
-    }
-    assert execute._normalize_mcp_tool_args(
-        "score", "info", {"id": "score-1", "scorecard_id": "card-1"}
-    ) == {
-        "score_identifier": "score-1",
-        "scorecard_identifier": "card-1",
-    }
-    assert execute._normalize_mcp_tool_args("item", "info", {"id": "item-1"}) == {
-        "item_id": "item-1"
-    }
+def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> None:
+    """plexus.scorecards.list/info must go through DIRECT_HANDLERS, not MCP loopback."""
+
+    class FakeMCP:
+        def __init__(self) -> None:
+            self.calls: list = []
+
+        async def call_tool(self, name, arguments):
+            self.calls.append((name, arguments))
+            raise AssertionError(
+                "scorecards.* must not loop back through MCP; got "
+                f"{name!r} with {arguments!r}"
+            )
+
+    list_args: list = []
+    info_args: list = []
+
+    def fake_list(args):
+        list_args.append(args)
+        return [{"id": "card-1", "name": "HCS Medium Risk"}]
+
+    def fake_info(args):
+        info_args.append(args)
+        return {
+            "name": "HCS Medium Risk",
+            "key": "hcs_medium_risk",
+            "externalId": "ext-1",
+            "description": None,
+            "guidelines": None,
+            "additionalDetails": {
+                "id": "card-1",
+                "createdAt": None,
+                "updatedAt": None,
+            },
+            "sections": None,
+        }
+
+    fake_mcp = FakeMCP()
+    facade = execute.PlexusRuntimeModule(
+        fake_mcp,
+        scorecards_lister=fake_list,
+        scorecards_infoer=fake_info,
+    )
+
+    listed = facade.scorecards.list({"identifier": "hcs"})
+    info = facade.scorecards.info({"id": "card-1"})
+
+    assert listed == [{"id": "card-1", "name": "HCS Medium Risk"}]
+    assert info["key"] == "hcs_medium_risk"
+    assert list_args == [{"identifier": "hcs"}]
+    assert info_args == [{"id": "card-1"}]
+    assert fake_mcp.calls == []
+    assert facade.api_calls == ["plexus.scorecards.list", "plexus.scorecards.info"]
 
 
-def test_runtime_normalizes_procedure_request_models(monkeypatch) -> None:
+def test_dispatch_routes_scorecards_to_direct_handlers() -> None:
+    assert execute.DIRECT_HANDLERS[("scorecards", "list")] == "_call_scorecards"
+    assert execute.DIRECT_HANDLERS[("scorecards", "info")] == "_call_scorecards"
+    assert ("scorecards", "list") not in execute.MCP_TOOL_MAP
+    assert ("scorecards", "info") not in execute.MCP_TOOL_MAP
+
+
+def test_dispatch_routes_score_to_direct_handlers() -> None:
+    for method in ("info", "evaluations", "predict", "set_champion"):
+        assert execute.DIRECT_HANDLERS[("score", method)] == "_call_score"
+        assert ("score", method) not in execute.MCP_TOOL_MAP
+
+
+def test_dispatch_routes_procedure_reads_to_direct_handlers() -> None:
+    for method in ("list", "info", "chat_sessions", "chat_messages"):
+        assert execute.DIRECT_HANDLERS[("procedure", method)] == "_call_procedure_read"
+        assert ("procedure", method) not in execute.MCP_TOOL_MAP
+
+
+def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
+    monkeypatch,
+) -> None:
+    """plexus.procedure.list/info/chat_sessions/chat_messages must NOT loop back."""
+
     monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "call-criteria")
 
-    assert execute._normalize_mcp_tool_args("procedure", "list", {"limit": 3}) == {
-        "request": {
-            "account_identifier": "call-criteria",
-            "scorecard_identifier": None,
-            "limit": 3,
-        }
-    }
-    assert execute._normalize_mcp_tool_args("procedure", "info", {"id": "proc-1"}) == {
-        "request": {"procedure_id": "proc-1", "include_yaml": False}
-    }
-    assert execute._normalize_mcp_tool_args(
-        "procedure", "chat_sessions", {"id": "proc-1", "limit": 2}
-    ) == {
-        "request": {"procedure_id": "proc-1", "limit": 2}
-    }
-    assert execute._normalize_mcp_tool_args(
-        "procedure", "chat_messages", {"id": "proc-1", "session_id": "session-1"}
-    ) == {
-        "request": {
-            "procedure_id": "proc-1",
-            "session_id": "session-1",
-            "limit": 50,
-            "show_tool_calls": True,
-            "show_tool_responses": True,
-        }
-    }
+    class FakeMCP:
+        async def call_tool(self, name, arguments):
+            raise AssertionError(
+                f"procedure.* must not loop back through MCP: {name!r}"
+            )
+
+    received: list[tuple[str, dict[str, Any]]] = []
+
+    def make_reader(method):
+        def reader(args):
+            received.append((method, args))
+            return {"success": True, "method": method, "args": args}
+
+        return reader
+
+    facade = execute.PlexusRuntimeModule(
+        FakeMCP(),
+        procedure_listers={
+            "list": make_reader("list"),
+            "info": make_reader("info"),
+            "chat_sessions": make_reader("chat_sessions"),
+            "chat_messages": make_reader("chat_messages"),
+        },
+    )
+
+    facade.procedure.list({"limit": 3})
+    facade.procedure.info({"id": "proc-1"})
+    facade.procedure.chat_sessions({"id": "proc-1", "limit": 2})
+    facade.procedure.chat_messages({"id": "proc-1", "session_id": "session-1"})
+
+    assert [m for m, _ in received] == [
+        "list",
+        "info",
+        "chat_sessions",
+        "chat_messages",
+    ]
+    assert facade.api_calls == [
+        "plexus.procedure.list",
+        "plexus.procedure.info",
+        "plexus.procedure.chat_sessions",
+        "plexus.procedure.chat_messages",
+    ]
 
 
 def test_extract_tool_value_parses_structured_json_string() -> None:
@@ -270,6 +354,58 @@ async def test_execute_tactus_tool_schema_uses_tactus_parameter() -> None:
     assert "lua" not in schema["properties"]
     assert "code" not in schema["properties"]
     assert schema["required"] == ["tactus"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_tool_description_contains_curated_examples() -> None:
+    mcp = FastMCP("test-execute-tactus")
+    execute.register_tactus_tools(mcp)
+
+    tools = await mcp.list_tools()
+    tool = next(tool for tool in tools if tool.name == "execute_tactus")
+    description = tool.description or ""
+
+    for term in (
+        "execute_tactus",
+        "plexus.docs.get",
+        "api_list()",
+        "docs_list()",
+        "docs_get",
+        "evaluate{",
+        "predict{",
+        "scorecards{",
+        "item{",
+        "handle_status",
+        "handle_await",
+        "handle_cancel",
+        "async = true",
+        "budget = {",
+        "usd",
+        "wallclock_seconds",
+        "depth",
+        "tool_calls",
+        "Human.approve",
+    ):
+        assert term in description, f"description missing curated term: {term!r}"
+
+
+def test_execute_tactus_description_constant_includes_themed_doc_pointers() -> None:
+    description = execute.EXECUTE_TACTUS_DESCRIPTION
+
+    for theme in (
+        "overview",
+        "discovery",
+        "read-apis",
+        "long-running-apis",
+        "handles-and-budgets",
+        "score-and-dataset-authoring/",
+        "evaluation-and-feedback/",
+        "procedures/",
+        "reports/",
+    ):
+        assert theme in description, (
+            f"tool description should reference theme {theme!r}"
+        )
 
 
 @pytest.mark.asyncio
@@ -491,13 +627,13 @@ async def test_execute_tactus_reports_missing_host_module_runtime_contract(
 async def test_execute_tactus_runs_helper_call_through_host_module() -> None:
     mcp = FastMCP("test-execute-tactus-runtime")
 
-    @mcp.tool()
-    def plexus_score_info(score_identifier: str):
-        return {"id": score_identifier, "name": "Compliance Tone"}
+    def fake_score_info(args):
+        return {"id": args.get("id"), "name": "Compliance Tone"}
 
     result = await execute._execute_tactus_tool(
         'score{ id = "score_compliance_tone" }',
         mcp,
+        score_info=fake_score_info,
     )
 
     assert result["value"] == {
@@ -514,13 +650,13 @@ async def test_execute_tactus_runs_helper_call_through_host_module() -> None:
 async def test_execute_tactus_runs_canonical_helper_call_through_host_module() -> None:
     mcp = FastMCP("test-execute-tactus-canonical-helper")
 
-    @mcp.tool()
-    def plexus_score_info(score_identifier: str):
-        return {"id": score_identifier, "name": "Compliance Tone"}
+    def fake_score_info(args):
+        return {"id": args.get("id"), "name": "Compliance Tone"}
 
     result = await execute._execute_tactus_tool(
         'score_info{ id = "score_compliance_tone" }',
         mcp,
+        score_info=fake_score_info,
     )
 
     assert result["value"] == {
@@ -625,6 +761,10 @@ def test_plexus_runtime_module_docs_get_rejects_unsafe_keys(tmp_path) -> None:
         module._docs_read("../etc/passwd")
     with pytest.raises(ValueError, match="Invalid plexus.docs key"):
         module._docs_read("")
+    with pytest.raises(ValueError, match="Invalid plexus.docs key"):
+        module._docs_read("/etc/passwd")
+    with pytest.raises(ValueError, match="Invalid plexus.docs key"):
+        module._docs_read("evaluation/../../etc/passwd")
     with pytest.raises(FileNotFoundError):
         module._docs_read("missing")
 
@@ -642,17 +782,111 @@ def test_plexus_runtime_module_docs_list_excludes_readme(tmp_path) -> None:
     assert module._docs_list() == ["alpha", "beta"]
 
 
+def test_plexus_runtime_module_docs_list_returns_nested_keys(tmp_path) -> None:
+    docs_dir = tmp_path / "docs"
+    (docs_dir / "evaluation-and-feedback").mkdir(parents=True)
+    (docs_dir / "score-and-dataset-authoring").mkdir(parents=True)
+    (docs_dir / "overview.md").write_text("overview")
+    (docs_dir / "evaluation-and-feedback" / "feedback-alignment.md").write_text(
+        "feedback"
+    )
+    (docs_dir / "evaluation-and-feedback" / "README.md").write_text("theme readme")
+    (docs_dir / "score-and-dataset-authoring" / "score-yaml-format.md").write_text(
+        "score"
+    )
+    (docs_dir / "README.md").write_text("top readme")
+
+    module = execute.PlexusRuntimeModule(FastMCP("test"), docs_dir=str(docs_dir))
+
+    assert module._docs_list() == [
+        "evaluation-and-feedback/feedback-alignment",
+        "overview",
+        "score-and-dataset-authoring/score-yaml-format",
+    ]
+
+
+def test_plexus_runtime_module_docs_read_resolves_nested_key(tmp_path) -> None:
+    docs_dir = tmp_path / "docs"
+    (docs_dir / "evaluation-and-feedback").mkdir(parents=True)
+    (docs_dir / "evaluation-and-feedback" / "feedback-alignment.md").write_text(
+        "nested-content"
+    )
+
+    module = execute.PlexusRuntimeModule(FastMCP("test"), docs_dir=str(docs_dir))
+
+    assert (
+        module._docs_read("evaluation-and-feedback/feedback-alignment")
+        == "nested-content"
+    )
+
+
+def test_plexus_runtime_module_docs_read_legacy_stem_fallback(tmp_path) -> None:
+    docs_dir = tmp_path / "docs"
+    (docs_dir / "evaluation-and-feedback").mkdir(parents=True)
+    (docs_dir / "evaluation-and-feedback" / "feedback-alignment.md").write_text(
+        "legacy-stem-resolves"
+    )
+
+    module = execute.PlexusRuntimeModule(FastMCP("test"), docs_dir=str(docs_dir))
+
+    assert module._docs_read("feedback-alignment") == "legacy-stem-resolves"
+
+
+def test_plexus_runtime_module_docs_read_legacy_fallback_skips_readme(
+    tmp_path,
+) -> None:
+    docs_dir = tmp_path / "docs"
+    (docs_dir / "procedures").mkdir(parents=True)
+    (docs_dir / "procedures" / "README.md").write_text("theme readme")
+
+    module = execute.PlexusRuntimeModule(FastMCP("test"), docs_dir=str(docs_dir))
+
+    with pytest.raises(FileNotFoundError):
+        module._docs_read("README")
+    with pytest.raises(FileNotFoundError):
+        module._docs_read("readme")
+
+
+def test_plexus_docs_repository_layout_exposes_themed_keys() -> None:
+    docs_dir = execute.PLEXUS_DOCS_DIR
+    module = execute.PlexusRuntimeModule(FastMCP("test"), docs_dir=docs_dir)
+
+    keys = module._docs_list()
+
+    assert "overview" in keys
+    assert "discovery" in keys
+    assert "read-apis" in keys
+    assert "long-running-apis" in keys
+    assert "handles-and-budgets" in keys
+    assert "evaluation-and-feedback/feedback-alignment" in keys
+    assert "score-and-dataset-authoring/score-yaml-format" in keys
+    assert all(not key.endswith("/README") for key in keys)
+    assert all(not key.endswith("readme") for key in keys)
+
+    legacy = module._docs_read("feedback-alignment")
+    assert "Feedback Alignment" in legacy or "feedback-alignment" in legacy.lower()
+
+    nested = module._docs_read(
+        "evaluation-and-feedback/feedback-alignment"
+    )
+    assert nested == legacy
+
+    overview = module._docs_read("overview")
+    assert "execute_tactus" in overview
+    assert "docs.list" in overview or "docs_list" in overview
+
+
 @pytest.mark.asyncio
 async def test_execute_tactus_implicit_last_helper_result_is_returned() -> None:
     mcp = FastMCP("test-execute-tactus-implicit")
 
-    @mcp.tool()
-    def plexus_score_info(score_identifier: str):
-        return {"id": score_identifier, "name": "Implicit"}
+    def fake_score_info(args):
+        return {"id": args.get("id"), "name": "Implicit"}
 
     result = await execute._execute_tactus_tool(
         'score{ id = "score_implicit" }',
         mcp,
+        score_info=fake_score_info,
     )
 
     assert result["ok"] is True
@@ -663,13 +897,13 @@ async def test_execute_tactus_implicit_last_helper_result_is_returned() -> None:
 async def test_execute_tactus_explicit_return_overrides_helper_capture() -> None:
     mcp = FastMCP("test-execute-tactus-explicit")
 
-    @mcp.tool()
-    def plexus_score_info(score_identifier: str):
-        return {"id": score_identifier, "name": "Captured"}
+    def fake_score_info(args):
+        return {"id": args.get("id"), "name": "Captured"}
 
     result = await execute._execute_tactus_tool(
         'score{ id = "score_captured" }\nreturn { override = true }',
         mcp,
+        score_info=fake_score_info,
     )
 
     assert result["ok"] is True
@@ -681,15 +915,15 @@ async def test_execute_tactus_explicit_return_overrides_helper_capture() -> None
 async def test_execute_tactus_writes_trace_for_successful_run() -> None:
     mcp = FastMCP("test-execute-tactus-trace-success")
 
-    @mcp.tool()
-    def plexus_score_info(score_identifier: str):
-        return {"id": score_identifier, "name": "Trace"}
+    def fake_score_info(args):
+        return {"id": args.get("id"), "name": "Trace"}
 
     store = _RecordingTraceStore()
     result = await execute._execute_tactus_tool(
         'score{ id = "score_trace" }',
         mcp,
         trace_store=store,
+        score_info=fake_score_info,
     )
 
     assert result["ok"] is True
@@ -1555,13 +1789,13 @@ async def test_execute_tactus_procedure_run_async_returns_handle() -> None:
 async def test_execute_tactus_cost_envelope_reflects_budget_remaining() -> None:
     mcp = FastMCP("test-execute-tactus-budget-remaining")
 
-    @mcp.tool()
-    def plexus_score_info(score_identifier: str):
-        return {"id": score_identifier, "name": "Tracked"}
+    def fake_score_info(args):
+        return {"id": args.get("id"), "name": "Tracked"}
 
     result = await execute._execute_tactus_tool(
         'score{ id = "score_tracked" }',
         mcp,
+        score_info=fake_score_info,
     )
 
     cost = result["cost"]

@@ -6,7 +6,7 @@ import click
 import pytest
 
 from plexus.cli.shared.experiment_runner import _extract_run_parameters_from_procedure_yaml
-from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
 
 
 class _FakeTask:
@@ -83,7 +83,7 @@ def _patch_service(monkeypatch, run_impl):
         def __init__(self, _client):
             self.client = _client
 
-        async def run_experiment(self, procedure_id, **options):
+        async def run_procedure(self, procedure_id, **options):
             return await run_impl(procedure_id, **options)
 
     monkeypatch.setattr("plexus.cli.procedure.service.ProcedureService", _FakeProcedureService)
@@ -128,7 +128,7 @@ parameters:
 
 
 @pytest.mark.asyncio
-async def test_run_experiment_persists_failed_result_telemetry(monkeypatch):
+async def test_run_procedure_persists_failed_result_telemetry(monkeypatch):
     fake_task = _FakeTask()
     fake_client = _FakeClient()
     stage_fail_calls = []
@@ -144,7 +144,7 @@ async def test_run_experiment_persists_failed_result_telemetry(monkeypatch):
 
     _patch_service(monkeypatch, _run_impl)
 
-    result = await run_experiment_with_task_tracking(
+    result = await run_procedure_with_task_tracking(
         procedure_id="proc-123",
         client=fake_client,
         account_id="acct-123",
@@ -164,7 +164,7 @@ async def test_run_experiment_persists_failed_result_telemetry(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_run_experiment_launches_background_stale_timeout_scan(monkeypatch):
+async def test_run_procedure_launches_background_stale_timeout_scan(monkeypatch):
     fake_task = _FakeTask()
     fake_client = _FakeClient()
     launched_scans = []
@@ -192,7 +192,7 @@ async def test_run_experiment_launches_background_stale_timeout_scan(monkeypatch
 
     _patch_service(monkeypatch, _run_impl)
 
-    result = await run_experiment_with_task_tracking(
+    result = await run_procedure_with_task_tracking(
         procedure_id="proc-123",
         client=fake_client,
         account_id="acct-123",
@@ -203,7 +203,7 @@ async def test_run_experiment_launches_background_stale_timeout_scan(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_run_experiment_persists_compacted_task_output_attachment(monkeypatch):
+async def test_run_procedure_persists_compacted_task_output_attachment(monkeypatch):
     fake_task = _FakeTask()
     fake_client = _FakeClient()
     persisted_calls = []
@@ -228,7 +228,7 @@ async def test_run_experiment_persists_compacted_task_output_attachment(monkeypa
 
     _patch_service(monkeypatch, _run_impl)
 
-    result = await run_experiment_with_task_tracking(
+    result = await run_procedure_with_task_tracking(
         procedure_id="proc-123",
         client=fake_client,
         account_id="acct-123",
@@ -249,7 +249,7 @@ async def test_run_experiment_persists_compacted_task_output_attachment(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_run_experiment_persists_sigterm_telemetry_and_reraises(monkeypatch):
+async def test_run_procedure_persists_sigterm_telemetry_and_reraises(monkeypatch):
     fake_task = _FakeTask()
     fake_client = _FakeClient()
     stage_fail_calls = []
@@ -270,7 +270,7 @@ async def test_run_experiment_persists_sigterm_telemetry_and_reraises(monkeypatc
     _patch_service(monkeypatch, _run_impl)
 
     with pytest.raises(SystemExit) as excinfo:
-        await run_experiment_with_task_tracking(
+        await run_procedure_with_task_tracking(
             procedure_id="proc-123",
             client=fake_client,
             account_id="acct-123",
@@ -284,7 +284,7 @@ async def test_run_experiment_persists_sigterm_telemetry_and_reraises(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_run_experiment_persists_abort_and_reraises(monkeypatch):
+async def test_run_procedure_persists_abort_and_reraises(monkeypatch):
     fake_task = _FakeTask()
     fake_client = _FakeClient()
 
@@ -300,7 +300,7 @@ async def test_run_experiment_persists_abort_and_reraises(monkeypatch):
     _patch_service(monkeypatch, _run_impl)
 
     with pytest.raises(click.Abort):
-        await run_experiment_with_task_tracking(
+        await run_procedure_with_task_tracking(
             procedure_id="proc-123",
             client=fake_client,
             account_id="acct-123",
@@ -311,7 +311,7 @@ async def test_run_experiment_persists_abort_and_reraises(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_run_experiment_persists_nonzero_system_exit_and_reraises(monkeypatch):
+async def test_run_procedure_persists_nonzero_system_exit_and_reraises(monkeypatch):
     fake_task = _FakeTask()
     fake_client = _FakeClient()
 
@@ -327,7 +327,7 @@ async def test_run_experiment_persists_nonzero_system_exit_and_reraises(monkeypa
     _patch_service(monkeypatch, _run_impl)
 
     with pytest.raises(SystemExit) as excinfo:
-        await run_experiment_with_task_tracking(
+        await run_procedure_with_task_tracking(
             procedure_id="proc-123",
             client=fake_client,
             account_id="acct-123",

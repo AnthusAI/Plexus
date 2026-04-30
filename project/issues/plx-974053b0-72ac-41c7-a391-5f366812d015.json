@@ -1,0 +1,18 @@
+{
+  "id": "plx-974053b0-72ac-41c7-a391-5f366812d015",
+  "title": "execute_tactus tool description rewrite + themed docs",
+  "description": "Rewrite the execute_tactus MCP tool description to a curated example-driven boot prompt, add a discovery example pointing at api.list/docs.list/docs.get, reorganize plexus/docs/ into Tactus-native theme subdirectories (overview, discovery, read-apis, long-running-apis, handles-and-budgets, score-and-dataset-authoring/, evaluation-and-feedback/, procedures/, reports/), and keep the existing get_plexus_documentation tool resolving every current key for backward compatibility during the transition. Plan file: .cursor/plans/execute-tactus_context_and_themed_docs_e5830b86.plan.md",
+  "type": "task",
+  "status": "open",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-07dc0d44-08df-4248-97af-1f928bc2e19d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-29T22:10:36.125439Z",
+  "updated_at": "2026-04-29T22:10:36.125439Z",
+  "closed_at": null,
+  "custom": {}
+}

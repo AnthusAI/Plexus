@@ -12,7 +12,7 @@ Provides high-level helpers used by both the CLI commands and MCP tools:
       ready to run from cycle N+1.
 
 Neither function dispatches the procedure run — callers are responsible for
-invoking ProcedureService.run_experiment or run_experiment_with_task_tracking
+invoking ProcedureService.run_procedure or run_procedure_with_task_tracking
 after calling these functions.
 """
 
