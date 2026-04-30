@@ -211,11 +211,18 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("score_predict", "score", "predict"),
     ("score_set_champion", "score", "set_champion"),
     ("score_contradictions", "score", "contradictions"),
+    ("score_pull", "score", "pull"),
+    ("score_update", "score", "update"),
+    ("score_test", "score", "test"),
     ("set_champion", "score", "set_champion"),
     ("item_info", "item", "info"),
     ("item_last", "item", "last"),
     ("feedback_find", "feedback", "find"),
     ("feedback_alignment", "feedback", "alignment"),
+    ("feedback_latest_update", "feedback", "latest_update"),
+    ("rubric_memory_recent_entries", "rubric_memory", "recent_entries"),
+    ("rubric_memory_evidence_pack", "rubric_memory", "evidence_pack"),
+    ("rubric_memory_sme_question_gate", "rubric_memory", "sme_question_gate"),
     ("evaluation_info", "evaluation", "info"),
     ("evaluation_find_recent", "evaluation", "find_recent"),
     ("evaluation_compare", "evaluation", "compare"),
@@ -293,10 +300,14 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("score", "predict"): "_call_score",
     ("score", "set_champion"): "_call_score",
     ("score", "contradictions"): "_call_score",
+    ("score", "pull"): "_call_score",
+    ("score", "update"): "_call_score",
+    ("score", "test"): "_call_score",
     ("item", "info"): "_call_item",
     ("item", "last"): "_call_item",
     ("feedback", "find"): "_call_feedback",
     ("feedback", "alignment"): "_call_feedback",
+    ("feedback", "latest_update"): "_call_feedback",
     ("evaluation", "info"): "_call_evaluation_read",
     ("evaluation", "find_recent"): "_call_evaluation_read",
     ("evaluation", "compare"): "_call_evaluation_read",
@@ -315,6 +326,9 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("handle", "status"): "_call_handle",
     ("handle", "await"): "_call_handle",
     ("handle", "cancel"): "_call_handle",
+    ("rubric_memory", "recent_entries"): "_call_rubric_memory",
+    ("rubric_memory", "evidence_pack"): "_call_rubric_memory",
+    ("rubric_memory", "sme_question_gate"): "_call_rubric_memory",
 }
 
 
@@ -2580,11 +2594,17 @@ def _default_evaluation_find_recent(args: dict[str, Any]) -> dict[str, Any]:
     return {"found": False}
 
 
-def _default_evaluation_runner(args: dict[str, Any], mcp: FastMCP) -> dict[str, Any]:
-    """Dispatch evaluation.run directly through the Plexus CLI in async mode."""
+def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> dict[str, Any]:
+    """Dispatch evaluation.run directly through the Plexus CLI in async mode.
+
+    Uses --emit-id-file to capture the evaluation_id from the subprocess so the
+    handle store can poll the evaluation status via the dashboard API once the
+    process exits.
+    """
 
     import shutil
     import subprocess
+    import tempfile
 
     scorecard_name = args.get("scorecard_name") or args.get("scorecard")
     if not scorecard_name:
@@ -2592,6 +2612,13 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: FastMCP) -> dict[str, 
 
     evaluation_type = str(args.get("evaluation_type") or "accuracy").strip().lower()
     plexus_bin = shutil.which("plexus") or "plexus"
+
+    # Temp file for evaluation_id capture (read after process starts)
+    id_tmpfile = tempfile.NamedTemporaryFile(
+        prefix="plexus_eval_id_", suffix=".txt", delete=False
+    )
+    id_tmpfile.close()
+    id_file_path = id_tmpfile.name
 
     if evaluation_type == "feedback":
         score_name = args.get("score_name") or args.get("score")
@@ -2609,6 +2636,8 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: FastMCP) -> dict[str, 
             str(int(args.get("max_feedback_items") or 200)),
             "--sampling-mode",
             str(args.get("sampling_mode") or "newest"),
+            "--emit-id-file",
+            id_file_path,
         ]
         _append_optional_cli_arg(cmd, "--days", args.get("days"))
         _append_optional_cli_arg(cmd, "--version", args.get("version"))
@@ -2628,6 +2657,8 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: FastMCP) -> dict[str, 
             "--number-of-samples",
             str(int(args.get("n_samples") or 10)),
             "--json-only",
+            "--emit-id-file",
+            id_file_path,
         ]
         _append_optional_cli_arg(
             cmd, "--score", args.get("score_name") or args.get("score")
@@ -2667,16 +2698,44 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: FastMCP) -> dict[str, 
         start_new_session=True,
         env=env,
     )
+
+    # Poll briefly for the id file (evaluation record is created near the start)
+    evaluation_id: str | None = None
+    for _ in range(30):  # up to 30 × 2s = 60s
+        time.sleep(2)
+        try:
+            with open(id_file_path, "r") as _f:
+                content = _f.read().strip()
+            if content:
+                evaluation_id = content
+                break
+        except FileNotFoundError:
+            pass
+        # Also check if process already exited (fast-fail / error case)
+        if process.poll() is not None:
+            break
+
+    # Clean up temp file
+    try:
+        os.unlink(id_file_path)
+    except OSError:
+        pass
+
     return {
         "status": "dispatched",
         "process_id": process.pid,
+        "evaluation_id": evaluation_id,
         "command": cmd,
         "evaluation_type": evaluation_type,
         "scorecard": scorecard_name,
         "score": args.get("score_name") or args.get("score"),
         "child_budget": _jsonable(child_budget),
         "message": "Evaluation dispatched in background.",
-        "dashboard_url": "https://lab.callcriteria.com/lab/evaluations",
+        "dashboard_url": (
+            f"https://lab.callcriteria.com/lab/evaluations/{evaluation_id}"
+            if evaluation_id
+            else "https://lab.callcriteria.com/lab/evaluations"
+        ),
     }
 
 
@@ -2728,6 +2787,58 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
         "cached": was_cached,
         "block_class": block_class,
         "child_budget": _jsonable(args.get("budget")),
+    }
+
+
+def _default_report_runner_sync(args: dict[str, Any]) -> dict[str, Any]:
+    """Run a report block synchronously and return its output directly.
+
+    Used inside procedures where blocking is acceptable (i.e. the Lua code
+    needs the report output before continuing).  Passes background=False to
+    run_block_cached so the block executes in the current process.
+    """
+    block_class = args.get("block_class")
+    if not block_class:
+        raise ValueError("plexus.report.run sync requires block_class")
+
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+    from plexus.reports.service import run_block_cached
+
+    client = create_dashboard_client()
+    if not client:
+        raise ValueError("Could not create dashboard client")
+    account_id = resolve_account_id_for_command(client, args.get("account"))
+    if not account_id:
+        raise ValueError("Could not determine default account ID")
+
+    cache_key = args.get("cache_key")
+    ttl_hours = args.get("ttl_hours")
+
+    output_data, log_output, was_cached = run_block_cached(
+        block_class=str(block_class),
+        block_config=args.get("block_config") or {},
+        account_id=account_id,
+        client=client,
+        cache_key=cache_key,
+        ttl_hours=ttl_hours if ttl_hours is not None else 24,
+        fresh=bool(args.get("fresh", False)),
+        background=False,
+        child_budget=args.get("budget"),
+    )
+
+    if output_data is not None:
+        return {
+            "status": "success",
+            "output": output_data,
+            "log": log_output,
+            "cached": was_cached,
+            "block_class": block_class,
+        }
+    return {
+        "status": "failed",
+        "error": log_output or "Report block returned no output",
+        "block_class": block_class,
     }
 
 
@@ -3482,6 +3593,521 @@ async def _send_mcp_stream_event(ctx: Context, event: dict[str, Any]) -> None:
         logger.debug("Ignoring failed execute_tactus info event: %s", exc)
 
 
+def _default_score_pull(args: dict[str, Any]) -> dict[str, Any]:
+    """Return the champion (or specific version) YAML for a score in-memory.
+
+    Unlike the old file-based plexus_score_pull, this returns the raw YAML
+    string so Lua code can inspect or pass it directly without file I/O.
+    """
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.direct_identifier_resolution import (
+        direct_resolve_score_identifier,
+        direct_resolve_scorecard_identifier,
+    )
+
+    scorecard_identifier = args.get("scorecard_identifier") or args.get("scorecard")
+    score_identifier = args.get("score_identifier") or args.get("score")
+    version_id = args.get("version_id") or args.get("version")
+    if not scorecard_identifier:
+        raise ValueError("plexus.score.pull requires scorecard_identifier")
+    if not score_identifier:
+        raise ValueError("plexus.score.pull requires score_identifier")
+
+    client = create_client()
+    scorecard_id = direct_resolve_scorecard_identifier(client, scorecard_identifier)
+    if not scorecard_id:
+        raise ValueError(f"Scorecard not found: {scorecard_identifier!r}")
+    score_id = direct_resolve_score_identifier(client, scorecard_id, score_identifier)
+    if not score_id:
+        raise ValueError(f"Score not found: {score_identifier!r}")
+
+    if version_id:
+        query = """
+        query GetScoreVersionYaml($id: ID!) {
+            getScoreVersion(id: $id) {
+                id
+                configuration
+                guidelines
+                note
+                createdAt
+                isFeatured
+            }
+        }
+        """
+        resp = client.execute(query, {"id": version_id})
+        sv = (resp or {}).get("getScoreVersion") or {}
+        if not sv:
+            raise ValueError(f"ScoreVersion not found: {version_id!r}")
+    else:
+        query = """
+        query GetScoreChampion($id: ID!) {
+            getScore(id: $id) {
+                id
+                name
+                championVersionId
+                championVersion {
+                    id
+                    configuration
+                    guidelines
+                    note
+                    createdAt
+                    isFeatured
+                }
+            }
+        }
+        """
+        resp = client.execute(query, {"id": score_id})
+        score_data = (resp or {}).get("getScore") or {}
+        sv = score_data.get("championVersion") or {}
+        if not sv:
+            raise ValueError(f"No champion version for score: {score_identifier!r}")
+        version_id = sv.get("id")
+
+    return {
+        "success": True,
+        "score_id": score_id,
+        "scorecard_id": scorecard_id,
+        "version_id": version_id or sv.get("id"),
+        "yaml_content": sv.get("configuration") or "",
+        "guidelines": sv.get("guidelines") or "",
+        "note": sv.get("note") or "",
+        "created_at": sv.get("createdAt") or "",
+        "is_featured": bool(sv.get("isFeatured")),
+    }
+
+
+def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
+    """Create a new ScoreVersion from provided YAML code.
+
+    Validates the YAML, optionally diffs against the parent version, and
+    creates a new version record.  Returns the new version ID.
+    """
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.direct_identifier_resolution import (
+        direct_resolve_score_identifier,
+        direct_resolve_scorecard_identifier,
+    )
+
+    scorecard_identifier = args.get("scorecard_identifier") or args.get("scorecard")
+    score_identifier = args.get("score_identifier") or args.get("score")
+    code = args.get("code") or args.get("yaml_content")
+    guidelines = args.get("guidelines")
+    parent_version_id = args.get("parent_version_id")
+    version_note = args.get("version_note") or args.get("note") or "Updated via plexus.score.update"
+
+    if not scorecard_identifier:
+        raise ValueError("plexus.score.update requires scorecard_identifier")
+    if not score_identifier:
+        raise ValueError("plexus.score.update requires score_identifier")
+    if not code:
+        raise ValueError("plexus.score.update requires code (YAML string)")
+
+    # Validate YAML
+    try:
+        from plexus.linting.schemas import create_score_linter
+
+        linter = create_score_linter()
+        lint_result = linter.lint(code)
+        if not lint_result.is_valid:
+            errors = [
+                f"{m.title}: {m.message}"
+                for m in lint_result.messages
+                if m.level == "error"
+            ]
+            return {
+                "success": False,
+                "error": "YAML validation failed",
+                "validation_errors": errors,
+            }
+    except ImportError:
+        import yaml as _yaml
+        _yaml.safe_load(code)
+
+    client = create_client()
+    scorecard_id = direct_resolve_scorecard_identifier(client, scorecard_identifier)
+    if not scorecard_id:
+        raise ValueError(f"Scorecard not found: {scorecard_identifier!r}")
+    score_id = direct_resolve_score_identifier(client, scorecard_id, score_identifier)
+    if not score_id:
+        raise ValueError(f"Score not found: {score_identifier!r}")
+
+    # Resolve parent version if not specified
+    if not parent_version_id:
+        q = """
+        query GetScoreChampionId($id: ID!) {
+            getScore(id: $id) { championVersionId }
+        }
+        """
+        resp = client.execute(q, {"id": score_id})
+        parent_version_id = (
+            (resp or {}).get("getScore") or {}
+        ).get("championVersionId")
+
+    mutation = """
+    mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
+        createScoreVersion(input: $input) {
+            id
+            createdAt
+        }
+    }
+    """
+    input_obj: dict[str, Any] = {
+        "scoreId": score_id,
+        "configuration": code,
+        "note": version_note,
+    }
+    if guidelines is not None:
+        input_obj["guidelines"] = guidelines
+    if parent_version_id:
+        input_obj["parentVersionId"] = parent_version_id
+
+    resp = client.execute(mutation, {"input": input_obj})
+    new_version = (resp or {}).get("createScoreVersion") or {}
+    new_version_id = new_version.get("id")
+    if not new_version_id:
+        return {"success": False, "error": f"createScoreVersion returned no id: {resp!r}"}
+
+    return {
+        "success": True,
+        "version_id": new_version_id,
+        "score_id": score_id,
+        "scorecard_id": scorecard_id,
+        "parent_version_id": parent_version_id,
+        "created_at": new_version.get("createdAt") or "",
+        "message": f"Score version created: {new_version_id}",
+    }
+
+
+def _default_score_test(args: dict[str, Any]) -> dict[str, Any]:
+    """Run a mechanical smoke-test on a score version against sampled items."""
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.score_version_test import run_score_version_test
+
+    scorecard_identifier = args.get("scorecard_identifier") or args.get("scorecard")
+    score_identifier = args.get("score_identifier") or args.get("score")
+    version = args.get("version")
+    samples = int(args.get("samples") or 3)
+    item_ids = args.get("item_ids")
+    days = int(args.get("days") or 90)
+
+    if not scorecard_identifier:
+        raise ValueError("plexus.score.test requires scorecard_identifier")
+    if not score_identifier:
+        raise ValueError("plexus.score.test requires score_identifier")
+
+    parsed_item_ids = None
+    if item_ids:
+        if isinstance(item_ids, str):
+            parsed_item_ids = [v.strip() for v in item_ids.split(",") if v.strip()]
+        elif isinstance(item_ids, list):
+            parsed_item_ids = item_ids
+
+    client = create_client()
+    return _run_async_from_sync(
+        lambda: run_score_version_test(
+            client=client,
+            scorecard_identifier=scorecard_identifier,
+            score_identifier=score_identifier,
+            version=version,
+            samples=samples,
+            item_identifiers=parsed_item_ids,
+            days=days,
+        )
+    )
+
+
+def _default_feedback_latest_update(args: dict[str, Any]) -> dict[str, Any]:
+    """Return the latest feedback updatedAt watermark for a score."""
+    import asyncio
+    from datetime import datetime, timedelta, timezone
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.memoized_resolvers import (
+        memoized_resolve_scorecard_identifier,
+        memoized_resolve_score_identifier,
+    )
+    from plexus.cli.report.utils import resolve_account_id_for_command
+
+    scorecard_name = args.get("scorecard_name") or args.get("scorecard")
+    score_name = args.get("score_name") or args.get("score")
+    days = args.get("days")
+    if not scorecard_name:
+        raise ValueError("plexus.feedback.latest_update requires scorecard_name")
+    if not score_name:
+        raise ValueError("plexus.feedback.latest_update requires score_name")
+
+    days_int = int(float(str(days))) if days is not None else None
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, None)
+    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_name)
+    score_id = memoized_resolve_score_identifier(client, scorecard_id, score_name)
+
+    now = datetime.now(timezone.utc)
+    window_start = (
+        (now - timedelta(days=days_int))
+        if days_int is not None
+        else datetime(1970, 1, 1, tzinfo=timezone.utc)
+    )
+    window_end = now + timedelta(minutes=5)
+
+    query = """
+    query ListFeedbackUpdatesByEditedWindow(
+        $accountId: String!,
+        $composite_sk_condition: ModelFeedbackItemByAccountScorecardScoreEditedAtCompositeKeyConditionInput,
+        $limit: Int,
+        $nextToken: String,
+        $sortDirection: ModelSortDirection
+    ) {
+        listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+            accountId: $accountId,
+            scorecardIdScoreIdEditedAt: $composite_sk_condition,
+            limit: $limit,
+            nextToken: $nextToken,
+            sortDirection: $sortDirection
+        ) {
+            items { id editedAt updatedAt isInvalid }
+            nextToken
+        }
+    }
+    """
+    variables: dict[str, Any] = {
+        "accountId": account_id,
+        "composite_sk_condition": {
+            "between": [
+                {
+                    "scorecardId": str(scorecard_id),
+                    "scoreId": str(score_id),
+                    "editedAt": window_start.isoformat(),
+                },
+                {
+                    "scorecardId": str(scorecard_id),
+                    "scoreId": str(score_id),
+                    "editedAt": window_end.isoformat(),
+                },
+            ]
+        },
+        "limit": 200,
+        "nextToken": None,
+        "sortDirection": "DESC",
+    }
+
+    def _parse_dt(s: str | None) -> datetime | None:
+        if not s:
+            return None
+        try:
+            return datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    latest_item_id = None
+    latest_updated_at: datetime | None = None
+
+    while True:
+        resp = client.execute(query, variables)
+        page = (
+            (resp or {}).get(
+                "listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt"
+            )
+            or {}
+        )
+        for row in page.get("items") or []:
+            updated = _parse_dt((row or {}).get("updatedAt"))
+            if updated and (latest_updated_at is None or updated > latest_updated_at):
+                latest_updated_at = updated
+                latest_item_id = (row or {}).get("id")
+        next_token = page.get("nextToken")
+        if not next_token:
+            break
+        variables["nextToken"] = next_token
+
+    def _fmt(dt: datetime | None) -> str | None:
+        if dt is None:
+            return None
+        return dt.isoformat().replace("+00:00", "Z")
+
+    return {
+        "found": latest_updated_at is not None,
+        "latest_feedback_updated_at": _fmt(latest_updated_at),
+        "latest_feedback_item_id": latest_item_id,
+        "window_start": _fmt(window_start),
+        "window_end": _fmt(window_end),
+        "scorecard_name": scorecard_name,
+        "score_name": score_name,
+        "scorecard_id": scorecard_id,
+        "score_id": score_id,
+        "days": days_int,
+    }
+
+
+# ---------------------------------------------------------------------------
+# rubric_memory helpers
+# ---------------------------------------------------------------------------
+
+def _resolve_rubric_memory_score_id(
+    client: Any, scorecard_identifier: str, score_identifier: str, score_id: str | None
+) -> str:
+    if score_id:
+        return score_id
+    from plexus.cli.shared.direct_identifier_resolution import (
+        direct_resolve_score_identifier,
+        direct_resolve_scorecard_identifier,
+    )
+    sc_id = direct_resolve_scorecard_identifier(client, scorecard_identifier)
+    if not sc_id:
+        raise ValueError(f"Scorecard not found: {scorecard_identifier!r}")
+    resolved = direct_resolve_score_identifier(client, sc_id, score_identifier)
+    if not resolved:
+        raise ValueError(f"Score not found: {score_identifier!r}")
+    return resolved
+
+
+def _default_rubric_memory_recent_entries(args: dict[str, Any]) -> dict[str, Any]:
+    """Retrieve recent rubric-memory citation context for one score."""
+    import asyncio
+
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.rubric_memory import RubricMemoryRecentBriefingProvider
+
+    scorecard_identifier = args.get("scorecard_identifier") or args.get("scorecard")
+    score_identifier = args.get("score_identifier") or args.get("score")
+    score_id_hint = args.get("score_id")
+    score_version_id = args.get("score_version_id")
+    query_text = args.get("query") or ""
+    days = int(args.get("days") or 30)
+    since = args.get("since")
+    limit = int(args.get("limit") or 16)
+
+    if not scorecard_identifier:
+        raise ValueError("plexus.rubric_memory.recent_entries requires scorecard_identifier")
+    if not score_identifier:
+        raise ValueError("plexus.rubric_memory.recent_entries requires score_identifier")
+
+    client = create_client()
+    resolved_score_id = _resolve_rubric_memory_score_id(
+        client, scorecard_identifier, score_identifier, score_id_hint
+    )
+
+    async def _run() -> Any:
+        return await RubricMemoryRecentBriefingProvider(api_client=client).retrieve_recent(
+            scorecard_identifier=scorecard_identifier,
+            score_identifier=score_identifier,
+            score_id=resolved_score_id,
+            score_version_id=score_version_id,
+            query=query_text,
+            days=days,
+            since=since,
+            limit=limit,
+        )
+
+    context = _run_async_from_sync(_run)
+    return {
+        "success": True,
+        "score_id": resolved_score_id,
+        "markdown_context": context.markdown_context,
+        "citation_index": [c.model_dump(mode="json") for c in context.citation_index],
+        "machine_context": context.machine_context,
+        "diagnostics": context.diagnostics,
+    }
+
+
+def _default_rubric_memory_evidence_pack(args: dict[str, Any]) -> dict[str, Any]:
+    """Generate rubric-memory citation context for a disputed score item."""
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.rubric_memory import RubricMemoryContextProvider
+
+    scorecard_identifier = args.get("scorecard_identifier") or args.get("scorecard")
+    score_identifier = args.get("score_identifier") or args.get("score")
+    score_id_hint = args.get("score_id")
+    score_version_id = args.get("score_version_id")
+    transcript_text = args.get("transcript_text") or ""
+    model_value = args.get("model_value") or ""
+    model_explanation = args.get("model_explanation") or ""
+    feedback_value = args.get("feedback_value") or ""
+    feedback_comment = args.get("feedback_comment") or ""
+    topic_hint = args.get("topic_hint")
+    synthesize = bool(args.get("synthesize", False))
+
+    if not scorecard_identifier:
+        raise ValueError("plexus.rubric_memory.evidence_pack requires scorecard_identifier")
+    if not score_identifier:
+        raise ValueError("plexus.rubric_memory.evidence_pack requires score_identifier")
+
+    client = create_client()
+    resolved_score_id = _resolve_rubric_memory_score_id(
+        client, scorecard_identifier, score_identifier, score_id_hint
+    )
+
+    provider = RubricMemoryContextProvider(api_client=client)
+    method = provider.generate_for_score_item if synthesize else provider.retrieve_for_score_item
+
+    context = _run_async_from_sync(
+        lambda: method(
+            scorecard_identifier=scorecard_identifier,
+            score_identifier=score_identifier,
+            score_id=resolved_score_id,
+            score_version_id=score_version_id,
+            transcript_text=transcript_text,
+            model_value=model_value,
+            model_explanation=model_explanation,
+            feedback_value=feedback_value,
+            feedback_comment=feedback_comment,
+            topic_hint=topic_hint,
+        )
+    )
+    return {
+        "success": True,
+        "synthesized": synthesize,
+        "score_id": resolved_score_id,
+        "markdown_context": context.markdown_context,
+        "citation_index": [c.model_dump(mode="json") for c in context.citation_index],
+        "machine_context": context.machine_context,
+        "diagnostics": context.diagnostics,
+    }
+
+
+def _default_rubric_memory_sme_question_gate(args: dict[str, Any]) -> dict[str, Any]:
+    """Gate proposed SME agenda questions against rubric-memory citations."""
+    from plexus.rubric_memory import (
+        RubricMemoryCitationContext,
+        RubricMemorySMEQuestionGateRequest,
+        RubricMemorySMEQuestionGateService,
+        candidate_agenda_items_from_markdown,
+    )
+
+    scorecard_identifier = args.get("scorecard_identifier") or args.get("scorecard")
+    score_identifier = args.get("score_identifier") or args.get("score")
+    score_version_id = args.get("score_version_id") or ""
+    candidate_agenda_markdown = args.get("candidate_agenda_markdown") or ""
+    rubric_memory_context = args.get("rubric_memory_context") or {}
+    optimizer_context = args.get("optimizer_context") or ""
+
+    if not scorecard_identifier:
+        raise ValueError("plexus.rubric_memory.sme_question_gate requires scorecard_identifier")
+    if not score_identifier:
+        raise ValueError("plexus.rubric_memory.sme_question_gate requires score_identifier")
+
+    if isinstance(rubric_memory_context, str):
+        import json as _json
+        rubric_memory_context = _json.loads(rubric_memory_context) if rubric_memory_context.strip() else {}
+
+    context = RubricMemoryCitationContext.model_validate({
+        "markdown_context": rubric_memory_context.get("markdown_context") or "",
+        "citation_index": rubric_memory_context.get("citation_index") or [],
+        "machine_context": rubric_memory_context.get("machine_context") or {},
+        "diagnostics": rubric_memory_context.get("diagnostics") or [],
+    })
+    candidate_items = candidate_agenda_items_from_markdown(candidate_agenda_markdown)
+    request = RubricMemorySMEQuestionGateRequest(
+        scorecard_identifier=scorecard_identifier,
+        score_identifier=score_identifier,
+        score_version_id=score_version_id,
+        rubric_memory_context=context,
+        candidate_agenda_items=candidate_items,
+        optimizer_context=optimizer_context,
+    )
+    result = _run_async_from_sync(lambda: RubricMemorySMEQuestionGateService().gate(request))
+    return {"success": True, **result.model_dump(mode="json")}
+
+
 class _Namespace:
     def __init__(
         self,
@@ -3504,15 +4130,12 @@ class _Namespace:
 class PlexusRuntimeModule:
     """Tactus host module exposing curated Plexus runtime namespaces.
 
-    Read-only namespaces with no service-layer dependency are implemented
-    directly inside this module (no MCP loopback). The remaining namespaces
-    delegate to existing FastMCP tools while the broader service-layer
-    refactor is in progress.
+    All namespaces use native Python implementations (no MCP loopback).
     """
 
     def __init__(
         self,
-        mcp: FastMCP,
+        mcp: "FastMCP | None" = None,
         trace_id: str | None = None,
         docs_dir: str | None = None,
         budget: BudgetGate | None = None,
@@ -3524,6 +4147,13 @@ class PlexusRuntimeModule:
         score_predict: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_set_champion: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_contradictions: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_pull: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_update: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_test: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        feedback_latest_update: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        rubric_memory_recent_entries: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        rubric_memory_evidence_pack: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        rubric_memory_sme_question_gate: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         item_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         item_last: Callable[[dict[str, Any]], Any] | None = None,
         procedure_listers: dict[str, Callable[[dict[str, Any]], Any]] | None = None,
@@ -3568,6 +4198,29 @@ class PlexusRuntimeModule:
         self._score_contradictions = (
             score_contradictions if score_contradictions is not None else _default_score_contradictions
         )
+        self._score_pull = score_pull if score_pull is not None else _default_score_pull
+        self._score_update = score_update if score_update is not None else _default_score_update
+        self._score_test = score_test if score_test is not None else _default_score_test
+        self._feedback_latest_update = (
+            feedback_latest_update
+            if feedback_latest_update is not None
+            else _default_feedback_latest_update
+        )
+        self._rubric_memory_recent_entries = (
+            rubric_memory_recent_entries
+            if rubric_memory_recent_entries is not None
+            else _default_rubric_memory_recent_entries
+        )
+        self._rubric_memory_evidence_pack = (
+            rubric_memory_evidence_pack
+            if rubric_memory_evidence_pack is not None
+            else _default_rubric_memory_evidence_pack
+        )
+        self._rubric_memory_sme_question_gate = (
+            rubric_memory_sme_question_gate
+            if rubric_memory_sme_question_gate is not None
+            else _default_rubric_memory_sme_question_gate
+        )
         self._item_info = (
             item_info if item_info is not None else _default_item_info
         )
@@ -3609,7 +4262,7 @@ class PlexusRuntimeModule:
         self._evaluation_runner = (
             evaluation_runner
             if evaluation_runner is not None
-            else lambda args: _default_evaluation_runner(args, self._mcp)
+            else lambda args: _default_evaluation_runner(args, None)
         )
         self._report_runner = (
             report_runner if report_runner is not None else _default_report_runner
@@ -3690,7 +4343,10 @@ class PlexusRuntimeModule:
         return _extract_tool_value(result)
 
     def _call_score(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "score" or method not in {"info", "evaluations", "predict", "set_champion", "contradictions"}:
+        if namespace != "score" or method not in {
+            "info", "evaluations", "predict", "set_champion", "contradictions",
+            "pull", "update", "test",
+        }:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -3706,6 +4362,12 @@ class PlexusRuntimeModule:
                 return self._score_predict(parsed)
             if method == "contradictions":
                 return self._score_contradictions(parsed)
+            if method == "pull":
+                return self._score_pull(parsed)
+            if method == "update":
+                return self._score_update(parsed)
+            if method == "test":
+                return self._score_test(parsed)
             return self._score_set_champion(parsed)
         finally:
             self._budget.record_after("score", method)
@@ -3755,7 +4417,7 @@ class PlexusRuntimeModule:
             self._budget.record_after("scorecards", method)
 
     def _call_feedback(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "feedback" or method not in {"find", "alignment"}:
+        if namespace != "feedback" or method not in {"find", "alignment", "latest_update"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -3765,9 +4427,30 @@ class PlexusRuntimeModule:
             parsed = _args(args)
             if method == "find":
                 return self._feedback_finder(parsed)
+            if method == "latest_update":
+                return self._feedback_latest_update(parsed)
             return self._feedback_aligner(parsed)
         finally:
             self._budget.record_after("feedback", method)
+
+    def _call_rubric_memory(self, namespace: str, method: str, args: Any = None) -> Any:
+        if namespace != "rubric_memory" or method not in {
+            "recent_entries", "evidence_pack", "sme_question_gate"
+        }:
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("rubric_memory", method)
+        self._record_api_call("rubric_memory", method)
+        try:
+            parsed = _args(args)
+            if method == "recent_entries":
+                return self._rubric_memory_recent_entries(parsed)
+            if method == "evidence_pack":
+                return self._rubric_memory_evidence_pack(parsed)
+            return self._rubric_memory_sme_question_gate(parsed)
+        finally:
+            self._budget.record_after("rubric_memory", method)
 
     def _call_evaluation_read(
         self, namespace: str, method: str, args: Any = None
@@ -3856,6 +4539,18 @@ class PlexusRuntimeModule:
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
         parsed = _args(args)
+
+        # Synchronous inline mode: run the block in the current process and
+        # return the output directly.  Used by procedures that need the report
+        # result before continuing (e.g. contradictions analysis).
+        if bool(parsed.get("sync")):
+            self._budget.check_before("report", "run")
+            self._record_api_call("report", "run")
+            try:
+                return _default_report_runner_sync(parsed)
+            finally:
+                self._budget.record_after("report", "run")
+
         if not bool(parsed.get("async")):
             self._record_api_call("report", "run")
             self.handle_protocol_required = ("report", "run")
