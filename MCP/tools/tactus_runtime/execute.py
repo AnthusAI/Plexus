@@ -2920,43 +2920,31 @@ def _default_report_runner_sync(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _default_procedure_runner(args: dict[str, Any]) -> dict[str, Any]:
-    """Dispatch procedure.run directly through ProcedureService async mode."""
+    """Dispatch procedure.run as an independent subprocess."""
 
     procedure_id = args.get("procedure_id") or args.get("id")
     if not procedure_id:
         raise ValueError("plexus.procedure.run requires procedure_id")
 
-    from plexus.cli.procedure.service import ProcedureService
-    from plexus.cli.shared.client_utils import create_client
+    import subprocess
+    import sys
 
-    client = create_client()
-    if not client:
-        raise ValueError("Could not create API client")
-
-    options: dict[str, Any] = {
-        "async_mode": True,
-        "dry_run": bool(args.get("dry_run", False)),
-    }
+    cmd = [
+        sys.executable, "-m", "plexus", "procedure", "run",
+        "--id", str(procedure_id),
+    ]
     if args.get("max_iterations") is not None:
-        options["max_iterations"] = int(args["max_iterations"])
-    if args.get("timeout") is not None:
-        options["timeout"] = int(args["timeout"])
-    if isinstance(args.get("budget"), dict):
-        context = args.get("context") if isinstance(args.get("context"), dict) else {}
-        options["context"] = {
-            **context,
-            "_plexus_child_budget": _jsonable(args["budget"]),
-        }
+        cmd += ["--max-iterations", str(int(args["max_iterations"]))]
+    if args.get("dry_run"):
+        cmd.append("--dry-run")
 
-    service = ProcedureService(client)
-    result = _run_async_from_sync(service.run_procedure(str(procedure_id), **options))
-    if not isinstance(result, dict):
-        raise ValueError(
-            f"plexus.procedure.run async dispatch returned {type(result).__name__}"
-        )
-    if result.get("status") == "error" or result.get("error"):
-        raise ValueError(str(result.get("error") or result))
-    return result
+    env = {**__import__("os").environ, "PYTHONUNBUFFERED": "1"}
+    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {
+        "status": "running",
+        "procedure_id": str(procedure_id),
+        "pid": proc.pid,
+    }
 
 
 def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
@@ -3063,28 +3051,26 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
 
     procedure_id = result.procedure.id
 
-    options: dict[str, Any] = {
-        "async_mode": True,
-        "dry_run": bool(args.get("dry_run", False)),
-    }
+    import subprocess
+    import sys
 
-    # Dispatch the optimizer in a background daemon thread so the caller can
-    # return the procedure_id immediately rather than blocking for hours.
-    import threading
+    cmd = [
+        sys.executable, "-m", "plexus", "procedure", "run",
+        "--id", procedure_id,
+    ]
+    if args.get("max_iterations") is not None:
+        cmd += ["--max-iterations", str(int(args["max_iterations"]))]
+    if args.get("dry_run"):
+        cmd.append("--dry-run")
 
-    def _run_bg():
-        try:
-            _run_async_from_sync(service.run_procedure(str(procedure_id), **options))
-        except Exception as _bg_exc:
-            logger.warning("Background optimizer run failed: %s", _bg_exc)
-
-    bg_thread = threading.Thread(target=_run_bg, daemon=True, name=f"optimizer-{procedure_id[:8]}")
-    bg_thread.start()
+    env = {**__import__("os").environ, "PYTHONUNBUFFERED": "1"}
+    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     return {
         "procedure_id": procedure_id,
-        "status": "dispatched",
-        "message": "Optimizer procedure dispatched — running in background.",
+        "status": "running",
+        "pid": proc.pid,
+        "message": "Optimizer procedure dispatched — running as independent subprocess.",
         "scorecard": str(scorecard_identifier),
         "score": str(score_identifier),
         "dashboard_url": f"https://lab.callcriteria.com/lab/procedures/{procedure_id}",
