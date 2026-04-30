@@ -191,7 +191,7 @@ describe('EvaluationTask category summary drill-down', () => {
     fireEvent.click(screen.getByRole('button', { name: /View items \(1\)/i }))
 
     expect(screen.getByText('Filtered by category: Information gap')).toBeInTheDocument()
-    expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('["item-1"]')
+    expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('["sr-1"]')
     expect(onSelectScoreResult).toHaveBeenCalledWith('sr-1')
 
     fireEvent.click(screen.getByRole('button', { name: /Clear category filter/i }))
