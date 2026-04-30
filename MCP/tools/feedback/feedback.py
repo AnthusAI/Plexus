@@ -736,3 +736,52 @@ def register_feedback_tools(mcp: FastMCP):
                 indent=2,
                 default=str,
             )
+
+    @mcp.tool()
+    async def plexus_feedback_uninvalidate(
+        identifier: str,
+        scorecard_name: Optional[str] = None,
+        score_name: Optional[str] = None,
+    ) -> str:
+        """
+        Mark exactly one invalidated feedback item valid again.
+
+        Args:
+            identifier: Feedback item ID, item ID, item externalId, or identifier-table value.
+            scorecard_name: Optional scorecard identifier used only to disambiguate item-level matches.
+            score_name: Optional score identifier used only to disambiguate item-level matches. Requires scorecard_name.
+
+        Returns:
+            JSON string describing the reinstated feedback item or a structured error.
+        """
+        try:
+            from plexus.cli.feedback.feedback_invalidation import (
+                FeedbackInvalidationError,
+                reinstate_feedback_item,
+            )
+            from plexus.cli.shared.client_utils import create_client
+
+            client = create_client()
+            if not client:
+                return json.dumps({"error": "Failed to create API client"})
+
+            result = await asyncio.to_thread(
+                reinstate_feedback_item,
+                client=client,
+                identifier=identifier,
+                scorecard_identifier=scorecard_name,
+                score_identifier=score_name,
+            )
+            return json.dumps(result, indent=2, default=str)
+        except FeedbackInvalidationError as exc:
+            payload = {"error": str(exc), "code": exc.code}
+            if exc.details:
+                payload["details"] = exc.details
+            return json.dumps(payload, indent=2, default=str)
+        except Exception as exc:
+            logger.error("Error in plexus_feedback_uninvalidate: %s", exc, exc_info=True)
+            return json.dumps(
+                {"error": f"Failed to reinstate feedback: {str(exc)}"},
+                indent=2,
+                default=str,
+            )

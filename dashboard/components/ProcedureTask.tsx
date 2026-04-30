@@ -4,7 +4,7 @@ import { TaskStatus } from '@/components/ui/task-status'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, ExternalLink, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users, CircleDollarSign, Repeat } from 'lucide-react'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, Link as LinkIcon, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users, CircleDollarSign, Repeat } from 'lucide-react'
 import Link from 'next/link'
 
 import { Timestamp } from './ui/timestamp'
@@ -1065,7 +1065,7 @@ export default function ProcedureTask({
                       className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      <LinkIcon className="h-3.5 w-3.5" />
                     </Link>
                   )}
                 </div>
@@ -1080,7 +1080,7 @@ export default function ProcedureTask({
                       className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      <LinkIcon className="h-3.5 w-3.5" />
                     </Link>
                   )}
                 </div>
@@ -1612,7 +1612,7 @@ export default function ProcedureTask({
                                 className="text-muted-foreground hover:text-foreground transition-colors"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <ExternalLink className="h-3 w-3" />
+                                <LinkIcon className="h-3 w-3" />
                               </Link>
                             )}
                           </td>

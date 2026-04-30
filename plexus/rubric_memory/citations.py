@@ -93,6 +93,35 @@ class RubricMemoryCitationFormatter:
             diagnostics=[],
         )
 
+    def from_recent_evidence(
+        self,
+        *,
+        request: RubricEvidencePackRequest,
+        evidence: Sequence[EvidenceSnippet],
+        metadata: dict[str, Any],
+    ) -> RubricMemoryCitationContext:
+        """Format recency-biased retrieved evidence for optimizer briefings."""
+        citations = self._retrieval_citations(request, evidence)
+        machine_context = self._retrieval_machine_context(
+            request,
+            evidence,
+            citations,
+        )
+        machine_context.update(metadata)
+        machine_context["context_kind"] = "recent_briefing"
+        markdown = self._recent_markdown_context(
+            request=request,
+            evidence=evidence,
+            citations=citations,
+            machine_context=machine_context,
+        )
+        return RubricMemoryCitationContext(
+            markdown_context=markdown,
+            citation_index=citations,
+            machine_context=machine_context,
+            diagnostics=[],
+        )
+
     def _citations(self, pack: RubricEvidencePack) -> list[RubricMemoryCitation]:
         citations = [
             RubricMemoryCitation(
@@ -242,6 +271,98 @@ class RubricMemoryCitationFormatter:
                 "",
                 "## Ranked Retrieved Evidence",
                 "This section preserves retrieval ranking. Use exact citation IDs when making policy-memory claims.",
+            ]
+        )
+        for citation in citations:
+            timestamp = self._timestamp(citation.source_timestamp)
+            lines.append(
+                f"- `{citation.id}` `{citation.kind}` `{citation.scope_level}` "
+                f"`{citation.evidence_classification}` {timestamp}: "
+                f"{citation.excerpt}"
+            )
+            if citation.source_uri:
+                lines.append(f"  Source: {citation.source_uri}")
+
+        lines.extend(
+            [
+                "",
+                "## Machine Context JSON",
+                "```json",
+                json.dumps(machine_context, sort_keys=True, separators=(",", ":")),
+                "```",
+            ]
+        )
+        return "\n".join(lines) + "\n"
+
+    def _recent_markdown_context(
+        self,
+        *,
+        request: RubricEvidencePackRequest,
+        evidence: Sequence[EvidenceSnippet],
+        citations: Sequence[RubricMemoryCitation],
+        machine_context: dict[str, Any],
+    ) -> str:
+        source_counts = machine_context.get("source_counts") or {}
+        lines = [
+            "# Recent Rubric Memory Briefing",
+            "",
+            "## Authority",
+            f"- Score version authority: `{request.score_version_id}`",
+            "- Official rubric authority is canonical; recent corpus evidence can reveal policy changes, stakeholder decisions, stale rubric areas, or related-score impacts.",
+            "",
+            "## Recent Window",
+            f"- Since: `{machine_context.get('since')}`",
+            f"- Days: `{machine_context.get('days')}`",
+            f"- Latest source date: `{machine_context.get('latest_source_date') or 'none'}`",
+            f"- Recent source counts: score `{source_counts.get('score', 0)}`, prefix `{source_counts.get('prefix', 0)}`, scorecard `{source_counts.get('scorecard', 0)}`",
+            f"- Unknown-date files skipped: `{machine_context.get('skipped_unknown_date_count', 0)}`",
+            "",
+            "## Recent Policy Memory",
+            "This section is sorted newest first. Use it to check recent stakeholder or SME changes before optimizing.",
+        ]
+        evidence_citations = [
+            citation for citation in citations if citation.kind == "corpus_evidence"
+        ]
+        if not evidence_citations:
+            lines.append("- No dated recent rubric-memory evidence was retrieved.")
+        else:
+            for citation in evidence_citations:
+                timestamp = self._timestamp(citation.source_timestamp)
+                lines.append(
+                    f"- `{citation.id}` {timestamp} `{citation.scope_level}` "
+                    f"`{citation.evidence_classification}`: {citation.excerpt}"
+                )
+                if citation.source_uri:
+                    lines.append(f"  Source: {citation.source_uri}")
+
+        lines.extend(
+            [
+                "",
+                "## Chronological Timeline",
+                "This section is sorted oldest to newest to show policy evolution.",
+            ]
+        )
+        dated_evidence = sorted(
+            [snippet for snippet in evidence if snippet.source_timestamp is not None],
+            key=lambda snippet: (
+                snippet.source_timestamp.isoformat(),
+                snippet.source_uri,
+            ),
+        )
+        if not dated_evidence:
+            lines.append("- No dated recent policy-memory evidence was retrieved.")
+        else:
+            for snippet in dated_evidence:
+                lines.append(
+                    f"- {self._timestamp(snippet.source_timestamp)} `{snippet.scope_level}`: "
+                    f"{self._excerpt(snippet.snippet_text, 360)} Source: {snippet.source_uri}"
+                )
+
+        lines.extend(
+            [
+                "",
+                "## Citation Index",
+                "Use these exact citation IDs when making claims from recent rubric memory.",
             ]
         )
         for citation in citations:
