@@ -66,6 +66,27 @@ def test_capture_llm_context_writes_markdown_and_json(monkeypatch, tmp_path):
     assert long_content in markdown
 
 
+def test_capture_llm_context_filter_includes_matching_call(monkeypatch, tmp_path):
+    monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_DIR", str(tmp_path))
+    monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_FILTER", "worker,sme_gate")
+
+    included = capture_llm_context_for_agent(
+        "CODING_ASSISTANT (Worker)",
+        [HumanMessage(content="Worker context")],
+        call_site="sop_worker_round",
+    )
+    skipped = capture_llm_context_for_agent(
+        "Report Writer",
+        [HumanMessage(content="Report context")],
+        call_site="final_summary",
+    )
+
+    assert included is not None
+    assert skipped is None
+    assert len(list(tmp_path.glob("*.json"))) == 1
+    assert len(list(tmp_path.glob("*.md"))) == 1
+
+
 def test_capture_llm_context_preserves_rubric_memory_briefing(monkeypatch, tmp_path):
     monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_DIR", str(tmp_path))
     briefing = (
@@ -126,7 +147,7 @@ def test_capture_tactus_dspy_context_serializes_prompt_context(monkeypatch, tmp_
 
     assert payload["agent_name"] == "Tactus DSPy Agent: hypothesis_planner"
     assert payload["call_site"] == "tactus_dspy_agent_non_streaming"
-    assert payload["context"] == "turn 1"
+    assert payload["context"] == "turn 1 | Generate the next hypothesis."
     assert [message["role"] for message in payload["messages"]] == [
         "SYSTEM",
         "USER",
@@ -135,6 +156,42 @@ def test_capture_tactus_dspy_context_serializes_prompt_context(monkeypatch, tmp_
     ]
     assert "=== RUBRIC MEMORY BRIEFING" in markdown
     assert "plexus_rubric_memory_evidence_pack" in payload["tools"]
+
+
+def test_capture_tactus_dspy_context_filter_can_match_user_message_prefix(monkeypatch, tmp_path):
+    monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_DIR", str(tmp_path))
+    monkeypatch.setenv("PLEXUS_CAPTURE_LLM_CONTEXT_FILTER", "cycle_lab_report")
+
+    included = capture_tactus_dspy_context_for_agent(
+        "Tactus DSPy Agent: report_writer",
+        {
+            "system_prompt": "Report writer system prompt",
+            "user_message": (
+                "=== OPTIMIZER REPORT PHASE: cycle_lab_report ===\n"
+                "Write the lab report."
+            ),
+        },
+        turn_count=2,
+        call_site="tactus_dspy_agent_non_streaming",
+    )
+    skipped = capture_tactus_dspy_context_for_agent(
+        "Tactus DSPy Agent: report_writer",
+        {
+            "system_prompt": "Report writer system prompt",
+            "user_message": (
+                "=== OPTIMIZER REPORT PHASE: cycle_sme_agenda ===\n"
+                "Write the SME agenda."
+            ),
+        },
+        turn_count=3,
+        call_site="tactus_dspy_agent_non_streaming",
+    )
+
+    assert included is not None
+    assert skipped is None
+    assert len(list(tmp_path.glob("*.json"))) == 1
+    payload = json.loads(next(tmp_path.glob("*.json")).read_text(encoding="utf-8"))
+    assert "cycle_lab_report" in payload["context"]
 
 
 def test_capture_markdown_escapes_nul_bytes_but_json_preserves_content(monkeypatch, tmp_path):
