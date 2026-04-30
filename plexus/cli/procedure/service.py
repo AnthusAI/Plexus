@@ -254,19 +254,35 @@ class ProcedureService:
                         if resolved:
                             score_id = resolved
 
-            # Create experiment
+            # Create experiment (code omitted from DB record — stored as S3 attachment below)
             procedure = Procedure.create(
                 client=self.client,
                 accountId=account_id,
                 scorecardId=scorecard_id,
                 scoreId=score_id,
-                parentProcedureId=template.id if template else None,  # Changed from templateId
-                isTemplate=False,  # Mark as instance, not template
-                code=yaml_config,  # Store YAML in procedure
+                parentProcedureId=template.id if template else None,
+                isTemplate=False,
                 featured=featured,
                 scoreVersionId=score_version_id
             )
-            
+
+            # Upload YAML as code.tac to S3 and record the key in metadata
+            if yaml_config:
+                try:
+                    from plexus.reports.s3_utils import upload_procedure_file
+                    import json as _json
+                    s3_key = upload_procedure_file(procedure.id, "code.tac", yaml_config, content_type="text/plain")
+                    current_meta = {}
+                    try:
+                        current_meta = _json.loads(procedure.metadata or "{}") or {}
+                    except Exception:
+                        pass
+                    current_meta["code_s3_key"] = s3_key
+                    procedure.update(metadata=_json.dumps(current_meta))
+                    logger.info(f"Uploaded code.tac to S3 for procedure {procedure.id}: {s3_key}")
+                except Exception as exc:
+                    logger.warning(f"Could not upload code.tac for procedure {procedure.id}: {exc}")
+
             # Get or create Task with stages from state machine
             task = self._get_or_create_task_with_stages_for_procedure(
                 procedure_id=procedure.id,
@@ -462,7 +478,21 @@ class ProcedureService:
             if hasattr(procedure, 'code') and procedure.code:
                 logger.info(f"Using YAML from Procedure.code field for {procedure_id}")
                 return procedure.code
-            
+
+            # FIRST-B: Download code.tac from S3 if key is stored in metadata
+            try:
+                import json as _json
+                meta = _json.loads(procedure.metadata or "{}") or {}
+                s3_key = meta.get("code_s3_key")
+                if s3_key:
+                    from plexus.reports.s3_utils import download_procedure_code
+                    s3_code = download_procedure_code(procedure_id, [s3_key])
+                    if s3_code:
+                        logger.info(f"Loaded YAML from S3 code.tac for procedure {procedure_id}")
+                        return s3_code
+            except Exception as exc:
+                logger.warning(f"Could not load code.tac from S3 for {procedure_id}: {exc}")
+
             # SECOND: Get template if procedure has one
             # NOTE: templateId was renamed to parentProcedureId
             parent_id = getattr(procedure, 'parentProcedureId', None) or getattr(procedure, 'templateId', None)

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "62a558d8-3728-46ba-83d6-eff9a4a2948f",
+  "issue_id": "plx-71ad53d3-34eb-4252-a78c-f1ab5428a9bf",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-30T11:35:54.205Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-07dc0d44-08df-4248-97af-1f928bc2e19d",
+    "priority": 1,
+    "status": "open",
+    "title": "task Complete L4 chat integration tests: predict on item and score update via chat"
+  }
+}

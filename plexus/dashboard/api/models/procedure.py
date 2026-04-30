@@ -48,6 +48,8 @@ class Procedure(BaseModel):
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
         scoreVersionId: Optional[str] = None,
+        attachedFiles: Optional[List[str]] = None,
+        metadata: Optional[str] = None,
         client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
@@ -66,6 +68,8 @@ class Procedure(BaseModel):
         self.scorecardId = scorecardId
         self.scoreId = scoreId
         self.scoreVersionId = scoreVersionId
+        self.attachedFiles = attachedFiles or []
+        self.metadata = metadata
 
     @classmethod
     def fields(cls) -> str:
@@ -112,6 +116,8 @@ class Procedure(BaseModel):
             scorecardId=data.get('scorecardId'),
             scoreId=data.get('scoreId'),
             scoreVersionId=data.get('scoreVersionId'),
+            attachedFiles=data.get('attachedFiles') or [],
+            metadata=data.get('metadata'),
             client=client
         )
 
@@ -268,6 +274,7 @@ class Procedure(BaseModel):
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
         code: Optional[str] = None,
+        metadata: Optional[str] = None,
     ) -> 'Procedure':
         """Update this procedure.
         
@@ -276,6 +283,7 @@ class Procedure(BaseModel):
             scorecardId: New scorecard ID (optional)
             scoreId: New score ID (optional)
             code: New procedure YAML/code (optional)
+            metadata: JSON metadata string (optional) — use to store code_s3_key etc.
             
         Returns:
             Updated Procedure instance
@@ -294,6 +302,8 @@ class Procedure(BaseModel):
             input_data['scoreId'] = scoreId
         if code is not None:
             input_data['code'] = code
+        if metadata is not None:
+            input_data['metadata'] = metadata
             
         mutation = """
         mutation UpdateProcedure($input: UpdateProcedureInput!) {

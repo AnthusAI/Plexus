@@ -688,6 +688,57 @@ class EmbeddedMCPServer:
                     "tool": "done",
                 }
             
+            # Register execute_tactus so LLM agents (e.g. console chat) can query
+            # Plexus data by writing short Lua snippets.
+            import os as _os_et, sys as _sys_et
+            _mcp_path_et = _os_et.path.normpath(
+                _os_et.path.join(_os_et.path.dirname(__file__), "..", "..", "..", "MCP")
+            )
+            if _os_et.path.isdir(_mcp_path_et) and _mcp_path_et not in _sys_et.path:
+                _sys_et.path.insert(0, _mcp_path_et)
+
+            try:
+                from tools.tactus_runtime.execute import (  # type: ignore[import]
+                    _execute_tactus_tool as _et_run,
+                    _default_trace_store as _et_traces,
+                    _default_handle_store as _et_handles,
+                    BudgetGate,
+                    BudgetSpec,
+                )
+
+                _et_trace_store = _et_traces()
+                _et_handle_store = _et_handles()
+                # Permissive budget: async eval/procedure dispatch must be allowed
+                _et_budget = BudgetGate(BudgetSpec(
+                    usd=float("inf"),
+                    wallclock_seconds=float("inf"),
+                    depth=20,
+                    tool_calls=500,
+                ))
+
+                @tool_capture.tool()
+                async def execute_tactus(tactus: str) -> dict:
+                    """Execute a Tactus (Lua) snippet against the Plexus runtime.
+                    `plexus` is a global providing access to all Plexus functionality.
+                    Examples:
+                      return plexus.scorecards.list({})
+                      return plexus.score.info({ id = "score-id" })
+                      return plexus.evaluation.find_recent({ score_id = "id", count = 5 })
+                      return plexus.item.last({ count = 1 })
+                    """
+                    return await _et_run(
+                        tactus,
+                        None,
+                        ctx=None,
+                        trace_store=_et_trace_store,
+                        handle_store=_et_handle_store,
+                        budget=_et_budget,
+                    )
+
+                logger.info("Registered execute_tactus in embedded MCP transport")
+            except Exception as _et_exc:
+                logger.warning(f"Could not register execute_tactus in embedded MCP: {_et_exc}")
+
             logger.info(f"Total MCP tools registered: {len(self.transport.tools)}")
             
         except Exception as e:

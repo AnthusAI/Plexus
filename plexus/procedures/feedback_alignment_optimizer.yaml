@@ -949,20 +949,13 @@ code: |
       dispatch = function(a)
         local result = plexus.score.pull(a)
         if not result or not result.success then return result end
-        -- Write YAML and guidelines to temp files so File.read() calls work
-        local version_id = result.version_id or "unknown"
-        local code_path  = "/tmp/plexus_score_"   .. version_id .. ".yaml"
-        local guide_path = "/tmp/plexus_guide_"   .. version_id .. ".md"
-        local f_c = io.open(code_path,  "w")
-        if f_c then f_c:write(result.yaml_content or "") ; f_c:close() end
-        local f_g = io.open(guide_path, "w")
-        if f_g then f_g:write(result.guidelines  or "") ; f_g:close() end
+        -- plexus.score.pull writes temp files from Python (io not available in sandbox)
         return {
-          success          = true,
-          scoreId          = result.score_id,
-          versionId        = result.version_id,
-          codeFilePath     = code_path,
-          guidelinesFilePath = guide_path,
+          success            = true,
+          scoreId            = result.score_id,
+          versionId          = result.version_id,
+          codeFilePath       = result.code_file_path,
+          guidelinesFilePath = result.guidelines_file_path,
         }
       end
     elseif tool_name == "plexus_evaluation_info" then
@@ -3218,7 +3211,7 @@ code: |
     if has_text(active_version) then
       score_version_id = active_version
     end
-    if type(rubric_memory_context.machine_context) == "table" then
+    if type(rubric_memory_context) == "table" and type(rubric_memory_context.machine_context) == "table" then
       score_version_id = score_version_id ~= "" and score_version_id
         or rubric_memory_context.machine_context.score_version_id
         or ""
