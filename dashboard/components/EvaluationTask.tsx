@@ -74,6 +74,19 @@ const getScoreResultFilterKeys = (result: ScoreResultData): string[] => {
   return Array.from(keys)
 }
 
+const collectClassificationLinkageIds = (classification: {
+  score_result_id?: string
+  item_id?: string
+  feedback_item_id?: string
+}): string[] => {
+  const ids = [
+    toNormalizedId(classification.score_result_id),
+    toNormalizedId(classification.item_id),
+    toNormalizedId(classification.feedback_item_id),
+  ].filter((id): id is string => id !== null)
+  return ids
+}
+
 export interface EvaluationMetric {
   name: string
   value: number
@@ -1012,46 +1025,42 @@ const DetailContent = React.memo(({
       classification => classification.primary_category === categoryKey
     )
 
-    const scoreResultIds: string[] = []
-    const itemIds: string[] = []
-    const fallbackFeedbackItemIds: string[] = []
+    const linkageIds: string[] = []
     let missingCount = 0
 
     filteredClassifications.forEach(classification => {
-      const normalizedScoreResultId = toNormalizedId(classification.score_result_id)
-      const normalizedItemId = toNormalizedId(classification.item_id)
-      const normalizedFeedbackItemId = toNormalizedId(classification.feedback_item_id)
-
-      if (!normalizedScoreResultId && !normalizedItemId && !normalizedFeedbackItemId) {
+      const classificationIds = collectClassificationLinkageIds(classification)
+      if (classificationIds.length === 0) {
         missingCount += 1
         return
       }
-
-      if (normalizedScoreResultId) {
-        scoreResultIds.push(normalizedScoreResultId)
-      }
-      if (normalizedItemId) {
-        itemIds.push(normalizedItemId)
-      }
-      if (normalizedFeedbackItemId) {
-        fallbackFeedbackItemIds.push(normalizedFeedbackItemId)
-      }
+      linkageIds.push(...classificationIds)
     })
 
-    const selectedIds = scoreResultIds.length > 0
-      ? scoreResultIds
-      : itemIds.length > 0
-        ? itemIds
-        : fallbackFeedbackItemIds
+    const summaryEvidence = misclassificationCategoryBreakdown.categorySummaries?.[categoryKey]?.representative_evidence ?? []
+    summaryEvidence.forEach(evidence => {
+      linkageIds.push(
+        ...[
+          toNormalizedId(evidence.score_result_id),
+          toNormalizedId(evidence.item_id),
+          toNormalizedId(evidence.feedback_item_id),
+        ].filter((id): id is string => id !== null)
+      )
+    })
+
+    const normalizedLinkageIds = new Set(linkageIds.map(id => toNormalizedId(id)).filter((id): id is string => id !== null))
+    const selectedScoreResultIds = parsedScoreResults
+      .filter(result => getScoreResultFilterKeys(result).some(key => normalizedLinkageIds.has(key)))
+      .map(result => String(result.id).trim())
 
     setSelectedTopicItemIds(null)
     setSelectedTopicLabel(null)
     setSelectedCategoryKey(categoryKey)
     setSelectedCategoryLabel(categoryLabel)
-    setSelectedCategoryItemIds(Array.from(new Set(selectedIds)))
+    setSelectedCategoryItemIds(Array.from(new Set(selectedScoreResultIds)))
     setCategoryMissingItemIdCount(missingCount)
     setSelectedPredictedActual({ predicted: null, actual: null })
-    selectFirstFilteredScoreResult(selectedIds)
+    selectFirstFilteredScoreResult(selectedScoreResultIds)
   }
 
   const clearCategoryFilter = () => {
