@@ -45,7 +45,7 @@ class TestScoreUpdateGuidelinesOnly:
             'configuration': current_version_data['configuration'],  # Preserved existing code
             'guidelines': update_params['guidelines'],  # New guidelines
             'note': update_params['version_note'],
-            'isFeatured': "true",
+            'isFeatured': "false",
             'parentVersionId': 'version-current'
         }
         
@@ -241,7 +241,7 @@ class TestScoreUpdateGuidelinesOnly:
                 'scoreId': score_id,
                 'configuration': (code_content or '').strip(),  # Fixed to handle None
                 'note': note or 'Updated via MCP score update tool',
-                'isFeatured': "true"
+                'isFeatured': "false"
             }
             
             # Add guidelines if provided (fixed logic)
@@ -357,7 +357,7 @@ class TestScoreUpdateGuidelinesOnly:
                     'scoreId': score_data['id'],
                     'configuration': (code or '').strip(),
                     'note': update_params['version_note'] or 'Updated via MCP',
-                    'isFeatured': "true"
+                    'isFeatured': "false"
                 }
                 
                 if guidelines:

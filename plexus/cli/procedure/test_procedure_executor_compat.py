@@ -9,11 +9,13 @@ from plexus.cli.procedure.procedure_executor import _PlexusTraceLogBridge, _exec
 
 class _FakeRuntime:
     last_context = None
+    last_instance = None
 
     def __init__(self, **_kwargs):
         self.toolset_registry = {}
         self.tool_primitive = None
         self.log_handler = None
+        _FakeRuntime.last_instance = self
 
     async def execute(self, _source, _context, format="yaml"):
         assert format == "yaml"
@@ -275,6 +277,47 @@ class _CollectingTraceSink:
         return None
 
 
+class _FakeMCPClient:
+    def __init__(self):
+        self.calls = []
+
+    async def list_tools(self):
+        return [
+            {
+                "name": "plexus_scorecards_list",
+                "description": "List scorecards from Plexus.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "string"},
+                    },
+                },
+            },
+            {
+                "name": "plexus_scorecard_info",
+                "description": "Get scorecard details.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "scorecard_identifier": {"type": "string"},
+                    },
+                    "required": ["scorecard_identifier"],
+                },
+            },
+        ]
+
+    async def call_tool(self, name, arguments):
+        self.calls.append((name, arguments))
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"called {name} with {arguments}",
+                }
+            ]
+        }
+
+
 @pytest.mark.asyncio
 async def test_trace_bridge_forwards_cost_events_to_trace_sink():
     from tactus.protocols.models import CostEvent
@@ -348,6 +391,58 @@ async def test_execute_tactus_initializes_embedded_mcp_transport(monkeypatch):
 
     assert result["success"] is True
     assert mcp_server.transport.connected is True
+
+
+@pytest.mark.asyncio
+async def test_console_tactus_registers_one_plexus_dispatch_tool(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _FakeRuntime)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+
+    mcp_client = _FakeMCPClient()
+    result = await _execute_tactus(
+        procedure_id="builtin:console/chat",
+        procedure_source=(
+            "name: Console\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  local function run(input)\n"
+            "    return { success = true }\n"
+            "  end\n"
+            "  return run(input)\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=mcp_client,
+        context={},
+    )
+
+    assert result["success"] is True
+    toolset = _FakeRuntime.last_instance.toolset_registry["plexus"]
+    assert list(toolset.tools.keys()) == ["plexus"]
+
+    plexus_tool = toolset.tools["plexus"]
+    output = await plexus_tool.function(
+        tool_name="plexus_scorecards_list",
+        arguments='{"limit": "1"}',
+    )
+    assert output == "called plexus_scorecards_list with {'limit': '1'}"
+    assert mcp_client.calls == [("plexus_scorecards_list", {"limit": "1"})]
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-METRICS_TABLE_TYPES = ['item', 'scoreresult', 'task', 'evaluation', 'procedure']
+METRICS_TABLE_TYPES = ['item', 'scoreresult', 'task', 'evaluation', 'procedure', 'feedbackitem']
 
 METRICS_STREAM_CONFIGS = {
     'item': {'batch_size': 10, 'batch_window': 15},
@@ -6,4 +6,5 @@ METRICS_STREAM_CONFIGS = {
     'task': {'batch_size': 1, 'batch_window': 15},
     'evaluation': {'batch_size': 1, 'batch_window': 15},
     'procedure': {'batch_size': 1, 'batch_window': 15},
+    'feedbackitem': {'batch_size': 10, 'batch_window': 15},
 }

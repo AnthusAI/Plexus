@@ -101,6 +101,33 @@ def test_acceptance_rate_passes_parallel_fetch_options(mock_run_feedback_report_
 
 
 @patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
+def test_contradictions_passes_include_rubric_memory_flag(mock_run_feedback_report_block):
+    runner = CliRunner()
+    mock_run_feedback_report_block.return_value = {
+        "status": "success",
+        "output": {"contradictions_found": 0},
+    }
+
+    result = runner.invoke(
+        report,
+        [
+            "contradictions",
+            "--scorecard",
+            "1438",
+            "--score",
+            "48059",
+            "--days",
+            "30",
+            "--include-rubric-memory",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, kwargs = mock_run_feedback_report_block.call_args
+    assert kwargs["extra_config"]["include_rubric_memory"] is True
+
+
+@patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
 def test_acceptance_rate_timeline_uses_default_parallel_fetch_options(mock_run_feedback_report_block):
     runner = CliRunner()
     mock_run_feedback_report_block.return_value = {"status": "success", "output": {"points": []}}

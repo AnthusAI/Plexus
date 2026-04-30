@@ -676,8 +676,9 @@ item:
         keywords: ["school", "university", "degree"]
         fuzzy_match: true
         fuzzy_threshold: 80
-        prev_count: 2
-        next_count: 2
+        window_unit: sentences
+        prev_count: 5
+        next_count: 8
     - class: RemoveSpeakerIdentifiersTranscriptFilter
       parameters: {}
 ```
@@ -693,9 +694,11 @@ Parameters:
 - `fuzzy_match` (bool): Enable fuzzy matching via RapidFuzz (default: false)
 - `fuzzy_threshold` (int): Minimum similarity score 0-100 for fuzzy matching (default: 80)
 - `case_sensitive` (bool): Case-sensitive matching (default: false)
-- `prev_count` (int): Sentences to include before match (default: 1)
-- `next_count` (int): Sentences to include after match (default: 1)
+- `prev_count` (int): Units to include before each match (default: 1)
+- `next_count` (int): Units to include after each match (default: 1)
 - `window_unit` (str): `'sentences'`, `'words'`, or `'characters'` (default: `'sentences'`)
+
+For conversational scorecards, start with broad sentence windows before narrowing. A good first experiment is usually `window_unit: sentences`, `prev_count: 5`, and `next_count: 8`, because short customer acknowledgments and corrections often occur several turns after the triggering agent phrase. Very narrow word windows such as `prev_count: 1` / `next_count: 1` can hide the evidence needed to interpret the exchange.
 
 **FilterCustomerOnlyProcessor** — Keep only customer speech (removes agent/system lines).
 
@@ -719,8 +722,9 @@ item:
         keywords: ["school", "university", "college", "program", "degree", "campus"]
         fuzzy_match: true
         fuzzy_threshold: 75
-        prev_count: 3
-        next_count: 3
+        window_unit: sentences
+        prev_count: 5
+        next_count: 8
 ```
 
 This feeds the LLM a focused excerpt instead of the full transcript, reducing both token cost and classification errors from irrelevant context.
