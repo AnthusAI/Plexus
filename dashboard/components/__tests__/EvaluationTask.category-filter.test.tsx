@@ -10,16 +10,33 @@ jest.mock('@/components/EvaluationTaskScoreResults', () => ({
 
 jest.mock('@/utils/amplify-client', () => ({
   getClient: () => ({
-    graphql: jest.fn().mockResolvedValue({
-      data: {
-        getScoreVersion: {
-          id: 'version-1',
-          createdAt: '2024-01-01T00:00:00Z',
-          score: {
-            championVersionId: 'version-1',
+    graphql: jest.fn(({ query }: { query: string }) => {
+      if (query.includes('getProcedure')) {
+        return Promise.resolve({
+          data: {
+            getProcedure: {
+              id: 'procedure-1',
+              name: 'Optimizer run',
+              description: 'Procedure workflow for evaluation refinement.',
+              status: 'COMPLETED',
+              updatedAt: '2024-01-02T00:00:00Z',
+            },
+          },
+        })
+      }
+
+      return Promise.resolve({
+        data: {
+          getScoreVersion: {
+            id: 'version-1',
+            createdAt: '2024-01-01T00:00:00Z',
+            note: 'Evaluation candidate version',
+            score: {
+              championVersionId: 'version-1',
+            },
           },
         },
-      },
+      })
     }),
   }),
 }))
@@ -111,30 +128,121 @@ const makeTask = () => {
   } as any
 }
 
+const makeTaskWithScoreResultIdOnly = () => {
+  const task = makeTask()
+  task.data.parameters = JSON.stringify({
+    root_cause: {
+      misclassification_analysis: {
+        category_totals: {
+          information_gap: 1,
+        },
+        item_classifications_all: [
+          {
+            score_result_id: 'sr-1',
+            primary_category: 'information_gap',
+            confidence: 'medium',
+            rationale_full: 'Matched only by score result id.',
+          },
+        ],
+        category_summaries: {
+          information_gap: {
+            category_summary_text: 'Score result id only linkage.',
+            item_count: 1,
+          },
+        },
+      },
+    },
+  })
+  return task
+}
+
+const makeTaskWithMissingCategoryLinkage = () => {
+  const task = makeTask()
+  task.data.parameters = JSON.stringify({
+    root_cause: {
+      misclassification_analysis: {
+        category_totals: {
+          information_gap: 1,
+        },
+        item_classifications_all: [
+          {
+            primary_category: 'information_gap',
+            confidence: 'medium',
+            rationale_full: 'No linkage ids on this row.',
+          },
+        ],
+        category_summaries: {
+          information_gap: {
+            category_summary_text: 'No linkage ids available.',
+            item_count: 1,
+          },
+        },
+      },
+    },
+  })
+  return task
+}
+
 describe('EvaluationTask category summary drill-down', () => {
-  test('applies category filter and auto-selects first matching score result', () => {
+  test('applies category filter and auto-selects first matching score result', async () => {
     const onSelectScoreResult = jest.fn()
     render(<EvaluationTask variant="detail" task={makeTask()} onSelectScoreResult={onSelectScoreResult} />)
 
     fireEvent.click(screen.getByRole('button', { name: /View items \(1\)/i }))
 
     expect(screen.getByText('Filtered by category: Information gap')).toBeInTheDocument()
-    expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('["item-1"]')
+    expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('["sr-1"]')
     expect(onSelectScoreResult).toHaveBeenCalledWith('sr-1')
 
     fireEvent.click(screen.getByRole('button', { name: /Clear category filter/i }))
     expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('null')
+
+    await waitFor(() => {
+      expect(screen.getByText('Champion')).toBeInTheDocument()
+    })
   })
 
-  test('renders score version and procedure links in detail view', async () => {
+  test('filters by score_result_id linkage when item_id is unavailable', async () => {
+    const onSelectScoreResult = jest.fn()
+    render(<EvaluationTask variant="detail" task={makeTaskWithScoreResultIdOnly()} onSelectScoreResult={onSelectScoreResult} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /View items \(1\)/i }))
+
+    expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('["sr-1"]')
+    expect(onSelectScoreResult).toHaveBeenCalledWith('sr-1')
+  })
+
+  test('applies empty category filter when linkage ids are missing', async () => {
+    render(<EvaluationTask variant="detail" task={makeTaskWithMissingCategoryLinkage()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /View items \(1\)/i }))
+
+    expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('[]')
+  })
+
+  test('renders score version and procedure related-resource cards in detail view', async () => {
     const { container } = render(<EvaluationTask variant="detail" task={makeTask()} />)
 
     await waitFor(() => {
-      expect(container.querySelector('a[href="/lab/procedures/procedure-1"]')).toBeTruthy()
+      expect(screen.getByText('Champion')).toBeInTheDocument()
     })
 
+    expect(screen.getByText('Score Version')).toBeInTheDocument()
+    expect(screen.getByText('Procedure')).toBeInTheDocument()
+    expect(screen.getByText('Optimizer run')).toBeInTheDocument()
     expect(container.querySelector('a[href="/lab/scorecards/scorecard-1"]')).toBeTruthy()
     expect(container.querySelector('a[href="/lab/scorecards/scorecard-1/scores/score-1/versions/version-1"]')).toBeTruthy()
     expect(container.querySelector('a[href="/lab/procedures/procedure-1"]')).toBeTruthy()
+  })
+
+  test('omits procedure related-resource card when no procedure is associated', async () => {
+    render(<EvaluationTask variant="detail" task={{ ...makeTask(), procedureId: undefined }} />)
+
+    expect(screen.getByText('Score Version')).toBeInTheDocument()
+    expect(screen.queryByText('Procedure')).not.toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(screen.getByText('Champion')).toBeInTheDocument()
+    })
   })
 })

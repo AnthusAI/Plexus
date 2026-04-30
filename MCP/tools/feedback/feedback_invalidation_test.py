@@ -33,7 +33,9 @@ def _register_tools():
 def test_feedback_invalidate_tool_registration():
     registered_tools = _register_tools()
     assert "plexus_feedback_invalidate" in registered_tools
+    assert "plexus_feedback_uninvalidate" in registered_tools
     assert callable(registered_tools["plexus_feedback_invalidate"])
+    assert callable(registered_tools["plexus_feedback_uninvalidate"])
 
 
 def test_feedback_invalidate_tool_success():
@@ -81,3 +83,31 @@ def test_feedback_invalidate_tool_returns_structured_error():
     parsed = json.loads(raw)
     assert parsed["code"] == "ambiguous_feedback_items"
     assert parsed["details"]["candidates"][0]["feedback_item_id"] == "feedback-1"
+
+
+def test_feedback_uninvalidate_tool_success():
+    registered_tools = _register_tools()
+    tool = registered_tools["plexus_feedback_uninvalidate"]
+    result_payload = {
+        "status": "reinstated",
+        "updated": True,
+        "already_invalid": True,
+        "resolution": {
+            "requested_identifier": "feedback-1",
+            "method": "feedback_item_id",
+            "resolved_item_id": "item-1",
+            "scorecard_filter": None,
+            "score_filter": None,
+        },
+        "feedback_item": {"id": "feedback-1", "is_invalid": False},
+    }
+
+    with patch("plexus.cli.shared.client_utils.create_client", return_value=Mock()), patch(
+        "plexus.cli.feedback.feedback_invalidation.reinstate_feedback_item",
+        return_value=result_payload,
+    ):
+        raw = asyncio.run(tool(identifier="feedback-1"))
+
+    parsed = json.loads(raw)
+    assert parsed["status"] == "reinstated"
+    assert parsed["feedback_item"]["id"] == "feedback-1"

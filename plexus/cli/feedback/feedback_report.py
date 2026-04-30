@@ -436,6 +436,12 @@ def alignment(
 @click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, or key).")
 @click.option("--score", required=True, help="Score identifier (id or external id).")
 @click.option(
+    "--score-version",
+    "score_version_id",
+    required=False,
+    help="Optional ScoreVersion ID to use as rubric authority instead of the champion.",
+)
+@click.option(
     "--mode",
     type=click.Choice(["contradictions", "aligned"]),
     default="contradictions",
@@ -445,6 +451,11 @@ def alignment(
 @click.option("--max-feedback-items", type=int, default=400, show_default=True)
 @click.option("--num-topics", type=int, default=8, show_default=True)
 @click.option("--max-concurrent", type=int, default=20, show_default=True)
+@click.option(
+    "--include-rubric-memory",
+    is_flag=True,
+    help="Inject retrieval-only rubric-memory citation context into contradiction voters.",
+)
 @click.option("--days", type=int, required=False, help="Trailing window in days.")
 @click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
 @click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
@@ -458,10 +469,12 @@ def alignment(
 def contradictions(
     scorecard: str,
     score: str,
+    score_version_id: Optional[str],
     mode: str,
     max_feedback_items: int,
     num_topics: int,
     max_concurrent: int,
+    include_rubric_memory: bool,
     days: Optional[int],
     start_date: Optional[str],
     end_date: Optional[str],
@@ -491,6 +504,8 @@ def contradictions(
             "max_feedback_items": max_feedback_items,
             "num_topics": num_topics,
             "max_concurrent": max_concurrent,
+            "include_rubric_memory": include_rubric_memory,
+            "score_version_id": score_version_id,
         },
     )
     _print_result(title="FeedbackContradictions", result=result, output_format=output_format, include_log=include_log)

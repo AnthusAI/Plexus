@@ -171,8 +171,22 @@ def register_score_tools(mcp: FastMCP):
             tofile=right_label,
         ))
 
+    def _coerce_metadata_dict(metadata: Any) -> Dict[str, Any]:
+        if isinstance(metadata, dict):
+            return {key: value for key, value in metadata.items()}
+        if isinstance(metadata, str) and metadata.strip():
+            try:
+                parsed = json.loads(metadata)
+            except json.JSONDecodeError:
+                logger.warning("Ignoring non-JSON ScoreVersion metadata during champion update")
+                return {}
+            if isinstance(parsed, dict):
+                return parsed
+            return {}
+        return {}
+
     def _build_champion_metadata(
-        metadata: Optional[Dict[str, Any]],
+        metadata: Any,
         *,
         score_id: str,
         version_id: str,
@@ -183,8 +197,16 @@ def register_score_tools(mcp: FastMCP):
         previous_champion_version_id: Optional[str] = None,
         next_champion_version_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        next_metadata: Dict[str, Any] = dict(metadata or {})
-        history = list(next_metadata.get("championHistory") or [])
+        next_metadata: Dict[str, Any] = _coerce_metadata_dict(metadata)
+        raw_history = next_metadata.get("championHistory") or []
+        if isinstance(raw_history, list):
+            history = [
+                {key: value for key, value in entry.items()}
+                for entry in raw_history
+                if isinstance(entry, dict)
+            ]
+        else:
+            history = []
         if incoming:
             history.append({
                 "scoreId": score_id,
@@ -217,6 +239,44 @@ def register_score_tools(mcp: FastMCP):
                 }
         next_metadata["championHistory"] = history
         return next_metadata
+
+    def _find_completed_score_version_evaluation(client, version_id: str) -> Optional[Dict[str, Any]]:
+        query = """
+        query FindEvaluationForPromotionGuard($scoreVersionId: String!, $limit: Int) {
+          listEvaluationByScoreVersionIdAndCreatedAt(
+            scoreVersionId: $scoreVersionId
+            sortDirection: DESC
+            limit: $limit
+          ) {
+            items {
+              id
+              type
+              status
+              scoreVersionId
+              totalItems
+              processedItems
+              createdAt
+            }
+          }
+        }
+        """
+        result = client.execute(query, {"scoreVersionId": version_id, "limit": 20})
+        items = (
+            (result.get("listEvaluationByScoreVersionIdAndCreatedAt") or {})
+            .get("items") or []
+        )
+        for item in items:
+            if not item.get("id") or item.get("status") != "COMPLETED":
+                continue
+            processed_items = item.get("processedItems")
+            if processed_items is not None:
+                try:
+                    if int(processed_items) <= 0:
+                        continue
+                except (TypeError, ValueError):
+                    continue
+            return item
+        return None
     
     @mcp.tool()
     async def plexus_score_info(
@@ -1906,7 +1966,8 @@ def register_score_tools(mcp: FastMCP):
     @mcp.tool()
     async def plexus_score_set_champion(
         score_id: str,
-        version_id: str
+        version_id: str,
+        force: bool = False,
     ) -> Union[str, Dict[str, Any]]:
         """
         Promotes a specific score version to champion (sets it as the active deployed version).
@@ -1914,6 +1975,7 @@ def register_score_tools(mcp: FastMCP):
         Parameters:
         - score_id: The ID of the score
         - version_id: The version ID to promote to champion
+        - force: Bypass the evaluation guard. Defaults to False.
 
         Returns:
         - Confirmation with the new championVersionId
@@ -1958,6 +2020,7 @@ def register_score_tools(mcp: FastMCP):
                     scoreId
                     configuration
                     metadata
+                    createdAt
                 }
             }
             """
@@ -1988,6 +2051,24 @@ def register_score_tools(mcp: FastMCP):
                     "scoreId": score_id,
                     "versionId": version_id,
                 }
+
+            guard_evaluation = None
+            if not force:
+                guard_evaluation = _find_completed_score_version_evaluation(client, version_id)
+                if not guard_evaluation:
+                    return {
+                        "success": False,
+                        "error": "EVALUATION_REQUIRED",
+                        "message": (
+                            "Cannot promote this version to champion because no completed "
+                            "Evaluation is associated with the target ScoreVersion. Run at least "
+                            "one feedback or accuracy evaluation for this version first, or call "
+                            "with force=true for an explicit operator override."
+                        ),
+                        "scoreId": score_id,
+                        "versionId": version_id,
+                        "forceSupported": True,
+                    }
 
             mutation = """
             mutation UpdateScore($input: UpdateScoreInput!) {
@@ -2031,8 +2112,9 @@ def register_score_tools(mcp: FastMCP):
                     """
                     client.execute(update_version_mutation, {"input": {
                         "id": version_id,
-                        "metadata": incoming_metadata,
+                        "metadata": json.dumps(incoming_metadata),
                         "isFeatured": "true",
+                        "createdAt": version_data.get("createdAt"),
                     }})
                     if previous_champion_version_id and previous_champion_version_id != version_id:
                         outgoing_metadata = _build_champion_metadata(
@@ -2044,7 +2126,11 @@ def register_score_tools(mcp: FastMCP):
                             transition_id=transition_id,
                             incoming=False,
                         )
-                        client.execute(update_version_mutation, {"input": {"id": previous_champion_version_id, "metadata": outgoing_metadata}})
+                        client.execute(update_version_mutation, {"input": {
+                            "id": previous_champion_version_id,
+                            "metadata": json.dumps(outgoing_metadata),
+                            "createdAt": previous_version_data.get("createdAt"),
+                        }})
                     return {
                         "success": True,
                         "scoreId": updated['id'],
@@ -2052,10 +2138,16 @@ def register_score_tools(mcp: FastMCP):
                         "previousChampionVersionId": previous_champion_version_id,
                         "transitionId": transition_id,
                         "promotedAt": promoted_at,
+                        "evaluationGuard": {
+                            "forced": force,
+                            "evaluationId": (guard_evaluation or {}).get("id"),
+                            "evaluationStatus": (guard_evaluation or {}).get("status"),
+                        },
                     }
                 else:
                     return f"Error: Failed to set champion: {result}"
             except Exception as e:
+                logger.error("Error setting score champion", exc_info=True)
                 return f"Error setting champion: {str(e)}"
 
         except Exception as e:
@@ -2590,7 +2682,7 @@ async def _create_version_from_code_with_parent(
             'scoreId': score.id,
             'configuration': (code_content or '').strip(),
             'note': note or 'Updated via MCP score update tool',
-            'isFeatured': "true"  # Mark as featured by default
+            'isFeatured': "false"
         }
         
         # Add guidelines if provided

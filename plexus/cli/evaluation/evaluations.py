@@ -116,6 +116,10 @@ from plexus.cli.shared.feedback_evaluation_runner import (
     run_feedback_evaluation_orchestrated,
 )
 from plexus.utils.feedback_selection import select_feedback_items
+from plexus.score_rubric_consistency import (
+    ScoreRubricConsistencyService,
+    merge_consistency_result_into_parameters,
+)
 
 from plexus.utils import truncate_dict_strings_inner
 
@@ -132,7 +136,7 @@ def log_scorecard_configurations(scorecard_instance, context=""):
         version = score_config.get('version', 'Not specified')
         champion_version = score_config.get('championVersionId', 'Not specified')
         
-        logging.info(f"Score #{i+1}: {score_name}")
+        logging.info(f"Score #{i + 1}: {score_name}")
         logging.info(f"  ID: {score_id}")
         logging.info(f"  Version field: {version}")
         logging.info(f"  Champion version: {champion_version}")
@@ -2804,9 +2808,9 @@ def accuracy(
                 scorecard_id_resolved = getattr(scorecard_instance, 'id', None)
                 logging.info(f"Resolved from attributes: name='{scorecard_name_resolved}', key='{scorecard_key_resolved}', id='{scorecard_id_resolved}' (type: {type(scorecard_id_resolved)})")
             else:
-                scorecard_name_resolved = scorecard # Fallback to initial identifier
-                scorecard_key_resolved = scorecard # Fallback to initial identifier
-                scorecard_id_resolved = scorecard # Fallback to initial identifier
+                scorecard_name_resolved = scorecard  # Fallback to initial identifier
+                scorecard_key_resolved = scorecard  # Fallback to initial identifier
+                scorecard_id_resolved = scorecard  # Fallback to initial identifier
                 logging.info(f"Using fallback: name='{scorecard_name_resolved}', key='{scorecard_key_resolved}', id='{scorecard_id_resolved}' (type: {type(scorecard_id_resolved)})")
             
             # Check if any cloud dataset options are provided
@@ -3257,9 +3261,9 @@ def accuracy(
                     raise
             
             # Display final results summary
-            logging.info(f"\n{'='*60}")
+            logging.info(f"\n{'=' * 60}")
             logging.info("EVALUATION RESULTS")
-            logging.info('='*60)
+            logging.info('=' * 60)
             logging.info(f"Sample Size:        {len(labeled_samples_data)}")
 
             # Safely extract metrics (handle None case)
@@ -3288,7 +3292,7 @@ def accuracy(
             if detailed_summary:
                 logging.info(detailed_summary)
             
-            logging.info('='*60)
+            logging.info('=' * 60)
             
             # Complete task lifecycle in tracker/API task record.
             if tracker:
@@ -3590,8 +3594,8 @@ def check_dict_serializability(d, path=""):
                 if isinstance(item, dict):
                     non_serializable_paths.extend(check_dict_serializability(item, item_path))
                 elif isinstance(item, list):
-                     # Handle nested lists if necessary, though less common in typical results
-                     pass # Or add recursive list check if needed
+                    # Handle nested lists if necessary, though less common in typical results
+                    pass  # Or add recursive list check if needed
                 elif not is_json_serializable(item):
                     logging.warning(f"Non-serializable list item found at path '{item_path}': type={type(item)}")
                     non_serializable_paths.append(item_path)
@@ -3652,8 +3656,8 @@ def score_text_wrapper(scorecard_instance, text, score_name, scorecard_name=None
                 score_result_name = None
                 if hasattr(score_result_obj, 'parameters') and hasattr(score_result_obj.parameters, 'name'):
                     score_result_name = score_result_obj.parameters.name
-                elif hasattr(score_result_obj, 'name'): # Fallback if name is directly on the object
-                     score_result_name = score_result_obj.name
+                elif hasattr(score_result_obj, 'name'):  # Fallback if name is directly on the object
+                    score_result_name = score_result_obj.name
 
                 if score_result_name == score_name:
                     # Ensure the returned object is a Score.Result instance or similar
@@ -3675,8 +3679,8 @@ def score_text_wrapper(scorecard_instance, text, score_name, scorecard_name=None
             #     return result[first_key]
             # else:
             #     return {"error": "Empty result dictionary", "value": "ERROR"}
-        elif hasattr(result, 'value'): # Handle case where a single Result object is returned directly
-             return result
+        elif hasattr(result, 'value'):  # Handle case where a single Result object is returned directly
+            return result
         else:
             # Handle unexpected result types
             logging.warning(f"Unexpected result type from score_entire_text: {type(result)}")
@@ -4188,7 +4192,12 @@ def last(account_key: str, type: Optional[str]):
 @click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 @click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
-@_enforce_child_budget_from_env("evaluation.feedback")
+@click.option(
+    '--score-rubric-consistency-check',
+    is_flag=True,
+    default=False,
+    help='Before feedback-backed predictions, compare the evaluated ScoreVersion code against its rubric and store the result.',
+)
 def feedback(
     scorecard: str,
     score: str,
@@ -4203,6 +4212,7 @@ def feedback(
     use_yaml: bool,
     task_id: Optional[str],
     notes: Optional[str] = None,
+    score_rubric_consistency_check: bool = False,
 ):
     """
     Evaluate feedback alignment by analyzing feedback items over a time period for a specific score.
@@ -4535,6 +4545,7 @@ def feedback(
                         "sample_seed": sample_seed,
                         "max_category_summary_items": max_category_summary_items,
                         "mode": "accuracy_with_feedback_dataset",
+                        "score_rubric_consistency_check_requested": bool(score_rubric_consistency_check),
                         **({"notes": notes} if notes else {}),
                         "metadata": {
                             **({"baseline": baseline} if baseline else {}),
@@ -4549,6 +4560,54 @@ def feedback(
                 
                 console.print(f"\nCreated evaluation record: {evaluation_id}")
                 console.print(f"Dashboard URL: https://app.plexusanalytics.com/evaluations/{evaluation_id}")
+
+                if score_rubric_consistency_check:
+                    console.print("\n[bold]Checking score code against rubric...[/bold]")
+                    try:
+                        consistency_result = ScoreRubricConsistencyService().generate_from_api(
+                            client=client,
+                            scorecard_identifier=scorecard,
+                            score_identifier=score_name_for_dataset,
+                            score_id=score_id,
+                            score_version_id=version,
+                        )
+                        merged_parameters = merge_consistency_result_into_parameters(
+                            evaluation_record.parameters,
+                            consistency_result,
+                        )
+                        evaluation_record.update(parameters=json.dumps(merged_parameters))
+                        console.print(
+                            f"[dim]Score/rubric consistency: {consistency_result.status}[/dim]"
+                        )
+                    except Exception as consistency_error:
+                        logging.warning(
+                            "Score/rubric consistency check failed for evaluation %s: %s",
+                            evaluation_id,
+                            consistency_error,
+                            exc_info=True,
+                        )
+                        merged_parameters = {}
+                        try:
+                            merged_parameters = (
+                                json.loads(evaluation_record.parameters)
+                                if isinstance(evaluation_record.parameters, str)
+                                and evaluation_record.parameters
+                                else (evaluation_record.parameters or {})
+                            )
+                        except Exception:
+                            merged_parameters = {}
+                        merged_parameters["score_rubric_consistency_check"] = {
+                            "scorecard_identifier": scorecard,
+                            "score_identifier": score_name_for_dataset,
+                            "score_version_id": version,
+                            "status": "unavailable",
+                            "paragraph": (
+                                "The score/rubric consistency check failed before predictions ran."
+                            ),
+                            "error": str(consistency_error),
+                            "checked_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                        }
+                        evaluation_record.update(parameters=json.dumps(merged_parameters))
                 
                 # Run accuracy evaluation with the modified scorecard
                 console.print("\n[bold]Running accuracy evaluation with FeedbackItems dataset...[/bold]")
