@@ -132,6 +132,7 @@ class Procedure(BaseModel):
         parentProcedureId: Optional[str] = None,
         isTemplate: bool = False,
         code: Optional[str] = None,
+        name: Optional[str] = None,
         state: str = "start",
         scoreVersionId: Optional[str] = None
     ) -> 'Procedure':
@@ -146,6 +147,7 @@ class Procedure(BaseModel):
             parentProcedureId: Optional ID of the parent procedure (if this is an instance)
             isTemplate: Whether this procedure is a template (default: False)
             code: Optional YAML code for the procedure
+            name: Optional explicit name (overrides name extracted from code)
             state: Initial state (default: "start")
             scoreVersionId: Optional ID of the score version
 
@@ -157,10 +159,8 @@ class Procedure(BaseModel):
         else:
             logger.debug(f"Creating standalone procedure")
 
-        # Generate name from code or use default
-        name = "Lua DSL Procedure"
-        if code:
-            # Try to extract name from YAML
+        # Determine name: explicit > extracted from code > default
+        if not name and code:
             try:
                 import yaml
                 yaml_data = yaml.safe_load(code)
@@ -168,6 +168,8 @@ class Procedure(BaseModel):
                     name = yaml_data['name']
             except:
                 pass
+        if not name:
+            name = "Lua DSL Procedure"
 
         input_data = {
             'accountId': accountId,
@@ -184,7 +186,8 @@ class Procedure(BaseModel):
             input_data['scoreId'] = scoreId
         if parentProcedureId:
             input_data['parentProcedureId'] = parentProcedureId
-        if code:
+        # Only store code in DynamoDB if it fits (400KB limit); large YAML goes to S3
+        if code and len(code.encode("utf-8")) < 350_000:
             input_data['code'] = code
         if scoreVersionId:
             input_data['scoreVersionId'] = scoreVersionId
