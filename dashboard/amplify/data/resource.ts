@@ -866,7 +866,8 @@ const schema = a.schema({
             parentProcedureId: a.string(), // References template procedure if this is an instance
             parentProcedure: a.belongsTo('Procedure', 'parentProcedureId'),
             childProcedures: a.hasMany('Procedure', 'parentProcedureId'), // Instances created from this template
-            code: a.string(), // YAML template code (for templates) or copied code (for instances)
+            code: a.string(), // YAML template code (for templates) or copied code (for instances) — omitted for large procedures
+            attachedFiles: a.string().array(), // S3 keys for attachments, e.g. ["procedures/{id}/code.tac"]
             category: a.string(), // For templates: e.g., "hypothesis_generation", "beam_search"
             version: a.string(), // For templates: version (e.g., "1.0", "2.1")
             isDefault: a.boolean(), // For templates: whether this is the default for the category

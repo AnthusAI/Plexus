@@ -2990,18 +2990,24 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
         "async_mode": True,
         "dry_run": bool(args.get("dry_run", False)),
     }
-    run_result = _run_async_from_sync(service.run_procedure(str(procedure_id), **options))
-    if not isinstance(run_result, dict):
-        raise ValueError(
-            f"plexus.procedure.optimize async dispatch returned {type(run_result).__name__}"
-        )
-    if run_result.get("status") == "error" or run_result.get("error"):
-        raise ValueError(str(run_result.get("error") or run_result))
+
+    # Dispatch the optimizer in a background daemon thread so the caller can
+    # return the procedure_id immediately rather than blocking for hours.
+    import threading
+
+    def _run_bg():
+        try:
+            _run_async_from_sync(service.run_procedure(str(procedure_id), **options))
+        except Exception as _bg_exc:
+            logger.warning("Background optimizer run failed: %s", _bg_exc)
+
+    bg_thread = threading.Thread(target=_run_bg, daemon=True, name=f"optimizer-{procedure_id[:8]}")
+    bg_thread.start()
 
     return {
         "procedure_id": procedure_id,
-        "status": run_result.get("status", "dispatched"),
-        "message": run_result.get("message") or "Optimizer procedure dispatched asynchronously.",
+        "status": "dispatched",
+        "message": "Optimizer procedure dispatched — running in background.",
         "scorecard": str(scorecard_identifier),
         "score": str(score_identifier),
         "dashboard_url": f"https://lab.callcriteria.com/lab/procedures/{procedure_id}",
@@ -3308,10 +3314,23 @@ class BudgetGate:
         budget_value: Any,
     ) -> dict[str, Any]:
         if not isinstance(budget_value, dict):
-            self.child_budget_required_reason = (
-                f"plexus.{namespace}.{method} async requires explicit budget"
-            )
-            raise ChildBudgetRequired(self.child_budget_required_reason)
+            # When the parent budget is effectively unlimited (e.g. chat embedded MCP),
+            # auto-supply a generous default instead of requiring explicit budget.
+            if (
+                self.spec.wallclock_seconds == float("inf")
+                and self.spec.usd == float("inf")
+            ):
+                budget_value = {
+                    "usd": float("inf"),
+                    "wallclock_seconds": 3600.0,
+                    "depth": max(min(self.spec.depth - 1, 15), 1),
+                    "tool_calls": max(self.spec.tool_calls - self.tool_calls - 1, 100),
+                }
+            else:
+                self.child_budget_required_reason = (
+                    f"plexus.{namespace}.{method} async requires explicit budget"
+                )
+                raise ChildBudgetRequired(self.child_budget_required_reason)
         child_spec = BudgetSpec.from_dict(budget_value)
         elapsed = self.elapsed_seconds()
         remaining_usd = max(self.spec.usd - self.spent_usd, 0.0)
@@ -3663,16 +3682,36 @@ def _default_score_pull(args: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"No champion version for score: {score_identifier!r}")
         version_id = sv.get("id")
 
+    yaml_content = sv.get("configuration") or ""
+    guidelines = sv.get("guidelines") or ""
+    resolved_version_id = version_id or sv.get("id") or "unknown"
+
+    # Write to temp files so sandboxed Lua code can read them via File.read()
+    # without needing the io library (which is not available in Tactus sandboxes).
+    import tempfile, os as _os
+    code_path = _os.path.join(tempfile.gettempdir(), f"plexus_score_{resolved_version_id}.yaml")
+    guide_path = _os.path.join(tempfile.gettempdir(), f"plexus_guide_{resolved_version_id}.md")
+    try:
+        with open(code_path, "w", encoding="utf-8") as f:
+            f.write(yaml_content)
+        with open(guide_path, "w", encoding="utf-8") as f:
+            f.write(guidelines)
+    except OSError:
+        code_path = None
+        guide_path = None
+
     return {
         "success": True,
         "score_id": score_id,
         "scorecard_id": scorecard_id,
-        "version_id": version_id or sv.get("id"),
-        "yaml_content": sv.get("configuration") or "",
-        "guidelines": sv.get("guidelines") or "",
+        "version_id": resolved_version_id,
+        "yaml_content": yaml_content,
+        "guidelines": guidelines,
         "note": sv.get("note") or "",
         "created_at": sv.get("createdAt") or "",
         "is_featured": bool(sv.get("isFeatured")),
+        "code_file_path": code_path,
+        "guidelines_file_path": guide_path,
     }
 
 
@@ -3755,6 +3794,7 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
         "scoreId": score_id,
         "configuration": code,
         "note": version_note,
+        "isFeatured": "false",
     }
     if guidelines is not None:
         input_obj["guidelines"] = guidelines
@@ -3804,7 +3844,7 @@ def _default_score_test(args: dict[str, Any]) -> dict[str, Any]:
 
     client = create_client()
     return _run_async_from_sync(
-        lambda: run_score_version_test(
+        run_score_version_test(
             client=client,
             scorecard_identifier=scorecard_identifier,
             score_identifier=score_identifier,
@@ -5093,6 +5133,37 @@ def _run_tactus_sync(
     return asyncio.run(run())
 
 
+_EXECUTE_TACTUS_MAX_RESPONSE_CHARS = 40_000
+
+
+def _truncate_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
+    """Cap the serialized response to avoid filling LLM context windows."""
+    try:
+        serialized = json.dumps(envelope)
+        if len(serialized) <= _EXECUTE_TACTUS_MAX_RESPONSE_CHARS:
+            return envelope
+        # Re-encode with the value field truncated
+        trunc = dict(envelope)
+        value = trunc.get("value")
+        if isinstance(value, (dict, list)):
+            value_str = json.dumps(value)
+            if len(value_str) > _EXECUTE_TACTUS_MAX_RESPONSE_CHARS // 2:
+                trunc["value"] = {
+                    "__truncated__": True,
+                    "preview": value_str[: _EXECUTE_TACTUS_MAX_RESPONSE_CHARS // 2],
+                    "original_bytes": len(value_str),
+                    "hint": "Response was too large for LLM context. Refine the query to fetch less data.",
+                }
+        elif isinstance(value, str) and len(value) > _EXECUTE_TACTUS_MAX_RESPONSE_CHARS // 2:
+            trunc["value"] = (
+                value[: _EXECUTE_TACTUS_MAX_RESPONSE_CHARS // 2]
+                + f"\n[...truncated, {len(value)} chars total]"
+            )
+        return trunc
+    except Exception:
+        return envelope
+
+
 async def _execute_tactus_tool(
     tactus: str,
     mcp: FastMCP,
@@ -5161,7 +5232,7 @@ async def _execute_tactus_tool(
             )
         )
         if stream_handler is None:
-            return await run_task
+            return _truncate_envelope(await run_task)
 
         while True:
             if run_task.done():
@@ -5174,7 +5245,7 @@ async def _execute_tactus_tool(
                 continue
             await _send_mcp_stream_event(ctx, event)
 
-        return await run_task
+        return _truncate_envelope(await run_task)
     except Exception as exc:
         logger.error("execute_tactus failed: %s", exc, exc_info=True)
         envelope = _response_envelope(
