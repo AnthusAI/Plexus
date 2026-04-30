@@ -68,14 +68,7 @@ export type ProcessedEvaluation = Omit<BaseEvaluation, 'task' | 'scorecard' | 's
       value: string;
       url?: string;
     }> | null;
-    feedbackItem?: {
-      id?: string | null;
-      editCommentValue?: string | null;
-      initialAnswerValue?: string | null;
-      finalAnswerValue?: string | null;
-      editorName?: string | null;
-      editedAt?: string | null;
-    } | null;
+    feedbackItem?: any | null;
     createdAt: string;
   }>;
 };
