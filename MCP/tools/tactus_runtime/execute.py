@@ -4667,6 +4667,43 @@ class PlexusRuntimeModule:
         finally:
             self._budget.record_after("report", "configurations_list")
 
+    @staticmethod
+    def _parse_acceptance_rate_result(raw: Any, *, include_items: bool = False) -> dict:
+        """Parse AcceptanceRate sync output into a clean dict for LLM consumption.
+
+        The block returns a string of the form ``# header\\n\\n{...json...}``.
+        We parse the JSON portion, drop the verbose log, and optionally strip
+        the per-item rows (which can be thousands of entries).
+        """
+        import json as _json
+
+        output_str = None
+        if isinstance(raw, dict):
+            out = raw.get("output")
+            if isinstance(out, str):
+                output_str = out
+            elif isinstance(out, dict):
+                data = dict(out)
+                if not include_items:
+                    data.pop("items", None)
+                data.pop("raw_counts", None)
+                return {"status": "success", "cached": raw.get("cached"), **data}
+        if output_str is None:
+            return raw  # can't parse, pass through
+
+        # Strip the comment-header lines (lines starting with #) to get raw JSON
+        json_lines = [l for l in output_str.splitlines() if not l.startswith("#")]
+        json_str = "\n".join(json_lines).strip()
+        try:
+            data = _json.loads(json_str)
+        except Exception:
+            return {"status": "success", "output": output_str}
+
+        if not include_items:
+            data.pop("items", None)
+        data.pop("raw_counts", None)
+        return {"status": "success", "cached": raw.get("cached") if isinstance(raw, dict) else None, **data}
+
     def _call_report_run(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "report" or method not in {"run", "acceptance_rate"}:
             raise ValueError(
@@ -4691,7 +4728,15 @@ class PlexusRuntimeModule:
             self._budget.check_before("report", "run")
             self._record_api_call("report", "run")
             try:
-                return _default_report_runner_sync(parsed)
+                raw = _default_report_runner_sync(parsed)
+                # For AcceptanceRate: parse the output string and return a clean
+                # dict (drop the verbose shard-fetch log and strip items unless
+                # the caller explicitly asked for them via include_items=true).
+                if parsed.get("block_class") == "AcceptanceRate":
+                    return self._parse_acceptance_rate_result(
+                        raw, include_items=bool(parsed.get("include_items", False))
+                    )
+                return raw
             finally:
                 self._budget.record_after("report", "run")
 
