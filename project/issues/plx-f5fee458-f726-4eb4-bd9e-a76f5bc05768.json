@@ -1,0 +1,49 @@
+{
+  "id": "plx-f5fee458-f726-4eb4-bd9e-a76f5bc05768",
+  "title": "Use shared IdentifierDisplay for evaluation score results",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f8aff74b-6412-4367-829d-0b5e2eec8e62",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "cfd97522-b93e-40e5-8359-39a6dc1ba0a5",
+      "author": "derek",
+      "text": "Started investigation. Goal: replace raw numeric/UUID identifier rendering in evaluations score-results detail views with shared IdentifierDisplay component used elsewhere (reports/items).",
+      "created_at": "2026-04-30T00:09:50.884610574Z"
+    },
+    {
+      "id": "42e08417-d987-406f-8186-c167c9bcf98a",
+      "author": "derek",
+      "text": "Findings: evaluation score-result detail already renders , but lazy-loaded score-results in  only populate  from . It skips legacy/object identifier sources that other surfaces normalize, causing fallback to raw itemId text. Next: centralize score-result identifier extraction in shared transform logic and reuse in evaluations lazy-load path.",
+      "created_at": "2026-04-30T00:10:47.672706092Z"
+    },
+    {
+      "id": "efd0fb20-6cf2-4516-bffe-5432ca3cc607",
+      "author": "derek",
+      "text": "Findings: evaluation score-result detail already renders the shared IdentifierDisplay component, but lazy-loaded score-results in dashboard/components/evaluations-dashboard.tsx only populate itemIdentifiers from item.itemIdentifiers.items. It skips legacy/object identifier sources that other surfaces normalize, causing fallback to raw itemId text. Next: centralize score-result identifier extraction in shared transform logic and reuse in evaluations lazy-load path.",
+      "created_at": "2026-04-30T00:10:51.014639324Z"
+    },
+    {
+      "id": "c9500c8a-86b2-4a07-a418-3600c66dba54",
+      "author": "derek",
+      "text": "User requested full DRY fix. Implementing shared score-result transformation helper(s) in dashboard/utils/data-operations.ts and replacing duplicate evaluation lazy-load mapping in dashboard/components/evaluations-dashboard.tsx to consume shared helpers only.",
+      "created_at": "2026-04-30T00:13:07.906077948Z"
+    },
+    {
+      "id": "9e3d1453-78a5-4577-840a-e355916a1933",
+      "author": "derek",
+      "text": "Implemented full DRY refactor: added shared transformScoreResultForDisplay + parseScoreResultMetadata in dashboard/utils/data-operations.ts; transformEvaluation now uses shared helper; evaluations-dashboard lazy-load transform now delegates to shared helper (removed duplicate mapping logic). Added tests for shared lazy-load transform and object-map identifier normalization. Targeted test suite pass: npm --prefix dashboard test -- --runInBand dashboard/utils/data-operations.test.ts.",
+      "created_at": "2026-04-30T00:13:47.557658200Z"
+    }
+  ],
+  "created_at": "2026-04-30T00:09:48.433406318Z",
+  "updated_at": "2026-04-30T00:13:47.557658200Z",
+  "closed_at": null,
+  "custom": {}
+}
