@@ -345,6 +345,7 @@ def register_evaluation_tools(mcp: FastMCP):
         use_score_associated_dataset: bool = False,
         batch: Optional[List[Dict[str, Any]]] = None,
         notes: Optional[str] = None,
+        score_rubric_consistency_check: bool = False,
     ) -> str:
         """
         Run an evaluation using the same code path as CLI.
@@ -391,6 +392,9 @@ def register_evaluation_tools(mcp: FastMCP):
                  the evaluation's parameters JSON under the "notes" key. Useful for recording
                  context like "Baseline: deterministic accuracy dataset" or
                  "Iteration 3: Added example for transfer-request edge case".
+        - score_rubric_consistency_check: Feedback evaluations only. When True, run a
+                 preflight check that compares the evaluated ScoreVersion code against its
+                 own rubric and store the paragraph on Evaluation.parameters.
 
         Returns:
         - JSON string with evaluation results including evaluation_id, metrics, and dashboard URL.
@@ -434,19 +438,27 @@ def register_evaluation_tools(mcp: FastMCP):
                 batch_list = list(batch)
             logger.info(f"Batch evaluation: dispatching {len(batch_list)} evaluations in parallel")
             for i, item in enumerate(batch_list):
-                logger.info(f"  Batch item {i+1}: type={item.get('evaluation_type')}, score={item.get('score_name')}, wait={item.get('wait')}")
+                logger.info(
+                    f"  Batch item {i + 1}: type={item.get('evaluation_type')}, "
+                    f"score={item.get('score_name')}, wait={item.get('wait')}"
+                )
             tasks = [plexus_evaluation_run(**item) for item in batch_list]
             raw_results = await _asyncio.gather(*tasks, return_exceptions=True)
             output = []
             for i, r in enumerate(raw_results):
                 if isinstance(r, Exception):
-                    logger.error(f"Batch item {i+1} raised exception: {type(r).__name__}: {r}", exc_info=r)
+                    logger.error(
+                        f"Batch item {i + 1} raised exception: {type(r).__name__}: {r}",
+                        exc_info=r,
+                    )
                     output.append({"error": f"{type(r).__name__}: {r}"})
                 else:
                     try:
                         output.append(json.loads(r))
                     except Exception as parse_exc:
-                        logger.error(f"Batch item {i+1} result parse error: {parse_exc}, raw={str(r)[:500]}")
+                        logger.error(
+                            f"Batch item {i + 1} result parse error: {parse_exc}, raw={str(r)[:500]}"
+                        )
                         output.append({"error": "Could not parse result", "raw": str(r)})
             logger.info(f"Batch evaluation complete: {len(output)} results")
             # Post-batch notes application: apply notes to each eval sequentially
@@ -459,7 +471,9 @@ def register_evaluation_tools(mcp: FastMCP):
                     if eval_id:
                         _apply_notes_to_evaluation(eval_id, item_notes)
                     else:
-                        logger.warning(f"Batch item {i+1}: no eval_id in result, cannot apply notes")
+                        logger.warning(
+                            f"Batch item {i + 1}: no eval_id in result, cannot apply notes"
+                        )
             return json.dumps(output)
 
         if not scorecard_name:
@@ -576,6 +590,8 @@ def register_evaluation_tools(mcp: FastMCP):
                     cmd += ["--max-category-summary-items", str(max_category_items)]
                     if runner_task_id:
                         cmd += ["--task-id", runner_task_id]
+                    if score_rubric_consistency_check:
+                        cmd += ["--score-rubric-consistency-check"]
                     subprocess.Popen(
                         cmd,
                         stdout=subprocess.DEVNULL,
@@ -699,6 +715,8 @@ def register_evaluation_tools(mcp: FastMCP):
                         fb_args.extend(['--sample-seed', str(sample_seed)])
                     if notes:
                         fb_args.extend(['--notes', notes])
+                    if score_rubric_consistency_check:
+                        fb_args.append('--score-rubric-consistency-check')
                     # When a specific version is requested, yaml mode must be disabled.
                     effective_yaml = yaml and not resolved_version
                     if effective_yaml:

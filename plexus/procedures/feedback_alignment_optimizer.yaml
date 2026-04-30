@@ -3819,6 +3819,7 @@ code: |
         max_feedback_items = params.max_samples or 100,
         sampling_mode      = "newest",
         wait               = true,
+        score_rubric_consistency_check = true,
         notes              = "Baseline: recent feedback alignment dataset for " .. score_name,
       })
     end

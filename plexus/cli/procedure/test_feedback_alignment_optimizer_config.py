@@ -321,6 +321,14 @@ def test_optimizer_yaml_runs_contradictions_directly_without_background_dispatch
     assert 'cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name' in code
 
 
+def test_optimizer_baseline_feedback_runs_score_rubric_consistency_check():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "score_rubric_consistency_check = true" in code
+    assert 'evaluation_type    = "feedback"' in code
+
+
 def test_optimizer_yaml_treats_cycle_errors_as_terminal_and_does_not_extend_iteration_cap():
     config = _load_optimizer_config()
     code = config["code"]
