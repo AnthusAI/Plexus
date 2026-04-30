@@ -128,6 +128,61 @@ const makeTask = () => {
   } as any
 }
 
+const makeTaskWithScoreResultIdOnly = () => {
+  const task = makeTask()
+  task.data.parameters = JSON.stringify({
+    root_cause: {
+      misclassification_analysis: {
+        category_totals: {
+          information_gap: 1,
+        },
+        item_classifications_all: [
+          {
+            score_result_id: 'sr-1',
+            primary_category: 'information_gap',
+            confidence: 'medium',
+            rationale_full: 'Matched only by score result id.',
+          },
+        ],
+        category_summaries: {
+          information_gap: {
+            category_summary_text: 'Score result id only linkage.',
+            item_count: 1,
+          },
+        },
+      },
+    },
+  })
+  return task
+}
+
+const makeTaskWithMissingCategoryLinkage = () => {
+  const task = makeTask()
+  task.data.parameters = JSON.stringify({
+    root_cause: {
+      misclassification_analysis: {
+        category_totals: {
+          information_gap: 1,
+        },
+        item_classifications_all: [
+          {
+            primary_category: 'information_gap',
+            confidence: 'medium',
+            rationale_full: 'No linkage ids on this row.',
+          },
+        ],
+        category_summaries: {
+          information_gap: {
+            category_summary_text: 'No linkage ids available.',
+            item_count: 1,
+          },
+        },
+      },
+    },
+  })
+  return task
+}
+
 describe('EvaluationTask category summary drill-down', () => {
   test('applies category filter and auto-selects first matching score result', async () => {
     const onSelectScoreResult = jest.fn()
@@ -136,7 +191,7 @@ describe('EvaluationTask category summary drill-down', () => {
     fireEvent.click(screen.getByRole('button', { name: /View items \(1\)/i }))
 
     expect(screen.getByText('Filtered by category: Information gap')).toBeInTheDocument()
-    expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('["item-1"]')
+    expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('["sr-1"]')
     expect(onSelectScoreResult).toHaveBeenCalledWith('sr-1')
 
     fireEvent.click(screen.getByRole('button', { name: /Clear category filter/i }))
@@ -145,6 +200,24 @@ describe('EvaluationTask category summary drill-down', () => {
     await waitFor(() => {
       expect(screen.getByText('Champion')).toBeInTheDocument()
     })
+  })
+
+  test('filters by score_result_id linkage when item_id is unavailable', async () => {
+    const onSelectScoreResult = jest.fn()
+    render(<EvaluationTask variant="detail" task={makeTaskWithScoreResultIdOnly()} onSelectScoreResult={onSelectScoreResult} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /View items \(1\)/i }))
+
+    expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('["sr-1"]')
+    expect(onSelectScoreResult).toHaveBeenCalledWith('sr-1')
+  })
+
+  test('applies empty category filter when linkage ids are missing', async () => {
+    render(<EvaluationTask variant="detail" task={makeTaskWithMissingCategoryLinkage()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /View items \(1\)/i }))
+
+    expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('[]')
   })
 
   test('renders score version and procedure related-resource cards in detail view', async () => {
