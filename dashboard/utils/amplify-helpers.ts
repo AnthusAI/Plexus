@@ -328,6 +328,8 @@ export function observeScoreResults(client: any, evaluationId: string) {
                   feedbackItem { id editCommentValue initialAnswerValue finalAnswerValue editorName editedAt }
                   item {
                     id
+                    externalId
+                    identifiers
                     itemIdentifiers { items { name value url position } }
                   }
                 }

@@ -41,7 +41,10 @@ export class EvaluationService {
   }
 
   // Fetch all score results for an evaluation using paginated query
-  private async fetchAllScoreResults(evaluationId: string): Promise<any[]> {
+  private async fetchAllScoreResults(
+    evaluationId: string,
+    authMode?: 'userPool' | 'identityPool'
+  ): Promise<any[]> {
     let nextToken: string | null = null;
     let all: any[] = [];
     do {
@@ -63,13 +66,20 @@ export class EvaluationService {
                 itemId
                 createdAt
                 feedbackItem { id editCommentValue initialAnswerValue initialCommentValue finalAnswerValue editorName editedAt createdAt scoreResults { items { id value explanation type } } }
-                item { id itemIdentifiers { items { name value url position } } }
+                item {
+                  id
+                  accountId
+                  externalId
+                  identifiers
+                  itemIdentifiers { items { name value url position } }
+                }
               }
               nextToken
             }
           }
         `,
-        variables: { evaluationId, limit: 1000, nextToken }
+        variables: { evaluationId, limit: 1000, nextToken },
+        ...(authMode ? { authMode } : {}),
       }) as any;
       const data = resp?.data?.listScoreResultByEvaluationId;
       const items = Array.isArray(data?.items) ? data.items : [];
@@ -212,8 +222,21 @@ export class EvaluationService {
         evaluationData = result.data;
       }
       
+      const evaluationId = shareLink.resourceId;
+
+      // Always refresh share views from canonical score-result query.
+      // Shared resolver payloads can be partial and omit nested score-result relations.
+      let evaluationPayload = evaluationData;
+      if (evaluationId) {
+        const scoreResultItems = await this.fetchAllScoreResults(evaluationId, authMode);
+        evaluationPayload = {
+          ...evaluationData,
+          scoreResults: { items: scoreResultItems },
+        };
+      }
+
       // Transform the evaluation data
-      const transformedData = transformEvaluation(evaluationData);
+      const transformedData = transformEvaluation(evaluationPayload);
       
       if (!transformedData) {
         throw new Error('Failed to transform evaluation data');
