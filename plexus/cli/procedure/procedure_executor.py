@@ -1298,6 +1298,12 @@ async def _execute_tactus(
             except Exception as exc:
                 logger.warning("Could not register ScoreEditorToolset: %s", exc)
 
+            try:
+                from .tactus_adapters.rubric_memory_toolset import register_on_transport as register_rubric_memory
+                register_rubric_memory(mcp_server.transport)
+            except Exception as exc:
+                logger.warning("Could not register rubric memory tools: %s", exc)
+
         if mcp_client_for_bridge:
             try:
                 from pydantic_ai.toolsets import FunctionToolset
@@ -1336,6 +1342,48 @@ async def _execute_tactus(
                                 runtime.toolset_registry[tool_name] = FunctionToolset(tools=[tool])
             except Exception as exc:
                 logger.warning("Could not bridge MCP tools into Tactus toolset registry: %s", exc)
+
+        # Register the plexus.* runtime module directly into the Tactus procedure
+        # runtime so that procedure Lua can call plexus.evaluation.run({...}),
+        # plexus.score.pull({...}), plexus.rubric_memory.recent_entries({...}), etc.
+        # without routing through any MCP bridge.
+        try:
+            import os as _os, sys as _sys
+
+            _mcp_dir = _os.path.normpath(
+                _os.path.join(_os.path.dirname(__file__), "..", "..", "..", "..", "MCP")
+            )
+            if _os.path.isdir(_mcp_dir) and _mcp_dir not in _sys.path:
+                _sys.path.insert(0, _mcp_dir)
+
+            from tools.tactus_runtime.execute import (  # type: ignore[import]
+                PlexusRuntimeModule,
+                _default_handle_store,
+                _default_evaluation_runner,
+                _default_report_runner,
+                _default_report_runner_sync,
+                _default_procedure_runner,
+                BudgetGate,
+            )
+
+            if hasattr(runtime, "register_python_module"):
+                _plexus_module = PlexusRuntimeModule(
+                    mcp=None,
+                    trace_id=procedure_id,
+                    handle_store=_default_handle_store(),
+                    evaluation_runner=lambda args: _default_evaluation_runner(args, None),
+                    report_runner=_default_report_runner_sync,
+                    procedure_runner=_default_procedure_runner,
+                )
+                runtime.register_python_module("plexus", _plexus_module)
+                logger.info("Registered plexus.* runtime module in procedure runtime")
+            else:
+                logger.warning(
+                    "TactusRuntime.register_python_module not available; "
+                    "plexus.* module not registered (update tactus package)"
+                )
+        except Exception as _exc:
+            logger.warning("Could not register plexus.* runtime module: %s", _exc)
 
         # Compatibility patch: newer DSPy ToolCall objects are attribute-based,
         # while current Tactus agent code indexes them like dictionaries.

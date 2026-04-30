@@ -611,41 +611,35 @@ class ScoreEditorToolset:
                 "dry_run": True,
             }
 
-        # Call plexus_score_update via MCP client
-        if not self._mcp_client:
-            return {"success": False, "error": "No MCP client available for score update"}
-
+        # Call plexus.score.update directly (no MCP round-trip needed)
         try:
-            update_result = await self._mcp_client.call_tool(
-                "plexus_score_update",
-                {
-                    "scorecard_identifier": self._scorecard,
-                    "score_identifier": self._score,
-                    "code": self._content,
-                    "parent_version_id": self._parent_version_id,
-                    "version_note": note,
-                },
+            import os, sys
+
+            _mcp_dir = os.path.normpath(
+                os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "MCP")
             )
+            if os.path.isdir(_mcp_dir) and _mcp_dir not in sys.path:
+                sys.path.insert(0, _mcp_dir)
 
-            payload = self._extract_json_payload(update_result) or {}
+            from tools.tactus_runtime.execute import _default_score_update  # type: ignore
 
-            # Surface validation failures as actionable errors (avoid "unexpected format")
+            payload = _default_score_update({
+                "scorecard_identifier": self._scorecard,
+                "score_identifier": self._score,
+                "code": self._content,
+                "parent_version_id": self._parent_version_id,
+                "version_note": note,
+            })
+
             if payload.get("success") is False:
-                err = payload.get("error") or "plexus_score_update failed"
-                validation_errors = (
-                    payload.get("validation_errors")
-                    or payload.get("validationErrors")
-                    or payload.get("validationErrorsList")
-                )
+                err = payload.get("error") or "plexus.score.update failed"
+                validation_errors = payload.get("validation_errors")
                 if isinstance(validation_errors, list) and validation_errors:
-                    preview = "\n".join(str(e) for e in validation_errors[:10])
-                    # Keep this short enough for chat storage and UI.
-                    preview = preview[:1500]
+                    preview = "\n".join(str(e) for e in validation_errors[:10])[:1500]
                     err = f"{err}\n\nValidation errors:\n{preview}"
                 return {"success": False, "error": err}
 
-            # Extract version ID from MCP response envelope
-            version_id = self._extract_version_id(payload or update_result)
+            version_id = payload.get("version_id")
             if version_id:
                 self._last_version_id = version_id
                 return {
@@ -654,10 +648,9 @@ class ScoreEditorToolset:
                     "message": f"Score version created: {version_id}",
                 }
 
-            # success==true but no version id, or unparsable payload
             return {
                 "success": False,
-                "error": f"plexus_score_update returned unexpected format: {update_result}",
+                "error": f"plexus.score.update returned unexpected format: {payload}",
             }
 
         except Exception as exc:
@@ -669,84 +662,50 @@ class ScoreEditorToolset:
     # ------------------------------------------------------------------
 
     def _load_content_from_api(self) -> Optional[str]:
-        """
-        Load the current champion score YAML via plexus_score_pull.
-        plexus_score_pull writes the code to a local file and returns the path.
+        """Load the current champion score YAML directly from the Plexus API.
+
+        Uses plexus.score.pull which returns the YAML content in-memory without
+        requiring the legacy plexus_score_pull MCP tool.
         Returns None on success, or an error string on failure.
         """
-        if not self._mcp_client or not self._scorecard or not self._score:
+        if not self._scorecard or not self._score:
             return "Score editor not set up — call score_editor_setup first"
 
-        import asyncio
-        import json
         import os
-
-        async def _do_pull():
-            return await self._mcp_client.call_tool(
-                "plexus_score_pull",
-                {
-                    "scorecard_identifier": self._scorecard,
-                    "score_identifier": self._score,
-                },
-            )
-
-        import concurrent.futures
+        import sys
         import time as _time
+
+        _mcp_dir = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "MCP")
+        )
+        if os.path.isdir(_mcp_dir) and _mcp_dir not in sys.path:
+            sys.path.insert(0, _mcp_dir)
 
         max_retries = 3
         for attempt in range(1, max_retries + 1):
             try:
-                # Run the async pull in a thread to avoid nested event loop issues
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                    future = pool.submit(asyncio.run, _do_pull())
-                    result = future.result(timeout=60)
+                from tools.tactus_runtime.execute import _default_score_pull  # type: ignore
 
-                # plexus_score_pull returns {"content": [{"type": "text", "text": "{...json...}"}]}
-                # The inner JSON has {"success": true, "codeFilePath": "/path/to/file.yaml", ...}
-                pull_data = None
-                if isinstance(result, dict):
-                    for item in result.get("content", []):
-                        if isinstance(item, dict) and item.get("type") == "text":
-                            try:
-                                pull_data = json.loads(item["text"])
-                                break
-                            except (ValueError, TypeError, KeyError) as exc:
-                                # Non-fatal: keep scanning for the structured JSON payload.
-                                logger.debug(
-                                    "ScoreEditorToolset._load_content_from_api skipped non-JSON content item for %s/%s: %s",
-                                    self._scorecard,
-                                    self._score,
-                                    exc,
-                                )
-                    # Also try direct dict fields (non-wrapped response)
-                    if pull_data is None:
-                        pull_data = result
+                pull_data = _default_score_pull({
+                    "scorecard_identifier": self._scorecard,
+                    "score_identifier": self._score,
+                })
 
-                if not pull_data or not pull_data.get("success"):
-                    raise RuntimeError(f"plexus_score_pull failed: {result}")
+                if not pull_data.get("success"):
+                    raise RuntimeError(f"score.pull failed: {pull_data}")
 
-                code_file_path = pull_data.get("codeFilePath")
-                if not code_file_path:
-                    raise RuntimeError(f"plexus_score_pull returned no codeFilePath: {pull_data}")
+                yaml_content = pull_data.get("yaml_content") or ""
+                if not yaml_content:
+                    raise RuntimeError(f"score.pull returned empty yaml_content: {pull_data}")
 
-                if not os.path.exists(code_file_path):
-                    raise RuntimeError(f"plexus_score_pull wrote to {code_file_path} but file does not exist")
-
-                with open(code_file_path, "r", encoding="utf-8", errors="replace") as f:
-                    code = f.read()
-
-                if not code:
-                    raise RuntimeError(f"Score code file is empty: {code_file_path}")
-
-                normalized_code = self._normalize_yaml_content(code, f"plexus_score_pull:{code_file_path}")
+                normalized_code = self._normalize_yaml_content(yaml_content, "plexus.score.pull")
 
                 self._content = normalized_code
                 self._original = normalized_code
                 self._history = []
-                self._code_file_path = code_file_path
                 logger.info(
-                    "ScoreEditorToolset: auto-loaded %d normalized chars for %s/%s from %s",
-                    len(normalized_code), self._scorecard, self._score, code_file_path,
+                    "ScoreEditorToolset: auto-loaded %d chars for %s/%s via plexus.score.pull",
+                    len(normalized_code), self._scorecard, self._score,
                 )
                 return None
 

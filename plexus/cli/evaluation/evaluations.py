@@ -2060,6 +2060,7 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
 @click.option('--current-baseline', default=None, type=str, help='Current baseline evaluation ID (latest accepted version) for dual baseline dashboard display.')
 @click.option('--json-only', is_flag=True, default=False, help='Emit JSON summary payload instead of rich console output.')
 @click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
+@click.option('--emit-id-file', default=None, type=str, help='Write the evaluation ID to this file as soon as the record is created (used by programmatic dispatch).')
 @_enforce_child_budget_from_env("evaluation.accuracy")
 def accuracy(
     scorecard: str,
@@ -2089,6 +2090,7 @@ def accuracy(
     current_baseline: Optional[str],
     json_only: bool,
     notes: Optional[str] = None,
+    emit_id_file: Optional[str] = None,
     ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
@@ -2467,6 +2469,12 @@ def accuracy(
                             **experiment_params
                         )
                         logging.info(f"Created initial Evaluation record with ID: {evaluation_record.id}")
+                        if emit_id_file:
+                            try:
+                                with open(emit_id_file, "w") as _f:
+                                    _f.write(evaluation_record.id)
+                            except Exception as _e:
+                                logging.warning(f"Failed to write evaluation ID to file {emit_id_file}: {_e}")
 
                     except Exception as e:
                         logging.error(f"Error creating task or evaluation: {str(e)}")
@@ -4198,6 +4206,7 @@ def last(account_key: str, type: Optional[str]):
     default=False,
     help='Before feedback-backed predictions, compare the evaluated ScoreVersion code against its rubric and store the result.',
 )
+@click.option('--emit-id-file', default=None, type=str, help='Write the evaluation ID to this file as soon as the record is created (used by programmatic dispatch).')
 def feedback(
     scorecard: str,
     score: str,
@@ -4213,6 +4222,7 @@ def feedback(
     task_id: Optional[str],
     notes: Optional[str] = None,
     score_rubric_consistency_check: bool = False,
+    emit_id_file: Optional[str] = None,
 ):
     """
     Evaluate feedback alignment by analyzing feedback items over a time period for a specific score.
@@ -4560,6 +4570,12 @@ def feedback(
                 
                 console.print(f"\nCreated evaluation record: {evaluation_id}")
                 console.print(f"Dashboard URL: https://app.plexusanalytics.com/evaluations/{evaluation_id}")
+                if emit_id_file:
+                    try:
+                        with open(emit_id_file, "w") as _f:
+                            _f.write(evaluation_id)
+                    except Exception as _e:
+                        logging.warning(f"Failed to write evaluation ID to file {emit_id_file}: {_e}")
 
                 if score_rubric_consistency_check:
                     console.print("\n[bold]Checking score code against rubric...[/bold]")

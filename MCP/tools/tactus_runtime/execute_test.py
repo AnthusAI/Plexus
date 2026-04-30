@@ -1301,6 +1301,9 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     class FakeProcess:
         pid = 4242
 
+        def poll(self) -> int:
+            return 1  # immediately signals process exited (fast-fail path)
+
     def fake_popen(cmd, **kwargs):
         captured["cmd"] = cmd
         captured["kwargs"] = kwargs
@@ -1312,6 +1315,7 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
 
     monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/plexus")
     monkeypatch.setattr("subprocess.Popen", fake_popen)
+    monkeypatch.setattr("time.sleep", lambda _: None)
 
     result = execute._default_evaluation_runner(
         {
@@ -1327,7 +1331,12 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
 
     assert result["status"] == "dispatched"
     assert result["process_id"] == 4242
-    assert captured["cmd"] == [
+    cmd = captured["cmd"]
+    # Strip out the --emit-id-file flag and its temp-file path since the path is dynamic
+    emit_idx = cmd.index("--emit-id-file") if "--emit-id-file" in cmd else None
+    if emit_idx is not None:
+        cmd = cmd[:emit_idx] + cmd[emit_idx + 2:]
+    assert cmd == [
         "/usr/local/bin/plexus",
         "evaluate",
         "feedback",
