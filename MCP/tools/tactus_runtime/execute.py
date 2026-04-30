@@ -2782,19 +2782,24 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
                 trigger="mcp_remote",
             )
         else:
-            def _run():
-                try:
-                    generate_report_with_parameters(
-                        config_id=configuration_id,
-                        parameters=parameters,
-                        account_id=account_id,
-                        client=client,
-                        trigger="mcp",
-                    )
-                except Exception:
-                    pass
+            import subprocess
+            import sys
 
-            threading.Thread(target=_run, daemon=False).start()
+            cmd = [
+                sys.executable, "-m", "plexus", "report", "run",
+                "--configuration-id", configuration_id,
+            ]
+            for k, v in (parameters or {}).items():
+                cmd += ["--parameter", f"{k}={v}"]
+
+            env = {**__import__("os").environ, "PYTHONUNBUFFERED": "1"}
+            proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return {
+                "status": "running",
+                "configuration_id": configuration_id,
+                "parameters": parameters,
+                "pid": proc.pid,
+            }
 
         return {
             "status": "dispatched",
@@ -2829,26 +2834,36 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(log_output or "Report block remote dispatch failed")
         return {**output_data, "block_class": block_class}
     else:
-        def _run():
-            try:
-                run_block_cached(
-                    block_class=str(block_class),
-                    block_config=block_config,
-                    account_id=account_id,
-                    client=client,
-                    cache_key=cache_key,
-                    ttl_hours=ttl_hours,
-                    fresh=fresh,
-                    background=False,
-                    child_budget=None,
-                )
-            except Exception:
-                pass
+        import subprocess
+        import sys
+        import json as _json
 
-        threading.Thread(target=_run, daemon=False).start()
+        cmd = [
+            sys.executable, "-m", "plexus", "feedback", "report", "alignment"
+            if block_class == "FeedbackAlignment" else
+            "contradictions" if block_class == "FeedbackContradictions" else
+            "acceptance-rate" if block_class == "AcceptanceRate" else
+            "correction-rate" if block_class == "CorrectionRate" else
+            "recent",
+            "--scorecard", str(block_config.get("scorecard", "")),
+        ]
+        if block_config.get("score"):
+            cmd += ["--score", str(block_config["score"])]
+        if block_config.get("days"):
+            cmd += ["--days", str(block_config["days"])]
+        if block_config.get("start_date"):
+            cmd += ["--start-date", str(block_config["start_date"])]
+        if block_config.get("end_date"):
+            cmd += ["--end-date", str(block_config["end_date"])]
+        if fresh:
+            cmd.append("--fresh")
+
+        env = {**__import__("os").environ, "PYTHONUNBUFFERED": "1"}
+        proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return {
-            "status": "dispatched",
+            "status": "running",
             "block_class": block_class,
+            "pid": proc.pid,
         }
 
 

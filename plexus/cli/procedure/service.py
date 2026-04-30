@@ -254,7 +254,6 @@ class ProcedureService:
                         if resolved:
                             score_id = resolved
 
-            # Create experiment (code omitted from DB record — stored as S3 attachment below)
             procedure = Procedure.create(
                 client=self.client,
                 accountId=account_id,
@@ -263,7 +262,8 @@ class ProcedureService:
                 parentProcedureId=template.id if template else None,
                 isTemplate=False,
                 featured=featured,
-                scoreVersionId=score_version_id
+                scoreVersionId=score_version_id,
+                code=yaml_config,
             )
 
             # Upload YAML as code.tac to S3 and record the key in metadata
