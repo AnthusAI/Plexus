@@ -68,6 +68,14 @@ export type ProcessedEvaluation = Omit<BaseEvaluation, 'task' | 'scorecard' | 's
       value: string;
       url?: string;
     }> | null;
+    feedbackItem?: {
+      id?: string | null;
+      editCommentValue?: string | null;
+      initialAnswerValue?: string | null;
+      finalAnswerValue?: string | null;
+      editorName?: string | null;
+      editedAt?: string | null;
+    } | null;
     createdAt: string;
   }>;
 };
@@ -896,6 +904,8 @@ type ParsedScoreResultMetadata = {
     correct: boolean;
     human_explanation: string | null;
     text: string | null;
+    feedback_item_id: string | null;
+    item_id: string | null;
   };
   nestedScoreResult: any | null;
   parsedMetadata: any;
@@ -994,7 +1004,9 @@ function parseScoreResultMetadata(rawMetadata: unknown): ParsedScoreResultMetada
       human_label: nestedScoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? null,
       correct: Boolean(nestedScoreResult?.metadata?.correct ?? parsedMetadata.correct),
       human_explanation: nestedScoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? null,
-      text: nestedScoreResult?.metadata?.text ?? parsedMetadata.text ?? null
+      text: nestedScoreResult?.metadata?.text ?? parsedMetadata.text ?? null,
+      feedback_item_id: nestedScoreResult?.metadata?.feedback_item_id ?? parsedMetadata.feedback_item_id ?? null,
+      item_id: nestedScoreResult?.metadata?.item_id ?? parsedMetadata.item_id ?? null
     },
     nestedScoreResult,
     parsedMetadata
