@@ -1670,14 +1670,14 @@ class TestCreateVersionFromCodeWithParent:
             'configuration': code_content.strip(),
             'guidelines': guidelines.strip(),
             'note': note,
-            'isFeatured': "true",
+            'isFeatured': "false",
             'parentVersionId': parent_version_id  # Should set parent relationship
         }
         
         # Verify parent relationship is established
         assert expected_version_input['parentVersionId'] == parent_version_id
         assert expected_version_input['scoreId'] == score_id
-        assert expected_version_input['isFeatured'] == "true"
+        assert expected_version_input['isFeatured'] == "false"
     
     def test_create_version_with_parent_error_handling(self):
         """Test error handling in _create_version_from_code_with_parent"""

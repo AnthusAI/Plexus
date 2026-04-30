@@ -45,6 +45,48 @@ const parseJsonDeep = (value: unknown): unknown => {
   return current
 }
 
+const toNormalizedId = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null
+  const normalized = String(value).trim()
+  return normalized.length > 0 ? normalized : null
+}
+
+const getScoreResultFilterKeys = (result: ScoreResultData): string[] => {
+  const keys = new Set<string>()
+  const directId = toNormalizedId(result.id)
+  if (directId) keys.add(directId)
+  const itemId = toNormalizedId(result.itemId)
+  if (itemId) keys.add(itemId)
+  const metadataItemId = toNormalizedId((result as any)?.metadata?.item_id)
+  if (metadataItemId) keys.add(metadataItemId)
+  const feedbackItemId = toNormalizedId((result as any)?.feedbackItem?.id)
+  if (feedbackItemId) keys.add(feedbackItemId)
+  const metadataFeedbackItemId = toNormalizedId((result as any)?.metadata?.feedback_item_id)
+  if (metadataFeedbackItemId) keys.add(metadataFeedbackItemId)
+
+  if (Array.isArray(result.itemIdentifiers)) {
+    result.itemIdentifiers.forEach((identifier: any) => {
+      const value = toNormalizedId(identifier?.value)
+      if (value) keys.add(value)
+    })
+  }
+
+  return Array.from(keys)
+}
+
+const collectClassificationLinkageIds = (classification: {
+  score_result_id?: string
+  item_id?: string
+  feedback_item_id?: string
+}): string[] => {
+  const ids = [
+    toNormalizedId(classification.score_result_id),
+    toNormalizedId(classification.item_id),
+    toNormalizedId(classification.feedback_item_id),
+  ].filter((id): id is string => id !== null)
+  return ids
+}
+
 export interface EvaluationMetric {
   name: string
   value: number
@@ -217,6 +259,7 @@ type MisclassificationCategorySummary = {
   category_summary_text?: string
   top_patterns?: Array<{ pattern?: string; count?: number }>
   representative_evidence?: Array<{
+    score_result_id?: string
     feedback_item_id?: string
     item_id?: string
     source?: string
@@ -269,6 +312,7 @@ type MisclassificationAnalysis = {
   item_classifications_all?: Array<{
     topic_id?: number | string
     topic_label?: string
+    score_result_id?: string
     feedback_item_id?: string
     item_id?: string
     timestamp?: string
@@ -941,10 +985,16 @@ const DetailContent = React.memo(({
     onSelectScoreResult?.(result.id)
   }
 
-  const selectFirstFilteredScoreResult = (itemIds: string[]) => {
-    const firstItemId = itemIds.find(Boolean)
-    if (!firstItemId) return
-    const matching = parsedScoreResults.find(result => result.itemId === firstItemId)
+  const selectFirstFilteredScoreResult = (filterIds: string[]) => {
+    const normalizedFilterIds = new Set(
+      filterIds
+        .map(id => toNormalizedId(id))
+        .filter((id): id is string => id !== null)
+    )
+    if (normalizedFilterIds.size === 0) return
+    const matching = parsedScoreResults.find(result =>
+      getScoreResultFilterKeys(result).some(key => normalizedFilterIds.has(key))
+    )
     if (matching) {
       onSelectScoreResult?.(matching.id)
     }
@@ -975,26 +1025,42 @@ const DetailContent = React.memo(({
       classification => classification.primary_category === categoryKey
     )
 
-    const itemIds: string[] = []
+    const linkageIds: string[] = []
     let missingCount = 0
 
     filteredClassifications.forEach(classification => {
-      if (!classification.item_id) {
+      const classificationIds = collectClassificationLinkageIds(classification)
+      if (classificationIds.length === 0) {
         missingCount += 1
         return
       }
-
-      itemIds.push(classification.item_id)
+      linkageIds.push(...classificationIds)
     })
+
+    const summaryEvidence = misclassificationCategoryBreakdown.categorySummaries?.[categoryKey]?.representative_evidence ?? []
+    summaryEvidence.forEach(evidence => {
+      linkageIds.push(
+        ...[
+          toNormalizedId(evidence.score_result_id),
+          toNormalizedId(evidence.item_id),
+          toNormalizedId(evidence.feedback_item_id),
+        ].filter((id): id is string => id !== null)
+      )
+    })
+
+    const normalizedLinkageIds = new Set(linkageIds.map(id => toNormalizedId(id)).filter((id): id is string => id !== null))
+    const selectedScoreResultIds = parsedScoreResults
+      .filter(result => getScoreResultFilterKeys(result).some(key => normalizedLinkageIds.has(key)))
+      .map(result => String(result.id).trim())
 
     setSelectedTopicItemIds(null)
     setSelectedTopicLabel(null)
     setSelectedCategoryKey(categoryKey)
     setSelectedCategoryLabel(categoryLabel)
-    setSelectedCategoryItemIds(Array.from(new Set(itemIds)))
+    setSelectedCategoryItemIds(Array.from(new Set(selectedScoreResultIds)))
     setCategoryMissingItemIdCount(missingCount)
     setSelectedPredictedActual({ predicted: null, actual: null })
-    selectFirstFilteredScoreResult(itemIds)
+    selectFirstFilteredScoreResult(selectedScoreResultIds)
   }
 
   const clearCategoryFilter = () => {
@@ -1067,6 +1133,15 @@ const DetailContent = React.memo(({
 
   const rootCauseTopics = rootCauseData?.topics ?? null
   const misclassificationAnalysis = rootCauseData?.misclassification_analysis ?? null
+  const scoreRubricConsistencyCheck = useMemo(() => {
+    try {
+      const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
+      const check = params?.score_rubric_consistency_check
+      return (check && typeof check === 'object') ? check as Record<string, unknown> : null
+    } catch {
+      return null
+    }
+  }, [data.parameters])
   const rcaCoverage = useMemo(() => {
     try {
       const params = parseJsonDeep(data.parameters) as Record<string, unknown> | null
@@ -1531,6 +1606,23 @@ const DetailContent = React.memo(({
                   </div>
                 )}
 
+                {scoreRubricConsistencyCheck && (
+                  <Alert className="mt-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle className="text-sm">
+                      Score/rubric consistency
+                      {typeof scoreRubricConsistencyCheck.status === 'string'
+                        ? `: ${scoreRubricConsistencyCheck.status}`
+                        : ''}
+                    </AlertTitle>
+                    <AlertDescription className="text-sm">
+                      {typeof scoreRubricConsistencyCheck.paragraph === 'string'
+                        ? scoreRubricConsistencyCheck.paragraph
+                        : 'No consistency summary was generated.'}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 {/* Score-Configuration RCA */}
                 {(rootCauseData && (
                   (rootCauseTopics && rootCauseTopics.length > 0) ||
@@ -1659,12 +1751,17 @@ const DetailContent = React.memo(({
                                 const summary = misclassificationCategoryBreakdown.categorySummaries?.[row.key]
                                 const summaryText = summary?.category_summary_text
                                 const patterns = Array.isArray(summary?.top_patterns) ? summary?.top_patterns : []
-                                const itemCount = summary?.item_count ?? 0
                                 const categoryClassifications = (misclassificationCategoryBreakdown.itemClassifications ?? [])
                                   .filter(classification => classification.primary_category === row.key)
+                                const itemCount = summary?.item_count ?? categoryClassifications.length ?? 0
                                 const itemsWithMissingId = categoryClassifications
-                                  .filter(classification => !classification.item_id)
+                                  .filter(classification => (
+                                    !toNormalizedId(classification.item_id)
+                                    && !toNormalizedId(classification.feedback_item_id)
+                                    && !toNormalizedId(classification.score_result_id)
+                                  ))
                                   .length
+                                if (itemCount <= 0) return null
                                 return (
                                   <div key={`category-summary-${row.key}`} className="rounded-md bg-muted/40 p-2 space-y-1.5">
                                     <div className="flex items-center justify-between gap-2 mb-1">
@@ -1675,7 +1772,7 @@ const DetailContent = React.memo(({
                                       <span className="text-xs text-muted-foreground shrink-0">{itemCount} item(s)</span>
                                     </div>
                                     <div className="text-xs text-foreground">
-                                      {summaryText || 'No items in this category for this run.'}
+                                      {summaryText || 'Summary unavailable for this category.'}
                                     </div>
                                     {patterns.length > 0 && (
                                       <div className="mt-1 text-xs text-muted-foreground">
@@ -1701,14 +1798,14 @@ const DetailContent = React.memo(({
                                         </Button>
                                         {selectedCategoryKey === row.key && categoryMissingItemIdCount > 0 && (
                                           <span className="text-[11px] text-muted-foreground">
-                                            {categoryMissingItemIdCount} item(s) missing item_id not shown
+                                            {categoryMissingItemIdCount} item(s) missing linkage ids not shown
                                           </span>
                                         )}
                                       </div>
                                     )}
                                     {itemsWithMissingId > 0 && selectedCategoryKey !== row.key && (
                                       <div className="text-[11px] text-muted-foreground">
-                                        {itemsWithMissingId} item(s) in this category are missing item_id and cannot appear in score results.
+                                        {itemsWithMissingId} item(s) in this category are missing linkage ids and cannot appear in score results.
                                       </div>
                                     )}
                                   </div>
@@ -2709,7 +2806,6 @@ ${categoryLines}${mechanicalLines}
           </div>
           {variant !== 'detail' && evaluationNotes && (
             <div className="mt-1">
-              <div className="mb-1 text-xs font-medium text-foreground">Note</div>
               <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                 p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
@@ -2886,6 +2982,7 @@ ${categoryLines}${mechanicalLines}
             )}
             {evaluationNotes && (
               <div className="mt-1">
+                <div className="mb-1 text-xs font-medium text-foreground">Note</div>
                 <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground prose-code:text-foreground prose-pre:text-foreground prose-pre:bg-muted">
                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
                   p: ({children}) => <p className="mb-1 last:mb-0 text-sm">{children}</p>,
