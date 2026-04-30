@@ -1,4 +1,4 @@
-import { transformEvaluation } from './data-operations';
+import { transformEvaluation, extractScoreResultItemIdentifiers, transformScoreResultForDisplay } from './data-operations';
 import type { BaseEvaluation } from './data-operations';
 
 describe('transformEvaluation', () => {
@@ -58,6 +58,22 @@ describe('transformEvaluation', () => {
   });
 
   describe('itemIdentifiers extraction', () => {
+    it('normalizes object-map legacy identifiers for shared display consumption', () => {
+      const identifiers = extractScoreResultItemIdentifiers({
+        item: {
+          identifiers: {
+            'Call ID': 309504413,
+            'Session ID': 'SESS-1234'
+          }
+        }
+      });
+
+      expect(identifiers).toEqual([
+        { name: 'Call ID', value: '309504413' },
+        { name: 'Session ID', value: 'SESS-1234' }
+      ]);
+    });
+
     it('should extract itemIdentifiers from score results with item relationships', () => {
       const mockEvaluation: BaseEvaluation = {
         id: 'eval-1',
@@ -388,6 +404,38 @@ describe('transformEvaluation', () => {
       
       expect(result).toBeTruthy();
       expect(result!.scoreResults).toEqual([]);
+    });
+  });
+
+  describe('shared score result transform', () => {
+    it('normalizes lazy-loaded score result payloads through a shared transformer', () => {
+      const transformed = transformScoreResultForDisplay({
+        id: 'result-lazy',
+        value: 'yes',
+        confidence: 0.77,
+        metadata: {
+          human_label: 'no',
+          correct: false,
+          human_explanation: 'reviewed',
+          text: 'transcript'
+        },
+        itemId: null,
+        item: {
+          identifiers: {
+            'Call ID': 309504413
+          }
+        }
+      } as any);
+
+      expect(transformed.metadata).toEqual({
+        human_label: 'no',
+        correct: false,
+        human_explanation: 'reviewed',
+        text: 'transcript'
+      });
+      expect(transformed.itemIdentifiers).toEqual([
+        { name: 'Call ID', value: '309504413' }
+      ]);
     });
   });
 
