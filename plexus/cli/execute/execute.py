@@ -100,6 +100,15 @@ def execute(
         raise click.UsageError("Tactus snippet is empty.")
 
     # --- run through the same path as the MCP tool --------------------------
+    # Ensure the MCP directory itself is on sys.path so that MCP-internal
+    # imports like `from shared.utils import ...` resolve correctly.
+    import os as _os
+    _mcp_dir = _os.path.normpath(
+        _os.path.join(_os.path.dirname(__file__), "..", "..", "..", "MCP")
+    )
+    if _os.path.isdir(_mcp_dir) and _mcp_dir not in sys.path:
+        sys.path.insert(0, _mcp_dir)
+
     try:
         from MCP.tools.tactus_runtime.execute import (
             BudgetGate,

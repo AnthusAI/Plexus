@@ -1040,6 +1040,16 @@ async def _execute_tactus(
                         if alias_lines:
                             shim_parts.append('\n'.join(alias_lines) + '\n')
 
+                    # Always inject the plexus global from the registered Python module.
+                    # register_python_module("plexus") makes it available via require(),
+                    # but Lua procedures use it as a plain global, so we expose it here.
+                    shim_parts.insert(0,
+                        'if plexus == nil then\n'
+                        '  local ok, _mod = pcall(require, "plexus")\n'
+                        '  if ok and _mod ~= nil then plexus = _mod end\n'
+                        'end\n'
+                    )
+
                     if shim_parts:
                         parsed_source = dict(parsed_source)
                         parsed_source['procedure'] = '\n'.join(shim_parts) + '\n' + lua_source
@@ -1307,39 +1317,25 @@ async def _execute_tactus(
         if mcp_client_for_bridge:
             try:
                 from pydantic_ai.toolsets import FunctionToolset
+                from tactus.adapters.mcp import PydanticAIMCPAdapter
 
-                if procedure_id == CONSOLE_CHAT_BUILTIN_ID:
-                    plexus_dispatch_tool = await _create_console_plexus_dispatch_tool(
-                        mcp_client_for_bridge
+                mcp_adapter = PydanticAIMCPAdapter(
+                    mcp_client_for_bridge,
+                    runtime=runtime,
+                )
+                mcp_tools = await mcp_adapter.load_tools()
+                if mcp_tools and "plexus" not in runtime.toolset_registry:
+                    runtime.toolset_registry["plexus"] = FunctionToolset(tools=mcp_tools)
+                    logger.info(
+                        "Registered bridged MCP toolset 'plexus' with %d tool(s)",
+                        len(mcp_tools),
                     )
-                    if plexus_dispatch_tool and "plexus" not in runtime.toolset_registry:
-                        runtime.toolset_registry["plexus"] = FunctionToolset(
-                            tools=[plexus_dispatch_tool]
-                        )
-                        logger.info(
-                            "Registered Console MCP dispatcher toolset 'plexus' with one dispatch tool"
-                        )
-                else:
-                    from tactus.adapters.mcp import PydanticAIMCPAdapter
-
-                    mcp_adapter = PydanticAIMCPAdapter(
-                        mcp_client_for_bridge,
-                        runtime=runtime,
-                    )
-                    mcp_tools = await mcp_adapter.load_tools()
-                    if mcp_tools and "plexus" not in runtime.toolset_registry:
-                        runtime.toolset_registry["plexus"] = FunctionToolset(tools=mcp_tools)
-                        logger.info(
-                            "Registered bridged MCP toolset 'plexus' with %d tool(s)",
-                            len(mcp_tools),
-                        )
-                        # Also register each tool individually so agent configs can reference
-                        # specific tool names (e.g., tools: [plexus_scorecard_info]) instead of
-                        # only the whole toolset name "plexus".
-                        for tool in mcp_tools:
-                            tool_name = getattr(tool, "name", None)
-                            if tool_name and tool_name not in runtime.toolset_registry:
-                                runtime.toolset_registry[tool_name] = FunctionToolset(tools=[tool])
+                    # Also register each tool individually so agent configs can reference
+                    # specific tool names directly (e.g., tools: [execute_tactus]).
+                    for tool in mcp_tools:
+                        tool_name = getattr(tool, "name", None)
+                        if tool_name and tool_name not in runtime.toolset_registry:
+                            runtime.toolset_registry[tool_name] = FunctionToolset(tools=[tool])
             except Exception as exc:
                 logger.warning("Could not bridge MCP tools into Tactus toolset registry: %s", exc)
 
@@ -1351,7 +1347,7 @@ async def _execute_tactus(
             import os as _os, sys as _sys
 
             _mcp_dir = _os.path.normpath(
-                _os.path.join(_os.path.dirname(__file__), "..", "..", "..", "..", "MCP")
+                _os.path.join(_os.path.dirname(__file__), "..", "..", "..", "MCP")
             )
             if _os.path.isdir(_mcp_dir) and _mcp_dir not in _sys.path:
                 _sys.path.insert(0, _mcp_dir)
@@ -1367,6 +1363,15 @@ async def _execute_tactus(
             )
 
             if hasattr(runtime, "register_python_module"):
+                # Procedures can run for hours; use an effectively unlimited budget
+                # so API calls inside the procedure are not killed by the 60s default.
+                from tools.tactus_runtime.execute import BudgetSpec  # type: ignore[import]
+                _proc_budget = BudgetGate(BudgetSpec(
+                    usd=float("inf"),
+                    wallclock_seconds=float("inf"),
+                    depth=99,
+                    tool_calls=999_999,
+                ))
                 _plexus_module = PlexusRuntimeModule(
                     mcp=None,
                     trace_id=procedure_id,
@@ -1374,6 +1379,7 @@ async def _execute_tactus(
                     evaluation_runner=lambda args: _default_evaluation_runner(args, None),
                     report_runner=_default_report_runner_sync,
                     procedure_runner=_default_procedure_runner,
+                    budget=_proc_budget,
                 )
                 runtime.register_python_module("plexus", _plexus_module)
                 logger.info("Registered plexus.* runtime module in procedure runtime")
