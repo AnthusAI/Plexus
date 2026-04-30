@@ -901,6 +901,7 @@ const DetailContent = React.memo(({
 
   const [containerWidth, setContainerWidth] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
+  const scoreResultsPanelRef = useRef<HTMLDivElement>(null)
   const [selectedPredictedActual, setSelectedPredictedActual] = useState<{
     predicted: string | null
     actual: string | null
@@ -1014,6 +1015,11 @@ const DetailContent = React.memo(({
       setSelectedPredictedActual({ predicted: null, actual: null })
       selectFirstFilteredScoreResult(itemIds)
     }
+    requestAnimationFrame(() => {
+      if (scoreResultsPanelRef.current && typeof scoreResultsPanelRef.current.scrollIntoView === 'function') {
+        scoreResultsPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    })
   }
 
   const handleCategoryFilter = (
@@ -1052,6 +1058,12 @@ const DetailContent = React.memo(({
     const selectedScoreResultIds = parsedScoreResults
       .filter(result => getScoreResultFilterKeys(result).some(key => normalizedLinkageIds.has(key)))
       .map(result => String(result.id).trim())
+    if (filteredClassifications.length > 0 && selectedScoreResultIds.length === 0) {
+      toast({
+        title: 'No linked score results',
+        description: 'This category has no score-result linkage in the current payload.',
+      })
+    }
 
     setSelectedTopicItemIds(null)
     setSelectedTopicLabel(null)
@@ -1061,6 +1073,11 @@ const DetailContent = React.memo(({
     setCategoryMissingItemIdCount(missingCount)
     setSelectedPredictedActual({ predicted: null, actual: null })
     selectFirstFilteredScoreResult(selectedScoreResultIds)
+    requestAnimationFrame(() => {
+      if (scoreResultsPanelRef.current && typeof scoreResultsPanelRef.current.scrollIntoView === 'function') {
+        scoreResultsPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    })
   }
 
   const clearCategoryFilter = () => {
@@ -1955,7 +1972,7 @@ const DetailContent = React.memo(({
 
         {/* Show score results panel during loading or when results exist, hidden only in narrow detail mode */}
         {(!showScoreResultInNarrowView) && (isResultsLoading || showResultsList) && (
-          <div className={`w-full ${showAsColumns ? 'h-full' : 'h-[500px] mt-6'} flex flex-col overflow-hidden`}>
+          <div ref={scoreResultsPanelRef} className={`w-full ${showAsColumns ? 'h-full' : 'h-[500px] mt-6'} flex flex-col overflow-hidden`}>
             {activeFilterChipLabel && (
               <div className="mb-2">
                 <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
