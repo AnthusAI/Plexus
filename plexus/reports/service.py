@@ -1159,9 +1159,7 @@ def _persist_block_result(
         block_config=block_config or {},
         output_data=output_data,
     )
-    # Single-block programmatic reports should stay concise at the report level.
-    # The block itself already carries detailed scope/metric explanations.
-    report_level_subtitle: Optional[str] = None
+    report_level_subtitle: Optional[str] = _format_date_window_for_display(block_config or {}, output_data)
     report_level_description: Optional[str] = None
 
     task = Task.create(
