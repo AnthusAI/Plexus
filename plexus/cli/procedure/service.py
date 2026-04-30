@@ -719,7 +719,7 @@ class ProcedureService:
             logger.error(f"Error resolving score identifier: {str(e)}")
             return None
     
-    async def run_experiment(self, procedure_id: str, **options) -> Dict[str, Any]:
+    async def run_procedure(self, procedure_id: str, **options) -> Dict[str, Any]:
         """
         Run an procedure with the given ID.
 
