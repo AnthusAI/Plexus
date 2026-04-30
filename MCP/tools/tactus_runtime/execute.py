@@ -2747,14 +2747,45 @@ def _append_optional_cli_arg(cmd: list[str], flag: str, value: Any) -> None:
 def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
     """Dispatch report.run directly for durable background report-block work."""
 
-    if args.get("config_id"):
-        raise ValueError(
-            "plexus.report.run async handles currently require block_class; "
-            "configuration report handles need a dedicated report task dispatch path"
-        )
+    configuration_id = args.get("configuration_id") or args.get("config_id")
+    if configuration_id:
+        from plexus.cli.report.utils import resolve_account_id_for_command
+        from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+        from plexus.reports.service import generate_report_with_parameters
+        import threading
+
+        client = create_dashboard_client()
+        if not client:
+            raise ValueError("Could not create dashboard client")
+        account_id = resolve_account_id_for_command(client, args.get("account"))
+        if not account_id:
+            raise ValueError("Could not determine default account ID")
+
+        parameters = args.get("parameters") or {}
+
+        def _run():
+            try:
+                generate_report_with_parameters(
+                    config_id=configuration_id,
+                    parameters=parameters,
+                    account_id=account_id,
+                    client=client,
+                    trigger="mcp",
+                )
+            except Exception:
+                pass
+
+        thread = threading.Thread(target=_run, daemon=True)
+        thread.start()
+        return {
+            "status": "dispatched",
+            "configuration_id": configuration_id,
+            "parameters": parameters,
+        }
+
     block_class = args.get("block_class")
     if not block_class:
-        raise ValueError("plexus.report.run async requires block_class")
+        raise ValueError("plexus.report.run async requires block_class or configuration_id")
 
     from plexus.cli.report.utils import resolve_account_id_for_command
     from plexus.cli.shared.client_utils import create_client as create_dashboard_client
@@ -4559,24 +4590,16 @@ class PlexusRuntimeModule:
             self.handle_protocol_required = ("evaluation", "run")
             raise RequiresHandleProtocol("evaluation", "run")
 
-        self._budget.check_before("evaluation", "run")
         self._record_api_call("evaluation", "run")
-        child_budget = self._budget.carve_child(
-            "evaluation", "run", parsed.get("budget")
+        dispatch_result = self._evaluation_runner(parsed)
+        return self._handle_store.create(
+            kind="evaluation",
+            parent_trace_id=self._trace_id,
+            api_call="plexus.evaluation.run",
+            args=parsed,
+            dispatch_result=dispatch_result,
+            child_budget=None,
         )
-        parsed["budget"] = child_budget
-        try:
-            dispatch_result = self._evaluation_runner(parsed)
-            return self._handle_store.create(
-                kind="evaluation",
-                parent_trace_id=self._trace_id,
-                api_call="plexus.evaluation.run",
-                args=parsed,
-                dispatch_result=dispatch_result,
-                child_budget=child_budget,
-            )
-        finally:
-            self._budget.record_after("evaluation", "run")
 
     def _call_dataset(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "dataset" or method not in self._dataset_handlers:
@@ -4627,22 +4650,16 @@ class PlexusRuntimeModule:
             self.handle_protocol_required = ("report", "run")
             raise RequiresHandleProtocol("report", "run")
 
-        self._budget.check_before("report", "run")
         self._record_api_call("report", "run")
-        child_budget = self._budget.carve_child("report", "run", parsed.get("budget"))
-        parsed["budget"] = child_budget
-        try:
-            dispatch_result = self._report_runner(parsed)
-            return self._handle_store.create(
-                kind="report",
-                parent_trace_id=self._trace_id,
-                api_call="plexus.report.run",
-                args=parsed,
-                dispatch_result=dispatch_result,
-                child_budget=child_budget,
-            )
-        finally:
-            self._budget.record_after("report", "run")
+        dispatch_result = self._report_runner(parsed)
+        return self._handle_store.create(
+            kind="report",
+            parent_trace_id=self._trace_id,
+            api_call="plexus.report.run",
+            args=parsed,
+            dispatch_result=dispatch_result,
+            child_budget=None,
+        )
 
     def _call_procedure_run(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "procedure" or method not in {"run", "optimize"}:
@@ -4653,38 +4670,24 @@ class PlexusRuntimeModule:
 
         if method == "optimize":
             # plexus.procedure.optimize always runs asynchronously — no handle protocol needed.
-            self._budget.check_before("procedure", "optimize")
             self._record_api_call("procedure", "optimize")
-            child_budget = self._budget.carve_child("procedure", "optimize", parsed.get("budget"))
-            parsed["budget"] = child_budget
-            try:
-                return self._procedure_optimize(parsed)
-            finally:
-                self._budget.record_after("procedure", "optimize")
+            return self._procedure_optimize(parsed)
 
         if not bool(parsed.get("async")):
             self._record_api_call("procedure", "run")
             self.handle_protocol_required = ("procedure", "run")
             raise RequiresHandleProtocol("procedure", "run")
 
-        self._budget.check_before("procedure", "run")
         self._record_api_call("procedure", "run")
-        child_budget = self._budget.carve_child(
-            "procedure", "run", parsed.get("budget")
+        dispatch_result = self._procedure_runner(parsed)
+        return self._handle_store.create(
+            kind="procedure",
+            parent_trace_id=self._trace_id,
+            api_call="plexus.procedure.run",
+            args=parsed,
+            dispatch_result=dispatch_result,
+            child_budget=None,
         )
-        parsed["budget"] = child_budget
-        try:
-            dispatch_result = self._procedure_runner(parsed)
-            return self._handle_store.create(
-                kind="procedure",
-                parent_trace_id=self._trace_id,
-                api_call="plexus.procedure.run",
-                args=parsed,
-                dispatch_result=dispatch_result,
-                child_budget=child_budget,
-            )
-        finally:
-            self._budget.record_after("procedure", "run")
 
     def _call_handle(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "handle":
@@ -5313,10 +5316,9 @@ Runtime ground rules:
 - Destructive ops (champion promotion, score updates, deletes, feedback
   invalidation) request `Human.approve` automatically; pass
   `no_confirm = true` only when the user explicitly approved.
-- Long-running async calls (`plexus.evaluation.run`, `plexus.report.run`,
-  `plexus.procedure.run` with `async = true`) require an explicit child
-  budget table:
-  `budget = { usd = <n>, wallclock_seconds = <n>, depth = <int>, tool_calls = <int> }`.
+- Long-running calls (`plexus.evaluation.run`, `plexus.report.run`,
+  `plexus.procedure.run`) must use `async = true`. They dispatch immediately
+  and return a handle — no `budget` table needed.
 
 Helper aliases injected before your snippet runs:
 - High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,
@@ -5370,13 +5372,12 @@ local overview = docs_get{ key = "overview" }
 return { apis = apis, topics = topics, overview = overview.content }
 ```
 
-7) Long-running async with explicit budget and a handle:
+7) Dispatch a long-running report (fire-and-forget, returns a handle immediately):
 ```tactus
-local handle = evaluate{
-  score_id = "score_compliance_tone",
-  item_count = 1000,
+local handle = plexus.report.run{
+  configuration_id = "44c97c07-...",
+  parameters = { days = 60 },
   async = true,
-  budget = { usd = 0.50, wallclock_seconds = 1800, depth = 1, tool_calls = 10 },
 }
 return { handle_id = handle.id, status = handle.status }
 ```
