@@ -5689,6 +5689,14 @@ class AccuracyEvaluation(Evaluation):
             raise
         finally:
             self.should_stop = True
+            metrics_tasks = getattr(self, "metrics_tasks", None)
+            if metrics_tasks:
+                pending = [t for t in metrics_tasks.values() if not t.done()]
+                if pending:
+                    try:
+                        await asyncio.wait(pending, timeout=10.0)
+                    except Exception:
+                        pass
 
     async def _run_evaluation(self, tracker):
         try:
