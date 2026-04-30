@@ -3235,14 +3235,17 @@ def accuracy(
                     if existing_parameters:
                         update_fields["parameters"] = json.dumps(existing_parameters)
 
-                    if final_metrics.get("confusionMatrix"):
-                        update_fields['confusionMatrix'] = json.dumps(final_metrics.get("confusionMatrix"))
-                    
-                    if final_metrics.get("predictedClassDistribution"):
-                        update_fields['predictedClassDistribution'] = json.dumps(final_metrics.get("predictedClassDistribution"))
-                    
-                    if final_metrics.get("datasetClassDistribution"):
-                        update_fields['datasetClassDistribution'] = json.dumps(final_metrics.get("datasetClassDistribution"))
+                    # Always write confusion matrix/distributions so this final write wins
+                    # over any intermediate write from the background metrics task.
+                    update_fields['confusionMatrix'] = json.dumps(
+                        final_metrics.get("confusionMatrix") or None
+                    )
+                    update_fields['predictedClassDistribution'] = json.dumps(
+                        final_metrics.get("predictedClassDistribution") or []
+                    )
+                    update_fields['datasetClassDistribution'] = json.dumps(
+                        final_metrics.get("datasetClassDistribution") or []
+                    )
                     
                     # Remove None values from update_fields
                     update_fields = {k: v for k, v in update_fields.items() if v is not None}
