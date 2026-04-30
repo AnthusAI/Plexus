@@ -3,7 +3,7 @@
   "title": "Configure Cursor MCP server for local execute_tactus testing",
   "description": "Set up and debug Cursor MCP configuration so Cursor can launch the local Plexus MCP server and exercise execute_tactus as an actual MCP tool. Workspace config works over stdio, but Cursor UI is showing no User MCP tools, so mirror the Plexus entry into the user MCP config as well.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 0,
   "assignee": null,
   "creator": null,
@@ -12,7 +12,7 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-04-29T18:53:12.123004Z",
-  "updated_at": "2026-04-29T19:44:09.992741Z",
-  "closed_at": null,
+  "updated_at": "2026-04-30T11:35:23.067032Z",
+  "closed_at": "2026-04-30T11:35:23.067032Z",
   "custom": {}
 }

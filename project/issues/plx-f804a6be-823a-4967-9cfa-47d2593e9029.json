@@ -3,7 +3,7 @@
   "title": "Harden execute_tactus MCP contract",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -76,10 +76,16 @@
       "author": "ryan",
       "text": "Runtime-boundary progress: plexus.evaluation.info now follows the same DIRECT_HANDLERS pattern as feedback.find, with no FastMCP loopback in the Tactus host module. Focused runtime tests pass: 49/49 execute_tactus tests and 86/86 combined runtime/spike tests.",
       "created_at": "2026-04-29T05:43:41.011873Z"
+    },
+    {
+      "id": "fb49d45d-a2cc-41d3-ab34-d52b0cc4d187",
+      "author": "ryan",
+      "text": "Contract hardening complete. Key additions in this phase: (1) _truncate_envelope added — caps execute_tactus JSON responses at 40K chars to prevent LLM context window overflow from large evaluation/scorecard queries. (2) carve_child updated — auto-supplies a default child budget when parent BudgetGate is effectively infinite (usd=inf, wallclock=inf), so embedded MCP chat context doesn't require explicit budget in async evaluation/procedure calls. (3) mcp_transport.py now passes a permissive BudgetGate (inf usd, inf wallclock, depth=20, tool_calls=500) to execute_tactus for chat embedded context. (4) _default_procedure_optimize dispatches optimizer in a background daemon thread so chat responds immediately with procedure ID rather than blocking for hours. Closing.",
+      "created_at": "2026-04-30T11:35:31.525886Z"
     }
   ],
   "created_at": "2026-04-29T03:50:13.779251Z",
-  "updated_at": "2026-04-29T05:43:41.011873Z",
-  "closed_at": null,
+  "updated_at": "2026-04-30T11:35:31.546037Z",
+  "closed_at": "2026-04-30T11:35:31.546037Z",
   "custom": {}
 }

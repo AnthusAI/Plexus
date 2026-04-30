@@ -34,10 +34,16 @@
       "author": "ryan",
       "text": "Refocusing on the Plexus-side execute_tactus MCP tool after the Tactus host-module support PR merged into Tactus develop. Current Plexus branch already contains the first prototype files and tests; next step is to verify the prototype against the merged local Tactus package, tighten the public contract, and address any runtime/test failures without touching unrelated Kanbus-generated files.",
       "created_at": "2026-04-29T03:49:46.441420Z"
+    },
+    {
+      "id": "21d75300-4da9-4468-9e89-28ec71fcb0d7",
+      "author": "ryan",
+      "text": "## Progress summary (Apr 2026)\n\n### What's done\n- execute_tactus is the single MCP tool. All ~60 legacy tools removed. MCP_TOOL_MAP eliminated; all Tactus calls route through DIRECT_HANDLERS.\n- Console chat agent (chat_agent.tac) works end-to-end with execute_tactus:\n  - extract_text fixed for Lupa userdata (Lua receives Python objects not Lua tables)\n  - MessageHistory auto-load removed — eliminates cross-turn context bleed\n  - Response truncation at 40K chars prevents LLM context window overflow\n  - Budget auto-default when parent gate is infinite (embedded MCP context)\n  - procedure.optimize dispatches in background thread (returns procedure_id immediately)\n- Verified via programmatic tests: scorecard/score queries (L1), trigger evaluation + real eval ID (L2), start optimizer via chat + procedure ID in ~49s (L3).\n- S3-backed code.tac storage for large procedure YAMLs (prevents DynamoDB 400KB limit).\n- plexus execute CLI for fast local testing without MCP server restarts.\n\n### What remains (plx-71ad53)\n- L4b: plexus.item.last + plexus.predict via chat (pending re-test after _item_helpers.py fix)\n- L4c: plexus.score.update via chat (untested)\n- L4d: guidelines update via chat (untested)\n- Commit _item_helpers.py fix to repo",
+      "created_at": "2026-04-30T11:36:15.687674Z"
     }
   ],
   "created_at": "2026-04-28T21:03:15.044640Z",
-  "updated_at": "2026-04-29T03:49:46.441420Z",
+  "updated_at": "2026-04-30T11:36:15.687674Z",
   "closed_at": null,
   "custom": {}
 }
