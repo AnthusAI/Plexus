@@ -636,7 +636,12 @@ export default function EvaluationsDashboard({
                     itemId
                     createdAt
                     feedbackItem { id editCommentValue initialAnswerValue finalAnswerValue editorName editedAt }
-                    item { id itemIdentifiers { items { name value url position } } }
+                    item {
+                      id
+                      externalId
+                      identifiers
+                      itemIdentifiers { items { name value url position } }
+                    }
                   }
                   nextToken
                 }
@@ -675,6 +680,7 @@ export default function EvaluationsDashboard({
       next: (data: { items: any[]; isSynced: boolean }) => {
         if (localGeneration !== evaluationFetchGenerationRef.current) return;
         const transformedItems = transformItems(data.items || []);
+        if (localGeneration !== evaluationFetchGenerationRef.current) return;
         evaluationResultsCacheRef.current.set(selectedEvaluationId, transformedItems)
         setSelectedEvaluationScoreResults(transformedItems)
       },
