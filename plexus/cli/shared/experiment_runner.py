@@ -758,13 +758,19 @@ async def run_procedure_with_task_tracking(
 
         # Complete or update the task
         if task_ref and mapped_task_status != "FAILED":
-            compact_output, attached_files, _attachment_key = persist_task_output_artifact(
-                task_id=task_ref.id,
-                output_payload=experiment_result,
-                format_type="json",
-                existing_attached_files=getattr(task_ref, "attachedFiles", None),
-                status=mapped_task_status.lower(),
-            )
+            try:
+                compact_output, attached_files, _attachment_key = persist_task_output_artifact(
+                    task_id=task_ref.id,
+                    output_payload=experiment_result,
+                    format_type="json",
+                    existing_attached_files=getattr(task_ref, "attachedFiles", None),
+                    status=mapped_task_status.lower(),
+                )
+            except Exception as _persist_err:
+                logger.warning("Could not persist task output artifact (continuing): %s", _persist_err)
+                compact_output = None
+                attached_files = getattr(task_ref, "attachedFiles", None) or []
+                _attachment_key = None
             update_data = {
                 "accountId": task_ref.accountId,
                 "type": task_ref.type,
