@@ -220,6 +220,8 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("feedback_find", "feedback", "find"),
     ("feedback_alignment", "feedback", "alignment"),
     ("feedback_latest_update", "feedback", "latest_update"),
+    ("acceptance_rate", "report", "acceptance_rate"),
+    ("report_acceptance_rate", "report", "acceptance_rate"),
     ("rubric_memory_recent_entries", "rubric_memory", "recent_entries"),
     ("rubric_memory_evidence_pack", "rubric_memory", "evidence_pack"),
     ("rubric_memory_sme_question_gate", "rubric_memory", "sme_question_gate"),
@@ -313,6 +315,7 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("evaluation", "compare"): "_call_evaluation_read",
     ("evaluation", "run"): "_call_evaluation_run",
     ("report", "run"): "_call_report_run",
+    ("report", "acceptance_rate"): "_call_report_run",
     ("report", "configurations_list"): "_call_report_read",
     ("dataset", "build_from_feedback_window"): "_call_dataset",
     ("dataset", "check_associated"): "_call_dataset",
@@ -2855,6 +2858,11 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
             cmd += ["--start-date", str(block_config["start_date"])]
         if block_config.get("end_date"):
             cmd += ["--end-date", str(block_config["end_date"])]
+        if block_class == "AcceptanceRate":
+            if block_config.get("include_item_acceptance_rate"):
+                cmd.append("--include-item-acceptance-rate")
+            if block_config.get("max_items") is not None:
+                cmd += ["--max-items", str(block_config["max_items"])]
         if fresh:
             cmd.append("--fresh")
 
@@ -4660,11 +4668,21 @@ class PlexusRuntimeModule:
             self._budget.record_after("report", "configurations_list")
 
     def _call_report_run(self, namespace: str, method: str, args: Any = None) -> Any:
-        if (namespace, method) != ("report", "run"):
+        if namespace != "report" or method not in {"run", "acceptance_rate"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
         parsed = _args(args)
+
+        # Convenience shorthand: plexus.report.acceptance_rate{...} pre-fills block_class.
+        if method == "acceptance_rate":
+            parsed = {**parsed, "block_class": "AcceptanceRate",
+                      "block_config": {**parsed.get("block_config", {}), **{
+                          k: parsed[k] for k in (
+                              "scorecard", "score", "days", "start_date", "end_date",
+                              "include_item_acceptance_rate", "max_items",
+                          ) if k in parsed
+                      }}}
 
         # Synchronous inline mode: run the block in the current process and
         # return the output directly.  Used by procedures that need the report
@@ -5354,8 +5372,8 @@ Runtime ground rules:
 
 Helper aliases injected before your snippet runs:
 - High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,
-  `item`, `last_item`, `feedback`, `feedback_alignment`, `dataset`,
-  `report`, `report_configs`, `procedure`, `procedures`,
+  `item`, `last_item`, `feedback`, `feedback_alignment`, `acceptance_rate`,
+  `dataset`, `report`, `report_configs`, `procedure`, `procedures`,
   `procedure_sessions`, `procedure_messages`.
 - Canonical `namespace_method`: `scorecards_list`, `score_info`,
   `evaluation_info`, `evaluation_run`, `handle_status`, `handle_await`,
