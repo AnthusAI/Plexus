@@ -215,7 +215,9 @@ describe('transformEvaluation', () => {
         human_label: 'correct_answer',
         correct: true,
         human_explanation: 'This is the right answer',
-        text: 'Sample input text'
+        text: 'Sample input text',
+        feedback_item_id: null,
+        item_id: null
       });
     });
 
@@ -496,7 +498,9 @@ describe('transformEvaluation', () => {
         human_label: 'correct',
         correct: true,
         human_explanation: null,
-        text: null
+        text: null,
+        feedback_item_id: null,
+        item_id: null
       });
       
       // Verify itemIdentifiers are correctly extracted and preserved
