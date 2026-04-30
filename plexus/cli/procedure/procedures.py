@@ -16,13 +16,45 @@ import click
 import json
 import yaml
 import time
-from typing import Optional
+from typing import Any, Optional
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 from rich.json import JSON
 from datetime import datetime
+
+
+def _json_safe(obj: Any) -> Any:
+    """Recursively convert non-serializable objects (e.g. Pydantic models) to plain dicts/lists."""
+    _dict = __builtins__["dict"] if isinstance(__builtins__, dict) else dict  # type: ignore[index]
+    _list = __builtins__["list"] if isinstance(__builtins__, dict) else list  # type: ignore[index]
+    if type(obj) is _dict or (hasattr(obj, "items") and hasattr(obj, "keys") and not hasattr(obj, "model_dump")):
+        try:
+            return {k: _json_safe(v) for k, v in obj.items()}
+        except Exception:
+            pass
+    if type(obj) is _list or isinstance(obj, (tuple,)):
+        try:
+            return [_json_safe(v) for v in obj]
+        except Exception:
+            pass
+    if hasattr(obj, "model_dump"):
+        try:
+            return _json_safe(obj.model_dump())
+        except Exception:
+            return str(obj)
+    if hasattr(obj, "__dict__") and not isinstance(obj, type):
+        try:
+            return _json_safe(vars(obj))
+        except Exception:
+            pass
+    try:
+        import json as _json
+        _json.dumps(obj)
+        return obj
+    except (TypeError, ValueError):
+        return str(obj)
 
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
@@ -383,7 +415,7 @@ def timeout_stale(account: Optional[str], threshold_seconds: int, lookback_hours
     )
 
     if output == 'json':
-        console.print(JSON.from_data(result))
+        console.print(JSON.from_data(_json_safe(result)))
         return
     if output == 'yaml':
         console.print(yaml.dump(result, default_flow_style=False))
@@ -741,7 +773,7 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
         return
     
     if output == 'json':
-        console.print(JSON.from_data(result))
+        console.print(JSON.from_data(_json_safe(result)))
     elif output == 'yaml':
         console.print(yaml.dump(result, default_flow_style=False))
     else:
@@ -858,7 +890,7 @@ def test_specs(
         return
 
     if output == 'json':
-        console.print(JSON.from_data(result))
+        console.print(JSON.from_data(_json_safe(result)))
         return
     if output == 'yaml':
         console.print(yaml.dump(result, default_flow_style=False, sort_keys=False))

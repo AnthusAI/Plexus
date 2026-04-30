@@ -3716,10 +3716,15 @@ def _default_score_pull(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
-    """Create a new ScoreVersion from provided YAML code.
+    """Update a score: create a new ScoreVersion and/or update Score metadata.
 
-    Validates the YAML, optionally diffs against the parent version, and
-    creates a new version record.  Returns the new version ID.
+    Supports:
+    - code: new YAML configuration string → creates a new ScoreVersion
+    - guidelines: new guidelines text → creates a new ScoreVersion
+    - description / name / key / external_id / ai_provider / ai_model: metadata-only
+      updates that mutate the Score record directly (no new version needed)
+
+    Any combination is valid. If only metadata fields are provided, no version is created.
     """
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.direct_identifier_resolution import (
@@ -3734,33 +3739,19 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
     parent_version_id = args.get("parent_version_id")
     version_note = args.get("version_note") or args.get("note") or "Updated via plexus.score.update"
 
+    # Metadata fields that update the Score record (not a version)
+    _META_FIELDS = ("description", "name", "key", "external_id", "ai_provider", "ai_model")
+    metadata_updates = {f: args[f] for f in _META_FIELDS if f in args and args[f] is not None}
+
     if not scorecard_identifier:
         raise ValueError("plexus.score.update requires scorecard_identifier")
     if not score_identifier:
         raise ValueError("plexus.score.update requires score_identifier")
-    if not code:
-        raise ValueError("plexus.score.update requires code (YAML string)")
-
-    # Validate YAML
-    try:
-        from plexus.linting.schemas import create_score_linter
-
-        linter = create_score_linter()
-        lint_result = linter.lint(code)
-        if not lint_result.is_valid:
-            errors = [
-                f"{m.title}: {m.message}"
-                for m in lint_result.messages
-                if m.level == "error"
-            ]
-            return {
-                "success": False,
-                "error": "YAML validation failed",
-                "validation_errors": errors,
-            }
-    except ImportError:
-        import yaml as _yaml
-        _yaml.safe_load(code)
+    if not code and guidelines is None and not metadata_updates:
+        raise ValueError(
+            "plexus.score.update requires at least one of: code, guidelines, or a metadata field "
+            "(description, name, key, external_id, ai_provider, ai_model)"
+        )
 
     client = create_client()
     scorecard_id = direct_resolve_scorecard_identifier(client, scorecard_identifier)
@@ -3770,52 +3761,92 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
     if not score_id:
         raise ValueError(f"Score not found: {score_identifier!r}")
 
-    # Resolve parent version if not specified
-    if not parent_version_id:
-        q = """
-        query GetScoreChampionId($id: ID!) {
-            getScore(id: $id) { championVersionId }
+    result: dict[str, Any] = {"success": True, "score_id": score_id, "scorecard_id": scorecard_id}
+
+    # --- Metadata-only update (Score record fields) ---
+    if metadata_updates:
+        _FIELD_MAP = {
+            "description": "description", "name": "name", "key": "key",
+            "external_id": "externalId", "ai_provider": "aiProvider", "ai_model": "aiModel",
+        }
+        meta_input: dict[str, Any] = {"id": score_id}
+        for py_field, gql_field in _FIELD_MAP.items():
+            if py_field in metadata_updates:
+                meta_input[gql_field] = metadata_updates[py_field]
+        meta_mutation = """
+        mutation UpdateScore($input: UpdateScoreInput!) {
+            updateScore(input: $input) { id name description key externalId }
         }
         """
-        resp = client.execute(q, {"id": score_id})
-        parent_version_id = (
-            (resp or {}).get("getScore") or {}
-        ).get("championVersionId")
+        meta_resp = client.execute(meta_mutation, {"input": meta_input})
+        updated_score = (meta_resp or {}).get("updateScore") or {}
+        if not updated_score.get("id"):
+            return {"success": False, "error": f"updateScore returned no id: {meta_resp!r}"}
+        result["metadata_updated"] = True
+        result["metadata_changes"] = metadata_updates
 
-    mutation = """
-    mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
-        createScoreVersion(input: $input) {
-            id
-            createdAt
+    # --- Version update (code / guidelines) ---
+    new_version_id: str | None = None
+    if code or guidelines is not None:
+        # Validate YAML if code provided
+        if code:
+            try:
+                from plexus.linting.schemas import create_score_linter
+                linter = create_score_linter()
+                lint_result = linter.lint(code)
+                if not lint_result.is_valid:
+                    errors = [
+                        f"{m.title}: {m.message}"
+                        for m in lint_result.messages
+                        if m.level == "error"
+                    ]
+                    return {"success": False, "error": "YAML validation failed", "validation_errors": errors}
+            except ImportError:
+                import yaml as _yaml
+                _yaml.safe_load(code)
+
+        # Resolve parent version
+        if not parent_version_id:
+            q = """
+            query GetScoreChampionId($id: ID!) {
+                getScore(id: $id) { championVersionId }
+            }
+            """
+            resp = client.execute(q, {"id": score_id})
+            parent_version_id = ((resp or {}).get("getScore") or {}).get("championVersionId")
+
+        version_mutation = """
+        mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
+            createScoreVersion(input: $input) { id createdAt }
         }
-    }
-    """
-    input_obj: dict[str, Any] = {
-        "scoreId": score_id,
-        "configuration": code,
-        "note": version_note,
-        "isFeatured": "false",
-    }
-    if guidelines is not None:
-        input_obj["guidelines"] = guidelines
-    if parent_version_id:
-        input_obj["parentVersionId"] = parent_version_id
+        """
+        input_obj: dict[str, Any] = {
+            "scoreId": score_id,
+            "note": version_note,
+            "isFeatured": "false",
+        }
+        if code:
+            input_obj["configuration"] = code
+        if guidelines is not None:
+            input_obj["guidelines"] = guidelines
+        if parent_version_id:
+            input_obj["parentVersionId"] = parent_version_id
 
-    resp = client.execute(mutation, {"input": input_obj})
-    new_version = (resp or {}).get("createScoreVersion") or {}
-    new_version_id = new_version.get("id")
-    if not new_version_id:
-        return {"success": False, "error": f"createScoreVersion returned no id: {resp!r}"}
+        resp = client.execute(version_mutation, {"input": input_obj})
+        new_version = (resp or {}).get("createScoreVersion") or {}
+        new_version_id = new_version.get("id")
+        if not new_version_id:
+            return {"success": False, "error": f"createScoreVersion returned no id: {resp!r}"}
+        result["version_id"] = new_version_id
+        result["parent_version_id"] = parent_version_id
+        result["created_at"] = new_version.get("createdAt") or ""
+        result["version_created"] = True
 
-    return {
-        "success": True,
-        "version_id": new_version_id,
-        "score_id": score_id,
-        "scorecard_id": scorecard_id,
-        "parent_version_id": parent_version_id,
-        "created_at": new_version.get("createdAt") or "",
-        "message": f"Score version created: {new_version_id}",
-    }
+    result["message"] = (
+        f"Score updated: version {new_version_id}" if new_version_id
+        else f"Score metadata updated: {list(metadata_updates.keys())}"
+    )
+    return result
 
 
 def _default_score_test(args: dict[str, Any]) -> dict[str, Any]:
