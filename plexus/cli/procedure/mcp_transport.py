@@ -498,32 +498,13 @@ class EmbeddedMCPServer:
             tool_subset: List of tool names to register. If None, registers all available tools.
         """
         try:
-            # Import the main MCP server tools from the MCP directory
+            # The legacy MCP tool catalog (tools.scorecard, tools.score, etc.) has been
+            # removed. All Plexus functionality is now exposed through execute_tactus in
+            # MCP/tools/tactus_runtime/. Procedure-internal tool loading is a no-op here;
+            # rubric_memory and other features are available to Tactus procedures via the
+            # plexus.* runtime APIs.
             import sys
             import os
-            
-            # Add MCP directory to path temporarily
-            # Get the project root (4 levels up from this file: mcp_transport.py -> procedure -> cli -> plexus -> project_root)
-            current_file = os.path.abspath(__file__)
-            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file))))
-            mcp_dir = os.path.join(project_root, 'MCP')
-            
-            if mcp_dir not in sys.path:
-                sys.path.insert(0, mcp_dir)
-                logger.debug(f"Added MCP directory to path: {mcp_dir}")
-            
-            from tools.util.think import register_think_tool
-            from tools.util.docs import register_docs_tool
-            from tools.scorecard.scorecards import register_scorecard_tools
-            from tools.score.scores import register_score_tools
-            from tools.score.guidelines import register_guidelines_tools
-            from tools.item.items import register_item_tools
-            from tools.feedback.feedback import register_feedback_tools
-            from tools.evaluation.evaluations import register_evaluation_tools
-            from tools.prediction.predictions import register_prediction_tools
-            from tools.dataset.datasets import register_dataset_tools
-            from tools.report.reports import register_report_tools
-            from tools.rubric_memory.rubric_memory import register_rubric_memory_tools
             
             # Create a mock MCP object that captures tool registrations
             class ToolCapture:
@@ -679,6 +660,7 @@ class EmbeddedMCPServer:
             
             tool_capture = ToolCapture(self)
 
+            # Register the built-in done tool used by all Tactus agents.
             @tool_capture.tool()
             async def done(reason: str = "", success: Optional[bool] = True, **kwargs):
                 """Signal agent completion with an optional reason and any additional fields."""
@@ -706,47 +688,10 @@ class EmbeddedMCPServer:
                     "tool": "done",
                 }
             
-            # Register selected tool sets
-            available_tools = {
-                "think": lambda: register_think_tool(tool_capture),
-                "documentation": lambda: register_docs_tool(tool_capture),
-                "scorecard": lambda: register_scorecard_tools(tool_capture),
-                "score": lambda: (register_score_tools(tool_capture), register_guidelines_tools(tool_capture)),
-                "guidelines": lambda: register_guidelines_tools(tool_capture),
-                "item": lambda: register_item_tools(tool_capture),
-                "feedback": lambda: register_feedback_tools(tool_capture),
-                "evaluation": lambda: register_evaluation_tools(tool_capture),
-                "prediction": lambda: register_prediction_tools(tool_capture),
-                "dataset": lambda: register_dataset_tools(tool_capture),
-                "report": lambda: register_report_tools(tool_capture),
-                "rubric_memory": lambda: register_rubric_memory_tools(tool_capture),
-            }
-            
-            # If no specific tools requested, register all available tools
-            if tool_subset is None:
-                tool_subset = list(available_tools.keys())
-            
-            # Always register think tool as it's essential for AI planning
-            if "think" not in tool_subset:
-                tool_subset = ["think"] + list(tool_subset)
-            
-            for tool_category in tool_subset:
-                if tool_category in available_tools:
-                    try:
-                        available_tools[tool_category]()
-                        logger.info(f"Registered {tool_category} tools for procedure MCP")
-                    except Exception as e:
-                        logger.warning(f"Failed to register {tool_category} tools: {e}")
-            
             logger.info(f"Total MCP tools registered: {len(self.transport.tools)}")
             
-        except ImportError as e:
-            logger.warning(f"Could not import Plexus MCP tools: {e}")
-            logger.debug(f"MCP directory: {mcp_dir}")
-            logger.debug(f"MCP directory exists: {os.path.exists(mcp_dir)}")
-            logger.debug(f"sys.path contains MCP dir: {mcp_dir in sys.path}")
         except Exception as e:
-            logger.error(f"Error registering Plexus tools: {e}")
+            logger.error(f"Error registering procedure tools: {e}")
     
     @asynccontextmanager
     async def connect(self, client_info: Optional[Dict[str, Any]] = None):

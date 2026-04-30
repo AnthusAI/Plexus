@@ -1,1 +1,0 @@
-"""Rubric-memory MCP tools."""

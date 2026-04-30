@@ -473,7 +473,7 @@ def create_tracker_and_experiment_task(
     return tracker, procedure_record, task
 
 
-async def run_experiment_with_task_tracking(
+async def run_procedure_with_task_tracking(
     *,
     procedure_id: str,
     client: Optional[PlexusDashboardClient] = None,
@@ -720,7 +720,7 @@ async def run_experiment_with_task_tracking(
         # Pass the task ID so the executor can update stage status in real-time
         if task_ref and task_ref.id:
             run_options.setdefault("_task_id_for_stage_tracking", task_ref.id)
-        experiment_result = await service.run_experiment(procedure_id, **run_options)
+        experiment_result = await service.run_procedure(procedure_id, **run_options)
 
         procedure_status = str(experiment_result.get("status") or "").upper()
         is_waiting_for_human = procedure_status == "WAITING_FOR_HUMAN"
