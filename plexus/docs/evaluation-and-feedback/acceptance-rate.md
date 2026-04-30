@@ -44,6 +44,7 @@ Drop `sync = true` and add `async = true` to fire-and-forget and get a handle ba
 | `end_date` | string | — | Inclusive end date `YYYY-MM-DD` |
 | `include_item_acceptance_rate` | bool | false | Also compute item-level acceptance (slower) |
 | `max_items` | int | 0 (no cap) | Cap on item rows in the output |
+| `include_items` | bool | false | Include per-item rows in sync output (omitted by default to keep response small) |
 | `sync` | bool | false | Run inline and return output now |
 | `async` | bool | false | Dispatch and return a handle immediately |
 | `fresh` | bool | false | Bypass cache and recompute |
