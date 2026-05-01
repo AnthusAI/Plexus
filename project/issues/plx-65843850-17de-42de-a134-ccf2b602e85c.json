@@ -10,9 +10,16 @@
   "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "8cfc4942-8ecf-49fc-9938-df37fa86393b",
+      "author": "ryan",
+      "text": "Fixed score editor direct YAML normalization so numeric external_id/externalId values are coerced to strings before optimizer agents edit or submit candidate versions. Focused regression added; live Blind Transfer optimizer run has accepted cycle 1 and is continuing.",
+      "created_at": "2026-05-01T20:32:35.896973Z"
+    }
+  ],
   "created_at": "2026-04-23T11:57:53.357707Z",
-  "updated_at": "2026-04-23T11:57:58.115652Z",
+  "updated_at": "2026-05-01T20:32:35.896973Z",
   "closed_at": null,
   "custom": {}
 }

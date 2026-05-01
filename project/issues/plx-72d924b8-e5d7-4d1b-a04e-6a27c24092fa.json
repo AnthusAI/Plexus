@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "Starting implementation from the approved plan. I will isolate changes in the PR worktree and keep unrelated local checkout changes out of staging.",
       "created_at": "2026-05-01T20:00:33.164186Z"
+    },
+    {
+      "id": "7f84e883-4265-49ae-9326-6682e556f94f",
+      "author": "ryan",
+      "text": "Implemented local procedure dispatch-state fix in working tree. Producer changes: MCP procedure subprocesses set PLEXUS_LOCAL_DISPATCH=1; ProcedureService can create local tasks with dispatch_mode=local and PENDING dispatch status; shared runner preserves dispatch_mode=local and clears workerNodeId for local lifecycle updates. Dashboard changes: ProcedureTask treats dispatch_mode as display authority, no-task state renders Pending, and nested TaskStatus pre-execution rows are suppressed for ProcedureTask. Added repair utility and repaired live tasks d90b6e36-1d24-4b26-bd39-a3f091ef8814 and 91cd1837-ab38-4534-beac-b47f43821741. Verification: pytest plexus/cli/shared/test_experiment_runner.py -q passed; dashboard ProcedureTask/TaskStatus Jest tests passed; dashboard npm run typecheck passed. MCP tactus procedure subset still has pre-existing failures around handle child budget expectations unrelated to this dispatch-state fix.",
+      "created_at": "2026-05-01T20:11:53.213488Z"
     }
   ],
   "created_at": "2026-05-01T20:00:30.638482Z",
-  "updated_at": "2026-05-01T20:00:33.164186Z",
+  "updated_at": "2026-05-01T20:11:53.213488Z",
   "closed_at": null,
   "custom": {}
 }
