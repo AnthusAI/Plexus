@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8cbd007b-f184-4616-b5e1-afa5c899c5e9",
+  "issue_id": "plx-f804a6be-823a-4967-9cfa-47d2593e9029",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T03:50:13.779Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-07dc0d44-08df-4248-97af-1f928bc2e19d",
+    "priority": 1,
+    "status": "open",
+    "title": "Harden execute_tactus MCP contract"
+  }
+}

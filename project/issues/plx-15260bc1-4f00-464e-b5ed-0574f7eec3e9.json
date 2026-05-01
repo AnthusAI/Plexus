@@ -1,0 +1,18 @@
+{
+  "id": "plx-15260bc1-4f00-464e-b5ed-0574f7eec3e9",
+  "title": "Frontier models write correct Lua against PlexusModule stub",
+  "description": "# Story: Frontier models write correct Lua against PlexusModule stub\n\n## Intent\n\nAs a Plexus architect, I want quantitative evidence that current frontier LLMs can write correct Plexus-flavored Tactus Lua against a small boot prompt and on-demand documentation, so that I can decide whether to commit several months of work to the runtime-platform direction.\n\n## Gherkin\n\n```gherkin\nFeature: Frontier models can author Plexus-flavored Tactus Lua\n\n  Scenario: Single-turn first-try success\n    Given a stub PlexusModule exposing read-only operations and a stubbed long-running evaluation\n    And a boot prompt of ≤2k tokens taught via the execute_tactus tool description\n    And the doc surface plexus.docs.{list,get} is populated with namespace references\n    And a representative task from the curated 10–15 task set\n    When a frontier LLM (claude-4.6-sonnet, claude-4.7-opus, gpt-5.3-codex, or gemini-3.1-pro) is asked to perform the task using only execute_tactus\n    Then the model writes Lua that runs successfully on the first attempt\n    And the resulting return value matches the task's expected outcome\n\n  Scenario: Aggregate proceed gate\n    Given the spike has been run across the full 10–15 task set against all 4 models\n    When the per-model first-try success rates are tallied\n    Then at least 2 of the 4 models achieve ≥85% first-try success rate\n\n  Scenario: Failure-mode classification\n    Given a task that fails on the first attempt\n    When the failure is examined\n    Then the failure is classified as one of: API design issue, boot prompt issue, language/Lua issue, or fundamental \"models can't do this\"\n    And each classification informs a specific remediation or escalation\n```\n\n## Definition of Done\n\n- All representative tasks executed against all 4 models with full transcripts captured.\n- Per-model success rates computed and recorded.\n- Aggregate gate evaluated and a go/no-go decision documented.\n- Failure-mode classifications produced for every failed attempt.",
+  "type": "story",
+  "status": "open",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-28T21:05:06.152748Z",
+  "updated_at": "2026-04-28T21:05:06.152748Z",
+  "closed_at": null,
+  "custom": {}
+}

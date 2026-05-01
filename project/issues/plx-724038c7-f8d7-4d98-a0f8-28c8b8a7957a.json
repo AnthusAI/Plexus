@@ -1,0 +1,67 @@
+{
+  "id": "plx-724038c7-f8d7-4d98-a0f8-28c8b8a7957a",
+  "title": "Run the spike across 4 frontier models and capture results",
+  "description": "# Run the spike across 4 frontier models\n\n## What\n\nExecute the harness against all curated tasks × all models, capture results, organize for analysis.\n\n## Models\n\n- claude-4.6-sonnet (Anthropic)\n- claude-4.7-opus (Anthropic)\n- gpt-5.3-codex (OpenAI)\n- gemini-3.1-pro (Google)\n\n(Substitute current frontier-equivalent if any of these are unavailable when the spike runs.)\n\n## What to record\n\nPer task × model pair:\n- All metrics from the harness output (tokens, latency, cost, success).\n- Full transcripts (prompt, response, tool invocations, Lua source generated, runtime results).\n\n## Storage\n\nResults land under `spikes/runtime-mcp-validation/results/<run-id>/<model>/<task>.json` plus an aggregate summary at `spikes/runtime-mcp-validation/results/<run-id>/summary.csv`.\n\n## Cost budget for the spike itself\n\nThe spike makes real API calls. Each model × task pair is small (<$0.20). Across ~15 tasks × 4 models, expect ~$10–20 total. Hard cap: $50 across the spike. If approaching, halt and reassess.\n\n## Deliverable\n\nA `run-id` results directory with all transcripts, a summary CSV, and confirmation that the harness completed all combinations (or documented exclusions if any model was unavailable / refused / errored systematically).",
+  "type": "task",
+  "status": "blocked",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "70b30c7e-4c9d-4f0e-abee-393d96399fe4",
+      "author": "ryan",
+      "text": "Blocked on real-provider credentials/configuration.\n\nReadiness command run:\n```bash\npython spikes/runtime-mcp-validation/harness.py --check-providers\n```\n\nOutput summary:\n- `anthropic` package present, `ANTHROPIC_API_KEY` missing, ready=false.\n- `openai` package present, `OPENAI_API_KEY` missing, ready=false.\n- `litellm` package present, no supported provider credential env vars present (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `GEMINI_API_KEY`, `VERTEXAI_PROJECT`, `AWS_ACCESS_KEY_ID` all missing), ready=false.\n\nNo real-provider calls were run, preserving the spike cost cap. The harness is ready for a one-task provider readiness run once credentials are configured, for example:\n\n```bash\npython spikes/runtime-mcp-validation/harness.py \\\n  --task predict_single_item \\\n  --model litellm:<configured-low-cost-model> \\\n  --run-id provider-readiness-001\n```\n\nStub smoke still passes 15/15 with `stub-oracle`.",
+      "created_at": "2026-04-28T22:39:16.115647Z"
+    },
+    {
+      "id": "c689741d-2cb8-42c7-b31f-a7def6056d61",
+      "author": "ryan",
+      "text": "Added enforceable pre-dispatch cost planning to the spike harness.\n\nChanges:\n- `harness.py` now has default spike cost controls:\n  - `--max-total-cost-usd` default `50.0`\n  - `--estimated-real-call-cost-usd` default `0.20`\n- Before dispatching any selected run, the harness computes:\n  - real provider call count = non-stub model count × task count\n  - estimated real-provider cost = real provider call count × per-call estimate\n- If estimated cost exceeds the cap, the harness exits before provider readiness checks or paid calls.\n- Each run now writes `run_metadata.json` with selected tasks, selected models, boot-prompt token count, and the cost plan.\n- `report.py` now includes the run cost plan when metadata exists.\n- README documents the default `$50` cap and `$0.20` per-real-call estimate and the explicit override flags.\n\nVerification:\n```bash\npython -m py_compile \"spikes/runtime-mcp-validation/harness.py\" \"spikes/runtime-mcp-validation/report.py\"\npython \"spikes/runtime-mcp-validation/harness.py\" --task predict_single_item --models stub-oracle --run-id ignored-cost-report-verify\npython \"spikes/runtime-mcp-validation/harness.py\" --task predict_single_item --model litellm:dummy-model --max-total-cost-usd 0.10 --estimated-real-call-cost-usd 0.20 --run-id should-not-run 2>&1 || true\npython \"spikes/runtime-mcp-validation/measure_mcp_catalog.py\" --run-id ignored-cost-report-verify\npython \"spikes/runtime-mcp-validation/report.py\" --run-id ignored-cost-report-verify\n```\n\nResults:\n- Stub run succeeded and wrote metadata.\n- Over-cap real-provider plan was refused before any provider call.\n- Report generated with catalog measurement and cost plan.",
+      "created_at": "2026-04-29T00:35:50.659833Z"
+    },
+    {
+      "id": "2105cc16-fcba-4049-bff6-0ee1d9b7694d",
+      "author": "ryan",
+      "text": "Added an explicit readiness-run guard before full real-provider matrix runs.\n\nChanges:\n- New CLI flag: `--readiness-run-id`.\n- When `--all` includes any real provider model, the harness now requires:\n  - `--allow-full-matrix`\n  - `--readiness-run-id <run-id>` pointing to an existing `results/<run-id>/summary.csv`\n  - that summary must contain at least one successful non-`stub-oracle` result\n- Stub-only full runs are unaffected.\n- README full-matrix examples now include `--readiness-run-id` and document the requirement.\n\nTests added:\n- missing readiness run id is rejected\n- missing readiness summary is rejected\n- stub-only readiness success is rejected\n- successful real-provider readiness row is accepted\n\nVerification:\n```bash\npython -m pytest \"spikes/runtime-mcp-validation/test_harness_report.py\" -q\npython -m py_compile \"spikes/runtime-mcp-validation/plexus_module_stub.py\" \"spikes/runtime-mcp-validation/harness.py\" \"spikes/runtime-mcp-validation/report.py\" \"spikes/runtime-mcp-validation/measure_mcp_catalog.py\"\npython \"spikes/runtime-mcp-validation/harness.py\" --all --models litellm:dummy-model --allow-full-matrix --run-id should-not-run 2>&1 || true\npython \"spikes/runtime-mcp-validation/harness.py\" --all --model stub-oracle --run-id ignored-readiness-verify\npython \"spikes/runtime-mcp-validation/measure_mcp_catalog.py\" --run-id ignored-readiness-verify\npython \"spikes/runtime-mcp-validation/report.py\" --run-id ignored-readiness-verify\n```\n\nResults:\n- Guardrail tests: 19 passed.\n- Full real-provider matrix without readiness run id was refused before provider calls.\n- Stub oracle full run still passed 15/15.\n- Catalog measurement and report generation still work.",
+      "created_at": "2026-04-29T00:44:56.509929Z"
+    },
+    {
+      "id": "1d58c452-849a-43ce-b7c4-474c4c6aeaa2",
+      "author": "ryan",
+      "text": "Ran a one-task OpenAI readiness check with GPT 5.4 mini after `.env` provider readiness was available.\n\nCommand:\n```bash\nset -a && source .env && set +a && python \"spikes/runtime-mcp-validation/harness.py\" --task predict_single_item --model openai:gpt-5.4-mini --run-id provider-readiness-openai-gpt54mini-001\n```\n\nResult:\n- Completed provider call successfully.\n- Strict checker result: 0/1 passed.\n- Failure classification: `boot_prompt`.\n- Provider-reported usage: 830 input tokens, 241 output tokens.\n- Stub Plexus cost spent: `$0.0168`.\n\nGenerated Lua behavior:\n- Correctly used `require(\"plexus\")`.\n- Correctly called `plexus.score.info` and `plexus.score.predict`.\n- Returned predicted value, explanation, score version id, and `total_cost`.\n\nWhy the checker failed:\n- The task prompt asks for predicted value, explanation, score version id, and total cost.\n- The task definition/checker also requires `item_id`, `score_id`, `cost`, and a `plexus.item.info` call.\n- GPT 5.4 mini did not call `plexus.item.info`, did not include `item_id`/`score_id`, and used `total_cost` rather than `cost`.\n\nThis is useful signal: the model can generate executable Lua for the simple task, but the spike task prompt is underspecified relative to its expected_outcome/required_apis. Next unblocked improvement is to align the prompt with the checker (or deliberately relax the checker if the stricter fields are not actually required).",
+      "created_at": "2026-04-29T00:47:34.599991Z"
+    },
+    {
+      "id": "ea41e04f-5afc-4ea8-bced-d616602172b4",
+      "author": "ryan",
+      "text": "Ran a one-task OpenAI readiness check with GPT 5.4.\n\nCommand:\n```bash\nset -a && source .env && set +a && python \"spikes/runtime-mcp-validation/harness.py\" --task predict_single_item --model openai:gpt-5.4 --run-id provider-readiness-openai-gpt54-001\n```\n\nResult:\n- Completed provider call successfully.\n- Strict checker result: 0/1 passed.\n- Failure classification: `boot_prompt`.\n- Provider-reported usage: 830 input tokens, 336 output tokens.\n- Stub Plexus cost spent: `$0.0168`.\n\nGenerated Lua behavior:\n- Used `require(\"plexus\")`.\n- Generated executable Lua.\n- Found Compliance Tone by listing scorecards and scorecard details.\n- Called `plexus.score.predict` and returned predicted value, explanation, score version id, and `total_cost`.\n\nWhy the checker failed:\n- Same core prompt/checker mismatch seen with GPT 5.4 mini and GPT 5.3 Codex.\n- The task prompt asks for predicted value, explanation, score version id, and total cost.\n- The checker also requires `plexus.score.info`, `plexus.item.info`, returned `item_id`, returned `score_id`, and a field named `cost`.\n- GPT 5.4 used scorecard discovery instead of `plexus.score.info`, did not call `plexus.item.info`, and returned `total_cost` instead of `cost`.\n\nInterpretation:\n- GPT 5.4 can generate runnable Tactus Lua for this task, but the current task is underspecified relative to its strict expected outcome. This should be fixed before treating this first-task readiness as a model failure.",
+      "created_at": "2026-04-29T00:48:08.565578Z"
+    },
+    {
+      "id": "91c3a3bc-cc89-4572-a301-8a9dc8764f44",
+      "author": "ryan",
+      "text": "Completed the Prompt Contract Repair Plan and reran GPT 5.4.\n\nChanges made:\n- Updated `spikes/runtime-mcp-validation/tasks/03_predict_single_item.yaml` so the prompt explicitly asks for:\n  - `plexus.score.info{ id = \"score_compliance_tone\" }`\n  - `plexus.item.info{ id = \"item_1007\" }`\n  - `plexus.score.predict`\n  - return fields `item_id`, `score_id`, `score_version_id`, `predicted_value`, `explanation`, and `cost`\n- Updated `spikes/runtime-mcp-validation/boot_prompt.md` prediction example to inspect score/item first and return `score_id` plus `cost`.\n- Added a prompt/checker consistency test for `predict_single_item`.\n\nLocal verification:\n```bash\npython -m pytest \"spikes/runtime-mcp-validation/test_harness_report.py\" -q\npython -m py_compile \"spikes/runtime-mcp-validation/plexus_module_stub.py\" \"spikes/runtime-mcp-validation/harness.py\" \"spikes/runtime-mcp-validation/report.py\" \"spikes/runtime-mcp-validation/measure_mcp_catalog.py\"\npython \"spikes/runtime-mcp-validation/harness.py\" --validate-tasks\npython \"spikes/runtime-mcp-validation/harness.py\" --all --model stub-oracle --run-id ignored-prompt-contract-verify\n```\nResults:\n- Guardrail tests: 20 passed.\n- Boot prompt: 810 / 2000 estimated tokens.\n- Stub oracle: 15/15 passed.\n\nPaid rerun:\n```bash\nset -a && source .env && set +a && python \"spikes/runtime-mcp-validation/harness.py\" --task predict_single_item --model openai:gpt-5.4 --run-id provider-readiness-openai-gpt54-promptfix-001\n```\nResult:\n- Strict checker: 0/1 passed.\n- Failure classification: `language`.\n- Usage: 938 input tokens, 257 output tokens.\n- The model followed the repaired contract in content, but duplicated the Lua program back-to-back. The second `local plexus = require(\"plexus\")` after the first `return` caused `LuaSyntaxError: <eof> expected near 'local'`.\n\nInterpretation:\n- The hidden prompt/checker mismatch is fixed for this task.\n- The next blocker is exactly the feedback-loop issue: syntactic validation should catch this and return a clear repair message so the model can remove the duplicated program.",
+      "created_at": "2026-04-29T00:51:32.208681Z"
+    },
+    {
+      "id": "5eee1f82-722e-4d05-8d5f-73d1dc468b1c",
+      "author": "ryan",
+      "text": "Post-contract readiness executed with openai:gpt-5.4-mini. New runs: readiness-gpt54mini-async-budget-001, readiness-gpt54mini-report-async-budget-001, and provider-full-openai-gpt54-mini-budgetcontract-005. Async budget contract held in generated Tactus for evaluation/report async calls. Full pass currently 14/15 with one boot_prompt-classified miss on false_negative_feedback_summary (representative_item_id + item.info usage).",
+      "created_at": "2026-04-29T17:34:04.062360Z"
+    },
+    {
+      "id": "962038ea-12ec-497e-9854-377190680bcb",
+      "author": "ryan",
+      "text": "After tightening false_negative_feedback_summary prompt/checker, targeted rerun readiness-gpt54mini-fn-summary-promptfix-001 passed. Full rerun provider-full-openai-gpt54-mini-budgetcontract-006 now passes 15/15 first-try with repair_attempts=0. This removes the prior boot_prompt-classified miss observed in run -005.",
+      "created_at": "2026-04-29T17:37:21.943440Z"
+    }
+  ],
+  "created_at": "2026-04-28T21:06:43.828Z",
+  "updated_at": "2026-04-29T17:37:21.943440Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "30e5c123-0644-4e37-bc0b-06a63270279d",
+  "issue_id": "plx-71ad53d3-34eb-4252-a78c-f1ab5428a9bf",
+  "event_type": "field_updated",
+  "occurred_at": "2026-04-30T11:35:57.277Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "task Complete L4 chat integration tests: predict on item and score update via chat",
+        "to": "Complete L4 chat integration tests: predict on item and score update via chat"
+      }
+    }
+  }
+}

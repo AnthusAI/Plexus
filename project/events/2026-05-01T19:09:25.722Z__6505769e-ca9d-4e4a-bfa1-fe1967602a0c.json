@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6505769e-ca9d-4e4a-bfa1-fe1967602a0c",
+  "issue_id": "plx-2b4a58fa-3789-45fc-a380-254fd3dd8d04",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-01T19:09:25.722Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Fix `plexus procedure optimize` post-success summary crash when procedure results contain Lua-style 1-indexed iteration tables.\n\nBehavior:\n- Convert contiguous 1-based numeric-key tables to Python lists during CLI result normalization.\n- Preserve normal dict behavior for string-keyed and non-contiguous numeric-key mappings.\n- Keep optimizer procedure YAML unchanged.\n- Add regression coverage for conversion and default table summary rendering.\n\nNo commit/push/PR/CI until user reviews and approves.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "Normalize Lua optimizer iterations for CLI summary"
+  }
+}

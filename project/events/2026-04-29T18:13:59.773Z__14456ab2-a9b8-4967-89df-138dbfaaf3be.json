@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "14456ab2-a9b8-4967-89df-138dbfaaf3be",
+  "issue_id": "plx-aa665986-9823-4398-9818-73eda2c21098",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T18:13:59.773Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Exercise execute_tactus against real Plexus runtime flows, expand helper/API coverage as gaps are found, fix failures with targeted tests, and rerun the flows until they pass. This is not a model-comparison task; focus on actual runtime/tool behavior.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-07dc0d44-08df-4248-97af-1f928bc2e19d",
+    "priority": 0,
+    "status": "open",
+    "title": "Real-run hardening loop for execute_tactus Plexus functionality"
+  }
+}
