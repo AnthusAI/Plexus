@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ef3bd323-6e74-4e46-b374-f6c4bb1b1b12",
+  "issue_id": "plx-bfeb5422-4581-4cef-a051-a0c47cae687d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-01T19:48:00.921Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix PR 261 dashboard unit metadata expectation"
+  }
+}

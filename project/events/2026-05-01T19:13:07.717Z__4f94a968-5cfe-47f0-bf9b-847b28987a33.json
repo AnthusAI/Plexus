@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4f94a968-5cfe-47f0-bf9b-847b28987a33",
+  "issue_id": "plx-f94d99a6-2411-4b69-befb-84d940f21927",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-01T19:13:07.717Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Run the current feedback alignment optimizer procedure for Suco - Home Improvement / Blind Transfer- AI with max_iterations=3, max_samples=200, days=90. Verify from direct CLI process output whether the new procedure version works before launching the remaining seven candidates.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "Test optimizer procedure on Blind Transfer"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-0918993d-6c10-4d6c-af4f-4a53d492bcc2",
+  "title": "Register optimizer documentation tool in procedure runtime",
+  "description": "Direct optimizer procedure runs fail during startup because feedback_alignment_optimizer.yaml calls `get_plexus_documentation(filename=\"optimizer-cookbook\")`, but the embedded procedure runtime does not expose the documentation MCP tool in the toolset used for the run.\n\nExpected behavior:\n- Direct CLI optimizer procedure runs can load the optimizer cookbook.\n- `get_plexus_documentation` is available whenever the procedure runtime registers the Plexus toolset used by optimizer procedures.\n- No fallback path or duplicated cookbook content is added; the single documented tool path should work.\n\nEvidence: `.codex/procedure-runs/blind-transfer-optimizer-20260501-151345.log` failed with Tool `get_plexus_documentation` not found.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "28db7110-42a9-4504-8896-48abb3c34055",
+      "author": "ryan",
+      "text": "Implemented local fix for direct optimizer startup failure: filtered procedure MCP toolsets now always include the documentation category, matching the existing always-on think helper behavior. Added regression coverage that a filtered rubric_memory-only server still exposes get_plexus_documentation. Verification: pytest plexus/cli/procedure/test_mcp_transport.py plexus/cli/procedure/test_feedback_alignment_optimizer_config.py plexus/cli/procedure/test_procedure_optimize_cli_result.py -q (68 passed, warnings only from existing dependency deprecations). Not closing until reviewed/landed.",
+      "created_at": "2026-05-01T19:22:04.110788Z"
+    }
+  ],
+  "created_at": "2026-05-01T19:19:12.612646Z",
+  "updated_at": "2026-05-01T19:22:04.110788Z",
+  "closed_at": null,
+  "custom": {}
+}
