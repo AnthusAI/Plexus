@@ -1,0 +1,18 @@
+{
+  "id": "plx-50fb12ce-1b68-44bc-bc03-79005bca0f52",
+  "title": "Lift evaluation.info include_examples into Tactus runtime",
+  "description": "Move the optional include_examples GraphQL example-fetching loop from MCP/tools/evaluation/evaluations.py into a small unit-testable direct helper for the execute_tactus plexus.evaluation.info runtime path. The default include_examples=false path is already direct in plx-803025.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-07dc0d44-08df-4248-97af-1f928bc2e19d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-29T05:43:40.989978Z",
+  "updated_at": "2026-04-29T05:43:40.989978Z",
+  "closed_at": null,
+  "custom": {}
+}

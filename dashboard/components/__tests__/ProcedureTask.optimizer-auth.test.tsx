@@ -72,6 +72,64 @@ describe('ProcedureTask optimizer auth flow', () => {
     ;(global as any).fetch = jest.fn()
   })
 
+  it('renders local dispatch mode before stale dispatcher fields', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: {
+            ...baseProcedure.task,
+            status: 'RUNNING',
+            dispatchStatus: 'ANNOUNCED',
+            workerNodeId: 'BlackbookM3-15348',
+            metadata: JSON.stringify({ procedure_id: 'proc-1', dispatch_mode: 'local' }),
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('Local')).toBeInTheDocument()
+    expect(screen.queryByText('Claimed...')).not.toBeInTheDocument()
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
+  it('renders pending when no task has been attached yet', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: null,
+        }}
+      />
+    )
+
+    expect(screen.getByText('Pending...')).toBeInTheDocument()
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
+  it('still renders claimed for true dispatcher-owned tasks', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: {
+            ...baseProcedure.task,
+            status: 'RUNNING',
+            dispatchStatus: 'CLAIMED',
+            workerNodeId: 'dispatcher-1',
+            metadata: JSON.stringify({ procedure_id: 'proc-1' }),
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('Claimed...')).toBeInTheDocument()
+    expect(screen.queryByText('Local')).not.toBeInTheDocument()
+  })
+
   it('loads metadata without apiKey auth mode and does not call the proxy route', async () => {
     const metadataState = {
       state: {

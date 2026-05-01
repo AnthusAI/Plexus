@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "765f62f7-4b73-4dbe-891a-f21859d2a2b3",
+  "issue_id": "plx-77865f5a-35da-4697-b802-a06640f398ef",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-01T18:09:49.561Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Procedure card dispatch indicator shows wrong state for locally-run procedures"
+  }
+}

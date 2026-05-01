@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3ca7673c-7920-4ffc-bf06-4386dfa5d2ae",
+  "issue_id": "plx-63d935c1-f347-4efc-b5d5-5d8fde0ac88f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T04:32:30.416Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "MCP/tools/score/scores.py and MCP/tools/item/items.py inline their read logic. Extract that logic into ScoreService.get_info(...) and ItemService.get_info(...) (or equivalent module-level functions) so both the MCP tool registrations and PlexusRuntimeModule.score.info / PlexusRuntimeModule.item.info call the same Python entry point. Then move the runtime module off MCP loopback for these methods with no fallback.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-07dc0d44-08df-4248-97af-1f928bc2e19d",
+    "priority": 3,
+    "status": "open",
+    "title": "Extract plexus.score.info and plexus.item.info into shared service classes"
+  }
+}

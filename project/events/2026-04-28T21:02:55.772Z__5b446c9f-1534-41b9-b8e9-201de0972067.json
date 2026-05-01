@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5b446c9f-1534-41b9-b8e9-201de0972067",
+  "issue_id": "plx-7895ccdc-5347-423d-a961-0b5ce8a8ccf2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T21:02:55.772Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "# HITL-by-default for destructive operations\n\n## Purpose\n\nWrap destructive Plexus operations exposed via the PlexusModule (~14 operations) with automatic `Human.approve` before execution. Preserves the safety property \"no destructive op without human in the loop\" without requiring an agent catalog to mediate (the agent catalog is YAGNI for v1).\n\n## Scope\n\nThe 14 operations marked \"v1 + HITL\" in the API surface analysis:\n\n**Scorecard:** create, update\n**Score:** push, update, create, metadata_update, set_champion, version_pin, delete\n**Feedback:** invalidate\n**Procedure:** create, update, delete\n\nPlus possibly more identified during implementation.\n\n## Mechanism\n\n- A decorator/wrapper at the PlexusModule layer that fires `Human.approve` BEFORE invoking the underlying service.\n- Auto-generated approval prompt summarizing the operation: target, change, blast radius. Example: `\"Set champion of score 'compliance.tone' to version v42 (was v40 — AC1 0.87 → 0.89)? Estimated monthly cost change: +$23.\"`\n- Integrates with existing HITL adapters in `plexus/cli/procedure/tactus_adapters/` (cli_hitl.py and the dashboard HITL surface).\n- Approval prompt UX must work both from Cursor (via MCP-side surface) and the Plexus dashboard. Decision required: where does the prompt actually surface?\n\n## Escape hatch\n\n- `no_confirm = true` per call as an explicit opt-out parameter.\n- When used, the action is logged conspicuously (audit log + trace event) so we can later answer \"who skipped HITL on a destructive op.\"\n- Future agent catalog (post-v1) can use `no_confirm = true` because the agent itself has done richer reasoning and possibly its own approval prompt.\n\n## Open design questions\n\n1. Where does the HITL prompt show up when `execute_tactus` was invoked from an MCP client (Cursor) and the dashboard is not necessarily in front of the user?\n2. What's the timeout behavior? If no human responds in N minutes/hours, what happens?\n3. Should the call block waiting for HITL (simple), or return a \"pending approval\" handle (complex, lets orchestrator do other work)?\n\n## Estimate\n\n1 week, mostly UX coordination between MCP client and dashboard. Implementation is a thin wrapper layer.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-a097a1b9-7d32-4d78-96fe-8a9aad61e097",
+    "priority": 1,
+    "status": "open",
+    "title": "HITL-by-default for destructive operations"
+  }
+}

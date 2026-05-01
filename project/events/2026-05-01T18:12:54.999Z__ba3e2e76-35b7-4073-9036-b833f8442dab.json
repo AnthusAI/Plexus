@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ba3e2e76-35b7-4073-9036-b833f8442dab",
+  "issue_id": "plx-8faf5139-db29-4884-b2e9-e12a3ba6c313",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-01T18:12:54.999Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Investigation task: identify four Suco Home Improvement scores with recent feedback items and no recent optimizer procedure runs, excluding the four scores already launched in this session. Record selection criteria and recommended candidates.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "Identify next Suco optimizer candidates"
+  }
+}

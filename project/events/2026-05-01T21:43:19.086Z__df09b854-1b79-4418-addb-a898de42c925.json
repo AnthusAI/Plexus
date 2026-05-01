@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "df09b854-1b79-4418-addb-a898de42c925",
+  "issue_id": "plx-2668dcc4-0205-4a04-ac81-5a458c7c9389",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-01T21:43:19.086Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Fix the Scorecards dashboard score-version detail tabs so Procedures and Evaluations show the records associated with the selected score version using first-class keyed access, not scans or slow client-side filtering.\n\nDefinition of Done:\n- Procedures tab shows procedures associated with the selected score version.\n- Evaluations tab shows evaluations associated with the selected score version.\n- Data access uses the intended indexed association/query path.\n- Regression coverage proves the score-version scoping behavior.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+    "priority": 1,
+    "status": "open",
+    "title": "Score version activity tabs use direct associations"
+  }
+}
