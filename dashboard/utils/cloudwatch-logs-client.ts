@@ -4,15 +4,23 @@ import {
   GetLogEventsCommand,
   GetLogEventsCommandOutput,
 } from '@aws-sdk/client-cloudwatch-logs'
-import amplifyOutputs from '@/amplify/amplify_outputs.json'
 
-const AWS_REGION: string =
-  (amplifyOutputs as { aws_region?: string }).aws_region ?? 'us-west-2'
+function resolveAwsRegion(): string {
+  const regionOverride = process.env.NEXT_PUBLIC_PLEXUS_API_REGION?.trim()
+  if (regionOverride) return regionOverride
+
+  try {
+    const outputs = require('../amplify_outputs.json')
+    return outputs?.data?.aws_region || outputs?.aws_region || 'us-west-2'
+  } catch {
+    return 'us-west-2'
+  }
+}
 
 async function getClient(): Promise<CloudWatchLogsClient> {
   const session = await fetchAuthSession()
   return new CloudWatchLogsClient({
-    region: AWS_REGION,
+    region: resolveAwsRegion(),
     credentials: session.credentials,
   })
 }
