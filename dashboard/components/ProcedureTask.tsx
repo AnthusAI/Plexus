@@ -978,21 +978,23 @@ export default function ProcedureTask({
     return rawMetadata && typeof rawMetadata === 'object' && !Array.isArray(rawMetadata) ? rawMetadata : {}
   }, [procedure.task?.metadata])
   const dispatchMode = typeof taskMetadata.dispatch_mode === 'string' ? taskMetadata.dispatch_mode : undefined
+  const dispatchDisplayMode = procedure.task ? dispatchMode : 'pending'
   const dispatchIndicator = useMemo(() => {
-    if (!procedure.task) return null
-    if (dispatchMode === 'local') {
+    if (dispatchDisplayMode === 'pending') {
+      return { label: 'Pending...', icon: Radio, className: 'animate-pulse' }
+    }
+    if (dispatchDisplayMode === 'local') {
       return { label: 'Local', icon: Radio, className: '' }
     }
-    if (procedure.task.workerNodeId && procedure.task.workerNodeId.trim() !== '') {
+    if (procedure.task?.workerNodeId && procedure.task.workerNodeId.trim() !== '') {
       return { label: 'Claimed...', icon: Hand, className: 'animate-wave' }
     }
     return { label: 'Announced...', icon: ConciergeBell, className: 'animate-jiggle' }
-  }, [dispatchMode, procedure.task])
+  }, [dispatchDisplayMode, procedure.task])
   const DispatchIndicator = () => {
-    if (!dispatchIndicator) return null
     const Icon = dispatchIndicator.icon
     return (
-      <div className="flex items-center gap-1 text-xs text-muted-foreground leading-none mt-1">
+      <div className="flex min-h-4 items-center gap-1 text-xs text-muted-foreground leading-none mt-1">
         <Icon className={cn("h-3.5 w-3.5", dispatchIndicator.className)} />
         <span>{dispatchIndicator.label}</span>
       </div>
@@ -1009,7 +1011,7 @@ export default function ProcedureTask({
 
   const taskObject = {
     id: procedure.id,
-    type: 'Procedure',
+    type: 'Optimization Procedure',
     name: procedure.title,
     description: procedure.description,
     scorecard: procedure.scorecard?.name || stateScorecardName || '',
@@ -1028,7 +1030,7 @@ export default function ProcedureTask({
     status: effectiveTaskStatus,
     errorMessage: procedure.task?.errorMessage || procedure.errorMessage,
     dispatchStatus: procedure.task?.dispatchStatus,
-    dispatchMode,
+    dispatchMode: dispatchDisplayMode,
     celeryTaskId: procedure.task?.celeryTaskId,
     workerNodeId: procedure.task?.workerNodeId
   }
@@ -1192,13 +1194,24 @@ export default function ProcedureTask({
               />
             </div>
             <div className="flex flex-col items-end flex-shrink-0">
-              <div className="flex items-center gap-2">
-                {!hasGridActions && (
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-2">
                   <div className="text-muted-foreground">
                     <Waypoints className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
                   </div>
-                )}
-                {controlButtons}
+                  {controlButtons}
+                </div>
+                <div className="text-xs text-muted-foreground text-center">
+                  {(() => {
+                    const [firstWord, ...restWords] = (props.task.type || 'Optimization Procedure').split(/\s+/)
+                    return (
+                      <>
+                        {firstWord}<br />
+                        {restWords.join(' ')}
+                      </>
+                    )
+                  })()}
+                </div>
               </div>
             </div>
           </div>
@@ -1240,6 +1253,7 @@ export default function ProcedureTask({
             commandDisplay="hide"
             statusMessageDisplay="always"
             hideElapsedTime
+            hidePreExecutionStatus
           />
           {feedbackEvaluationSummary && (
             <EvaluationListAccuracyBar

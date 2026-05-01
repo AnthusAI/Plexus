@@ -3,7 +3,7 @@
   "title": "Procedure card dispatch indicator shows wrong state for locally-run procedures",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": "ryan",
   "creator": null,
@@ -46,10 +46,46 @@
       "author": "ryan",
       "text": "After cleanup, focused Jest tests, Python dispatch tests, and dashboard typecheck pass. Lint remains blocked by plx-6d94cc.",
       "created_at": "2026-05-01T18:35:45.834969Z"
+    },
+    {
+      "id": "6cfadfca-61a4-42c8-b309-3fa15e67110f",
+      "author": "ryan",
+      "text": "Follow-up finding before release: procedure grid subtitles disappear after real-time task updates. Investigating the subscription merge path; no further git commit/push until reviewed.",
+      "created_at": "2026-05-01T18:38:24.518307Z"
+    },
+    {
+      "id": "31c09854-8cbd-4f69-98af-c23b3a893b26",
+      "author": "ryan",
+      "text": "Fixed subtitle instability from sparse realtime procedure updates by preserving existing scorecard/score identity fields during procedure subscription merges. Added regression coverage for sparse update payloads. Changes are local only; not committing or pushing.",
+      "created_at": "2026-05-01T18:39:33.579201Z"
+    },
+    {
+      "id": "97122b8e-b7fe-4fc7-95a5-1eff944963cc",
+      "author": "ryan",
+      "text": "Addressed additional layout instability: procedure cards now render a reserved Pending dispatch indicator before task hydration, so the Local/Claimed/Announced line does not appear later and shift the grid layout. Local only; no commit/push.",
+      "created_at": "2026-05-01T18:40:50.421815Z"
+    },
+    {
+      "id": "3acbe4e1-7c5d-4ac7-a80e-dfc87a8fed94",
+      "author": "ryan",
+      "text": "Restored the grid badge label for procedure cards. ProcedureTask now uses Optimization Procedure as the grid task type and always renders the icon+label badge even when the action dropdown is present. Local only; no commit/push.",
+      "created_at": "2026-05-01T18:42:25.494071Z"
+    },
+    {
+      "id": "8bafb2e4-aa4b-4f30-9bea-2679ba020ad3",
+      "author": "ryan",
+      "text": "Removed duplicate transient Pending indicator from procedure grid card body. Header remains the single dispatch indicator; TaskStatus body can now suppress pre-execution dispatch text for this layout. Local only; no commit/push.",
+      "created_at": "2026-05-01T18:52:15.649783Z"
+    },
+    {
+      "id": "9bfdf645-07c4-497a-9751-47aa4feb07e3",
+      "author": "ryan",
+      "text": "Release summary: implemented and verified procedure grid dispatch indicator stability. Local runs stay Local, sparse realtime updates preserve subtitles, the dispatch row is reserved from first render, the Optimization Procedure badge label is restored, and duplicate body Pending text is suppressed.",
+      "created_at": "2026-05-01T18:54:27.926131Z"
     }
   ],
   "created_at": "2026-05-01T18:09:49.560708Z",
-  "updated_at": "2026-05-01T18:35:45.834969Z",
-  "closed_at": null,
+  "updated_at": "2026-05-01T18:54:38.041565Z",
+  "closed_at": "2026-05-01T18:54:38.041565Z",
   "custom": {}
 }
