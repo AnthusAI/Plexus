@@ -29,6 +29,8 @@ export const TASK_CARD_FIELDS = `
   command
   description
   dispatchStatus
+  celeryTaskId
+  workerNodeId
   metadata
   createdAt
   startedAt
@@ -266,6 +268,8 @@ export type OptimizerRunView = {
     command?: string | null
     description?: string | null
     dispatchStatus?: string | null
+    celeryTaskId?: string | null
+    workerNodeId?: string | null
     metadata?: unknown
     createdAt?: string | null
     startedAt?: string | null
@@ -822,6 +826,8 @@ function normalizeTaskRecord(task: any): ProcedureTaskRecord | null {
     command: task.command ?? null,
     description: task.description ?? null,
     dispatchStatus: task.dispatchStatus ?? null,
+    celeryTaskId: task.celeryTaskId ?? null,
+    workerNodeId: task.workerNodeId ?? null,
     metadata: task.metadata ?? null,
     createdAt: task.createdAt ?? null,
     startedAt: task.startedAt ?? null,
