@@ -357,4 +357,11 @@ describe('EvaluationTask category summary drill-down', () => {
       expect(screen.getByText('Champion')).toBeInTheDocument()
     })
   })
+
+  test('does not render procedure related-resource card in grid mode', () => {
+    render(<EvaluationTask variant="grid" task={makeTask()} />)
+
+    expect(screen.queryByText('Procedure')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Open procedure/i })).not.toBeInTheDocument()
+  })
 })
