@@ -684,6 +684,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       type: 'Procedure',
       procedure_id: procedureId,
       task_type: 'Procedure',
+      dispatch_mode: 'local',
     }
     if (runParameters && Object.keys(runParameters).length > 0) {
       metadata.run_parameters = runParameters
@@ -955,6 +956,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       command: procedure.task.command || '',
       description: procedure.task.description || undefined,
       dispatchStatus: procedure.task.dispatchStatus || undefined,
+      celeryTaskId: procedure.task.celeryTaskId || undefined,
+      workerNodeId: procedure.task.workerNodeId || undefined,
       metadata: typeof procedure.task.metadata === 'string' ? procedure.task.metadata : JSON.stringify(procedure.task.metadata),
       createdAt: procedure.task.createdAt || undefined,
       startedAt: procedure.task.startedAt || undefined,
