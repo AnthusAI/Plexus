@@ -1,0 +1,67 @@
+{
+  "id": "plx-f94d99a6-2411-4b69-befb-84d940f21927",
+  "title": "Test optimizer procedure on Blind Transfer",
+  "description": "Run the current feedback alignment optimizer procedure for Suco - Home Improvement / Blind Transfer- AI with max_iterations=3, max_samples=200, days=90. Verify from direct CLI process output whether the new procedure version works before launching the remaining seven candidates.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "310a55c6-e0ec-4614-bb2b-7b69ed4ba9d4",
+      "author": "ryan",
+      "text": "Starting direct CLI optimizer test for Blind Transfer- AI. Parameters: scorecard=Suco - Home Improvement, score=Blind Transfer- AI, max_iterations=3, max_samples=200, days=90.",
+      "created_at": "2026-05-01T19:13:13.556929Z"
+    },
+    {
+      "id": "370b4860-0395-4fc5-a150-ee22b732ef2d",
+      "author": "ryan",
+      "text": "First direct CLI run failed before baseline. Procedure ID: 9a1c84e4-69d6-4718-b3ab-c95cc83dfc6d. Task ID: 77ef6ea9-427d-4799-a7b8-2d2f1becffeb. Exact failure from CLI: Tool 'get_plexus_documentation' not found while loading optimizer cookbook at Lua execution line 1978. Investigating whether the procedure should call plexus.docs.get / execute_tactus instead or whether the direct CLI tool registry is missing this tool.",
+      "created_at": "2026-05-01T19:16:16.587197Z"
+    },
+    {
+      "id": "5d6d8204-641f-4c09-983c-5739ff5747bc",
+      "author": "ryan",
+      "text": "Applied focused MCP bridge fix: after Tactus rebuilds toolset_registry, Plexus re-registers the bridged MCP aggregate and individual tool names. Added regression test test_execute_tactus_reapplies_mcp_bridge_after_toolset_initialization; focused pytest passed.",
+      "created_at": "2026-05-01T19:21:51.486898Z"
+    },
+    {
+      "id": "404b8b58-d58d-431f-a5d6-a03e2261dd55",
+      "author": "ryan",
+      "text": "Second retry after MCP bridge patch still failed with missing get_plexus_documentation. Root cause is the optimizer YAML still depended on the legacy docs MCP tool, while the new direct CLI runtime exposes execute_tactus plus local primitives. Updated feedback_alignment_optimizer.yaml to load optimizer docs from local plexus/docs/*.md via File.read; YAML parse check passed; focused MCP bridge regression test still passes.",
+      "created_at": "2026-05-01T19:26:34.762628Z"
+    },
+    {
+      "id": "c918bb41-0633-4595-bb75-ee78d58d2412",
+      "author": "ryan",
+      "text": "Paused optimizer run/fix path per user concern. User flagged that seeing legacy direct plexus_* tool calls likely means optimizer YAML regressed to older code. Investigating git history and current diffs before any further changes; do not build on potentially reverted optimizer code.",
+      "created_at": "2026-05-01T19:31:43.805916Z"
+    },
+    {
+      "id": "8728cc0f-70d0-454c-95d4-0cde97810370",
+      "author": "ryan",
+      "text": "Correction: current checkout is bugfix/plx-77865f-procedure-dispatch-indicator, which is not the optimizer execute-Tactus branch. Pausing conclusions from this branch and inspecting feature/plx-07dc0d-execute-tactus-mcp-tool separately.",
+      "created_at": "2026-05-01T19:32:48.490488Z"
+    },
+    {
+      "id": "13b25b78-f21e-4094-8568-00fe481ce0a9",
+      "author": "ryan",
+      "text": "Restored workspace to correct integration branch feature/plx-07dc0d-execute-tactus-mcp-tool at origin tip 0cd1a5a6. Preserved latest optimizer YAML from branch tip (Tactus runtime with plexus.* module and rubric-memory/SME briefing code). Rejected old wrong-branch MCP bridge/doc-loading changes; stash backup remains at stash@{0}. Remaining local CLI change is Lua table serialization for procedure optimize output plus test.",
+      "created_at": "2026-05-01T19:52:02.260653Z"
+    },
+    {
+      "id": "cec67cca-2a5c-43f9-9d9f-538f61bde40d",
+      "author": "ryan",
+      "text": "Retry direct CLI run after score-editor normalization fix is materially healthier. Procedure 64c65f35-93f6-4823-a627-fde308d3d8c0 / task cbe744a9-7386-4558-a63d-8f1110ce2f82 completed baseline, accepted cycle 1 with version 0468b78a-7d19-41b9-a802-549ef9a6dd1d, AC1 0.638 -> 0.702 (+0.064), and moved into cycle 2/3.",
+      "created_at": "2026-05-01T20:32:35.914064Z"
+    }
+  ],
+  "created_at": "2026-05-01T19:13:07.716717Z",
+  "updated_at": "2026-05-01T20:32:35.914064Z",
+  "closed_at": null,
+  "custom": {}
+}

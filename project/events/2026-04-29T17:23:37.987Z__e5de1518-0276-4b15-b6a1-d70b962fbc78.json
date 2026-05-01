@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e5de1518-0276-4b15-b6a1-d70b962fbc78",
+  "issue_id": "plx-8ef8da8e-830d-48e5-9dba-bb6d34d13e81",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T17:23:37.987Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Update runtime-mcp-validation boot prompt, async task fixtures, and harness/report tests so async evaluation/report/procedure calls always include explicit budget fields (usd, wallclock_seconds, depth, tool_calls), matching execute_tactus runtime contract.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+    "priority": 1,
+    "status": "open",
+    "title": "Align async budget contract in runtime validation prompts and checks"
+  }
+}

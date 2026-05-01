@@ -6,7 +6,10 @@ import re
 import sys
 import json
 import click
+from contextlib import nullcontext
+from contextvars import ContextVar
 from click.core import ParameterSource
+from functools import wraps
 import yaml
 import asyncio
 import pandas as pd
@@ -24,6 +27,7 @@ from plexus.CustomLogging import logging, set_log_group
 from plexus.Scorecard import Scorecard
 from plexus.Evaluation import AccuracyEvaluation, FeedbackEvaluation
 from plexus.cli.shared.console import console
+from plexus.runtime_budget import RuntimeBudgetLimitExceeded, RuntimeBudgetMeter
 
 # Import dashboard-specific modules
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -43,6 +47,49 @@ import types  # Add this at the top with other imports
 import uuid
 import inspect
 import subprocess
+
+
+_ACTIVE_CHILD_BUDGET: ContextVar[RuntimeBudgetMeter | None] = ContextVar(
+    "active_child_budget",
+    default=None,
+)
+
+
+def _enforce_child_budget_from_env(operation: str):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            try:
+                meter = RuntimeBudgetMeter.from_env()
+            except ValueError as exc:
+                raise click.ClickException(str(exc)) from exc
+            token = _ACTIVE_CHILD_BUDGET.set(meter)
+            try:
+                context = meter.enforce_wallclock(operation) if meter else nullcontext()
+                with context:
+                    return fn(*args, **kwargs)
+            except RuntimeBudgetLimitExceeded as exc:
+                raise click.ClickException(str(exc)) from exc
+            finally:
+                _ACTIVE_CHILD_BUDGET.reset(token)
+
+        return wrapper
+
+    return decorator
+
+
+def _record_scorecard_cost_against_child_budget(scorecard: Any, operation: str) -> None:
+    meter = _ACTIVE_CHILD_BUDGET.get()
+    if meter is None or scorecard is None:
+        return
+    try:
+        expenses = scorecard.get_accumulated_costs()
+    except Exception as exc:  # noqa: BLE001
+        logging.debug("Could not read scorecard costs for child budget: %s", exc)
+        return
+    if not isinstance(expenses, dict):
+        return
+    meter.record_usd(operation, expenses.get("total_cost") or 0.0)
 from concurrent.futures import ThreadPoolExecutor
 
 def truncate_dict_strings(d, max_length=100):
@@ -2013,6 +2060,8 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
 @click.option('--current-baseline', default=None, type=str, help='Current baseline evaluation ID (latest accepted version) for dual baseline dashboard display.')
 @click.option('--json-only', is_flag=True, default=False, help='Emit JSON summary payload instead of rich console output.')
 @click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
+@click.option('--emit-id-file', default=None, type=str, help='Write the evaluation ID to this file as soon as the record is created (used by programmatic dispatch).')
+@_enforce_child_budget_from_env("evaluation.accuracy")
 def accuracy(
     scorecard: str,
     yaml: bool,
@@ -2041,6 +2090,7 @@ def accuracy(
     current_baseline: Optional[str],
     json_only: bool,
     notes: Optional[str] = None,
+    emit_id_file: Optional[str] = None,
     ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
@@ -2419,6 +2469,12 @@ def accuracy(
                             **experiment_params
                         )
                         logging.info(f"Created initial Evaluation record with ID: {evaluation_record.id}")
+                        if emit_id_file:
+                            try:
+                                with open(emit_id_file, "w") as _f:
+                                    _f.write(evaluation_record.id)
+                            except Exception as _e:
+                                logging.warning(f"Failed to write evaluation ID to file {emit_id_file}: {_e}")
 
                     except Exception as e:
                         logging.error(f"Error creating task or evaluation: {str(e)}")
@@ -3037,6 +3093,10 @@ def accuracy(
             try:
                 # Pass tracker when available; method tolerates None
                 result_metrics = await accuracy_eval.run(tracker=tracker)
+                _record_scorecard_cost_against_child_budget(
+                    getattr(accuracy_eval, "scorecard", None),
+                    "evaluation.accuracy",
+                )
                 # Ensure we have valid metrics (run() should return dict, not None)
                 if result_metrics is not None:
                     final_metrics = result_metrics
@@ -3175,14 +3235,17 @@ def accuracy(
                     if existing_parameters:
                         update_fields["parameters"] = json.dumps(existing_parameters)
 
-                    if final_metrics.get("confusionMatrix"):
-                        update_fields['confusionMatrix'] = json.dumps(final_metrics.get("confusionMatrix"))
-                    
-                    if final_metrics.get("predictedClassDistribution"):
-                        update_fields['predictedClassDistribution'] = json.dumps(final_metrics.get("predictedClassDistribution"))
-                    
-                    if final_metrics.get("datasetClassDistribution"):
-                        update_fields['datasetClassDistribution'] = json.dumps(final_metrics.get("datasetClassDistribution"))
+                    # Always write confusion matrix/distributions so this final write wins
+                    # over any intermediate write from the background metrics task.
+                    update_fields['confusionMatrix'] = json.dumps(
+                        final_metrics.get("confusionMatrix") or None
+                    )
+                    update_fields['predictedClassDistribution'] = json.dumps(
+                        final_metrics.get("predictedClassDistribution") or []
+                    )
+                    update_fields['datasetClassDistribution'] = json.dumps(
+                        final_metrics.get("datasetClassDistribution") or []
+                    )
                     
                     # Remove None values from update_fields
                     update_fields = {k: v for k, v in update_fields.items() if v is not None}
@@ -4146,6 +4209,7 @@ def last(account_key: str, type: Optional[str]):
     default=False,
     help='Before feedback-backed predictions, compare the evaluated ScoreVersion code against its rubric and store the result.',
 )
+@click.option('--emit-id-file', default=None, type=str, help='Write the evaluation ID to this file as soon as the record is created (used by programmatic dispatch).')
 def feedback(
     scorecard: str,
     score: str,
@@ -4161,6 +4225,7 @@ def feedback(
     task_id: Optional[str],
     notes: Optional[str] = None,
     score_rubric_consistency_check: bool = False,
+    emit_id_file: Optional[str] = None,
 ):
     """
     Evaluate feedback alignment by analyzing feedback items over a time period for a specific score.
@@ -4508,6 +4573,12 @@ def feedback(
                 
                 console.print(f"\nCreated evaluation record: {evaluation_id}")
                 console.print(f"Dashboard URL: https://app.plexusanalytics.com/evaluations/{evaluation_id}")
+                if emit_id_file:
+                    try:
+                        with open(emit_id_file, "w") as _f:
+                            _f.write(evaluation_id)
+                    except Exception as _e:
+                        logging.warning(f"Failed to write evaluation ID to file {emit_id_file}: {_e}")
 
                 if score_rubric_consistency_check:
                     console.print("\n[bold]Checking score code against rubric...[/bold]")
@@ -4585,6 +4656,10 @@ def feedback(
                 # Run the evaluation
                 try:
                     asyncio.run(accuracy_eval.run(tracker=tracker))
+                    _record_scorecard_cost_against_child_budget(
+                        getattr(accuracy_eval, "scorecard", None),
+                        "evaluation.feedback",
+                    )
                 except Exception as e:
                     raw_error_msg = str(e)
                     error_msg = raw_error_msg if raw_error_msg.startswith("Initial evaluation failed:") else f"Initial evaluation failed: {raw_error_msg}"
