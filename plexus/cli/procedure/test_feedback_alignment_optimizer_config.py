@@ -306,6 +306,18 @@ def test_optimizer_yaml_gates_sme_questions_with_rubric_memory():
     assert 'State.set("sme_question_gate_diagnostics"' in code
 
 
+def test_optimizer_yaml_keeps_sme_agenda_item_ids_plain_text():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function strip_sme_item_id_links" in code
+    assert "never use Markdown links or URLs" in code
+    assert 'sme_agenda = strip_sme_item_id_links(sme_agenda)' in code
+    assert 'sme_agenda_text = strip_sme_item_id_links(sme_agenda_text)' in code
+    assert '%[([Ii]tem%s+[^%]]+)%]%([^%)]+%)' in code
+    assert '/lab/items/' in code
+
+
 def test_optimizer_yaml_runs_contradictions_directly_without_background_dispatch():
     config = _load_optimizer_config()
     code = config["code"]
