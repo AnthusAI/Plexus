@@ -56,14 +56,14 @@ def _parse_json_dict(value: Any) -> Dict[str, Any]:
     return {}
 
 
-def _json_dumps(value: Dict[str, Any]) -> str:
-    return json.dumps(_to_json_safe(value), default=str)
-
-
 def _with_local_dispatch_metadata(metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     result = dict(metadata or {})
     result["dispatch_mode"] = LOCAL_DISPATCH_MODE
     return result
+
+
+def _json_dumps(value: Dict[str, Any]) -> str:
+    return json.dumps(_to_json_safe(value), default=str)
 
 
 def _build_runtime_identity(command: Optional[str]) -> Dict[str, Any]:

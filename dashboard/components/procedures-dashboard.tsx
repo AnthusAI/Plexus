@@ -57,6 +57,54 @@ const getProcedureStartTimeMs = (procedure: ProcedureWithTask): number => {
 const sortProceduresByStartTime = (procedures: ProcedureWithTask[]): ProcedureWithTask[] =>
   [...procedures].sort((a, b) => getProcedureStartTimeMs(b) - getProcedureStartTimeMs(a))
 
+const mergeProcedureTaskRealtimeUpdate = (
+  existing: Task | null | undefined,
+  updated: Partial<Task> | null | undefined
+): Task | null => {
+  if (!existing) return (updated as Task) ?? null
+  if (!updated) return existing
+  return {
+    ...existing,
+    ...updated,
+    metadata: updated.metadata ?? existing.metadata,
+    stages: updated.stages ?? existing.stages,
+  } as Task
+}
+
+const procedureMetadataToString = (value: unknown): string | null | undefined => {
+  if (value === null || value === undefined) return value as null | undefined
+  return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+const mergeProcedureMetadata = (incomingValue: unknown, existingValue: unknown): string | null | undefined => {
+  const incoming = procedureMetadataToString(incomingValue)
+  const existing = procedureMetadataToString(existingValue)
+  if (!incoming) return existing
+  if (!existing) return incoming
+  try {
+    const a = JSON.parse(existing)
+    const b = JSON.parse(incoming)
+    return JSON.stringify({ ...a, ...b })
+  } catch {
+    return incoming
+  }
+}
+
+const mergeProcedureRealtimeUpdate = (
+  existing: ProcedureWithTask,
+  updated: Partial<ProcedureWithTask>
+): ProcedureWithTask => ({
+  ...existing,
+  ...updated,
+  scorecardId: updated.scorecardId ?? existing.scorecardId,
+  scorecard: updated.scorecard ?? existing.scorecard,
+  scoreId: updated.scoreId ?? existing.scoreId,
+  score: updated.score ?? existing.score,
+  metadata: mergeProcedureMetadata(updated.metadata, existing.metadata),
+  task: mergeProcedureTaskRealtimeUpdate(existing.task, updated.task),
+  feedbackEvaluationSummary: existing.feedbackEvaluationSummary ?? updated.feedbackEvaluationSummary ?? null,
+})
+
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
@@ -390,9 +438,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             sortProceduresByStartTime(prevProcedures.map(procedure => {
               if (procedure.id === procedureId) {
                 // Merge new task data with existing task, preserving stages
-                const updatedTask = procedure.task
-                  ? { ...procedure.task, ...data, stages: procedure.task.stages } // Preserve existing stages
-                  : data;
+                const updatedTask = mergeProcedureTaskRealtimeUpdate(procedure.task, data);
                 return { ...procedure, task: updatedTask };
               }
               return procedure;
@@ -518,39 +564,13 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           if (!updated || updated.accountId !== accountId) return;
           // Subscription payloads don't resolve @belongsTo relations — preserve existing
           // scorecard/score/metadata from the stored record so they don't get wiped.
-          // Also merge metadata so that fields set at creation (e.g. procedure_type) survive
-          // later updates that may not include them.
-          const metadataToString = (value: unknown): string | null | undefined => {
-            if (value === null || value === undefined) return value as null | undefined
-            return typeof value === 'string' ? value : JSON.stringify(value)
-          }
-          const mergeMetadata = (incomingValue: unknown, existingValue: unknown): string | null | undefined => {
-            const incoming = metadataToString(incomingValue)
-            const existing = metadataToString(existingValue)
-            if (!incoming) return existing
-            if (!existing) return incoming
-            try {
-              const a = JSON.parse(existing)
-              const b = JSON.parse(incoming)
-              return JSON.stringify({ ...a, ...b })
-            } catch {
-              return incoming
-            }
-          }
           let existingTask: Task | null | undefined = null
           setProcedures(prev =>
             sortProceduresByStartTime(
               prev.map(p => {
                 if (p.id !== updated.id) return p
                 existingTask = p.task
-                return {
-                  ...p,
-                  ...updated,
-                  scorecard: updated.scorecard ?? p.scorecard,
-                  score: updated.score ?? p.score,
-                  metadata: mergeMetadata(updated.metadata, p.metadata),
-                  task: p.task,
-                }
+                return mergeProcedureRealtimeUpdate(p, updated)
               })
             )
           );
@@ -558,17 +578,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             if (!hydratedProcedure) return
             setProcedures(prev =>
               sortProceduresByStartTime(
-                prev.map(p => {
-                  if (p.id !== hydratedProcedure.id) return p
-                  return {
-                    ...p,
-                    ...hydratedProcedure,
-                    scorecard: hydratedProcedure.scorecard ?? p.scorecard,
-                    score: hydratedProcedure.score ?? p.score,
-                    metadata: mergeMetadata(hydratedProcedure.metadata, p.metadata),
-                    task: p.task ?? hydratedProcedure.task,
-                  }
-                })
+                prev.map(p => p.id === hydratedProcedure.id ? mergeProcedureRealtimeUpdate(p, hydratedProcedure) : p)
               )
             )
           })
@@ -736,6 +746,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       type: 'Procedure',
       procedure_id: procedureId,
       task_type: 'Procedure',
+      dispatch_mode: 'local',
     }
     if (runParameters && Object.keys(runParameters).length > 0) {
       metadata.run_parameters = runParameters
