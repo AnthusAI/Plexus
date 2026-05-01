@@ -1192,6 +1192,7 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         yaml_config=yaml_config,
         featured=False,
         score_version_id=version,
+        name=f"Optimizer: {scorecard}",
     )
 
     if not result.success:
@@ -1365,8 +1366,11 @@ def reset(procedure_id: str, after: Optional[str], checkpoints_only: bool):
               help='Number of additional cycles to run (default: 3)')
 @click.option('--hint', '-h', 'hint', default=None,
               help='Optional instructions to guide the continuation run')
+@click.option('--target-accuracy', type=float, default=None,
+              help='Override target AC1 for early-stop (e.g. 1.0 to disable early-stop)')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table')
-def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], output: str):
+def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str],
+              target_accuracy: Optional[float], output: str):
     """Continue a completed optimizer procedure for additional cycles.
 
     Updates max_iterations, clears Tactus replay checkpoints (preserving
@@ -1377,6 +1381,7 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
         plexus procedure continue abc-123
         plexus procedure continue abc-123 --additional-cycles 5
         plexus procedure continue abc-123 -n 2 --hint "focus on false positives"
+        plexus procedure continue abc-123 -n 7 --target-accuracy 1.0
     """
     client = create_client()
     if not client:
@@ -1391,7 +1396,7 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
     console.print(f"Preparing continuation for procedure {procedure_id} (+{additional_cycles} cycles)...")
 
     try:
-        info = prepare_continuation(client, procedure_id, additional_cycles, hint)
+        info = prepare_continuation(client, procedure_id, additional_cycles, hint, target_accuracy)
     except Exception as e:
         console.print(f"[red]Error preparing continuation: {e}[/red]")
         import traceback
@@ -1463,9 +1468,11 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
 @click.option('--hint', '-h', 'hint', default=None,
               help='Optional instructions for the branch run')
 @click.option('--name', default=None, help='Name for the new branch procedure')
+@click.option('--target-accuracy', type=float, default=None,
+              help='Override target AC1 for early-stop (e.g. 1.0 to disable early-stop)')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table')
 def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[str],
-           name: Optional[str], output: str):
+           name: Optional[str], target_accuracy: Optional[float], output: str):
     """Branch a procedure from cycle N into a new procedure.
 
     Creates a new procedure whose State is a copy of source_id truncated to
@@ -1476,6 +1483,7 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
         plexus procedure branch abc-123 --cycle 2
         plexus procedure branch abc-123 --cycle 2 --additional-cycles 5
         plexus procedure branch abc-123 -c 3 -n 4 --hint "try structural prompt changes"
+        plexus procedure branch abc-123 -c 3 -n 4 --target-accuracy 1.0
     """
     client = create_client()
     if not client:
@@ -1490,7 +1498,7 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
     console.print(f"Branching {source_id} from cycle {cycle} (+{additional_cycles} cycles)...")
 
     try:
-        info = prepare_branch(client, source_id, cycle, additional_cycles, hint, name)
+        info = prepare_branch(client, source_id, cycle, additional_cycles, hint, name, target_accuracy)
     except Exception as e:
         console.print(f"[red]Error preparing branch: {e}[/red]")
         import traceback

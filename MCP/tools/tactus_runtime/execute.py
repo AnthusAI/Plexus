@@ -239,6 +239,8 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("procedure_chat_messages", "procedure", "chat_messages"),
     ("procedure_run", "procedure", "run"),
     ("procedure_optimize", "procedure", "optimize"),
+    ("procedure_continue", "procedure", "continue"),
+    ("procedure_branch", "procedure", "branch"),
     ("handle_peek", "handle", "peek"),
     ("handle_status", "handle", "status"),
     ("handle_await", "handle", "await"),
@@ -325,6 +327,8 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("procedure", "chat_messages"): "_call_procedure_read",
     ("procedure", "run"): "_call_procedure_run",
     ("procedure", "optimize"): "_call_procedure_run",
+    ("procedure", "continue"): "_call_procedure_run",
+    ("procedure", "branch"): "_call_procedure_run",
     ("handle", "peek"): "_call_handle",
     ("handle", "status"): "_call_handle",
     ("handle", "await"): "_call_handle",
@@ -3053,6 +3057,7 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
         score_identifier=str(score_identifier),
         yaml_config=yaml_text,
         featured=False,
+        name=f"Optimizer: {scorecard_identifier}",
     )
     if not result.success:
         raise RuntimeError(f"plexus.procedure.optimize: failed to create procedure — {result.message}")
@@ -3082,6 +3087,132 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
         "scorecard": str(scorecard_identifier),
         "score": str(score_identifier),
         "dashboard_url": f"https://lab.callcriteria.com/lab/procedures/{procedure_id}",
+    }
+
+
+def _default_procedure_continue(args: dict[str, Any]) -> dict[str, Any]:
+    """Continue a completed optimizer procedure for additional cycles.
+
+    Required args:
+        procedure_id (str): ID of the completed procedure to continue.
+
+    Optional args:
+        additional_cycles (int): Extra cycles to run. Default 3.
+        hint (str): Expert guidance injected into planning context.
+        target_accuracy (float): Override AC1 early-stop threshold (e.g. 1.0 to run to max).
+    """
+    import os
+    import subprocess
+    import sys
+
+    from plexus.cli.procedure.continuation_service import prepare_continuation
+    from plexus.cli.shared.client_utils import create_client
+
+    procedure_id = args.get("procedure_id") or args.get("id")
+    if not procedure_id:
+        raise ValueError("plexus.procedure.continue requires procedure_id")
+
+    additional_cycles = int(args.get("additional_cycles") or 3)
+    hint = args.get("hint") or None
+    target_accuracy = args.get("target_accuracy")
+    if target_accuracy is not None:
+        target_accuracy = float(target_accuracy)
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.procedure.continue: could not create dashboard client")
+
+    info = prepare_continuation(client, str(procedure_id), additional_cycles, hint, target_accuracy)
+
+    cmd = [
+        sys.executable, "-m", "plexus", "procedure", "run",
+        str(procedure_id),
+        "--max-iterations", str(info["new_max_iterations"]),
+    ]
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    return {
+        "ok": True,
+        "procedure_id": str(procedure_id),
+        "status": "running",
+        "pid": proc.pid,
+        "completed_cycles": info["completed_cycles"],
+        "additional_cycles": additional_cycles,
+        "new_max_iterations": info["new_max_iterations"],
+        "message": (
+            f"Continuation dispatched — {info['completed_cycles']} prior cycles, "
+            f"running to {info['new_max_iterations']} total."
+        ),
+        "dashboard_url": f"https://lab.callcriteria.com/lab/procedures/{procedure_id}",
+    }
+
+
+def _default_procedure_branch(args: dict[str, Any]) -> dict[str, Any]:
+    """Branch an optimizer procedure from a specific cycle into a new procedure.
+
+    Required args:
+        procedure_id (str): Source procedure ID.
+        cycle (int): Branch from after this cycle number.
+
+    Optional args:
+        additional_cycles (int): Cycles to run in the branch. Default 3.
+        hint (str): Expert guidance for the branch run.
+        name (str): Name for the new branch procedure.
+        target_accuracy (float): Override AC1 early-stop threshold.
+    """
+    import os
+    import subprocess
+    import sys
+
+    from plexus.cli.procedure.continuation_service import prepare_branch
+    from plexus.cli.shared.client_utils import create_client
+
+    source_id = args.get("procedure_id") or args.get("source_id") or args.get("id")
+    if not source_id:
+        raise ValueError("plexus.procedure.branch requires procedure_id")
+    cycle = args.get("cycle")
+    if cycle is None:
+        raise ValueError("plexus.procedure.branch requires cycle")
+    cycle = int(cycle)
+
+    additional_cycles = int(args.get("additional_cycles") or 3)
+    hint = args.get("hint") or None
+    name = args.get("name") or None
+    target_accuracy = args.get("target_accuracy")
+    if target_accuracy is not None:
+        target_accuracy = float(target_accuracy)
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.procedure.branch: could not create dashboard client")
+
+    info = prepare_branch(client, str(source_id), cycle, additional_cycles, hint, name, target_accuracy)
+    target_id = info["target_id"]
+
+    cmd = [
+        sys.executable, "-m", "plexus", "procedure", "run",
+        str(target_id),
+        "--max-iterations", str(info["new_max_iterations"]),
+    ]
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    return {
+        "ok": True,
+        "source_procedure_id": str(source_id),
+        "procedure_id": str(target_id),
+        "status": "running",
+        "pid": proc.pid,
+        "branched_from_cycle": cycle,
+        "additional_cycles": additional_cycles,
+        "new_max_iterations": info["new_max_iterations"],
+        "name": info["target_name"],
+        "message": (
+            f"Branch procedure {target_id} created from cycle {cycle}, "
+            f"running to {info['new_max_iterations']} total cycles."
+        ),
+        "dashboard_url": f"https://lab.callcriteria.com/lab/procedures/{target_id}",
     }
 
 
@@ -4431,6 +4562,8 @@ class PlexusRuntimeModule:
             if procedure_optimize is not None
             else _default_procedure_optimize
         )
+        self._procedure_continue = _default_procedure_continue
+        self._procedure_branch = _default_procedure_branch
         self._stream_handler = stream_handler
         self._api_calls: list[str] = []
         self.handle_protocol_required: tuple[str, str] | None = None
@@ -4757,7 +4890,7 @@ class PlexusRuntimeModule:
         )
 
     def _call_procedure_run(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "procedure" or method not in {"run", "optimize"}:
+        if namespace != "procedure" or method not in {"run", "optimize", "continue", "branch"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -4767,6 +4900,14 @@ class PlexusRuntimeModule:
             # plexus.procedure.optimize always runs asynchronously — no handle protocol needed.
             self._record_api_call("procedure", "optimize")
             return self._procedure_optimize(parsed)
+
+        if method == "continue":
+            self._record_api_call("procedure", "continue")
+            return self._procedure_continue(parsed)
+
+        if method == "branch":
+            self._record_api_call("procedure", "branch")
+            return self._procedure_branch(parsed)
 
         if not bool(parsed.get("async")):
             self._record_api_call("procedure", "run")
@@ -5419,7 +5560,8 @@ Helper aliases injected before your snippet runs:
 - High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,
   `item`, `last_item`, `feedback`, `feedback_alignment`, `acceptance_rate`,
   `dataset`, `report`, `report_configs`, `procedure`, `procedures`,
-  `procedure_sessions`, `procedure_messages`.
+  `procedure_sessions`, `procedure_messages`, `procedure_continue`,
+  `procedure_branch`.
 - Canonical `namespace_method`: `scorecards_list`, `score_info`,
   `evaluation_info`, `evaluation_run`, `handle_status`, `handle_await`,
   `handle_cancel`, `docs_list`, `docs_get`, `api_list`, plus one helper

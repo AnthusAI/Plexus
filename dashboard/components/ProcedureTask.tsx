@@ -116,6 +116,7 @@ export interface ProcedureTaskData extends BaseTaskData {
     id?: string
     name: string
   } | null
+  procedureType?: string
   status?: string
   taskId?: string
   task?: {
@@ -227,6 +228,7 @@ export default function ProcedureTask({
   const [optimizerVersionBaseIds, setOptimizerVersionBaseIds] = useState<{ scorecardId?: string; scoreId?: string }>({})
   const [stateScorecardName, setStateScorecardName] = useState<string>('')
   const [stateScoreName, setStateScoreName] = useState<string>('')
+  const [stateProcedureType, setStateProcedureType] = useState<string>('')
   const [cycleInsights, setCycleInsights] = useState<any[]>([])
   const [optimizationDiagnostic, setOptimizationDiagnostic] = useState<any>(null)
   const [endOfRunReport, setEndOfRunReport] = useState<any>(null)
@@ -259,6 +261,7 @@ export default function ProcedureTask({
       }
       if (state.scorecard_name) setStateScorecardName(state.scorecard_name)
       if (state.score_name) setStateScoreName(state.score_name)
+      if (state.procedure_type) setStateProcedureType(state.procedure_type)
       // Costs should stream even before baseline metrics exist.
       setProcedureCosts(state.costs ?? null)
 
@@ -410,6 +413,12 @@ export default function ProcedureTask({
         if (!raw) return
 
         const metadata = typeof raw === 'string' ? JSON.parse(raw) : raw
+
+        // Top-level metadata keys (seeded at creation time, available before first checkpoint)
+        if (metadata?.scorecard_name) setStateScorecardName(metadata.scorecard_name)
+        if (metadata?.score_name) setStateScoreName(metadata.score_name)
+        if (metadata?.procedure_type) setStateProcedureType(metadata.procedure_type)
+
         // Prefer the lightweight dashboard projection (tens of KB) over the
         // full runtime state (can exceed 10 MB due to exploration_results/RCA).
         let stateRef = metadata?.dashboard_state || metadata?.state || {}
@@ -972,7 +981,7 @@ export default function ProcedureTask({
 
   const taskObject = {
     id: procedure.id,
-    type: 'Procedure',
+    type: procedure.procedureType || stateProcedureType || 'Procedure',
     name: procedure.title,
     description: procedure.description,
     scorecard: procedure.scorecard?.name || stateScorecardName || '',
@@ -1048,7 +1057,7 @@ export default function ProcedureTask({
             <div className="flex flex-col pb-1 leading-none min-w-0 flex-1 overflow-hidden">
               <div className="flex items-center gap-2 mb-1">
                 <Waypoints className="h-5 w-5 text-muted-foreground" />
-                <span className="text-lg font-semibold text-muted-foreground">Procedure</span>
+                <span className="text-lg font-semibold text-muted-foreground">{taskObject.type}</span>
               </div>
               
               {/* Timestamp */}
@@ -1149,13 +1158,25 @@ export default function ProcedureTask({
               />
             </div>
             <div className="flex flex-col items-end flex-shrink-0">
-              <div className="flex items-center gap-2">
-                {!hasGridActions && (
-                  <div className="text-muted-foreground">
-                    <Waypoints className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
-                  </div>
-                )}
-                {controlButtons}
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-2">
+                  {!hasGridActions && (
+                    <div className="text-muted-foreground">
+                      <Waypoints className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                    </div>
+                  )}
+                  {controlButtons}
+                </div>
+                <div className="text-xs text-muted-foreground text-center">
+                  {(() => {
+                    const [firstWord, ...restWords] = (props.task.type || 'Procedure').split(/\s+/)
+                    return restWords.length > 0 ? (
+                      <>{firstWord}<br />{restWords.join(' ')}</>
+                    ) : (
+                      <>{firstWord}</>
+                    )
+                  })()}
+                </div>
               </div>
             </div>
           </div>
