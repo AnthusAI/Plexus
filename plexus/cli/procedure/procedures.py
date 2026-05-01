@@ -13,6 +13,7 @@ Uses the shared ProcedureService for consistent behavior.
 """
 
 import click
+import builtins
 import json
 import yaml
 import time
@@ -60,6 +61,41 @@ from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
 from plexus.cli.shared.optimizer_results import OptimizerResultsService
 from .service import ProcedureService
+
+
+def _lua_to_python(obj):
+    """Recursively convert Lua-style tables to native Python containers."""
+    try:
+        if isinstance(obj, builtins.dict):
+            converted_items = [(_lua_to_python(k), _lua_to_python(v)) for k, v in obj.items()]
+            if _has_contiguous_one_based_integer_keys(converted_items):
+                return [value for _, value in sorted(converted_items, key=lambda item: item[0])]
+            return {key: value for key, value in converted_items}
+        elif hasattr(obj, 'keys') and hasattr(obj, 'values'):
+            converted_items = [(_lua_to_python(k), _lua_to_python(v)) for k, v in obj.items()]
+            if _has_contiguous_one_based_integer_keys(converted_items):
+                return [value for _, value in sorted(converted_items, key=lambda item: item[0])]
+            return {key: value for key, value in converted_items}
+        elif isinstance(obj, builtins.list):
+            return [_lua_to_python(v) for v in obj]
+        elif isinstance(obj, builtins.tuple):
+            return [_lua_to_python(v) for v in obj]
+        elif hasattr(obj, '__iter__') and not isinstance(obj, (builtins.str, bytes)):
+            return [_lua_to_python(v) for v in obj]
+        else:
+            return obj
+    except (TypeError, ValueError):
+        return str(obj)
+
+
+def _has_contiguous_one_based_integer_keys(items):
+    if not items:
+        return False
+    keys = [key for key, _ in items]
+    if not all(isinstance(key, builtins.int) and not isinstance(key, builtins.bool) for key in keys):
+        return False
+    return sorted(keys) == builtins.list(builtins.range(1, len(keys) + 1))
+
 
 @click.group()
 def procedure():
@@ -1233,25 +1269,6 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
 
     # Convert Lua tables to native Python types for serialization
     import json as json_mod
-
-    def _lua_to_python(obj):
-        """Recursively convert Lua tables to Python dicts/lists."""
-        try:
-            if hasattr(obj, 'keys') and hasattr(obj, 'values') and not isinstance(obj, dict):
-                # Lua table acting as dict
-                return {_lua_to_python(k): _lua_to_python(v) for k, v in obj.items()}
-            elif isinstance(obj, dict):
-                return {k: _lua_to_python(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [_lua_to_python(v) for v in obj]
-            elif isinstance(obj, tuple):
-                return [_lua_to_python(v) for v in obj]
-            elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes)):
-                return [_lua_to_python(v) for v in obj]
-            else:
-                return obj
-        except (TypeError, ValueError):
-            return str(obj)
 
     try:
         exec_result_clean = json_mod.loads(json_mod.dumps(_lua_to_python(exec_result), default=str))

@@ -1,0 +1,25 @@
+{
+  "id": "plx-72d924b8-e5d7-4d1b-a04e-6a27c24092fa",
+  "title": "Fix local procedure dispatch state",
+  "description": "As a dashboard user, I want procedure runs launched locally through MCP/Tactus tools to display as Local from first render through realtime updates, so that local work is not misrepresented as dispatcher Announced or Claimed state.\n\nFeature: Local procedure dispatch state\nScenario: Tool-launched local procedure task is displayed as local\nGiven a procedure run is launched from the local MCP/Tactus tool path\nWhen the task is created, updated, heartbeating, failed, or completed\nThen task metadata includes dispatch_mode local and the dashboard displays Local instead of Announced or Claimed.\n\nDefinition of Done:\n- Producer writes dispatch_mode local for direct local procedure runs.\n- Local task updates preserve dispatch_mode and avoid workerNodeId.\n- Dashboard trusts dispatch_mode as the authority.\n- Existing malformed recent tasks can be repaired without permanent broad fallback logic.\n- Targeted Python and dashboard tests pass.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9ca22824-c353-40a0-8348-d294a0a384aa",
+      "author": "ryan",
+      "text": "Starting implementation from the approved plan. I will isolate changes in the PR worktree and keep unrelated local checkout changes out of staging.",
+      "created_at": "2026-05-01T20:00:33.164186Z"
+    }
+  ],
+  "created_at": "2026-05-01T20:00:30.638482Z",
+  "updated_at": "2026-05-01T20:00:33.164186Z",
+  "closed_at": null,
+  "custom": {}
+}
