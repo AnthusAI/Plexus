@@ -161,6 +161,9 @@ async def test_run_procedure_persists_failed_result_telemetry(monkeypatch):
     assert fake_task.update_calls[-1]["status"] == "FAILED"
     assert fake_task.update_calls[-1]["errorMessage"] == "optimizer blew up"
     assert json.loads(fake_task.update_calls[-1]["errorDetails"])["kind"] == "exception"
+    assert fake_task.update_calls[-1]["dispatchStatus"] == "LOCAL"
+    assert fake_task.update_calls[-1]["workerNodeId"] is None
+    assert json.loads(fake_task.update_calls[-1]["metadata"])["dispatch_mode"] == "local"
 
 
 @pytest.mark.asyncio
@@ -200,6 +203,9 @@ async def test_run_procedure_launches_background_stale_timeout_scan(monkeypatch)
 
     assert result["status"] == "COMPLETED"
     assert launched_scans == [{"account_id": "acct-123", "exclude_procedure_id": "proc-123"}]
+    assert fake_task.update_calls[-1]["dispatchStatus"] == "LOCAL"
+    assert fake_task.update_calls[-1]["workerNodeId"] is None
+    assert json.loads(fake_task.update_calls[-1]["metadata"])["dispatch_mode"] == "local"
 
 
 @pytest.mark.asyncio
@@ -246,6 +252,9 @@ async def test_run_procedure_persists_compacted_task_output_attachment(monkeypat
     ]
     assert fake_task.update_calls[-1]["output"] == '{"output_compacted": true, "output_attachment": "tasks/task-123/output.json"}'
     assert fake_task.update_calls[-1]["attachedFiles"] == ["tasks/task-123/output.json"]
+    assert fake_task.update_calls[-1]["dispatchStatus"] == "LOCAL"
+    assert fake_task.update_calls[-1]["workerNodeId"] is None
+    assert json.loads(fake_task.update_calls[-1]["metadata"])["dispatch_mode"] == "local"
 
 
 @pytest.mark.asyncio
