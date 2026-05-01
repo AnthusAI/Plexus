@@ -176,7 +176,7 @@ class Procedure(BaseModel):
             'name': name,
             'featured': featured,
             'isTemplate': isTemplate,
-            # Note: 'state' is NOT supported in CreateProcedureInput GraphQL schema
+            'status': 'RUNNING',
         }
 
         # Add optional fields if provided
@@ -278,24 +278,28 @@ class Procedure(BaseModel):
         scoreId: Optional[str] = None,
         code: Optional[str] = None,
         metadata: Optional[str] = None,
+        status: Optional[str] = None,
+        name: Optional[str] = None,
     ) -> 'Procedure':
         """Update this procedure.
-        
+
         Args:
             featured: Whether this procedure should be featured
             scorecardId: New scorecard ID (optional)
             scoreId: New score ID (optional)
             code: New procedure YAML/code (optional)
             metadata: JSON metadata string (optional) — use to store code_s3_key etc.
-            
+            status: New status string e.g. 'RUNNING', 'COMPLETE', 'ERROR' (optional)
+            name: New display name (optional)
+
         Returns:
             Updated Procedure instance
         """
         if not self._client:
             raise ValueError("Cannot update procedure without client")
-            
+
         logger.debug(f"Updating procedure {self.id}")
-        
+
         input_data = {'id': self.id}
         if featured is not None:
             input_data['featured'] = featured
@@ -307,6 +311,10 @@ class Procedure(BaseModel):
             input_data['code'] = code
         if metadata is not None:
             input_data['metadata'] = metadata
+        if status is not None:
+            input_data['status'] = status
+        if name is not None:
+            input_data['name'] = name
             
         mutation = """
         mutation UpdateProcedure($input: UpdateProcedureInput!) {
@@ -325,6 +333,8 @@ class Procedure(BaseModel):
         self.scoreId = updated_procedure.scoreId
         self.code = updated_procedure.code
         self.updatedAt = updated_procedure.updatedAt
+        self.status = updated_procedure.status
+        self.name = updated_procedure.name
         
         return self
 
