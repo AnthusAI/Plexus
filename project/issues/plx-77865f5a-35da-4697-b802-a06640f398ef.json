@@ -1,0 +1,97 @@
+{
+  "id": "plx-77865f5a-35da-4697-b802-a06640f398ef",
+  "title": "Procedure card dispatch indicator shows wrong state for locally-run procedures",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": "ryan",
+  "creator": null,
+  "parent": "plx-dbca12b0-ce51-42ee-969d-e0e2808ad8c9",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d1c2316e-35e8-47c3-a43c-c602a4e9511f",
+      "author": "ryan",
+      "text": "## Location\n\nThe dispatch-mode indicator lives in the procedure card header (grid and detail views), directly below the score subtitle. It should show one of: **Local**, **Claimed...**, or **Announced...**.\n\n## Expected behavior\n\nA procedure started via CLI (`plexus procedure optimize`) runs locally — never dispatched to a worker queue, never announced to a broker. The indicator should say **Local** immediately and never change.\n\n## Actual behavior\n\nShows **Announced...** on first render, then transitions to **Claimed...** when CommandDispatch.py sets `workerNodeId`, and only later (if at all) shows **Local**. The procedure was never announced or claimed.\n\n## Root cause\n\n`dispatch_mode: \"local\"` is written to `task.metadata` by CommandDispatch.py *after* dispatch starts — a second DynamoDB update. By then the UI has already rendered Announced... and Claimed... states. The `isLocalRun` check in ProcedureTask.tsx reads `task.metadata.dispatch_mode` but the value isn't present during those earlier subscription events.\n\nA partial fix (commit 3a288781) writes `dispatch_mode: \"local\"` into task metadata at creation time in service.py. However timing issues remain: subscription events for `workerNodeId` being set may still arrive before the metadata is read, and the indicator still flips through wrong states.\n\n## Files to fix\n\n- `dashboard/components/ProcedureTask.tsx` — `isLocalRun` and indicator JSX (consider also checking `dispatchStatus` or a dedicated flag rather than relying solely on metadata timing)\n- `plexus/cli/procedure/service.py` — task metadata at creation\n- `plexus/cli/shared/CommandDispatch.py` — where `dispatch_mode` and `workerNodeId` are set during dispatch",
+      "created_at": "2026-05-01T18:09:57.673916Z"
+    },
+    {
+      "id": "57a03bd8-b7c1-46a1-90c3-43356f6394c8",
+      "author": "ryan",
+      "text": "Started investigation on branch bugfix/plx-77865f-procedure-dispatch-indicator. Goal: make locally-run procedure cards show Local from first render and avoid transient Announced/Claimed states.",
+      "created_at": "2026-05-01T18:24:57.311510Z"
+    },
+    {
+      "id": "c062e424-1df8-43c9-a911-c03550cedfa1",
+      "author": "ryan",
+      "text": "Implemented local dispatch-mode propagation for procedure tasks and UI display wiring. Focused tests are passing; running dashboard typecheck next.",
+      "created_at": "2026-05-01T18:29:03.034287Z"
+    },
+    {
+      "id": "827ef1b2-24c3-49cc-8f52-7c9f91623861",
+      "author": "ryan",
+      "text": "Focused dashboard Jest tests, Python dispatch tests, and dashboard typecheck all pass. Running dashboard lint next before final status/commit.",
+      "created_at": "2026-05-01T18:33:51.984555Z"
+    },
+    {
+      "id": "5ab0a151-d429-4c5e-9532-0d5255102b0b",
+      "author": "ryan",
+      "text": "Lint gate is blocked by existing dashboard lint tooling failure: npm run lint exits on next lint --no-cache/Next CLI handling, and direct eslint exits during ESLint/AJV initialization before checking files. Filed follow-up chore under the epic; runnable gates remain green.",
+      "created_at": "2026-05-01T18:34:38.361738Z"
+    },
+    {
+      "id": "62ffa186-d73f-4ba4-a11a-54309b89de03",
+      "author": "ryan",
+      "text": "After cleanup, focused Jest tests, Python dispatch tests, and dashboard typecheck pass. Lint remains blocked by plx-6d94cc.",
+      "created_at": "2026-05-01T18:35:45.834969Z"
+    },
+    {
+      "id": "6cfadfca-61a4-42c8-b309-3fa15e67110f",
+      "author": "ryan",
+      "text": "Follow-up finding before release: procedure grid subtitles disappear after real-time task updates. Investigating the subscription merge path; no further git commit/push until reviewed.",
+      "created_at": "2026-05-01T18:38:24.518307Z"
+    },
+    {
+      "id": "31c09854-8cbd-4f69-98af-c23b3a893b26",
+      "author": "ryan",
+      "text": "Fixed subtitle instability from sparse realtime procedure updates by preserving existing scorecard/score identity fields during procedure subscription merges. Added regression coverage for sparse update payloads. Changes are local only; not committing or pushing.",
+      "created_at": "2026-05-01T18:39:33.579201Z"
+    },
+    {
+      "id": "97122b8e-b7fe-4fc7-95a5-1eff944963cc",
+      "author": "ryan",
+      "text": "Addressed additional layout instability: procedure cards now render a reserved Pending dispatch indicator before task hydration, so the Local/Claimed/Announced line does not appear later and shift the grid layout. Local only; no commit/push.",
+      "created_at": "2026-05-01T18:40:50.421815Z"
+    },
+    {
+      "id": "3acbe4e1-7c5d-4ac7-a80e-dfc87a8fed94",
+      "author": "ryan",
+      "text": "Restored the grid badge label for procedure cards. ProcedureTask now uses Optimization Procedure as the grid task type and always renders the icon+label badge even when the action dropdown is present. Local only; no commit/push.",
+      "created_at": "2026-05-01T18:42:25.494071Z"
+    },
+    {
+      "id": "8bafb2e4-aa4b-4f30-9bea-2679ba020ad3",
+      "author": "ryan",
+      "text": "Removed duplicate transient Pending indicator from procedure grid card body. Header remains the single dispatch indicator; TaskStatus body can now suppress pre-execution dispatch text for this layout. Local only; no commit/push.",
+      "created_at": "2026-05-01T18:52:15.649783Z"
+    },
+    {
+      "id": "9bfdf645-07c4-497a-9751-47aa4feb07e3",
+      "author": "ryan",
+      "text": "Release summary: implemented and verified procedure grid dispatch indicator stability. Local runs stay Local, sparse realtime updates preserve subtitles, the dispatch row is reserved from first render, the Optimization Procedure badge label is restored, and duplicate body Pending text is suppressed.",
+      "created_at": "2026-05-01T18:54:27.926131Z"
+    },
+    {
+      "id": "1775b5df-98a3-4ae4-ac87-094179f20e4e",
+      "author": "ryan",
+      "text": "User verification found the duplicate Pending row still appears between the status message area and segmented progress during initial loading. The dispatch indicator should live only above the timestamp in the procedure grid header. Pausing PR merge until fixed.",
+      "created_at": "2026-05-01T19:04:11.553429Z"
+    }
+  ],
+  "created_at": "2026-05-01T18:09:49.560708Z",
+  "updated_at": "2026-05-01T19:04:11.553429Z",
+  "closed_at": "2026-05-01T18:54:38.041565Z",
+  "custom": {}
+}
