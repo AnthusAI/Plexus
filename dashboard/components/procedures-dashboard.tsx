@@ -520,31 +520,16 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           // scorecard/score/metadata from the stored record so they don't get wiped.
           // Also merge metadata so that fields set at creation (e.g. procedure_type) survive
           // later updates that may not include them.
-          type ProcedureMetadata = Procedure['metadata']
-          const parseMetadataObject = (metadata: ProcedureMetadata): Record<string, unknown> | null => {
-            if (!metadata) return null
-            if (typeof metadata === 'string') {
-              try {
-                const parsed = JSON.parse(metadata)
-                return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-                  ? parsed as Record<string, unknown>
-                  : null
-              } catch {
-                return null
-              }
-            }
-            return typeof metadata === 'object' && !Array.isArray(metadata)
-              ? metadata as Record<string, unknown>
-              : null
-          }
-          const mergeMetadata = (incoming: ProcedureMetadata, existing: ProcedureMetadata): ProcedureMetadata => {
+          const mergeMetadata = (incoming: string | null | undefined, existing: string | null | undefined): string | null | undefined => {
             if (!incoming) return existing
             if (!existing) return incoming
-            const existingMetadata = parseMetadataObject(existing)
-            const incomingMetadata = parseMetadataObject(incoming)
-            return existingMetadata && incomingMetadata
-              ? JSON.stringify({ ...existingMetadata, ...incomingMetadata })
-              : incoming
+            try {
+              const a = JSON.parse(existing)
+              const b = JSON.parse(incoming)
+              return JSON.stringify({ ...a, ...b })
+            } catch {
+              return incoming
+            }
           }
           let existingTask: Task | null | undefined = null
           setProcedures(prev =>
