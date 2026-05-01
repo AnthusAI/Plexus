@@ -291,6 +291,42 @@ def _advance_task_to_stage_by_name(client: Any, task_id: str, stage_name: str) -
         logger.warning("Could not refresh runtime heartbeat for task %s after stage update: %s", task_id, exc)
 
 
+def _update_stage_status_message(client: Any, task_id: str, message: str) -> None:
+    """Update statusMessage on the current RUNNING TaskStage."""
+    stage_query = """
+    query GetTask($id: ID!) {
+        getTask(id: $id) {
+            stages {
+                items {
+                    id
+                    status
+                }
+            }
+        }
+    }
+    """
+    result = client.execute(stage_query, {"id": task_id})
+    stages = result.get("getTask", {}).get("stages", {}).get("items", [])
+    running = next((s for s in stages if s.get("status") == "RUNNING"), None)
+    if not running:
+        logger.debug("No RUNNING stage found for task %s", task_id)
+        return
+
+    update_mutation = """
+    mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+        updateTaskStage(input: $input) {
+            id
+            statusMessage
+        }
+    }
+    """
+    client.execute(
+        update_mutation,
+        {"input": {"id": running["id"], "statusMessage": message[:500]}},
+        retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+    )
+
+
 def _update_stage_progress(client: Any, task_id: str, current: int, total: int) -> None:
     """
     Update processedItems and totalItems on the current RUNNING TaskStage.
@@ -361,6 +397,7 @@ class EmbeddedMCPServer:
         self._setup_core_tools()
         self._setup_stage_tool()
         self._setup_stage_progress_tool()
+        self._setup_status_message_tool()
     
     def _setup_core_tools(self):
         """Setup core MCP tools that are useful for experiments."""
@@ -461,6 +498,39 @@ class EmbeddedMCPServer:
             return {"success": True, "current": current, "total": total}
         except Exception as e:
             logger.warning(f"plexus_set_stage_progress failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    def _setup_status_message_tool(self):
+        """Register the plexus_set_status_message tool."""
+        self.transport.register_tool(MCPToolInfo(
+            name="plexus_set_status_message",
+            description="Update the status message on the current RUNNING stage (visible in the dashboard during long-running procedures)",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "Short status message (max 500 chars) describing what the procedure is doing right now"}
+                },
+                "required": ["message"],
+                "additionalProperties": False
+            },
+            handler=self._set_status_message
+        ))
+
+    def _set_status_message(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Update statusMessage on the current RUNNING TaskStage."""
+        message = str(arguments.get('message', ''))
+        task_id = self.experiment_context.get('task_id')
+
+        if not task_id:
+            return {"success": False, "error": "No task_id in context"}
+
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            client = PlexusDashboardClient()
+            _update_stage_status_message(client, task_id, message)
+            return {"success": True, "message": message}
+        except Exception as e:
+            logger.warning(f"plexus_set_status_message failed: {e}")
             return {"success": False, "error": str(e)}
 
     def _get_experiment_context(self, arguments: Dict[str, Any]) -> Dict[str, Any]:

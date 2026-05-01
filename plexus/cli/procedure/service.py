@@ -1809,10 +1809,12 @@ Based on this data, you should prioritize examining error types with the highest
                 stage_configs = get_stages_from_state_machine()
 
             # Build metadata
+            import os as _os
             metadata = {
                 "type": "Procedure",
                 "procedure_id": procedure_id,
-                "task_type": "Procedure"
+                "task_type": "Procedure",
+                "dispatch_mode": _os.getenv("PLEXUS_DISPATCH_MODE", "local").strip().lower(),
             }
 
             # Create the Task
