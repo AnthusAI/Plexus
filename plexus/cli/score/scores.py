@@ -13,6 +13,7 @@ from ruamel.yaml import YAML
 from rich.table import Table
 from rich.panel import Panel
 from plexus.cli.shared.console import console
+from plexus.cli.report.utils import resolve_account_id_for_command
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.cli.shared.file_editor import FileEditor
 from typing import Optional
@@ -40,6 +41,7 @@ from plexus.cli.shared.memoized_resolvers import (
     clear_resolver_caches
 )
 from plexus.cli.shared.score_config_fetching import fetch_and_cache_single_score
+from plexus.score_rubric_consistency import ScoreRubricConsistencyService
 
 # Define the main command groups that will be exported
 @click.group()
@@ -1629,13 +1631,13 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
 
     # Run with task tracking
     import asyncio
-    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
 
     options = {
         'context': params,
     }
 
-    exec_result = asyncio.run(run_experiment_with_task_tracking(
+    exec_result = asyncio.run(run_procedure_with_task_tracking(
         procedure_id=procedure_id,
         client=client,
         account_id=account_id,
@@ -2095,6 +2097,67 @@ def score_evaluations(scorecard: str, score: str, version_id: Optional[str], sor
 
 
 scores.add_command(score_evaluations)
+
+
+@score.command(name="contradictions")
+@click.option("--scorecard", "scorecard_identifier", required=True)
+@click.option("--score", "score_identifier", required=True)
+@click.option("--version", "score_version_id", required=True)
+@click.option(
+    "--item",
+    "item_identifier",
+    default=None,
+    help=(
+        "Optional item id or identifier to include as example context; "
+        "the check is still score-version-level."
+    ),
+)
+@click.option("--format", "output_format", type=click.Choice(["markdown", "json"]), default="markdown")
+def contradictions(
+    scorecard_identifier: str,
+    score_identifier: str,
+    score_version_id: str,
+    item_identifier: Optional[str],
+    output_format: str,
+):
+    """Check whether one ScoreVersion's code is consistent with its rubric."""
+    client = create_client()
+    scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_identifier)
+    if not scorecard_id:
+        raise click.ClickException(f"Could not resolve scorecard: {scorecard_identifier}")
+    score_id = memoized_resolve_score_identifier(client, scorecard_id, score_identifier)
+    if not score_id:
+        raise click.ClickException(
+            f"Could not resolve score '{score_identifier}' in scorecard '{scorecard_identifier}'"
+        )
+
+    item_text = ""
+    if item_identifier:
+        from plexus.cli.item.items import find_item_by_any_identifier
+
+        account_id = resolve_account_id_for_command(client, None)
+        item = find_item_by_any_identifier(client, item_identifier, account_id)
+        if not item:
+            raise click.ClickException(f"Could not resolve item: {item_identifier}")
+        item_text = item.text or ""
+
+    result = ScoreRubricConsistencyService().generate_from_api(
+        client=client,
+        scorecard_identifier=scorecard_identifier,
+        score_identifier=score_identifier,
+        score_id=score_id,
+        score_version_id=score_version_id,
+        item_text=item_text,
+    )
+    payload = result.to_parameters_payload()
+    if output_format == "json":
+        console.print_json(json.dumps(payload))
+    else:
+        console.print(f"[bold]Status:[/bold] {result.status}")
+        console.print(result.paragraph)
+
+
+scores.add_command(contradictions)
 
 
 @score.command(name="promotion-packet")

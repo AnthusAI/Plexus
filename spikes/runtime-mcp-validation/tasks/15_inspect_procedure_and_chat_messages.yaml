@@ -1,0 +1,34 @@
+id: inspect_procedure_and_chat_messages
+name: "Inspect a procedure and summarize recent chat messages"
+prompt: |
+  Inspect procedure proc_alignment_optimizer and summarize the last five chat
+  messages from its most recent session. Include whether the procedure appears
+  stopped, waiting on human input, or still running.
+  Call plexus.procedure.info{ id = "proc_alignment_optimizer" }, then call
+  plexus.procedure.chat_sessions for that procedure, then call
+  plexus.procedure.chat_messages for the most recent session.
+  Return exactly these fields: procedure_id, status, and chat_messages.
+  The chat_messages field must contain exactly the last five chat messages.
+expected_outcome:
+  kind: contains_fields
+  fields:
+    procedure_id: proc_alignment_optimizer
+    chat_messages_count: 5
+    status_one_of:
+      - stopped
+      - waiting_on_human
+      - running
+coverage_tags:
+  - procedure
+  - chat_messages
+  - read_only
+  - multi_step
+required_apis:
+  - plexus.procedure.info
+  - plexus.procedure.chat_sessions
+  - plexus.procedure.chat_messages
+max_attempts_for_first_try_pass: 1
+fixture_notes: |
+  This covers procedure introspection without invoking recursive procedure.run.
+  The fixture should include at least one recent session with more than five
+  messages so the agent must slice the most recent five.

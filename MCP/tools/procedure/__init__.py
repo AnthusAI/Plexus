@@ -1,1 +1,0 @@
-"""Procedure node management tools for MCP."""

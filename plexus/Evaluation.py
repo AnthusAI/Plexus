@@ -2430,6 +2430,8 @@ Total cost:       ${expenses['total_cost']:.6f}
                 for col_name in row.index:
                     if col_name not in result:  # Don't overwrite the explicitly set keys above
                         result[col_name] = row[col_name]
+                if item and getattr(item, "id", None):
+                    result["resolved_item_id"] = item.id
 
                 # Track if we've processed any scores for this text
                 has_processed_scores = False
@@ -2669,9 +2671,16 @@ Total cost:       ${expenses['total_cost']:.6f}
             if feedback_item_id is None and score_result.metadata:
                 feedback_item_id = score_result.metadata.get('feedback_item_id')
             
+            resolved_item_id = (
+                result.get('resolved_item_id')
+                or result.get('item_id')
+                or content_id
+            )
+
             # Ensure we have valid metadata
             metadata_dict = {
-                'item_id': result.get('form_id', ''),
+                'item_id': resolved_item_id,
+                'form_id': result.get('form_id', ''),
                 'results': {
                     score_result.parameters.name: {
                         'value': value,
@@ -2691,14 +2700,11 @@ Total cost:       ${expenses['total_cost']:.6f}
             if feedback_item_id:
                 metadata_dict['feedback_item_id'] = feedback_item_id
             
-            # The Item should already exist from dataset creation - evaluations don't create Items
-            # Use content_id as the itemId since Items are created by the data loading process
-            
             # Create data dictionary with all required fields
             # MARKER: CODE VERSION 2025-10-17-v3 - This ensures we're using the updated code
             data = {
                 'evaluationId': self.experiment_id,
-                'itemId': content_id,  # Use content_id directly
+                'itemId': resolved_item_id,
                 'accountId': self.account_id,
                 'scorecardId': self.scorecard_id,
                 'metadata': json.dumps(metadata_dict),  # Add the metadata that was created earlier
@@ -5683,6 +5689,14 @@ class AccuracyEvaluation(Evaluation):
             raise
         finally:
             self.should_stop = True
+            metrics_tasks = getattr(self, "metrics_tasks", None)
+            if metrics_tasks:
+                pending = [t for t in metrics_tasks.values() if not t.done()]
+                if pending:
+                    try:
+                        await asyncio.wait(pending, timeout=10.0)
+                    except Exception:
+                        pass
 
     async def _run_evaluation(self, tracker):
         try:

@@ -205,7 +205,7 @@ def test_optimizer_yaml_bounds_report_context_and_output_shapes():
     assert "Keep the entire report under 450 words." in code
     assert "Exactly 4 bullets, one sentence each." in code
     assert "Exactly 3 short subsections. Each must be exactly 2 sentences." in code
-    assert "HARD LIMIT: max 3 agenda items. Under 150 words total." in code
+    assert "HARD LIMIT: max 3 agenda items. Under 200 words total." in code
     assert 'trunc(history_text, 2000)' in code
     assert 'trunc(ins.analysis, 800)' in code
     assert 'render_items("FALSE POSITIVES (predicted YES, should be NO)", fp_items, 2)' in code
@@ -319,6 +319,14 @@ def test_optimizer_yaml_runs_contradictions_directly_without_background_dispatch
     assert "include_rubric_memory = true" in code
     assert 'pcall(refresh_known_contradictions, 0, {ttl_hours = 48})' in code
     assert 'cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name' in code
+
+
+def test_optimizer_baseline_feedback_runs_score_rubric_consistency_check():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "score_rubric_consistency_check = true" in code
+    assert 'evaluation_type    = "feedback"' in code
 
 
 def test_optimizer_yaml_treats_cycle_errors_as_terminal_and_does_not_extend_iteration_cap():

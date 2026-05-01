@@ -13,6 +13,7 @@ access for procedure contexts.
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Callable, Union
 from dataclasses import dataclass, field
@@ -291,6 +292,42 @@ def _advance_task_to_stage_by_name(client: Any, task_id: str, stage_name: str) -
         logger.warning("Could not refresh runtime heartbeat for task %s after stage update: %s", task_id, exc)
 
 
+def _update_stage_status_message(client: Any, task_id: str, message: str) -> None:
+    """Update statusMessage on the current RUNNING TaskStage."""
+    stage_query = """
+    query GetTask($id: ID!) {
+        getTask(id: $id) {
+            stages {
+                items {
+                    id
+                    status
+                }
+            }
+        }
+    }
+    """
+    result = client.execute(stage_query, {"id": task_id})
+    stages = result.get("getTask", {}).get("stages", {}).get("items", [])
+    running = next((s for s in stages if s.get("status") == "RUNNING"), None)
+    if not running:
+        logger.debug("No RUNNING stage found for task %s", task_id)
+        return
+
+    update_mutation = """
+    mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+        updateTaskStage(input: $input) {
+            id
+            statusMessage
+        }
+    }
+    """
+    client.execute(
+        update_mutation,
+        {"input": {"id": running["id"], "statusMessage": message[:500]}},
+        retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+    )
+
+
 def _update_stage_progress(client: Any, task_id: str, current: int, total: int) -> None:
     """
     Update processedItems and totalItems on the current RUNNING TaskStage.
@@ -361,6 +398,7 @@ class EmbeddedMCPServer:
         self._setup_core_tools()
         self._setup_stage_tool()
         self._setup_stage_progress_tool()
+        self._setup_status_message_tool()
     
     def _setup_core_tools(self):
         """Setup core MCP tools that are useful for experiments."""
@@ -463,6 +501,39 @@ class EmbeddedMCPServer:
             logger.warning(f"plexus_set_stage_progress failed: {e}")
             return {"success": False, "error": str(e)}
 
+    def _setup_status_message_tool(self):
+        """Register the plexus_set_status_message tool."""
+        self.transport.register_tool(MCPToolInfo(
+            name="plexus_set_status_message",
+            description="Update the status message on the current RUNNING stage (visible in the dashboard during long-running procedures)",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "Short status message (max 500 chars) describing what the procedure is doing right now"}
+                },
+                "required": ["message"],
+                "additionalProperties": False
+            },
+            handler=self._set_status_message
+        ))
+
+    def _set_status_message(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Update statusMessage on the current RUNNING TaskStage."""
+        message = str(arguments.get('message', ''))
+        task_id = self.experiment_context.get('task_id')
+
+        if not task_id:
+            return {"success": False, "error": "No task_id in context"}
+
+        try:
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            client = PlexusDashboardClient()
+            _update_stage_status_message(client, task_id, message)
+            return {"success": True, "message": message}
+        except Exception as e:
+            logger.warning(f"plexus_set_status_message failed: {e}")
+            return {"success": False, "error": str(e)}
+
     def _get_experiment_context(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Handler for get_experiment_context tool."""
         # Create a JSON-serializable copy of procedure context
@@ -498,32 +569,13 @@ class EmbeddedMCPServer:
             tool_subset: List of tool names to register. If None, registers all available tools.
         """
         try:
-            # Import the main MCP server tools from the MCP directory
+            # The legacy MCP tool catalog (tools.scorecard, tools.score, etc.) has been
+            # removed. All Plexus functionality is now exposed through execute_tactus in
+            # MCP/tools/tactus_runtime/. Procedure-internal tool loading is a no-op here;
+            # rubric_memory and other features are available to Tactus procedures via the
+            # plexus.* runtime APIs.
             import sys
             import os
-            
-            # Add MCP directory to path temporarily
-            # Get the project root (4 levels up from this file: mcp_transport.py -> procedure -> cli -> plexus -> project_root)
-            current_file = os.path.abspath(__file__)
-            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file))))
-            mcp_dir = os.path.join(project_root, 'MCP')
-            
-            if mcp_dir not in sys.path:
-                sys.path.insert(0, mcp_dir)
-                logger.debug(f"Added MCP directory to path: {mcp_dir}")
-            
-            from tools.util.think import register_think_tool
-            from tools.util.docs import register_docs_tool
-            from tools.scorecard.scorecards import register_scorecard_tools
-            from tools.score.scores import register_score_tools
-            from tools.score.guidelines import register_guidelines_tools
-            from tools.item.items import register_item_tools
-            from tools.feedback.feedback import register_feedback_tools
-            from tools.evaluation.evaluations import register_evaluation_tools
-            from tools.prediction.predictions import register_prediction_tools
-            from tools.dataset.datasets import register_dataset_tools
-            from tools.report.reports import register_report_tools
-            from tools.rubric_memory.rubric_memory import register_rubric_memory_tools
             
             # Create a mock MCP object that captures tool registrations
             class ToolCapture:
@@ -679,6 +731,7 @@ class EmbeddedMCPServer:
             
             tool_capture = ToolCapture(self)
 
+            # Register the built-in done tool used by all Tactus agents.
             @tool_capture.tool()
             async def done(reason: str = "", success: Optional[bool] = True, **kwargs):
                 """Signal agent completion with an optional reason and any additional fields."""
@@ -705,48 +758,100 @@ class EmbeddedMCPServer:
                     "reason": reason,
                     "tool": "done",
                 }
+
+            @tool_capture.tool()
+            async def get_plexus_documentation(filename: str):
+                """Get documentation content for specific Plexus topics by markdown slug."""
+                slug = str(filename or "").strip().lower()
+                if not slug:
+                    return {"error": "filename is required"}
+
+                docs_root = os.path.normpath(
+                    os.path.join(os.path.dirname(__file__), "..", "..", "docs")
+                )
+                candidate_name = f"{slug}.md"
+                matches: List[str] = []
+                for root, _dirs, files in os.walk(docs_root):
+                    if candidate_name in files:
+                        matches.append(os.path.join(root, candidate_name))
+
+                if not matches:
+                    return {
+                        "error": (
+                            f"Documentation file not found: {slug}. "
+                            "Expected a markdown file under plexus/docs."
+                        )
+                    }
+
+                # Use deterministic path ordering if duplicates exist.
+                selected_path = sorted(matches)[0]
+                try:
+                    with open(selected_path, "r", encoding="utf-8") as handle:
+                        content = handle.read()
+                except Exception as exc:
+                    return {"error": f"Failed to read documentation file {selected_path}: {exc}"}
+
+                return {
+                    "filename": slug,
+                    "path": selected_path,
+                    "documentation": content,
+                }
             
-            # Register selected tool sets
-            available_tools = {
-                "think": lambda: register_think_tool(tool_capture),
-                "documentation": lambda: register_docs_tool(tool_capture),
-                "scorecard": lambda: register_scorecard_tools(tool_capture),
-                "score": lambda: (register_score_tools(tool_capture), register_guidelines_tools(tool_capture)),
-                "guidelines": lambda: register_guidelines_tools(tool_capture),
-                "item": lambda: register_item_tools(tool_capture),
-                "feedback": lambda: register_feedback_tools(tool_capture),
-                "evaluation": lambda: register_evaluation_tools(tool_capture),
-                "prediction": lambda: register_prediction_tools(tool_capture),
-                "dataset": lambda: register_dataset_tools(tool_capture),
-                "report": lambda: register_report_tools(tool_capture),
-                "rubric_memory": lambda: register_rubric_memory_tools(tool_capture),
-            }
-            
-            # If no specific tools requested, register all available tools
-            if tool_subset is None:
-                tool_subset = list(available_tools.keys())
-            
-            # Always register think tool as it's essential for AI planning
-            if "think" not in tool_subset:
-                tool_subset = ["think"] + list(tool_subset)
-            
-            for tool_category in tool_subset:
-                if tool_category in available_tools:
-                    try:
-                        available_tools[tool_category]()
-                        logger.info(f"Registered {tool_category} tools for procedure MCP")
-                    except Exception as e:
-                        logger.warning(f"Failed to register {tool_category} tools: {e}")
-            
+            # Register execute_tactus so LLM agents (e.g. console chat) can query
+            # Plexus data by writing short Lua snippets.
+            import os as _os_et, sys as _sys_et
+            _mcp_path_et = _os_et.path.normpath(
+                _os_et.path.join(_os_et.path.dirname(__file__), "..", "..", "..", "MCP")
+            )
+            if _os_et.path.isdir(_mcp_path_et) and _mcp_path_et not in _sys_et.path:
+                _sys_et.path.insert(0, _mcp_path_et)
+
+            try:
+                from tools.tactus_runtime.execute import (  # type: ignore[import]
+                    _execute_tactus_tool as _et_run,
+                    _default_trace_store as _et_traces,
+                    _default_handle_store as _et_handles,
+                    BudgetGate,
+                    BudgetSpec,
+                )
+
+                _et_trace_store = _et_traces()
+                _et_handle_store = _et_handles()
+                # Permissive budget: async eval/procedure dispatch must be allowed
+                _et_budget = BudgetGate(BudgetSpec(
+                    usd=float("inf"),
+                    wallclock_seconds=float("inf"),
+                    depth=20,
+                    tool_calls=500,
+                ))
+
+                @tool_capture.tool()
+                async def execute_tactus(tactus: str) -> dict:
+                    """Execute a Tactus (Lua) snippet against the Plexus runtime.
+                    `plexus` is a global providing access to all Plexus functionality.
+                    Examples:
+                      return plexus.scorecards.list({})
+                      return plexus.score.info({ id = "score-id" })
+                      return plexus.evaluation.find_recent({ score_id = "id", count = 5 })
+                      return plexus.item.last({ count = 1 })
+                    """
+                    return await _et_run(
+                        tactus,
+                        None,
+                        ctx=None,
+                        trace_store=_et_trace_store,
+                        handle_store=_et_handle_store,
+                        budget=_et_budget,
+                    )
+
+                logger.info("Registered execute_tactus in embedded MCP transport")
+            except Exception as _et_exc:
+                logger.warning(f"Could not register execute_tactus in embedded MCP: {_et_exc}")
+
             logger.info(f"Total MCP tools registered: {len(self.transport.tools)}")
             
-        except ImportError as e:
-            logger.warning(f"Could not import Plexus MCP tools: {e}")
-            logger.debug(f"MCP directory: {mcp_dir}")
-            logger.debug(f"MCP directory exists: {os.path.exists(mcp_dir)}")
-            logger.debug(f"sys.path contains MCP dir: {mcp_dir in sys.path}")
         except Exception as e:
-            logger.error(f"Error registering Plexus tools: {e}")
+            logger.error(f"Error registering procedure tools: {e}")
     
     @asynccontextmanager
     async def connect(self, client_info: Optional[Dict[str, Any]] = None):

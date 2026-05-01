@@ -1,5 +1,14 @@
+import os
+import sys
 import pytest
 import json
+
+# Ensure the MCP directory is importable for execute module patching
+_mcp_dir = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "MCP")
+)
+if os.path.isdir(_mcp_dir) and _mcp_dir not in sys.path:
+    sys.path.insert(0, _mcp_dir)
 
 
 class FakeMCPClient:
@@ -104,25 +113,21 @@ output:
 
 
 @pytest.mark.asyncio
-async def test_submit_score_version_surfaces_validation_errors_from_envelope():
+async def test_submit_score_version_surfaces_validation_errors_from_envelope(monkeypatch):
     from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
+    import tools.tactus_runtime.execute as _exec  # type: ignore
 
-    mcp_response = {
-        "content": [
-            {
-                "type": "text",
-                "text": (
-                    '{\n'
-                    '  "success": false,\n'
-                    '  "error": "YAML validation failed",\n'
-                    '  "validation_errors": ["Schema Validation Failed: foo", "Another error"]\n'
-                    "}\n"
-                ),
-            }
-        ]
-    }
+    monkeypatch.setattr(
+        _exec,
+        "_default_score_update",
+        lambda args: {
+            "success": False,
+            "error": "YAML validation failed",
+            "validation_errors": ["Schema Validation Failed: foo", "Another error"],
+        },
+    )
 
-    toolset = ScoreEditorToolset(mcp_client=FakeMCPClient(mcp_response))
+    toolset = ScoreEditorToolset()
     toolset._scorecard = "sc-1"
     toolset._score = "score-1"
     toolset._iteration = 1
@@ -198,6 +203,31 @@ def test_setup_normalizes_direct_yaml_content_to_block_scalars():
     assert toolset._content == toolset._original
 
 
+def test_setup_normalizes_numeric_external_id_to_string():
+    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
+
+    raw_yaml = (
+        "name: Test Score\n"
+        "external_id: 48381\n"
+        "class: LangGraphScore\n"
+        "graph: []\n"
+    )
+
+    toolset = ScoreEditorToolset()
+    result = toolset.setup(
+        {
+            "scorecard_identifier": "sc-1",
+            "score_identifier": "score-1",
+            "yaml_content": raw_yaml,
+        }
+    )
+
+    assert result["success"] is True
+    content = toolset.get_content({})["file_content"]
+    assert "external_id: '48381'" in content or 'external_id: "48381"' in content
+    assert "external_id: 48381" not in content
+
+
 def test_setup_fails_fast_when_direct_yaml_is_invalid():
     from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
 
@@ -214,7 +244,7 @@ def test_setup_fails_fast_when_direct_yaml_is_invalid():
     assert "Failed to normalize score YAML" in result["message"]
 
 
-def test_load_content_from_api_normalizes_yaml_before_exposing_it(tmp_path):
+def test_load_content_from_api_normalizes_yaml_before_exposing_it(monkeypatch):
     from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
 
     raw_yaml = (
@@ -223,57 +253,37 @@ def test_load_content_from_api_normalizes_yaml_before_exposing_it(tmp_path):
         'system_message: "First line\\nSecond line\\n"\n'
         'user_message: "Review this call\\n{{text}}\\n"\n'
     )
-    code_path = tmp_path / "score.yaml"
-    code_path.write_text(raw_yaml, encoding="utf-8")
 
-    mcp_response = {
-        "content": [
-            {
-                "type": "text",
-                "text": json.dumps(
-                    {
-                        "success": True,
-                        "codeFilePath": str(code_path),
-                    }
-                ),
-            }
-        ]
-    }
+    import tools.tactus_runtime.execute as _exec  # type: ignore
+    monkeypatch.setattr(
+        _exec,
+        "_default_score_pull",
+        lambda args: {"success": True, "yaml_content": raw_yaml, "guidelines": ""},
+    )
 
-    toolset = ScoreEditorToolset(mcp_client=FakePullMCPClient(mcp_response))
+    toolset = ScoreEditorToolset()
     toolset._scorecard = "sc-1"
     toolset._score = "score-1"
 
     load_error = toolset._load_content_from_api()
 
     assert load_error is None
-    assert toolset._code_file_path == str(code_path)
     assert "system_message: |" in toolset._content
     assert "user_message: |" in toolset._content
     assert toolset._content == toolset._original
 
 
-def test_load_content_from_api_fails_clearly_on_invalid_yaml(tmp_path):
+def test_load_content_from_api_fails_clearly_on_invalid_yaml(monkeypatch):
     from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
 
-    code_path = tmp_path / "invalid-score.yaml"
-    code_path.write_text("name: [unterminated\n", encoding="utf-8")
+    import tools.tactus_runtime.execute as _exec  # type: ignore
+    monkeypatch.setattr(
+        _exec,
+        "_default_score_pull",
+        lambda args: {"success": True, "yaml_content": "name: [unterminated\n", "guidelines": ""},
+    )
 
-    mcp_response = {
-        "content": [
-            {
-                "type": "text",
-                "text": json.dumps(
-                    {
-                        "success": True,
-                        "codeFilePath": str(code_path),
-                    }
-                ),
-            }
-        ]
-    }
-
-    toolset = ScoreEditorToolset(mcp_client=FakePullMCPClient(mcp_response))
+    toolset = ScoreEditorToolset()
     toolset._scorecard = "sc-1"
     toolset._score = "score-1"
 
@@ -287,7 +297,7 @@ def test_load_content_from_api_fails_clearly_on_invalid_yaml(tmp_path):
 async def test_submit_score_version_rejects_classifier_as_extractor_candidate():
     from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
 
-    toolset = ScoreEditorToolset(mcp_client=FakeMCPClient({"success": True, "version_id": "v-1"}))
+    toolset = ScoreEditorToolset()
     toolset._scorecard = "sc-1"
     toolset._score = "score-1"
     toolset._iteration = 1
@@ -305,10 +315,17 @@ async def test_submit_score_version_rejects_classifier_as_extractor_candidate():
 
 
 @pytest.mark.asyncio
-async def test_submit_score_version_allows_extractor_then_classifier_pattern():
+async def test_submit_score_version_allows_extractor_then_classifier_pattern(monkeypatch):
+    import tools.tactus_runtime.execute as _exec  # type: ignore
+    monkeypatch.setattr(
+        _exec,
+        "_default_score_update",
+        lambda args: {"success": True, "version_id": "v-2"},
+    )
+
     from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
 
-    toolset = ScoreEditorToolset(mcp_client=FakeMCPClient({"success": True, "version_id": "v-2"}))
+    toolset = ScoreEditorToolset()
     toolset._scorecard = "sc-1"
     toolset._score = "score-1"
     toolset._iteration = 1
