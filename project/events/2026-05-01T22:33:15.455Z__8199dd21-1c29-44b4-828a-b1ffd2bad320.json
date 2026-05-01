@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8199dd21-1c29-44b4-828a-b1ffd2bad320",
+  "issue_id": "plx-5604dfad-0358-42a9-ae70-38307acd3927",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-01T22:33:15.455Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Merge Derek's execute-tactus branch update into develop.\n\nBehavior intent:\n- Procedure runs stream lifecycle/tool/cost events to CloudWatch in real time.\n- Procedure runs write full LLM prompt-context JSON to a separate CloudWatch stream.\n- Procedure metadata records log group and stream prefix so dashboard integrations can locate logs later.\n- IAM permissions support consoleRunWorker writes and authenticated dashboard reads.\n\nDefinition of Done:\n- PR from feature/plx-07dc0d-execute-tactus-mcp-tool to develop is created.\n- CI passes or failures are fixed.\n- PR is merged into develop.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-07dc0d44-08df-4248-97af-1f928bc2e19d",
+    "priority": 1,
+    "status": "open",
+    "title": "Integrate CloudWatch procedure log streaming"
+  }
+}
