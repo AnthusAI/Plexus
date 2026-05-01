@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "Real-run hardening loop started. Live in-process execute_tactus calls uncovered and fixed: (1) streaming progress/info transport failures from FastMCP in-process calls were aborting execution; now stream emission is best-effort, (2) Tactus summary events containing Lua tables could fail Pydantic JSON serialization; now stream payload conversion falls back safely, (3) legacy MCP argument names broke runtime-friendly calls such as scorecards.info{id=...}; added normalization for scorecards.info, score.info, item.info, and procedure list/info/chat request models, (4) JSON-string tool results were leaking into Tactus as strings; extraction now parses structured/content JSON strings including result-wrapped strings, (5) expanded helper aliases with complete underscore helpers plus friendlier aliases like scorecards, scorecard, report_configs, procedures, last_item, evaluation, etc., (6) rejected async run attempts now show the attempted API call in api_calls. Live flows passing so far: api.list, docs.list, scorecards.list, scorecards.info{id=...}, item.last -> item.info, report.configurations_list, procedure.list -> procedure.info, expanded-helper read flow, and report.run async missing-budget rejection before dispatch.",
       "created_at": "2026-04-29T18:33:15.096985Z"
+    },
+    {
+      "id": "d12e37fe-f706-4841-9fa7-7cf2f5b73d79",
+      "author": "ryan",
+      "text": "User requested committing and pushing the remaining local frontend/CLI/task-dispatch changes on the current execute-tactus branch, excluding the temporary local repair script, then merging the branch into develop through the normal repo flow.",
+      "created_at": "2026-05-01T21:12:22.403875Z"
     }
   ],
   "created_at": "2026-04-29T18:13:59.773387Z",
-  "updated_at": "2026-04-29T18:33:15.096985Z",
+  "updated_at": "2026-05-01T21:12:22.403875Z",
   "closed_at": null,
   "custom": {}
 }

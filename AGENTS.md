@@ -108,6 +108,44 @@ return plexus.docs.list({})
 return plexus.docs.get({ name = "score-yaml-format" })
 ```
 
+### Testing the Current MCP Code From CLI
+
+When the Codex IDE MCP server cannot be restarted, use the CLI harness in
+`MCP/test_harness.py` to start a fresh stdio MCP server from the current
+working tree. The harness defaults may point at old local paths, so override
+them at runtime instead of editing the file:
+
+```bash
+python - <<'PY'
+import json, sys
+from pathlib import Path
+
+root = Path.cwd()
+sys.path.insert(0, str(root / "MCP"))
+import test_harness
+
+test_harness.PYTHON = sys.executable
+test_harness.WRAPPER = str(root / "MCP" / "plexus_fastmcp_wrapper.py")
+test_harness.TARGET_CWD = str(root)
+test_harness.SERVER_ENV = {
+    **test_harness.os.environ,
+    "PYTHONUNBUFFERED": "1",
+    "PYTHONPATH": str(root),
+}
+
+with test_harness.MCPServer(timeout=180, verbose=False) as server:
+    resp = server.call_tool(
+        "execute_tactus",
+        {"tactus": "return plexus.api.list({})"},
+        timeout=180,
+    )
+    print(json.dumps(resp, indent=2))
+PY
+```
+
+This is the preferred way to verify MCP changes against the latest local code
+when the IDE is still holding an older loaded MCP process.
+
 ### Installation and Setup
 
 For detailed installation instructions, see [MCP/README.md](MCP/README.md).

@@ -22,10 +22,31 @@
       "author": "ryan",
       "text": "Implemented local procedure dispatch-state fix in working tree. Producer changes: MCP procedure subprocesses set PLEXUS_LOCAL_DISPATCH=1; ProcedureService can create local tasks with dispatch_mode=local and PENDING dispatch status; shared runner preserves dispatch_mode=local and clears workerNodeId for local lifecycle updates. Dashboard changes: ProcedureTask treats dispatch_mode as display authority, no-task state renders Pending, and nested TaskStatus pre-execution rows are suppressed for ProcedureTask. Added repair utility and repaired live tasks d90b6e36-1d24-4b26-bd39-a3f091ef8814 and 91cd1837-ab38-4534-beac-b47f43821741. Verification: pytest plexus/cli/shared/test_experiment_runner.py -q passed; dashboard ProcedureTask/TaskStatus Jest tests passed; dashboard npm run typecheck passed. MCP tactus procedure subset still has pre-existing failures around handle child budget expectations unrelated to this dispatch-state fix.",
       "created_at": "2026-05-01T20:11:53.213488Z"
+    },
+    {
+      "id": "7ddfa6fe-9238-46fb-aa68-19c0a4798bdf",
+      "author": "ryan",
+      "text": "Implemented dispatch isolation hardening: local procedure tasks now use dispatchStatus LOCAL with dispatch_mode=local and no workerNodeId; CLI dispatcher claim/list paths and both Lambda stream dispatchers skip self-managed local/console modes; repair script now writes LOCAL. Repaired known malformed task records including ba122509-ed0a-44dc-abbe-79c77265e602. Verification: targeted Python dispatcher/tracker/Lambda tests passed, ProcedureTask/TaskStatus Jest tests passed, dashboard typecheck passed, git diff --check passed, fresh MCP harness smoke created procedure 21887f27-f91f-4e55-a75d-2986e7bb7084 with task efa2c835-ba6e-4c79-a7b9-3204609994b1 remaining LOCAL with workerNodeId null after dispatcher window.",
+      "created_at": "2026-05-01T20:54:59.192207Z"
+    },
+    {
+      "id": "75222d0c-6194-45e7-80e8-3379c7719fe6",
+      "author": "ryan",
+      "text": "Follow-up from smoke run: the first harness procedure was not actually running; recorded pid 58516 was dead while task/procedure stayed RUNNING. Root cause was the MCP launcher coupling the local procedure subprocess to the MCP server lifecycle and discarding stdout/stderr. Updated execute_tactus local procedure launcher to start the CLI in its own session, set cwd/PYTHONPATH explicitly, and write logs to tmp/tactus_procedure_runs/<procedure_id>.log. Fresh harness run created procedure 600688e7-a39b-482f-b523-5b567d3a1cf3; pid 64682 stayed alive after harness shutdown, task stayed dispatchStatus LOCAL with workerNodeId null, and logs showed runtime startup. Clean SIGTERM moved it to FAILED while preserving LOCAL/no worker.",
+      "created_at": "2026-05-01T21:02:02.569188Z"
+    },
+    {
+      "id": "0cc92aee-9fef-4f73-a328-10a573e8a4b2",
+      "author": "ryan",
+      "text": "Started Annual Income AI optimizer as the new local test score: procedure 0f080204-c01e-40ec-8893-c9725c396aa3, task e2e5e13f-a106-498b-8fac-efd3c930ad37, pid 77574. Parameters: scorecard Suco - Home Improvement, score Annual Income AI, max_iterations 3, max_samples 200, days 90. Verified task is RUNNING with dispatchStatus LOCAL, workerNodeId null, dispatch_mode local, runtime pid 77574. No chat sessions existed at first check; process was still alive and runtime was initialized.",
+      "created_at": "2026-05-01T21:09:27.115234Z"
     }
   ],
   "created_at": "2026-05-01T20:00:30.638482Z",
-  "updated_at": "2026-05-01T20:11:53.213488Z",
+  "updated_at": "2026-05-01T21:09:27.115234Z",
   "closed_at": null,
-  "custom": {}
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }

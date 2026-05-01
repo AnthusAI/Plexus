@@ -30,9 +30,58 @@ PLEXUS_TACTUS_TRACE_DIR_DEFAULT = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "tmp", "tactus_traces")
 )
 
+PLEXUS_PROJECT_ROOT = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..")
+)
+
+PLEXUS_PROCEDURE_RUN_LOG_DIR_DEFAULT = os.path.join(
+    PLEXUS_PROJECT_ROOT, "tmp", "tactus_procedure_runs"
+)
+
 
 def _resolve_trace_dir() -> str:
     return os.environ.get("PLEXUS_TACTUS_TRACE_DIR", PLEXUS_TACTUS_TRACE_DIR_DEFAULT)
+
+
+def _resolve_procedure_run_log_dir() -> str:
+    return os.environ.get(
+        "PLEXUS_PROCEDURE_RUN_LOG_DIR",
+        PLEXUS_PROCEDURE_RUN_LOG_DIR_DEFAULT,
+    )
+
+
+def _local_procedure_env() -> dict[str, str]:
+    env = {
+        **os.environ,
+        "PYTHONUNBUFFERED": "1",
+        "PLEXUS_LOCAL_DISPATCH": "1",
+    }
+    existing_pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = (
+        PLEXUS_PROJECT_ROOT
+        if not existing_pythonpath
+        else os.pathsep.join([PLEXUS_PROJECT_ROOT, existing_pythonpath])
+    )
+    return env
+
+
+def _launch_local_procedure_subprocess(cmd: list[str], procedure_id: str) -> tuple[Any, str]:
+    import subprocess
+
+    log_dir = _resolve_procedure_run_log_dir()
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, f"{procedure_id}.log")
+    with open(log_path, "ab", buffering=0) as log_file:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=PLEXUS_PROJECT_ROOT,
+            env=_local_procedure_env(),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            close_fds=True,
+        )
+    return proc, log_path
 
 
 class TactusTraceStore:
@@ -2835,11 +2884,14 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
             ttl_hours=ttl_hours,
             fresh=fresh,
             background=True,
-            child_budget=None,
         )
         if not isinstance(output_data, dict):
             raise ValueError(log_output or "Report block remote dispatch failed")
-        return {**output_data, "block_class": block_class}
+        return {
+            **output_data,
+            "block_class": block_class,
+            "child_budget": _jsonable(args.get("budget")),
+        }
     else:
         import subprocess
         import sys
@@ -2913,7 +2965,6 @@ def _default_report_runner_sync(args: dict[str, Any]) -> dict[str, Any]:
         ttl_hours=ttl_hours if ttl_hours is not None else 24,
         fresh=bool(args.get("fresh", False)),
         background=False,
-        child_budget=args.get("budget"),
     )
 
     if output_data is not None:
@@ -2938,7 +2989,6 @@ def _default_procedure_runner(args: dict[str, Any]) -> dict[str, Any]:
     if not procedure_id:
         raise ValueError("plexus.procedure.run requires procedure_id")
 
-    import subprocess
     import sys
 
     cmd = [
@@ -2950,12 +3000,12 @@ def _default_procedure_runner(args: dict[str, Any]) -> dict[str, Any]:
     if args.get("dry_run"):
         cmd.append("--dry-run")
 
-    env = {**__import__("os").environ, "PYTHONUNBUFFERED": "1"}
-    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc, log_path = _launch_local_procedure_subprocess(cmd, str(procedure_id))
     return {
         "status": "running",
         "procedure_id": str(procedure_id),
         "pid": proc.pid,
+        "log_path": log_path,
     }
 
 
@@ -3058,13 +3108,13 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
         yaml_config=yaml_text,
         featured=False,
         name=f"Optimizer: {scorecard_identifier}",
+        dispatch_mode="local",
     )
     if not result.success:
         raise RuntimeError(f"plexus.procedure.optimize: failed to create procedure — {result.message}")
 
     procedure_id = result.procedure.id
 
-    import subprocess
     import sys
 
     cmd = [
@@ -3076,13 +3126,13 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
     if args.get("dry_run"):
         cmd.append("--dry-run")
 
-    env = {**__import__("os").environ, "PYTHONUNBUFFERED": "1"}
-    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc, log_path = _launch_local_procedure_subprocess(cmd, procedure_id)
 
     return {
         "procedure_id": procedure_id,
         "status": "running",
         "pid": proc.pid,
+        "log_path": log_path,
         "message": "Optimizer procedure dispatched — running as independent subprocess.",
         "scorecard": str(scorecard_identifier),
         "score": str(score_identifier),
@@ -3101,8 +3151,6 @@ def _default_procedure_continue(args: dict[str, Any]) -> dict[str, Any]:
         hint (str): Expert guidance injected into planning context.
         target_accuracy (float): Override AC1 early-stop threshold (e.g. 1.0 to run to max).
     """
-    import os
-    import subprocess
     import sys
 
     from plexus.cli.procedure.continuation_service import prepare_continuation
@@ -3129,14 +3177,14 @@ def _default_procedure_continue(args: dict[str, Any]) -> dict[str, Any]:
         str(procedure_id),
         "--max-iterations", str(info["new_max_iterations"]),
     ]
-    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc, log_path = _launch_local_procedure_subprocess(cmd, str(procedure_id))
 
     return {
         "ok": True,
         "procedure_id": str(procedure_id),
         "status": "running",
         "pid": proc.pid,
+        "log_path": log_path,
         "completed_cycles": info["completed_cycles"],
         "additional_cycles": additional_cycles,
         "new_max_iterations": info["new_max_iterations"],
@@ -3161,8 +3209,6 @@ def _default_procedure_branch(args: dict[str, Any]) -> dict[str, Any]:
         name (str): Name for the new branch procedure.
         target_accuracy (float): Override AC1 early-stop threshold.
     """
-    import os
-    import subprocess
     import sys
 
     from plexus.cli.procedure.continuation_service import prepare_branch
@@ -3195,8 +3241,7 @@ def _default_procedure_branch(args: dict[str, Any]) -> dict[str, Any]:
         str(target_id),
         "--max-iterations", str(info["new_max_iterations"]),
     ]
-    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
-    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc, log_path = _launch_local_procedure_subprocess(cmd, str(target_id))
 
     return {
         "ok": True,
@@ -3204,6 +3249,7 @@ def _default_procedure_branch(args: dict[str, Any]) -> dict[str, Any]:
         "procedure_id": str(target_id),
         "status": "running",
         "pid": proc.pid,
+        "log_path": log_path,
         "branched_from_cycle": cycle,
         "additional_cycles": additional_cycles,
         "new_max_iterations": info["new_max_iterations"],
@@ -4764,15 +4810,19 @@ class PlexusRuntimeModule:
             raise RequiresHandleProtocol("evaluation", "run")
 
         self._record_api_call("evaluation", "run")
-        dispatch_result = self._evaluation_runner(parsed)
-        return self._handle_store.create(
-            kind="evaluation",
-            parent_trace_id=self._trace_id,
-            api_call="plexus.evaluation.run",
-            args=parsed,
-            dispatch_result=dispatch_result,
-            child_budget=None,
-        )
+        child_budget = self._budget.carve_child("evaluation", "run", parsed.get("budget"))
+        try:
+            dispatch_result = self._evaluation_runner(parsed)
+            return self._handle_store.create(
+                kind="evaluation",
+                parent_trace_id=self._trace_id,
+                api_call="plexus.evaluation.run",
+                args=parsed,
+                dispatch_result=dispatch_result,
+                child_budget=child_budget,
+            )
+        finally:
+            self._budget.record_after("evaluation", "run")
 
     def _call_dataset(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "dataset" or method not in self._dataset_handlers:
@@ -4879,15 +4929,19 @@ class PlexusRuntimeModule:
             raise RequiresHandleProtocol("report", "run")
 
         self._record_api_call("report", "run")
-        dispatch_result = self._report_runner(parsed)
-        return self._handle_store.create(
-            kind="report",
-            parent_trace_id=self._trace_id,
-            api_call="plexus.report.run",
-            args=parsed,
-            dispatch_result=dispatch_result,
-            child_budget=None,
-        )
+        child_budget = self._budget.carve_child("report", "run", parsed.get("budget"))
+        try:
+            dispatch_result = self._report_runner(parsed)
+            return self._handle_store.create(
+                kind="report",
+                parent_trace_id=self._trace_id,
+                api_call="plexus.report.run",
+                args=parsed,
+                dispatch_result=dispatch_result,
+                child_budget=child_budget,
+            )
+        finally:
+            self._budget.record_after("report", "run")
 
     def _call_procedure_run(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "procedure" or method not in {"run", "optimize", "continue", "branch"}:
@@ -4915,15 +4969,19 @@ class PlexusRuntimeModule:
             raise RequiresHandleProtocol("procedure", "run")
 
         self._record_api_call("procedure", "run")
-        dispatch_result = self._procedure_runner(parsed)
-        return self._handle_store.create(
-            kind="procedure",
-            parent_trace_id=self._trace_id,
-            api_call="plexus.procedure.run",
-            args=parsed,
-            dispatch_result=dispatch_result,
-            child_budget=None,
-        )
+        child_budget = self._budget.carve_child("procedure", "run", parsed.get("budget"))
+        try:
+            dispatch_result = self._procedure_runner(parsed)
+            return self._handle_store.create(
+                kind="procedure",
+                parent_trace_id=self._trace_id,
+                api_call="plexus.procedure.run",
+                args=parsed,
+                dispatch_result=dispatch_result,
+                child_budget=child_budget,
+            )
+        finally:
+            self._budget.record_after("procedure", "run")
 
     def _call_handle(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "handle":
@@ -5615,6 +5673,7 @@ local handle = plexus.report.run{
   configuration_id = "44c97c07-...",
   parameters = { days = 60 },
   async = true,
+  budget = { usd = 1.0, wallclock_seconds = 600, depth = 1, tool_calls = 5 },
 }
 return { handle_id = handle.id, status = handle.status }
 ```

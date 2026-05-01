@@ -1615,30 +1615,68 @@ def test_report_run_async_creates_handle_and_records_budget() -> None:
     assert handles.created[0]["child_budget"] == budget
 
 
-def test_default_report_runner_propagates_child_budget(monkeypatch) -> None:
+def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -> None:
     captured: dict = {}
 
-    def fake_run_block_cached(**kwargs):
-        captured.update(kwargs)
-        return {"status": "dispatched", "task_id": "task-1"}, None, False
+    class FakeProcess:
+        pid = 12345
+        returncode = 0
+        args = None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, _exc_type, _exc, _tb):
+            return False
+
+        def communicate(self, _input=None, timeout=None):
+            return "", ""
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+        def kill(self):
+            self.returncode = -9
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        proc = FakeProcess()
+        proc.args = cmd
+        return proc
 
     monkeypatch.setattr(
         "plexus.cli.report.utils.resolve_account_id_for_command",
         lambda _client, _account: "acct-1",
     )
     monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
-    monkeypatch.setattr("plexus.reports.service.run_block_cached", fake_run_block_cached)
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
 
     result = execute._default_report_runner(
         {
             "block_class": "FeedbackContradictions",
             "cache_key": "report-cache",
-            "budget": _child_budget(),
+            "block_config": {"scorecard": "Card", "score": "Score", "days": 30},
+            "fresh": True,
         }
     )
 
-    assert captured["child_budget"] == _child_budget()
-    assert result["child_budget"] == _child_budget()
+    assert result == {"status": "running", "block_class": "FeedbackContradictions", "pid": 12345}
+    assert captured["cmd"][-7:] == [
+        "contradictions",
+        "--scorecard",
+        "Card",
+        "--score",
+        "Score",
+        "--days",
+        "30",
+        "--fresh",
+    ][-7:]
+    assert captured["kwargs"]["stdout"] is not None
+    assert captured["kwargs"]["stderr"] is not None
 
 
 def test_report_run_blocking_requires_handle_protocol() -> None:
@@ -1694,34 +1732,35 @@ def test_procedure_run_async_creates_handle_and_records_budget() -> None:
     assert handles.created[0]["child_budget"] == budget
 
 
-def test_default_procedure_runner_propagates_child_budget(monkeypatch) -> None:
+def test_default_procedure_runner_launches_detached_local_subprocess(monkeypatch) -> None:
     captured: dict = {}
 
-    class FakeService:
-        def __init__(self, client) -> None:
-            self.client = client
+    class FakeProcess:
+        pid = 12345
 
-        async def run_procedure(self, procedure_id: str, **options):
-            captured["procedure_id"] = procedure_id
-            captured["options"] = options
-            return {"status": "initiated", "procedure_id": procedure_id}
+    def fake_launch(cmd, procedure_id):
+        captured["cmd"] = cmd
+        captured["procedure_id"] = procedure_id
+        return FakeProcess(), "/tmp/proc-1.log"
 
-    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
-    monkeypatch.setattr("plexus.cli.procedure.service.ProcedureService", FakeService)
+    monkeypatch.setattr(execute, "_launch_local_procedure_subprocess", fake_launch)
 
     result = execute._default_procedure_runner(
         {
             "procedure_id": "proc-1",
-            "context": {"existing": "value"},
-            "budget": _child_budget(),
+            "max_iterations": 2,
+            "dry_run": True,
         }
     )
 
-    assert result["status"] == "initiated"
-    assert captured["options"]["context"] == {
-        "existing": "value",
-        "_plexus_child_budget": _child_budget(),
+    assert result == {
+        "status": "running",
+        "procedure_id": "proc-1",
+        "pid": 12345,
+        "log_path": "/tmp/proc-1.log",
     }
+    assert captured["procedure_id"] == "proc-1"
+    assert captured["cmd"][-4:] == ["proc-1", "--max-iterations", "2", "--dry-run"]
 
 
 def test_procedure_run_blocking_requires_handle_protocol() -> None:
