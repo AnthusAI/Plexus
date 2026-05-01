@@ -1235,6 +1235,7 @@ def test_evaluation_run_async_creates_handle_and_records_budget() -> None:
         "score_name": "Tone",
         "async": True,
         "budget": budget,
+        "procedure_id": "trace-1",
     }
     assert gate.tool_calls == 3
     assert gate.spent_usd == pytest.approx(0.01)
@@ -1263,6 +1264,65 @@ def test_evaluation_run_async_requires_explicit_child_budget() -> None:
 
     assert called is False
     assert module.api_calls == ["plexus.evaluation.run"]
+
+
+def test_evaluation_run_async_preserves_explicit_procedure_id() -> None:
+    seen_args: dict = {}
+
+    def fake_runner(args: dict) -> dict:
+        seen_args.update(args)
+        return {
+            "status": "dispatched",
+            "evaluation_id": "eval-1",
+            "dashboard_url": "https://example.test/evaluations/eval-1",
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        evaluation_runner=fake_runner,
+        handle_store=_MemoryHandleStore(),
+    )
+
+    module.evaluation.run(
+        {
+            "scorecard_name": "Compliance",
+            "async": True,
+            "budget": _child_budget(),
+            "procedure_id": "proc-explicit",
+        }
+    )
+
+    assert seen_args["procedure_id"] == "proc-explicit"
+
+
+def test_evaluation_run_async_injects_trace_id_procedure_id_when_missing() -> None:
+    seen_args: dict = {}
+
+    def fake_runner(args: dict) -> dict:
+        seen_args.update(args)
+        return {
+            "status": "dispatched",
+            "evaluation_id": "eval-2",
+            "dashboard_url": "https://example.test/evaluations/eval-2",
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="proc-trace-123",
+        evaluation_runner=fake_runner,
+        handle_store=_MemoryHandleStore(),
+    )
+
+    module.evaluation.run(
+        {
+            "scorecard_name": "Compliance",
+            "async": True,
+            "budget": _child_budget(),
+        }
+    )
+
+    assert seen_args["procedure_id"] == "proc-trace-123"
 
 
 def test_async_child_budget_overrun_blocks_dispatch() -> None:
@@ -1325,6 +1385,7 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
             "score_name": "Tone",
             "max_feedback_items": 25,
             "days": 30,
+            "procedure_id": "proc-123",
             "budget": _child_budget(),
         },
         FakeMCP(),
@@ -1351,6 +1412,8 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
         "newest",
         "--days",
         "30",
+        "--procedure-id",
+        "proc-123",
     ]
     assert captured["kwargs"]["start_new_session"] is True
     assert json.loads(captured["kwargs"]["env"]["PLEXUS_CHILD_BUDGET"]) == _child_budget()

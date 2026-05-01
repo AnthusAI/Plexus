@@ -13,6 +13,7 @@ access for procedure contexts.
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Callable, Union
 from dataclasses import dataclass, field
@@ -756,6 +757,44 @@ class EmbeddedMCPServer:
                     "success": bool(True if success is None else success),
                     "reason": reason,
                     "tool": "done",
+                }
+
+            @tool_capture.tool()
+            async def get_plexus_documentation(filename: str):
+                """Get documentation content for specific Plexus topics by markdown slug."""
+                slug = str(filename or "").strip().lower()
+                if not slug:
+                    return {"error": "filename is required"}
+
+                docs_root = os.path.normpath(
+                    os.path.join(os.path.dirname(__file__), "..", "..", "docs")
+                )
+                candidate_name = f"{slug}.md"
+                matches: List[str] = []
+                for root, _dirs, files in os.walk(docs_root):
+                    if candidate_name in files:
+                        matches.append(os.path.join(root, candidate_name))
+
+                if not matches:
+                    return {
+                        "error": (
+                            f"Documentation file not found: {slug}. "
+                            "Expected a markdown file under plexus/docs."
+                        )
+                    }
+
+                # Use deterministic path ordering if duplicates exist.
+                selected_path = sorted(matches)[0]
+                try:
+                    with open(selected_path, "r", encoding="utf-8") as handle:
+                        content = handle.read()
+                except Exception as exc:
+                    return {"error": f"Failed to read documentation file {selected_path}: {exc}"}
+
+                return {
+                    "filename": slug,
+                    "path": selected_path,
+                    "documentation": content,
                 }
             
             # Register execute_tactus so LLM agents (e.g. console chat) can query
