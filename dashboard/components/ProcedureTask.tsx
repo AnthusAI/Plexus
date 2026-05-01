@@ -4,7 +4,7 @@ import { TaskStatus } from '@/components/ui/task-status'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, Link as LinkIcon, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users, CircleDollarSign, Repeat, ConciergeBell, Hand, Terminal } from 'lucide-react'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, Link as LinkIcon, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users, CircleDollarSign, Repeat, ConciergeBell, Hand, Terminal, Radio } from 'lucide-react'
 import Link from 'next/link'
 
 import { Timestamp } from './ui/timestamp'
@@ -981,14 +981,27 @@ export default function ProcedureTask({
         ? 100
         : 0
 
-  const isLocalRun = (() => {
+  const dispatchMode = (() => {
     try {
       const meta = typeof procedure.task?.metadata === 'string'
         ? JSON.parse(procedure.task.metadata)
         : procedure.task?.metadata
-      return meta?.dispatch_mode === 'local'
-    } catch { return false }
+      return typeof meta?.dispatch_mode === 'string' ? meta.dispatch_mode : undefined
+    } catch { return undefined }
   })()
+  const dispatchIndicator = (() => {
+    if (!procedure.task) {
+      return { Icon: Radio, label: 'Pending...', className: 'animate-pulse' }
+    }
+    if (dispatchMode === 'local') {
+      return { Icon: Terminal, label: 'Local', className: '' }
+    }
+    if (procedure.task.workerNodeId) {
+      return { Icon: Hand, label: 'Claimed...', className: 'animate-wave' }
+    }
+    return { Icon: ConciergeBell, label: 'Announced...', className: 'animate-jiggle' }
+  })()
+  const DispatchIndicatorIcon = dispatchIndicator.Icon
 
   const taskObject = {
     id: procedure.id,
@@ -1156,13 +1169,8 @@ export default function ProcedureTask({
                 </div>
               )}
               <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                {isLocalRun ? (
-                  <><Terminal className="w-4 h-4 flex-shrink-0" /><span>Local</span></>
-                ) : taskObject.workerNodeId ? (
-                  <><Hand className="w-4 h-4 flex-shrink-0 animate-wave" /><span>Claimed...</span></>
-                ) : (
-                  <><ConciergeBell className="w-4 h-4 flex-shrink-0 animate-jiggle" /><span>Announced...</span></>
-                )}
+                <DispatchIndicatorIcon className={cn("w-4 h-4 flex-shrink-0", dispatchIndicator.className)} />
+                <span>{dispatchIndicator.label}</span>
               </div>
             </div>
             <div className="flex flex-col items-end flex-shrink-0">
@@ -1233,6 +1241,7 @@ export default function ProcedureTask({
             commandDisplay="hide"
             statusMessageDisplay="always"
             hideElapsedTime
+            hidePreExecutionStatus
           />
           {feedbackEvaluationSummary && (
             <EvaluationListAccuracyBar
@@ -1247,13 +1256,8 @@ export default function ProcedureTask({
           {/* Status indicator, timestamp, elapsed, notes — consistent with grid */}
           <div className="space-y-1.5 mb-4">
             <div className="flex items-center gap-1 text-sm text-muted-foreground">
-              {isLocalRun ? (
-                <><Terminal className="w-4 h-4 flex-shrink-0" /><span>Local</span></>
-              ) : taskObject.workerNodeId ? (
-                <><Hand className="w-4 h-4 flex-shrink-0 animate-wave" /><span>Claimed...</span></>
-              ) : (
-                <><ConciergeBell className="w-4 h-4 flex-shrink-0 animate-jiggle" /><span>Announced...</span></>
-              )}
+              <DispatchIndicatorIcon className={cn("w-4 h-4 flex-shrink-0", dispatchIndicator.className)} />
+              <span>{dispatchIndicator.label}</span>
             </div>
             <Timestamp time={taskObject.time} variant="relative" />
             {taskObject.startedAt && (
@@ -1288,6 +1292,7 @@ export default function ProcedureTask({
               commandDisplay="hide"
               statusMessageDisplay="always"
               hideElapsedTime
+              hidePreExecutionStatus
             />
           </div>
           {/* Parameters section - collapsed by default */}

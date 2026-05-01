@@ -21,6 +21,9 @@ from plexus.dashboard.api.models.task import Task
 from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id
 
 logger = logging.getLogger(__name__)
+LOCAL_DISPATCH_MODE = "local"
+LOCAL_DISPATCH_ENV = "PLEXUS_LOCAL_DISPATCH"
+LOCAL_DISPATCH_STATUS = "LOCAL"
 
 
 class ProcedureRunTermination(BaseException):
@@ -55,6 +58,12 @@ def _parse_json_dict(value: Any) -> Dict[str, Any]:
 
 def _json_dumps(value: Dict[str, Any]) -> str:
     return json.dumps(_to_json_safe(value), default=str)
+
+
+def _with_local_dispatch_metadata(metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    result = dict(metadata or {})
+    result["dispatch_mode"] = LOCAL_DISPATCH_MODE
+    return result
 
 
 def _build_runtime_identity(command: Optional[str]) -> Dict[str, Any]:
@@ -312,6 +321,7 @@ def create_tracker_and_experiment_task(
     total_items: int = 0,
     run_parameters: Optional[Dict[str, Any]] = None,
     run_options: Optional[Dict[str, Any]] = None,
+    local_dispatch: bool = False,
 ) -> Tuple[Optional[TaskProgressTracker], Optional[DashboardProcedure], Optional['Task']]:
     """Create a TaskProgressTracker for an experiment run.
 
@@ -338,6 +348,8 @@ def create_tracker_and_experiment_task(
         "procedure_id": procedure_id,
         "task_type": "Experiment Run",
     }
+    if local_dispatch:
+        metadata = _with_local_dispatch_metadata(metadata)
     if run_parameters:
         metadata["run_parameters"] = _to_json_safe(run_parameters)
     if run_options:
@@ -404,7 +416,7 @@ def create_tracker_and_experiment_task(
                     accountId=account_id,
                     type="Procedure Run",
                     status="PENDING",
-                    dispatchStatus="PENDING",
+                    dispatchStatus=LOCAL_DISPATCH_STATUS if local_dispatch else "PENDING",
                     target=f"procedure/run/{procedure_id}",
                     command=f"procedure run {procedure_id}",
                     metadata=json.dumps(metadata),
@@ -421,18 +433,27 @@ def create_tracker_and_experiment_task(
                     f"Please recreate the procedure."
                 )
 
-    # Claim task like CLI (set worker and RUNNING)
+    # Start task tracking. Local runs are not dispatcher claims.
     if task:
-        worker_id = f"{socket.gethostname()}-{__import__('os').getpid()}"
+        task_metadata = _merge_task_metadata(task)
+        update_payload = {
+            "accountId": task.accountId,
+            "type": task.type,
+            "status": "RUNNING",
+            "target": task.target,
+            "command": task.command,
+            "startedAt": datetime.now(timezone.utc).isoformat(),
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        }
+        if local_dispatch:
+            update_payload["dispatchStatus"] = LOCAL_DISPATCH_STATUS
+            update_payload["workerNodeId"] = None
+            update_payload["metadata"] = _json_dumps(_with_local_dispatch_metadata(task_metadata))
+        else:
+            worker_id = f"{socket.gethostname()}-{__import__('os').getpid()}"
+            update_payload["workerNodeId"] = worker_id
         task.update(
-            accountId=task.accountId,
-            type=task.type,
-            status='RUNNING',
-            target=task.target,
-            command=task.command,
-            workerNodeId=worker_id,
-            startedAt=datetime.now(timezone.utc).isoformat(),
-            updatedAt=datetime.now(timezone.utc).isoformat(),
+            **update_payload,
         )
 
     # Try to get the existing Procedure record and associate via metadata
@@ -450,21 +471,27 @@ def create_tracker_and_experiment_task(
                     task_metadata = {}
             task_metadata["procedure_id"] = procedure_id
             task_metadata["procedure_type"] = "run"
+            if local_dispatch:
+                task_metadata = _with_local_dispatch_metadata(task_metadata)
             if run_parameters:
                 task_metadata["run_parameters"] = _to_json_safe(run_parameters)
             if run_options:
                 task_metadata["run_options"] = _to_json_safe(run_options)
             
             # Update the task with the metadata
-            task.update(
-                accountId=task.accountId,
-                type=task.type,
-                status=task.status,
-                target=task.target,
-                command=task.command,
-                metadata=json.dumps(task_metadata),
-                updatedAt=datetime.now(timezone.utc).isoformat(),
-            )
+            update_payload = {
+                "accountId": task.accountId,
+                "type": task.type,
+                "status": task.status,
+                "target": task.target,
+                "command": task.command,
+                "metadata": json.dumps(task_metadata),
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+            }
+            if local_dispatch:
+                update_payload["dispatchStatus"] = LOCAL_DISPATCH_STATUS
+                update_payload["workerNodeId"] = None
+            task.update(**update_payload)
             logging.info(f"Associated Task {task.id} with Procedure {procedure_id} via metadata")
     except Exception as e:
         logging.warning(f"Could not get Procedure record {procedure_id}: {str(e)}")
@@ -510,6 +537,9 @@ async def run_procedure_with_task_tracking(
         from plexus.cli.report.utils import resolve_account_id_for_command
         account_id = resolve_account_id_for_command(client, None)
 
+    dispatch_task_id = (os.getenv("PLEXUS_DISPATCH_TASK_ID") or "").strip()
+    local_dispatch = os.getenv(LOCAL_DISPATCH_ENV) == "1" or not dispatch_task_id
+
     # Capture resolved run parameters and run options in task metadata so the
     # dashboard can show exactly what was used for this run.
     run_options_for_metadata: Dict[str, Any] = {}
@@ -549,6 +579,7 @@ async def run_procedure_with_task_tracking(
         total_items=total_items,
         run_parameters=run_parameters_for_metadata,
         run_options=run_options_for_metadata,
+        local_dispatch=local_dispatch,
     )
 
     result = {
@@ -591,18 +622,24 @@ async def run_procedure_with_task_tracking(
         now_iso = datetime.now(timezone.utc).isoformat()
         if task_ref:
             task_metadata = _merge_task_metadata(task_ref, {"runtime": runtime_identity})
-            task_ref.update(
-                accountId=task_ref.accountId,
-                type=task_ref.type,
-                status="RUNNING",
-                target=task_ref.target,
-                command=task_ref.command,
-                metadata=_json_dumps(task_metadata),
-                startedAt=now_iso,
-                updatedAt=now_iso,
-                errorMessage=None,
-                errorDetails=None,
-            )
+            if local_dispatch:
+                task_metadata = _with_local_dispatch_metadata(task_metadata)
+            update_payload = {
+                "accountId": task_ref.accountId,
+                "type": task_ref.type,
+                "status": "RUNNING",
+                "target": task_ref.target,
+                "command": task_ref.command,
+                "metadata": _json_dumps(task_metadata),
+                "startedAt": now_iso,
+                "updatedAt": now_iso,
+                "errorMessage": None,
+                "errorDetails": None,
+            }
+            if local_dispatch:
+                update_payload["dispatchStatus"] = LOCAL_DISPATCH_STATUS
+                update_payload["workerNodeId"] = None
+            task_ref.update(**update_payload)
 
         if not is_builtin_procedure_id(procedure_id):
             _update_procedure_status_and_metadata(
@@ -650,18 +687,24 @@ async def run_procedure_with_task_tracking(
 
             try:
                 task_metadata = _merge_task_metadata(task_ref, {"runtime": runtime_identity})
-                task_ref.update(
-                    accountId=task_ref.accountId,
-                    type=task_ref.type,
-                    status="FAILED",
-                    target=task_ref.target,
-                    command=task_ref.command,
-                    metadata=_json_dumps(task_metadata),
-                    updatedAt=terminated_at,
-                    completedAt=terminated_at,
-                    errorMessage=str(message)[:2000],
-                    errorDetails=_json_dumps(failure_payload),
-                )
+                if local_dispatch:
+                    task_metadata = _with_local_dispatch_metadata(task_metadata)
+                update_payload = {
+                    "accountId": task_ref.accountId,
+                    "type": task_ref.type,
+                    "status": "FAILED",
+                    "target": task_ref.target,
+                    "command": task_ref.command,
+                    "metadata": _json_dumps(task_metadata),
+                    "updatedAt": terminated_at,
+                    "completedAt": terminated_at,
+                    "errorMessage": str(message)[:2000],
+                    "errorDetails": _json_dumps(failure_payload),
+                }
+                if local_dispatch:
+                    update_payload["dispatchStatus"] = LOCAL_DISPATCH_STATUS
+                    update_payload["workerNodeId"] = None
+                task_ref.update(**update_payload)
             except Exception as task_exc:
                 logger.warning("Could not persist FAILED task state for %s: %s", task_ref.id, task_exc, exc_info=True)
 
@@ -781,6 +824,12 @@ async def run_procedure_with_task_tracking(
                 "output": compact_output,
                 "attachedFiles": attached_files,
             }
+            if local_dispatch:
+                update_data["dispatchStatus"] = LOCAL_DISPATCH_STATUS
+                update_data["workerNodeId"] = None
+                update_data["metadata"] = _json_dumps(
+                    _with_local_dispatch_metadata(_merge_task_metadata(task_ref))
+                )
             if mapped_task_status in {"COMPLETED", "FAILED"}:
                 update_data["completedAt"] = datetime.now(timezone.utc).isoformat()
             task_ref.update(**update_data)
