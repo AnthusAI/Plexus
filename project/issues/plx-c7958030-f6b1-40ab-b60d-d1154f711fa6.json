@@ -1,0 +1,31 @@
+{
+  "id": "plx-c7958030-f6b1-40ab-b60d-d1154f711fa6",
+  "title": "Resolve PR #261 merge conflicts",
+  "description": "Merge PR #261 into develop by resolving conflicts from the score-version activity-tab work while preserving procedure dispatch indicator behavior.\n\nDefinition of Done:\n- Conflict markers are removed.\n- Focused dashboard and Python checks pass or failures are documented.\n- PR branch is pushed.\n- PR #261 is merged into develop.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-dbca12b0-ce51-42ee-969d-e0e2808ad8c9",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "86f210de-d9aa-49d8-b500-8c092cc2c5cd",
+      "author": "ryan",
+      "text": "Started conflict resolution on PR #261. Resolved textual conflicts by preserving local dispatch UI behavior, preserving develop score-version query work, and making procedure realtime metadata merges happen through one helper.",
+      "created_at": "2026-05-01T22:20:56.292621Z"
+    },
+    {
+      "id": "d4277056-3e69-4fc3-a1c4-040914cd7728",
+      "author": "ryan",
+      "text": "Focused checks passed: dashboard Jest run for ProcedureTask/TaskStatus/procedure dashboard/score tabs, dashboard typecheck, and Python dispatch/procedure optimizer-result tests. Updated one stale failure assertion so direct local failed runs expect dispatchStatus LOCAL.",
+      "created_at": "2026-05-01T22:21:52.689485Z"
+    }
+  ],
+  "created_at": "2026-05-01T22:20:53.600484Z",
+  "updated_at": "2026-05-01T22:21:52.689485Z",
+  "closed_at": null,
+  "custom": {}
+}
