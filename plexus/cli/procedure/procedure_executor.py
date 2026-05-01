@@ -1319,23 +1319,29 @@ async def _execute_tactus(
                 from pydantic_ai.toolsets import FunctionToolset
                 from tactus.adapters.mcp import PydanticAIMCPAdapter
 
-                mcp_adapter = PydanticAIMCPAdapter(
-                    mcp_client_for_bridge,
-                    runtime=runtime,
-                )
-                mcp_tools = await mcp_adapter.load_tools()
-                if mcp_tools and "plexus" not in runtime.toolset_registry:
-                    runtime.toolset_registry["plexus"] = FunctionToolset(tools=mcp_tools)
-                    logger.info(
-                        "Registered bridged MCP toolset 'plexus' with %d tool(s)",
-                        len(mcp_tools),
+                if procedure_id == CONSOLE_CHAT_BUILTIN_ID:
+                    console_tool = await _create_console_plexus_dispatch_tool(mcp_client_for_bridge)
+                    if console_tool and "plexus" not in runtime.toolset_registry:
+                        runtime.toolset_registry["plexus"] = FunctionToolset(tools=[console_tool])
+                        logger.info("Registered console Plexus dispatcher toolset")
+                else:
+                    mcp_adapter = PydanticAIMCPAdapter(
+                        mcp_client_for_bridge,
+                        runtime=runtime,
                     )
-                    # Also register each tool individually so agent configs can reference
-                    # specific tool names directly (e.g., tools: [execute_tactus]).
-                    for tool in mcp_tools:
-                        tool_name = getattr(tool, "name", None)
-                        if tool_name and tool_name not in runtime.toolset_registry:
-                            runtime.toolset_registry[tool_name] = FunctionToolset(tools=[tool])
+                    mcp_tools = await mcp_adapter.load_tools()
+                    if mcp_tools and "plexus" not in runtime.toolset_registry:
+                        runtime.toolset_registry["plexus"] = FunctionToolset(tools=mcp_tools)
+                        logger.info(
+                            "Registered bridged MCP toolset 'plexus' with %d tool(s)",
+                            len(mcp_tools),
+                        )
+                        # Also register each tool individually so agent configs can reference
+                        # specific tool names directly (e.g., tools: [execute_tactus]).
+                        for tool in mcp_tools:
+                            tool_name = getattr(tool, "name", None)
+                            if tool_name and tool_name not in runtime.toolset_registry:
+                                runtime.toolset_registry[tool_name] = FunctionToolset(tools=[tool])
             except Exception as exc:
                 logger.warning("Could not bridge MCP tools into Tactus toolset registry: %s", exc)
 
@@ -1344,7 +1350,8 @@ async def _execute_tactus(
         # plexus.score.pull({...}), plexus.rubric_memory.recent_entries({...}), etc.
         # without routing through any MCP bridge.
         try:
-            import os as _os, sys as _sys
+            import os as _os
+            import sys as _sys
 
             _mcp_dir = _os.path.normpath(
                 _os.path.join(_os.path.dirname(__file__), "..", "..", "..", "MCP")
@@ -1356,7 +1363,6 @@ async def _execute_tactus(
                 PlexusRuntimeModule,
                 _default_handle_store,
                 _default_evaluation_runner,
-                _default_report_runner,
                 _default_report_runner_sync,
                 _default_procedure_runner,
                 BudgetGate,
@@ -1567,4 +1573,3 @@ async def _execute_tactus(
             'procedure_id': procedure_id,
             'error': f"Tactus execution error: {e}"
         }
-
