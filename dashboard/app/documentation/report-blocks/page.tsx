@@ -1,232 +1,115 @@
-import { Button as DocButton } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import Link from "next/link"
+import Link from "next/link";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
+import { reportDocCategories, reportDocs } from "./report-docs-data";
 
 export default function ReportBlocksPage() {
   return (
-    <div className="max-w-4xl mx-auto py-8 px-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-4">Report Blocks</h1>
-        <p className="text-lg text-muted-foreground leading-relaxed">
-          Report blocks are modular components that generate specific types of analysis and visualizations 
-          within reports. Each block focuses on a particular analytical task and can be combined to create 
-          comprehensive reports.
+    <div className="mx-auto max-w-5xl space-y-10 px-6 py-8">
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold">Report Blocks</h1>
+        <p className="max-w-3xl text-lg leading-relaxed text-muted-foreground">
+          Report blocks are reusable analysis components that generate metrics, charts,
+          review queues, and supporting context for Plexus reports. These pages show how
+          to run each report, configure it, and interpret the rendered dashboard block.
         </p>
       </div>
 
-      <div className="mb-8">
-        <h2 className="text-2xl font-semibold mb-4">What are Report Blocks?</h2>
-        <div className="space-y-4 text-muted-foreground">
-          <p>
-            Report blocks are the building blocks of the Plexus reporting system. Each block:
+      <Card>
+        <CardHeader>
+          <CardTitle>Run Reports From The CLI</CardTitle>
+          <CardDescription>
+            Use direct feedback report commands for quick analysis, or create a saved report
+            configuration when you want a reusable report template.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <pre className="overflow-x-auto rounded-lg bg-muted p-4 text-xs">
+            <code>{`# Direct one-off report
+plexus feedback report alignment --scorecard "Customer Service QA" --score "Medication Review: Dosage" --days 30
+
+# Reusable report configuration
+plexus report config create --name "Dosage Feedback Overview" --file dosage-report.md
+plexus report run --config "Dosage Feedback Overview"`}</code>
+          </pre>
+          <p className="text-sm text-muted-foreground">
+            `FeedbackAnalysis` is still accepted as an alias for `FeedbackAlignment`; new
+            documentation uses `FeedbackAlignment`.
           </p>
-          <ul className="list-disc list-inside space-y-2 ml-4">
-            <li>Performs a specific type of analysis on your data</li>
-            <li>Generates structured output with visualizations and insights</li>
-            <li>Can be configured with parameters to customize the analysis</li>
-            <li>Produces both raw data and formatted presentations</li>
-            <li>Supports file attachments for detailed exports</li>
-          </ul>
-          <p>
-            Report blocks are implemented as Python classes that inherit from{" "}
-            <code className="text-sm bg-muted px-1 py-0.5 rounded">BaseReportBlock</code>{" "}
-            and have corresponding React components for visualization in the dashboard.
-          </p>
-        </div>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-8">
+        {reportDocCategories.map((category) => {
+          const docs = reportDocs.filter((doc) => doc.category === category);
+          if (docs.length === 0) return null;
+          return (
+            <section key={category} className="space-y-4">
+              <h2 className="text-2xl font-semibold">{category}</h2>
+              <div className="grid gap-4 md:grid-cols-2">
+                {docs.map((doc) => (
+                  <Card key={doc.slug} className="transition-shadow hover:shadow-md">
+                    <CardHeader>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <CardTitle className="text-xl">
+                            <Link href={`/documentation/report-blocks/${doc.slug}`} className="hover:text-primary">
+                              {doc.title}
+                            </Link>
+                          </CardTitle>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Badge variant="secondary">{doc.badge}</Badge>
+                            {doc.relatedCheck ? <Badge variant="outline">Related check</Badge> : <Badge variant="outline">Report block</Badge>}
+                          </div>
+                        </div>
+                      </div>
+                      <CardDescription className="text-base leading-relaxed">
+                        {doc.summary}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <h3 className="mb-2 text-sm font-medium">Answers</h3>
+                        <ul className="space-y-1 text-sm text-muted-foreground">
+                          {doc.answers.slice(0, 3).map((answer) => (
+                            <li key={answer} className="flex gap-2">
+                              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                              <span>{answer}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <Link href={`/documentation/report-blocks/${doc.slug}`}>
+                        <Button>View Documentation</Button>
+                      </Link>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          );
+        })}
       </div>
 
-      <div className="mb-8">
-        <h2 className="text-2xl font-semibold mb-6">Available Report Blocks</h2>
-        <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-          
-          <Card className="hover:shadow-md transition-shadow border-border dark:border-transparent">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-xl">
-                    <Link 
-                      href="/documentation/report-blocks/feedback-alignment"
-                      className="hover:text-primary transition-colors"
-                    >
-                      FeedbackAlignment
-                    </Link>
-                  </CardTitle>
-                  <Badge className="mt-1">Analytics</Badge>
-                </div>
-              </div>
-              <CardDescription className="text-base leading-relaxed">
-                Analyzes feedback data and calculates inter-rater reliability using Gwet's AC1 agreement coefficient
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <h4 className="font-medium text-sm text-foreground">Key Features:</h4>
-                <ul className="grid grid-cols-1 gap-1 text-sm text-muted-foreground">
-                  <li className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    AC1 Agreement Coefficient
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    Accuracy Metrics
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    Confusion Matrix
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    Score-by-score Breakdown
-                  </li>
-                </ul>
-                <div className="pt-2">
-                  <Link href="/documentation/report-blocks/feedback-alignment">
-                    <DocButton>View Documentation →</DocButton>
-                  </Link>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md transition-shadow border-border dark:border-transparent">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-xl">
-                    <Link
-                      href="/documentation/report-blocks/feedback-alignment-timeline"
-                      className="hover:text-primary transition-colors"
-                    >
-                      FeedbackAlignmentTimeline
-                    </Link>
-                  </CardTitle>
-                  <Badge className="mt-1">Trend</Badge>
-                </div>
-              </div>
-              <CardDescription className="text-base leading-relaxed">
-                Visualizes change in feedback alignment over complete trailing or calendar-aligned time buckets
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <h4 className="font-medium text-sm text-foreground">Key Features:</h4>
-                <ul className="grid grid-cols-1 gap-1 text-sm text-muted-foreground">
-                  <li className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    AC1 + Accuracy trend lines
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    Complete-period buckets only
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    Trailing and calendar bucket policies
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    Overall and per-score series
-                  </li>
-                </ul>
-                <div className="pt-2">
-                  <Link href="/documentation/report-blocks/feedback-alignment-timeline">
-                    <DocButton>View Documentation →</DocButton>
-                  </Link>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md transition-shadow border-border dark:border-transparent">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-xl">
-                    <Link 
-                      href="/documentation/report-blocks/topic-analysis"
-                      className="hover:text-primary transition-colors"
-                    >
-                      TopicAnalysis
-                    </Link>
-                  </CardTitle>
-                  <Badge className="mt-1">NLP</Badge>
-                </div>
-              </div>
-              <CardDescription className="text-base leading-relaxed">
-                Performs NLP analysis to identify and categorize topics in text data using BERTopic
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <h4 className="font-medium text-sm text-foreground">Key Features:</h4>
-                <ul className="grid grid-cols-1 gap-1 text-sm text-muted-foreground">
-                  <li className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    BERTopic Clustering
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    Topic Visualization
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    Keyword Extraction
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />
-                    Representative Examples
-                  </li>
-                </ul>
-                <div className="pt-2">
-                  <Link href="/documentation/report-blocks/topic-analysis">
-                    <DocButton>View Documentation →</DocButton>
-                  </Link>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-        </div>
-      </div>
-
-      <div className="mb-8">
-        <h2 className="text-2xl font-semibold mb-4">Using Report Blocks</h2>
-        <div className="space-y-4 text-muted-foreground">
-          <p>
-            Report blocks are configured in report configuration files using Markdown with embedded code blocks:
-          </p>
-                      <div className="bg-muted p-4 rounded-lg font-mono text-sm">
-              <div className="text-foreground"># My Report</div>
-              <div className="text-muted-foreground">This report analyzes feedback data.</div>
-              <br />
-              <div className="text-foreground">```block</div>
-              <div className="text-foreground">class: FeedbackAlignment</div>
-              <div className="text-foreground">scorecard: example_scorecard</div>
-              <div className="text-foreground">days: 30</div>
-              <div className="text-foreground">```</div>
-            </div>
-          <p>
-            Each block type has its own configuration parameters and generates specific types of output. 
-            See the individual block documentation pages for detailed configuration options and examples.
-          </p>
-        </div>
-      </div>
-
-      <div className="bg-muted/50 rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-2">Related Documentation</h3>
-        <div className="space-y-2">
-          <Link href="/documentation/concepts/reports" className="block text-primary hover:text-primary/80">
-            Reports Concept Overview →
+      <Card className="bg-muted/50">
+        <CardHeader>
+          <CardTitle>Related Documentation</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Link href="/documentation/concepts/reports" className="block text-primary hover:underline">
+            Reports concept overview
           </Link>
-          <Link href="/documentation/methods/monitor-tasks" className="block text-primary hover:text-primary/80">
-            Monitoring Report Generation →
+          <Link href="/documentation/advanced/cli" className="block text-primary hover:underline">
+            CLI command reference
           </Link>
-          <Link href="/documentation/advanced/cli" className="block text-primary hover:text-primary/80">
-            CLI Report Commands →
+          <Link href="/documentation/concepts/rubric-memory" className="block text-primary hover:underline">
+            Rubric memory
           </Link>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
