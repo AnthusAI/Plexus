@@ -21,6 +21,7 @@ from plexus.dashboard.api.models.task import Task
 from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id
 
 logger = logging.getLogger(__name__)
+LOCAL_DISPATCH_MODE = "local"
 
 
 class ProcedureRunTermination(BaseException):
@@ -51,6 +52,12 @@ def _parse_json_dict(value: Any) -> Dict[str, Any]:
         except Exception:
             return {}
     return {}
+
+
+def _with_local_dispatch_metadata(metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    result = dict(metadata or {})
+    result["dispatch_mode"] = LOCAL_DISPATCH_MODE
+    return result
 
 
 def _json_dumps(value: Dict[str, Any]) -> str:
@@ -142,9 +149,10 @@ def _update_procedure_status_and_metadata(
 
 
 def _merge_task_metadata(task: Task, patch: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    metadata = _parse_json_dict(task.metadata)
+    metadata = _with_local_dispatch_metadata(_parse_json_dict(task.metadata))
     if patch:
         metadata.update(_to_json_safe(patch))
+        metadata = _with_local_dispatch_metadata(metadata)
     return metadata
 
 
@@ -337,7 +345,7 @@ def create_tracker_and_experiment_task(
         "type": "Experiment Run",
         "procedure_id": procedure_id,
         "task_type": "Experiment Run",
-        "dispatch_mode": "local",
+        "dispatch_mode": LOCAL_DISPATCH_MODE,
     }
     if run_parameters:
         metadata["run_parameters"] = _to_json_safe(run_parameters)
@@ -433,13 +441,14 @@ def create_tracker_and_experiment_task(
                 task_metadata_for_claim = {}
         if not isinstance(task_metadata_for_claim, dict):
             task_metadata_for_claim = {}
-        task_metadata_for_claim["dispatch_mode"] = "local"
+        task_metadata_for_claim = _with_local_dispatch_metadata(task_metadata_for_claim)
         task.update(
             accountId=task.accountId,
             type=task.type,
             status='RUNNING',
             target=task.target,
             command=task.command,
+            dispatchStatus="PENDING",
             workerNodeId=worker_id,
             metadata=json.dumps(task_metadata_for_claim),
             startedAt=datetime.now(timezone.utc).isoformat(),
@@ -461,7 +470,7 @@ def create_tracker_and_experiment_task(
                     task_metadata = {}
             task_metadata["procedure_id"] = procedure_id
             task_metadata["procedure_type"] = "run"
-            task_metadata["dispatch_mode"] = "local"
+            task_metadata = _with_local_dispatch_metadata(task_metadata)
             if run_parameters:
                 task_metadata["run_parameters"] = _to_json_safe(run_parameters)
             if run_options:
@@ -474,6 +483,7 @@ def create_tracker_and_experiment_task(
                 status=task.status,
                 target=task.target,
                 command=task.command,
+                dispatchStatus="PENDING",
                 metadata=json.dumps(task_metadata),
                 updatedAt=datetime.now(timezone.utc).isoformat(),
             )
@@ -609,6 +619,7 @@ async def run_experiment_with_task_tracking(
                 status="RUNNING",
                 target=task_ref.target,
                 command=task_ref.command,
+                dispatchStatus="PENDING",
                 metadata=_json_dumps(task_metadata),
                 startedAt=now_iso,
                 updatedAt=now_iso,
@@ -668,6 +679,7 @@ async def run_experiment_with_task_tracking(
                     status="FAILED",
                     target=task_ref.target,
                     command=task_ref.command,
+                    dispatchStatus="PENDING",
                     metadata=_json_dumps(task_metadata),
                     updatedAt=terminated_at,
                     completedAt=terminated_at,
