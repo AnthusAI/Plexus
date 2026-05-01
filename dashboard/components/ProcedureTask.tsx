@@ -4,7 +4,7 @@ import { TaskStatus } from '@/components/ui/task-status'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, Link as LinkIcon, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users, CircleDollarSign, Repeat } from 'lucide-react'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, Link as LinkIcon, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users, CircleDollarSign, Repeat, Radio, Hand, ConciergeBell } from 'lucide-react'
 import Link from 'next/link'
 
 import { Timestamp } from './ui/timestamp'
@@ -126,6 +126,8 @@ export interface ProcedureTaskData extends BaseTaskData {
     command: string
     description?: string
     dispatchStatus?: string
+    celeryTaskId?: string
+    workerNodeId?: string
     metadata?: any
     createdAt?: string
     startedAt?: string
@@ -700,6 +702,7 @@ export default function ProcedureTask({
     const metadata: Record<string, any> = {
       type: 'Procedure',
       procedure_id: procedureId,
+      dispatch_mode: 'local',
     }
     if (runParameters && Object.keys(runParameters).length > 0) {
       metadata.run_parameters = runParameters
@@ -961,6 +964,40 @@ export default function ProcedureTask({
   })()
 
   const feedbackEvaluationSummary = procedure.feedbackEvaluationSummary ?? null
+  const taskMetadata = useMemo(() => {
+    const rawMetadata = procedure.task?.metadata
+    if (!rawMetadata) return {}
+    if (typeof rawMetadata === 'string') {
+      try {
+        const parsed = JSON.parse(rawMetadata)
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+      } catch {
+        return {}
+      }
+    }
+    return rawMetadata && typeof rawMetadata === 'object' && !Array.isArray(rawMetadata) ? rawMetadata : {}
+  }, [procedure.task?.metadata])
+  const dispatchMode = typeof taskMetadata.dispatch_mode === 'string' ? taskMetadata.dispatch_mode : undefined
+  const dispatchIndicator = useMemo(() => {
+    if (!procedure.task) return null
+    if (dispatchMode === 'local') {
+      return { label: 'Local', icon: Radio, className: '' }
+    }
+    if (procedure.task.workerNodeId && procedure.task.workerNodeId.trim() !== '') {
+      return { label: 'Claimed...', icon: Hand, className: 'animate-wave' }
+    }
+    return { label: 'Announced...', icon: ConciergeBell, className: 'animate-jiggle' }
+  }, [dispatchMode, procedure.task])
+  const DispatchIndicator = () => {
+    if (!dispatchIndicator) return null
+    const Icon = dispatchIndicator.icon
+    return (
+      <div className="flex items-center gap-1 text-xs text-muted-foreground leading-none mt-1">
+        <Icon className={cn("h-3.5 w-3.5", dispatchIndicator.className)} />
+        <span>{dispatchIndicator.label}</span>
+      </div>
+    )
+  }
   const feedbackProgress =
     feedbackEvaluationSummary?.processedItems != null &&
     feedbackEvaluationSummary?.totalItems != null &&
@@ -989,7 +1026,11 @@ export default function ProcedureTask({
     estimatedCompletionAt: procedure.task?.estimatedCompletionAt, // Get from task
     completedAt: procedure.task?.completedAt, // Get from task
     status: effectiveTaskStatus,
-    errorMessage: procedure.task?.errorMessage || procedure.errorMessage
+    errorMessage: procedure.task?.errorMessage || procedure.errorMessage,
+    dispatchStatus: procedure.task?.dispatchStatus,
+    dispatchMode,
+    celeryTaskId: procedure.task?.celeryTaskId,
+    workerNodeId: procedure.task?.workerNodeId
   }
 
   const headerContent = (
@@ -1085,6 +1126,7 @@ export default function ProcedureTask({
                   )}
                 </div>
               )}
+              <DispatchIndicator />
             </div>
             <div className="flex flex-col items-end flex-shrink-0 gap-2">
               <div className="flex gap-2">
@@ -1139,6 +1181,7 @@ export default function ProcedureTask({
                   <span className="truncate">{props.task.score}</span>
                 </div>
               )}
+              <DispatchIndicator />
               <Timestamp time={props.task.time} variant="relative" />
               <ProgressBarTiming
                 startedAt={props.task.startedAt}
@@ -1186,6 +1229,10 @@ export default function ProcedureTask({
             command={taskObject.command}
             statusMessage={taskStatusMessage}
             errorMessage={taskObject.errorMessage}
+            dispatchStatus={taskObject.dispatchStatus}
+            dispatchMode={taskObject.dispatchMode}
+            celeryTaskId={taskObject.celeryTaskId}
+            workerNodeId={taskObject.workerNodeId}
             completedAt={taskObject.completedAt}
             truncateMessages
             isSelected={isSelected}

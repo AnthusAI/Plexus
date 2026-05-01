@@ -1764,7 +1764,8 @@ Based on this data, you should prioritize examining error types with the highest
             metadata = {
                 "type": "Procedure",
                 "procedure_id": procedure_id,
-                "task_type": "Procedure"
+                "task_type": "Procedure",
+                "dispatch_mode": "local",
             }
 
             # Create the Task
