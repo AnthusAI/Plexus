@@ -127,8 +127,8 @@ export interface ProcedureTaskData extends BaseTaskData {
     command: string
     description?: string
     dispatchStatus?: string
-    workerNodeId?: string
     celeryTaskId?: string
+    workerNodeId?: string
     metadata?: any
     createdAt?: string
     startedAt?: string
@@ -711,6 +711,7 @@ export default function ProcedureTask({
     const metadata: Record<string, any> = {
       type: 'Procedure',
       procedure_id: procedureId,
+      dispatch_mode: 'local',
     }
     if (runParameters && Object.keys(runParameters).length > 0) {
       metadata.run_parameters = runParameters
@@ -972,6 +973,58 @@ export default function ProcedureTask({
   })()
 
   const feedbackEvaluationSummary = procedure.feedbackEvaluationSummary ?? null
+  const taskMetadata = useMemo(() => {
+    const rawMetadata = procedure.task?.metadata
+    if (!rawMetadata) return {}
+    if (typeof rawMetadata === 'string') {
+      try {
+        const parsed = JSON.parse(rawMetadata)
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+      } catch {
+        return {}
+      }
+    }
+    return rawMetadata && typeof rawMetadata === 'object' && !Array.isArray(rawMetadata) ? rawMetadata : {}
+  }, [procedure.task?.metadata])
+  const hasLocalProcedureRuntime = useMemo(() => {
+    const runtime = (taskMetadata as Record<string, any>).runtime
+    const hasRuntimeIdentity = runtime && typeof runtime === 'object' && (
+      typeof runtime.host === 'string' ||
+      typeof runtime.pid === 'number' ||
+      typeof runtime.started_at === 'string'
+    )
+    const taskType = (procedure.task?.type || '').toLowerCase()
+    const target = procedure.task?.target || ''
+    const command = procedure.task?.command || ''
+    return Boolean(
+      hasRuntimeIdentity &&
+      taskType.includes('procedure') &&
+      (target === `procedure/${procedure.id}` || target === `procedure/run/${procedure.id}` || command === `procedure ${procedure.id}` || command === `procedure run ${procedure.id}`)
+    )
+  }, [procedure.id, procedure.task?.command, procedure.task?.target, procedure.task?.type, taskMetadata])
+  const dispatchMode = typeof taskMetadata.dispatch_mode === 'string' ? taskMetadata.dispatch_mode : undefined
+  const dispatchDisplayMode = procedure.task ? (dispatchMode || (hasLocalProcedureRuntime ? 'local' : undefined)) : 'pending'
+  const dispatchIndicator = useMemo(() => {
+    if (dispatchDisplayMode === 'pending') {
+      return { label: 'Pending...', icon: Radio, className: 'animate-pulse' }
+    }
+    if (dispatchDisplayMode === 'local') {
+      return { label: 'Local', icon: Terminal, className: '' }
+    }
+    if (procedure.task?.workerNodeId && procedure.task.workerNodeId.trim() !== '') {
+      return { label: 'Claimed...', icon: Hand, className: 'animate-wave' }
+    }
+    return { label: 'Announced...', icon: ConciergeBell, className: 'animate-jiggle' }
+  }, [dispatchDisplayMode, procedure.task])
+  const DispatchIndicator = () => {
+    const Icon = dispatchIndicator.icon
+    return (
+      <div className="flex min-h-4 items-center gap-1 text-xs text-muted-foreground leading-none mt-1">
+        <Icon className={cn("h-3.5 w-3.5", dispatchIndicator.className)} />
+        <span>{dispatchIndicator.label}</span>
+      </div>
+    )
+  }
   const feedbackProgress =
     feedbackEvaluationSummary?.processedItems != null &&
     feedbackEvaluationSummary?.totalItems != null &&
@@ -981,31 +1034,9 @@ export default function ProcedureTask({
         ? 100
         : 0
 
-  const dispatchMode = (() => {
-    try {
-      const meta = typeof procedure.task?.metadata === 'string'
-        ? JSON.parse(procedure.task.metadata)
-        : procedure.task?.metadata
-      return typeof meta?.dispatch_mode === 'string' ? meta.dispatch_mode : undefined
-    } catch { return undefined }
-  })()
-  const dispatchIndicator = (() => {
-    if (!procedure.task) {
-      return { Icon: Radio, label: 'Pending...', className: 'animate-pulse' }
-    }
-    if (dispatchMode === 'local') {
-      return { Icon: Terminal, label: 'Local', className: '' }
-    }
-    if (procedure.task.workerNodeId) {
-      return { Icon: Hand, label: 'Claimed...', className: 'animate-wave' }
-    }
-    return { Icon: ConciergeBell, label: 'Announced...', className: 'animate-jiggle' }
-  })()
-  const DispatchIndicatorIcon = dispatchIndicator.Icon
-
   const taskObject = {
     id: procedure.id,
-    type: procedure.procedureType || stateProcedureType || 'Procedure',
+    type: 'Optimization Procedure',
     name: procedure.title,
     description: procedure.description,
     scorecard: procedure.scorecard?.name || stateScorecardName || '',
@@ -1023,8 +1054,10 @@ export default function ProcedureTask({
     completedAt: procedure.task?.completedAt,
     status: effectiveTaskStatus,
     errorMessage: procedure.task?.errorMessage || procedure.errorMessage,
-    workerNodeId: procedure.task?.workerNodeId,
+    dispatchStatus: procedure.task?.dispatchStatus,
+    dispatchMode: dispatchDisplayMode,
     celeryTaskId: procedure.task?.celeryTaskId,
+    workerNodeId: procedure.task?.workerNodeId
   }
 
   const headerContent = (
@@ -1114,6 +1147,15 @@ export default function ProcedureTask({
                   )}
                 </div>
               )}
+              <DispatchIndicator />
+              <Timestamp time={props.task.time} variant="relative" />
+              <ProgressBarTiming
+                startedAt={props.task.startedAt}
+                completedAt={props.task.completedAt}
+                estimatedTimeRemaining={undefined}
+                isInProgress={props.task.status === 'RUNNING'}
+                className="text-muted-foreground"
+              />
             </div>
             <div className="flex flex-col items-end flex-shrink-0 gap-2">
               <div className="flex gap-2">
@@ -1168,33 +1210,35 @@ export default function ProcedureTask({
                   <span className="truncate">{props.task.score}</span>
                 </div>
               )}
-              <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                <DispatchIndicatorIcon className={cn("w-4 h-4 flex-shrink-0", dispatchIndicator.className)} />
-                <span>{dispatchIndicator.label}</span>
-              </div>
+              <DispatchIndicator />
+              <Timestamp time={props.task.time} variant="relative" />
+              <ProgressBarTiming
+                startedAt={props.task.startedAt}
+                completedAt={props.task.completedAt}
+                estimatedTimeRemaining={undefined}
+                isInProgress={props.task.status === 'RUNNING'}
+                className="text-muted-foreground"
+              />
             </div>
             <div className="flex flex-col items-end flex-shrink-0">
               <div className="flex flex-col items-center gap-1">
                 <div className="flex items-center gap-2">
-                  {!hasGridActions && (
-                    <div className="text-muted-foreground">
-                      <Waypoints className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
-                    </div>
-                  )}
+                  <div className="text-muted-foreground">
+                    <Waypoints className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                  </div>
                   {controlButtons}
                 </div>
-                {!hasGridActions && (
-                  <div className="text-xs text-muted-foreground text-center">
-                    {(() => {
-                      const [firstWord, ...restWords] = taskObject.type.split(/\s+/)
-                      return restWords.length > 0 ? (
-                        <>{firstWord}<br />{restWords.join(' ')}</>
-                      ) : (
-                        <>{firstWord}</>
-                      )
-                    })()}
-                  </div>
-                )}
+                <div className="text-xs text-muted-foreground text-center">
+                  {(() => {
+                    const [firstWord, ...restWords] = (props.task.type || 'Optimization Procedure').split(/\s+/)
+                    return (
+                      <>
+                        {firstWord}<br />
+                        {restWords.join(' ')}
+                      </>
+                    )
+                  })()}
+                </div>
               </div>
             </div>
           </div>
@@ -1203,8 +1247,41 @@ export default function ProcedureTask({
     }
   }
 
+  const renderProcedureStatus = (statusVariant: 'grid' | 'detail') => (
+    <TaskStatus
+      showStages
+      stages={taskObject.stages || []}
+      stageConfigs={taskObject.stages || []}
+      currentStageName={taskObject.currentStageName}
+      processedItems={taskObject.processedItems}
+      totalItems={taskObject.totalItems}
+      startedAt={taskObject.startedAt}
+      estimatedCompletionAt={taskObject.estimatedCompletionAt}
+      status={taskObject.status || 'PENDING'}
+      command={taskObject.command}
+      statusMessage={taskStatusMessage}
+      errorMessage={taskObject.errorMessage}
+      dispatchStatus={taskObject.dispatchStatus}
+      dispatchMode={taskObject.dispatchMode}
+      celeryTaskId={taskObject.celeryTaskId}
+      workerNodeId={taskObject.workerNodeId}
+      completedAt={taskObject.completedAt}
+      truncateMessages={statusVariant === 'grid'}
+      isSelected={isSelected}
+      variant={statusVariant}
+      commandDisplay={statusVariant === 'grid' ? 'hide' : 'show'}
+      statusMessageDisplay="always"
+      hideElapsedTime
+      hidePreExecutionStatus
+    />
+  )
+
   const renderContent = () => (
-    <TaskContent variant={variant} task={taskObject} hideTaskStatus={true}>
+    <TaskContent
+      variant={variant}
+      task={taskObject}
+      hideTaskStatus={variant === 'grid' || variant === 'detail'}
+    >
       {variant === 'grid' ? (
         <div className="space-y-1.5">
           <Timestamp time={taskObject.time} variant="relative" />
@@ -1221,28 +1298,7 @@ export default function ProcedureTask({
               {taskObject.description}
             </div>
           )}
-          <TaskStatus
-            showStages
-            stages={taskObject.stages || []}
-            stageConfigs={taskObject.stages || []}
-            currentStageName={taskObject.currentStageName}
-            processedItems={taskObject.processedItems}
-            totalItems={taskObject.totalItems}
-            startedAt={taskObject.startedAt}
-            estimatedCompletionAt={taskObject.estimatedCompletionAt}
-            status={taskObject.status || 'PENDING'}
-            command={taskObject.command}
-            statusMessage={taskStatusMessage}
-            errorMessage={taskObject.errorMessage}
-            completedAt={taskObject.completedAt}
-            truncateMessages
-            isSelected={isSelected}
-            variant="grid"
-            commandDisplay="hide"
-            statusMessageDisplay="always"
-            hideElapsedTime
-            hidePreExecutionStatus
-          />
+          {renderProcedureStatus('grid')}
           {feedbackEvaluationSummary && (
             <EvaluationListAccuracyBar
               progress={feedbackProgress}
@@ -1252,49 +1308,11 @@ export default function ProcedureTask({
           )}
         </div>
       ) : (
-        <div className="p-3 pt-2">
-          {/* Status indicator, timestamp, elapsed, notes — consistent with grid */}
-          <div className="space-y-1.5 mb-4">
-            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-              <DispatchIndicatorIcon className={cn("w-4 h-4 flex-shrink-0", dispatchIndicator.className)} />
-              <span>{dispatchIndicator.label}</span>
-            </div>
-            <Timestamp time={taskObject.time} variant="relative" />
-            {taskObject.startedAt && (
-              <ProgressBarTiming
-                startedAt={taskObject.startedAt}
-                completedAt={taskObject.completedAt}
-                isInProgress={taskObject.status === 'RUNNING'}
-                className="text-muted-foreground"
-              />
-            )}
-            {taskObject.description && (
-              <div className="text-sm text-muted-foreground">
-                {taskObject.description}
-              </div>
-            )}
-            <TaskStatus
-              showStages
-              stages={taskObject.stages || []}
-              stageConfigs={taskObject.stages || []}
-              currentStageName={taskObject.currentStageName}
-              processedItems={taskObject.processedItems}
-              totalItems={taskObject.totalItems}
-              startedAt={taskObject.startedAt}
-              estimatedCompletionAt={taskObject.estimatedCompletionAt}
-              status={taskObject.status || 'PENDING'}
-              command={taskObject.command}
-              statusMessage={taskStatusMessage}
-              errorMessage={taskObject.errorMessage}
-              completedAt={taskObject.completedAt}
-              isSelected={true}
-              variant="detail"
-              commandDisplay="hide"
-              statusMessageDisplay="always"
-              hideElapsedTime
-              hidePreExecutionStatus
-            />
+        <div className="p-3">
+          <div className="mb-4">
+            {renderProcedureStatus('detail')}
           </div>
+
           {/* Parameters section - collapsed by default */}
           {parameters.length > 0 && (
             <Accordion type="multiple" className="w-full mb-4">
