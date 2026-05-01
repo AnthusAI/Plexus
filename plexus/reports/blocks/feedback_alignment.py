@@ -515,17 +515,19 @@ class FeedbackAlignment(BaseReportBlock):
                 single_score_name = str(scores_to_process[0].get("plexus_score_name") or "")
 
             order_scores = str(self.config.get("order_scores") or "best_to_worst").strip().lower()
+            days_config = self.config.get("days")
+            date_range_label = f"Last {days_config} days" if days_config else f"{start_date.date()} – {end_date.date()}"
             if cc_question_id_param:
-                block_description = "Inter-rater reliability assessment for the selected score"
+                block_description = f"Inter-rater reliability assessment for the selected score | {date_range_label}"
                 scope = "single_score"
             else:
                 scope = "scorecard_all_scores"
                 if order_scores == "worst_to_best":
-                    block_description = "Inter-rater reliability across all scores (ordered worst to best)"
+                    block_description = f"Inter-rater reliability across all scores (ordered worst to best) | {date_range_label}"
                 elif order_scores == "none":
-                    block_description = "Inter-rater reliability across all scores"
+                    block_description = f"Inter-rater reliability across all scores | {date_range_label}"
                 else:
-                    block_description = "Inter-rater reliability across all scores (ordered best to worst)"
+                    block_description = f"Inter-rater reliability across all scores (ordered best to worst) | {date_range_label}"
             
             # --- 7. Structure Final Output ---
             final_output_data = {
@@ -574,7 +576,7 @@ class FeedbackAlignment(BaseReportBlock):
                 "notes": overall_analysis.get("notes"),
                 "discussion": overall_analysis.get("discussion"),
                 # Add block metadata for frontend display
-                "block_title": self.DEFAULT_NAME,
+                "block_title": f"{plexus_scorecard_obj.name} - {self.DEFAULT_NAME}",
                 "block_description": block_description,
             }
             # --- 7b. Optional Memory Analysis ---

@@ -350,4 +350,92 @@ def check_s3_bucket_access(bucket_name=None):
         return {
             "error": f"Unexpected error: {str(e)}",
             "bucket_name": bucket_name
-        } 
+        }
+
+
+# ---------------------------------------------------------------------------
+# Procedure attachment helpers
+# ---------------------------------------------------------------------------
+
+def upload_procedure_file(procedure_id: str, file_name: str, content, content_type: str | None = None) -> str:
+    """Upload a file to the reportBlockDetails S3 bucket under procedures/{procedure_id}/{file_name}.
+
+    Returns the S3 key.
+    """
+    bucket_name = get_bucket_name()
+    s3_client = boto3.client('s3')
+    s3_key = f"procedures/{procedure_id}/{file_name}"
+
+    with tempfile.NamedTemporaryFile(mode='wb+', suffix=f"_{file_name}", delete=False) as tmp:
+        tmp_path = tmp.name
+        if isinstance(content, str):
+            tmp.write(content.encode('utf-8'))
+        elif content is not None:
+            tmp.write(content)
+        else:
+            tmp.write(b"")
+
+    try:
+        extra_args = {'ContentType': content_type} if content_type else {}
+        s3_client.upload_file(Filename=tmp_path, Bucket=bucket_name, Key=s3_key, ExtraArgs=extra_args)
+        logger.info("Uploaded procedure attachment s3://%s/%s", bucket_name, s3_key)
+        return s3_key
+    except Exception:
+        logger.exception("Failed to upload procedure file %s for procedure %s", file_name, procedure_id)
+        raise
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def add_code_attachment_to_procedure(procedure_id: str, code: str, client=None) -> list[str]:
+    """Upload procedure code as code.tac to S3 and record the key in Procedure.attachedFiles.
+
+    Returns the updated attachedFiles list.
+    """
+    from plexus.dashboard.api.models.procedure import Procedure
+
+    s3_key = upload_procedure_file(procedure_id, "code.tac", code, content_type="text/plain")
+
+    if client is None:
+        from plexus.cli.shared.client_utils import create_client
+        client = create_client()
+
+    procedure = Procedure.get_by_id(procedure_id, client)
+    if not procedure:
+        raise ValueError(f"Procedure {procedure_id} not found after creation")
+
+    current = list(procedure.attachedFiles or [])
+    # Replace any existing code.tac entry
+    current = [p for p in current if not p.endswith("/code.tac")]
+    current.append(s3_key)
+    procedure.update(attachedFiles=current)
+    logger.info("Procedure %s attachedFiles updated: %s", procedure_id, current)
+    return current
+
+
+def download_procedure_code(procedure_id: str, attached_files: list[str]) -> str | None:
+    """Download code.tac from S3 for a procedure, given its attachedFiles list.
+
+    Returns the code string, or None if no code.tac attachment is found.
+    """
+    tac_key = next((p for p in (attached_files or []) if p.endswith("/code.tac")), None)
+    if not tac_key:
+        return None
+
+    bucket_name = get_bucket_name()
+    s3_client = boto3.client('s3')
+
+    with tempfile.NamedTemporaryFile(mode='wb', delete=False) as tmp:
+        tmp_path = tmp.name
+
+    try:
+        s3_client.download_file(Bucket=bucket_name, Key=tac_key, Filename=tmp_path)
+        with open(tmp_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception:
+        logger.exception("Failed to download procedure code from %s", tac_key)
+        raise
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
