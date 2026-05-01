@@ -57,6 +57,20 @@ const getProcedureStartTimeMs = (procedure: ProcedureWithTask): number => {
 const sortProceduresByStartTime = (procedures: ProcedureWithTask[]): ProcedureWithTask[] =>
   [...procedures].sort((a, b) => getProcedureStartTimeMs(b) - getProcedureStartTimeMs(a))
 
+const mergeProcedureRealtimeUpdate = (
+  existing: ProcedureWithTask,
+  updated: Partial<ProcedureWithTask>
+): ProcedureWithTask => ({
+  ...existing,
+  ...updated,
+  scorecardId: updated.scorecardId ?? existing.scorecardId,
+  scorecard: updated.scorecard ?? existing.scorecard,
+  scoreId: updated.scoreId ?? existing.scoreId,
+  score: updated.score ?? existing.score,
+  task: existing.task ?? updated.task ?? null,
+  feedbackEvaluationSummary: existing.feedbackEvaluationSummary ?? updated.feedbackEvaluationSummary ?? null,
+})
+
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
@@ -508,7 +522,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
               prev.map(p => {
                 if (p.id !== updated.id) return p
                 existingTask = p.task
-                return { ...p, ...updated, task: p.task }
+                return mergeProcedureRealtimeUpdate(p, updated)
               })
             )
           );
@@ -516,7 +530,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             if (!hydratedProcedure) return
             setProcedures(prev =>
               sortProceduresByStartTime(
-                prev.map(p => p.id === hydratedProcedure.id ? { ...p, ...hydratedProcedure, task: p.task ?? hydratedProcedure.task } : p)
+                prev.map(p => p.id === hydratedProcedure.id ? mergeProcedureRealtimeUpdate(p, hydratedProcedure) : p)
               )
             )
           })

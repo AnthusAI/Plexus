@@ -90,6 +90,7 @@ export interface TaskStatusProps {
   elapsedSeconds?: number | null
   estimatedRemainingSeconds?: number | null
   hideElapsedTime?: boolean
+  hidePreExecutionStatus?: boolean
 }
 
 function formatDuration(seconds: number): string {
@@ -139,7 +140,8 @@ export const TaskStatus = React.memo(({
   onCommandDisplayChange,
   elapsedSeconds,
   estimatedRemainingSeconds,
-  hideElapsedTime = false
+  hideElapsedTime = false,
+  hidePreExecutionStatus = false
 }: TaskStatusProps) => {
 
   if (stages.length > 0) {
@@ -339,6 +341,13 @@ export const TaskStatus = React.memo(({
   , [status]);
 
   const getPreExecutionStatus = () => {
+    if (dispatchMode === 'pending') {
+      return {
+        message: 'Pending...',
+        icon: Radio,
+        animation: 'animate-pulse'
+      }
+    }
     if (dispatchMode === 'local') {
       return {
         message: 'Local',
@@ -371,12 +380,13 @@ export const TaskStatus = React.memo(({
   // 1. Task is in PENDING state
   // 2. Has no stages (not started processing yet)
   // 3. Either has a worker node ID or showPreExecutionStages is true
-  const shouldShowPreExecution = status === 'PENDING' && 
+  const shouldShowPreExecution = !hidePreExecutionStatus &&
+    status === 'PENDING' &&
     (!stages || stages.length === 0) && 
-    (dispatchMode === 'local' || (workerNodeId && workerNodeId.trim() !== '') || showPreExecutionStages)
+    (dispatchMode === 'pending' || dispatchMode === 'local' || (workerNodeId && workerNodeId.trim() !== '') || showPreExecutionStages)
 
   const preExecutionStatus = shouldShowPreExecution ? getPreExecutionStatus() : null
-  const showEmptyState = dispatchMode !== 'local' && !stages.length && !preExecutionStatus && status === 'PENDING'
+  const showEmptyState = !hidePreExecutionStatus && dispatchMode !== 'pending' && dispatchMode !== 'local' && !stages.length && !preExecutionStatus && status === 'PENDING'
 
   const displayMessage = isError && errorMessage ? errorMessage : statusMessage
 
@@ -628,6 +638,7 @@ export const TaskStatus = React.memo(({
     prevProps.statusMessageDisplay === nextProps.statusMessageDisplay &&
     prevProps.elapsedSeconds === nextProps.elapsedSeconds &&
     prevProps.estimatedRemainingSeconds === nextProps.estimatedRemainingSeconds &&
-    prevProps.hideElapsedTime === nextProps.hideElapsedTime
+    prevProps.hideElapsedTime === nextProps.hideElapsedTime &&
+    prevProps.hidePreExecutionStatus === nextProps.hidePreExecutionStatus
   );
 }); 
