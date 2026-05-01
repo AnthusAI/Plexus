@@ -1229,6 +1229,7 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         featured=False,
         score_version_id=version,
         name=f"Optimizer: {scorecard}",
+        dispatch_mode="local",
     )
 
     if not result.success:
