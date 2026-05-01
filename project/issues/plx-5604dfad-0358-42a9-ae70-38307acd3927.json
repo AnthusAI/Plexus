@@ -3,7 +3,7 @@
   "title": "Integrate CloudWatch procedure log streaming",
   "description": "Merge Derek's execute-tactus branch update into develop.\n\nBehavior intent:\n- Procedure runs stream lifecycle/tool/cost events to CloudWatch in real time.\n- Procedure runs write full LLM prompt-context JSON to a separate CloudWatch stream.\n- Procedure metadata records log group and stream prefix so dashboard integrations can locate logs later.\n- IAM permissions support consoleRunWorker writes and authenticated dashboard reads.\n\nDefinition of Done:\n- PR from feature/plx-07dc0d-execute-tactus-mcp-tool to develop is created.\n- CI passes or failures are fixed.\n- PR is merged into develop.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,16 @@
       "author": "ryan",
       "text": "Local verification: dashboard typecheck passes after fixing the CloudWatch log client to avoid static import of untracked amplify_outputs.json; py_compile passes for cloudwatch_logger.py and procedure_executor.py. Also refreshed dashboard package-lock for the new direct CloudWatch Logs SDK dependency.",
       "created_at": "2026-05-01T22:36:11.370969Z"
+    },
+    {
+      "id": "458a1fa7-8022-4220-b840-0dd156fd1abd",
+      "author": "ryan",
+      "text": "Merged PR #265 into develop and verified develop CI run 25236213294 passed.",
+      "created_at": "2026-05-01T22:50:05.446202Z"
     }
   ],
   "created_at": "2026-05-01T22:33:15.454351Z",
-  "updated_at": "2026-05-01T22:36:11.370969Z",
-  "closed_at": null,
+  "updated_at": "2026-05-01T22:50:05.465630Z",
+  "closed_at": "2026-05-01T22:50:05.465630Z",
   "custom": {}
 }
