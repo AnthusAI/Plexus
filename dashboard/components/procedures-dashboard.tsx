@@ -520,7 +520,13 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           // scorecard/score/metadata from the stored record so they don't get wiped.
           // Also merge metadata so that fields set at creation (e.g. procedure_type) survive
           // later updates that may not include them.
-          const mergeMetadata = (incoming: string | null | undefined, existing: string | null | undefined): string | null | undefined => {
+          const metadataToString = (value: unknown): string | null | undefined => {
+            if (value === null || value === undefined) return value as null | undefined
+            return typeof value === 'string' ? value : JSON.stringify(value)
+          }
+          const mergeMetadata = (incomingValue: unknown, existingValue: unknown): string | null | undefined => {
+            const incoming = metadataToString(incomingValue)
+            const existing = metadataToString(existingValue)
             if (!incoming) return existing
             if (!existing) return incoming
             try {
