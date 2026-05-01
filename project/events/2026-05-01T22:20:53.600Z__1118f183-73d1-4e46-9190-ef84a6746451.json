@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1118f183-73d1-4e46-9190-ef84a6746451",
+  "issue_id": "plx-c7958030-f6b1-40ab-b60d-d1154f711fa6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-01T22:20:53.600Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Merge PR #261 into develop by resolving conflicts from the score-version activity-tab work while preserving procedure dispatch indicator behavior.\n\nDefinition of Done:\n- Conflict markers are removed.\n- Focused dashboard and Python checks pass or failures are documented.\n- PR branch is pushed.\n- PR #261 is merged into develop.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-dbca12b0-ce51-42ee-969d-e0e2808ad8c9",
+    "priority": 1,
+    "status": "open",
+    "title": "Resolve PR #261 merge conflicts"
+  }
+}
