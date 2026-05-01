@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "Fetched Derek's new execute-tactus branch commit 84686085. Delta against develop is CloudWatch procedure log streaming across Amplify IAM/backend, dashboard log client utility, cloudwatch_logger.py, and procedure_executor.py.",
       "created_at": "2026-05-01T22:33:21.196537Z"
+    },
+    {
+      "id": "c3d6b8b9-c684-40fc-acbd-278491cc306d",
+      "author": "ryan",
+      "text": "Local verification: dashboard typecheck passes after fixing the CloudWatch log client to avoid static import of untracked amplify_outputs.json; py_compile passes for cloudwatch_logger.py and procedure_executor.py. Also refreshed dashboard package-lock for the new direct CloudWatch Logs SDK dependency.",
+      "created_at": "2026-05-01T22:36:11.370969Z"
     }
   ],
   "created_at": "2026-05-01T22:33:15.454351Z",
-  "updated_at": "2026-05-01T22:33:21.196537Z",
+  "updated_at": "2026-05-01T22:36:11.370969Z",
   "closed_at": null,
   "custom": {}
 }
