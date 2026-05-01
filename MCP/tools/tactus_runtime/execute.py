@@ -2741,6 +2741,7 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
     _append_optional_cli_arg(cmd, "--baseline", args.get("baseline"))
     _append_optional_cli_arg(cmd, "--current-baseline", args.get("current_baseline"))
     _append_optional_cli_arg(cmd, "--notes", args.get("notes"))
+    _append_optional_cli_arg(cmd, "--procedure-id", args.get("procedure_id"))
 
     child_budget = args.get("budget")
     env = os.environ.copy()
@@ -4804,6 +4805,8 @@ class PlexusRuntimeModule:
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
         parsed = _args(args)
+        if not parsed.get("procedure_id") and self._trace_id:
+            parsed["procedure_id"] = self._trace_id
         if not bool(parsed.get("async")):
             self._record_api_call("evaluation", "run")
             self.handle_protocol_required = ("evaluation", "run")
