@@ -977,8 +977,24 @@ export default function ProcedureTask({
     }
     return rawMetadata && typeof rawMetadata === 'object' && !Array.isArray(rawMetadata) ? rawMetadata : {}
   }, [procedure.task?.metadata])
+  const hasLocalProcedureRuntime = useMemo(() => {
+    const runtime = (taskMetadata as Record<string, any>).runtime
+    const hasRuntimeIdentity = runtime && typeof runtime === 'object' && (
+      typeof runtime.host === 'string' ||
+      typeof runtime.pid === 'number' ||
+      typeof runtime.started_at === 'string'
+    )
+    const taskType = (procedure.task?.type || '').toLowerCase()
+    const target = procedure.task?.target || ''
+    const command = procedure.task?.command || ''
+    return Boolean(
+      hasRuntimeIdentity &&
+      taskType.includes('procedure') &&
+      (target === `procedure/${procedure.id}` || target === `procedure/run/${procedure.id}` || command === `procedure ${procedure.id}` || command === `procedure run ${procedure.id}`)
+    )
+  }, [procedure.id, procedure.task?.command, procedure.task?.target, procedure.task?.type, taskMetadata])
   const dispatchMode = typeof taskMetadata.dispatch_mode === 'string' ? taskMetadata.dispatch_mode : undefined
-  const dispatchDisplayMode = procedure.task ? dispatchMode : 'pending'
+  const dispatchDisplayMode = procedure.task ? (dispatchMode || (hasLocalProcedureRuntime ? 'local' : undefined)) : 'pending'
   const dispatchIndicator = useMemo(() => {
     if (dispatchDisplayMode === 'pending') {
       return { label: 'Pending...', icon: Radio, className: 'animate-pulse' }
