@@ -1,1 +1,0 @@
-# Item tools for MCP server

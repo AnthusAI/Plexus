@@ -2107,7 +2107,6 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     id: string;
     createdAt: string;
     note?: string | null;
-    isChampion: boolean;
   } | null>(null);
   const [scoreVersionLoadFailed, setScoreVersionLoadFailed] = useState(false);
   const [procedureInfo, setProcedureInfo] = useState<{
@@ -2160,9 +2159,6 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
                 id
                 createdAt
                 note
-                score {
-                  championVersionId
-                }
               }
             }
           `,
@@ -2175,7 +2171,6 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
             id: scoreVersion.id,
             createdAt: scoreVersion.createdAt,
             note: scoreVersion.note ?? null,
-            isChampion: scoreVersion.score?.championVersionId === task.scoreVersionId
           });
         } else {
           setScoreVersionInfo(null);
@@ -2898,36 +2893,6 @@ ${categoryLines}${mechanicalLines}
                   )}
               </div>
             )}
-            {taskWithDefaults.procedureId && (
-              <RelatedResourceCard
-                label="Procedure"
-                className="bg-card-selected"
-                href={`/lab/procedures/${taskWithDefaults.procedureId}`}
-                linkLabel="Open procedure"
-                summary={
-                  <span className="truncate">
-                    {procedureInfo?.name || (procedureLoadFailed ? 'Unavailable' : taskWithDefaults.procedureId)}
-                  </span>
-                }
-              >
-                {procedureInfo ? (
-                  <div className="space-y-1">
-                    <div>{procedureInfo.description || 'No description'}</div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      {procedureInfo.status && <span>Status: {procedureInfo.status}</span>}
-                      {procedureInfo.updatedAt && (
-                        <span>
-                          Updated <Timestamp time={procedureInfo.updatedAt} variant="relative" className="text-xs" />
-                        </span>
-                      )}
-                    </div>
-                    <div className="font-mono text-xs">{procedureInfo.id}</div>
-                  </div>
-                ) : (
-                  <span>{procedureLoadFailed ? 'This procedure could not be loaded.' : 'Loading procedure details...'}</span>
-                )}
-              </RelatedResourceCard>
-            )}
             {taskWithDefaults.dataSetId && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>Dataset:</span>
@@ -2985,31 +2950,57 @@ ${categoryLines}${mechanicalLines}
               isInProgress={data.status?.toUpperCase() === 'RUNNING'}
               className="text-muted-foreground"
             />
-            {taskWithDefaults.scorecardId && taskWithDefaults.scoreId && taskWithDefaults.scoreVersionId && (
-              <RelatedResourceCard
-                label="Score Version"
-                className="bg-card-selected"
-                collapsible={false}
-                href={`/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`}
-                linkLabel="Open score version"
-                summary={<span className="font-mono truncate">{shortHash(taskWithDefaults.scoreVersionId)}</span>}
-              >
-                {scoreVersionInfo ? (
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <Timestamp time={scoreVersionInfo.createdAt} variant="relative" className="text-xs" />
-                      {scoreVersionInfo.isChampion && (
-                        <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
-                          Champion
-                        </span>
-                      )}
-                    </div>
-                    <div>{scoreVersionInfo.note || 'No note'}</div>
-                  </div>
-                ) : (
-                  <span>{scoreVersionLoadFailed ? 'This score version could not be loaded.' : 'Loading score version details...'}</span>
+            {(taskWithDefaults.procedureId || (taskWithDefaults.scorecardId && taskWithDefaults.scoreId && taskWithDefaults.scoreVersionId)) && (
+              <div className="space-y-0">
+                {taskWithDefaults.procedureId && (
+                  <RelatedResourceCard
+                    label="Procedure"
+                    className="bg-card-selected"
+                    collapsible={false}
+                    inlineLink={true}
+                    rowDensity="dense"
+                    href={`/lab/procedures/${taskWithDefaults.procedureId}`}
+                    linkLabel="Open procedure"
+                    rightMeta={
+                      procedureInfo?.updatedAt ? (
+                        <Timestamp time={procedureInfo.updatedAt} variant="relative" className="whitespace-nowrap text-xs text-muted-foreground" />
+                      ) : null
+                    }
+                    summary={
+                      <span className="truncate">
+                        {procedureInfo?.name || (procedureLoadFailed ? 'Unavailable' : taskWithDefaults.procedureId)}
+                      </span>
+                    }
+                  >
+                    {null}
+                  </RelatedResourceCard>
                 )}
-              </RelatedResourceCard>
+                {taskWithDefaults.scorecardId && taskWithDefaults.scoreId && taskWithDefaults.scoreVersionId && (
+                  <RelatedResourceCard
+                    label="Score Version"
+                    className="bg-card-selected"
+                    collapsible={false}
+                    inlineLink={true}
+                    rowDensity="dense"
+                    href={`/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`}
+                    linkLabel="Open score version"
+                    rightMeta={
+                      scoreVersionInfo?.createdAt ? (
+                        <Timestamp time={scoreVersionInfo.createdAt} variant="relative" className="whitespace-nowrap text-xs text-muted-foreground" />
+                      ) : null
+                    }
+                    summary={<span className="font-mono truncate">{shortHash(taskWithDefaults.scoreVersionId)}</span>}
+                  >
+                    {scoreVersionInfo ? (
+                      <div className="space-y-1">
+                        <div>{scoreVersionInfo.note || 'No note'}</div>
+                      </div>
+                    ) : (
+                      <span>{scoreVersionLoadFailed ? 'This score version could not be loaded.' : 'Loading score version details...'}</span>
+                    )}
+                  </RelatedResourceCard>
+                )}
+              </div>
             )}
             {evaluationNotes && (
               <div className="mt-1">
