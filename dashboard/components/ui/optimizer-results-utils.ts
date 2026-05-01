@@ -29,6 +29,8 @@ export const TASK_CARD_FIELDS = `
   command
   description
   dispatchStatus
+  workerNodeId
+  celeryTaskId
   metadata
   createdAt
   startedAt
