@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8dcb0a55-2469-4488-afd0-fdededfb2359",
+  "issue_id": "plx-986bdf94-3798-48b5-9ccc-e9b6002ef43d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T21:04:33.167Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "# Migration and dual-stack rollout\n\n## Purpose\n\nShip the new `execute_tactus` MCP tool alongside the existing 64-tool catalog without breaking any existing integration. Establish written sunset criteria so the dual-stack period doesn't become permanent.\n\n## Rollout phases\n\n### Phase 1: Coexist (launch + ~3 months)\n- Existing `MCP/plexus_fastmcp_server.py` continues to expose all current tools unchanged.\n- New `execute_tactus` lives in a separate MCP server module (or feature flag — TBD), opt-in.\n- Users / agents who choose to use it do so deliberately.\n- Telemetry on both surfaces from day one: usage frequency, error rate, latency, cost per invocation.\n\n### Phase 2: Recommend new (~3–6 months in)\n- Documentation defaults to the new pattern.\n- Existing tools marked as legacy in their descriptions.\n- Migration cookbook published.\n- Existing tools still functional.\n\n### Phase 3: Sunset criteria met (~6+ months in)\n- New tool is the default in all surfaces.\n- Old tools: deprecation warning on each call.\n- Sunset announcement with date.\n\n### Phase 4: Old tools removed (date driven by sunset criteria)\n- Old MCP server modules deleted.\n- Existing MCP server consolidation epic (separate initiative) cleans up the remaining pieces.\n\n## Sunset criteria (written down so dual-stack doesn't become permanent)\n\nOld tools may be removed when:\n- ≥80% of MCP traffic is on the new path for ≥30 consecutive days, AND\n- ≥6 months have elapsed since launch, AND\n- Migration cookbook covers ≥95% of historical workflow patterns.\n\n## Migration support\n\n- Migration cookbook: per-pattern translation of common 64-tool workflows into Lua snippets. Auto-generated where possible.\n- Per-tool deprecation note: when a legacy MCP tool is invoked, response includes a one-line \"Lua equivalent: ...\" pointer.\n\n## Telemetry from day one\n\nUsage / error / cost / latency data on both surfaces, kept apart so we can measure migration progress and detect regressions.\n\n## Estimate\n\n1 week of focused work, plus ongoing telemetry / cookbook maintenance during the rollout period.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": "plx-a097a1b9-7d32-4d78-96fe-8a9aad61e097",
+    "priority": 2,
+    "status": "open",
+    "title": "Migration and dual-stack rollout"
+  }
+}

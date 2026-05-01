@@ -1,0 +1,25 @@
+{
+  "id": "plx-a35142b9-67ed-4ded-9e51-897728a13314",
+  "title": "Stub long-running plexus.evaluation.run with simulated streaming and budget",
+  "description": "# Stub long-running plexus.evaluation.run\n\n## What\n\nA stub for the canonical fan-out / dispatched operation that simulates:\n- Items processed over time (realistic pacing — e.g., 1 item per ~50ms for a 1000-item evaluation = 50s total).\n- Streaming progress events flowing back to the parent runtime through the trace bridge.\n- Cost accumulation against the per-call budget envelope.\n- Graceful halt with partial results when budget is exhausted mid-flight.\n- Cancellation responding to a parent-side signal.\n\n## Why a stub is sufficient for the spike\n\nThe spike validates the Lua-authoring hypothesis and the streaming/handle ergonomics. The actual distributed-budget infrastructure (Epic 4) is too large to build before the spike runs. A stub that simulates the externally-observable behavior is enough to validate the AGENT'S experience of using these operations, which is what the spike measures.\n\n## Stubbed behavior\n\n- Synchronous: `plexus.evaluation.run{ id = \"X\" }` blocks Lua, streams progress, returns final result.\n- Async: `plexus.evaluation.run{ id = \"X\", async = true }` returns a handle immediately; `plexus.handle.await{ id = ... }` blocks for the result.\n- Budget-aware: on every simulated item processed, debits a fixed simulated cost from ambient budget. Halts when exhausted.\n- Streaming format: `{ event = \"progress\", items_done = N, items_total = M, current_metric = ..., cost_so_far = ... }` events emitted to the trace bridge.\n\n## Deliverable\n\nExtension of the PlexusModule stub plus a small simulated-budget implementation (just enough for the spike — NOT the real Epic 4 infrastructure).",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "538227de-f5e2-4bb6-b15c-1d721f48b9c5",
+      "author": "ryan",
+      "text": "Progress: implemented the long-running evaluation stub and handle namespace in `spikes/runtime-mcp-validation/plexus_module_stub.py`.\n\nAdded:\n- `plexus.evaluation.run{...}` synchronous mode with simulated per-item budget debits and progress events.\n- `plexus.evaluation.run{ async = true }` returning a stable handle.\n- `plexus.handle.{status,await,cancel}` for async-handle workflows.\n- `PlexusModule.stream_events()` so the future harness can inspect streamed events.\n- Budget-exhaustion path returns partial results with structured `BUDGET_EXHAUSTED` error data.\n\nValidation run:\n- `python -m py_compile spikes/runtime-mcp-validation/plexus_module_stub.py`\n- Sync evaluation: completed 20 items with 5 progress events.\n- Async evaluation: handle created, status read, awaited to completion.\n- Cancellation: handle moved to `cancelled`.\n- Low-budget run: halted with `budget_exhausted`, `partial=true`, processed 5 items.\n\nTask remains `in_progress` pending review/landing.",
+      "created_at": "2026-04-28T22:11:58.220443Z"
+    }
+  ],
+  "created_at": "2026-04-28T21:06:09.961801Z",
+  "updated_at": "2026-04-28T22:11:58.220443Z",
+  "closed_at": null,
+  "custom": {}
+}

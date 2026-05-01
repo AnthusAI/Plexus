@@ -1,0 +1,91 @@
+{
+  "id": "plx-95237766-3387-46f6-a91f-d322724bba63",
+  "title": "Build the spike test harness",
+  "description": "# Build the spike test harness\n\n## What\n\nA scriptable runner that executes one curated spike task against one frontier model and produces a structured result.\n\n## Inputs\n\n- A task definition (from the curated set).\n- A model identifier.\n- The boot prompt.\n- The PlexusModule stub registered into a TactusRuntime.\n- Configurable max attempts (default 1 for first-try-success measurement; up to N for \"iterations to working code\" measurement).\n\n## Per-attempt behavior\n\n1. Compose system prompt = boot prompt; user prompt = task prompt.\n2. Send to the model with `execute_tactus` as the only tool available.\n3. When the model calls `execute_tactus`, run the supplied Lua through TactusRuntime + the stub PlexusModule.\n4. Stream progress and results back to the model in the next turn.\n5. Capture: tokens consumed (prompt + completion), tool definitions size, latency, model output, generated Lua, Lua runtime result, errors.\n6. After the model returns a final answer (or hits max attempts), check against `expected_outcome`.\n\n## Per-task output\n\nStructured JSON record:\n```\n{\n  task_id, model_id, succeeded_first_try, attempts_used,\n  total_input_tokens, total_output_tokens, tool_definition_tokens,\n  latency_ms, total_cost_usd,\n  generated_lua_per_attempt: [...],\n  errors_per_attempt: [...],\n  failure_classification: \"api_design\"|\"boot_prompt\"|\"language\"|\"fundamental\"|null,\n  full_transcript: ...\n}\n```\n\n## Aggregate output\n\nAcross all task × model pairs, produce a CSV / Markdown summary table for the go/no-go report.\n\n## Reproducibility\n\n- Fixture data is deterministic.\n- Model temperature: 0 where supported (some require non-zero — record actual setting).\n- Random seed where applicable.\n\n## Deliverable\n\n`spikes/runtime-mcp-validation/harness.py` (or similar) with a CLI: `python harness.py --task <id> --model <id>` and `python harness.py --all`.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "07315e15-6e42-433e-a212-24f72a090e3c",
+      "author": "ryan",
+      "text": "Progress: built the first validation harness skeleton at `spikes/runtime-mcp-validation/harness.py`.\n\nCurrent capabilities:\n- Loads all YAML task definitions into typed `SpikeTask` records.\n- Validates unique IDs, required fields, non-empty API lists/tags, and first-try max attempts.\n- Provides a deterministic `stub-oracle` adapter that exercises the fixture-backed PlexusModule rather than calling real model APIs.\n- Records generated-Lua placeholders, API call logs, stream events, cost/budget data, transcript data, and structured check results.\n- Implements outcome checkers for the curated task kinds: exact fields, contains fields, structured summary, streaming operation, async handle, budget-aware, structured error, HITL-required, and docs-discovery-then-action.\n- Writes per-task JSON result files and aggregate `summary.csv` under `spikes/runtime-mcp-validation/results/<run-id>/`.\n- Added `spikes/runtime-mcp-validation/results/.gitignore` so generated result files do not get committed accidentally.\n\nSmoke validation:\n- `python -m py_compile spikes/runtime-mcp-validation/plexus_module_stub.py spikes/runtime-mcp-validation/harness.py`\n- `python spikes/runtime-mcp-validation/harness.py --validate-tasks`\n- `python spikes/runtime-mcp-validation/harness.py --all --model stub-oracle --run-id local-smoke-3`\n\nFinal oracle result before cleanup: passed 15/15 curated tasks. A final ignored smoke run is being used to keep generated outputs out of the working tree.\n\nTask remains `in_progress` pending review/landing and later real model adapters.",
+      "created_at": "2026-04-28T22:19:20.703947Z"
+    },
+    {
+      "id": "e7f32e51-4874-45f5-be53-bfdfb7d28884",
+      "author": "ryan",
+      "text": "Progress update: extended the harness beyond `stub-oracle` so it can exercise real model-generated Lua.\n\nAdded:\n- Lupa execution shim that provides `require(\"plexus\")` and converts Python fixture data into Lua tables (supports ordinary `ipairs` over returned lists).\n- Recursive Lua-table to Python conversion for final results.\n- Lua extraction from fenced or raw model output.\n- Provider adapters:\n  - `anthropic:<model>` and `claude-*`\n  - `openai:<model>` and `gpt-*`\n  - `litellm:<model>` and `gemini-*` via LiteLLM\n- `model_prompt()` that combines `boot_prompt.md` with each task prompt and asks for Lua code only.\n- `spikes/runtime-mcp-validation/README.md` documenting local smoke tests, provider model runs, and required environment variables.\n\nValidation:\n- Direct Lua execution against the stub works with code shaped like the boot prompt examples (`ipairs(cards)`, nested score inspection, `return { ... }`).\n- `python -m py_compile spikes/runtime-mcp-validation/plexus_module_stub.py spikes/runtime-mcp-validation/harness.py`\n- `python spikes/runtime-mcp-validation/harness.py --validate-tasks`\n- `python spikes/runtime-mcp-validation/harness.py --all --model stub-oracle --run-id ignored-smoke-2`\n- Result: passed 15/15 curated tasks.\n\nNo real model calls have been run yet; provider adapters are wired but await credentials / explicit run instruction.",
+      "created_at": "2026-04-28T22:24:42.479898Z"
+    },
+    {
+      "id": "92872bd2-d93a-40ae-812f-5e616c574142",
+      "author": "ryan",
+      "text": "Progress update: added real-provider readiness support to the harness.\n\nChanges:\n- Added `--check-providers` to `spikes/runtime-mcp-validation/harness.py`.\n- Readiness check reports installed provider packages and env var presence without printing secret values.\n- Added documentation in `spikes/runtime-mcp-validation/README.md` for safe provider readiness checks and the recommended one-task low-cost run before any full matrix run.\n\nVerification commands run:\n```bash\npython -m py_compile spikes/runtime-mcp-validation/plexus_module_stub.py spikes/runtime-mcp-validation/harness.py\npython spikes/runtime-mcp-validation/harness.py --validate-tasks\npython spikes/runtime-mcp-validation/harness.py --check-providers\npython spikes/runtime-mcp-validation/harness.py --all --model stub-oracle --run-id ignored-smoke-readiness\n```\n\nResults:\n- Task validation: 15 tasks valid.\n- Provider packages present: anthropic=true, openai=true, litellm=true.\n- Provider credentials missing: ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY, GEMINI_API_KEY, VERTEXAI_PROJECT, AWS_ACCESS_KEY_ID all absent.\n- Stub oracle smoke: passed 15/15.",
+      "created_at": "2026-04-28T22:39:16.103939Z"
+    },
+    {
+      "id": "557901d6-6f19-4a14-b777-e90580363577",
+      "author": "ryan",
+      "text": "Follow-up hardening: added a real-provider full-matrix safety guard to the harness.\n\nChanges:\n- Added provider readiness preflight before paid model calls.\n- Added `--allow-full-matrix` flag.\n- The harness now refuses `--all` with any real provider unless `--allow-full-matrix` is explicitly passed.\n- README now documents the required sequence: `--check-providers`, one-task readiness run, then explicit `--allow-full-matrix` only after the readiness run succeeds.\n\nVerification:\n```bash\npython -m py_compile \"spikes/runtime-mcp-validation/plexus_module_stub.py\" \"spikes/runtime-mcp-validation/harness.py\" \"spikes/runtime-mcp-validation/report.py\"\npython \"spikes/runtime-mcp-validation/harness.py\" --validate-tasks\npython \"spikes/runtime-mcp-validation/harness.py\" --all --model stub-oracle --run-id ignored-parent-verify\npython \"spikes/runtime-mcp-validation/report.py\" --run-id ignored-parent-verify\npython \"spikes/runtime-mcp-validation/harness.py\" --all --model litellm:dummy-model --run-id should-not-run 2>&1 || true\n```\n\nResults:\n- Task validation: 15 valid.\n- Stub oracle: 15/15 passed.\n- Report scaffold generated from ignored smoke results.\n- Unsafe full real-provider run was refused before any provider call.",
+      "created_at": "2026-04-29T00:27:08.536089Z"
+    },
+    {
+      "id": "a2fc04cf-1bdb-4bb2-8cb8-dac5a4aa1557",
+      "author": "ryan",
+      "text": "Added multi-model matrix support to the spike harness.\n\nChanges:\n- New `--models` CLI option accepts comma-separated model IDs.\n- `--model` and `--models` are mutually exclusive.\n- Duplicate model IDs are rejected to avoid per-task JSON artifact collisions.\n- Existing full-matrix guard now applies across the full model list: `--all` with any real provider still requires explicit `--allow-full-matrix`.\n- README now documents one-task multi-model readiness runs and full explicit matrix usage.\n\nVerification:\n```bash\npython -m py_compile \"spikes/runtime-mcp-validation/harness.py\"\npython \"spikes/runtime-mcp-validation/harness.py\" --task predict_single_item --models stub-oracle --run-id ignored-models-verify-2\npython \"spikes/runtime-mcp-validation/harness.py\" --task predict_single_item --models stub-oracle,stub-oracle --run-id should-not-run 2>&1 || true\npython \"spikes/runtime-mcp-validation/harness.py\" --all --models stub-oracle,litellm:dummy-model --run-id should-not-run 2>&1 || true\n```\n\nResults:\n- Single-model list path passed 1/1.\n- Duplicate model list was rejected.\n- Mixed stub+real full matrix was rejected without `--allow-full-matrix` before any provider call.",
+      "created_at": "2026-04-29T00:33:27.290381Z"
+    },
+    {
+      "id": "fb99633c-ab4f-42e1-8764-5d61f2a4f6a2",
+      "author": "ryan",
+      "text": "Added focused pytest coverage for spike harness/report guardrails.\n\nNew test file:\n- `spikes/runtime-mcp-validation/test_harness_report.py`\n\nCovered behavior:\n- `--models` rejects duplicate model IDs.\n- `--model` and `--models` are mutually exclusive.\n- Pre-dispatch cost cap refuses over-cap real-provider plans before provider calls.\n- Stub oracle calls do not count against real-provider cost estimates.\n- Report decision gate remains pending for four real models that only ran one task.\n- Report decision gate becomes ready only when four real models each have complete curated-task coverage.\n\nVerification:\n```bash\npython -m pytest \"spikes/runtime-mcp-validation/test_harness_report.py\" -q\npython -m py_compile \"spikes/runtime-mcp-validation/plexus_module_stub.py\" \"spikes/runtime-mcp-validation/harness.py\" \"spikes/runtime-mcp-validation/report.py\" \"spikes/runtime-mcp-validation/measure_mcp_catalog.py\"\npython \"spikes/runtime-mcp-validation/harness.py\" --validate-tasks\npython \"spikes/runtime-mcp-validation/harness.py\" --all --model stub-oracle --run-id ignored-tests-verify\n```\n\nResults:\n- Guardrail tests: 6 passed.\n- Task validation: 15 valid.\n- Stub oracle: 15/15 passed.",
+      "created_at": "2026-04-29T00:38:08.091735Z"
+    },
+    {
+      "id": "83bc72a4-0a8b-4023-a585-1e9f393de5dd",
+      "author": "ryan",
+      "text": "Improved token accounting for real-provider runs.\n\nChanges:\n- Added `normalize_provider_usage(transcript)` to `harness.py`.\n- Supports common provider usage shapes:\n  - Anthropic/OpenAI-style `input_tokens` / `output_tokens`\n  - LiteLLM-style `prompt_tokens` / `completion_tokens` / `total_tokens`\n  - Derives missing input or output from `total_tokens` when one side is present.\n- `run_task()` now prefers provider-reported input/output token counts and only falls back to estimates when usage is missing.\n- Added tests for Anthropic-style usage, LiteLLM-style usage, and derivation from total tokens.\n\nVerification:\n```bash\npython -m pytest \"spikes/runtime-mcp-validation/test_harness_report.py\" -q\npython -m py_compile \"spikes/runtime-mcp-validation/plexus_module_stub.py\" \"spikes/runtime-mcp-validation/harness.py\" \"spikes/runtime-mcp-validation/report.py\" \"spikes/runtime-mcp-validation/measure_mcp_catalog.py\"\npython \"spikes/runtime-mcp-validation/harness.py\" --validate-tasks\npython \"spikes/runtime-mcp-validation/harness.py\" --all --model stub-oracle --run-id ignored-usage-verify\n```\n\nResults:\n- Guardrail tests: 9 passed.\n- Task validation: 15 valid.\n- Stub oracle: 15/15 passed.",
+      "created_at": "2026-04-29T00:40:36.392187Z"
+    },
+    {
+      "id": "9edf201b-2d2b-4302-bc2d-9069d762f508",
+      "author": "ryan",
+      "text": "Continuing harness work after provider readiness checks selected `openai:gpt-5.4-mini` as the standard spike model. Immediate fixes: OpenAI provider calls must not send unsupported parameters like `temperature=0` to models that reject them, and provider/API setup errors must be classified separately from prompt/model/code failures. After focused tests pass, run the full 15-task spike on `openai:gpt-5.4-mini` and record results for the go/no-go report.",
+      "created_at": "2026-04-29T01:02:16.154054Z"
+    },
+    {
+      "id": "396b5314-6510-4214-96eb-3c78e8a97005",
+      "author": "ryan",
+      "text": "Harness continuation results:\n\n- Adopted `openai:gpt-5.4-mini` as the standard spike model for the next validation pass.\n- Fixed OpenAI provider calls to omit unsupported `temperature=0` for models that reject it.\n- Fixed failure classification so provider/API request failures classify as `provider_error` instead of prompt/model failures.\n- Fixed result artifact serialization so Lua-returned Python-backed structured errors do not abort the full run.\n- Verification: `python -m pytest spikes/runtime-mcp-validation/test_harness_report.py -q` -> 22 passed; task validation passed; stub-oracle full run passed 15/15.\n- Full standard-model run: `provider-full-openai-gpt54-mini-002` completed, `openai:gpt-5.4-mini` passed 1/15 first try. Report written to `spikes/runtime-mcp-validation/results/provider-full-openai-gpt54-mini-002/report.md`.\n\nInterpretation: the single prediction task is solid, but the broader curated task set still has hidden task/checker/API-contract expectations. Most failures are classified as `boot_prompt`; one is a Lua syntax issue (`until` reserved word), and one exposed an API bridge issue around async evaluation/nested Lua table args. Next work should align all task prompts/checkers and add the bounded syntax/validation repair loop before another paid full pass.",
+      "created_at": "2026-04-29T01:07:53.625026Z"
+    },
+    {
+      "id": "0b946677-1c3b-47bc-a2ad-1c89dfc8bffa",
+      "author": "ryan",
+      "text": "Starting the next repair pass after `provider-full-openai-gpt54-mini-002` showed 1/15 first-try success. Scope: remove hidden contracts from the curated task prompts, add prompt/checker consistency coverage beyond `predict_single_item`, and fix the Lua/Python bridge issue exposed by async evaluation/nested table args. No additional paid model calls until local tests, task validation, and stub-oracle smoke pass.",
+      "created_at": "2026-04-29T01:08:47.332258Z"
+    },
+    {
+      "id": "dd2c23b4-2323-4aa7-8c2b-1638a20894f7",
+      "author": "ryan",
+      "text": "Contract repair pass checkpoint:\n\n- Made all task prompts explicit about required API calls and output fields.\n- Added an all-task prompt/checker consistency test.\n- Fixed nested Lua table argument normalization in the stub so async evaluation args with nested filters no longer crash call logging/deepcopy.\n- Fixed budget-aware cost comparison to accept structured cost payloads like `{ usd = ... }`.\n- Added focused tests for the async bridge and structured cost handling.\n- Verification: `python -m pytest spikes/runtime-mcp-validation/test_harness_report.py -q` -> 25 passed; task validation passed; stub-oracle 15/15 passed.\n\nProvider results:\n- `provider-full-openai-gpt54-mini-contractfix-002`: 14/15 first-try pass.\n- `provider-hitl-openai-gpt54-mini-contractfix-001`: isolated HITL task passed after making candidate_better explicit.\n- `provider-feedback-openai-gpt54-mini-contractfix-001`: isolated feedback-summary task passed after clarifying feedback.find returns an array and uses `kind = \"FN\"`.\n- `provider-full-openai-gpt54-mini-contractfix-004`: 13/15 first-try pass. Remaining failures: feedback summary omitted representative_item_id on placeholder patterns; dataset docs task emitted the correct Lua program twice, causing LuaSyntaxError.\n\nInterpretation: prompt/contract repair moved the standard model from 1/15 to 13-14/15. The remaining work is no longer broad API comprehension; it is bounded validation/repair feedback: syntax validation, clear checker errors, and one or two repair attempts while preserving first-try metrics separately.",
+      "created_at": "2026-04-29T01:18:33.383768Z"
+    },
+    {
+      "id": "734bb2ce-a92f-4a55-a83a-8c1bfadc5510",
+      "author": "ryan",
+      "text": "Starting bounded repair-loop implementation. Goal: keep first-try success metrics intact, but allow optional syntax/checker repair attempts with structured feedback so the spike can separately measure first-try generation and recoverable generation. No provider rerun until focused tests and stub-oracle verification pass.",
+      "created_at": "2026-04-29T01:21:18.390781Z"
+    }
+  ],
+  "created_at": "2026-04-28T21:06:36.168145Z",
+  "updated_at": "2026-04-29T01:21:18.390781Z",
+  "closed_at": null,
+  "custom": {}
+}

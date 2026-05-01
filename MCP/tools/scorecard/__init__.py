@@ -1,1 +1,0 @@
-# Scorecard tools for MCP server

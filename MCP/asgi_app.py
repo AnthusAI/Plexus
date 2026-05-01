@@ -67,38 +67,13 @@ mcp = FastMCP(
     auth=auth_provider
 )
 
-# Register all tools from the original MCP server
-# Since we can't directly copy private attributes, we'll import and re-register the tools
+# Register the single execute_tactus tool
 try:
-    from tools.util.think import register_think_tool
-    from tools.scorecard.scorecards import register_scorecard_tools
-    from tools.report.reports import register_report_tools
-    from tools.score.scores import register_score_tools
-    from tools.item.items import register_item_tools
-    from tools.task.tasks import register_task_tools
-    from tools.feedback.feedback import register_feedback_tools
-    from tools.evaluation.evaluations import register_evaluation_tools
-    from tools.prediction.predictions import register_prediction_tools
-    from tools.documentation.docs import register_documentation_tools
-    from tools.cost.analysis import register_cost_analysis_tools
-    from tools.dataset.datasets import register_dataset_tools
-    
-    register_think_tool(mcp)
-    register_scorecard_tools(mcp)
-    register_report_tools(mcp)
-    register_score_tools(mcp)
-    register_item_tools(mcp)
-    register_task_tools(mcp)
-    register_feedback_tools(mcp)
-    register_evaluation_tools(mcp)
-    register_prediction_tools(mcp)
-    register_documentation_tools(mcp)
-    register_cost_analysis_tools(mcp)
-    register_dataset_tools(mcp)
-    
-    print("Successfully registered all tools for authenticated MCP", file=sys.stderr)
+    from tools.tactus_runtime.execute import register_tactus_tools
+    register_tactus_tools(mcp)
+    print("Successfully registered execute_tactus tool for authenticated MCP", file=sys.stderr)
 except Exception as e:
-    print(f"Error registering tools: {e}", file=sys.stderr)
+    print(f"Error registering execute_tactus tool: {e}", file=sys.stderr)
 
 # Create ASGI application
 app = mcp.http_app()

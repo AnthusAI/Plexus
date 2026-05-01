@@ -111,6 +111,22 @@ export class ConsoleChatResponderStack extends NestedStack {
       }),
     );
 
+    this.responderFunction.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams",
+        ],
+        resources: [
+          "arn:aws:logs:*:*:log-group:/plexus/procedures/*",
+          "arn:aws:logs:*:*:log-group:/plexus/procedures/*:*",
+        ],
+      }),
+    );
+
     new CfnOutput(this, "ConsoleChatResponderFunctionArn", {
       value: this.responderFunction.functionArn,
     });

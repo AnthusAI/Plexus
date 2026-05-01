@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "fa4af6ff-58fe-4f90-b7cc-a82da41bc164",
+  "issue_id": "plx-39099d58-37e1-45e6-bde2-729d07b2899c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T21:07:05.430Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "# Plexus procedure docs refresh\n\n## What\n\nUpdate Plexus-side documentation that references deprecated Tactus idioms to match the current Tactus conventions, BEFORE the new MCP boot prompt is authored. Avoid feeding stale patterns into the boot prompt and into the agents that use it.\n\n## Specific drift identified\n\n`plexus/procedures/AGENTS.md` and related documentation reference `Worker.turn()` style invocations.\n\nIn current Tactus (`tactus/dspy/agent.py` `DSPyAgentHandle.__call__` and `tactus/validation/semantic_visitor.py`):\n- `Worker.turn()` is treated as deprecated by the validator.\n- Current pattern is `agent \"name\" { ... }` declaration with callable handles: `local result = name()`.\n\n## Scope\n\n- Audit `plexus/procedures/AGENTS.md`, `plexus/procedures/DSL_SPECIFICATION.md`, and other procedure docs for deprecated patterns.\n- Update all examples to current callable-handle form.\n- Keep a brief migration note at the top of each affected doc: \"Note: `Worker.turn()` syntax was deprecated in Tactus X.Y; use callable agent handles instead.\"\n\n## Why this is in this epic, not standalone\n\nPer CONTRIBUTING_AGENT.md, project-management chores attach to the parent epic. This work is a hard prerequisite for Epic 8 (boot prompt content) — if we don't do it first, the boot prompt will inherit stale patterns that the agents then propagate.\n\n## Deliverable\n\nUpdated docs in `plexus/procedures/` reflecting current Tactus idioms, with PR linked back to this chore.",
+    "issue_type": "chore",
+    "labels": [],
+    "parent": "plx-9ffd490c-ff25-4277-8008-15037f01f992",
+    "priority": 2,
+    "status": "open",
+    "title": "Plexus procedure docs refresh (callable agent handles vs deprecated Worker.turn)"
+  }
+}
