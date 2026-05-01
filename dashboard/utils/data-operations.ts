@@ -1044,10 +1044,25 @@ export function parseTaskMetadata(rawMetadata: unknown): Record<string, unknown>
 
 export function getTaskProcedureId(task: AmplifyTask | null | undefined): string | null {
   const metadata = parseTaskMetadata(task?.metadata);
-  if (!metadata) return null;
+  if (metadata) {
+    const procedureId = metadata.procedure_id ?? metadata.procedureId;
+    if (typeof procedureId === 'string' && procedureId.trim()) {
+      return procedureId.trim();
+    }
+  }
 
-  const procedureId = metadata.procedure_id ?? metadata.procedureId;
-  return typeof procedureId === 'string' && procedureId.trim() ? procedureId : null;
+  const target = typeof task?.target === 'string' ? task.target.trim() : '';
+  if (!target) return null;
+  if (target.startsWith('procedure/run/')) {
+    const extracted = target.slice('procedure/run/'.length).trim();
+    return extracted || null;
+  }
+  if (target.startsWith('procedure/')) {
+    const extracted = target.slice('procedure/'.length).trim();
+    return extracted || null;
+  }
+
+  return null;
 }
 
 export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvaluation | null {

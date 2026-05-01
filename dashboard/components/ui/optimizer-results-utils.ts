@@ -29,8 +29,8 @@ export const TASK_CARD_FIELDS = `
   command
   description
   dispatchStatus
-  celeryTaskId
   workerNodeId
+  celeryTaskId
   metadata
   createdAt
   startedAt
@@ -83,6 +83,7 @@ export const EVALUATION_CARD_FIELDS = `
   updatedAt
   createdAt
   parameters
+  scoreId
   scoreVersionId
   accuracy
   processedItems
@@ -152,6 +153,40 @@ export const PROCEDURE_DELETE_SUBSCRIPTION_FOR_CARDS = `
       scoreId
       scoreVersionId
       accountId
+    }
+  }
+`
+
+export const PROCEDURE_SCORE_VERSION_CREATE_SUBSCRIPTION_FOR_CARDS = `
+  subscription OnCreateProcedureScoreVersionForCards {
+    onCreateProcedureScoreVersion {
+      id
+      scoreVersionId
+      procedure {
+        ${PROCEDURE_CARD_FIELDS}
+      }
+    }
+  }
+`
+
+export const PROCEDURE_SCORE_VERSION_UPDATE_SUBSCRIPTION_FOR_CARDS = `
+  subscription OnUpdateProcedureScoreVersionForCards {
+    onUpdateProcedureScoreVersion {
+      id
+      scoreVersionId
+      procedure {
+        ${PROCEDURE_CARD_FIELDS}
+      }
+    }
+  }
+`
+
+export const PROCEDURE_SCORE_VERSION_DELETE_SUBSCRIPTION_FOR_CARDS = `
+  subscription OnDeleteProcedureScoreVersionForCards {
+    onDeleteProcedureScoreVersion {
+      id
+      procedureId
+      scoreVersionId
     }
   }
 `
@@ -1056,7 +1091,7 @@ export async function refreshOptimizerRunManifest(run: OptimizerRunView): Promis
   }
 }
 
-export async function loadOptimizerRuns(scoreId: string, pageSize: number = 100): Promise<OptimizerRunView[]> {
+async function loadProcedureRecordsByScoreId(scoreId: string, pageSize: number): Promise<ProcedureRecord[]> {
   const client = getAmplifyClient()
   const procedures: ProcedureRecord[] = []
   let nextToken: string | null | undefined = null
@@ -1096,6 +1131,61 @@ export async function loadOptimizerRuns(scoreId: string, pageSize: number = 100)
     nextToken = page?.nextToken ?? null
   } while (nextToken)
 
+  return procedures
+}
+
+async function loadProcedureRecordsByScoreVersionId(
+  scoreVersionId: string,
+  pageSize: number
+): Promise<ProcedureRecord[]> {
+  const client = getAmplifyClient()
+  const procedures: ProcedureRecord[] = []
+  let nextToken: string | null | undefined = null
+
+  do {
+    const procedureResponse = await client.graphql({
+      query: `
+        query ListProcedureScoreVersionByScoreVersionIdAndUpdatedAtWorkbench(
+          $scoreVersionId: String!
+          $sortDirection: ModelSortDirection
+          $limit: Int
+          $nextToken: String
+        ) {
+          listProcedureScoreVersionByScoreVersionIdAndUpdatedAt(
+            scoreVersionId: $scoreVersionId
+            sortDirection: $sortDirection
+            limit: $limit
+            nextToken: $nextToken
+          ) {
+            items {
+              procedure {
+                ${PROCEDURE_CARD_FIELDS}
+              }
+            }
+            nextToken
+          }
+        }
+      `,
+      variables: {
+        scoreVersionId,
+        sortDirection: 'DESC',
+        limit: pageSize,
+        nextToken,
+      },
+    }) as any
+
+    const page = procedureResponse.data?.listProcedureScoreVersionByScoreVersionIdAndUpdatedAt
+    procedures.push(...(page?.items ?? []).map((item: any) => item?.procedure).filter(Boolean))
+    nextToken = page?.nextToken ?? null
+  } while (nextToken)
+
+  return procedures
+}
+
+async function procedureRecordsToOptimizerRunViews(
+  procedures: ProcedureRecord[]
+): Promise<OptimizerRunView[]> {
+  const client = getAmplifyClient()
   const accountIds = [...new Set(procedures.map((procedure) => procedure.accountId).filter(Boolean))]
   const taskResponses = await Promise.all(
     accountIds.map((accountId) =>
@@ -1141,6 +1231,19 @@ export async function loadOptimizerRuns(scoreId: string, pageSize: number = 100)
       return procedureToOptimizerRunView(procedure, task)
     })
   )
+}
+
+export async function loadOptimizerRuns(scoreId: string, pageSize: number = 100): Promise<OptimizerRunView[]> {
+  const procedures = await loadProcedureRecordsByScoreId(scoreId, pageSize)
+  return procedureRecordsToOptimizerRunViews(procedures)
+}
+
+export async function loadScoreVersionOptimizerRuns(
+  scoreVersionId: string,
+  pageSize: number = 100
+): Promise<OptimizerRunView[]> {
+  const procedures = await loadProcedureRecordsByScoreVersionId(scoreVersionId, pageSize)
+  return procedureRecordsToOptimizerRunViews(procedures)
 }
 
 export function evaluationToScoreEvaluationView(item: any): ScoreEvaluationView {
@@ -1199,5 +1302,38 @@ export async function loadScoreEvaluations(scoreId: string, limit: number = 100)
   }) as any
 
   const items = response.data?.listEvaluationByScoreIdAndUpdatedAt?.items ?? []
+  return items.map(evaluationToScoreEvaluationView)
+}
+
+export async function loadScoreVersionEvaluations(
+  scoreVersionId: string,
+  limit: number = 100
+): Promise<ScoreEvaluationView[]> {
+  const response = await getAmplifyClient().graphql({
+    query: `
+      query ListEvaluationByScoreVersionIdAndCreatedAtForWorkbench(
+        $scoreVersionId: String!
+        $sortDirection: ModelSortDirection!
+        $limit: Int
+      ) {
+        listEvaluationByScoreVersionIdAndCreatedAt(
+          scoreVersionId: $scoreVersionId
+          sortDirection: $sortDirection
+          limit: $limit
+        ) {
+          items {
+            ${EVALUATION_CARD_FIELDS}
+          }
+        }
+      }
+    `,
+    variables: {
+      scoreVersionId,
+      sortDirection: 'DESC',
+      limit,
+    },
+  }) as any
+
+  const items = response.data?.listEvaluationByScoreVersionIdAndCreatedAt?.items ?? []
   return items.map(evaluationToScoreEvaluationView)
 }

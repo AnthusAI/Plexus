@@ -48,6 +48,7 @@ type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | 
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
 type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "updatedAt" | "createdAt" | "category" | "version" | "status";
+type ProcedureScoreVersionIndexFields = "procedureId" | "scoreVersionId" | "scoreId" | "updatedAt";
 
 // New index types for Feedback Alignment
 // type FeedbackAlignmentIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -207,7 +208,8 @@ const schema = a.schema({
             childVersions: a.hasMany('ScoreVersion', 'parentVersionId'),
             evaluations: a.hasMany('Evaluation', 'scoreVersionId'),
             dataSets: a.hasMany('DataSet', 'scoreVersionId'),
-            procedures: a.hasMany('Procedure', 'scoreVersionId')
+            procedures: a.hasMany('Procedure', 'scoreVersionId'),
+            procedureLinks: a.hasMany('ProcedureScoreVersion', 'scoreVersionId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -866,7 +868,8 @@ const schema = a.schema({
             parentProcedureId: a.string(), // References template procedure if this is an instance
             parentProcedure: a.belongsTo('Procedure', 'parentProcedureId'),
             childProcedures: a.hasMany('Procedure', 'parentProcedureId'), // Instances created from this template
-            code: a.string(), // YAML template code (for templates) or copied code (for instances)
+            code: a.string(), // YAML template code (for templates) or copied code (for instances) — omitted for large procedures
+            attachedFiles: a.string().array(), // S3 keys for attachments, e.g. ["procedures/{id}/code.tac"]
             category: a.string(), // For templates: e.g., "hypothesis_generation", "beam_search"
             version: a.string(), // For templates: version (e.g., "1.0", "2.1")
             isDefault: a.boolean(), // For templates: whether this is the default for the category
@@ -883,6 +886,7 @@ const schema = a.schema({
             score: a.belongsTo('Score', 'scoreId'),
             scoreVersionId: a.string(),
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
+            scoreVersionLinks: a.hasMany('ProcedureScoreVersion', 'procedureId'),
             chatSessions: a.hasMany('ChatSession', 'procedureId'),
             chatMessages: a.hasMany('ChatMessage', 'procedureId'),
         })
@@ -898,6 +902,29 @@ const schema = a.schema({
             idx("parentProcedureId").sortKeys(["updatedAt"]),
             idx("category").sortKeys(["version"]).name("byCategory"),
             idx("status").sortKeys(["updatedAt"]).name("byStatus")
+        ]),
+
+    ProcedureScoreVersion: a
+        .model({
+            procedureId: a.string().required(),
+            procedure: a.belongsTo('Procedure', 'procedureId'),
+            scoreVersionId: a.string().required(),
+            scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
+            accountId: a.string().required(),
+            scorecardId: a.string(),
+            scoreId: a.string(),
+            relationshipTypes: a.string().array(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+        })
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated()
+        ])
+        .secondaryIndexes((idx: (field: ProcedureScoreVersionIndexFields) => any) => [
+            idx("procedureId").sortKeys(["updatedAt"]),
+            idx("scoreVersionId").sortKeys(["updatedAt"]),
+            idx("scoreId").sortKeys(["updatedAt"])
         ]),
 
     ChatSession: a
