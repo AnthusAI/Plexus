@@ -110,6 +110,8 @@ interface ScoreResult {
     correct: boolean
     human_explanation: string | null
     text: string | null
+    feedback_item_id?: string | null
+    item_id?: string | null
   }
   trace: any | null
   itemId: string | null
@@ -119,7 +121,14 @@ interface ScoreResult {
     url?: string
   }> | null
   feedbackItem: {
+    id?: string | null
     editCommentValue: string | null
+    initialAnswerValue?: string | null
+    initialCommentValue?: string | null
+    finalAnswerValue?: string | null
+    editorName?: string | null
+    editedAt?: string | null
+    createdAt?: string | null
   } | null
 }
 
@@ -836,6 +845,8 @@ function parseScoreResult(result: any): ParsedScoreResult {
   const correct = Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct);
   const humanExplanation = scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? null;
   const text = scoreResult?.metadata?.text ?? parsedMetadata.text ?? null;
+  const feedbackItemId = scoreResult?.metadata?.feedback_item_id ?? parsedMetadata.feedback_item_id ?? null;
+  const metadataItemId = scoreResult?.metadata?.item_id ?? parsedMetadata.item_id ?? null;
   const itemId = result.itemId || parsedMetadata.item_id?.toString() || null;
 
   // Parse feedbackItem data
@@ -843,6 +854,7 @@ function parseScoreResult(result: any): ParsedScoreResult {
     (sr: any) => sr.type === 'prediction'
   ) || null;
   const feedbackItem = result.feedbackItem ? {
+    id: result.feedbackItem.id || null,
     editCommentValue: result.feedbackItem.editCommentValue || null,
     initialAnswerValue: result.feedbackItem.initialAnswerValue || originalScoreResult?.value || null,
     initialCommentValue: result.feedbackItem.initialCommentValue || originalScoreResult?.explanation || null,
@@ -863,7 +875,9 @@ function parseScoreResult(result: any): ParsedScoreResult {
       human_label: humanLabel,
       correct,
       human_explanation: humanExplanation,
-      text
+      text,
+      feedback_item_id: feedbackItemId,
+      item_id: metadataItemId
     },
     trace,
     itemId,
@@ -901,6 +915,7 @@ const DetailContent = React.memo(({
 
   const [containerWidth, setContainerWidth] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
+  const scoreResultsPanelRef = useRef<HTMLDivElement>(null)
   const [selectedPredictedActual, setSelectedPredictedActual] = useState<{
     predicted: string | null
     actual: string | null
@@ -1014,6 +1029,11 @@ const DetailContent = React.memo(({
       setSelectedPredictedActual({ predicted: null, actual: null })
       selectFirstFilteredScoreResult(itemIds)
     }
+    requestAnimationFrame(() => {
+      if (scoreResultsPanelRef.current && typeof scoreResultsPanelRef.current.scrollIntoView === 'function') {
+        scoreResultsPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    })
   }
 
   const handleCategoryFilter = (
@@ -1052,6 +1072,12 @@ const DetailContent = React.memo(({
     const selectedScoreResultIds = parsedScoreResults
       .filter(result => getScoreResultFilterKeys(result).some(key => normalizedLinkageIds.has(key)))
       .map(result => String(result.id).trim())
+    if (filteredClassifications.length > 0 && selectedScoreResultIds.length === 0) {
+      toast({
+        title: 'No linked score results',
+        description: 'This category has no score-result linkage in the current payload.',
+      })
+    }
 
     setSelectedTopicItemIds(null)
     setSelectedTopicLabel(null)
@@ -1061,6 +1087,11 @@ const DetailContent = React.memo(({
     setCategoryMissingItemIdCount(missingCount)
     setSelectedPredictedActual({ predicted: null, actual: null })
     selectFirstFilteredScoreResult(selectedScoreResultIds)
+    requestAnimationFrame(() => {
+      if (scoreResultsPanelRef.current && typeof scoreResultsPanelRef.current.scrollIntoView === 'function') {
+        scoreResultsPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    })
   }
 
   const clearCategoryFilter = () => {
@@ -1955,7 +1986,7 @@ const DetailContent = React.memo(({
 
         {/* Show score results panel during loading or when results exist, hidden only in narrow detail mode */}
         {(!showScoreResultInNarrowView) && (isResultsLoading || showResultsList) && (
-          <div className={`w-full ${showAsColumns ? 'h-full' : 'h-[500px] mt-6'} flex flex-col overflow-hidden`}>
+          <div ref={scoreResultsPanelRef} className={`w-full ${showAsColumns ? 'h-full' : 'h-[500px] mt-6'} flex flex-col overflow-hidden`}>
             {activeFilterChipLabel && (
               <div className="mb-2">
                 <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
