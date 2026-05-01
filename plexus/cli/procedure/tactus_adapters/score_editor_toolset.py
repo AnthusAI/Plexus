@@ -124,6 +124,9 @@ class ScoreEditorToolset:
                 parsed[OPTIMIZER_SHADOW_INVALID_FIELD] = shadow_ids
             else:
                 parsed.pop(OPTIMIZER_SHADOW_INVALID_FIELD, None)
+            for key in ("external_id", "externalId"):
+                if key in parsed and parsed[key] is not None:
+                    parsed[key] = str(parsed[key])
 
             normalized = _rewrite_multiline_strings(parsed)
             rendered = StringIO()
