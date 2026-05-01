@@ -1,6 +1,7 @@
 name: Feedback Alignment Optimizer
 version: 1.0.0
 class: Tactus
+procedure_type: Optimizer Procedure
 description: "Iteratively optimize Plexus score alignment using feedback evaluations with root-cause analysis (RCA). Runs baseline → analyze RCA → propose changes → evaluate → repeat until convergence or max iterations."
 
 params:
@@ -326,6 +327,11 @@ agents:
       Your output must be brief, concrete, and tightly structured.
       You are not editing code. You are not writing long reports.
 
+      Domain context:
+      In transcripts and evaluation data, "Agent" always means a human call-center
+      representative (a person employed by the company to handle customer calls),
+      never an AI or software agent. "Customer" means the person calling in.
+
       Required output structure:
       ## EXECUTIVE SUMMARY
       - Maximum 4 sentences.
@@ -361,6 +367,12 @@ agents:
 
       Your job is to be concise, structured, and cheap in output tokens.
       Never write long essays. Follow every hard limit exactly.
+
+      Domain context:
+      In transcripts and evaluation data, "Agent" always means a human call-center
+      representative (a person employed by the company to handle customer calls),
+      never an AI or software agent. "Customer" means the person calling in.
+      Keep this in mind whenever you discuss transcript evidence, errors, or labels.
 
       Rules:
       - Respect all sentence, bullet, item, and word limits.
@@ -1005,6 +1017,12 @@ code: |
         end
         return tostring(result)
       end
+    elseif tool_name == "plexus_set_status_message" then
+      dispatch = function(a)
+        local handle = Tool.get("plexus_set_status_message")
+        if handle then handle(a or {}) end
+        return {success = true}
+      end
     elseif tool_name == "plexus_score_test" then
       dispatch = function(a) return plexus.score.test(a) end
     elseif tool_name == "score_editor_setup"
@@ -1497,6 +1515,597 @@ code: |
       end
     end
     return table.concat(parts, "\n")
+  end
+
+  -- ==================================================================
+  -- SME Worksheet helpers (end-of-run, Phase 3b)
+  -- ==================================================================
+  -- These run deterministically against the final RCA and the recurrence
+  -- tracker. Their output feeds the SME Worksheet writer prompt with
+  -- specific items, transcript quotes, and contrasting pairs — the signals
+  -- that the LLM has consistently failed to surface from aggregate context.
+
+  -- Extract the original transcript-quote evidence from an RCA item.
+  local function _extract_evidence_quote(ic)
+    if type(ic) ~= "table" then return "" end
+    if has_text(ic.evidence_quote) then return trunc(ic.evidence_quote, 220) end
+    if type(ic.evidence_snippets) == "table" then
+      for _, snip in ipairs(ic.evidence_snippets) do
+        if type(snip) == "table"
+           and snip.source ~= "edit_comment"
+           and has_text(snip.quote_or_fact) then
+          return trunc(snip.quote_or_fact, 220)
+        end
+      end
+    end
+    return ""
+  end
+
+  -- Extract the edit_comment string for an item from its evidence_snippets.
+  local function _extract_edit_comment(ic)
+    if type(ic) ~= "table" or type(ic.evidence_snippets) ~= "table" then return "" end
+    for _, snip in ipairs(ic.evidence_snippets) do
+      if type(snip) == "table" and snip.source == "edit_comment" and has_text(snip.quote_or_fact) then
+        -- edit_comment snippets come wrapped in quotes; strip them for cleaner display
+        local raw = tostring(snip.quote_or_fact)
+        raw = raw:gsub('^"(.*)"$', "%1")
+        return trunc(raw, 240)
+      end
+    end
+    return ""
+  end
+
+  -- Derive the external_id (numeric content id) from an item_id of the
+  -- form "<account_uuid>--<external_id>". Returns "" if the pattern does
+  -- not match.
+  local function _external_id_from_item(item_id)
+    if type(item_id) ~= "string" or item_id == "" then return "" end
+    local _, _, ext = item_id:find("%-%-([^%-].*)$")
+    return ext or ""
+  end
+
+  -- Build a dashboard URL for an item. Matches MCP/shared/utils.py:get_plexus_url.
+  local PLEXUS_APP_URL = "https://plexus.anth.us"
+
+  local function _item_url(item_id)
+    if type(item_id) ~= "string" or item_id == "" then return "" end
+    return PLEXUS_APP_URL .. "/lab/items/" .. item_id
+  end
+
+  -- Build a clickable markdown link labelled by external_id. Falls back to
+  -- item_id if the composite pattern does not match.
+  local function _item_link(item_id)
+    if type(item_id) ~= "string" or item_id == "" then return "" end
+    local ext = _external_id_from_item(item_id)
+    local label = ext ~= "" and ext or item_id
+    return "[" .. label .. "](" .. _item_url(item_id) .. ")"
+  end
+
+  -- Build a compact agenda context block naming up to `max_items` misclassified
+  -- items from the most recent RCA, each with its clickable markdown link, the
+  -- score version's prediction, the reviewer's label, transcript evidence, and
+  -- cross-cycle pattern. Used by both the per-cycle and end-of-run SME Agenda
+  -- prompts so the LLM has concrete items to cite instead of inventing examples.
+  local function _build_agenda_item_context(max_items)
+    max_items = max_items or 5
+    local last_rca = State.get("last_recent_rca")
+    if type(last_rca) ~= "table" then return "" end
+    local items = last_rca._all_item_classifications
+    if type(items) ~= "table" or #items == 0 then return "" end
+    local recurrence = State.get("item_recurrence") or {}
+
+    -- Collect misclassified items (predicted != correct), preferring PERSISTENT /
+    -- OSCILLATING per the cross-cycle tracker.
+    local wrong = {}
+    for _, ic in ipairs(items) do
+      local pred = tostring(ic.predicted_value or "")
+      local corr = tostring(ic.correct_value or "")
+      if pred ~= "" and corr ~= "" and pred ~= corr then
+        local iid = tostring(ic.item_id or "")
+        local rec = (type(recurrence) == "table" and iid ~= "") and recurrence[iid] or nil
+        local pattern = (rec and rec.pattern) or "EMERGING"
+        local wrong_count = (rec and rec.wrong_count) or 1
+        local priority = 0
+        if pattern == "PERSISTENT" then priority = 3
+        elseif pattern == "OSCILLATING" then priority = 2
+        elseif pattern == "FLIP_FLOP" then priority = 1
+        end
+        table.insert(wrong, {
+          ic = ic,
+          item_id = iid,
+          pattern = pattern,
+          wrong_count = wrong_count,
+          priority = priority,
+        })
+      end
+    end
+    if #wrong == 0 then return "" end
+
+    table.sort(wrong, function(a, b)
+      if a.priority ~= b.priority then return a.priority > b.priority end
+      if a.wrong_count ~= b.wrong_count then return a.wrong_count > b.wrong_count end
+      return tostring(a.item_id) < tostring(b.item_id)
+    end)
+
+    local parts = {}
+    table.insert(parts, "=== CANDIDATE ITEMS FOR AGENDA EXAMPLES ===")
+    table.insert(parts, "Use ONLY these items when writing Examples. Copy each markdown link verbatim.")
+    table.insert(parts, "")
+    local n = math.min(#wrong, max_items)
+    for i = 1, n do
+      local w = wrong[i]
+      local ic = w.ic
+      local link = _item_link(w.item_id)
+      local edit_comment = _extract_edit_comment(ic)
+      local evidence = _extract_evidence_quote(ic)
+      local rationale = tostring(ic.rationale_short or ic.rationale_paragraph or "")
+      local category = tostring(ic.primary_category or "")
+      table.insert(parts, string.format("ITEM %s", _external_id_from_item(w.item_id)))
+      table.insert(parts, "  link: " .. link)
+      table.insert(parts, string.format("  score version predicted: %s", tostring(ic.predicted_value or "?")))
+      table.insert(parts, string.format("  reviewer labeled: %s", tostring(ic.correct_value or "?")))
+      table.insert(parts, string.format("  cross-cycle pattern: %s (wrong %d cycles)", w.pattern, w.wrong_count))
+      if has_text(evidence) then
+        table.insert(parts, string.format("  transcript evidence (\"Agent:\" = human phone operator): \"%s\"", trunc(evidence, 280)))
+      end
+      if has_text(edit_comment) then
+        table.insert(parts, string.format("  reviewer edit comment: \"%s\"", trunc(edit_comment, 280)))
+      end
+      if has_text(category) then
+        table.insert(parts, string.format("  error category: %s", category))
+      end
+      if has_text(rationale) then
+        table.insert(parts, string.format("  score rationale: %s", trunc(rationale, 240)))
+      end
+      table.insert(parts, "")
+    end
+    table.insert(parts, "=== END CANDIDATE ITEMS ===")
+    return table.concat(parts, "\n")
+  end
+
+  -- Deterministic detector: flag items whose feedback record carries
+  -- machine-checkable contradictions suggesting the label itself may be wrong
+  -- (as opposed to a real policy gap). See plan, section 1.
+  local function detect_suspected_mislabels(iterations, item_recurrence)
+    local results = {}
+    local last_rca = State.get("last_recent_rca")
+    if type(last_rca) ~= "table" then return results end
+    local items = last_rca._all_item_classifications
+    if type(items) ~= "table" or #items == 0 then
+      local ma = last_rca.misclassification_analysis
+      if type(ma) == "table" then items = ma.item_classifications_all end
+    end
+    if type(items) ~= "table" or #items == 0 then return results end
+
+    -- Keywords that, when present in edit_comment, express reviewer
+    -- *agreement* with the AI's original prediction or explicitly deny that
+    -- the call was problematic. If final_value disagrees with the model's
+    -- original "no-problem" direction while the comment reads "no problem",
+    -- the label likely contradicts the comment.
+    local agreement_keywords = {
+      "no inappropriate",
+      "not inappropriate",
+      "agree with aime",
+      "agree with ai",
+      "agree w/ ai",
+      "no issue",
+      "not an issue",
+      "nothing inappropriate",
+      "not a violation",
+      "no violation",
+    }
+
+    local function comment_agrees_with_no_problem(comment_lc)
+      for _, kw in ipairs(agreement_keywords) do
+        if comment_lc:find(kw, 1, true) then return true end
+      end
+      return false
+    end
+
+    -- Build a wrong_count lookup from the recurrence tracker for the
+    -- "persistent across 3+ cycles" condition.
+    local wrong_counts = {}
+    local patterns = {}
+    if type(item_recurrence) == "table" then
+      for id, entry in pairs(item_recurrence) do
+        wrong_counts[id] = entry.wrong_count or 0
+        patterns[id] = entry.pattern or "EMERGING"
+      end
+    end
+
+    for _, ic in ipairs(items) do
+      local item_id = tostring(ic.item_id or "")
+      if item_id ~= "" then
+        local external_id = _external_id_from_item(item_id)
+        local predicted = tostring(ic.predicted_value or "")
+        local correct = tostring(ic.correct_value or "")
+        local edit_comment = _extract_edit_comment(ic)
+        local evidence_quote = _extract_evidence_quote(ic)
+        local fixability = tostring(ic.config_fixability or "")
+        local reasons = {}
+
+        -- Reason A: edit_comment text asserts "no problem" but the label
+        -- is the "problem" class (i.e., correct_value disagrees with the
+        -- comment's stated position).
+        if has_text(edit_comment) and comment_agrees_with_no_problem(edit_comment:lower()) then
+          -- The "problem" label depends on the score, so we infer from the
+          -- predicted_value: if the model originally predicted the "no-problem"
+          -- class (whatever value that is) and the comment agrees with no problem,
+          -- then the label should match the prediction — if it doesn't, the
+          -- label contradicts the comment.
+          -- Heuristic: if the model's prediction matches the comment's stance
+          -- (no-problem) but the correct_value does not, flag as suspect.
+          -- We use a simple rule: if predicted != correct AND comment says
+          -- "no problem", the label likely contradicts the comment.
+          if predicted ~= correct then
+            table.insert(reasons, "edit_comment_contradicts_label")
+          end
+        end
+
+        -- Reason B: the model's explanation correctly identified that the
+        -- disputed content was spoken by a non-agent speaker, yet the label
+        -- still disagrees with the model. Detect by looking for the phrase
+        -- "spoken by the customer" / "customer said" / "by the customer"
+        -- in the evidence quote or rationale.
+        local rationale_lc = (tostring(ic.rationale_paragraph or "") .. " "
+                              .. tostring(ic.rationale_short or "") .. " "
+                              .. tostring(evidence_quote or "")):lower()
+        if rationale_lc:find("spoken by the customer", 1, true)
+           or rationale_lc:find("customer said", 1, true)
+           or rationale_lc:find("by the customer", 1, true)
+           or rationale_lc:find("not attributable to the agent", 1, true) then
+          if predicted ~= correct then
+            table.insert(reasons, "model_reasoned_customer_speech_but_label_disagrees")
+          end
+        end
+
+        -- Reason C: persistent failure across cycles + needs_sme_clarification.
+        -- A persistent gray-area item that the optimizer cannot resolve via
+        -- rule changes is a candidate for label review.
+        local wc = wrong_counts[item_id] or 0
+        local pat = patterns[item_id] or "EMERGING"
+        if (pat == "PERSISTENT" or pat == "OSCILLATING")
+           and wc >= 3
+           and (fixability == "needs_sme_clarification"
+                or fixability == "blocked_by_mechanical") then
+          table.insert(reasons, "persistent_unfixable_gray_area")
+        end
+
+        if #reasons > 0 then
+          table.insert(results, {
+            item_id = item_id,
+            external_id = external_id,
+            predicted_value = predicted,
+            correct_value = correct,
+            edit_comment = edit_comment,
+            evidence_quote = evidence_quote,
+            primary_category = tostring(ic.primary_category or ""),
+            config_fixability = fixability,
+            wrong_count = wc,
+            pattern = pat,
+            reasons = reasons,
+          })
+        end
+      end
+    end
+    return results
+  end
+
+  -- Deterministic detector: find up to 3 pairs of persistent/oscillating
+  -- items with OPPOSITE labels and shared primary_category or overlapping
+  -- evidence vocabulary. These reveal the actual policy axis reviewers
+  -- disagree on. See plan, section 2.
+  local function build_contrasting_pairs(iterations, item_recurrence)
+    local results = {}
+    local last_rca = State.get("last_recent_rca")
+    if type(last_rca) ~= "table" then return results end
+    local items = last_rca._all_item_classifications
+    if type(items) ~= "table" or #items == 0 then
+      local ma = last_rca.misclassification_analysis
+      if type(ma) == "table" then items = ma.item_classifications_all end
+    end
+    if type(items) ~= "table" or #items == 0 then return results end
+
+    local patterns = {}
+    if type(item_recurrence) == "table" then
+      for id, entry in pairs(item_recurrence) do
+        patterns[id] = entry.pattern or "EMERGING"
+      end
+    end
+
+    -- Candidate pool: misclassified in final cycle AND persistent/oscillating.
+    local candidates = {}
+    for _, ic in ipairs(items) do
+      local item_id = tostring(ic.item_id or "")
+      local pat = patterns[item_id] or "EMERGING"
+      if item_id ~= "" and (pat == "PERSISTENT" or pat == "OSCILLATING" or pat == "FLIP_FLOP") then
+        table.insert(candidates, {
+          item_id = item_id,
+          external_id = _external_id_from_item(item_id),
+          predicted_value = tostring(ic.predicted_value or ""),
+          correct_value = tostring(ic.correct_value or ""),
+          edit_comment = _extract_edit_comment(ic),
+          evidence_quote = _extract_evidence_quote(ic),
+          primary_category = tostring(ic.primary_category or ""),
+          rationale_short = trunc(tostring(ic.rationale_short or ic.rationale_paragraph or ""), 220),
+          pattern = pat,
+        })
+      end
+    end
+    if #candidates < 2 then return results end
+
+    -- Tokenize helper for cheap overlap.
+    local stopwords = {
+      ["the"]=1,["a"]=1,["an"]=1,["and"]=1,["or"]=1,["of"]=1,["to"]=1,["in"]=1,
+      ["on"]=1,["is"]=1,["are"]=1,["was"]=1,["were"]=1,["be"]=1,["it"]=1,["that"]=1,
+      ["this"]=1,["for"]=1,["with"]=1,["as"]=1,["by"]=1,["at"]=1,["from"]=1,["not"]=1,
+      ["no"]=1,["yes"]=1,["i"]=1,["you"]=1,["we"]=1,["he"]=1,["she"]=1,["they"]=1,
+      ["agent"]=1,["customer"]=1,["transcript"]=1,["evidence"]=1,
+    }
+    local function tokenize(s)
+      local tokens = {}
+      if type(s) ~= "string" then return tokens end
+      for w in s:lower():gmatch("[%a']+") do
+        if #w >= 3 and not stopwords[w] then
+          tokens[w] = (tokens[w] or 0) + 1
+        end
+      end
+      return tokens
+    end
+    local function overlap_score(a_tokens, b_tokens)
+      local score = 0
+      for w, _ in pairs(a_tokens) do
+        if b_tokens[w] then score = score + 1 end
+      end
+      return score
+    end
+
+    -- Score every opposite-label pair.
+    local scored_pairs = {}
+    for i = 1, #candidates - 1 do
+      for j = i + 1, #candidates do
+        local a, b = candidates[i], candidates[j]
+        if a.correct_value ~= "" and b.correct_value ~= "" and a.correct_value ~= b.correct_value then
+          local a_text = (a.evidence_quote or "") .. " " .. (a.rationale_short or "")
+          local b_text = (b.evidence_quote or "") .. " " .. (b.rationale_short or "")
+          local a_tokens = tokenize(a_text)
+          local b_tokens = tokenize(b_text)
+          local vocab_score = overlap_score(a_tokens, b_tokens)
+          local category_bonus = (a.primary_category ~= "" and a.primary_category == b.primary_category) and 3 or 0
+          local total_score = vocab_score + category_bonus
+          if total_score > 0 then
+            -- Identify shared tokens for "distinguishing feature" hint.
+            local shared_tokens = {}
+            for w, _ in pairs(a_tokens) do
+              if b_tokens[w] then table.insert(shared_tokens, w) end
+            end
+            table.insert(scored_pairs, {
+              a = a, b = b, score = total_score, shared_tokens = shared_tokens,
+            })
+          end
+        end
+      end
+    end
+    table.sort(scored_pairs, function(x, y) return x.score > y.score end)
+
+    -- Take up to 3 highest-scoring pairs with no item repeated across pairs.
+    local used = {}
+    for _, p in ipairs(scored_pairs) do
+      if #results >= 3 then break end
+      if not used[p.a.item_id] and not used[p.b.item_id] then
+        used[p.a.item_id] = true
+        used[p.b.item_id] = true
+        -- Build a compact shared-tokens string for the Worksheet hint.
+        local shared_str = ""
+        if #p.shared_tokens > 0 then
+          local top = {}
+          for i = 1, math.min(5, #p.shared_tokens) do table.insert(top, p.shared_tokens[i]) end
+          shared_str = table.concat(top, ", ")
+        end
+        table.insert(results, {
+          item_a = p.a,
+          item_b = p.b,
+          similarity_score = p.score,
+          shared_vocabulary = shared_str,
+        })
+      end
+    end
+    return results
+  end
+
+  -- Per-item LLM diagnostic for repeat offenders.
+  -- Runs once per cycle for every PERSISTENT/OSCILLATING item with wrong_count >= 3.
+  -- Returns a list of diagnosis records stored in State("repeat_offender_diagnoses").
+  -- Each record: {item_id, external_id, diagnosis, confidence, explanation, recommended_action}
+  -- diagnosis values: mislabel | rubric_gap | new_policy_case | classifier_failure | contradictory_rule
+  -- recommended_action values: challenge_label | clarify_rubric | add_policy | accept_ceiling | investigate_code
+  --
+  -- Called from the per-cycle block after update_item_recurrence; results injected into
+  -- build_planning_context() and the per-cycle SME Worksheet.
+  local function analyze_repeat_offenders(cycle, item_recurrence, iterations)
+    if type(item_recurrence) ~= "table" then return {} end
+
+    -- Collect candidates: PERSISTENT or OSCILLATING with wrong_count >= 3
+    local candidates = {}
+    local last_rca = State.get("last_recent_rca")
+    local rca_items_by_id = {}
+    if type(last_rca) == "table" then
+      local items = last_rca._all_item_classifications
+      if type(items) ~= "table" or #items == 0 then
+        local ma = last_rca.misclassification_analysis
+        if type(ma) == "table" then items = ma.item_classifications_all end
+      end
+      if type(items) == "table" then
+        for _, ic in ipairs(items) do
+          local id = tostring(ic.item_id or "")
+          if id ~= "" then rca_items_by_id[id] = ic end
+        end
+      end
+    end
+
+    for item_id, entry in pairs(item_recurrence) do
+      local pat = entry.pattern or "EMERGING"
+      local wc = entry.wrong_count or 0
+      if (pat == "PERSISTENT" or pat == "OSCILLATING") and wc >= 3 then
+        table.insert(candidates, {id = item_id, entry = entry, rca_ic = rca_items_by_id[item_id]})
+      end
+    end
+
+    if #candidates == 0 then return {} end
+
+    -- Sort: OSCILLATING first (contradictory rule signal), then by wrong_count desc
+    table.sort(candidates, function(a, b)
+      local ap = a.entry.pattern == "OSCILLATING" and 0 or 1
+      local bp = b.entry.pattern == "OSCILLATING" and 0 or 1
+      if ap ~= bp then return ap < bp end
+      return (a.entry.wrong_count or 0) > (b.entry.wrong_count or 0)
+    end)
+
+    -- Cap at 6 items to keep LLM cost bounded
+    if #candidates > 6 then
+      local trimmed = {}
+      for i = 1, 6 do trimmed[i] = candidates[i] end
+      candidates = trimmed
+    end
+
+    -- Check if we already analyzed these items this cycle (skip re-analysis on re-entry)
+    local existing = State.get("repeat_offender_diagnoses") or {}
+    local existing_cycle = State.get("repeat_offender_diagnoses_cycle") or -1
+    if existing_cycle == cycle and #existing > 0 then
+      return existing
+    end
+
+    diag(string.format("analyze_repeat_offenders: cycle %d, %d candidates", cycle, #candidates))
+
+    local results = {}
+
+    for _, cand in ipairs(candidates) do
+      local item_id = cand.id
+      local entry = cand.entry
+      local ic = cand.rca_ic
+      local external_id = _external_id_from_item(item_id)
+
+      -- Build per-item diagnostic prompt
+      local p = {}
+      table.insert(p, string.format(
+        "You are diagnosing a single repeat-offender item from a score optimization run.\n"
+        .. "Terminology: \"Agent:\" in transcripts = the human call-center phone operator.\n"
+        .. "The thing being evaluated is the score version, never call it \"AI\".\n"
+        .. "Item external_id: %s | Pattern: %s | Wrong %d cycles | Correct %d cycles\n"
+        .. "Human reviewer label: %s | Most recent score prediction: %s\n",
+        external_id ~= "" and external_id or item_id,
+        entry.pattern or "?",
+        entry.wrong_count or 0,
+        entry.correct_count or 0,
+        tostring(entry.recent_label or "?"),
+        tostring(entry.model_prediction or "?")))
+
+      -- Per-cycle history
+      if entry.per_cycle and #entry.per_cycle > 0 then
+        table.insert(p, "Per-cycle history (most recent first):")
+        for i = #entry.per_cycle, math.max(1, #entry.per_cycle - 6), -1 do
+          local pc = entry.per_cycle[i]
+          local outcome = pc.segment == "CORRECT" and "✓ CORRECT" or string.format("✗ WRONG (%s)", pc.segment or "?")
+          local hyp_note = has_text(pc.hypothesis) and (" | hypothesis: " .. trunc(pc.hypothesis, 80)) or ""
+          table.insert(p, string.format("  Cycle %d: %s%s", pc.cycle or i, outcome, hyp_note))
+          if pc.segment ~= "CORRECT" then
+            if has_text(pc.rationale) then
+              table.insert(p, string.format("    RCA: %s", trunc(pc.rationale, 180)))
+            end
+            if has_text(pc.evidence) then
+              table.insert(p, string.format("    Evidence: \"%s\"", trunc(pc.evidence, 180)))
+            end
+          end
+        end
+        table.insert(p, "")
+      end
+
+      -- RCA item details (from last evaluation)
+      if type(ic) == "table" then
+        local edit_comment = _extract_edit_comment(ic)
+        local evidence_quote = _extract_evidence_quote(ic)
+        local fixability = tostring(ic.config_fixability or "")
+        local rationale = tostring(ic.rationale_short or ic.rationale_paragraph or "")
+        if has_text(edit_comment) then
+          table.insert(p, string.format("Reviewer edit comment: \"%s\"", edit_comment))
+        end
+        if has_text(evidence_quote) then
+          table.insert(p, string.format("Transcript evidence: \"%s\"", evidence_quote))
+        end
+        if has_text(fixability) then
+          table.insert(p, string.format("Config fixability: %s", fixability))
+        end
+        if has_text(rationale) then
+          table.insert(p, string.format("Score rationale: %s", trunc(rationale, 300)))
+        end
+        table.insert(p, "")
+      end
+
+      table.insert(p, "Based on all the above, diagnose this item. Respond in exactly this format:\n")
+      table.insert(p, "DIAGNOSIS: <one of: mislabel | rubric_gap | new_policy_case | classifier_failure | contradictory_rule>")
+      table.insert(p, "CONFIDENCE: <one of: high | medium | low>")
+      table.insert(p, "EXPLANATION: <1-2 sentences explaining what is actually happening>")
+      table.insert(p, "RECOMMENDED_ACTION: <one of: challenge_label | clarify_rubric | add_policy | accept_ceiling | investigate_code>")
+      table.insert(p, "SME_QUESTION: <one sentence — the specific question to put to a domain expert, or NONE if no SME input needed>")
+      table.insert(p, "\nDiagnosis values:\n"
+        .. "  mislabel — the human reviewer's label is likely wrong (the score is correct)\n"
+        .. "  rubric_gap — the rubric is missing or ambiguous; a rule addition could fix this\n"
+        .. "  new_policy_case — this is a novel scenario not covered by the current rubric\n"
+        .. "  classifier_failure — the score's reasoning is wrong; better prompt logic is needed\n"
+        .. "  contradictory_rule — fixing this item requires a rule that breaks other items\n"
+        .. "Recommended action values:\n"
+        .. "  challenge_label — bring to SME to review the human label\n"
+        .. "  clarify_rubric — the existing rubric rule needs to be sharpened\n"
+        .. "  add_policy — a new policy rule needs to be added to the rubric\n"
+        .. "  accept_ceiling — accept that this item cannot be fixed without contradicting others\n"
+        .. "  investigate_code — check for a code/structural issue (not a policy problem)")
+
+      local prompt_text = table.concat(p, "\n")
+
+      local ok, err = pcall(function()
+        report_writer.clear_history()
+        safe_agent_call(report_writer, "report_writer", prompt_text, nil)
+      end)
+
+      local raw_output = report_writer.output or ""
+
+      if ok and has_text(raw_output) then
+        -- Parse structured response
+        local diagnosis = raw_output:match("DIAGNOSIS:%s*([%w_]+)") or "classifier_failure"
+        local confidence = raw_output:match("CONFIDENCE:%s*([%w]+)") or "low"
+        local explanation = raw_output:match("EXPLANATION:%s*([^\n]+)") or ""
+        local recommended_action = raw_output:match("RECOMMENDED_ACTION:%s*([%w_]+)") or "investigate_code"
+        local sme_question = raw_output:match("SME_QUESTION:%s*([^\n]+)") or ""
+        if sme_question:upper() == "NONE" then sme_question = "" end
+
+        table.insert(results, {
+          item_id = item_id,
+          external_id = external_id,
+          pattern = entry.pattern,
+          wrong_count = entry.wrong_count or 0,
+          correct_count = entry.correct_count or 0,
+          recent_label = tostring(entry.recent_label or ""),
+          model_prediction = tostring(entry.model_prediction or ""),
+          diagnosis = diagnosis,
+          confidence = confidence,
+          explanation = explanation,
+          recommended_action = recommended_action,
+          sme_question = sme_question,
+        })
+
+        diag(string.format(
+          "analyze_repeat_offenders: item %s → diagnosis=%s [%s] action=%s",
+          external_id ~= "" and external_id or item_id, diagnosis, confidence, recommended_action))
+      else
+        diag(string.format(
+          "analyze_repeat_offenders: item %s failed: %s",
+          external_id ~= "" and external_id or item_id, trunc(tostring(err or ""), 120)))
+      end
+    end
+
+    State.set("repeat_offender_diagnoses", results)
+    State.set("repeat_offender_diagnoses_cycle", cycle)
+    return results
   end
 
   -- Forward declaration: defined later but called from build_planning_context
@@ -2159,6 +2768,53 @@ code: |
         table.insert(parts, "=== END ITEM RECURRENCE PATTERNS ===")
         table.insert(parts, "")
       end
+    end
+
+    -- Repeat-offender LLM diagnoses: per-item diagnosis for PERSISTENT/OSCILLATING items
+    -- with wrong_count >= 3. Produced by analyze_repeat_offenders() each cycle.
+    local rod = State.get("repeat_offender_diagnoses") or {}
+    if #rod > 0 then
+      table.insert(parts, "=== REPEAT-OFFENDER DIAGNOSES (LLM per-item analysis) ===")
+      table.insert(parts, "These items have been wrong for 3+ consecutive cycles despite multiple prompt changes.")
+      table.insert(parts, "Each diagnosis explains WHY the optimizer cannot fix the item and what action is needed.\n")
+      for _, d in ipairs(rod) do
+        local id_label = has_text(d.external_id) and d.external_id or d.item_id
+        table.insert(parts, string.format(
+          "Item %s — Pattern: %s | Wrong: %d | Label: %s | AI: %s",
+          id_label, d.pattern or "?", d.wrong_count or 0,
+          d.recent_label or "?", d.model_prediction or "?"))
+        table.insert(parts, string.format(
+          "  Diagnosis: %s [%s confidence] — %s",
+          d.diagnosis or "?", d.confidence or "?", d.explanation or ""))
+        table.insert(parts, string.format(
+          "  Recommended action: %s",
+          d.recommended_action or "?"))
+        if has_text(d.sme_question) then
+          table.insert(parts, string.format(
+            "  SME question: %s", d.sme_question))
+        end
+        table.insert(parts, "")
+      end
+      -- Escalation guidance based on diagnosis types
+      local has_ceiling = false
+      local has_mislabel = false
+      local has_contradictory = false
+      for _, d in ipairs(rod) do
+        if d.recommended_action == "accept_ceiling" then has_ceiling = true end
+        if d.diagnosis == "mislabel" and d.confidence == "high" then has_mislabel = true end
+        if d.diagnosis == "contradictory_rule" then has_contradictory = true end
+      end
+      if has_ceiling or has_contradictory then
+        table.insert(parts, "ESCALATION: One or more items have diagnosis=contradictory_rule or action=accept_ceiling.")
+        table.insert(parts, "Do NOT generate more hypothesis variants targeting these items — the optimizer cannot fix them.")
+        table.insert(parts, "Instead, generate a SME question for each and move on to other items.")
+      end
+      if has_mislabel then
+        table.insert(parts, "MISLABEL ALERT: One or more items have high-confidence mislabel diagnosis.")
+        table.insert(parts, "These items should be flagged for label review before further optimization cycles.")
+      end
+      table.insert(parts, "=== END REPEAT-OFFENDER DIAGNOSES ===")
+      table.insert(parts, "")
     end
 
     -- Guidelines (read-only reference), then editable score config last
@@ -3041,6 +3697,12 @@ code: |
     Human.notify({message = msg, level = "info"})
   end
 
+  -- Update the dashboard status message (visible during long-running cycles).
+  -- Silently no-ops if the tool is unavailable.
+  local function status_msg(msg)
+    pcall(call_plexus_tool, "plexus_set_status_message", {message = msg}, {max_retries = 1})
+  end
+
   -- Phase A: Setup & Baseline
   Stage.set("setup")
   Stage.progress(0, params.max_iterations)  -- show total cycle count from the start
@@ -3237,7 +3899,13 @@ code: |
         tostring(gate_result.summary_counts and gate_result.summary_counts.transformed or 0),
         tostring(gate_result.summary_counts and gate_result.summary_counts.kept or 0)
       ), level = "info"})
-      return gate_result.final_agenda_markdown or raw_agenda, gate_result
+      -- Validate the returned markdown is actual agenda text, not a serialized object
+      local fam = gate_result.final_agenda_markdown
+      local fam_looks_valid = type(fam) == "string"
+        and fam:len() > 0
+        and not fam:find("output=None", 1, true)
+        and not fam:find("UsageStats(", 1, true)
+      return fam_looks_valid and fam or raw_agenda, gate_result
     end
     local err = gate_ok and type(gate_result) == "table" and gate_result.error or tostring(gate_result)
     record_sme_question_gate(stage, raw_agenda, {success = false, error = err})
@@ -3667,13 +4335,14 @@ code: |
           Human.notify({message = "Created unbalanced dataset: " .. selected_dataset_id .. " (" .. final_build_result.rows_written .. " rows)", level = "info"})
         else
           local final_rows = (final_build_result and final_build_result.rows_written) or 0
-          error(string.format(
-            "Insufficient feedback data to build a regression dataset for version %s. Only %d items available (need %d, minimum %d).",
+          Human.notify({message = string.format(
+            "Insufficient feedback data for regression dataset (version %s): only %d items available (need %d, minimum %d). Regression tracking disabled for this run.",
             tostring(version_id or "champion"),
             final_rows,
             min_dataset_rows,
             min_acceptable
-          ))
+          ), level = "warning"})
+          return nil
         end
       end
     end
@@ -3736,7 +4405,12 @@ code: |
 
   State.set("dataset_id", dataset_id)
   State.set("feedback_target_updated_at", feedback_target_updated_at)
-  Human.notify({message = "Using regression dataset: " .. dataset_id, level = "info"})
+  if dataset_id then
+    Human.notify({message = "Using regression dataset: " .. dataset_id, level = "info"})
+  else
+    regression_available = false
+    Human.notify({message = "No regression dataset available — running feedback-only (no accuracy regression guard).", level = "warning"})
+  end
 
   -- Pull starting version (champion or specified start_version)
   local pull_args = {
@@ -3758,7 +4432,10 @@ code: |
     }
   end
   -- champion_version_id and baseline variables are pre-declared above the continuation check
-  champion_version_id = initial_pull.versionId
+  -- For continuation runs, champion_version_id was already restored from State; do not overwrite it.
+  if not is_continuation then
+    champion_version_id = initial_pull.versionId
+  end
   if not has_text(active_rubric_memory_score_version_id) then
     active_rubric_memory_score_version_id = champion_version_id
   end
@@ -3766,8 +4443,11 @@ code: |
   dataset_cache_by_version[tostring(champion_version_id)] = {
     dataset_id = dataset_id
   }
-  current_code_path = initial_pull.codeFilePath
-  current_code = File.read(current_code_path)
+  -- For continuation runs, current_code_path/current_code were already restored from the champion version.
+  if not is_continuation then
+    current_code_path = initial_pull.codeFilePath
+    current_code = File.read(current_code_path)
+  end
 
   -- Detect score class and load class-specific YAML format doc
   local score_class = (current_code:match("\nclass:%s*(%S+)")
@@ -3784,10 +4464,12 @@ code: |
   Human.notify({message = string.format(
     "  Score class: %s — loaded doc: %s", score_class, score_class_doc_key), level = "info"})
 
-  current_guidelines = ""
-  if initial_pull.guidelinesFilePath then
-    local g = File.read(initial_pull.guidelinesFilePath)
-    if has_text(g) then current_guidelines = g end
+  if not is_continuation then
+    current_guidelines = ""
+    if initial_pull.guidelinesFilePath then
+      local g = File.read(initial_pull.guidelinesFilePath)
+      if has_text(g) then current_guidelines = g end
+    end
   end
   Human.notify({message = "Champion version: " .. tostring(champion_version_id), level = "info"})
 
@@ -3944,9 +4626,9 @@ code: |
   end
 
   -- Run fresh baselines for any that weren't found above
-  if not recent_baseline_id or (not regression_baseline_id and not resume_regression) then
+  if not recent_baseline_id or (dataset_id and not regression_baseline_id and not resume_regression) then
     local batch_items = {}
-    if not regression_baseline_id then
+    if dataset_id and not regression_baseline_id then
       table.insert(batch_items, {
         scorecard_name  = params.scorecard,
         score_name      = params.score,
@@ -3982,7 +4664,7 @@ code: |
 
     -- Parse results — map back to regression/recent based on what we requested
     local batch_idx = 1
-    if not regression_baseline_id then
+    if dataset_id and not regression_baseline_id then
       local acc_result = baseline_batch and baseline_batch[batch_idx]
       if acc_result and not acc_result.error and (acc_result.id or acc_result.evaluation_id) then
         regression_baseline         = acc_result
@@ -4502,6 +5184,7 @@ code: |
       "═══ Cycle %d/%d ═══", cycle, max_cycles), level = "info"})
     State.set("current_iteration", cycle)
     Stage.progress(cycle, max_cycles)
+    status_msg(string.format("Cycle %d/%d — starting", cycle, max_cycles))
 
     -- Stop when feedback changed since run start; restart is required to keep baselines coherent.
     do
@@ -4620,6 +5303,7 @@ code: |
     -- duplication and ensure diversity.
     -- ================================================================
     Stage.set("exploration")
+    status_msg(string.format("Cycle %d/%d — planning hypotheses", cycle, max_cycles))
     Human.notify({message = string.format(
       "Cycle %d — Planning: generating hypotheses sequentially...", cycle
     ), level = "info"})
@@ -4690,6 +5374,7 @@ code: |
     local hypotheses = {}
 
     for slot_idx, slot_name in ipairs(hyp_slots) do
+      status_msg(string.format("Cycle %d/%d — generating hypothesis %d/%d (%s)", cycle, max_cycles, slot_idx, #hyp_slots, slot_name))
       Human.notify({message = string.format(
         "  Generating hypothesis %d/%d (%s)...", slot_idx, #hyp_slots, slot_name), level = "info"})
 
@@ -4857,6 +5542,7 @@ code: |
 
     for h = 1, #hypotheses do
       local hyp = hypotheses[h]
+      status_msg(string.format("Cycle %d/%d — implementing hypothesis %d/%d: %s", cycle, max_cycles, h, #hypotheses, trunc(hyp.name, 60)))
       Human.notify({message = string.format(
         "  Hypothesis %d/%d: %s", h, #hypotheses, hyp.name), level = "info"})
 
@@ -5302,6 +5988,7 @@ code: |
         })
       end
 
+      status_msg(string.format("Cycle %d/%d — evaluating %d hypotheses (%d evals)", cycle, max_cycles, #submitted_versions, #batch))
       Human.notify({message = string.format(
         "  Evaluating %d hypotheses (%d evals in parallel)...",
         #submitted_versions, #batch
@@ -5377,6 +6064,7 @@ code: |
       -- ================================================================
       diag("Entering synthesis phase")
       Stage.set("selection")
+      status_msg(string.format("Cycle %d/%d — synthesis (combining best changes)", cycle, max_cycles))
       local final_version_id = nil
       local final_is_synthesis = true
       local final_done_reason = ""
@@ -6391,6 +7079,7 @@ code: |
         else
           -- Need fresh evals for combined version
           diag(string.format("Dispatching synthesis eval for version %s", tostring(final_version_id)))
+          status_msg(string.format("Cycle %d/%d — evaluating synthesis result", cycle, max_cycles))
           Human.notify({message = "  Evaluating final version...", level = "info"})
           local b_batch = {}
           local final_dataset_id = nil
@@ -6599,20 +7288,24 @@ code: |
           if acc_regressed then
             decision_str = "REJECTED"
             decision_reason = string.format("accuracy regressed vs baseline by %.4f", math.abs(b_acc_deltas.alignment))
+            status_msg(string.format("Cycle %d/%d — REJECTED: %s", cycle, max_cycles, decision_reason))
             Human.notify({message = string.format("Cycle %d REJECTED: %s", cycle, decision_reason), level = "warning"})
           elseif fb_regressed then
             decision_str = "REJECTED"
             decision_reason = string.format("feedback regressed vs baseline by %.4f", math.abs(b_fb_deltas.alignment))
+            status_msg(string.format("Cycle %d/%d — REJECTED: %s", cycle, max_cycles, decision_reason))
             Human.notify({message = string.format("Cycle %d REJECTED: %s", cycle, decision_reason), level = "warning"})
           elseif acc_regressed_vs_accepted then
             local vs_acc = calculate_deltas(b_acc_metrics, last_accepted_acc_metrics)
             decision_str = "REJECTED"
             decision_reason = string.format("accuracy regressed vs last accepted by %.4f", math.abs(vs_acc.alignment))
+            status_msg(string.format("Cycle %d/%d — REJECTED: %s", cycle, max_cycles, decision_reason))
             Human.notify({message = string.format("Cycle %d REJECTED: %s", cycle, decision_reason), level = "warning"})
           elseif fb_regressed_vs_accepted then
             local vs_fb = calculate_deltas(b_fb_metrics, last_accepted_fb_metrics)
             decision_str = "REJECTED"
             decision_reason = string.format("feedback regressed vs last accepted by %.4f", math.abs(vs_fb.alignment))
+            status_msg(string.format("Cycle %d/%d — REJECTED: %s", cycle, max_cycles, decision_reason))
             Human.notify({message = string.format("Cycle %d REJECTED: %s", cycle, decision_reason), level = "warning"})
           else
             accept = true
@@ -6620,10 +7313,12 @@ code: |
             if fb_improved then
               decision_str = "ACCEPTED"
               decision_reason = string.format("feedback improved by %.4f", b_fb_deltas.alignment)
+              status_msg(string.format("Cycle %d/%d — ACCEPTED: %s", cycle, max_cycles, decision_reason))
               Human.notify({message = string.format("Cycle %d ACCEPTED: %s", cycle, decision_reason), level = "info"})
             else
               decision_str = "CARRIED"
               decision_reason = string.format("neutral result (Recent %+.4f)", b_fb_deltas.alignment)
+              status_msg(string.format("Cycle %d/%d — CARRIED: %s", cycle, max_cycles, decision_reason))
               Human.notify({message = string.format("Cycle %d CARRIED: %s — carrying forward to accumulate improvements", cycle, decision_reason), level = "info"})
             end
             last_accepted_version_id = final_version_id
@@ -6740,6 +7435,29 @@ code: |
         end
         diag(string.format("Item recurrence tracker (cycle %d): %d total (%d oscillating, %d persistent, %d flip-flop, %d emerging), fb_item_class=%d",
           cycle, o_count + p_count + f_count + e_count, o_count, p_count, f_count, e_count, #fb_item_class))
+
+        -- Run per-item LLM diagnosis for repeat offenders (PERSISTENT/OSCILLATING, wrong_count >= 3)
+        if p_count + o_count > 0 then
+          status_msg(string.format("Cycle %d/%d — diagnosing %d repeat offenders", cycle, max_cycles, p_count + o_count))
+          local rod = {}
+          pcall(function()
+            rod = analyze_repeat_offenders(cycle, item_recurrence, iterations) or {}
+          end)
+          if #rod > 0 then
+            Human.notify({message = string.format(
+              "Cycle %d — repeat-offender diagnoses (%d items): %s",
+              cycle, #rod,
+              table.concat((function()
+                local labels = {}
+                for _, d in ipairs(rod) do
+                  local id_label = has_text(d.external_id) and d.external_id or d.item_id
+                  table.insert(labels, string.format("%s=%s[%s]", id_label, d.diagnosis, d.confidence))
+                end
+                return labels
+              end)(), ", ")),
+              level = "info"})
+          end
+        end
 
         diag("Saving iterations to state...")
         State.set("iterations", iterations)
@@ -6872,6 +7590,7 @@ code: |
       -- for hypothesis generation in the next cycle.
       -- ================================================================
       if #iterations > 0 then
+        status_msg(string.format("Cycle %d/%d — generating per-cycle report", cycle, max_cycles))
         Human.notify({message = string.format(
           "Cycle %d — generating per-cycle report...", cycle), level = "info"})
 
@@ -7022,20 +7741,29 @@ code: |
         do
           local sme_parts = {}
           table.insert(sme_parts, string.format(
-            "Write a short meeting agenda for domain experts (Subject Matter Experts). "
+            "Write a short meeting agenda for domain experts (Subject Matter Experts).\n"
             .. "They are NOT technical. They do NOT know what AC1 means.\n\n"
-            .. "HARD LIMIT: max 3 agenda items. Under 150 words total.\n\n"
+            .. "Glossary (always apply):\n"
+            .. "- \"Agent:\" in transcripts = the human call-center phone operator, NEVER an AI or software agent.\n"
+            .. "- \"Customer:\" = the person calling in.\n"
+            .. "- \"the evaluated score version\" = the specific score configuration being tested in this optimizer run.\n"
+            .. "- Never write \"AI\" in your output. Say \"the evaluated score version\" or \"the score\".\n\n"
+            .. "HARD LIMIT: max 3 agenda items. Under 200 words total.\n\n"
             .. "## SME AGENDA\n\n"
-            .. "Format each item exactly as:\n"
-            .. "### Title of the decision\n"
-            .. "Question: The specific decision they need to make\n"
-            .. "Example: AI said X, reviewer marked Y — 1-2 sentences describing what happened\n"
-            .. "Options: (a) first option (b) second option\n"
-            .. "Impact: ~N disputed reviews\n\n"
-            .. "Rules:\n"
-            .. "- Only include items that REQUIRE a human policy decision\n"
-            .. "- No technical jargon, no model names, no metric names\n"
-            .. "- If there are no SME decisions needed, write: (No SME decisions needed this cycle)\n",
+            .. "Format each item exactly as:\n\n"
+            .. "### <short title of the decision>\n"
+            .. "**Question:** <the specific decision SMEs need to make>\n"
+            .. "**Examples:** (2-3 items, one per line, each citing a real item from the CANDIDATE ITEMS context)\n"
+            .. "  - Item [<external_id>](<url>): score version said \"<prediction>\", reviewer labeled \"<correct>\". Transcript evidence: \"<quote from agent>\". Reviewer's edit comment: \"<comment>\".\n"
+            .. "**Options:** (a) <option> (b) <option>\n"
+            .. "**Impact:** ~<N> disputed reviews\n\n"
+            .. "Hard rules:\n"
+            .. "- Every Example MUST cite a real item by copying its markdown link verbatim from the CANDIDATE ITEMS context (the link block labeled \"link: [<id>](<url>)\"). Do NOT invent or omit item IDs.\n"
+            .. "- Do NOT generalize across items. Each example describes ONE specific item concretely.\n"
+            .. "- Never write \"AI\". Use \"the evaluated score version\" or \"the score\".\n"
+            .. "- Only include items that REQUIRE a human policy decision.\n"
+            .. "- No technical jargon, no model names, no metric names (no AC1, no accuracy percentages).\n"
+            .. "- If there are no SME decisions needed, write exactly: (No SME decisions needed this cycle)\n",
             cycle))
           table.insert(sme_parts, "\n=== KEY FINDINGS FROM THIS CYCLE ===\n")
           table.insert(sme_parts, trunc(exec_summary, 300))
@@ -7054,6 +7782,11 @@ code: |
             table.concat(sme_parts, "\n"),
             function()
               report_writer.clear_history()
+              local agenda_items_ctx = _build_agenda_item_context(5)
+              if has_text(agenda_items_ctx) then
+                report_writer.history:add({role = "system", content = agenda_items_ctx})
+                return #agenda_items_ctx
+              end
               return 0
             end
           )
@@ -7100,6 +7833,104 @@ code: |
           Human.notify({message = string.format(
             "=== Cycle %d — SME Agenda ===\n\n%s", cycle, sme_agenda), level = "info"})
         end
+
+        -- ---- Call 4: Per-cycle SME Worksheet ----
+        do
+          local cycle_suspected = {}
+          local cycle_pairs = {}
+          local cycle_rod = State.get("repeat_offender_diagnoses") or {}
+          pcall(function()
+            local ir = State.get("item_recurrence") or {}
+            cycle_suspected = detect_suspected_mislabels(iterations, ir) or {}
+            cycle_pairs     = build_contrasting_pairs(iterations, ir) or {}
+          end)
+
+          if #cycle_suspected > 0 or #cycle_pairs > 0 or #cycle_rod > 0 then
+            Human.notify({message = string.format(
+              "Cycle %d — SME Worksheet signals: %d suspected mislabels, %d contrasting pairs, %d repeat-offender diagnoses",
+              cycle, #cycle_suspected, #cycle_pairs, #cycle_rod), level = "info"})
+
+            local ws_parts = {}
+            table.insert(ws_parts, string.format(
+              "=== SME WORKSHEET (Cycle %d) ===\n", cycle))
+            table.insert(ws_parts,
+              "\nWrite the cycle SME Worksheet. Same format as the end-of-run worksheet.\n"
+              .. "Name items by external_id. Quote transcript evidence verbatim.\n"
+              .. "Use the REPEAT-OFFENDER DIAGNOSES section as the primary source for mislabel candidates.\n"
+              .. "Items with diagnosis=mislabel and confidence=high are your top suspects — present them first.\n"
+              .. "Items with diagnosis=contradictory_rule or recommended_action=accept_ceiling should go\n"
+              .. "in 'Policy questions' with the SME_QUESTION text from the diagnosis.\n"
+              .. "Sections: Suspected mislabels / Policy questions / Items still in play.\n"
+              .. "Skip any section whose input is empty. Plain English; no metric names.\n")
+
+            local ws_raw = run_required_report_phase(
+              report_writer,
+              "report_writer",
+              string.format("cycle_%d_sme_worksheet", cycle),
+              table.concat(ws_parts, "\n"),
+              function()
+                report_writer.clear_history()
+                local p = {}
+
+                -- Primary: repeat-offender diagnoses (LLM-produced per-item reasoning)
+                if #cycle_rod > 0 then
+                  local rod_json = "[]"
+                  pcall(function() rod_json = Json.encode(cycle_rod) end)
+                  table.insert(p, "=== REPEAT_OFFENDER_DIAGNOSES (primary — LLM per-item reasoning) ===")
+                  table.insert(p, "These items have 3+ consecutive wrong cycles. Each has a specific diagnosis.")
+                  for _, d in ipairs(cycle_rod) do
+                    local id_label = has_text(d.external_id) and d.external_id or d.item_id
+                    table.insert(p, string.format(
+                      "Item %s: diagnosis=%s [%s] action=%s",
+                      id_label, d.diagnosis or "?", d.confidence or "?", d.recommended_action or "?"))
+                    table.insert(p, string.format("  %s", d.explanation or ""))
+                    if has_text(d.sme_question) then
+                      table.insert(p, string.format("  SME question: %s", d.sme_question))
+                    end
+                  end
+                  table.insert(p, "=== END REPEAT_OFFENDER_DIAGNOSES ===\n")
+                end
+
+                -- Secondary: deterministic mislabel signals
+                local sm_json = "[]"
+                local cp_json = "[]"
+                pcall(function() sm_json = Json.encode(cycle_suspected) end)
+                pcall(function() cp_json = Json.encode(cycle_pairs) end)
+                table.insert(p, "=== SUSPECTED_MISLABELS (JSON) ===")
+                table.insert(p, sm_json)
+                table.insert(p, "=== END SUSPECTED_MISLABELS ===\n")
+                table.insert(p, "=== CONTRASTING_PAIRS (JSON) ===")
+                table.insert(p, cp_json)
+                table.insert(p, "=== END CONTRASTING_PAIRS ===\n")
+                local ir = State.get("item_recurrence") or {}
+                local rs = build_recurrence_compact_summary(ir, #iterations)
+                if has_text(rs) then
+                  table.insert(p, "=== ITEM RECURRENCE ===")
+                  table.insert(p, trunc(rs, 1500))
+                  table.insert(p, "=== END ITEM RECURRENCE ===")
+                end
+                local ctx = table.concat(p, "\n")
+                report_writer.history:add({role = "system", content = ctx})
+                return #ctx
+              end
+            )
+
+            if has_text(ws_raw) then
+              Human.notify({message = string.format(
+                "=== Cycle %d — SME Worksheet ===\n\n%s", cycle, ws_raw), level = "info"})
+            end
+
+            local ci = State.get("cycle_insights") or {}
+            if #ci > 0 then
+              ci[#ci].sme_worksheet = ws_raw or ""
+              ci[#ci].sme_worksheet_suspected_mislabels = cycle_suspected
+              ci[#ci].sme_worksheet_contrasting_pairs = cycle_pairs
+              ci[#ci].sme_worksheet_rod_diagnoses = cycle_rod
+              State.set("cycle_insights", ci)
+            end
+          end
+        end
+
         if not has_text(exec_summary) then
           Human.notify({message = syn_text, level = "info"})
         end
@@ -7980,22 +8811,31 @@ code: |
       "\nYou are writing a meeting agenda for subject-matter experts (SMEs) — the people",
       "\nwho write the rubric, handle the calls, and know the domain.",
       "\nThey are NOT engineers. They do not know what AC1 is. They do not care about YAML.",
-      "\n\nYour job: give them a list of DECISIONS they need to make, formatted as agenda items.",
+      "\n\nGlossary (always apply):",
+      "\n- \"Agent:\" in transcripts = the human call-center phone operator, NEVER an AI or software agent.",
+      "\n- \"Customer:\" = the person calling in.",
+      "\n- \"the evaluated score version\" = the specific score configuration being tested in this optimizer run.",
+      "\n- Never write \"AI\" in your output. Say \"the evaluated score version\" or \"the score\".",
+      "\n\nYour job: give SMEs a list of DECISIONS they need to make, formatted as agenda items.",
       "\n\nRules:",
       "\n- Each item is a question to answer, not a finding to read.",
       "\n- Include: what the question is, why it matters (in plain language), concrete examples.",
       "\n- Prioritize by how many items the decision would unblock.",
       "\n- Maximum 3 agenda items — pick the most important ones.",
-      "\n- Keep the entire agenda under 150 words total.",
+      "\n- Keep the entire agenda under 200 words total.",
       "\n- Use plain English throughout.",
       "\n- Do NOT include anything the lab can fix without SME input.",
       "\n- Do NOT explain what agreement or AC1 means.",
       "\n- Do NOT summarize the optimization run — the agenda is action-only.",
+      "\n- Never write \"AI\" — use \"the evaluated score version\" or \"the score\".",
+      "\n- Every Example MUST cite a real item by copying its markdown link verbatim from the CANDIDATE ITEMS context. Do NOT invent or omit item IDs.",
+      "\n- Each example describes ONE specific item concretely. Do NOT generalize across items.",
       "\n\nStructure your output exactly as follows:",
       string.format("\n\n## FOR YOUR NEXT MEETING: %s Quality Review", score_name_for_agenda),
       "\n\n### Title of the first decision",
       "\n**Why this matters:** 1-2 sentences on impact, in plain language",
-      "\n**Examples:** 2-3 specific examples — describe what the system said vs. what the reviewer said, without IDs",
+      "\n**Examples:** 2-3 items, one per line, each citing a real item from the CANDIDATE ITEMS context:",
+      "\n  - Item [<external_id>](<url>): score version said \"<prediction>\", reviewer labeled \"<correct>\". Transcript evidence: \"<quote from agent>\". Reviewer's edit comment: \"<comment>\".",
       "\n**Options:** (a) first option (b) second option (c) third option if applicable",
       "\n**Resolves:** ~N disputed reviews",
       "\n\n### Title of the second decision",
@@ -8011,8 +8851,16 @@ code: |
     sme_prompt,
     function()
       report_writer.clear_history()
-      -- SME Agenda gets: executive summary + lab report + contradiction details + feedback landscape
+      -- SME Agenda gets: candidate items (for link-grounded examples) + executive summary
+      -- + lab report + contradiction details + feedback landscape
       local sme_ctx_parts = {}
+
+      local agenda_items_ctx = _build_agenda_item_context(5)
+      if has_text(agenda_items_ctx) then
+        table.insert(sme_ctx_parts, agenda_items_ctx)
+        table.insert(sme_ctx_parts, "")
+      end
+
       table.insert(sme_ctx_parts, "=== EXECUTIVE SUMMARY ===")
       table.insert(sme_ctx_parts, executive_summary_text)
       table.insert(sme_ctx_parts, "=== END EXECUTIVE SUMMARY ===")
@@ -8064,6 +8912,118 @@ code: |
   )
   State.set("sme_agenda_gated", sme_agenda_text)
 
+  -- ==================================================================
+  -- Phase 3b: SME Worksheet (long-form companion to the SME Agenda)
+  -- ==================================================================
+  -- Pre-compute deterministic signals (suspected mislabels and contrasting
+  -- pairs), then ask the report writer to produce a detailed Worksheet that
+  -- names specific items, quotes the transcript, and separates "review this
+  -- label" from "decide this policy". Unlike the Agenda, the Worksheet is
+  -- NOT gated through rubric-memory because mislabel-review items are not
+  -- policy questions.
+  local suspected_mislabels = {}
+  local contrasting_pairs = {}
+  pcall(function()
+    local item_recurrence_final = State.get("item_recurrence") or {}
+    suspected_mislabels = detect_suspected_mislabels(iterations, item_recurrence_final) or {}
+    contrasting_pairs = build_contrasting_pairs(iterations, item_recurrence_final) or {}
+  end)
+
+  Human.notify({message = string.format(
+    "  SME Worksheet signals: %d suspected mislabels, %d contrasting pairs",
+    #suspected_mislabels, #contrasting_pairs), level = "info"})
+
+  local worksheet_text = "(SME worksheet not available)"
+  Human.notify({message = "  Phase 3b: Generating SME worksheet...", level = "info"})
+
+  local worksheet_prompt = table.concat({
+    "=== SME WORKSHEET ===\n",
+    "\nYou are writing the detailed companion to the SME Agenda. Subject-matter experts",
+    "\nwill read this before their meeting to understand exactly what they are deciding.",
+    "\n\nThis is the drill-down document: name specific items by external_id, quote the",
+    "\ntranscript evidence verbatim, and separate label-review items from policy questions.",
+    "\nUnlike the Agenda, you MUST include item IDs and direct transcript quotes.",
+    "\n\nSections (emit them in this order; skip any section whose input list is empty):",
+    "\n\n## Suspected mislabels (review before making policy changes)",
+    "\nFor each item in SUSPECTED_MISLABELS input, write 3-5 lines:",
+    "\n  **Item <external_id>** — label=<correct_value>, model=<predicted_value>, reason=<first reason code>",
+    "\n  Transcript evidence: \"<evidence_quote>\"",
+    "\n  Edit comment: \"<edit_comment>\"",
+    "\n  Recommendation: ask the reviewer to confirm or correct the label; if mislabeled, shadow-invalidate.",
+    "\nDo NOT treat these as policy questions until SMEs confirm the label.",
+    "\n\n## Policy questions (real decisions SMEs must make)",
+    "\nFor each of the top 3 policy questions (use CONTRASTING_PAIRS input and residual errors),",
+    "\nwrite in this exact format:",
+    "\n  **Question:** <plain-English question>",
+    "\n  **Why it matters:** <one sentence on real-world impact>",
+    "\n  **Contrasting examples:** (always include the pair when CONTRASTING_PAIRS has one covering this question)",
+    "\n    Item <id_a>: \"<quote_a>\" → label=<A>",
+    "\n    Item <id_b>: \"<quote_b>\" → label=<B>",
+    "\n    Distinguishing feature: <one line naming the axis>",
+    "\n  **Options:** a) ... b) ... c) ...",
+    "\n  **If answered, resolves:** ~N items",
+    "\n\n## Items still in play (for reference)",
+    "\nCompact list of all PERSISTENT and OSCILLATING items with label, model prediction,",
+    "\nand one-line rationale. One item per line. No editorializing, no options, no headers.",
+    "\n\nRules:",
+    "\n- Use plain English. SMEs are not engineers.",
+    "\n- Quote transcript evidence verbatim; do NOT paraphrase.",
+    "\n- Cite external_id (numeric) whenever you name an item.",
+    "\n- If SUSPECTED_MISLABELS is empty, omit that whole section (do not write a placeholder).",
+    "\n- If no contrasting pair exists for a policy question, omit the Contrasting examples sub-section for that question.",
+    "\n- Keep each section focused. Do not pad. Do not repeat content across sections."
+  }, "")
+
+  worksheet_text = run_required_report_phase(
+    report_writer,
+    "report_writer",
+    "end_sme_worksheet",
+    worksheet_prompt,
+    function()
+      report_writer.clear_history()
+      local parts = {}
+      table.insert(parts, "=== EXECUTIVE SUMMARY ===")
+      table.insert(parts, executive_summary_text)
+      table.insert(parts, "=== END EXECUTIVE SUMMARY ===")
+      table.insert(parts, "")
+
+      -- Structured inputs the writer must use.
+      local sm_json = "[]"
+      local cp_json = "[]"
+      pcall(function() sm_json = Json.encode(suspected_mislabels) end)
+      pcall(function() cp_json = Json.encode(contrasting_pairs) end)
+      table.insert(parts, "=== SUSPECTED_MISLABELS (JSON) ===")
+      table.insert(parts, sm_json)
+      table.insert(parts, "=== END SUSPECTED_MISLABELS ===")
+      table.insert(parts, "")
+      table.insert(parts, "=== CONTRASTING_PAIRS (JSON) ===")
+      table.insert(parts, cp_json)
+      table.insert(parts, "=== END CONTRASTING_PAIRS ===")
+      table.insert(parts, "")
+
+      -- Existing residual errors (already includes per-item RCA metadata).
+      if has_text(residual_errors_text) then
+        table.insert(parts, trunc(residual_errors_text, 2000))
+        table.insert(parts, "")
+      end
+
+      -- Final item_recurrence compact summary for the "still in play" section.
+      local item_recurrence_final = State.get("item_recurrence") or {}
+      local recur_summary = build_recurrence_compact_summary(item_recurrence_final, #iterations)
+      if has_text(recur_summary) then
+        table.insert(parts, "=== ITEM RECURRENCE SUMMARY ===")
+        table.insert(parts, trunc(recur_summary, 1500))
+        table.insert(parts, "=== END ITEM RECURRENCE SUMMARY ===")
+        table.insert(parts, "")
+      end
+
+      local ctx = table.concat(parts, "\n")
+      report_writer.history:add({role = "system", content = ctx})
+      return #ctx
+    end
+  )
+  State.set("sme_worksheet", worksheet_text)
+
   -- Store results
   State.set("end_of_run_report", {
     generated_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
@@ -8088,6 +9048,13 @@ code: |
     },
     sme_agenda = {
       text = sme_agenda_text
+    },
+    sme_worksheet = {
+      text = worksheet_text,
+      structured = {
+        suspected_mislabels = suspected_mislabels,
+        contrasting_pairs = contrasting_pairs,
+      }
     },
     evidence = {
       divergence_summary = divergence_text,
@@ -8123,6 +9090,11 @@ code: |
     .. string.rep("=", 60) .. "\n\n"
     .. sme_agenda_text, level = "info"})
 
+  Human.notify({message = "\n" .. string.rep("=", 60)
+    .. "\n=== SME WORKSHEET ===\n"
+    .. string.rep("=", 60) .. "\n\n"
+    .. trunc(worksheet_text, 8000), level = "info"})
+
   if last_accepted_version_id and last_accepted_version_id ~= champion_version_id then
     Human.notify({message = string.format(
       "Winning version selected: %s (starting champion: %s). Manual promotion is required; the optimizer never promotes champion automatically.",
@@ -8155,5 +9127,6 @@ code: |
     executive_summary = executive_summary_text,
     lab_report = lab_report_text,
     sme_agenda = sme_agenda_text,
+    sme_worksheet = worksheet_text,
     winning_version_id = last_accepted_version_id
   }
