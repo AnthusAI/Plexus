@@ -68,8 +68,15 @@ export type ProcessedEvaluation = Omit<BaseEvaluation, 'task' | 'scorecard' | 's
       value: string;
       url?: string;
     }> | null;
+    feedbackItem?: any | null;
     createdAt: string;
   }>;
+};
+
+export type NormalizedIdentifierItem = {
+  name: string;
+  value: string;
+  url?: string;
 };
 
 // Update AmplifyTask type to use BaseEvaluation
@@ -884,6 +891,138 @@ type RawScoreResults = {
   items: RawScoreResult[];
 };
 
+type ParsedScoreResultMetadata = {
+  processedMetadata: {
+    human_label: string | null;
+    correct: boolean;
+    human_explanation: string | null;
+    text: string | null;
+    feedback_item_id: string | null;
+    item_id: string | null;
+  };
+  nestedScoreResult: any | null;
+  parsedMetadata: any;
+};
+
+export function extractScoreResultItemIdentifiers(result: any): NormalizedIdentifierItem[] | null {
+  if (!result?.item) {
+    return null;
+  }
+
+  const relationshipIdentifiers = result.item?.itemIdentifiers?.items;
+  if (Array.isArray(relationshipIdentifiers) && relationshipIdentifiers.length > 0) {
+    return relationshipIdentifiers
+      .slice()
+      .sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
+      .map((identifier: any) => ({
+        name: identifier.name,
+        value: identifier.value,
+        url: identifier.url || undefined
+      }));
+  }
+
+  const legacyIdentifiers = result.item?.identifiers;
+  if (!legacyIdentifiers) {
+    return null;
+  }
+
+  const normalizeIdentifierEntry = (entry: any): NormalizedIdentifierItem | null => {
+    if (!entry || typeof entry !== 'object') return null;
+    if (typeof entry.name !== 'string' || !entry.name) return null;
+
+    const rawValue = entry.value ?? entry.id;
+    if (rawValue === undefined || rawValue === null) return null;
+
+    return {
+      name: entry.name,
+      value: String(rawValue),
+      url: typeof entry.url === 'string' ? entry.url : undefined
+    };
+  };
+
+  if (Array.isArray(legacyIdentifiers)) {
+    const normalized = legacyIdentifiers
+      .map((entry: any) => normalizeIdentifierEntry(entry))
+      .filter((entry: NormalizedIdentifierItem | null): entry is NormalizedIdentifierItem => entry !== null);
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  if (typeof legacyIdentifiers === 'string') {
+    try {
+      const parsed = JSON.parse(legacyIdentifiers);
+      const normalized = Array.isArray(parsed)
+        ? parsed
+            .map((entry: any) => normalizeIdentifierEntry(entry))
+            .filter((entry: NormalizedIdentifierItem | null): entry is NormalizedIdentifierItem => entry !== null)
+        : [];
+      return normalized.length > 0 ? normalized : null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof legacyIdentifiers === 'object') {
+    const normalized = Object.entries(legacyIdentifiers as Record<string, unknown>)
+      .map(([name, value]) => {
+        if (!name || value === undefined || value === null) return null;
+        return { name, value: String(value) };
+      })
+      .filter((entry: NormalizedIdentifierItem | null): entry is NormalizedIdentifierItem => entry !== null);
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  return null;
+}
+
+function parseScoreResultMetadata(rawMetadata: unknown): ParsedScoreResultMetadata {
+  let parsedMetadata: any;
+  try {
+    if (typeof rawMetadata === 'string') {
+      parsedMetadata = JSON.parse(rawMetadata);
+      if (typeof parsedMetadata === 'string') {
+        parsedMetadata = JSON.parse(parsedMetadata);
+      }
+    } else {
+      parsedMetadata = rawMetadata || {};
+    }
+  } catch {
+    parsedMetadata = {};
+  }
+
+  const firstResultKey = parsedMetadata?.results ? Object.keys(parsedMetadata.results)[0] : null;
+  const nestedScoreResult = firstResultKey && parsedMetadata.results ? parsedMetadata.results[firstResultKey] : null;
+
+  return {
+    processedMetadata: {
+      human_label: nestedScoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? null,
+      correct: Boolean(nestedScoreResult?.metadata?.correct ?? parsedMetadata.correct),
+      human_explanation: nestedScoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? null,
+      text: nestedScoreResult?.metadata?.text ?? parsedMetadata.text ?? null,
+      feedback_item_id: nestedScoreResult?.metadata?.feedback_item_id ?? parsedMetadata.feedback_item_id ?? null,
+      item_id: nestedScoreResult?.metadata?.item_id ?? parsedMetadata.item_id ?? null
+    },
+    nestedScoreResult,
+    parsedMetadata
+  };
+}
+
+export function transformScoreResultForDisplay(result: any) {
+  const { processedMetadata, nestedScoreResult, parsedMetadata } = parseScoreResultMetadata(result?.metadata);
+
+  return {
+    id: result?.id,
+    value: result?.value,
+    confidence: result?.confidence ?? null,
+    metadata: processedMetadata,
+    explanation: result?.explanation ?? nestedScoreResult?.explanation ?? null,
+    trace: result?.trace ?? nestedScoreResult?.trace ?? null,
+    itemId: result?.itemId ?? parsedMetadata?.item_id?.toString() ?? null,
+    itemIdentifiers: extractScoreResultItemIdentifiers(result),
+    createdAt: result?.createdAt || new Date().toISOString(),
+    feedbackItem: result?.feedbackItem ?? null
+  };
+}
+
 export function parseTaskMetadata(rawMetadata: unknown): Record<string, unknown> | null {
   if (!rawMetadata) return null;
 
@@ -984,75 +1123,9 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
 
 
   // Transform score results into the expected format
-  const transformedScoreResults = standardizedScoreResults.map((result: any) => {
-    // Extract item identifier data if available
-    let itemIdentifiers = null;
-    
-    if (result.item?.itemIdentifiers?.items) {
-      itemIdentifiers = result.item.itemIdentifiers.items
-        .sort((a: any, b: any) => (a.position || 0) - (b.position || 0)) // Sort by position
-        .map((identifier: any) => ({
-          name: identifier.name,
-          value: identifier.value,
-          url: identifier.url || undefined
-        }));
-    } else if (result.item?.identifiers) {
-      // Handle legacy JSON identifiers format
-      try {
-        const parsed = JSON.parse(result.item.identifiers);
-        if (Array.isArray(parsed)) {
-          itemIdentifiers = parsed.map((identifier: any) => ({
-            name: identifier.name,
-            value: identifier.value || identifier.id, // Support both value and id fields
-            url: identifier.url || undefined
-          }));
-        }
-      } catch (error) {
-        console.warn('Failed to parse legacy identifiers JSON:', error);
-      }
-    }
-
-    // Parse metadata (which might be JSON string, sometimes double-encoded)
-    let parsedMetadata;
-    try {
-      if (typeof result.metadata === 'string') {
-        parsedMetadata = JSON.parse(result.metadata);
-        if (typeof parsedMetadata === 'string') {
-          parsedMetadata = JSON.parse(parsedMetadata);
-        }
-      } else {
-        parsedMetadata = result.metadata || {};
-      }
-    } catch (e) {
-      console.warn('Error parsing metadata:', e);
-      parsedMetadata = {};
-    }
-
-    // Extract results from nested structure if present
-    const firstResultKey = parsedMetadata?.results ? Object.keys(parsedMetadata.results)[0] : null;
-    const scoreResult = firstResultKey && parsedMetadata.results ? parsedMetadata.results[firstResultKey] : null;
-
-    // Construct properly formatted metadata object
-    const processedMetadata = {
-      human_label: scoreResult?.metadata?.human_label ?? parsedMetadata.human_label ?? null,
-      correct: Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct),
-      human_explanation: scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? null,
-      text: scoreResult?.metadata?.text ?? parsedMetadata.text ?? null
-    };
-
-    return {
-      id: result.id,
-      value: result.value,
-      confidence: result.confidence ?? null,
-      metadata: processedMetadata,
-      explanation: result.explanation ?? scoreResult?.explanation ?? null,
-      trace: result.trace ?? scoreResult?.trace ?? null,
-      itemId: result.itemId ?? parsedMetadata.item_id?.toString() ?? null,
-      itemIdentifiers,
-      createdAt: result.createdAt || new Date().toISOString(),
-      feedbackItem: result.feedbackItem ?? null  // Preserve feedbackItem relationship
-    };
-  });
+  const transformedScoreResults = standardizedScoreResults.map((result: any) =>
+    transformScoreResultForDisplay(result)
+  );
 
   const procedureId = getTaskProcedureId(taskData);
   const parsedParameters = parseJsonMaybeDeep(evaluation.parameters);
