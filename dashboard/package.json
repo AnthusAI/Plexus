@@ -175,6 +175,7 @@
     "autoprefixer": "^10.4.0",
     "aws-cdk": "^2",
     "aws-cdk-lib": "^2",
+    "baseline-browser-mapping": "^2.10.24",
     "concurrently": "^9.1.1",
     "constructs": "^10.3.0",
     "esbuild": "^0.25.4",
