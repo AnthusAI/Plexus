@@ -52,10 +52,16 @@
       "author": "ryan",
       "text": "Restored workspace to correct integration branch feature/plx-07dc0d-execute-tactus-mcp-tool at origin tip 0cd1a5a6. Preserved latest optimizer YAML from branch tip (Tactus runtime with plexus.* module and rubric-memory/SME briefing code). Rejected old wrong-branch MCP bridge/doc-loading changes; stash backup remains at stash@{0}. Remaining local CLI change is Lua table serialization for procedure optimize output plus test.",
       "created_at": "2026-05-01T19:52:02.260653Z"
+    },
+    {
+      "id": "cec67cca-2a5c-43f9-9d9f-538f61bde40d",
+      "author": "ryan",
+      "text": "Retry direct CLI run after score-editor normalization fix is materially healthier. Procedure 64c65f35-93f6-4823-a627-fde308d3d8c0 / task cbe744a9-7386-4558-a63d-8f1110ce2f82 completed baseline, accepted cycle 1 with version 0468b78a-7d19-41b9-a802-549ef9a6dd1d, AC1 0.638 -> 0.702 (+0.064), and moved into cycle 2/3.",
+      "created_at": "2026-05-01T20:32:35.914064Z"
     }
   ],
   "created_at": "2026-05-01T19:13:07.716717Z",
-  "updated_at": "2026-05-01T19:52:02.260653Z",
+  "updated_at": "2026-05-01T20:32:35.914064Z",
   "closed_at": null,
   "custom": {}
 }

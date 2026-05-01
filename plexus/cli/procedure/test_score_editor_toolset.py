@@ -113,25 +113,21 @@ output:
 
 
 @pytest.mark.asyncio
-async def test_submit_score_version_surfaces_validation_errors_from_envelope():
+async def test_submit_score_version_surfaces_validation_errors_from_envelope(monkeypatch):
     from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
+    import tools.tactus_runtime.execute as _exec  # type: ignore
 
-    mcp_response = {
-        "content": [
-            {
-                "type": "text",
-                "text": (
-                    '{\n'
-                    '  "success": false,\n'
-                    '  "error": "YAML validation failed",\n'
-                    '  "validation_errors": ["Schema Validation Failed: foo", "Another error"]\n'
-                    "}\n"
-                ),
-            }
-        ]
-    }
+    monkeypatch.setattr(
+        _exec,
+        "_default_score_update",
+        lambda args: {
+            "success": False,
+            "error": "YAML validation failed",
+            "validation_errors": ["Schema Validation Failed: foo", "Another error"],
+        },
+    )
 
-    toolset = ScoreEditorToolset(mcp_client=FakeMCPClient(mcp_response))
+    toolset = ScoreEditorToolset()
     toolset._scorecard = "sc-1"
     toolset._score = "score-1"
     toolset._iteration = 1
@@ -205,6 +201,31 @@ def test_setup_normalizes_direct_yaml_content_to_block_scalars():
     assert "user_message: |" in content
     assert "\\n\\n" not in content
     assert toolset._content == toolset._original
+
+
+def test_setup_normalizes_numeric_external_id_to_string():
+    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
+
+    raw_yaml = (
+        "name: Test Score\n"
+        "external_id: 48381\n"
+        "class: LangGraphScore\n"
+        "graph: []\n"
+    )
+
+    toolset = ScoreEditorToolset()
+    result = toolset.setup(
+        {
+            "scorecard_identifier": "sc-1",
+            "score_identifier": "score-1",
+            "yaml_content": raw_yaml,
+        }
+    )
+
+    assert result["success"] is True
+    content = toolset.get_content({})["file_content"]
+    assert "external_id: '48381'" in content or 'external_id: "48381"' in content
+    assert "external_id: 48381" not in content
 
 
 def test_setup_fails_fast_when_direct_yaml_is_invalid():
