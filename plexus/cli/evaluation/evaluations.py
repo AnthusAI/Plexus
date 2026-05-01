@@ -2032,6 +2032,25 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
         logging.error(f"Error fetching latest ScoreVersion for score {score_id}: {str(e)}")
         return None
 
+
+def _build_evaluation_task_metadata(
+    *,
+    task_type: str,
+    scorecard: str,
+    score: Optional[str] = None,
+    procedure_id: Optional[str] = None,
+) -> Dict[str, str]:
+    metadata: Dict[str, str] = {
+        "type": task_type,
+        "scorecard": scorecard,
+        "task_type": task_type,
+    }
+    if score:
+        metadata["score"] = score
+    if procedure_id:
+        metadata["procedure_id"] = procedure_id
+    return metadata
+
 @evaluate.command()
 @click.option('--scorecard', 'scorecard', default=None, help='Scorecard identifier (ID, name, key, or external ID)')
 @click.option('--yaml', is_flag=True, help='Load scorecard from individual YAML files (from fetch_score_configurations) instead of the API')
@@ -2060,6 +2079,7 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
 @click.option('--current-baseline', default=None, type=str, help='Current baseline evaluation ID (latest accepted version) for dual baseline dashboard display.')
 @click.option('--json-only', is_flag=True, default=False, help='Emit JSON summary payload instead of rich console output.')
 @click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
+@click.option('--procedure-id', default=None, type=str, help='Procedure ID to associate with the evaluation task metadata.')
 @click.option('--emit-id-file', default=None, type=str, help='Write the evaluation ID to this file as soon as the record is created (used by programmatic dispatch).')
 @_enforce_child_budget_from_env("evaluation.accuracy")
 def accuracy(
@@ -2090,6 +2110,7 @@ def accuracy(
     current_baseline: Optional[str],
     json_only: bool,
     notes: Optional[str] = None,
+    procedure_id: Optional[str] = None,
     emit_id_file: Optional[str] = None,
     ):
     """
@@ -2399,11 +2420,11 @@ def accuracy(
                             description=f"Accuracy evaluation for {scorecard}",
                             dispatch_status="DISPATCHED",
                             prevent_new_task=False,
-                            metadata={
-                                "type": "Accuracy Evaluation",
-                                "scorecard": scorecard,
-                                "task_type": "Accuracy Evaluation"
-                            },
+                            metadata=_build_evaluation_task_metadata(
+                                task_type="Accuracy Evaluation",
+                                scorecard=scorecard,
+                                procedure_id=procedure_id,
+                            ),
                             account_id=account.id
                         )
 
@@ -2497,11 +2518,11 @@ def accuracy(
                     description=f"Accuracy evaluation for {scorecard}",
                     dispatch_status="DISPATCHED",
                     prevent_new_task=True,  # Prevent new task creation since we have one
-                    metadata={
-                        "type": "Accuracy Evaluation",
-                        "scorecard": scorecard,
-                        "task_type": "Accuracy Evaluation"
-                    },
+                    metadata=_build_evaluation_task_metadata(
+                        task_type="Accuracy Evaluation",
+                        scorecard=scorecard,
+                        procedure_id=procedure_id,
+                    ),
                     account_id=account.id
                 )
                 
@@ -4203,6 +4224,7 @@ def last(account_key: str, type: Optional[str]):
 @click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 @click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
+@click.option('--procedure-id', default=None, type=str, help='Procedure ID to associate with the evaluation task metadata.')
 @click.option(
     '--score-rubric-consistency-check',
     is_flag=True,
@@ -4224,6 +4246,7 @@ def feedback(
     use_yaml: bool,
     task_id: Optional[str],
     notes: Optional[str] = None,
+    procedure_id: Optional[str] = None,
     score_rubric_consistency_check: bool = False,
     emit_id_file: Optional[str] = None,
 ):
@@ -4523,11 +4546,12 @@ def feedback(
                         description=f"Feedback accuracy evaluation for {scorecard} > {score}",
                         dispatch_status="DISPATCHED",
                         prevent_new_task=False,
-                        metadata={
-                            "type": "Feedback Accuracy Evaluation",
-                            "scorecard": scorecard,
-                            "task_type": "Feedback Accuracy Evaluation"
-                        },
+                        metadata=_build_evaluation_task_metadata(
+                            task_type="Feedback Accuracy Evaluation",
+                            scorecard=scorecard,
+                            score=score,
+                            procedure_id=procedure_id,
+                        ),
                         account_id=account_id,
                         client=client
                     )
