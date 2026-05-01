@@ -1,4 +1,4 @@
-import { transformEvaluation } from './data-operations';
+import { transformEvaluation, extractScoreResultItemIdentifiers, transformScoreResultForDisplay } from './data-operations';
 import type { BaseEvaluation } from './data-operations';
 
 describe('transformEvaluation', () => {
@@ -58,6 +58,22 @@ describe('transformEvaluation', () => {
   });
 
   describe('itemIdentifiers extraction', () => {
+    it('normalizes object-map legacy identifiers for shared display consumption', () => {
+      const identifiers = extractScoreResultItemIdentifiers({
+        item: {
+          identifiers: {
+            'Call ID': 309504413,
+            'Session ID': 'SESS-1234'
+          }
+        }
+      });
+
+      expect(identifiers).toEqual([
+        { name: 'Call ID', value: '309504413' },
+        { name: 'Session ID', value: 'SESS-1234' }
+      ]);
+    });
+
     it('should extract itemIdentifiers from score results with item relationships', () => {
       const mockEvaluation: BaseEvaluation = {
         id: 'eval-1',
@@ -199,7 +215,9 @@ describe('transformEvaluation', () => {
         human_label: 'correct_answer',
         correct: true,
         human_explanation: 'This is the right answer',
-        text: 'Sample input text'
+        text: 'Sample input text',
+        feedback_item_id: null,
+        item_id: null
       });
     });
 
@@ -391,6 +409,38 @@ describe('transformEvaluation', () => {
     });
   });
 
+  describe('shared score result transform', () => {
+    it('normalizes lazy-loaded score result payloads through a shared transformer', () => {
+      const transformed = transformScoreResultForDisplay({
+        id: 'result-lazy',
+        value: 'yes',
+        confidence: 0.77,
+        metadata: {
+          human_label: 'no',
+          correct: false,
+          human_explanation: 'reviewed',
+          text: 'transcript'
+        },
+        itemId: null,
+        item: {
+          identifiers: {
+            'Call ID': 309504413
+          }
+        }
+      } as any);
+
+      expect(transformed.metadata).toEqual({
+        human_label: 'no',
+        correct: false,
+        human_explanation: 'reviewed',
+        text: 'transcript'
+      });
+      expect(transformed.itemIdentifiers).toEqual([
+        { name: 'Call ID', value: '309504413' }
+      ]);
+    });
+  });
+
   describe('golden path data flow', () => {
     it('should preserve all score result fields including itemIdentifiers', () => {
       const mockEvaluation: BaseEvaluation = {
@@ -448,7 +498,9 @@ describe('transformEvaluation', () => {
         human_label: 'correct',
         correct: true,
         human_explanation: null,
-        text: null
+        text: null,
+        feedback_item_id: null,
+        item_id: null
       });
       
       // Verify itemIdentifiers are correctly extracted and preserved

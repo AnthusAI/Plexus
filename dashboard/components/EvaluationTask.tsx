@@ -110,6 +110,8 @@ interface ScoreResult {
     correct: boolean
     human_explanation: string | null
     text: string | null
+    feedback_item_id?: string | null
+    item_id?: string | null
   }
   trace: any | null
   itemId: string | null
@@ -119,7 +121,14 @@ interface ScoreResult {
     url?: string
   }> | null
   feedbackItem: {
+    id?: string | null
     editCommentValue: string | null
+    initialAnswerValue?: string | null
+    initialCommentValue?: string | null
+    finalAnswerValue?: string | null
+    editorName?: string | null
+    editedAt?: string | null
+    createdAt?: string | null
   } | null
 }
 
@@ -836,6 +845,8 @@ function parseScoreResult(result: any): ParsedScoreResult {
   const correct = Boolean(scoreResult?.metadata?.correct ?? parsedMetadata.correct);
   const humanExplanation = scoreResult?.metadata?.human_explanation ?? parsedMetadata.human_explanation ?? null;
   const text = scoreResult?.metadata?.text ?? parsedMetadata.text ?? null;
+  const feedbackItemId = scoreResult?.metadata?.feedback_item_id ?? parsedMetadata.feedback_item_id ?? null;
+  const metadataItemId = scoreResult?.metadata?.item_id ?? parsedMetadata.item_id ?? null;
   const itemId = result.itemId || parsedMetadata.item_id?.toString() || null;
 
   // Parse feedbackItem data
@@ -843,6 +854,7 @@ function parseScoreResult(result: any): ParsedScoreResult {
     (sr: any) => sr.type === 'prediction'
   ) || null;
   const feedbackItem = result.feedbackItem ? {
+    id: result.feedbackItem.id || null,
     editCommentValue: result.feedbackItem.editCommentValue || null,
     initialAnswerValue: result.feedbackItem.initialAnswerValue || originalScoreResult?.value || null,
     initialCommentValue: result.feedbackItem.initialCommentValue || originalScoreResult?.explanation || null,
@@ -863,7 +875,9 @@ function parseScoreResult(result: any): ParsedScoreResult {
       human_label: humanLabel,
       correct,
       human_explanation: humanExplanation,
-      text
+      text,
+      feedback_item_id: feedbackItemId,
+      item_id: metadataItemId
     },
     trace,
     itemId,
