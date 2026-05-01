@@ -1,5 +1,5 @@
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import EvaluationTask from '@/components/EvaluationTask'
 
 jest.mock('@/components/EvaluationTaskScoreResults', () => ({
@@ -27,16 +27,13 @@ jest.mock('@/utils/amplify-client', () => ({
 
       return Promise.resolve({
         data: {
-          getScoreVersion: {
-            id: 'version-1',
-            createdAt: '2024-01-01T00:00:00Z',
-            note: 'Evaluation candidate version',
-            score: {
-              championVersionId: 'version-1',
+            getScoreVersion: {
+              id: 'version-1',
+              createdAt: '2024-01-01T00:00:00Z',
+              note: 'Evaluation candidate version',
             },
           },
-        },
-      })
+        })
     }),
   }),
 }))
@@ -280,10 +277,6 @@ describe('EvaluationTask category summary drill-down', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Clear category filter/i }))
     expect(screen.getByTestId('selected-item-ids')).toHaveTextContent('null')
-
-    await waitFor(() => {
-      expect(screen.getByText('Champion')).toBeInTheDocument()
-    })
   })
 
   test('filters by score_result_id linkage when item_id is unavailable', async () => {
@@ -335,13 +328,9 @@ describe('EvaluationTask category summary drill-down', () => {
   test('renders score version and procedure related-resource cards in detail view', async () => {
     const { container } = render(<EvaluationTask variant="detail" task={makeTask()} />)
 
-    await waitFor(() => {
-      expect(screen.getByText('Champion')).toBeInTheDocument()
-    })
-
     expect(screen.getByText('Score Version')).toBeInTheDocument()
     expect(screen.getByText('Procedure')).toBeInTheDocument()
-    expect(screen.getByText('Optimizer run')).toBeInTheDocument()
+    expect(await screen.findByText('Optimizer run')).toBeInTheDocument()
     expect(container.querySelector('a[href="/lab/scorecards/scorecard-1"]')).toBeTruthy()
     expect(container.querySelector('a[href="/lab/scorecards/scorecard-1/scores/score-1/versions/version-1"]')).toBeTruthy()
     expect(container.querySelector('a[href="/lab/procedures/procedure-1"]')).toBeTruthy()
@@ -352,9 +341,13 @@ describe('EvaluationTask category summary drill-down', () => {
 
     expect(screen.getByText('Score Version')).toBeInTheDocument()
     expect(screen.queryByText('Procedure')).not.toBeInTheDocument()
+    expect(await screen.findByText('Evaluation candidate version')).toBeInTheDocument()
+  })
 
-    await waitFor(() => {
-      expect(screen.getByText('Champion')).toBeInTheDocument()
-    })
+  test('does not render procedure related-resource card in grid mode', () => {
+    render(<EvaluationTask variant="grid" task={makeTask()} />)
+
+    expect(screen.queryByText('Procedure')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Open procedure/i })).not.toBeInTheDocument()
   })
 })

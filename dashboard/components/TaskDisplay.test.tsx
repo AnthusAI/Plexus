@@ -269,6 +269,31 @@ describe('TaskDisplay Golden Path', () => {
       expect(screen.getByTestId('task-procedure-id')).toHaveTextContent('procedure-789');
     });
 
+    it('derives procedure id from task metadata when evaluationData does not provide it', () => {
+      const taskWithProcedureMetadata: AmplifyTask = {
+        ...mockTask,
+        metadata: JSON.stringify({ procedure_id: 'procedure-from-task-metadata' }),
+      };
+
+      const mockEvaluationData = {
+        id: 'eval-links-derived-procedure',
+        type: 'accuracy',
+        scorecardId: 'scorecard-123',
+        scoreId: 'score-456',
+        scoreResults: []
+      };
+
+      render(
+        <TaskDisplay
+          variant="detail"
+          task={taskWithProcedureMetadata}
+          evaluationData={mockEvaluationData}
+        />
+      );
+
+      expect(screen.getByTestId('task-procedure-id')).toHaveTextContent('procedure-from-task-metadata');
+    });
+
     it('passes through original and current baseline ids to EvaluationTask', () => {
       const mockEvaluationData = {
         id: 'eval-baselines',

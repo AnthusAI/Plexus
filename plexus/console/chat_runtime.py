@@ -819,7 +819,7 @@ async def run_console_chat_response_async(
     if message.selected_model:
         context["agent_models"] = {"assistant": message.selected_model}
 
-    result = await service.run_experiment(
+    result = await service.run_procedure(
         CONSOLE_CHAT_BUILTIN_ID,
         account_id=message.account_id,
         console_user_message=message.content,

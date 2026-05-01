@@ -34,6 +34,29 @@ describe('transformEvaluation', () => {
     expect(result!.procedureId).toBe('procedure-999');
   });
 
+  it('derives procedureId from task target when metadata is missing', () => {
+    const mockEvaluation: BaseEvaluation = {
+      id: 'eval-procedure-target',
+      type: 'accuracy',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+      status: 'COMPLETED',
+      accountId: 'account-1',
+      task: {
+        id: 'task-2',
+        type: 'Accuracy Evaluation',
+        status: 'COMPLETED',
+        target: 'procedure/run/procedure-abc123',
+        command: 'evaluate accuracy --scorecard test',
+      } as any,
+    } as any;
+
+    const result = transformEvaluation(mockEvaluation);
+
+    expect(result).toBeTruthy();
+    expect(result!.procedureId).toBe('procedure-abc123');
+  });
+
   it('extracts canonical baseline ids from evaluation parameters metadata', () => {
     const mockEvaluation: BaseEvaluation = {
       id: 'eval-baselines',
@@ -433,7 +456,9 @@ describe('transformEvaluation', () => {
         human_label: 'no',
         correct: false,
         human_explanation: 'reviewed',
-        text: 'transcript'
+        text: 'transcript',
+        feedback_item_id: null,
+        item_id: null
       });
       expect(transformed.itemIdentifiers).toEqual([
         { name: 'Call ID', value: '309504413' }

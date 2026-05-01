@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0d5f29fd-cb36-4d7b-8671-38c2aa72d091",
+  "issue_id": "plx-aed56336-00a2-4204-996f-9c9dbf2f1590",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T21:05:14.389Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "# Story: Streaming progress for long-running operations remains usable\n\n## Intent\n\nAs an MCP client (Cursor or similar) consuming `execute_tactus`, I want to see incremental progress for operations that take more than a few seconds, so that I can show users meaningful feedback and can confirm the agent's orchestration is doing useful work.\n\n## Gherkin\n\n```gherkin\nFeature: Long-running operations stream progress to the MCP client\n\n  Scenario: Synthetic evaluation with streamed progress\n    Given a stubbed plexus.evaluation.run that simulates 1000 items processed over 60 seconds\n    And a boot prompt that teaches the agent to invoke evaluations\n    And an MCP client that supports streaming notifications\n    When a frontier LLM invokes execute_tactus with code that calls plexus.evaluation.run\n    Then the MCP client receives at least one streaming progress event per 5 seconds during the call\n    And each event reports current progress (e.g., items_processed, current_metric, cost_so_far)\n    And the final response includes the completed result with full cost accounting\n\n  Scenario: Synthetic budget exhaustion mid-flight\n    Given the same stubbed evaluation\n    And a per-call budget that is intentionally too small to complete the full operation\n    When the LLM invokes the operation\n    Then the operation halts gracefully when budget is exhausted\n    And the final response indicates partial: true with the work completed so far\n    And cost reporting accurately reflects the spend before halting\n```\n\n## Definition of Done\n\n- Stub harness produces realistic streaming events for the simulated evaluation.\n- Streaming events visible to the MCP client during the call (verified end-to-end against at least one real client, ideally Cursor).\n- Partial-results behavior on budget exhaustion verified.\n- Findings recorded: does the streaming UX feel usable to a human watching, or do we need design work in Epic 7?",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+    "priority": 1,
+    "status": "open",
+    "title": "Streaming progress for long-running operations remains usable"
+  }
+}

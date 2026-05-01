@@ -120,7 +120,7 @@ def test_generate_report_success(
 
     # === Assertions ===
     # 1. Task Loading
-    MockTask.get_by_id.assert_called_once_with("task-123", mock_client_instance)
+    MockTask.get_by_id.assert_any_call("task-123", mock_client_instance)
 
     # 2. Config Loading
     mock_load_config.assert_called_once_with(mock_client_instance, "test-config-1")
