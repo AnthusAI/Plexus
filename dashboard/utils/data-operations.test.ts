@@ -433,7 +433,9 @@ describe('transformEvaluation', () => {
         human_label: 'no',
         correct: false,
         human_explanation: 'reviewed',
-        text: 'transcript'
+        text: 'transcript',
+        feedback_item_id: null,
+        item_id: null
       });
       expect(transformed.itemIdentifiers).toEqual([
         { name: 'Call ID', value: '309504413' }
