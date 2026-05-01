@@ -20,9 +20,9 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     assert parsed["class"] == "Tactus"
     assert "console_session_history" in parsed.get("input", {})
     assert parsed["agents"]["assistant"]["model"] == "gpt-5.4-mini"
-    assert parsed["agents"]["assistant"]["reasoning_effort"] == "low"
+    assert parsed["agents"]["assistant"]["reasoning_effort"] == "medium"
     assert parsed["agents"]["assistant"]["verbosity"] == "low"
-    assert parsed["agents"]["assistant"]["max_tokens"] == 220
+    assert parsed["agents"]["assistant"]["max_tokens"] == 1024
     assert parsed["agents"]["assistant"]["stream"] is True
     assert parsed["agents"]["assistant"]["tools"] == ["plexus"]
     assert isinstance(parsed.get("code"), str)
