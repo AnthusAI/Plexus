@@ -82,10 +82,16 @@
       "author": "ryan",
       "text": "Release summary: implemented and verified procedure grid dispatch indicator stability. Local runs stay Local, sparse realtime updates preserve subtitles, the dispatch row is reserved from first render, the Optimization Procedure badge label is restored, and duplicate body Pending text is suppressed.",
       "created_at": "2026-05-01T18:54:27.926131Z"
+    },
+    {
+      "id": "1775b5df-98a3-4ae4-ac87-094179f20e4e",
+      "author": "ryan",
+      "text": "User verification found the duplicate Pending row still appears between the status message area and segmented progress during initial loading. The dispatch indicator should live only above the timestamp in the procedure grid header. Pausing PR merge until fixed.",
+      "created_at": "2026-05-01T19:04:11.553429Z"
     }
   ],
   "created_at": "2026-05-01T18:09:49.560708Z",
-  "updated_at": "2026-05-01T18:54:38.041565Z",
+  "updated_at": "2026-05-01T19:04:11.553429Z",
   "closed_at": "2026-05-01T18:54:38.041565Z",
   "custom": {}
 }

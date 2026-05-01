@@ -234,6 +234,41 @@ describe('ProcedureTask optimizer auth flow', () => {
     expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
   })
 
+  it('keeps detail timing in the header instead of between status and segmented progress', () => {
+    render(
+      <ProcedureTask
+        variant="detail"
+        procedure={{
+          ...baseProcedure,
+          task: {
+            ...baseProcedure.task,
+            status: 'COMPLETED',
+            startedAt: '2026-01-01T00:00:00.000Z',
+            completedAt: '2026-01-01T00:05:00.000Z',
+            stages: {
+              items: [
+                {
+                  id: 'stage-final',
+                  name: 'Final',
+                  order: 1,
+                  status: 'COMPLETED',
+                  statusMessage: 'Final stage complete',
+                },
+              ],
+            },
+          },
+        } as any}
+      />
+    )
+
+    const card = screen.getByRole('article')
+    expect(screen.getAllByText(/Elapsed:/)).toHaveLength(1)
+    expect(card).toHaveTextContent('Final stage complete')
+    expect(card.textContent?.indexOf('Elapsed:')).toBeLessThan(
+      card.textContent?.indexOf('Final stage complete') ?? 0
+    )
+  })
+
   it('hydrates offloaded optimizer state from Amplify Storage procedures path', async () => {
     const metadataState = {
       state: {

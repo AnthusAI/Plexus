@@ -1094,11 +1094,6 @@ export default function ProcedureTask({
                 <span className="text-lg font-semibold text-muted-foreground">Procedure</span>
               </div>
               
-              {/* Timestamp */}
-              <div className="mb-2">
-                <Timestamp time={props.task.time} variant="relative" />
-              </div>
-              
               {props.task.scorecard && props.task.scorecard.trim() !== '' && (
                 <div className="flex items-center gap-1.5 font-semibold text-sm min-w-0">
                   <span className="truncate">{props.task.scorecard}</span>
@@ -1129,6 +1124,14 @@ export default function ProcedureTask({
                 </div>
               )}
               <DispatchIndicator />
+              <Timestamp time={props.task.time} variant="relative" />
+              <ProgressBarTiming
+                startedAt={props.task.startedAt}
+                completedAt={props.task.completedAt}
+                estimatedTimeRemaining={undefined}
+                isInProgress={props.task.status === 'RUNNING'}
+                className="text-muted-foreground"
+              />
             </div>
             <div className="flex flex-col items-end flex-shrink-0 gap-2">
               <div className="flex gap-2">
@@ -1220,8 +1223,41 @@ export default function ProcedureTask({
     }
   }
 
+  const renderProcedureStatus = (statusVariant: 'grid' | 'detail') => (
+    <TaskStatus
+      showStages
+      stages={taskObject.stages || []}
+      stageConfigs={taskObject.stages || []}
+      currentStageName={taskObject.currentStageName}
+      processedItems={taskObject.processedItems}
+      totalItems={taskObject.totalItems}
+      startedAt={taskObject.startedAt}
+      estimatedCompletionAt={taskObject.estimatedCompletionAt}
+      status={taskObject.status || 'PENDING'}
+      command={taskObject.command}
+      statusMessage={taskStatusMessage}
+      errorMessage={taskObject.errorMessage}
+      dispatchStatus={taskObject.dispatchStatus}
+      dispatchMode={taskObject.dispatchMode}
+      celeryTaskId={taskObject.celeryTaskId}
+      workerNodeId={taskObject.workerNodeId}
+      completedAt={taskObject.completedAt}
+      truncateMessages={statusVariant === 'grid'}
+      isSelected={isSelected}
+      variant={statusVariant}
+      commandDisplay={statusVariant === 'grid' ? 'hide' : 'show'}
+      statusMessageDisplay="always"
+      hideElapsedTime
+      hidePreExecutionStatus
+    />
+  )
+
   const renderContent = () => (
-    <TaskContent variant={variant} task={taskObject} hideTaskStatus={variant === 'grid'}>
+    <TaskContent
+      variant={variant}
+      task={taskObject}
+      hideTaskStatus={variant === 'grid' || variant === 'detail'}
+    >
       {variant === 'grid' ? (
         <div className="mt-auto space-y-2">
           {taskObject.description && (
@@ -1229,32 +1265,7 @@ export default function ProcedureTask({
               {taskObject.description}
             </div>
           )}
-          <TaskStatus
-            showStages
-            stages={taskObject.stages || []}
-            stageConfigs={taskObject.stages || []}
-            currentStageName={taskObject.currentStageName}
-            processedItems={taskObject.processedItems}
-            totalItems={taskObject.totalItems}
-            startedAt={taskObject.startedAt}
-            estimatedCompletionAt={taskObject.estimatedCompletionAt}
-            status={taskObject.status || 'PENDING'}
-            command={taskObject.command}
-            statusMessage={taskStatusMessage}
-            errorMessage={taskObject.errorMessage}
-            dispatchStatus={taskObject.dispatchStatus}
-            dispatchMode={taskObject.dispatchMode}
-            celeryTaskId={taskObject.celeryTaskId}
-            workerNodeId={taskObject.workerNodeId}
-            completedAt={taskObject.completedAt}
-            truncateMessages
-            isSelected={isSelected}
-            variant="grid"
-            commandDisplay="hide"
-            statusMessageDisplay="always"
-            hideElapsedTime
-            hidePreExecutionStatus
-          />
+          {renderProcedureStatus('grid')}
           {feedbackEvaluationSummary && (
             <EvaluationListAccuracyBar
               progress={feedbackProgress}
@@ -1265,6 +1276,10 @@ export default function ProcedureTask({
         </div>
       ) : (
         <div className="p-3">
+          <div className="mb-4">
+            {renderProcedureStatus('detail')}
+          </div>
+
           {/* Parameters section - collapsed by default */}
           {parameters.length > 0 && (
             <Accordion type="multiple" className="w-full mb-4">
