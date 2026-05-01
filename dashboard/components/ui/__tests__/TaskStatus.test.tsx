@@ -102,4 +102,16 @@ describe('TaskStatus', () => {
     expect(screen.queryByText('Claimed...')).not.toBeInTheDocument()
     expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
   })
+
+  test('uses Pending as the reserved pre-execution state while dispatch mode is unknown', () => {
+    render(
+      <TaskStatus
+        status="PENDING"
+        dispatchMode="pending"
+      />
+    )
+
+    expect(screen.getByText('Pending...')).toBeInTheDocument()
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
 })
