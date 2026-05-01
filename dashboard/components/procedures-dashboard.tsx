@@ -518,6 +518,19 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           if (!updated || updated.accountId !== accountId) return;
           // Subscription payloads don't resolve @belongsTo relations — preserve existing
           // scorecard/score/metadata from the stored record so they don't get wiped.
+          // Also merge metadata so that fields set at creation (e.g. procedure_type) survive
+          // later updates that may not include them.
+          const mergeMetadata = (incoming: string | null | undefined, existing: string | null | undefined): string | null | undefined => {
+            if (!incoming) return existing
+            if (!existing) return incoming
+            try {
+              const a = JSON.parse(existing)
+              const b = JSON.parse(incoming)
+              return JSON.stringify({ ...a, ...b })
+            } catch {
+              return incoming
+            }
+          }
           let existingTask: Task | null | undefined = null
           setProcedures(prev =>
             sortProceduresByStartTime(
@@ -529,7 +542,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                   ...updated,
                   scorecard: updated.scorecard ?? p.scorecard,
                   score: updated.score ?? p.score,
-                  metadata: updated.metadata ?? p.metadata,
+                  metadata: mergeMetadata(updated.metadata, p.metadata),
                   task: p.task,
                 }
               })
@@ -546,7 +559,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                     ...hydratedProcedure,
                     scorecard: hydratedProcedure.scorecard ?? p.scorecard,
                     score: hydratedProcedure.score ?? p.score,
-                    metadata: hydratedProcedure.metadata ?? p.metadata,
+                    metadata: mergeMetadata(hydratedProcedure.metadata, p.metadata),
                     task: p.task ?? hydratedProcedure.task,
                   }
                 })
@@ -1002,6 +1015,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       command: procedure.task.command || '',
       description: procedure.task.description || undefined,
       dispatchStatus: procedure.task.dispatchStatus || undefined,
+      workerNodeId: (procedure.task as any).workerNodeId || undefined,
+      celeryTaskId: (procedure.task as any).celeryTaskId || undefined,
       metadata: typeof procedure.task.metadata === 'string' ? procedure.task.metadata : JSON.stringify(procedure.task.metadata),
       createdAt: procedure.task.createdAt || undefined,
       startedAt: procedure.task.startedAt || undefined,
