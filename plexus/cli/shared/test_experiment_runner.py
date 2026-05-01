@@ -159,6 +159,8 @@ async def test_run_experiment_persists_failed_result_telemetry(monkeypatch):
     assert fake_client.procedure_metadata["last_failure"]["phase"] == "Baseline Evaluation"
     assert stage_fail_calls == [(fake_client, "task-123", "optimizer blew up")]
     assert fake_task.update_calls[-1]["status"] == "FAILED"
+    assert fake_task.update_calls[-1]["dispatchStatus"] == "PENDING"
+    assert json.loads(fake_task.update_calls[-1]["metadata"])["dispatch_mode"] == "local"
     assert fake_task.update_calls[-1]["errorMessage"] == "optimizer blew up"
     assert json.loads(fake_task.update_calls[-1]["errorDetails"])["kind"] == "exception"
 
