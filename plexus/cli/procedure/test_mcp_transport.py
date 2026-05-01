@@ -272,6 +272,22 @@ class TestEmbeddedMCPServer:
             assert server.transport.client_info["name"] == "Procedure Client"
             assert server.transport.client_info["version"] == "1.0.0"
 
+    @pytest.mark.asyncio
+    async def test_register_plexus_tools_includes_get_documentation(self, server):
+        """Procedure MCP transport should expose get_plexus_documentation."""
+        server.register_plexus_tools()
+        await server.transport.initialize({"name": "Test"})
+
+        result = await server.transport.call_tool(
+            "get_plexus_documentation",
+            {"filename": "optimizer-cookbook"},
+        )
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["filename"] == "optimizer-cookbook"
+        assert "documentation" in payload
+        assert isinstance(payload["documentation"], str)
+        assert "optimizer" in payload["documentation"].lower()
+
 
 def test_advance_task_to_stage_by_name_uses_long_running_retry_policy():
     client = Mock()
