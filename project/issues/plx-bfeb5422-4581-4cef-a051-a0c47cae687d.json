@@ -1,0 +1,18 @@
+{
+  "id": "plx-bfeb5422-4581-4cef-a051-a0c47cae687d",
+  "title": "Fix PR 261 dashboard unit metadata expectation",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-01T19:48:00.920959Z",
+  "updated_at": "2026-05-01T19:48:03.607628Z",
+  "closed_at": null,
+  "custom": {}
+}

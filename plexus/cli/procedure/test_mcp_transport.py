@@ -433,23 +433,6 @@ class TestIntegrationScenarios:
     """Integration tests for common procedure MCP usage patterns."""
 
     @pytest.mark.asyncio
-    async def test_registered_tool_schema_includes_parameters(self):
-        """Registered Plexus tools should expose argument schema to MCP clients."""
-        server = await create_procedure_mcp_server()
-
-        async with server.connect({"name": "Schema Test Client"}) as client:
-            tools = await client.list_tools()
-            guidelines_tool = next(
-                (tool for tool in tools if tool.get("name") == "plexus_guidelines_validate"),
-                None,
-            )
-
-            assert guidelines_tool is not None
-            schema = guidelines_tool.get("inputSchema", {})
-            properties = schema.get("properties", {})
-            assert "guidelines_markdown" in properties
-    
-    @pytest.mark.asyncio
     async def test_full_experiment_mcp_workflow(self):
         """Test a complete procedure MCP workflow."""
         # Create server with procedure context

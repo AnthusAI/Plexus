@@ -1,6 +1,8 @@
 from unittest.mock import MagicMock, patch
 
 from plexus.reports.service import (
+    ReportGenerationCancelled,
+    _generate_report_core,
     _wait_for_programmatic_task_result,
     run_programmatic_block_and_persist,
     run_block_cached,
@@ -172,6 +174,35 @@ def test_wait_for_programmatic_task_result_surfaces_persisted_report_failure(
     assert output is None
     assert log_output == "Score not found"
     assert was_cached is False
+
+
+@patch("plexus.reports.service._load_report_configuration")
+@patch("plexus.reports.service.Task.get_by_id")
+def test_generate_report_core_stops_before_work_when_task_cancelled(
+    mock_task_get_by_id,
+    mock_load_report_configuration,
+):
+    cancelled_task = MagicMock()
+    cancelled_task.status = "CANCELLED"
+    mock_task_get_by_id.return_value = cancelled_task
+
+    tracker = MagicMock()
+    tracker.task_id = "task-cancelled"
+
+    try:
+        _generate_report_core(
+            report_config_id="report-config-1",
+            account_id="acct-1",
+            run_parameters={},
+            client=MagicMock(),
+            tracker=tracker,
+        )
+    except ReportGenerationCancelled as exc:
+        assert "task-cancelled" in str(exc)
+    else:
+        raise AssertionError("Expected report generation to stop on CANCELLED task")
+
+    mock_load_report_configuration.assert_not_called()
 
 
 @patch("plexus.reports.service._persist_block_result")

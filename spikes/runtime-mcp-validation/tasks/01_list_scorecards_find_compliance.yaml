@@ -1,0 +1,29 @@
+id: list_scorecards_find_compliance
+name: "List scorecards and find the compliance score"
+prompt: |
+  Find the scorecard for Acme Health that contains a score related to compliance tone.
+  Use plexus.scorecards.list{ account = "Acme Health" } to list candidate scorecards.
+  Use plexus.scorecards.info to inspect each candidate scorecard's scores.
+  After finding Compliance Tone, call plexus.score.info for that score before returning.
+  Return exactly these fields: scorecard_id, score_id, score_name, and champion_version_id.
+expected_outcome:
+  kind: exact_fields
+  fields:
+    scorecard_id: sc_acme_health
+    score_id: score_compliance_tone
+    score_name: Compliance Tone
+    champion_version_id: sv_compliance_tone_champion
+coverage_tags:
+  - read_only
+  - scorecards
+  - score_info
+  - basic_discovery
+required_apis:
+  - plexus.scorecards.list
+  - plexus.scorecards.info
+  - plexus.score.info
+max_attempts_for_first_try_pass: 1
+fixture_notes: |
+  The fixture should include multiple scorecards, only one Acme Health scorecard, and
+  a Compliance Tone score with a champion version. Success requires filtering rather
+  than returning the first scorecard.

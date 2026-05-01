@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "72d08b00-e9a3-4ccc-b084-9bf0f2b8c13b",
+  "issue_id": "plx-debda55f-df79-485c-bc5b-a8b394c64c37",
+  "event_type": "field_updated",
+  "occurred_at": "2026-05-01T19:16:57.744Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "assignee": {
+        "from": null,
+        "to": "ryan"
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+id: build_and_check_associated_dataset
+name: "Build a feedback dataset and check association"
+prompt: |
+  Build a dataset from the last 7 days of feedback for Compliance Tone and then
+  verify whether the resulting dataset is associated with the feedback window.
+  Return dataset id, row count, and associated=true/false.
+  Call plexus.dataset.build_from_feedback_window with score_id
+  score_compliance_tone and window_days 7. Then call
+  plexus.dataset.check_associated for the returned dataset id.
+  Return exactly these fields: score_id, source_window_days, dataset_id,
+  row_count, and associated. Avoid using Tactus reserved words such as until as
+  field-access names; use bracket syntax like table["until"] if needed.
+expected_outcome:
+  kind: exact_fields
+  fields:
+    score_id: score_compliance_tone
+    source_window_days: 7
+    associated: true
+    dataset_id_present: true
+    row_count_present: true
+coverage_tags:
+  - dataset
+  - feedback
+  - multi_step
+  - association_check
+required_apis:
+  - plexus.dataset.build_from_feedback_window
+  - plexus.dataset.check_associated
+max_attempts_for_first_try_pass: 1
+fixture_notes: |
+  This task is data-volume dependent but not necessarily LLM-expensive. The stub
+  should debit a small budget amount per synthetic row so budget accounting is
+  still exercised.

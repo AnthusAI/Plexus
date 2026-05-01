@@ -10,9 +10,28 @@
   "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "8cfc4942-8ecf-49fc-9938-df37fa86393b",
+      "author": "ryan",
+      "text": "Fixed score editor direct YAML normalization so numeric external_id/externalId values are coerced to strings before optimizer agents edit or submit candidate versions. Focused regression added; live Blind Transfer optimizer run has accepted cycle 1 and is continuing.",
+      "created_at": "2026-05-01T20:32:35.896973Z"
+    },
+    {
+      "id": "95c732ec-5b7c-4f8e-ad9c-389f46da5623",
+      "author": "ryan",
+      "text": "Follow-up CI fixes after push: imported typing.Any in MCP/tools/tactus_runtime/execute_test.py for ruff F821, and included the existing procedures dashboard metadata normalization so TypeScript accepts non-string GraphQL metadata payloads. Local checks: ruff execute_test.py passed; dashboard npm run ci:typecheck passed.",
+      "created_at": "2026-05-01T20:46:25.750314Z"
+    },
+    {
+      "id": "2e565a78-2447-4b91-a5c7-c9da72d54e7f",
+      "author": "ryan",
+      "text": "CI follow-up: latest pushed branch run failed in Python jobs on stale execute_tactus-era tests and console tool registration expectations. Fixing the branch tests/code without touching unrelated local CLI dispatch changes.",
+      "created_at": "2026-05-01T21:01:17.736565Z"
+    }
+  ],
   "created_at": "2026-04-23T11:57:53.357707Z",
-  "updated_at": "2026-04-23T11:57:58.115652Z",
+  "updated_at": "2026-05-01T21:01:17.736565Z",
   "closed_at": null,
   "custom": {}
 }
