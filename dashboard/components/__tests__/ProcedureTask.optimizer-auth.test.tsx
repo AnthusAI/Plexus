@@ -183,6 +183,29 @@ describe('ProcedureTask optimizer auth flow', () => {
     expect(screen.getByText(/^Procedure$/)).toBeInTheDocument()
   })
 
+  it('keeps local procedure runs labeled Local even when a worker node id is present', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: {
+            ...baseProcedure.task,
+            status: 'PENDING',
+            dispatchStatus: 'DISPATCHING',
+            workerNodeId: 'local-host-123',
+            metadata: JSON.stringify({ dispatch_mode: 'local', procedure_id: 'proc-1' }),
+            stages: { items: [] },
+          },
+        } as any}
+      />
+    )
+
+    expect(screen.getAllByText('Local').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Claimed...')).not.toBeInTheDocument()
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
   it('hydrates offloaded optimizer state from Amplify Storage procedures path', async () => {
     const metadataState = {
       state: {

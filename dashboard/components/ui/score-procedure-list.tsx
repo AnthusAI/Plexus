@@ -144,6 +144,8 @@ function toProcedureTaskData(
       command: run.task?.command || '',
       description: operationalSummary.join(' · '),
       dispatchStatus: run.task?.dispatchStatus || undefined,
+      celeryTaskId: run.task?.celeryTaskId || undefined,
+      workerNodeId: run.task?.workerNodeId || undefined,
       metadata: run.task?.metadata,
       createdAt: run.task?.createdAt || run.updatedAt || new Date().toISOString(),
       startedAt: run.task?.startedAt || undefined,

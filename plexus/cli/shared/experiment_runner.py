@@ -337,6 +337,7 @@ def create_tracker_and_experiment_task(
         "type": "Experiment Run",
         "procedure_id": procedure_id,
         "task_type": "Experiment Run",
+        "dispatch_mode": "local",
     }
     if run_parameters:
         metadata["run_parameters"] = _to_json_safe(run_parameters)
@@ -424,6 +425,15 @@ def create_tracker_and_experiment_task(
     # Claim task like CLI (set worker and RUNNING)
     if task:
         worker_id = f"{socket.gethostname()}-{__import__('os').getpid()}"
+        task_metadata_for_claim = task.metadata or {}
+        if isinstance(task_metadata_for_claim, str):
+            try:
+                task_metadata_for_claim = json.loads(task_metadata_for_claim) if task_metadata_for_claim else {}
+            except Exception:
+                task_metadata_for_claim = {}
+        if not isinstance(task_metadata_for_claim, dict):
+            task_metadata_for_claim = {}
+        task_metadata_for_claim["dispatch_mode"] = "local"
         task.update(
             accountId=task.accountId,
             type=task.type,
@@ -431,6 +441,7 @@ def create_tracker_and_experiment_task(
             target=task.target,
             command=task.command,
             workerNodeId=worker_id,
+            metadata=json.dumps(task_metadata_for_claim),
             startedAt=datetime.now(timezone.utc).isoformat(),
             updatedAt=datetime.now(timezone.utc).isoformat(),
         )
@@ -450,6 +461,7 @@ def create_tracker_and_experiment_task(
                     task_metadata = {}
             task_metadata["procedure_id"] = procedure_id
             task_metadata["procedure_type"] = "run"
+            task_metadata["dispatch_mode"] = "local"
             if run_parameters:
                 task_metadata["run_parameters"] = _to_json_safe(run_parameters)
             if run_options:
