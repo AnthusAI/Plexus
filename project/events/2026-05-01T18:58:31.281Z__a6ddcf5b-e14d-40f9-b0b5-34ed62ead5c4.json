@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a6ddcf5b-e14d-40f9-b0b5-34ed62ead5c4",
+  "issue_id": "plx-ce9b7ccf-213d-4782-a130-fbacf70a7502",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-01T18:58:31.281Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "As a procedure operator, I want SME agenda examples to cite item IDs as plain text, so that the agenda stays useful when no dashboard item URL is available.\n\nFeature: SME agenda item citations\n\nScenario: SME agenda examples cite disputed items\nGiven the optimizer generates SME agenda questions with concrete item examples\nWhen an agenda includes an item identifier\nThen the agenda renders the item identifier as plain text\nAnd the agenda does not wrap the item identifier in a Markdown link or URL.\n\nOut of scope: changing the substance, structure, or prioritization of SME questions.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "SME agenda uses plain item IDs"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-c9f53a78-c596-4d8e-a771-ab3585ac215a",
+  "title": "Remove SME agenda item ID links",
+  "description": "Implementation task for story plx-ce9b7c.\n\nScope:\n- Locate SME agenda prompts or post-processing that permit Markdown item links.\n- Ensure agenda output uses plain item IDs such as `Item 308411774`, not `[Item 308411774](...)`.\n- Preserve the current question wording, examples, options, and impact format.\n- Add or update focused tests/specs for this behavior.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "51eec729-fefa-45f9-ad34-8efabc513b83",
+      "author": "ryan",
+      "text": "Implemented SME agenda item-ID link flattening in feedback_alignment_optimizer.yaml. Added prompt instructions for cycle and end-of-run SME agendas, plus a deterministic strip_sme_item_id_links post-processor after raw and rubric-memory-gated agenda generation. Focused config tests pass: pytest plexus/cli/procedure/test_feedback_alignment_optimizer_config.py -q (36 passed).",
+      "created_at": "2026-05-01T18:59:51.373849Z"
+    }
+  ],
+  "created_at": "2026-05-01T18:58:39.836525Z",
+  "updated_at": "2026-05-01T18:59:58.733943Z",
+  "closed_at": "2026-05-01T18:59:58.733943Z",
+  "custom": {}
+}

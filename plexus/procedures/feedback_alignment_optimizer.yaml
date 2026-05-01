@@ -467,6 +467,17 @@ code: |
     return type(s) == "string" and #s > 0
   end
 
+  local function strip_sme_item_id_links(markdown)
+    if not has_text(markdown) then
+      return markdown
+    end
+    local text = markdown
+    text = text:gsub("%[([Ii]tem%s+[^%]]+)%]%([^%)]+%)", "%1")
+    text = text:gsub("%[([0-9][0-9A-Za-z_%-]*)%]%([^%)]-/lab/items/[^%)]+%)", "%1")
+    text = text:gsub("%[([0-9][0-9A-Za-z_%-]*)%]%([^%)]-/items/[^%)]+%)", "%1")
+    return text
+  end
+
   local function safe_decode(value)
     if value == nil then
       return nil, "nil"
@@ -6844,6 +6855,7 @@ code: |
             .. "Rules:\n"
             .. "- Only include items that REQUIRE a human policy decision\n"
             .. "- No technical jargon, no model names, no metric names\n"
+            .. "- If citing item IDs, write plain text like Item 308411774; never use Markdown links or URLs\n"
             .. "- If there are no SME decisions needed, write: (No SME decisions needed this cycle)\n",
             cycle))
           table.insert(sme_parts, "\n=== KEY FINDINGS FROM THIS CYCLE ===\n")
@@ -6875,6 +6887,7 @@ code: |
             sme_agenda = sme_raw
           end
         end
+        sme_agenda = strip_sme_item_id_links(sme_agenda)
         local raw_cycle_sme_agenda = sme_agenda
         local cycle_gate_context = table.concat({
           "Cycle " .. tostring(cycle) .. " SME agenda",
@@ -6886,6 +6899,7 @@ code: |
           "cycle_" .. tostring(cycle) .. "_sme_agenda",
           cycle_gate_context
         )
+        sme_agenda = strip_sme_item_id_links(sme_agenda)
 
         -- Backward-compat field: exec_summary doubles as the "diagnosis" for older dashboard code
         local diag_summary  = exec_summary
@@ -7796,6 +7810,7 @@ code: |
       "\n- Do NOT include anything the lab can fix without SME input.",
       "\n- Do NOT explain what agreement or AC1 means.",
       "\n- Do NOT summarize the optimization run — the agenda is action-only.",
+      "\n- If citing item IDs, write plain text like Item 308411774; never use Markdown links or URLs.",
       "\n\nStructure your output exactly as follows:",
       string.format("\n\n## FOR YOUR NEXT MEETING: %s Quality Review", score_name_for_agenda),
       "\n\n### Title of the first decision",
@@ -7855,6 +7870,7 @@ code: |
       return #sme_context
     end
   )
+  sme_agenda_text = strip_sme_item_id_links(sme_agenda_text)
   local raw_end_sme_agenda = sme_agenda_text
   State.set("sme_agenda_raw", raw_end_sme_agenda)
   sme_agenda_text = gate_sme_agenda(
@@ -7867,6 +7883,7 @@ code: |
       "Residual errors: " .. trunc(residual_errors_text, 900)
     }, "\n")
   )
+  sme_agenda_text = strip_sme_item_id_links(sme_agenda_text)
   State.set("sme_agenda_gated", sme_agenda_text)
 
   -- Store results

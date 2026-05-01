@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a35d6c22-3a98-45a8-9f1f-4f5e15a3f1da",
+  "issue_id": "plx-c9f53a78-c596-4d8e-a771-ab3585ac215a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-01T18:58:39.837Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implementation task for story plx-ce9b7c.\n\nScope:\n- Locate SME agenda prompts or post-processing that permit Markdown item links.\n- Ensure agenda output uses plain item IDs such as `Item 308411774`, not `[Item 308411774](...)`.\n- Preserve the current question wording, examples, options, and impact format.\n- Add or update focused tests/specs for this behavior.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 2,
+    "status": "open",
+    "title": "Remove SME agenda item ID links"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-ce9b7ccf-213d-4782-a130-fbacf70a7502",
+  "title": "SME agenda uses plain item IDs",
+  "description": "As a procedure operator, I want SME agenda examples to cite item IDs as plain text, so that the agenda stays useful when no dashboard item URL is available.\n\nFeature: SME agenda item citations\n\nScenario: SME agenda examples cite disputed items\nGiven the optimizer generates SME agenda questions with concrete item examples\nWhen an agenda includes an item identifier\nThen the agenda renders the item identifier as plain text\nAnd the agenda does not wrap the item identifier in a Markdown link or URL.\n\nOut of scope: changing the substance, structure, or prioritization of SME questions.",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "62bc1b45-1b88-48e0-aab4-04ef4f26ca02",
+      "author": "ryan",
+      "text": "Behavior covered by focused optimizer config test: SME agenda generation now instructs plain item IDs and strips Markdown links around item citations after both raw agenda writing and rubric-memory gating.",
+      "created_at": "2026-05-01T18:59:51.374983Z"
+    }
+  ],
+  "created_at": "2026-05-01T18:58:31.280625Z",
+  "updated_at": "2026-05-01T18:59:58.733917Z",
+  "closed_at": "2026-05-01T18:59:58.733917Z",
+  "custom": {}
+}
