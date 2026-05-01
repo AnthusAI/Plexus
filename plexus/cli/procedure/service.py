@@ -147,6 +147,7 @@ class ProcedureService:
         template_id: Optional[str] = None,
         score_version_id: Optional[str] = None,
         stage_configs: Optional[Dict[str, Any]] = None,
+        name: Optional[str] = None,
     ) -> ProcedureCreationResult:
         """Create a new procedure.
 
@@ -264,24 +265,41 @@ class ProcedureService:
                 featured=featured,
                 scoreVersionId=score_version_id,
                 code=yaml_config,
+                name=name,
             )
 
-            # Upload YAML as code.tac to S3 and record the key in metadata
-            if yaml_config:
+            # Upload YAML as code.tac to S3 and record the key in metadata.
+            # Also seed scorecard_name/score_name so the dashboard subtitle renders
+            # immediately without waiting for the first Lua State checkpoint.
+            try:
+                import json as _json
+                current_meta = {}
                 try:
-                    from plexus.reports.s3_utils import upload_procedure_file
-                    import json as _json
-                    s3_key = upload_procedure_file(procedure.id, "code.tac", yaml_config, content_type="text/plain")
-                    current_meta = {}
+                    current_meta = _json.loads(procedure.metadata or "{}") or {}
+                except Exception:
+                    pass
+                if scorecard_identifier:
+                    current_meta["scorecard_name"] = scorecard_identifier
+                if score_identifier:
+                    current_meta["score_name"] = score_identifier
+                if yaml_config:
                     try:
-                        current_meta = _json.loads(procedure.metadata or "{}") or {}
+                        _yaml_data = yaml.safe_load(yaml_config)
+                        if isinstance(_yaml_data, dict) and _yaml_data.get("procedure_type"):
+                            current_meta["procedure_type"] = _yaml_data["procedure_type"]
                     except Exception:
                         pass
-                    current_meta["code_s3_key"] = s3_key
-                    procedure.update(metadata=_json.dumps(current_meta))
-                    logger.info(f"Uploaded code.tac to S3 for procedure {procedure.id}: {s3_key}")
-                except Exception as exc:
-                    logger.warning(f"Could not upload code.tac for procedure {procedure.id}: {exc}")
+                if yaml_config:
+                    try:
+                        from plexus.reports.s3_utils import upload_procedure_file
+                        s3_key = upload_procedure_file(procedure.id, "code.tac", yaml_config, content_type="text/plain")
+                        current_meta["code_s3_key"] = s3_key
+                        logger.info(f"Uploaded code.tac to S3 for procedure {procedure.id}: {s3_key}")
+                    except Exception as exc:
+                        logger.warning(f"Could not upload code.tac for procedure {procedure.id}: {exc}")
+                procedure.update(metadata=_json.dumps(current_meta))
+            except Exception as exc:
+                logger.warning(f"Could not update metadata for procedure {procedure.id}: {exc}")
 
             # Get or create Task with stages from state machine
             task = self._get_or_create_task_with_stages_for_procedure(
