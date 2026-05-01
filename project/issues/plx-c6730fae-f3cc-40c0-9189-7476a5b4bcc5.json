@@ -1,0 +1,49 @@
+{
+  "id": "plx-c6730fae-f3cc-40c0-9189-7476a5b4bcc5",
+  "title": "Fix score-version procedure and evaluation queries",
+  "description": "The Scorecards dashboard score-version detail tabs do not reliably show version-associated activity. Evaluations are missing associated records, and procedures appear to work through a slow or incorrect query path. Investigate the schema/generated client hooks and update the dashboard to use the intended direct association or GSI-backed query path.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2668dcc4-0205-4a04-ac81-5a458c7c9389",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e826ad18-4cfc-4b9e-a4cf-f05dc967e665",
+      "author": "ryan",
+      "text": "Starting investigation. I will trace the Scorecards dashboard score-version tabs, generated data model/indexes, and existing hooks/tests before making changes.",
+      "created_at": "2026-05-01T21:43:30.643637Z"
+    },
+    {
+      "id": "d24fe8d0-2032-49ae-9d96-c78705d15b98",
+      "author": "ryan",
+      "text": "Updated local develop from origin and fast-forwarded the current branch onto develop. Implemented version-scope dashboard loaders using listEvaluationByScoreVersionIdAndCreatedAt and listProcedureByScoreVersionIdAndUpdatedAt, with focused Jest tests and dashboard typecheck passing.",
+      "created_at": "2026-05-01T21:47:51.806029Z"
+    },
+    {
+      "id": "509e76dd-2e40-4d73-b123-9b2ce7a50d58",
+      "author": "ryan",
+      "text": "Found root cause for empty Procedures tab: Procedure.scoreVersionId is a single FK and does not represent optimizer runs that touch multiple generated/candidate versions. The dashboard's direct GSI query is fast but returns no rows for versions that only appear in optimizer manifests. Next fix is a first-class ProcedureScoreVersion link model populated during optimizer indexing, queried directly by scoreVersionId.",
+      "created_at": "2026-05-01T21:59:37.489493Z"
+    },
+    {
+      "id": "e1fbe759-8d80-4f38-9b57-df0fb84c01e9",
+      "author": "ryan",
+      "text": "Implemented first-class optimizer procedure-to-score-version indexing. Added ProcedureScoreVersion model with scoreVersionId+updatedAt GSI, populated links during optimizer artifact indexing from baseline/winning/cycle/candidate versions, and changed the dashboard version Procedures tab to query the link table directly. Verification: focused dashboard Jest tests, optimizer_results pytest, and dashboard typecheck all pass.",
+      "created_at": "2026-05-01T22:01:02.915835Z"
+    },
+    {
+      "id": "67bd9e33-d6e1-41f5-a974-44ee0ae019e9",
+      "author": "ryan",
+      "text": "Added ProcedureScoreVersion create/update/delete subscriptions for the version Procedures tab so newly indexed links can appear live. Re-ran focused dashboard Jest tests, optimizer_results pytest, and dashboard typecheck successfully.",
+      "created_at": "2026-05-01T22:01:54.713112Z"
+    }
+  ],
+  "created_at": "2026-05-01T21:43:26.692109Z",
+  "updated_at": "2026-05-01T22:01:54.713112Z",
+  "closed_at": null,
+  "custom": {}
+}

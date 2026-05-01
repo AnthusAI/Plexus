@@ -1,0 +1,18 @@
+{
+  "id": "plx-2668dcc4-0205-4a04-ac81-5a458c7c9389",
+  "title": "Score version activity tabs use direct associations",
+  "description": "Fix the Scorecards dashboard score-version detail tabs so Procedures and Evaluations show the records associated with the selected score version using first-class keyed access, not scans or slow client-side filtering.\n\nDefinition of Done:\n- Procedures tab shows procedures associated with the selected score version.\n- Evaluations tab shows evaluations associated with the selected score version.\n- Data access uses the intended indexed association/query path.\n- Regression coverage proves the score-version scoping behavior.",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-01T21:43:19.085275Z",
+  "updated_at": "2026-05-01T21:43:30.639237Z",
+  "closed_at": null,
+  "custom": {}
+}
