@@ -1,1 +1,0 @@
-# Score management tools for MCP server

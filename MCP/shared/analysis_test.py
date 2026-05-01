@@ -88,37 +88,27 @@ class TestBuildFeedbackContext:
 class TestAnalyzeScoreResult:
     """BDD tests for analyze_score_result — the core LLM inference logic."""
 
-    def _make_mock_bedrock(self, responses):
-        """Helper to create a mock Bedrock client with given response texts."""
-        mock_client = MagicMock()
-        call_count = [0]
-
-        def mock_invoke(modelId, body, contentType, accept):
-            resp_text = responses[min(call_count[0], len(responses) - 1)]
-            call_count[0] += 1
-            resp_body = json.dumps({"content": [{"text": resp_text}]})
-            mock_resp = MagicMock()
-            mock_resp.__getitem__ = lambda self, key: MagicMock(read=MagicMock(return_value=resp_body.encode())) if key == "body" else None
-            return mock_resp
-
-        mock_client.invoke_model.side_effect = mock_invoke
-        return mock_client, call_count
-
     def test_successful_two_turn_analysis(self):
         """
         GIVEN a transcript, predicted/correct values, and score context
         WHEN analyze_score_result is called
-        AND Bedrock Haiku responds successfully
+        AND the OpenAI helper responds successfully
         THEN it should return (detailed_cause, suggested_fix) from two turns
         """
         from plexus.rca_analysis import analyze_score_result
 
-        mock_client, call_count = self._make_mock_bedrock([
+        call_count = [0]
+        responses = [
             "The model incorrectly flagged this as a violation.",
             "Add 'free service + copay mention = compliant' rule.",
-        ])
+        ]
 
-        with patch("boto3.client", return_value=mock_client):
+        def fake_invoke(*, system, messages, max_output_tokens, call_site="rca"):
+            text = responses[min(call_count[0], len(responses) - 1)]
+            call_count[0] += 1
+            return text
+
+        with patch("plexus.rca_analysis._invoke_rca_openai_text", side_effect=fake_invoke):
             cause, fix = analyze_score_result(
                 primary_input="Agent: SelectRx is a free service for you.",
                 predicted="No",
@@ -133,15 +123,18 @@ class TestAnalyzeScoreResult:
         assert "copay" in fix
         assert call_count[0] == 2
 
-    def test_bedrock_failure_returns_empty(self):
+    def test_openai_failure_returns_empty(self):
         """
         GIVEN a valid request
-        WHEN Bedrock call fails with an exception
+        WHEN the OpenAI call fails with an exception
         THEN it should return empty strings without raising
         """
         from plexus.rca_analysis import analyze_score_result
 
-        with patch("boto3.client", side_effect=Exception("Bedrock unavailable")):
+        with patch(
+            "plexus.rca_analysis._invoke_rca_openai_text",
+            side_effect=Exception("OpenAI unavailable"),
+        ):
             cause, fix = analyze_score_result(
                 primary_input="Some input artifact",
                 predicted="No",
@@ -156,23 +149,17 @@ class TestAnalyzeScoreResult:
         """
         GIVEN feedback_context text
         WHEN analyze_score_result is called
-        THEN the feedback context should appear in the prompt sent to Bedrock
+        THEN the feedback context should appear in the prompt sent to the LLM
         """
         from plexus.rca_analysis import analyze_score_result
 
-        captured_bodies = []
-        mock_client = MagicMock()
+        captured_messages: list = []
 
-        def mock_invoke(modelId, body, contentType, accept):
-            captured_bodies.append(json.loads(body))
-            resp_body = json.dumps({"content": [{"text": "Analysis result"}]})
-            mock_resp = MagicMock()
-            mock_resp.__getitem__ = lambda self, key: MagicMock(read=MagicMock(return_value=resp_body.encode())) if key == "body" else None
-            return mock_resp
+        def fake_invoke(*, system, messages, max_output_tokens, call_site="rca"):
+            captured_messages.append(messages)
+            return "Analysis result"
 
-        mock_client.invoke_model.side_effect = mock_invoke
-
-        with patch("boto3.client", return_value=mock_client):
+        with patch("plexus.rca_analysis._invoke_rca_openai_text", side_effect=fake_invoke):
             analyze_score_result(
                 primary_input="Some input artifact",
                 predicted="No",
@@ -181,9 +168,9 @@ class TestAnalyzeScoreResult:
                 feedback_context="Reviewer AGREED with original production value 'No'",
             )
 
-        assert len(captured_bodies) >= 1
-        first_prompt = captured_bodies[0]["messages"][0]["content"]
-        assert "Reviewer AGREED" in first_prompt
+        assert len(captured_messages) >= 1
+        first_user_content = captured_messages[0][0]["content"]
+        assert "Reviewer AGREED" in first_user_content
 
 
 class TestPayloadRootCauseInclusion:
