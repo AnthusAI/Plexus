@@ -57,6 +57,20 @@ const getProcedureStartTimeMs = (procedure: ProcedureWithTask): number => {
 const sortProceduresByStartTime = (procedures: ProcedureWithTask[]): ProcedureWithTask[] =>
   [...procedures].sort((a, b) => getProcedureStartTimeMs(b) - getProcedureStartTimeMs(a))
 
+const mergeProcedureTaskRealtimeUpdate = (
+  existing: Task | null | undefined,
+  updated: Partial<Task> | null | undefined
+): Task | null => {
+  if (!existing) return (updated as Task) ?? null
+  if (!updated) return existing
+  return {
+    ...existing,
+    ...updated,
+    metadata: updated.metadata ?? existing.metadata,
+    stages: updated.stages ?? existing.stages,
+  } as Task
+}
+
 const mergeProcedureRealtimeUpdate = (
   existing: ProcedureWithTask,
   updated: Partial<ProcedureWithTask>
@@ -67,7 +81,7 @@ const mergeProcedureRealtimeUpdate = (
   scorecard: updated.scorecard ?? existing.scorecard,
   scoreId: updated.scoreId ?? existing.scoreId,
   score: updated.score ?? existing.score,
-  task: existing.task ?? updated.task ?? null,
+  task: mergeProcedureTaskRealtimeUpdate(existing.task, updated.task),
   feedbackEvaluationSummary: existing.feedbackEvaluationSummary ?? updated.feedbackEvaluationSummary ?? null,
 })
 
@@ -404,9 +418,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             sortProceduresByStartTime(prevProcedures.map(procedure => {
               if (procedure.id === procedureId) {
                 // Merge new task data with existing task, preserving stages
-                const updatedTask = procedure.task
-                  ? { ...procedure.task, ...data, stages: procedure.task.stages } // Preserve existing stages
-                  : data;
+                const updatedTask = mergeProcedureTaskRealtimeUpdate(procedure.task, data);
                 return { ...procedure, task: updatedTask };
               }
               return procedure;
