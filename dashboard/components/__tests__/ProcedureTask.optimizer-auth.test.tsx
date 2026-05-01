@@ -206,6 +206,38 @@ describe('ProcedureTask optimizer auth flow', () => {
     expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
   })
 
+  it('treats direct procedure runtime metadata as Local when dispatch mode is missing', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: {
+            ...baseProcedure.task,
+            status: 'FAILED',
+            target: 'procedure/proc-1',
+            command: 'procedure proc-1',
+            dispatchStatus: 'ANNOUNCED',
+            workerNodeId: 'BlackbookM3-30475',
+            metadata: JSON.stringify({
+              procedure_id: 'proc-1',
+              runtime: {
+                host: 'BlackbookM3',
+                pid: 30475,
+                started_at: '2026-05-01T19:22:27.470086+00:00',
+              },
+            }),
+            stages: { items: [] },
+          },
+        } as any}
+      />
+    )
+
+    expect(screen.getAllByText('Local').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Claimed...')).not.toBeInTheDocument()
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
   it('shows the optimization procedure badge label in grid mode', () => {
     render(
       <ProcedureTask
