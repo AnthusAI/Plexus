@@ -180,7 +180,7 @@ describe('ProcedureTask optimizer auth flow', () => {
     )
 
     expect(screen.getByLabelText('Procedure actions')).toBeInTheDocument()
-    expect(screen.getByText(/^Procedure$/)).toBeInTheDocument()
+    expect(screen.getByText(/^Optimization Procedure$/)).toBeInTheDocument()
   })
 
   it('keeps local procedure runs labeled Local even when a worker node id is present', () => {
@@ -203,6 +203,34 @@ describe('ProcedureTask optimizer auth flow', () => {
 
     expect(screen.getAllByText('Local').length).toBeGreaterThan(0)
     expect(screen.queryByText('Claimed...')).not.toBeInTheDocument()
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
+  it('shows the optimization procedure badge label in grid mode', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={baseProcedure}
+      />
+    )
+
+    expect(screen.getAllByText((_, element) =>
+      element?.textContent === 'OptimizationProcedure'
+    ).length).toBeGreaterThan(0)
+  })
+
+  it('renders a stable dispatch indicator before task data is hydrated', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: null,
+        } as any}
+      />
+    )
+
+    expect(screen.getAllByText('Pending...')).toHaveLength(1)
     expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
   })
 
