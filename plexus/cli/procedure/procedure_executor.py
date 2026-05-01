@@ -644,10 +644,11 @@ class _PlexusTraceLogBridge:
 
     supports_streaming = True
 
-    def __init__(self, trace_sink: Any, on_cost_event: Optional[Any] = None):
+    def __init__(self, trace_sink: Any, on_cost_event: Optional[Any] = None, cw_logger: Optional[Any] = None):
         self.trace_sink = trace_sink
         self.cost_events = []
         self._on_cost_event = on_cost_event
+        self._cw_logger = cw_logger
         self._events: "queue.Queue[Any]" = queue.Queue()
         self._closed = threading.Event()
         self._worker = threading.Thread(
@@ -690,11 +691,18 @@ class _PlexusTraceLogBridge:
                     continue
 
                 try:
-                    record_fn = getattr(self.trace_sink, "record", None)
-                    if callable(record_fn):
-                        loop.run_until_complete(record_fn(event))
-                except Exception as exc:
-                    logger.warning("Failed recording streamed trace event: %s", exc)
+                    try:
+                        record_fn = getattr(self.trace_sink, "record", None)
+                        if callable(record_fn):
+                            loop.run_until_complete(record_fn(event))
+                    except Exception as exc:
+                        logger.warning("Failed recording streamed trace event: %s", exc)
+
+                    if self._cw_logger is not None:
+                        try:
+                            self._cw_logger.log_run_event_from_tactus(event)
+                        except Exception as exc:
+                            logger.debug("CloudWatch run log failed: %s", exc)
                 finally:
                     self._events.task_done()
         finally:
@@ -811,6 +819,8 @@ async def _execute_tactus(
     """
     logger.info(f"Executing procedure {procedure_id} with Tactus runtime")
     log_bridge: Optional[_PlexusTraceLogBridge] = None
+    cw_logger = None
+    _uninstall_cw_llm_patch = None
 
     try:
         from tactus.core import TactusRuntime
@@ -1202,9 +1212,21 @@ async def _execute_tactus(
                 )
             _persist_inference_costs_to_state(storage, procedure_id, [event])
 
+        # Generate invocation_run_id here so it can be used for CloudWatch stream naming.
+        invocation_run_id = str(uuid.uuid4())
+
+        _account_key = getattr(getattr(client, "context", None), "account_key", None) or "unknown"
+        from .cloudwatch_logger import _create_procedure_cloudwatch_logger, _install_cloudwatch_llm_context_patch
+        cw_logger = _create_procedure_cloudwatch_logger(
+            account_key=_account_key,
+            procedure_id=procedure_id,
+            invocation_run_id=invocation_run_id,
+        )
+
         log_bridge = _PlexusTraceLogBridge(
             trace_sink,
             on_cost_event=_on_incremental_cost_event,
+            cw_logger=cw_logger,
         )
 
         # Create Tactus runtime with Plexus adapters.
@@ -1213,9 +1235,6 @@ async def _execute_tactus(
             "procedure_id", "storage_backend", "hitl_handler", "chat_recorder",
             "trace_sink", "log_handler", "mcp_server", "openai_api_key", "run_id",
         ]
-        # Generate a unique run_id for this invocation so that checkpoints from
-        # previous runs (which have run_id=None) are never replayed.
-        invocation_run_id = str(uuid.uuid4())
 
         runtime_kwargs: Dict[str, Any] = {
             "procedure_id": procedure_id,
@@ -1268,6 +1287,9 @@ async def _execute_tactus(
             runtime.log_handler = log_bridge
 
         _install_tactus_dspy_context_capture_patch()
+        _uninstall_cw_llm_patch = None
+        if cw_logger is not None:
+            _uninstall_cw_llm_patch = _install_cloudwatch_llm_context_patch(cw_logger)
 
         # Bridge legacy in-process MCP server to Tactus toolset registry.
         # Newer Tactus versions resolve agent tools through named toolsets.
@@ -1478,6 +1500,30 @@ async def _execute_tactus(
         except Exception as _inject_err:
             logger.debug("Could not inject _procedure_id into State: %s", _inject_err)
 
+        # Store CloudWatch log stream pointer in procedure metadata so the UI can locate logs.
+        if cw_logger is not None:
+            try:
+                import json as _json
+                _cw_meta_result = client.execute(
+                    "query GetProcedureMeta($id: ID!) { getProcedure(id: $id) { metadata } }",
+                    {"id": procedure_id},
+                )
+                _existing_meta_str = (
+                    (_cw_meta_result.get("getProcedure") or {}).get("metadata") or "{}"
+                )
+                try:
+                    _meta = _json.loads(_existing_meta_str) or {}
+                except Exception:
+                    _meta = {}
+                _meta["cloudwatchLogGroup"] = cw_logger.log_group
+                _meta["cloudwatchLogStreamPrefix"] = f"{procedure_id}/"
+                client.execute(
+                    "mutation UpdateProcedureCWMeta($input: UpdateProcedureInput!) { updateProcedure(input: $input) { id } }",
+                    {"input": {"id": procedure_id, "metadata": _json.dumps(_meta)}},
+                )
+            except Exception as _cw_meta_err:
+                logger.debug("Could not store CloudWatch metadata on procedure: %s", _cw_meta_err)
+
         if _is_dashboard_task_cancelled(client, _task_id):
             raise ProcedureExecutionCancelled(
                 f"Procedure execution cancelled for task {_task_id}"
@@ -1530,6 +1576,14 @@ async def _execute_tactus(
             except Exception as close_error:
                 logger.warning("Failed closing trace log bridge after success: %s", close_error)
 
+        if _uninstall_cw_llm_patch is not None:
+            _uninstall_cw_llm_patch()
+        if cw_logger is not None:
+            try:
+                await asyncio.to_thread(cw_logger.close, execution_succeeded)
+            except Exception as _cw_err:
+                logger.debug("Failed closing CloudWatch logger after success: %s", _cw_err)
+
         logger.info(f"Tactus execution complete: {result.get('success')}")
         return result
 
@@ -1543,6 +1597,13 @@ async def _execute_tactus(
                 await log_bridge.close()
             except Exception as close_error:
                 logger.warning("Failed closing trace log bridge after cancellation: %s", close_error)
+        if _uninstall_cw_llm_patch is not None:
+            _uninstall_cw_llm_patch()
+        if cw_logger is not None:
+            try:
+                await asyncio.to_thread(cw_logger.close, False)
+            except Exception as _cw_err:
+                logger.debug("Failed closing CloudWatch logger after cancellation: %s", _cw_err)
         logger.info("Tactus procedure execution cancelled: %s", e)
         return {
             'success': False,
@@ -1562,6 +1623,13 @@ async def _execute_tactus(
                 await log_bridge.close()
             except Exception as close_error:
                 logger.warning("Failed closing trace log bridge after error: %s", close_error)
+        if _uninstall_cw_llm_patch is not None:
+            _uninstall_cw_llm_patch()
+        if cw_logger is not None:
+            try:
+                await asyncio.to_thread(cw_logger.close, False)
+            except Exception as _cw_err:
+                logger.debug("Failed closing CloudWatch logger after error: %s", _cw_err)
         if _task_id:
             try:
                 _fail_all_task_stages(client, _task_id, str(e))
