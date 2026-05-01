@@ -72,6 +72,7 @@ export interface TaskStatusProps {
   isLoading?: boolean
   errorLabel?: string
   dispatchStatus?: string
+  dispatchMode?: string
   celeryTaskId?: string
   workerNodeId?: string
   showPreExecutionStages?: boolean
@@ -122,6 +123,7 @@ export const TaskStatus = React.memo(({
   isLoading,
   errorLabel,
   dispatchStatus,
+  dispatchMode,
   celeryTaskId,
   workerNodeId,
   showPreExecutionStages = false,
@@ -339,6 +341,20 @@ export const TaskStatus = React.memo(({
   , [status]);
 
   const getPreExecutionStatus = () => {
+    if (dispatchMode === 'pending') {
+      return {
+        message: 'Pending...',
+        icon: Radio,
+        animation: 'animate-pulse'
+      }
+    }
+    if (dispatchMode === 'local') {
+      return {
+        message: 'Local',
+        icon: Radio,
+        animation: ''
+      }
+    }
     if (workerNodeId && workerNodeId.trim() !== '') {
       return { 
         message: 'Claimed...', 
@@ -367,10 +383,10 @@ export const TaskStatus = React.memo(({
   const shouldShowPreExecution = !hidePreExecutionStatus &&
     status === 'PENDING' &&
     (!stages || stages.length === 0) && 
-    ((workerNodeId && workerNodeId.trim() !== '') || showPreExecutionStages)
+    (dispatchMode === 'pending' || dispatchMode === 'local' || (workerNodeId && workerNodeId.trim() !== '') || showPreExecutionStages)
 
   const preExecutionStatus = shouldShowPreExecution ? getPreExecutionStatus() : null
-  const showEmptyState = !hidePreExecutionStatus && !stages.length && !preExecutionStatus && status === 'PENDING'
+  const showEmptyState = !hidePreExecutionStatus && dispatchMode !== 'pending' && dispatchMode !== 'local' && !stages.length && !preExecutionStatus && status === 'PENDING'
 
   const displayMessage = isError && errorMessage ? errorMessage : statusMessage
 
@@ -608,6 +624,7 @@ export const TaskStatus = React.memo(({
     prevProps.isLoading === nextProps.isLoading &&
     prevProps.errorLabel === nextProps.errorLabel &&
     prevProps.dispatchStatus === nextProps.dispatchStatus &&
+    prevProps.dispatchMode === nextProps.dispatchMode &&
     prevProps.celeryTaskId === nextProps.celeryTaskId &&
     prevProps.workerNodeId === nextProps.workerNodeId &&
     prevProps.showPreExecutionStages === nextProps.showPreExecutionStages &&
