@@ -160,10 +160,64 @@
       "author": "ryan",
       "text": "Adjusted top ScoreChampionVersionTimeline summary metrics to remove the redundant Scores Analyzed tile and use a three-column desktop grid for the remaining six metrics.",
       "created_at": "2026-05-02T18:51:35.794136Z"
+    },
+    {
+      "id": "35da17b1-e9f4-472c-b8ea-edaa37b74e0a",
+      "author": "ryan",
+      "text": "Moved champion transition markers below the x-axis date labels by increasing the chart bottom margin and drawing the marker rectangles lower in the Recharts customized layer. This keeps them out of the AC1 plot area so they no longer read as -1 alignment values.",
+      "created_at": "2026-05-02T18:54:19.327585Z"
+    },
+    {
+      "id": "237a3661-c85d-4c09-8a10-975c086ed0a1",
+      "author": "ryan",
+      "text": "Replaced text expand buttons in ScoreChampionVersionTimeline with the standard report expand affordance from FeedbackAlignment/FeedbackContradictions: horizontal bg-border rule plus small ChevronDown/ChevronUp caret button. Applied to SME agenda/worksheet previews and champion diff expansion.",
+      "created_at": "2026-05-02T18:55:41.682548Z"
+    },
+    {
+      "id": "de8285fe-0f80-4b88-b80f-1b824ec1db03",
+      "author": "ryan",
+      "text": "Removed horizontal scrolling from the champion-version table in ScoreChampionVersionTimeline. The table now uses full-width shrinkable grid columns instead of a min-width scroll container, and the focused test asserts no overflow-x-auto/min-w behavior.",
+      "created_at": "2026-05-02T18:56:09.283984Z"
+    },
+    {
+      "id": "e9da147e-4d9e-42d7-b9af-3d544e228481",
+      "author": "ryan",
+      "text": "Tightened the top padding on each score card in ScoreChampionVersionTimeline and moved the per-score title from text-base to the standard next size, text-lg.",
+      "created_at": "2026-05-02T18:56:31.929211Z"
+    },
+    {
+      "id": "b1810af4-2e3b-4cc7-ba16-ffad0bb37ee3",
+      "author": "ryan",
+      "text": "Added per-score performance improvement summaries to ScoreChampionVersionTimeline. Backend now emits performance_summary comparing previous champion before the first in-window transition to the latest in-window champion. Frontend renders prominent side-by-side before/after Gauge cards for alignment and accuracy, with original/delta/new numbers, above the operational metric boxes. Tests: pytest plexus/reports/blocks/score_champion_version_timeline_test.py -q (15 passed); npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx (10 passed).",
+      "created_at": "2026-05-02T19:01:19.419958Z"
+    },
+    {
+      "id": "52069ed4-d6ba-467b-b872-490fb5587f33",
+      "author": "ryan",
+      "text": "Changed champion-transition marker rectangles in ScoreChampionVersionTimeline from foreground to muted-foreground so the x-axis champion markers are lower contrast.",
+      "created_at": "2026-05-02T19:01:40.200328Z"
+    },
+    {
+      "id": "5742cda9-2937-43df-bcc6-3aac94a2e7fc",
+      "author": "ryan",
+      "text": "Tightened vertical spacing between the champion-transition marker rail and chart legend by reducing ScoreChampionVersionTimeline chart bottom margin and legend top padding while keeping markers below x-axis labels.",
+      "created_at": "2026-05-02T19:02:07.256518Z"
+    },
+    {
+      "id": "7bb2be1d-4bd0-47ee-a932-d6176378b094",
+      "author": "ryan",
+      "text": "Further tightened top padding on each ScoreChampionVersionTimeline score card from pt-3 to pt-2 so score titles sit closer to the top of the card.",
+      "created_at": "2026-05-02T19:02:38.588867Z"
+    },
+    {
+      "id": "de751b03-649b-4827-9a02-a78dbb38a0d2",
+      "author": "ryan",
+      "text": "Applied stronger visual tightening based on review feedback: score cards now have no top padding (pt-0), and champion-transition marker rectangles now use the muted background color hsl(var(--muted)) instead of muted-foreground.",
+      "created_at": "2026-05-02T19:04:12.311783Z"
     }
   ],
   "created_at": "2026-05-02T18:05:21.700758Z",
-  "updated_at": "2026-05-02T18:51:35.794136Z",
+  "updated_at": "2026-05-02T19:04:12.311783Z",
   "closed_at": "2026-05-02T18:10:42.895877Z",
   "custom": {}
 }

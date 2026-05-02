@@ -4,7 +4,7 @@ import React from "react";
 import { downloadData } from "aws-amplify/storage";
 import { DiffEditor, type Monaco } from "@monaco-editor/react";
 import Link from "next/link";
-import { Link as LinkIcon } from "lucide-react";
+import { ChevronDown, ChevronUp, Link as LinkIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -15,6 +15,9 @@ import { parseOutputString } from "@/lib/utils";
 import { ChartContainer } from "@/components/ui/chart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ReportBlock, { ReportBlockProps, type BlockComponent } from "./ReportBlock";
+import { Gauge } from "@/components/gauge";
+import { ac1GaugeSegments } from "@/components/ui/scorecard-evaluation";
+import { GaugeThresholdComputer } from "@/utils/gauge-thresholds";
 import {
   applyMonacoTheme,
   configureYamlLanguage,
@@ -98,10 +101,31 @@ interface SmeInformation {
   generated_at?: string | null;
 }
 
+interface MetricChange {
+  before?: number | null;
+  after?: number | null;
+  delta?: number | null;
+}
+
+interface DatasetPerformanceSummary {
+  before_evaluation_id?: string | null;
+  after_evaluation_id?: string | null;
+  alignment?: MetricChange | null;
+  accuracy?: MetricChange | null;
+}
+
+interface PerformanceSummary {
+  before_version_id?: string | null;
+  after_version_id?: string | null;
+  feedback?: DatasetPerformanceSummary | null;
+  regression?: DatasetPerformanceSummary | null;
+}
+
 interface ChampionScoreSeries {
   score_id: string;
   score_name: string;
   optimization_summary?: OptimizationSummary | null;
+  performance_summary?: PerformanceSummary | null;
   sme?: SmeInformation | null;
   points: ChampionPoint[];
   champion_change_count?: number;
@@ -155,6 +179,10 @@ const chartConfig = {
   regression_accuracy: { label: "Regression Accuracy", color: "var(--chart-2)" },
 };
 
+const accuracyGaugeSegments = GaugeThresholdComputer.createSegments(
+  GaugeThresholdComputer.computeThresholds({})
+);
+
 const metricKeys = [
   "feedback_alignment",
   "regression_alignment",
@@ -164,7 +192,7 @@ const metricKeys = [
 
 type MetricKey = (typeof metricKeys)[number];
 
-const chartMargin = { top: 8, right: 52, left: 20, bottom: 24 };
+const chartMargin = { top: 8, right: 52, left: 20, bottom: 40 };
 
 type ChartPoint = ChampionPoint & {
   entered_at_timestamp: number;
@@ -182,6 +210,19 @@ const formatNumber = (value: number | null | undefined, decimals = 3): string =>
 const formatAccuracy = (value: number | null | undefined): string => {
   if (value === null || value === undefined || Number.isNaN(value)) return "N/A";
   return value <= 1 ? `${(value * 100).toFixed(1)}%` : `${value.toFixed(1)}%`;
+};
+
+const formatSignedNumber = (value: number | null | undefined, decimals = 3): string => {
+  if (value === null || value === undefined || Number.isNaN(value)) return "N/A";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(decimals)}`;
+};
+
+const formatSignedAccuracyDelta = (value: number | null | undefined): string => {
+  if (value === null || value === undefined || Number.isNaN(value)) return "N/A";
+  const normalized = value <= 1 && value >= -1 ? value * 100 : value;
+  const sign = normalized > 0 ? "+" : "";
+  return `${sign}${normalized.toFixed(1)} pts`;
 };
 
 const formatInteger = (value: number | null | undefined): string => {
@@ -259,6 +300,30 @@ const LinkedShortId: React.FC<{
   </span>
 );
 
+const ExpandCaretControl: React.FC<{
+  isExpanded: boolean;
+  onClick: () => void;
+  expandLabel: string;
+  collapseLabel: string;
+}> = ({ isExpanded, onClick, expandLabel, collapseLabel }) => (
+  <div className="flex flex-col items-center">
+    <div className="mb-1 h-px w-full bg-border" />
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center justify-center rounded-full p-0.5 transition-colors hover:bg-muted/50"
+      aria-label={isExpanded ? collapseLabel : expandLabel}
+      aria-expanded={isExpanded}
+    >
+      {isExpanded ? (
+        <ChevronUp className="h-3 w-3 text-muted-foreground" />
+      ) : (
+        <ChevronDown className="h-3 w-3 text-muted-foreground" />
+      )}
+    </button>
+  </div>
+);
+
 const chartAccuracy = (value: number | null | undefined): number | null => {
   if (value === null || value === undefined || Number.isNaN(value)) return null;
   return value <= 1 ? value * 100 : value;
@@ -314,7 +379,7 @@ const MetricLegend: React.FC<{ metrics: MetricKey[] }> = ({ metrics }) => {
   if (!metrics.length) return null;
 
   return (
-    <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-2 text-[11px] text-foreground">
+    <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-1 text-[11px] text-foreground">
       {metrics.map((key) => {
         const isAccuracy = key.endsWith("_accuracy");
         const color = chartConfig[key].color;
@@ -344,7 +409,7 @@ const ChampionTransitionMarkers: React.FC<{
   const scale = xAxis?.scale;
   if (typeof scale !== "function") return null;
 
-  const y = (offset?.top || 0) + (offset?.height || 0) + 3;
+  const y = (offset?.top || 0) + (offset?.height || 0) + 30;
 
   return (
     <g data-testid="champion-transition-marker-layer" aria-label="Champion changes">
@@ -361,7 +426,7 @@ const ChampionTransitionMarkers: React.FC<{
             width={20}
             height={8}
             rx={4}
-            fill="hsl(var(--foreground))"
+            fill="hsl(var(--muted))"
             aria-label={`Champion changed to ${shortId(point.version_id)} on ${formatDateTime(point.entered_at)}`}
           >
             <title>{`${formatDateTime(point.entered_at)}: ${shortId(point.version_id)}`}</title>
@@ -419,6 +484,114 @@ const availableMetricsFor = (chartData: ChartPoint[]): MetricKey[] => {
   );
 };
 
+const hasMetricChange = (change?: MetricChange | null): boolean => {
+  return (
+    typeof change?.before === "number" &&
+    Number.isFinite(change.before) &&
+    typeof change.after === "number" &&
+    Number.isFinite(change.after)
+  );
+};
+
+const selectedPerformanceDataset = (
+  summary?: PerformanceSummary | null
+): { label: string; dataset: DatasetPerformanceSummary } | null => {
+  if (summary?.feedback && (hasMetricChange(summary.feedback.alignment) || hasMetricChange(summary.feedback.accuracy))) {
+    return { label: "Feedback", dataset: summary.feedback };
+  }
+  if (summary?.regression && (hasMetricChange(summary.regression.alignment) || hasMetricChange(summary.regression.accuracy))) {
+    return { label: "Regression", dataset: summary.regression };
+  }
+  return null;
+};
+
+const PerformanceGaugeCard: React.FC<{
+  title: "Alignment" | "Accuracy";
+  change?: MetricChange | null;
+}> = ({ title, change }) => {
+  if (!hasMetricChange(change)) return null;
+
+  const isAccuracy = title === "Accuracy";
+  const before = isAccuracy ? chartAccuracy(change?.before) : change?.before;
+  const after = isAccuracy ? chartAccuracy(change?.after) : change?.after;
+  if (before === null || before === undefined || after === null || after === undefined) return null;
+
+  const delta = after - before;
+  const deltaClassName = delta >= 0 ? "text-green-500" : "text-red-500";
+
+  return (
+    <div className="rounded-md bg-card p-3" data-testid={`performance-gauge-${title.toLowerCase()}`}>
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <div className="text-sm font-medium">{title}</div>
+        <div className={`text-sm font-semibold ${deltaClassName}`}>
+          {isAccuracy ? formatSignedAccuracyDelta(delta) : formatSignedNumber(delta, 3)}
+        </div>
+      </div>
+      <div className="flex justify-center">
+        <div className="w-[190px]">
+          <Gauge
+            value={after}
+            beforeValue={before}
+            showComparisonLabel
+            title={title}
+            valueUnit={isAccuracy ? "%" : ""}
+            min={isAccuracy ? 0 : -1}
+            max={isAccuracy ? 100 : 1}
+            decimalPlaces={isAccuracy ? 1 : 2}
+            segments={isAccuracy ? accuracyGaugeSegments : ac1GaugeSegments}
+            showTicks
+          />
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+        <div>
+          <div className="text-muted-foreground">Original</div>
+          <div className="font-medium text-foreground">
+            {isAccuracy ? formatAccuracy(before) : formatNumber(before, 3)}
+          </div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">Delta</div>
+          <div className={`font-medium ${deltaClassName}`}>
+            {isAccuracy ? formatSignedAccuracyDelta(delta) : formatSignedNumber(delta, 3)}
+          </div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">New</div>
+          <div className="font-medium text-foreground">
+            {isAccuracy ? formatAccuracy(after) : formatNumber(after, 3)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PerformanceSummarySection: React.FC<{
+  summary?: PerformanceSummary | null;
+}> = ({ summary }) => {
+  const selected = selectedPerformanceDataset(summary);
+  if (!selected) return null;
+
+  return (
+    <div className="rounded-md bg-background p-3" data-testid="performance-summary">
+      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+        <div>
+          <div className="text-base font-semibold">Performance Improvement</div>
+          <div className="text-xs text-muted-foreground">
+            Previous champion to latest champion
+          </div>
+        </div>
+        <div className="text-xs font-medium text-muted-foreground">{selected.label} dataset</div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <PerformanceGaugeCard title="Alignment" change={selected.dataset.alignment} />
+        <PerformanceGaugeCard title="Accuracy" change={selected.dataset.accuracy} />
+      </div>
+    </div>
+  );
+};
+
 const SmeMarkdown: React.FC<{ children: string; testId: string }> = ({ children, testId }) => (
   <div
     data-testid={testId}
@@ -448,18 +621,16 @@ const ExpandableSmeMarkdown: React.FC<{
     <div>
       <div className="mb-1 flex items-center justify-between gap-3">
         <div className="text-xs font-medium text-muted-foreground">{label}</div>
-        <button
-          type="button"
-          className="rounded-md bg-background px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
-          onClick={() => setIsExpanded((current) => !current)}
-          aria-expanded={isExpanded}
-        >
-          {isExpanded ? "Show less" : "Show more"}
-        </button>
       </div>
       <div className={isExpanded ? "" : "max-h-24 overflow-hidden"}>
         <SmeMarkdown testId={testId}>{children}</SmeMarkdown>
       </div>
+      <ExpandCaretControl
+        isExpanded={isExpanded}
+        onClick={() => setIsExpanded((current) => !current)}
+        expandLabel={`Expand ${label}`}
+        collapseLabel={`Collapse ${label}`}
+      />
     </div>
   );
 };
@@ -569,14 +740,14 @@ const ChampionDiffSection: React.FC<{
             />
           </div>
         </div>
-        <button
-          type="button"
-          className="rounded-md bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+      </div>
+      <div className="mt-3">
+        <ExpandCaretControl
+          isExpanded={isOpen}
           onClick={() => setIsOpen((current) => !current)}
-          aria-expanded={isOpen}
-        >
-          {isOpen ? "Hide diff" : "Show diff"}
-        </button>
+          expandLabel="Expand champion diff"
+          collapseLabel="Collapse champion diff"
+        />
       </div>
 
       {isOpen ? (
@@ -633,10 +804,10 @@ const ScoreTimelineSection: React.FC<{
   ).length;
 
   return (
-    <section className="space-y-3 rounded-md bg-muted p-4">
+    <section className="space-y-3 rounded-md bg-muted px-4 pb-4 pt-0">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
         <div>
-          <h3 className="text-base font-semibold">{score.score_name}</h3>
+          <h3 className="text-lg font-semibold">{score.score_name}</h3>
           <div className="text-xs text-muted-foreground">
             {championChangeCount} champion change{championChangeCount === 1 ? "" : "s"}
             {newChampionCount > 0
@@ -652,6 +823,8 @@ const ScoreTimelineSection: React.FC<{
           iconSize="md"
         />
       </div>
+
+      <PerformanceSummarySection summary={score.performance_summary} />
 
       <div className="grid gap-2 sm:grid-cols-4">
         <div className="rounded-md bg-card p-3">
@@ -782,16 +955,16 @@ const ScoreTimelineSection: React.FC<{
       {score.points?.length ? (
         <div
           data-testid={`version-table-${score.score_id}`}
-          className="h-auto max-h-none self-start overflow-x-auto overflow-y-visible rounded-md bg-background"
+          className="h-auto max-h-none self-start overflow-visible rounded-md bg-background"
         >
           <div
             role="table"
             aria-label={`${score.score_name} champion versions`}
-            className="min-w-[720px] text-sm"
+            className="w-full text-sm"
           >
             <div
               role="row"
-              className="grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr] bg-card text-xs text-muted-foreground"
+              className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1fr)] bg-card text-xs text-muted-foreground"
             >
               <div role="columnheader" className="px-3 py-2 font-medium">Champion Entered</div>
               <div role="columnheader" className="px-3 py-2 font-medium">Version</div>
@@ -803,9 +976,9 @@ const ScoreTimelineSection: React.FC<{
               <div
                 key={`${score.score_id}-${point.version_id}-${point.entered_at}`}
                 role="row"
-                className={`grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr] ${index % 2 === 0 ? "bg-background" : "bg-muted"}`}
+                className={`grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1fr)] ${index % 2 === 0 ? "bg-background" : "bg-muted"}`}
               >
-                <div role="cell" className="px-3 py-2">{formatDateTime(point.entered_at)}</div>
+                <div role="cell" className="min-w-0 truncate px-3 py-2">{formatDateTime(point.entered_at)}</div>
                 <div role="cell" className="px-3 py-2 text-xs">
                   <LinkedShortId
                     id={point.version_id}
