@@ -44,9 +44,9 @@ params:
 
   num_candidates:
     type: number
-    default: 3
+    default: 4
     required: false
-    description: "Maximum number of hypotheses per cycle (agent may propose fewer). Evals run in parallel after all hypotheses are implemented."
+    description: "Target number of hypotheses per cycle. Baseline cycles always include 4 slots: recent_incremental, recent_bold, regression_fix, structural. Evals run in parallel after all hypotheses are implemented."
 
   hint:
     type: string
@@ -3179,7 +3179,10 @@ code: |
   params.days                  = tonumber(params.days) or 90
   params.max_iterations        = tonumber(params.max_iterations) or 3
   params.max_samples           = tonumber(params.max_samples) or 100
-  params.num_candidates        = tonumber(params.num_candidates) or 3
+  params.num_candidates        = tonumber(params.num_candidates) or 4
+  if params.num_candidates < 4 then
+    params.num_candidates = 4
+  end
   params.improvement_threshold = tonumber(params.improvement_threshold) or 0.02
   params.target_accuracy       = tonumber(params.target_accuracy) or 0.95
   params.context_window        = tonumber(params.context_window) or 180000
@@ -3357,6 +3360,18 @@ code: |
     local cap = tonumber(requested_count) or #slots
     if cap < 1 then
       cap = 1
+    end
+    -- Structural is a mandatory baseline lane (slot #4).
+    -- Keep it even when callers provide a smaller candidate count.
+    local has_structural = false
+    for i = 1, #slots do
+      if slots[i] == "structural" then
+        has_structural = true
+        break
+      end
+    end
+    if has_structural and cap < 4 then
+      cap = 4
     end
     if cap >= #slots then
       return slots
@@ -3561,6 +3576,10 @@ code: |
       table.insert(parts, "            into a named state field consumed by the final classifier.")
       table.insert(parts, "            Never use Classifier(valid_classes=['Extracted']) or similar pseudo-extractor labels.")
       table.insert(parts, "     - C4:  Full rewrite — if prior cycles have plateaued, start from scratch.")
+      table.insert(parts, "     - C5:  Creative prompt transport experiments — ONLY after many cycles of failed/flat results and after trying C1-C4 options.")
+      table.insert(parts, "            FIRST creative step: duplicate the full instruction prompt text twice (same content repeated 2x).")
+      table.insert(parts, "            SECOND creative step (more extreme): translate prompt instructions into Polish while keeping answer classes/output in English for parser compatibility.")
+      table.insert(parts, "            Never propose Polish translation before trying the prompt-duplication experiment.")
       table.insert(parts, "")
       table.insert(parts, "Check score_config.yaml to avoid proposing something already in place.")
       table.insert(parts, "Do NOT propose a prompt-only change for this slot — that is what slots 1-3 are for.")
