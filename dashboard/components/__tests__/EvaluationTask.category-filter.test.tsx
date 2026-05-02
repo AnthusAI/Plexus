@@ -293,6 +293,9 @@ const makeTaskWithFeedbackItemLinkedCategories = () => {
 
 describe('EvaluationTask category summary drill-down', () => {
   const readSelectedItemIds = () => JSON.parse(screen.getByTestId('selected-item-ids').textContent || 'null')
+  const expectBefore = (before: Element, after: Element) => {
+    expect(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  }
 
   test('applies category filter and auto-selects first matching score result', async () => {
     const onSelectScoreResult = jest.fn()
@@ -405,6 +408,37 @@ describe('EvaluationTask category summary drill-down', () => {
       expect(originalBaselineCard?.querySelectorAll('.ml-auto [role="button"]')).toHaveLength(1)
       expect(currentBaselineCard?.querySelectorAll('.ml-auto [role="button"]')).toHaveLength(1)
     })
+  })
+
+  test('orders timing, cost, baselines, then procedure and score version rows', async () => {
+    const task = makeTask()
+    task.data.cost = 0.25
+    task.data.baseline_evaluation_id = 'baseline-1'
+    task.data.current_baseline_evaluation_id = 'current-baseline-1'
+
+    const { container } = render(<EvaluationTask variant="detail" task={task} />)
+
+    expect(screen.getByLabelText('Cost')).toBeInTheDocument()
+    expect(screen.queryByText('Cost:')).not.toBeInTheDocument()
+    const cost = screen.getByText(/\$0\.2500 total/)
+    const elapsed = screen.getByText(/Elapsed:/)
+    const originalBaseline = screen.getByText('Original baseline')
+    const currentBaseline = screen.getByText('Current best baseline')
+    const procedure = screen.getByText('Procedure')
+    const scoreVersion = screen.getByText('Score Version')
+
+    const taskTimestamp = await waitFor(() => {
+      const timestamp = container.querySelector('[role="button"]')
+      expect(timestamp).toBeTruthy()
+      return timestamp as Element
+    })
+
+    expectBefore(taskTimestamp, elapsed)
+    expectBefore(elapsed, cost)
+    expectBefore(cost, originalBaseline)
+    expectBefore(originalBaseline, currentBaseline)
+    expectBefore(currentBaseline, procedure)
+    expectBefore(procedure, scoreVersion)
   })
 
   test('omits procedure related-resource card when no procedure is associated', async () => {
