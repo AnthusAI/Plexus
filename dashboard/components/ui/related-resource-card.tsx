@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, Link as LinkIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Timestamp } from "@/components/ui/timestamp"
 
 export interface RelatedResourceCardProps {
   label: string
@@ -17,6 +18,7 @@ export interface RelatedResourceCardProps {
   collapsible?: boolean
   rowDensity?: "default" | "dense"
   rightMeta?: React.ReactNode
+  rightTimestamp?: string | Date | null
   inlineLink?: boolean
 }
 
@@ -30,6 +32,7 @@ export function RelatedResourceCard({
   collapsible = true,
   rowDensity = "default",
   rightMeta,
+  rightTimestamp,
   inlineLink = false,
 }: RelatedResourceCardProps) {
   const [isOpen, setIsOpen] = React.useState(false)
@@ -92,7 +95,7 @@ export function RelatedResourceCard({
           </div>
         )}
       </div>
-      {((href && !inlineLink) || rightMeta) && (
+      {((href && !inlineLink) || rightTimestamp || rightMeta) && (
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {href && !inlineLink && (
             <NextLink
@@ -105,6 +108,7 @@ export function RelatedResourceCard({
               <LinkIcon className="h-4 w-4" />
             </NextLink>
           )}
+          {rightTimestamp && <Timestamp time={rightTimestamp} variant="relative" />}
           {rightMeta}
         </div>
       )}
