@@ -336,6 +336,17 @@ describe('EvaluationTask category summary drill-down', () => {
     expect(container.querySelector('a[href="/lab/procedures/procedure-1"]')).toBeTruthy()
   })
 
+  test('renders evaluation cost with the money icon instead of a text label', () => {
+    const task = makeTask()
+    task.data.cost = 0.25
+
+    render(<EvaluationTask variant="detail" task={task} />)
+
+    expect(screen.getByLabelText('Cost')).toBeInTheDocument()
+    expect(screen.queryByText('Cost:')).not.toBeInTheDocument()
+    expect(screen.getByText(/\$0\.2500 total/)).toBeInTheDocument()
+  })
+
   test('omits procedure related-resource card when no procedure is associated', async () => {
     render(<EvaluationTask variant="detail" task={{ ...makeTask(), procedureId: undefined }} />)
 

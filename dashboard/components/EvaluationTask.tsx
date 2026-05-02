@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, MoreHorizontal, MessageSquareCode, Share, Trash2, Link as LinkIcon, AlertTriangle } from 'lucide-react'
+import { Coins, FlaskConical, Square, X, MoreHorizontal, MessageSquareCode, Share, Trash2, Link as LinkIcon, AlertTriangle } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
 import { Button } from '@/components/ui/button'
@@ -2934,7 +2934,7 @@ ${categoryLines}${mechanicalLines}
             )}
             {task.data?.cost != null && task.data.cost > 0 && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>Cost:</span>
+                <Coins className="h-3.5 w-3.5 flex-shrink-0" aria-label="Cost" />
                 <span>
                   ${task.data.cost.toFixed(4)} total
                   {task.data.processedItems > 0 && (
@@ -2961,11 +2961,7 @@ ${categoryLines}${mechanicalLines}
                     rowDensity="dense"
                     href={`/lab/procedures/${taskWithDefaults.procedureId}`}
                     linkLabel="Open procedure"
-                    rightMeta={
-                      procedureInfo?.updatedAt ? (
-                        <Timestamp time={procedureInfo.updatedAt} variant="relative" className="whitespace-nowrap text-xs text-muted-foreground" />
-                      ) : null
-                    }
+                    rightTimestamp={procedureInfo?.updatedAt}
                     summary={
                       <span className="truncate">
                         {procedureInfo?.name || (procedureLoadFailed ? 'Unavailable' : taskWithDefaults.procedureId)}
@@ -2984,11 +2980,7 @@ ${categoryLines}${mechanicalLines}
                     rowDensity="dense"
                     href={`/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`}
                     linkLabel="Open score version"
-                    rightMeta={
-                      scoreVersionInfo?.createdAt ? (
-                        <Timestamp time={scoreVersionInfo.createdAt} variant="relative" className="whitespace-nowrap text-xs text-muted-foreground" />
-                      ) : null
-                    }
+                    rightTimestamp={scoreVersionInfo?.createdAt}
                     summary={<span className="font-mono truncate">{shortHash(taskWithDefaults.scoreVersionId)}</span>}
                   >
                     {scoreVersionInfo ? (

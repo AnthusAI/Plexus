@@ -4,7 +4,7 @@ import { TaskStatus } from '@/components/ui/task-status'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, Link as LinkIcon, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users, CircleDollarSign, Repeat, ConciergeBell, Hand, Terminal, Radio } from 'lucide-react'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, Link as LinkIcon, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users, Coins, Repeat, ConciergeBell, Hand, SquareTerminal, Radio } from 'lucide-react'
 import Link from 'next/link'
 
 import { Timestamp } from './ui/timestamp'
@@ -1009,7 +1009,7 @@ export default function ProcedureTask({
       return { label: 'Pending...', icon: Radio, className: 'animate-pulse' }
     }
     if (dispatchDisplayMode === 'local') {
-      return { label: 'Local', icon: Terminal, className: '' }
+      return { label: 'Local', icon: SquareTerminal, className: '' }
     }
     if (procedure.task?.workerNodeId && procedure.task.workerNodeId.trim() !== '') {
       return { label: 'Claimed...', icon: Hand, className: 'animate-wave' }
@@ -1019,9 +1019,9 @@ export default function ProcedureTask({
   const DispatchIndicator = () => {
     const Icon = dispatchIndicator.icon
     return (
-      <div className="flex min-h-4 items-center gap-1 text-xs text-muted-foreground leading-none mt-1">
-        <Icon className={cn("h-3.5 w-3.5", dispatchIndicator.className)} />
-        <span>{dispatchIndicator.label}</span>
+      <div className="flex items-start gap-1 text-sm text-muted-foreground min-w-0">
+        <Icon className={cn("h-4 w-4 flex-shrink-0", dispatchIndicator.className)} />
+        <span className="truncate">{dispatchIndicator.label}</span>
       </div>
     )
   }
@@ -1436,7 +1436,7 @@ export default function ProcedureTask({
           {procedureCosts && (
             <div className="mt-4 rounded-lg bg-card p-3">
               <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-                <CircleDollarSign className="h-4 w-4" />
+                <Coins className="h-4 w-4" />
                 Cost Breakdown
               </h3>
               <div className="grid grid-cols-1 gap-2 @lg:grid-cols-3 text-xs">
