@@ -2354,6 +2354,41 @@ function ConversationViewer({
     }
     return streamingState !== 'complete'
   }, [sortedMessages])
+  const hasToolTailActivity = React.useMemo(() => {
+    if (!selectedSessionId || sortedMessages.length === 0) {
+      return false
+    }
+
+    const latestToolTailMessage = [...sortedMessages].reverse().find((message) => (
+      message.role === 'ASSISTANT'
+      && (message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE')
+    ))
+    if (!latestToolTailMessage?.createdAt) {
+      return false
+    }
+
+    const latestToolTailMs = toEpochMs(latestToolTailMessage.createdAt)
+    if (latestToolTailMs === null) {
+      return false
+    }
+
+    const latestActiveUserMessageMs = [...sortedMessages].reverse().find((message) => (
+      message.role === 'USER'
+      && (message.responseStatus === 'PENDING' || message.responseStatus === 'RUNNING')
+      && typeof message.createdAt === 'string'
+    ))?.createdAt
+
+    const liveWindowAnchorMs = toEpochMs(latestActiveUserMessageMs ?? null)
+    if (liveWindowAnchorMs === null) {
+      return false
+    }
+
+    return latestToolTailMs >= liveWindowAnchorMs
+  }, [selectedSessionId, sortedMessages])
+  const hasLiveTailActivity = showThinkingPlaceholder
+    || Boolean(pendingAssistantState)
+    || hasStreamingAssistantTail
+    || hasToolTailActivity
   const latestConversationRenderSignature = React.useMemo(() => {
     const lastMessage = sortedMessages[sortedMessages.length - 1]
     if (!lastMessage) {
@@ -2369,10 +2404,7 @@ function ConversationViewer({
       showThinkingPlaceholder ? 'thinking' : 'idle',
     ].join(':')
   }, [selectedSessionId, showThinkingPlaceholder, sortedMessages])
-  const shouldForceFollow = autoFollowEnabled
-    || showThinkingPlaceholder
-    || Boolean(pendingAssistantState)
-    || hasStreamingAssistantTail
+  const shouldForceFollow = autoFollowEnabled && hasLiveTailActivity
   const pendingMessageForPrompt = React.useMemo(
     () => [...sortedMessages].reverse().find(message => unresolvedPendingMessageIds.has(message.id)) || null,
     [sortedMessages, unresolvedPendingMessageIds]
@@ -2469,11 +2501,8 @@ function ConversationViewer({
       setAutoFollowEnabled(true)
       return
     }
-    if (showThinkingPlaceholder || Boolean(pendingAssistantState) || hasStreamingAssistantTail) {
-      return
-    }
     setAutoFollowEnabled(false)
-  }, [hasStreamingAssistantTail, pendingAssistantState, showThinkingPlaceholder])
+  }, [])
 
   useEffect(() => {
     setAutoFollowEnabled(true)
