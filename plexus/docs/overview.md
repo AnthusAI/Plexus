@@ -6,8 +6,7 @@ returns a structured envelope. Use this as the only Plexus tool.
 
 ## Runtime ground rules
 
-- `plexus` is a global. You do **not** need
-  `local plexus = require("plexus")`.
+- `plexus` is a global. You do **not** need to import it yourself.
 - The runtime captures the result of the **last** Plexus operation your
   snippet calls and returns it as the value of this tool call. You only
   need to write an explicit `return` when you want a custom output shape.
