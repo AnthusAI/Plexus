@@ -72,6 +72,10 @@ describe('ProcedureTask optimizer auth flow', () => {
     ;(global as any).fetch = jest.fn()
   })
 
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
   it('renders local dispatch mode before stale dispatcher fields', () => {
     render(
       <ProcedureTask
@@ -107,6 +111,42 @@ describe('ProcedureTask optimizer auth flow', () => {
 
     expect(screen.getByText('Pending...')).toBeInTheDocument()
     expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
+  it('renders grid dispatch, timestamp, and duration indicators once', async () => {
+    jest.useFakeTimers()
+    jest.setSystemTime(new Date('2026-01-01T00:10:00.000Z'))
+
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          task: {
+            ...baseProcedure.task,
+            status: 'RUNNING',
+            startedAt: '2026-01-01T00:00:00.000Z',
+            dispatchStatus: 'ANNOUNCED',
+            workerNodeId: 'BlackbookM3-15348',
+            metadata: JSON.stringify({ procedure_id: 'proc-1', dispatch_mode: 'local' }),
+          },
+        }}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Local')).toHaveLength(1)
+      expect(screen.getAllByText(/minutes ago/)).toHaveLength(1)
+      expect(screen.getAllByText('Elapsed:')).toHaveLength(1)
+      expect(screen.getAllByTestId('timer-icon')).toHaveLength(1)
+    })
+
+    const dispatchRow = screen.getByText('Local').closest('div')
+    expect(dispatchRow).toHaveClass('text-sm', 'text-muted-foreground', 'gap-1')
+    expect(dispatchRow?.querySelector('svg')).toHaveClass('h-4', 'w-4', 'flex-shrink-0')
+
+    jest.useRealTimers()
   })
 
   it('still renders claimed for true dispatcher-owned tasks', () => {

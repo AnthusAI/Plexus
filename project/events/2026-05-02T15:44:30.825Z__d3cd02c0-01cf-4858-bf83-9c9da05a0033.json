@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d3cd02c0-01cf-4858-bf83-9c9da05a0033",
+  "issue_id": "plx-d42c63cb-3c25-4fc0-9c46-d027d92f809a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-02T15:44:30.825Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Runtime exposes procedure steering retrieval and injects new steering notes centrally before each AgentPrimitive LLM invocation using per-agent State watermarks.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-07dc0d44-08df-4248-97af-1f928bc2e19d",
+    "priority": 1,
+    "status": "open",
+    "title": "Inject procedure steering into all Tactus agents"
+  }
+}
