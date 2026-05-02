@@ -18,7 +18,7 @@ Result shape:
 ```lua
 {
   ["plexus.scorecards"] = { "info", "list" },
-  ["plexus.score"] = { "evaluations", "info", "predict", "set_champion" },
+  ["plexus.score"] = { "contradictions", "evaluations", "info", "predict", "pull", "test", "update" },
   ["plexus.evaluation"] = { "compare", "find_recent", "info", "run" },
   ["plexus.handle"] = { "await", "cancel", "peek", "status" },
   ["plexus.docs"] = { "get", "list" },
