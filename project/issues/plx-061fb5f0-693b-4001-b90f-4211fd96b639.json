@@ -1,0 +1,25 @@
+{
+  "id": "plx-061fb5f0-693b-4001-b90f-4211fd96b639",
+  "title": "Document ScoreChampionVersionTimeline report block",
+  "description": "Add public dashboard documentation and navigation for the ScoreChampionVersionTimeline report block.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6f81ca29-9b3b-4764-812c-ca78673d5252",
+      "author": "ryan",
+      "text": "Added ScoreChampionVersionTimeline to the public report-block docs navigation and expanded the docs examples for scorecard-wide, single-score, trailing-days, explicit date-range, and include_unchanged usage.",
+      "created_at": "2026-05-02T19:39:50.511521Z"
+    }
+  ],
+  "created_at": "2026-05-02T19:39:12.761061Z",
+  "updated_at": "2026-05-02T19:40:10.206451Z",
+  "closed_at": "2026-05-02T19:40:10.206451Z",
+  "custom": {}
+}

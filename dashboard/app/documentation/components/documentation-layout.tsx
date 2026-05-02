@@ -147,6 +147,7 @@ const docSections: DocSidebarItem[] = [
       { name: "RecentFeedback", href: "/documentation/report-blocks/recent-feedback" },
       { name: "FeedbackAlignmentTimeline", href: "/documentation/report-blocks/feedback-alignment-timeline" },
       { name: "FeedbackVolumeTimeline", href: "/documentation/report-blocks/feedback-volume-timeline" },
+      { name: "ScoreChampionVersionTimeline", href: "/documentation/report-blocks/score-champion-version-timeline" },
       { name: "AcceptanceRateTimeline", href: "/documentation/report-blocks/acceptance-rate-timeline" },
       { name: "AcceptanceRate", href: "/documentation/report-blocks/acceptance-rate" },
       { name: "CorrectionRate", href: "/documentation/report-blocks/correction-rate" },

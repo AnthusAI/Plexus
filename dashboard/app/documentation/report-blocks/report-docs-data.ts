@@ -293,13 +293,25 @@ bucket_count: 8`,
     type: "ScoreChampionVersionTimeline",
     category: "Trends",
     badge: "Optimizer",
-    summary: "Plots score champion version changes during a requested time window with feedback and regression evaluation metrics.",
-    answers: ["Which champion versions shipped during this window?", "Did champion feedback and regression metrics improve?", "What changed between the prior champion and the latest champion?"],
-    useWhen: ["Reviewing optimizer impact after score improvement work.", "Explaining production champion changes over time.", "Auditing manually promoted score versions."],
-    avoidWhen: ["You need every optimizer candidate; use procedure optimizer views.", "The score predates championHistory metadata and has no recorded transitions."],
+    summary: "Shows score champion-version changes during a requested time window, with per-score timelines, optimizer cost, SME context, diffs, and feedback/regression evaluation metrics.",
+    answers: ["Which scores changed champion versions during this window?", "Did champion feedback and regression metrics improve?", "What changed between the prior champion and the latest champion?"],
+    useWhen: ["Reviewing optimizer impact after score improvement work.", "Explaining production champion changes across a whole scorecard.", "Auditing manually promoted score versions."],
+    avoidWhen: ["You need every optimizer candidate; use procedure optimizer views.", "You want scores with no champion change; unchanged scores are hidden unless explicitly requested.", "The score predates championHistory metadata and has no recorded transitions."],
     cli: `plexus feedback report score-champion-version-timeline \\
   --scorecard "Customer Service QA" \\
   --days 30
+
+# Limit to one score.
+plexus feedback report score-champion-version-timeline \\
+  --scorecard "Customer Service QA" \\
+  --score "Medication Review: Dosage" \\
+  --days 30
+
+# Use an explicit date range instead of a trailing day window.
+plexus feedback report score-champion-version-timeline \\
+  --scorecard "Customer Service QA" \\
+  --start-date 2026-03-01 \\
+  --end-date 2026-03-31
 
 # Add --include-unchanged to include initial champion entries with no previous champion.`,
     tactus: `return plexus.report.score_champion_version_timeline{
@@ -307,10 +319,24 @@ bucket_count: 8`,
   days = 30,
   sync = true
 }`,
-    config: `class: ScoreChampionVersionTimeline
+    config: `# Scorecard-wide trailing window.
+class: ScoreChampionVersionTimeline
+scorecard: "Customer Service QA"
+days: 30
+include_unchanged: false
+
+# Or limit to one score.
+class: ScoreChampionVersionTimeline
 scorecard: "Customer Service QA"
 score: "Medication Review: Dosage"
 days: 30
+include_unchanged: false
+
+# Or use an explicit date range.
+class: ScoreChampionVersionTimeline
+scorecard: "Customer Service QA"
+start_date: "2026-03-01"
+end_date: "2026-03-31"
 include_unchanged: false`,
     interpretation: ["By default, initial champion entries with no previous champion are omitted because they are not changes; set include_unchanged to true to show them.", "Only versions with championHistory enteredAt values inside the requested window are included.", "The displayed date range is narrowed to one day before the earliest champion activity when the request window is much broader than the activity.", "Missing feedback or regression evaluations are shown as unavailable instead of suppressing the champion point.", "Procedure, evaluation, score-result, and procedure cost totals summarize optimizer work during the window.", "SME agenda and worksheet content comes from the most recent optimizer procedure for each score.", "Diffs compare the previous champion before the first in-window transition to the latest in-window champion."],
     sampleOutput: {
