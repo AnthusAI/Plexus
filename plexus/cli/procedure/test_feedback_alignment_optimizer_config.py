@@ -382,6 +382,15 @@ def test_optimizer_yaml_marks_one_cycle_runs_as_verification_only():
     assert 'local completion_mode = params.max_iterations == 1 and "Verification complete" or "Optimization complete"' in code
 
 
+def test_optimizer_yaml_skips_synthesis_when_no_hypothesis_has_positive_signal():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "if #succeeded == 0 and not any_partial_positive then" in code
+    assert "no_successful_hypotheses_no_positive_signal" in code
+    assert "no hypotheses succeeded and no positive signal was found" in code
+
+
 def test_optimizer_yaml_uses_safe_tool_call_arg_helper_instead_of_direct_args_dereferences():
     config = _load_optimizer_config()
     code = config["code"]
@@ -429,6 +438,19 @@ def test_optimizer_yaml_escalates_plateaus_instead_of_stopping_or_shrinking():
     assert 'table.insert(slots, "full_rewrite")' in code
     assert 'The run is stuck. Search harder instead of shrinking the hypothesis set.' in code
     assert 'Recent cycles are flat. Broaden search instead of reducing ambition.' in code
+
+
+def test_optimizer_yaml_rejects_repeated_strongly_harmful_hypothesis_territory():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local HYPOTHESIS_REPEAT_STOPWORDS" in code
+    assert "hypothesis_repeats_strongly_harmful_prior" in code
+    assert "fb_d < -0.05 or acc_d < -0.05" in code
+    assert "overlaps strongly harmful cycle" in code
+    assert "rejected as repeated harmful territory" in code
+    assert "blocked for harmful repeat, retrying with hard exclusion" in code
+    assert "Do not target the same policy family, wording family, or evidence rule." in code
 
 
 def test_optimizer_yaml_keeps_bold_lane_and_uses_escalation_advisor():
