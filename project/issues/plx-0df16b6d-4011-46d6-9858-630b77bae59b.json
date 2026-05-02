@@ -286,10 +286,40 @@
       "author": "ryan",
       "text": "Reworked score card header alignment: title and score ID are now in the same explicit title row with items-baseline, with the subtitle on its own row below. The card uses standard p-3 and the body starts with pt-3, avoiding the previous two-line flex/header mismatch.",
       "created_at": "2026-05-02T19:13:54.079625Z"
+    },
+    {
+      "id": "9a1a888c-99a2-4e07-9452-b8df3b6dc373",
+      "author": "ryan",
+      "text": "Removed the h3 element for score card titles because global/user-agent heading styles were creating unwanted top margin in the rendered report. Score names now render as a div with role=heading aria-level=3 and controlled Tailwind line-height/spacing.",
+      "created_at": "2026-05-02T19:23:21.949107Z"
+    },
+    {
+      "id": "c92194d4-a6fd-433e-b7fd-628e92bcd3a3",
+      "author": "ryan",
+      "text": "Added a small top inset to score cards now that title margin is controlled: score card spacing changed from p-3 to px-3 pb-3 pt-4 for slightly more top padding without reintroducing h3 margin behavior.",
+      "created_at": "2026-05-02T19:24:33.799962Z"
+    },
+    {
+      "id": "b4bb0a88-0248-4c82-b3ab-3a1ff3459ffb",
+      "author": "ryan",
+      "text": "Removed the small standalone scorecard-name label above the score list in ScoreChampionVersionTimeline. Updated compacted-output test to assert that label is not rendered.",
+      "created_at": "2026-05-02T19:25:13.027357Z"
+    },
+    {
+      "id": "87c20466-d553-4ca3-851a-34eb2f9eb06f",
+      "author": "ryan",
+      "text": "Moved the scorecard name into the ScoreChampionVersionTimeline report subtitle under the main block title. The old inline 'Scorecard: ...' label remains removed; tests now assert the subtitle displays the scorecard name.",
+      "created_at": "2026-05-02T19:25:57.582156Z"
+    },
+    {
+      "id": "7bc51b9c-ec14-422f-bd96-cc611b7d7af1",
+      "author": "ryan",
+      "text": "Made the scorecard subtitle under ScoreChampionVersionTimeline a proper subhead instead of small muted text. ReportBlock now supports an optional subtitleClassName override, and this report passes text-lg font-semibold text-foreground for the scorecard name.",
+      "created_at": "2026-05-02T19:26:58.788044Z"
     }
   ],
   "created_at": "2026-05-02T18:05:21.700758Z",
-  "updated_at": "2026-05-02T19:13:54.079625Z",
+  "updated_at": "2026-05-02T19:26:58.788044Z",
   "closed_at": "2026-05-02T18:10:42.895877Z",
   "custom": {}
 }
