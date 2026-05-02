@@ -198,8 +198,12 @@ async def test_all_score_mode_only_returns_scores_with_in_window_transitions(moc
     assert score["points"][0]["regression_metrics"] is None
     assert score["diff"]["left_version_id"] == "v0"
     assert score["diff"]["right_version_id"] == "v1"
+    assert score["diff"]["configuration_left"] == "name: old\n"
+    assert score["diff"]["configuration_right"] == "name: new\n"
     assert "-name: old" in score["diff"]["configuration_diff"]
     assert "+name: new" in score["diff"]["configuration_diff"]
+    assert score["diff"]["guidelines_left"] == "# Old\n"
+    assert score["diff"]["guidelines_right"] == "# New\n"
     assert "-# Old" in score["diff"]["guidelines_diff"]
     assert "+# New" in score["diff"]["guidelines_diff"]
 
@@ -265,6 +269,70 @@ async def test_unchanged_champion_is_omitted(mock_api_client):
 
 
 @pytest.mark.asyncio
+async def test_initial_champion_without_previous_champion_is_omitted_by_default(mock_api_client):
+    block = ScoreChampionVersionTimeline(
+        config={"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+    scorecard = SimpleNamespace(id="sc-1", name="Scorecard")
+    versions = [
+        _version("v1", entered_at="2026-04-10T12:00:00+00:00", previous_id=None),
+    ]
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(
+            block,
+            "_resolve_scores_for_mode",
+            new=AsyncMock(return_value=[{"score_id": "score-1", "score_name": "Score 1"}]),
+        ),
+        patch.object(block, "_fetch_score_versions", new=AsyncMock(return_value=versions)),
+    ):
+        output, _ = await block.generate()
+
+    assert output["include_unchanged"] is False
+    assert output["scores"] == []
+    assert output["summary"]["champion_change_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_include_unchanged_keeps_initial_champion_without_previous_champion(mock_api_client):
+    block = ScoreChampionVersionTimeline(
+        config={
+            "scorecard": "sc-1",
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-30",
+            "include_unchanged": True,
+        },
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+    scorecard = SimpleNamespace(id="sc-1", name="Scorecard")
+    versions = [
+        _version("v1", entered_at="2026-04-10T12:00:00+00:00", previous_id=None),
+    ]
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(
+            block,
+            "_resolve_scores_for_mode",
+            new=AsyncMock(return_value=[{"score_id": "score-1", "score_name": "Score 1"}]),
+        ),
+        patch.object(block, "_fetch_score_versions", new=AsyncMock(return_value=versions)),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
+    ):
+        output, _ = await block.generate()
+
+    assert output["include_unchanged"] is True
+    assert len(output["scores"]) == 1
+    assert output["scores"][0]["points"][0]["version_id"] == "v1"
+    assert output["scores"][0]["points"][0]["previous_champion_version_id"] is None
+    assert output["scores"][0]["diff"]["message"] == "Previous or latest champion version was not available for diff generation."
+
+
+@pytest.mark.asyncio
 async def test_diff_uses_previous_champion_before_first_transition_to_latest_transition(mock_api_client):
     block = ScoreChampionVersionTimeline(
         config={"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
@@ -295,6 +363,37 @@ async def test_diff_uses_previous_champion_before_first_transition_to_latest_tra
     assert diff["right_version_id"] == "v2"
     assert "-name: original" in diff["configuration_diff"]
     assert "+name: latest" in diff["configuration_diff"]
+
+
+@pytest.mark.asyncio
+async def test_date_range_normalizes_to_activity_with_one_day_padding(mock_api_client):
+    block = ScoreChampionVersionTimeline(
+        config={"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+    scorecard = SimpleNamespace(id="sc-1", name="Scorecard")
+    versions = [
+        _version("v0"),
+        _version("v1", entered_at="2026-04-20T12:00:00+00:00", previous_id="v0"),
+    ]
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(
+            block,
+            "_resolve_scores_for_mode",
+            new=AsyncMock(return_value=[{"score_id": "score-1", "score_name": "Score 1"}]),
+        ),
+        patch.object(block, "_fetch_score_versions", new=AsyncMock(return_value=versions)),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
+    ):
+        output, _ = await block.generate()
+
+    assert output["requested_date_range"]["start"].startswith("2026-04-01T00:00:00")
+    assert output["date_range"]["start"] == "2026-04-19T12:00:00+00:00"
+    assert output["date_range"]["end"].startswith("2026-04-30T23:59:59")
+    assert output["date_range"]["normalized_to_activity"] is True
 
 
 @pytest.mark.asyncio
@@ -335,7 +434,24 @@ async def test_optimization_summary_counts_procedures_evaluations_score_results_
             "status": "COMPLETED",
             "createdAt": "2026-04-11T00:00:00+00:00",
             "updatedAt": "2026-04-11T01:00:00+00:00",
-            "metadata": {"procedure_type": "Optimizer Procedure"},
+            "metadata": {
+                "procedure_type": "Optimizer Procedure",
+                "dashboard_state": {
+                    "costs": {
+                        "totals": {
+                            "overall": {"incurred": 1.5, "total": 1.5},
+                            "inference": {"total": 0.4},
+                            "evaluation": {"incurred": 1.1, "total": 1.1},
+                        }
+                    },
+                    "sme_agenda_gated": "Review boundary cases with the SME.",
+                    "end_of_run_report": {
+                        "generated_at": "2026-04-11T02:00:00+00:00",
+                        "sme_worksheet": {"text": "Confirm the transfer criteria."},
+                        "run_summary": {"cycles": 2},
+                    },
+                },
+            },
         }
     ]
 
@@ -343,21 +459,6 @@ async def test_optimization_summary_counts_procedures_evaluations_score_results_
         block,
         "_fetch_optimizer_procedures_for_score",
         AsyncMock(return_value=procedures),
-    )
-    monkeypatch.setattr(
-        block,
-        "_load_dashboard_state",
-        AsyncMock(
-            return_value={
-                "costs": {
-                    "totals": {
-                        "overall": {"incurred": 1.5, "total": 1.5},
-                        "inference": {"total": 0.4},
-                        "evaluation": {"incurred": 1.1, "total": 1.1},
-                    }
-                }
-            }
-        ),
     )
 
     with (
@@ -384,3 +485,8 @@ async def test_optimization_summary_counts_procedures_evaluations_score_results_
     assert output["summary"]["evaluation_count"] == 2
     assert output["summary"]["score_result_count"] == 30
     assert output["summary"]["optimization_cost"]["overall"] == 1.5
+    assert output["scores"][0]["sme"]["procedure_id"] == "procedure-1"
+    assert output["scores"][0]["sme"]["available"] is True
+    assert output["scores"][0]["sme"]["agenda"] == "Review boundary cases with the SME."
+    assert output["scores"][0]["sme"]["worksheet"] == "Confirm the transfer criteria."
+    assert output["scores"][0]["sme"]["run_summary"] == {"cycles": 2}

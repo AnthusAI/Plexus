@@ -4,7 +4,7 @@ import asyncio
 import difflib
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from .feedback_rates_base import FeedbackRatesBase
@@ -31,6 +31,10 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
                 raise ValueError("'scorecard' is required.")
 
             score_identifier = self._get_param("score") or self._get_param("score_id")
+            include_unchanged = self._parse_bool(
+                self._get_param("include_unchanged"),
+                default=False,
+            )
             window_start, window_end = self._resolve_window()
             if window_end <= window_start:
                 raise ValueError("'end_date' must be after 'start_date'.")
@@ -66,6 +70,12 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
                     window_start=window_start,
                     window_end=window_end,
                 )
+                if not include_unchanged:
+                    transitions = [
+                        transition
+                        for transition in transitions
+                        if transition.get("previous_champion_version_id")
+                    ]
 
                 if not transitions:
                     continue
@@ -134,11 +144,17 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
                             procedures=procedures,
                             evaluations=list(completed_evaluations_by_id.values()),
                         ),
+                        "sme": await self._latest_sme_info(procedures),
                         "points": points,
                         "diff": diff,
                     }
                 )
 
+            effective_window_start, effective_window_end = self._effective_display_window(
+                requested_start=window_start,
+                requested_end=window_end,
+                score_outputs=score_outputs,
+            )
             mode = "single_score" if score_identifier else "all_scores"
             output: Dict[str, Any] = {
                 "report_type": "score_champion_version_timeline",
@@ -147,10 +163,16 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
                 "scope": mode,
                 "scorecard_id": scorecard.id,
                 "scorecard_name": scorecard.name,
-                "date_range": {
+                "requested_date_range": {
                     "start": window_start.isoformat(),
                     "end": window_end.isoformat(),
                 },
+                "date_range": {
+                    "start": effective_window_start.isoformat(),
+                    "end": effective_window_end.isoformat(),
+                    "normalized_to_activity": effective_window_start != window_start,
+                },
+                "include_unchanged": include_unchanged,
                 "scores": score_outputs,
                 "summary": {
                     "scores_analyzed": len(scores_to_analyze),
@@ -195,6 +217,29 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
                 "error": str(exc),
                 "scores": [],
             }, self._get_log_string()
+
+    def _effective_display_window(
+        self,
+        *,
+        requested_start: datetime,
+        requested_end: datetime,
+        score_outputs: List[Dict[str, Any]],
+    ) -> Tuple[datetime, datetime]:
+        entered_times: List[datetime] = []
+        for score in score_outputs:
+            for point in score.get("points") or []:
+                entered_at = self._parse_datetime(point.get("entered_at"))
+                if entered_at:
+                    entered_times.append(entered_at)
+
+        if not entered_times:
+            return requested_start, requested_end
+
+        earliest_activity = min(entered_times)
+        padded_start = earliest_activity - timedelta(days=1)
+        if padded_start <= requested_start:
+            return requested_start, requested_end
+        return padded_start, requested_end
 
     async def _resolve_scores_for_mode(
         self,
@@ -546,6 +591,40 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
             ],
         }
 
+    async def _latest_sme_info(self, procedures: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not procedures:
+            return None
+
+        procedure = procedures[0]
+        metadata = self._parse_json_object(procedure.get("metadata"))
+        state = await self._load_dashboard_state(metadata.get("dashboard_state"))
+        end_of_run_report = state.get("end_of_run_report") if isinstance(state, dict) else None
+        end_of_run_report = end_of_run_report if isinstance(end_of_run_report, dict) else {}
+
+        agenda_gated = self._text_from_sme_value(state.get("sme_agenda_gated"))
+        agenda_raw = self._text_from_sme_value(state.get("sme_agenda_raw"))
+        end_agenda = self._text_from_sme_value(end_of_run_report.get("sme_agenda"))
+        worksheet = self._text_from_sme_value(end_of_run_report.get("sme_worksheet"))
+
+        agenda = agenda_gated or end_agenda or agenda_raw
+        available = bool(agenda or worksheet)
+
+        return {
+            "procedure_id": procedure.get("id"),
+            "procedure_status": procedure.get("status"),
+            "procedure_created_at": procedure.get("createdAt"),
+            "procedure_updated_at": procedure.get("updatedAt"),
+            "available": available,
+            "agenda": agenda,
+            "agenda_gated": agenda_gated,
+            "agenda_raw": agenda_raw,
+            "worksheet": worksheet,
+            "run_summary": end_of_run_report.get("run_summary")
+            if isinstance(end_of_run_report.get("run_summary"), dict)
+            else None,
+            "generated_at": end_of_run_report.get("generated_at"),
+        }
+
     async def _procedure_cost_payload(self, procedure: Dict[str, Any]) -> Dict[str, Optional[float]]:
         metadata = self._parse_json_object(procedure.get("metadata"))
         dashboard_state_ref = metadata.get("dashboard_state")
@@ -652,12 +731,16 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
             "right_version_id": right_version_id,
             "right_version_note": right_version.get("note"),
             "right_version_created_at": right_version.get("createdAt"),
+            "configuration_left": left_version.get("configuration") or "",
+            "configuration_right": right_version.get("configuration") or "",
             "configuration_diff": self._unified_diff(
                 left_version.get("configuration") or "",
                 right_version.get("configuration") or "",
                 fromfile=f"{left_version_id}/configuration",
                 tofile=f"{right_version_id}/configuration",
             ),
+            "guidelines_left": left_version.get("guidelines") or "",
+            "guidelines_right": right_version.get("guidelines") or "",
             "guidelines_diff": self._unified_diff(
                 left_version.get("guidelines") or "",
                 right_version.get("guidelines") or "",
@@ -753,6 +836,19 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
                 return None
         return value
 
+    def _text_from_sme_value(self, value: Any) -> Optional[str]:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        if isinstance(value, dict):
+            text = value.get("text")
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+            structured = value.get("structured")
+            if isinstance(structured, (dict, list)) and structured:
+                return json.dumps(structured, indent=2, default=str)
+        return None
+
     def _parse_datetime(self, value: Any) -> Optional[datetime]:
         if isinstance(value, datetime):
             dt = value
@@ -793,6 +889,21 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
             return int(value)
         except (TypeError, ValueError):
             return None
+
+    def _parse_bool(self, value: Any, *, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "y", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "n", "off"}:
+                return False
+        return default
 
     def _sum_number(self, values: Any) -> Optional[float]:
         total = 0.0

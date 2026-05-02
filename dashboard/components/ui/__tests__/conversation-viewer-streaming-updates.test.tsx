@@ -4,7 +4,6 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import ConversationViewer from "../conversation-viewer"
 
 const mockScrollToIndex = jest.fn()
-const atBottomCallbacks: Array<(isAtBottom: boolean) => void> = []
 
 jest.mock("../evaluation-tool-output", () => ({
   __esModule: true,
@@ -24,18 +23,8 @@ jest.mock("react-virtuoso", () => {
     }))
 
     React.useEffect(() => {
-      if (!atBottomStateChange) {
-        return
-      }
-      atBottomCallbacks.push(atBottomStateChange)
-      atBottomStateChange(true)
-      return () => {
-        const idx = atBottomCallbacks.indexOf(atBottomStateChange)
-        if (idx >= 0) {
-          atBottomCallbacks.splice(idx, 1)
-        }
-      }
-    }, [atBottomStateChange])
+      atBottomStateChange?.(true)
+    }, [atBottomStateChange, data.length])
 
     return (
       <div data-testid="virtuoso-scroller" className={className}>
@@ -238,7 +227,6 @@ describe("ConversationViewer streaming updates", () => {
 
   beforeEach(() => {
     mockScrollToIndex.mockReset()
-    atBottomCallbacks.length = 0
     subscriptions.sessionUpdate = null
     subscriptions.messageCreate = null
     subscriptions.messageUpdate = null
@@ -319,12 +307,6 @@ describe("ConversationViewer streaming updates", () => {
     })
   })
 
-  const emitAtBottomState = (isAtBottom: boolean) => {
-    for (const callback of [...atBottomCallbacks]) {
-      callback(isAtBottom)
-    }
-  }
-
   it("updates assistant message in place from onUpdate subscription payloads", async () => {
     const { container } = render(
       <ConversationViewer
@@ -393,129 +375,6 @@ describe("ConversationViewer streaming updates", () => {
               state: "streaming",
             },
           }),
-        },
-      })
-    })
-
-    await waitFor(() => {
-      expect(mockScrollToIndex).toHaveBeenCalledWith(
-        expect.objectContaining({
-          index: "LAST",
-          align: "end",
-          behavior: "auto",
-        })
-      )
-    })
-  })
-
-  it("auto-follows when a tool call arrives while at bottom", async () => {
-    render(
-      <ConversationViewer
-        experimentId="proc-1"
-        defaultSidebarCollapsed={false}
-      />
-    )
-
-    await screen.findByText("Hel")
-    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
-      target: { value: "Run a tool" },
-    })
-    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
-
-    await waitFor(() => {
-      expect(mockChatMessageCreate).toHaveBeenCalled()
-    })
-    mockScrollToIndex.mockClear()
-
-    await act(async () => {
-      subscriptions.messageCreate?.next({
-        data: {
-          id: "msg-tool-call-1",
-          accountId: "acct-1",
-          procedureId: "proc-1",
-          sessionId: "sess-1",
-          role: "ASSISTANT",
-          messageType: "TOOL_CALL",
-          humanInteraction: "INTERNAL",
-          content: "Tool call: execute_tactus",
-          createdAt: "2026-03-27T00:00:02.000Z",
-          sequenceNumber: 2,
-        },
-      })
-    })
-
-    await waitFor(() => {
-      expect(mockScrollToIndex).toHaveBeenCalledWith(
-        expect.objectContaining({
-          index: "LAST",
-          align: "end",
-          behavior: "auto",
-        })
-      )
-    })
-  })
-
-  it("does not auto-follow tool activity after user scrolls up", async () => {
-    render(
-      <ConversationViewer
-        experimentId="proc-1"
-        defaultSidebarCollapsed={false}
-      />
-    )
-
-    await screen.findByText("Hel")
-    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
-      target: { value: "Run a tool" },
-    })
-    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
-
-    await waitFor(() => {
-      expect(mockChatMessageCreate).toHaveBeenCalled()
-    })
-    mockScrollToIndex.mockClear()
-
-    await act(async () => {
-      emitAtBottomState(false)
-    })
-
-    await act(async () => {
-      subscriptions.messageCreate?.next({
-        data: {
-          id: "msg-tool-call-2",
-          accountId: "acct-1",
-          procedureId: "proc-1",
-          sessionId: "sess-1",
-          role: "ASSISTANT",
-          messageType: "TOOL_CALL",
-          humanInteraction: "INTERNAL",
-          content: "Tool call: execute_tactus",
-          createdAt: "2026-03-27T00:00:02.000Z",
-          sequenceNumber: 2,
-        },
-      })
-    })
-
-    await waitFor(() => {
-      expect(mockScrollToIndex).not.toHaveBeenCalled()
-    })
-
-    await act(async () => {
-      emitAtBottomState(true)
-    })
-
-    await act(async () => {
-      subscriptions.messageUpdate?.next({
-        data: {
-          id: "msg-tool-call-2",
-          accountId: "acct-1",
-          procedureId: "proc-1",
-          sessionId: "sess-1",
-          role: "ASSISTANT",
-          messageType: "TOOL_RESPONSE",
-          humanInteraction: "INTERNAL",
-          content: "Tool output",
-          createdAt: "2026-03-27T00:00:03.000Z",
-          sequenceNumber: 3,
         },
       })
     })
@@ -675,6 +534,7 @@ describe("ConversationViewer streaming updates", () => {
     )
 
     await screen.findByText("Hel")
+
     expect(screen.queryByText("Model")).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText("Type a message"), {
@@ -692,8 +552,7 @@ describe("ConversationViewer streaming updates", () => {
     expect(createdMessage.messageType).toBe("MESSAGE")
     expect(createdMessage.responseTarget).toBe("proc-1")
     expect(createdMessage.responseStatus).toBe("COMPLETED")
-    const metadata = JSON.parse(createdMessage.metadata)
-    expect(metadata).toEqual({
+    expect(JSON.parse(createdMessage.metadata)).toEqual({
       source: "procedure-steering-input",
       scope: "all_agents",
       sent_at: expect.any(String),

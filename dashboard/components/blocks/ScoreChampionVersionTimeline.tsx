@@ -2,12 +2,20 @@
 
 import React from "react";
 import { downloadData } from "aws-amplify/storage";
-import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
+import { DiffEditor, type Monaco } from "@monaco-editor/react";
+import { Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 
 import { parseOutputString } from "@/lib/utils";
 import { ChartContainer } from "@/components/ui/chart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ReportBlock, { ReportBlockProps, type BlockComponent } from "./ReportBlock";
+import {
+  applyMonacoTheme,
+  configureYamlLanguage,
+  defineCustomMonacoThemes,
+  getCommonMonacoOptions,
+  setupMonacoThemeWatcher,
+} from "@/lib/monaco-theme";
 
 interface MetricPayload {
   alignment?: number | null;
@@ -45,7 +53,11 @@ interface VersionDiff {
   right_version_id?: string | null;
   right_version_note?: string | null;
   right_version_created_at?: string | null;
+  configuration_left?: string | null;
+  configuration_right?: string | null;
   configuration_diff?: string | null;
+  guidelines_left?: string | null;
+  guidelines_right?: string | null;
   guidelines_diff?: string | null;
   message?: string | null;
 }
@@ -64,10 +76,25 @@ interface OptimizationSummary {
   associated_evaluation_cost?: number | null;
 }
 
+interface SmeInformation {
+  procedure_id?: string | null;
+  procedure_status?: string | null;
+  procedure_created_at?: string | null;
+  procedure_updated_at?: string | null;
+  available?: boolean;
+  agenda?: string | null;
+  agenda_gated?: string | null;
+  agenda_raw?: string | null;
+  worksheet?: string | null;
+  run_summary?: Record<string, unknown> | null;
+  generated_at?: string | null;
+}
+
 interface ChampionScoreSeries {
   score_id: string;
   score_name: string;
   optimization_summary?: OptimizationSummary | null;
+  sme?: SmeInformation | null;
   points: ChampionPoint[];
   diff?: VersionDiff | null;
 }
@@ -80,6 +107,11 @@ interface ScoreChampionVersionTimelineData {
   scorecard_id?: string;
   scorecard_name?: string;
   date_range?: {
+    start: string;
+    end: string;
+    normalized_to_activity?: boolean;
+  };
+  requested_date_range?: {
     start: string;
     end: string;
   };
@@ -173,7 +205,7 @@ const TimelineTooltip: React.FC<any> = ({ active, payload }) => {
   if (!point) return null;
 
   return (
-    <div className="rounded-md border bg-background p-3 shadow-lg text-xs space-y-1">
+    <div className="rounded-md bg-popover p-3 text-popover-foreground text-xs space-y-1">
       <div className="font-medium">{point.version_note || shortId(point.version_id)}</div>
       <div className="text-muted-foreground">{formatDateTime(point.entered_at)}</div>
       <div>Version: {shortId(point.version_id)}</div>
@@ -215,6 +247,95 @@ const availableMetricsFor = (chartData: ChartPoint[]): MetricKey[] => {
   );
 };
 
+const SmeInformationSection: React.FC<{ sme?: SmeInformation | null }> = ({ sme }) => {
+  if (!sme) return null;
+
+  return (
+    <div className="rounded-md bg-card p-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+        <div className="text-sm font-medium">SME Information</div>
+        <div className="font-mono text-xs text-muted-foreground">{shortId(sme.procedure_id)}</div>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span>Status: {sme.procedure_status || "N/A"}</span>
+        <span>Updated: {formatDateTime(sme.procedure_updated_at)}</span>
+        {sme.generated_at ? <span>Generated: {formatDateTime(sme.generated_at)}</span> : null}
+      </div>
+
+      {sme.available ? (
+        <div className="mt-3 space-y-3">
+          {sme.agenda ? (
+            <div>
+              <div className="mb-1 text-xs font-medium text-muted-foreground">Agenda</div>
+              <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-xs text-foreground">
+                {sme.agenda}
+              </pre>
+            </div>
+          ) : null}
+          {sme.worksheet ? (
+            <div>
+              <div className="mb-1 text-xs font-medium text-muted-foreground">Worksheet</div>
+              <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-xs text-foreground">
+                {sme.worksheet}
+              </pre>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-md bg-background p-3 text-sm text-foreground">
+          No SME agenda or worksheet was produced by the latest optimizer procedure.
+        </div>
+      )}
+    </div>
+  );
+};
+
+const handleDiffEditorMount = (_editor: unknown, monaco: Monaco) => {
+  defineCustomMonacoThemes(monaco);
+  applyMonacoTheme(monaco);
+  setupMonacoThemeWatcher(monaco);
+  configureYamlLanguage(monaco);
+};
+
+const MonacoDiffPanel: React.FC<{
+  language: "yaml" | "markdown";
+  original?: string | null;
+  modified?: string | null;
+  fallbackDiff?: string | null;
+  emptyText: string;
+}> = ({ language, original, modified, fallbackDiff, emptyText }) => {
+  const left = original || "";
+  const right = modified || "";
+
+  if (!left && !right) {
+    return (
+      <pre className="max-h-96 overflow-auto rounded-md bg-background p-3 text-xs text-foreground">
+        {fallbackDiff || emptyText}
+      </pre>
+    );
+  }
+
+  return (
+    <div className="h-[420px] rounded-md bg-background">
+      <DiffEditor
+        height="100%"
+        language={language}
+        original={left}
+        modified={right}
+        onMount={handleDiffEditorMount}
+        options={{
+          ...getCommonMonacoOptions(),
+          readOnly: true,
+          renderSideBySide: true,
+          automaticLayout: true,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+        }}
+      />
+    </div>
+  );
+};
+
 const ScoreTimelineSection: React.FC<{
   score: ChampionScoreSeries;
   xDomain: [number, number] | undefined;
@@ -223,7 +344,7 @@ const ScoreTimelineSection: React.FC<{
   const availableMetricKeys = React.useMemo(() => availableMetricsFor(chartData), [chartData]);
 
   return (
-    <section className="space-y-3 rounded-md border bg-card/40 p-4">
+    <section className="space-y-3 rounded-md bg-muted p-4">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
         <div>
           <h3 className="text-base font-semibold">{score.score_name}</h3>
@@ -261,7 +382,6 @@ const ScoreTimelineSection: React.FC<{
       {chartData.length > 0 ? (
         <ChartContainer config={chartConfig} className="h-[260px] w-full">
           <LineChart data={chartData} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" />
             <XAxis
               dataKey="entered_at_timestamp"
               type="number"
@@ -345,13 +465,13 @@ const ScoreTimelineSection: React.FC<{
           </LineChart>
         </ChartContainer>
       ) : (
-        <div className="rounded-md bg-card p-4 text-sm text-muted-foreground">
+        <div className="rounded-md bg-card p-4 text-sm text-foreground">
           No parseable champion transition dates for this score.
         </div>
       )}
 
       {score.points?.length ? (
-        <div className="overflow-x-auto rounded-md border">
+        <div className="overflow-x-auto rounded-md bg-background">
           <table className="w-full text-sm">
             <thead className="bg-card text-xs text-muted-foreground">
               <tr>
@@ -363,8 +483,11 @@ const ScoreTimelineSection: React.FC<{
               </tr>
             </thead>
             <tbody>
-              {score.points.map((point) => (
-                <tr key={`${score.score_id}-${point.version_id}-${point.entered_at}`} className="border-t">
+              {score.points.map((point, index) => (
+                <tr
+                  key={`${score.score_id}-${point.version_id}-${point.entered_at}`}
+                  className={index % 2 === 0 ? "bg-background" : "bg-muted"}
+                >
                   <td className="px-3 py-2">{formatDateTime(point.entered_at)}</td>
                   <td className="px-3 py-2 font-mono text-xs">{shortId(point.version_id)}</td>
                   <td className="px-3 py-2">{formatNumber(point.feedback_metrics?.alignment)}</td>
@@ -379,6 +502,8 @@ const ScoreTimelineSection: React.FC<{
         </div>
       ) : null}
 
+      <SmeInformationSection sme={score.sme} />
+
       {score.diff ? (
         <div className="rounded-md bg-card p-3">
           <div className="mb-3 text-sm font-medium">Champion Diff</div>
@@ -386,7 +511,7 @@ const ScoreTimelineSection: React.FC<{
             {shortId(score.diff.left_version_id)} to {shortId(score.diff.right_version_id)}
           </div>
           {score.diff.message ? (
-            <div className="text-sm text-muted-foreground">{score.diff.message}</div>
+            <div className="text-sm text-foreground">{score.diff.message}</div>
           ) : (
             <Tabs defaultValue="code">
               <TabsList>
@@ -394,14 +519,22 @@ const ScoreTimelineSection: React.FC<{
                 <TabsTrigger value="guidelines">Guidelines</TabsTrigger>
               </TabsList>
               <TabsContent value="code">
-                <pre className="max-h-96 overflow-auto rounded-md bg-background p-3 text-xs">
-                  {score.diff.configuration_diff || "No code changes."}
-                </pre>
+                <MonacoDiffPanel
+                  language="yaml"
+                  original={score.diff.configuration_left}
+                  modified={score.diff.configuration_right}
+                  fallbackDiff={score.diff.configuration_diff}
+                  emptyText="No code changes."
+                />
               </TabsContent>
               <TabsContent value="guidelines">
-                <pre className="max-h-96 overflow-auto rounded-md bg-background p-3 text-xs">
-                  {score.diff.guidelines_diff || "No guideline changes."}
-                </pre>
+                <MonacoDiffPanel
+                  language="markdown"
+                  original={score.diff.guidelines_left}
+                  modified={score.diff.guidelines_right}
+                  fallbackDiff={score.diff.guidelines_diff}
+                  emptyText="No guideline changes."
+                />
               </TabsContent>
             </Tabs>
           )}
@@ -498,7 +631,7 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
         warning={output.warning}
         dateRange={output.date_range}
       >
-        <div className="rounded-md bg-card p-4 text-sm text-muted-foreground">
+        <div className="rounded-md bg-card p-4 text-sm text-foreground">
           Report block is processing. Champion version metrics will appear when computation completes.
         </div>
       </ReportBlock>
@@ -553,7 +686,7 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
           </div>
         </div>
 
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-foreground">
           {output.scorecard_name ? `Scorecard: ${output.scorecard_name}` : null}
         </div>
 
@@ -564,7 +697,7 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
             ))}
           </div>
         ) : (
-          <div className="rounded-md bg-card p-4 text-sm text-muted-foreground">
+          <div className="rounded-md bg-card p-4 text-sm text-foreground">
             {output.message || "No champion version changes found in the requested time window."}
           </div>
         )}
