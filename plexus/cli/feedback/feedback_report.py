@@ -644,6 +644,55 @@ def volume(
     _print_result(title="FeedbackVolumeTimeline", result=result, output_format=output_format, include_log=include_log)
 
 
+@report.command(name="score-champion-version-timeline")
+@click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, key, or name).")
+@click.option("--score", required=False, help="Optional score identifier (id, external id, key, or name).")
+@click.option("--days", type=int, required=False, help="Trailing window in days.")
+@click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
+@click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
+@click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
+@click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
+@click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
+@click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
+@click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
+@click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
+@click.option("--include-log", is_flag=True, help="Include report block log output.")
+def score_champion_version_timeline(
+    scorecard: str,
+    score: Optional[str],
+    days: Optional[int],
+    start_date: Optional[str],
+    end_date: Optional[str],
+    cache_key: Optional[str],
+    ttl_hours: float,
+    fresh: bool,
+    background: bool,
+    account_identifier: Optional[str],
+    output_format: str,
+    include_log: bool,
+) -> None:
+    """Run the ScoreChampionVersionTimeline report block."""
+    result = run_feedback_report_block(
+        block_class="ScoreChampionVersionTimeline",
+        scorecard=scorecard,
+        score=score,
+        days=_coerce_optional_int(days, "days"),
+        start_date=start_date,
+        end_date=end_date,
+        account_identifier=account_identifier,
+        cache_key=cache_key,
+        ttl_hours=ttl_hours,
+        fresh=fresh,
+        background=background,
+    )
+    _print_result(
+        title="ScoreChampionVersionTimeline",
+        result=result,
+        output_format=output_format,
+        include_log=include_log,
+    )
+
+
 @report.command(name="acceptance-rate-timeline")
 @click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, or key).")
 @click.option("--score", required=False, help="Optional score identifier (id or external id).")

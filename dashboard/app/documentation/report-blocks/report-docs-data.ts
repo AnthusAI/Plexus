@@ -9,6 +9,7 @@ export type ReportDoc = {
   useWhen: string[];
   avoidWhen: string[];
   cli?: string;
+  tactus?: string;
   config?: string;
   interpretation: string[];
   sampleOutput?: Record<string, unknown>;
@@ -283,6 +284,80 @@ bucket_count: 8`,
         { bucket_index: 1, label: "Mar 9", start: "2026-03-09T00:00:00Z", end: "2026-03-16T00:00:00Z", feedback_items_total: 22, feedback_items_valid: 22, feedback_items_unchanged: 18, feedback_items_changed: 4, feedback_items_invalid_or_unclassified: 0 },
         { bucket_index: 2, label: "Mar 16", start: "2026-03-16T00:00:00Z", end: "2026-03-23T00:00:00Z", feedback_items_total: 23, feedback_items_valid: 21, feedback_items_unchanged: 18, feedback_items_changed: 3, feedback_items_invalid_or_unclassified: 2 },
         { bucket_index: 3, label: "Mar 23", start: "2026-03-23T00:00:00Z", end: "2026-03-30T00:00:00Z", feedback_items_total: 27, feedback_items_valid: 26, feedback_items_unchanged: 23, feedback_items_changed: 3, feedback_items_invalid_or_unclassified: 1 },
+      ],
+    },
+  },
+  {
+    slug: "score-champion-version-timeline",
+    title: "ScoreChampionVersionTimeline",
+    type: "ScoreChampionVersionTimeline",
+    category: "Trends",
+    badge: "Optimizer",
+    summary: "Plots score champion version changes during a requested time window with feedback and regression evaluation metrics.",
+    answers: ["Which champion versions shipped during this window?", "Did champion feedback and regression metrics improve?", "What changed between the prior champion and the latest champion?"],
+    useWhen: ["Reviewing optimizer impact after score improvement work.", "Explaining production champion changes over time.", "Auditing manually promoted score versions."],
+    avoidWhen: ["You need every optimizer candidate; use procedure optimizer views.", "The score predates championHistory metadata and has no recorded transitions."],
+    cli: `plexus feedback report score-champion-version-timeline \\
+  --scorecard "Customer Service QA" \\
+  --days 30`,
+    tactus: `return plexus.report.score_champion_version_timeline{
+  scorecard = "Customer Service QA",
+  days = 30,
+  sync = true
+}`,
+    config: `class: ScoreChampionVersionTimeline
+scorecard: "Customer Service QA"
+score: "Medication Review: Dosage"
+days: 30`,
+    interpretation: ["Only versions with championHistory enteredAt values inside the window are included.", "Missing feedback or regression evaluations are shown as unavailable instead of suppressing the champion point.", "Diffs compare the previous champion before the first in-window transition to the latest in-window champion."],
+    sampleOutput: {
+      report_type: "score_champion_version_timeline",
+      block_title: "Score Champion Version Timeline",
+      block_description: "Champion version changes and associated evaluation metrics",
+      scope: "single_score",
+      scorecard_name: "Customer Service QA",
+      date_range: dateRange,
+      summary: {
+        scores_analyzed: 1,
+        scores_with_champion_changes: 1,
+        champion_change_count: 2,
+        evaluations_scanned: 4,
+      },
+      scores: [
+        {
+          score_id: "score-dosage",
+          score_name: "Medication Review: Dosage",
+          points: [
+            {
+              point_index: 0,
+              label: "2026-03-12",
+              entered_at: "2026-03-12T14:20:00Z",
+              version_id: "version-101",
+              previous_champion_version_id: "version-100",
+              feedback_evaluation_id: "eval-feedback-101",
+              feedback_metrics: { alignment: 0.71, accuracy: 82, processed_items: 100, total_items: 100 },
+              regression_evaluation_id: "eval-regression-101",
+              regression_metrics: { alignment: 0.68, accuracy: 79, processed_items: 200, total_items: 200 },
+            },
+            {
+              point_index: 1,
+              label: "2026-03-26",
+              entered_at: "2026-03-26T09:10:00Z",
+              version_id: "version-102",
+              previous_champion_version_id: "version-101",
+              feedback_evaluation_id: "eval-feedback-102",
+              feedback_metrics: { alignment: 0.78, accuracy: 87 },
+              regression_evaluation_id: "eval-regression-102",
+              regression_metrics: { alignment: 0.72, accuracy: 81 },
+            },
+          ],
+          diff: {
+            left_version_id: "version-100",
+            right_version_id: "version-102",
+            configuration_diff: "--- version-100/configuration\n+++ version-102/configuration\n@@ -1 +1 @@\n-name: old\n+name: new",
+            guidelines_diff: "--- version-100/guidelines\n+++ version-102/guidelines\n@@ -1 +1 @@\n-Old rubric\n+New rubric",
+          },
+        },
       ],
     },
   },

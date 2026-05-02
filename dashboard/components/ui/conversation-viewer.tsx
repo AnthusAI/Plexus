@@ -80,73 +80,6 @@ const EVALUATION_TOOL_NAMES = new Set([
   'plexus_evaluation_info',
 ])
 
-type ExecuteTactusEnvelope = {
-  ok?: boolean
-  value?: unknown
-  error?: unknown
-  api_calls?: unknown
-}
-
-const isExecuteTactusEnvelope = (value: unknown): value is ExecuteTactusEnvelope => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false
-  }
-  const record = value as Record<string, unknown>
-  return (
-    'ok' in record
-    || 'value' in record
-    || 'error' in record
-    || 'api_calls' in record
-  )
-}
-
-const extractExecuteTactusApiCalls = (value: unknown): string[] => {
-  if (!isExecuteTactusEnvelope(value)) {
-    return []
-  }
-  const apiCalls = (value as ExecuteTactusEnvelope).api_calls
-  if (!Array.isArray(apiCalls)) {
-    return []
-  }
-  return apiCalls
-    .map((entry) => {
-      if (typeof entry === 'string') return entry
-      if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
-        const name = (entry as Record<string, unknown>).api_call
-        if (typeof name === 'string') return name
-      }
-      return null
-    })
-    .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-}
-
-const extractExecuteTactusValue = (value: unknown): unknown => {
-  if (!isExecuteTactusEnvelope(value)) {
-    return value
-  }
-  return (value as ExecuteTactusEnvelope).value
-}
-
-const isExecuteTactusEvaluationEnvelope = (value: unknown): boolean => {
-  const apiCalls = extractExecuteTactusApiCalls(value)
-  if (apiCalls.some((call) => call === 'plexus.evaluation.run' || call.startsWith('plexus.evaluation.'))) {
-    return true
-  }
-  const payload = extractExecuteTactusValue(value)
-  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-    const record = payload as Record<string, unknown>
-    return typeof record.evaluation_id === 'string' || typeof record.evaluationId === 'string'
-  }
-  if (Array.isArray(payload)) {
-    return payload.some((entry) => {
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false
-      const record = entry as Record<string, unknown>
-      return typeof record.evaluation_id === 'string' || typeof record.evaluationId === 'string' || typeof record.id === 'string'
-    })
-  }
-  return false
-}
-
 const CONSOLE_CHAT_MODEL_OPTIONS = [
   { value: 'gpt-5.4', label: 'GPT-5.4' },
   { value: 'gpt-5.3', label: 'GPT-5.3' },
@@ -246,7 +179,6 @@ export interface ConversationViewerProps {
   defaultSidebarWidth?: number
   forceProcedureIdForDispatch?: string
   defaultAccountIdForNewSession?: string
-  enableProcedureSteering?: boolean
 }
 
 
@@ -800,16 +732,6 @@ const mapMessageToToolViewModel = (message: ChatMessage): ConsoleToolViewModel |
   }
 }
 
-const isEvaluationToolViewModel = (toolViewModel: ConsoleToolViewModel): boolean => {
-  if (EVALUATION_TOOL_NAMES.has(toolViewModel.toolName)) {
-    return true
-  }
-  if (toolViewModel.toolName === 'execute_tactus') {
-    return isExecuteTactusEvaluationEnvelope(toolViewModel.output)
-  }
-  return false
-}
-
 // Collapsible text component with Markdown support for long messages
 function CollapsibleText({ 
   content, 
@@ -1124,7 +1046,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
             <div className="space-y-2">
               <Tool
                 defaultOpen={
-                  isEvaluationToolViewModel(toolViewModel) ||
+                  EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
                   toolViewModel.state === 'output-error'
                 }
               >
@@ -1138,20 +1060,14 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                     <ToolInput input={toolViewModel.input} />
                   )}
                   {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
-                    isEvaluationToolViewModel(toolViewModel) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
+                    EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
                       <React.Suspense fallback={
                         <div className="rounded-md bg-card p-3">
                           <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
                           <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
                         </div>
                       }>
-                        <EvaluationToolOutput
-                          toolOutput={
-                            toolViewModel.toolName === 'execute_tactus'
-                              ? extractExecuteTactusValue(toolViewModel.output)
-                              : toolViewModel.output
-                          }
-                        />
+                        <EvaluationToolOutput toolOutput={toolViewModel.output} />
                       </React.Suspense>
                     ) : (
                       <ToolOutput
@@ -1413,7 +1329,6 @@ function ConversationViewer({
   defaultSidebarWidth = 320,
   forceProcedureIdForDispatch,
   defaultAccountIdForNewSession,
-  enableProcedureSteering = false,
 }: ConversationViewerProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(defaultSidebarCollapsed)
   const [sidebarWidth, setSidebarWidth] = useState(() => Math.min(Math.max(defaultSidebarWidth, 240), 520))
@@ -1440,6 +1355,8 @@ function ConversationViewer({
   const [isRenamingSession, setIsRenamingSession] = useState(false)
   const [pendingAssistantBySession, setPendingAssistantBySession] = useState<Record<string, PendingAssistantState>>({})
   const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
+  const manualScrollLockRef = React.useRef(false)
+  const lastScrollerTopRef = React.useRef<number | null>(null)
   const promptSubmitLockRef = React.useRef(false)
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const [atBottom, setAtBottom] = useState(true)
@@ -2354,41 +2271,6 @@ function ConversationViewer({
     }
     return streamingState !== 'complete'
   }, [sortedMessages])
-  const hasToolTailActivity = React.useMemo(() => {
-    if (!selectedSessionId || sortedMessages.length === 0) {
-      return false
-    }
-
-    const latestToolTailMessage = [...sortedMessages].reverse().find((message) => (
-      message.role === 'ASSISTANT'
-      && (message.messageType === 'TOOL_CALL' || message.messageType === 'TOOL_RESPONSE')
-    ))
-    if (!latestToolTailMessage?.createdAt) {
-      return false
-    }
-
-    const latestToolTailMs = toEpochMs(latestToolTailMessage.createdAt)
-    if (latestToolTailMs === null) {
-      return false
-    }
-
-    const latestActiveUserMessageMs = [...sortedMessages].reverse().find((message) => (
-      message.role === 'USER'
-      && (message.responseStatus === 'PENDING' || message.responseStatus === 'RUNNING')
-      && typeof message.createdAt === 'string'
-    ))?.createdAt
-
-    const liveWindowAnchorMs = toEpochMs(latestActiveUserMessageMs ?? null)
-    if (liveWindowAnchorMs === null) {
-      return false
-    }
-
-    return latestToolTailMs >= liveWindowAnchorMs
-  }, [selectedSessionId, sortedMessages])
-  const hasLiveTailActivity = showThinkingPlaceholder
-    || Boolean(pendingAssistantState)
-    || hasStreamingAssistantTail
-    || hasToolTailActivity
   const latestConversationRenderSignature = React.useMemo(() => {
     const lastMessage = sortedMessages[sortedMessages.length - 1]
     if (!lastMessage) {
@@ -2404,7 +2286,7 @@ function ConversationViewer({
       showThinkingPlaceholder ? 'thinking' : 'idle',
     ].join(':')
   }, [selectedSessionId, showThinkingPlaceholder, sortedMessages])
-  const shouldForceFollow = autoFollowEnabled && hasLiveTailActivity
+  const shouldForceFollow = autoFollowEnabled
   const pendingMessageForPrompt = React.useMemo(
     () => [...sortedMessages].reverse().find(message => unresolvedPendingMessageIds.has(message.id)) || null,
     [sortedMessages, unresolvedPendingMessageIds]
@@ -2499,15 +2381,59 @@ function ConversationViewer({
     setAtBottom(isNowAtBottom)
     if (isNowAtBottom) {
       setAutoFollowEnabled(true)
+      manualScrollLockRef.current = false
+      lastScrollerTopRef.current = null
       return
     }
-    setAutoFollowEnabled(false)
+    if (manualScrollLockRef.current) {
+      setAutoFollowEnabled(false)
+    }
   }, [])
 
   useEffect(() => {
     setAutoFollowEnabled(true)
     setAtBottom(true)
+    manualScrollLockRef.current = false
+    lastScrollerTopRef.current = null
   }, [selectedSessionId])
+
+  const handleScrollerScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const currentTop = event.currentTarget.scrollTop
+    const previousTop = lastScrollerTopRef.current
+    if (previousTop !== null && currentTop < previousTop - 1) {
+      manualScrollLockRef.current = true
+    }
+    lastScrollerTopRef.current = currentTop
+  }, [])
+
+  const handleScrollerWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    if (event.deltaY < 0) {
+      manualScrollLockRef.current = true
+    }
+  }, [])
+
+  const VirtuosoScroller = React.useMemo(
+    () =>
+      React.forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<"div">>(
+        function ConversationVirtuosoScroller({ onScroll, onWheel, ...props }, ref) {
+          return (
+            <div
+              ref={ref}
+              {...props}
+              onScroll={(event) => {
+                handleScrollerScroll(event)
+                onScroll?.(event)
+              }}
+              onWheel={(event) => {
+                handleScrollerWheel(event)
+                onWheel?.(event)
+              }}
+            />
+          )
+        }
+      ),
+    [handleScrollerScroll, handleScrollerWheel]
+  )
 
   useEffect(() => {
     if (!shouldForceFollow) {
@@ -2695,9 +2621,7 @@ function ConversationViewer({
 
         const clientSendStartedAt = new Date().toISOString()
         const nowIso = new Date().toISOString()
-        const responseTarget = enableProcedureSteering
-          ? targetSessionProcedureId
-          : getConsoleResponseTarget()
+        const responseTarget = getConsoleResponseTarget()
         const optimisticMessageId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         const optimisticMessage: ChatMessage = {
           id: optimisticMessageId,
@@ -2709,7 +2633,7 @@ function ConversationViewer({
           humanInteraction: 'CHAT',
           content: nextValue,
           responseTarget,
-          responseStatus: enableProcedureSteering ? 'COMPLETED' : 'PENDING',
+          responseStatus: 'PENDING',
           createdAt: nowIso,
         }
 
@@ -2725,32 +2649,15 @@ function ConversationViewer({
         let messagePersisted = false
         try {
           const client = getClient()
-          const metadata = enableProcedureSteering
-            ? {
-                source: 'procedure-steering-input',
-                scope: 'all_agents',
-                sent_at: nowIso,
-              }
-            : {
-                source: 'console-prompt-input',
-                sent_at: nowIso,
-                model: {
-                  id: getConsoleSelectedModel(),
-                },
-                instrumentation: {
-                  client_send_started_at: clientSendStartedAt,
-                  client_prompt_length_chars: nextValue.length,
-                  client_user_message_text: nextValue.length > 4000
-                    ? `${nextValue.slice(0, 4000)}…`
-                    : nextValue,
-                  client_selected_model: getConsoleSelectedModel(),
-                  client_history_snapshot: buildClientHistorySnapshot(
-                    messages,
-                    targetSessionId,
-                    nextValue,
-                  ),
-                },
-              }
+          const dispatchMessageText = nextValue.length > 4000
+            ? `${nextValue.slice(0, 4000)}…`
+            : nextValue
+          const model = getConsoleSelectedModel()
+          const clientHistorySnapshot = buildClientHistorySnapshot(
+            messages,
+            targetSessionId,
+            nextValue,
+          )
           const created = await (client.models.ChatMessage.create as any)({
             accountId: targetSessionAccountId,
             sessionId: targetSessionId,
@@ -2759,9 +2666,22 @@ function ConversationViewer({
             messageType: 'MESSAGE',
             humanInteraction: 'CHAT',
             content: nextValue,
-            metadata: JSON.stringify(metadata),
+            metadata: JSON.stringify({
+              source: 'console-prompt-input',
+              sent_at: nowIso,
+              model: {
+                id: model,
+              },
+              instrumentation: {
+                client_send_started_at: clientSendStartedAt,
+                client_prompt_length_chars: nextValue.length,
+                client_user_message_text: dispatchMessageText,
+                client_selected_model: model,
+                client_history_snapshot: clientHistorySnapshot,
+              },
+            }),
             responseTarget,
-            responseStatus: enableProcedureSteering ? 'COMPLETED' : 'PENDING',
+            responseStatus: 'PENDING',
           })
 
           const createdMessageId = created?.data?.id
@@ -2777,13 +2697,11 @@ function ConversationViewer({
               : message
           )))
 
-          if (!enableProcedureSteering) {
-            markPendingAssistant(
-              targetSessionId,
-              persistedCreatedAt,
-              createdMessageId,
-            )
-          }
+          markPendingAssistant(
+            targetSessionId,
+            persistedCreatedAt,
+            createdMessageId,
+          )
 
           setPromptValue('')
         } catch (error) {
@@ -2832,7 +2750,6 @@ function ConversationViewer({
       clearPendingAssistant,
       getConsoleResponseTarget,
       getConsoleSelectedModel,
-      enableProcedureSteering,
       markAuthUnavailable,
       markPendingAssistant,
       submitHitlResponse,
@@ -3109,6 +3026,7 @@ function ConversationViewer({
                   )
                 )}
                 components={{
+                  Scroller: VirtuosoScroller,
                   Footer: () => (!showThinkingPlaceholder ? <div aria-hidden className="h-8" /> : null),
                 }}
               />
@@ -3139,24 +3057,22 @@ function ConversationViewer({
                 />
             </PromptInputBody>
             <PromptInputFooter className="justify-between gap-2">
-              {!enableProcedureSteering && (
-                <PromptInputSelect
-                  value={selectedModel}
-                  onValueChange={setSelectedModel}
-                  disabled={isPromptDisabled || isPromptSubmitting}
-                >
-                  <PromptInputSelectTrigger className="h-8 w-40 text-xs">
-                    <PromptInputSelectValue placeholder="Model" />
-                  </PromptInputSelectTrigger>
-                  <PromptInputSelectContent>
-                    {CONSOLE_CHAT_MODEL_OPTIONS.map((option) => (
-                      <PromptInputSelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </PromptInputSelectItem>
-                    ))}
-                  </PromptInputSelectContent>
-                </PromptInputSelect>
-              )}
+              <PromptInputSelect
+                value={selectedModel}
+                onValueChange={setSelectedModel}
+                disabled={isPromptDisabled || isPromptSubmitting}
+              >
+                <PromptInputSelectTrigger className="h-8 w-40 text-xs">
+                  <PromptInputSelectValue placeholder="Model" />
+                </PromptInputSelectTrigger>
+                <PromptInputSelectContent>
+                  {CONSOLE_CHAT_MODEL_OPTIONS.map((option) => (
+                    <PromptInputSelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </PromptInputSelectItem>
+                  ))}
+                </PromptInputSelectContent>
+              </PromptInputSelect>
               <PromptInputSubmit disabled={isPromptDisabled || !promptValue.trim() || isPromptSubmitting} />
             </PromptInputFooter>
           </PromptInput>
