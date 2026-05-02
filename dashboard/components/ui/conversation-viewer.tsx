@@ -246,6 +246,7 @@ export interface ConversationViewerProps {
   defaultSidebarWidth?: number
   forceProcedureIdForDispatch?: string
   defaultAccountIdForNewSession?: string
+  enableProcedureSteering?: boolean
 }
 
 
@@ -1412,6 +1413,7 @@ function ConversationViewer({
   defaultSidebarWidth = 320,
   forceProcedureIdForDispatch,
   defaultAccountIdForNewSession,
+  enableProcedureSteering = false,
 }: ConversationViewerProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(defaultSidebarCollapsed)
   const [sidebarWidth, setSidebarWidth] = useState(() => Math.min(Math.max(defaultSidebarWidth, 240), 520))
@@ -2664,7 +2666,9 @@ function ConversationViewer({
 
         const clientSendStartedAt = new Date().toISOString()
         const nowIso = new Date().toISOString()
-        const responseTarget = getConsoleResponseTarget()
+        const responseTarget = enableProcedureSteering
+          ? targetSessionProcedureId
+          : getConsoleResponseTarget()
         const optimisticMessageId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         const optimisticMessage: ChatMessage = {
           id: optimisticMessageId,
@@ -2676,7 +2680,7 @@ function ConversationViewer({
           humanInteraction: 'CHAT',
           content: nextValue,
           responseTarget,
-          responseStatus: 'PENDING',
+          responseStatus: enableProcedureSteering ? 'COMPLETED' : 'PENDING',
           createdAt: nowIso,
         }
 
@@ -2692,15 +2696,32 @@ function ConversationViewer({
         let messagePersisted = false
         try {
           const client = getClient()
-          const dispatchMessageText = nextValue.length > 4000
-            ? `${nextValue.slice(0, 4000)}…`
-            : nextValue
-          const model = getConsoleSelectedModel()
-          const clientHistorySnapshot = buildClientHistorySnapshot(
-            messages,
-            targetSessionId,
-            nextValue,
-          )
+          const metadata = enableProcedureSteering
+            ? {
+                source: 'procedure-steering-input',
+                scope: 'all_agents',
+                sent_at: nowIso,
+              }
+            : {
+                source: 'console-prompt-input',
+                sent_at: nowIso,
+                model: {
+                  id: getConsoleSelectedModel(),
+                },
+                instrumentation: {
+                  client_send_started_at: clientSendStartedAt,
+                  client_prompt_length_chars: nextValue.length,
+                  client_user_message_text: nextValue.length > 4000
+                    ? `${nextValue.slice(0, 4000)}…`
+                    : nextValue,
+                  client_selected_model: getConsoleSelectedModel(),
+                  client_history_snapshot: buildClientHistorySnapshot(
+                    messages,
+                    targetSessionId,
+                    nextValue,
+                  ),
+                },
+              }
           const created = await (client.models.ChatMessage.create as any)({
             accountId: targetSessionAccountId,
             sessionId: targetSessionId,
@@ -2709,22 +2730,9 @@ function ConversationViewer({
             messageType: 'MESSAGE',
             humanInteraction: 'CHAT',
             content: nextValue,
-            metadata: JSON.stringify({
-              source: 'console-prompt-input',
-              sent_at: nowIso,
-              model: {
-                id: model,
-              },
-              instrumentation: {
-                client_send_started_at: clientSendStartedAt,
-                client_prompt_length_chars: nextValue.length,
-                client_user_message_text: dispatchMessageText,
-                client_selected_model: model,
-                client_history_snapshot: clientHistorySnapshot,
-              },
-            }),
+            metadata: JSON.stringify(metadata),
             responseTarget,
-            responseStatus: 'PENDING',
+            responseStatus: enableProcedureSteering ? 'COMPLETED' : 'PENDING',
           })
 
           const createdMessageId = created?.data?.id
@@ -2740,11 +2748,13 @@ function ConversationViewer({
               : message
           )))
 
-          markPendingAssistant(
-            targetSessionId,
-            persistedCreatedAt,
-            createdMessageId,
-          )
+          if (!enableProcedureSteering) {
+            markPendingAssistant(
+              targetSessionId,
+              persistedCreatedAt,
+              createdMessageId,
+            )
+          }
 
           setPromptValue('')
         } catch (error) {
@@ -2793,6 +2803,7 @@ function ConversationViewer({
       clearPendingAssistant,
       getConsoleResponseTarget,
       getConsoleSelectedModel,
+      enableProcedureSteering,
       markAuthUnavailable,
       markPendingAssistant,
       submitHitlResponse,
@@ -3099,22 +3110,24 @@ function ConversationViewer({
                 />
             </PromptInputBody>
             <PromptInputFooter className="justify-between gap-2">
-              <PromptInputSelect
-                value={selectedModel}
-                onValueChange={setSelectedModel}
-                disabled={isPromptDisabled || isPromptSubmitting}
-              >
-                <PromptInputSelectTrigger className="h-8 w-40 text-xs">
-                  <PromptInputSelectValue placeholder="Model" />
-                </PromptInputSelectTrigger>
-                <PromptInputSelectContent>
-                  {CONSOLE_CHAT_MODEL_OPTIONS.map((option) => (
-                    <PromptInputSelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </PromptInputSelectItem>
-                  ))}
-                </PromptInputSelectContent>
-              </PromptInputSelect>
+              {!enableProcedureSteering && (
+                <PromptInputSelect
+                  value={selectedModel}
+                  onValueChange={setSelectedModel}
+                  disabled={isPromptDisabled || isPromptSubmitting}
+                >
+                  <PromptInputSelectTrigger className="h-8 w-40 text-xs">
+                    <PromptInputSelectValue placeholder="Model" />
+                  </PromptInputSelectTrigger>
+                  <PromptInputSelectContent>
+                    {CONSOLE_CHAT_MODEL_OPTIONS.map((option) => (
+                      <PromptInputSelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </PromptInputSelectItem>
+                    ))}
+                  </PromptInputSelectContent>
+                </PromptInputSelect>
+              )}
               <PromptInputSubmit disabled={isPromptDisabled || !promptValue.trim() || isPromptSubmitting} />
             </PromptInputFooter>
           </PromptInput>

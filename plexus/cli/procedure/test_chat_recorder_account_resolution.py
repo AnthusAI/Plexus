@@ -772,3 +772,78 @@ async def test_record_message_uses_chat_stream_retry_policy():
     message_input = client.execute.call_args.args[1]["input"]
     assert message_input["responseTarget"] == "proc-write-1"
     assert message_input["responseStatus"] == "COMPLETED"
+
+
+def test_get_steering_messages_returns_flat_filtered_rows():
+    client = Mock()
+    client.execute.return_value = {
+        "data": {
+            "listChatMessageByProcedureIdAndCreatedAt": {
+                "items": [
+                    {
+                        "id": "m-steer",
+                        "accountId": "acct-1",
+                        "sessionId": "sess-1",
+                        "procedureId": "proc-1",
+                        "role": "USER",
+                        "content": "Prioritize reviewer contradiction analysis.",
+                        "messageType": "MESSAGE",
+                        "humanInteraction": "CHAT",
+                        "responseStatus": "COMPLETED",
+                        "metadata": '{"source": "procedure-steering-input", "scope": "all_agents"}',
+                        "createdAt": "2026-04-01T00:00:02.000Z",
+                    },
+                    {
+                        "id": "m-console",
+                        "accountId": "acct-1",
+                        "sessionId": "sess-1",
+                        "procedureId": "proc-1",
+                        "role": "USER",
+                        "content": "Console request",
+                        "messageType": "MESSAGE",
+                        "humanInteraction": "CHAT",
+                        "responseStatus": "COMPLETED",
+                        "metadata": '{"source": "console-prompt-input"}',
+                        "createdAt": "2026-04-01T00:00:03.000Z",
+                    },
+                    {
+                        "id": "m-assistant",
+                        "accountId": "acct-1",
+                        "sessionId": "sess-1",
+                        "procedureId": "proc-1",
+                        "role": "ASSISTANT",
+                        "content": "Assistant text",
+                        "messageType": "MESSAGE",
+                        "humanInteraction": "CHAT_ASSISTANT",
+                        "responseStatus": "COMPLETED",
+                        "metadata": '{"source": "procedure-steering-input", "scope": "all_agents"}',
+                        "createdAt": "2026-04-01T00:00:04.000Z",
+                    },
+                ],
+                "nextToken": None,
+            }
+        }
+    }
+    recorder = ProcedureChatRecorder(client, "proc-1")
+
+    result = recorder.get_steering_messages(
+        after="2026-04-01T00:00:00.000Z",
+        agent_name="report_writer",
+        limit=20,
+    )
+
+    assert result["watermark"] == "2026-04-01T00:00:02.000Z"
+    assert result["messages"] == [
+        {
+            "id": "m-steer",
+            "account_id": "acct-1",
+            "session_id": "sess-1",
+            "procedure_id": "proc-1",
+            "created_at": "2026-04-01T00:00:02.000Z",
+            "content": "Prioritize reviewer contradiction analysis.",
+            "metadata": {"source": "procedure-steering-input", "scope": "all_agents"},
+        }
+    ]
+    variables = client.execute.call_args.args[1]
+    assert variables["procedureId"] == "proc-1"
+    assert variables["createdAt"] == {"gt": "2026-04-01T00:00:00.000Z"}
