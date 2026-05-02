@@ -142,6 +142,10 @@ describe('ProcedureTask optimizer auth flow', () => {
       expect(screen.getAllByTestId('timer-icon')).toHaveLength(1)
     })
 
+    const dispatchRow = screen.getByText('Local').closest('div')
+    expect(dispatchRow).toHaveClass('text-sm', 'text-muted-foreground', 'gap-1')
+    expect(dispatchRow?.querySelector('svg')).toHaveClass('h-4', 'w-4', 'flex-shrink-0')
+
     jest.useRealTimers()
   })
 
