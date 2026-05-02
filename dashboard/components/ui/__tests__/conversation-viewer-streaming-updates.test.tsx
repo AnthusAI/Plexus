@@ -524,6 +524,43 @@ describe("ConversationViewer streaming updates", () => {
     expect(mockGraphql).not.toHaveBeenCalled()
   })
 
+  it("saves procedure steering messages without console dispatch behavior", async () => {
+    render(
+      <ConversationViewer
+        procedureId="proc-1"
+        defaultSidebarCollapsed={false}
+        enableProcedureSteering={true}
+      />
+    )
+
+    await screen.findByText("Hel")
+    expect(screen.queryByText("Model")).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Focus the final summary on reviewer contradictions." },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageCreate).toHaveBeenCalled()
+    })
+
+    const createdMessage = mockChatMessageCreate.mock.calls[0]?.[0]
+    expect(createdMessage.role).toBe("USER")
+    expect(createdMessage.humanInteraction).toBe("CHAT")
+    expect(createdMessage.messageType).toBe("MESSAGE")
+    expect(createdMessage.responseTarget).toBe("proc-1")
+    expect(createdMessage.responseStatus).toBe("COMPLETED")
+    const metadata = JSON.parse(createdMessage.metadata)
+    expect(metadata).toEqual({
+      source: "procedure-steering-input",
+      scope: "all_agents",
+      sent_at: expect.any(String),
+    })
+    expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
+    expect(mockGraphql).not.toHaveBeenCalled()
+  })
+
   it("writes non-default selected model into outgoing metadata", async () => {
     render(
       <ConversationViewer
