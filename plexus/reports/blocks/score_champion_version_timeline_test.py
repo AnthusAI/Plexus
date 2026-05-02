@@ -226,12 +226,20 @@ async def test_single_score_mode_filters_scope(mock_api_client):
         _version("v0"),
         _version("v1", entered_at="2026-04-10T12:00:00+00:00", previous_id="v0"),
     ]
+    evaluations = [
+        _evaluation(
+            "eval-feedback",
+            evaluation_type="feedback",
+            alignment=0.8,
+            created_at="2026-04-11T00:00:00+00:00",
+        )
+    ]
 
     with (
         patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
         patch.object(block, "_resolve_score", new=AsyncMock(return_value=score)),
         patch.object(block, "_fetch_score_versions", new=AsyncMock(return_value=versions)),
-        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=evaluations)),
     ):
         output, _ = await block.generate()
 
@@ -297,7 +305,7 @@ async def test_initial_champion_without_previous_champion_is_omitted_by_default(
 
 
 @pytest.mark.asyncio
-async def test_include_unchanged_keeps_initial_champion_without_previous_champion(mock_api_client):
+async def test_include_unchanged_omits_initial_champion_without_previous_champion_or_metrics(mock_api_client):
     block = ScoreChampionVersionTimeline(
         config={
             "scorecard": "sc-1",
@@ -326,9 +334,62 @@ async def test_include_unchanged_keeps_initial_champion_without_previous_champio
         output, _ = await block.generate()
 
     assert output["include_unchanged"] is True
+    assert output["scores"] == []
+    assert output["summary"]["champion_change_count"] == 0
+    assert output["summary"]["new_champion_count"] == 0
+    assert output["summary"]["scores_with_champion_changes"] == 0
+    assert output["summary"]["scores_with_new_champions"] == 0
+
+
+@pytest.mark.asyncio
+async def test_include_unchanged_keeps_initial_champion_with_evaluations(mock_api_client):
+    block = ScoreChampionVersionTimeline(
+        config={
+            "scorecard": "sc-1",
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-30",
+            "include_unchanged": True,
+        },
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+    scorecard = SimpleNamespace(id="sc-1", name="Scorecard")
+    versions = [
+        _version("v1", entered_at="2026-04-10T12:00:00+00:00", previous_id=None),
+    ]
+    evaluations = [
+        _evaluation(
+            "eval-feedback",
+            evaluation_type="feedback",
+            alignment=0.8,
+            accuracy=90,
+            created_at="2026-04-11T00:00:00+00:00",
+        )
+    ]
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(
+            block,
+            "_resolve_scores_for_mode",
+            new=AsyncMock(return_value=[{"score_id": "score-1", "score_name": "Score 1"}]),
+        ),
+        patch.object(block, "_fetch_score_versions", new=AsyncMock(return_value=versions)),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=evaluations)),
+    ):
+        output, _ = await block.generate()
+
+    assert output["include_unchanged"] is True
     assert len(output["scores"]) == 1
+    assert output["summary"]["champion_change_count"] == 0
+    assert output["summary"]["new_champion_count"] == 1
+    assert output["summary"]["scores_with_champion_changes"] == 0
+    assert output["summary"]["scores_with_new_champions"] == 1
+    assert output["scores"][0]["champion_change_count"] == 0
+    assert output["scores"][0]["new_champion_count"] == 1
     assert output["scores"][0]["points"][0]["version_id"] == "v1"
     assert output["scores"][0]["points"][0]["previous_champion_version_id"] is None
+    assert output["scores"][0]["points"][0]["feedback_evaluation_id"] == "eval-feedback"
     assert output["scores"][0]["diff"]["message"] == "Previous or latest champion version was not available for diff generation."
 
 
@@ -377,6 +438,14 @@ async def test_date_range_normalizes_to_activity_with_one_day_padding(mock_api_c
         _version("v0"),
         _version("v1", entered_at="2026-04-20T12:00:00+00:00", previous_id="v0"),
     ]
+    evaluations = [
+        _evaluation(
+            "eval-feedback",
+            evaluation_type="feedback",
+            alignment=0.8,
+            created_at="2026-04-21T00:00:00+00:00",
+        )
+    ]
 
     with (
         patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
@@ -386,7 +455,7 @@ async def test_date_range_normalizes_to_activity_with_one_day_padding(mock_api_c
             new=AsyncMock(return_value=[{"score_id": "score-1", "score_name": "Score 1"}]),
         ),
         patch.object(block, "_fetch_score_versions", new=AsyncMock(return_value=versions)),
-        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=evaluations)),
     ):
         output, _ = await block.generate()
 
