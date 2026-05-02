@@ -59,6 +59,15 @@ def test_optimizer_yaml_routes_report_generation_to_reporting_agents():
     assert "Write a complete technical analysis" not in code
 
 
+def test_optimizer_yaml_uses_central_agent_steering_not_mailbox_polling():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "Phase 4: Mailbox check" not in code
+    assert "last_mailbox_check" not in code
+    assert "[User guidance injected mid-run]" not in code
+
+
 def test_optimizer_yaml_uses_dedicated_hypothesis_planner_and_agent_model_overrides():
     config = _load_optimizer_config()
     code = config["code"]

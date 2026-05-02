@@ -238,7 +238,7 @@ def test_dispatch_routes_score_to_direct_handlers() -> None:
 
 
 def test_dispatch_routes_procedure_reads_to_direct_handlers() -> None:
-    for method in ("list", "info", "chat_sessions", "chat_messages"):
+    for method in ("list", "info", "chat_sessions", "chat_messages", "steering_messages"):
         assert execute.DIRECT_HANDLERS[("procedure", method)] == "_call_procedure_read"
         assert ("procedure", method) not in execute.MCP_TOOL_MAP
 
@@ -246,7 +246,7 @@ def test_dispatch_routes_procedure_reads_to_direct_handlers() -> None:
 def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
     monkeypatch,
 ) -> None:
-    """plexus.procedure.list/info/chat_sessions/chat_messages must NOT loop back."""
+    """plexus.procedure read methods must NOT loop back."""
 
     monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "call-criteria")
 
@@ -272,6 +272,7 @@ def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
             "info": make_reader("info"),
             "chat_sessions": make_reader("chat_sessions"),
             "chat_messages": make_reader("chat_messages"),
+            "steering_messages": make_reader("steering_messages"),
         },
     )
 
@@ -279,18 +280,21 @@ def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
     facade.procedure.info({"id": "proc-1"})
     facade.procedure.chat_sessions({"id": "proc-1", "limit": 2})
     facade.procedure.chat_messages({"id": "proc-1", "session_id": "session-1"})
+    facade.procedure.steering_messages({"id": "proc-1", "agent_name": "report_writer"})
 
     assert [m for m, _ in received] == [
         "list",
         "info",
         "chat_sessions",
         "chat_messages",
+        "steering_messages",
     ]
     assert facade.api_calls == [
         "plexus.procedure.list",
         "plexus.procedure.info",
         "plexus.procedure.chat_sessions",
         "plexus.procedure.chat_messages",
+        "plexus.procedure.steering_messages",
     ]
 
 

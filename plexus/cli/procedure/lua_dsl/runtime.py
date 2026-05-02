@@ -574,7 +574,8 @@ class LuaDSLRuntime:
                 tool_primitive=self.tool_primitive,
                 stop_primitive=self.stop_primitive,
                 iterations_primitive=self.iterations_primitive,
-                chat_recorder=chat_recorder
+                chat_recorder=chat_recorder,
+                state_primitive=self.state_primitive
             )
 
             self.agents[agent_name] = agent_primitive
