@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "00102999-95e2-4017-9a12-42ae7abf430e",
+  "issue_id": "plx-736b785f-4efd-406f-9782-cd04bac2dcf5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-02T17:32:46.023Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "EvaluationTask detail baseline and regression baseline rows should use the same standard related-resource layout as Procedure and Score Version rows.\n\nBehavior spec:\nFeature: EvaluationTask baseline related-resource layout\nScenario: Baseline evaluation links render consistently\nGiven an EvaluationTask is shown in detail mode with baseline and regression baseline evaluation IDs\nWhen the baseline related-resource cards render\nThen each baseline row shows the link icon inline next to the baseline identifier\nAnd each row reserves the right metadata area for timestamp metadata when available\nAnd the layout matches the standard RelatedResourceCard behavior used by Procedure and Score Version links.\n\nDefinition of Done:\n- Baseline and regression baseline links use inline related-resource link placement.\n- Baseline rows share the same RelatedResourceCard timing/link API where applicable.\n- Focused EvaluationTask tests cover the layout.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+    "priority": 2,
+    "status": "open",
+    "title": "Standardize EvaluationTask baseline related links"
+  }
+}

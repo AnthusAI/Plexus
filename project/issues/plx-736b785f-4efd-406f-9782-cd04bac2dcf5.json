@@ -1,0 +1,37 @@
+{
+  "id": "plx-736b785f-4efd-406f-9782-cd04bac2dcf5",
+  "title": "Standardize EvaluationTask baseline related links",
+  "description": "EvaluationTask detail baseline and regression baseline rows should use the same standard related-resource layout as Procedure and Score Version rows.\n\nBehavior spec:\nFeature: EvaluationTask baseline related-resource layout\nScenario: Baseline evaluation links render consistently\nGiven an EvaluationTask is shown in detail mode with baseline and regression baseline evaluation IDs\nWhen the baseline related-resource cards render\nThen each baseline row shows the link icon inline next to the baseline identifier\nAnd each row reserves the right metadata area for timestamp metadata when available\nAnd the layout matches the standard RelatedResourceCard behavior used by Procedure and Score Version links.\n\nDefinition of Done:\n- Baseline and regression baseline links use inline related-resource link placement.\n- Baseline rows share the same RelatedResourceCard timing/link API where applicable.\n- Focused EvaluationTask tests cover the layout.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6472a59e-65cf-4c68-bced-6d2d879d1cf4",
+      "author": "ryan",
+      "text": "Starting follow-up fix. Scope: EvaluationTask detail baseline and regression baseline RelatedResourceCard usages only, plus focused test coverage. Unrelated branch changes will be left untouched.",
+      "created_at": "2026-05-02T17:32:49.582372Z"
+    },
+    {
+      "id": "b4f59361-2539-4110-89ab-215ecdf00581",
+      "author": "ryan",
+      "text": "Implemented locally. Baseline and current best baseline RelatedResourceCard usages now set inlineLink=true and pass fetched evaluation createdAt values through rightTimestamp. Baseline evaluation GraphQL queries now request createdAt. Added focused test coverage for inline baseline links plus per-card right-side timestamps. Verification: npm test -- EvaluationTask.category-filter.test.tsx passed with existing act warnings.",
+      "created_at": "2026-05-02T17:33:54.013938Z"
+    },
+    {
+      "id": "77871b5c-5da2-4205-a367-7a44344553f6",
+      "author": "ryan",
+      "text": "Follow-up consistency fix: Procedure related-resource fallback now uses shortHash(procedureId) instead of rendering the full procedure ID when the procedure name is unavailable. Added focused coverage for an unnamed procedure ID to assert the shortened hash text appears and the full ID does not. Verification: npm test -- EvaluationTask.category-filter.test.tsx passed with existing act warnings.",
+      "created_at": "2026-05-02T17:34:37.811179Z"
+    }
+  ],
+  "created_at": "2026-05-02T17:32:46.022906Z",
+  "updated_at": "2026-05-02T17:46:27.649547Z",
+  "closed_at": "2026-05-02T17:46:27.649547Z",
+  "custom": {}
+}
