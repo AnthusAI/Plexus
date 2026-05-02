@@ -288,6 +288,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("procedure_list", "procedure", "list"),
     ("procedure_chat_sessions", "procedure", "chat_sessions"),
     ("procedure_chat_messages", "procedure", "chat_messages"),
+    ("procedure_steering_messages", "procedure", "steering_messages"),
     ("procedure_run", "procedure", "run"),
     ("procedure_optimize", "procedure", "optimize"),
     ("procedure_continue", "procedure", "continue"),
@@ -318,6 +319,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("procedures", "procedure", "list"),
     ("procedure_sessions", "procedure", "chat_sessions"),
     ("procedure_messages", "procedure", "chat_messages"),
+    ("procedure_steering", "procedure", "steering_messages"),
 )
 
 # Long-running operations require handle/streaming semantics that the v0 prototype
@@ -377,6 +379,7 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("procedure", "info"): "_call_procedure_read",
     ("procedure", "chat_sessions"): "_call_procedure_read",
     ("procedure", "chat_messages"): "_call_procedure_read",
+    ("procedure", "steering_messages"): "_call_procedure_read",
     ("procedure", "run"): "_call_procedure_run",
     ("procedure", "optimize"): "_call_procedure_run",
     ("procedure", "continue"): "_call_procedure_run",
@@ -909,6 +912,25 @@ def _default_procedure_chat_messages(args: dict[str, Any]) -> dict[str, Any]:
         },
         "sessions": processed_sessions,
     }
+
+
+def _default_procedure_steering_messages(args: dict[str, Any]) -> dict[str, Any]:
+    """Return flat procedure steering messages for runtime agent injection."""
+
+    from plexus.cli.procedure.chat_recorder import ProcedureChatRecorder
+    from plexus.dashboard.api.client import PlexusDashboardClient
+
+    procedure_id = args.get("procedure_id") or args.get("id")
+    if not procedure_id:
+        raise ValueError("plexus.procedure.steering_messages requires id or procedure_id")
+
+    recorder = ProcedureChatRecorder(PlexusDashboardClient(), str(procedure_id))
+    result = recorder.get_steering_messages(
+        after=args.get("after"),
+        agent_name=args.get("agent_name"),
+        limit=int(args.get("limit") or 50),
+    )
+    return {"success": True, "procedure_id": str(procedure_id), **result}
 
 
 def _default_feedback_alignment(args: dict[str, Any]) -> dict[str, Any]:
@@ -2924,6 +2946,9 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
                 cmd.append("--include-item-acceptance-rate")
             if block_config.get("max_items") is not None:
                 cmd += ["--max-items", str(block_config["max_items"])]
+        if block_class == "ScoreChampionVersionTimeline":
+            if block_config.get("include_unchanged"):
+                cmd.append("--include-unchanged")
         if fresh:
             cmd.append("--fresh")
 
@@ -4556,6 +4581,7 @@ class PlexusRuntimeModule:
             "info": _default_procedure_info,
             "chat_sessions": _default_procedure_chat_sessions,
             "chat_messages": _default_procedure_chat_messages,
+            "steering_messages": _default_procedure_steering_messages,
         }
         if procedure_listers:
             default_procedure_readers.update(procedure_listers)
@@ -4915,6 +4941,7 @@ class PlexusRuntimeModule:
                       "block_config": {**parsed.get("block_config", {}), **{
                           k: parsed[k] for k in (
                               "scorecard", "score", "days", "start_date", "end_date",
+                              "include_unchanged",
                           ) if k in parsed
                       }}}
 

@@ -639,6 +639,129 @@ class ProcedureChatRecorder:
 
         return items
 
+    @staticmethod
+    def _parse_metadata(value: Any) -> Dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str) and value.strip():
+            try:
+                parsed = json.loads(value)
+            except Exception:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return {}
+
+    def get_steering_messages(
+        self,
+        *,
+        after: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        """Return procedure steering messages created after the supplied watermark."""
+        procedure_id = str(self.procedure_id or "").strip()
+        if not procedure_id:
+            return {"messages": [], "watermark": after or ""}
+
+        after_value = str(after or "1970-01-01T00:00:00.000Z")
+        query = """
+        query ListProcedureSteeringMessages(
+            $procedureId: String!
+            $createdAt: ModelStringKeyConditionInput
+            $limit: Int
+            $nextToken: String
+        ) {
+            listChatMessageByProcedureIdAndCreatedAt(
+                procedureId: $procedureId
+                createdAt: $createdAt
+                sortDirection: ASC
+                limit: $limit
+                nextToken: $nextToken
+            ) {
+                items {
+                    id
+                    accountId
+                    sessionId
+                    procedureId
+                    role
+                    content
+                    messageType
+                    humanInteraction
+                    metadata
+                    createdAt
+                }
+                nextToken
+            }
+        }
+        """
+
+        messages: List[Dict[str, Any]] = []
+        watermark = after or ""
+        next_token: Optional[str] = None
+        remaining = max(1, int(limit or 50))
+
+        while remaining > 0:
+            result = self.client.execute(
+                query,
+                {
+                    "procedureId": procedure_id,
+                    "createdAt": {"gt": after_value},
+                    "limit": min(remaining, 100),
+                    "nextToken": next_token,
+                },
+            )
+            if isinstance(result, dict) and result.get("errors"):
+                raise RuntimeError(f"GraphQL error listing steering messages: {result['errors']}")
+
+            payload = self._graphql_field(result, "listChatMessageByProcedureIdAndCreatedAt")
+            if not isinstance(payload, dict):
+                break
+
+            for item in payload.get("items") or []:
+                if not isinstance(item, dict):
+                    continue
+                metadata = self._parse_metadata(item.get("metadata"))
+                if metadata.get("source") != "procedure-steering-input":
+                    continue
+                if str(item.get("role") or "").upper() != "USER":
+                    continue
+                if str(item.get("messageType") or "MESSAGE").upper() != "MESSAGE":
+                    continue
+                if str(item.get("humanInteraction") or "").upper() != "CHAT":
+                    continue
+
+                content = item.get("content")
+                if not isinstance(content, str) or not content.strip():
+                    continue
+
+                created_at = str(item.get("createdAt") or "")
+                target_agents = metadata.get("target_agents")
+                if isinstance(target_agents, list) and agent_name:
+                    normalized_targets = {str(target) for target in target_agents}
+                    if "all_agents" not in normalized_targets and str(agent_name) not in normalized_targets:
+                        continue
+
+                messages.append({
+                    "id": item.get("id"),
+                    "account_id": item.get("accountId"),
+                    "session_id": item.get("sessionId"),
+                    "procedure_id": item.get("procedureId"),
+                    "created_at": created_at,
+                    "content": content.strip(),
+                    "metadata": metadata,
+                })
+                if created_at and created_at > watermark:
+                    watermark = created_at
+                remaining -= 1
+                if remaining <= 0:
+                    break
+
+            next_token = payload.get("nextToken")
+            if not next_token:
+                break
+
+        return {"messages": messages, "watermark": watermark}
+
     def get_console_session_history(
         self,
         account_id: Optional[str] = None,
@@ -906,19 +1029,7 @@ class ProcedureChatRecorder:
                 )
                 return self.session_id
 
-            is_console_context = isinstance(context, dict) and any(
-                context.get(key)
-                for key in (
-                    'console_user_message',
-                    'console_session_history',
-                    'console_chat',
-                )
-            )
-            console_chat_metadata = (
-                self._get_latest_console_chat_metadata(account_id)
-                if is_console_context
-                else None
-            )
+            console_chat_metadata = self._get_latest_console_chat_metadata(account_id)
             console_session_id = None
             if isinstance(console_chat_metadata, dict):
                 session_id = console_chat_metadata.get('session_id')

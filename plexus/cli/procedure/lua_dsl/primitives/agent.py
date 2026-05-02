@@ -140,7 +140,7 @@ class AgentPrimitive:
             stop_primitive: StopPrimitive instance for stop detection
             iterations_primitive: IterationsPrimitive for tracking turns
             chat_recorder: Optional ProcedureChatRecorder for logging conversations
-            state_primitive: Optional StatePrimitive for shared procedure state
+            state_primitive: Optional StatePrimitive for steering watermarks
         """
         self.name = name
         self.system_prompt = system_prompt
@@ -464,55 +464,55 @@ class AgentPrimitive:
         logger.debug(f"Injected message into agent '{self.name}' conversation")
 
     def _inject_pending_steering(self) -> None:
-        """Inject new procedure steering notes once for this agent before the next LLM call."""
+        """Inject new procedure steering notes once per agent before an LLM call."""
         if not self.chat_recorder or not self.state_primitive:
             return
-        get_messages = getattr(self.chat_recorder, 'get_steering_messages', None)
-        if not callable(get_messages):
+
+        getter = getattr(self.chat_recorder, "get_steering_messages", None)
+        if not callable(getter):
             return
 
         watermark_key = f"procedure_steering_watermark:{self.name}"
+        after = self.state_primitive.get(watermark_key, "")
         try:
-            after = self.state_primitive.get(watermark_key) or ""
-            result = get_messages(
-                after=after,
-                agent_name=self.name,
-                limit=20,
-            )
-            messages = result.get('messages', []) if isinstance(result, dict) else []
-            watermark = result.get('watermark') if isinstance(result, dict) else None
-            if not messages:
-                if watermark and watermark != after:
-                    self.state_primitive.set(watermark_key, watermark)
-                return
-
-            try:
-                from langchain_core.messages import SystemMessage
-            except ImportError:  # pragma: no cover - compatibility only
-                from langchain.schema import SystemMessage
-
-            lines = ["=== USER STEERING RECEIVED MID-RUN ==="]
-            for index, message in enumerate(messages, start=1):
-                created_at = message.get('created_at') or 'unknown time'
-                content = str(message.get('content') or '').strip()
-                lines.append(f"{index}. [{created_at}] {content}")
-            lines.append(
-                "Treat this as advisory operator guidance for this and future procedure work."
-            )
-            lines.append("=== END USER STEERING ===")
-            self._conversation.append(SystemMessage(content="\n".join(lines)))
-            self.state_primitive.set(watermark_key, watermark or messages[-1].get('created_at') or after)
-            logger.info(
-                "Injected %d steering message(s) into agent '%s'",
-                len(messages),
-                self.name,
-            )
+            result = getter(after=after, agent_name=self.name, limit=20)
         except Exception as exc:
-            logger.warning(
-                "Failed to inject procedure steering into agent '%s': %s",
-                self.name,
-                exc,
-            )
+            logger.warning("Could not load procedure steering for agent '%s': %s", self.name, exc)
+            return
+
+        messages = result.get("messages") if isinstance(result, dict) else None
+        if not isinstance(messages, list) or not messages:
+            return
+
+        parts = ["=== USER STEERING RECEIVED MID-RUN ==="]
+        injected_count = 0
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            created_at = str(message.get("created_at") or "")
+            content = str(message.get("content") or "").strip()
+            if not content:
+                continue
+            injected_count += 1
+            timestamp = f" [{created_at}]" if created_at else ""
+            parts.append(f"{injected_count}.{timestamp} {content}")
+
+        if injected_count == 0:
+            return
+
+        parts.append("Treat this as advisory operator guidance for this and future procedure work.")
+        parts.append("=== END USER STEERING ===")
+
+        try:
+            from langchain_core.messages import SystemMessage
+        except ImportError:  # pragma: no cover - compatibility only
+            from langchain.schema import SystemMessage
+
+        self._conversation.append(SystemMessage(content="\n".join(parts)))
+        watermark = result.get("watermark") if isinstance(result, dict) else None
+        if isinstance(watermark, str) and watermark:
+            self.state_primitive.set(watermark_key, watermark)
+        logger.info("Injected %d steering message(s) into agent '%s'", injected_count, self.name)
 
     def _execute_tool_calls(self, tool_calls: List[Any]) -> List[Dict[str, Any]]:
         """
