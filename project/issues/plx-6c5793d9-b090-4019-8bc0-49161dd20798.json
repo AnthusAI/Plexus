@@ -1,0 +1,61 @@
+{
+  "id": "plx-6c5793d9-b090-4019-8bc0-49161dd20798",
+  "title": "Run next Suco optimizer candidate batch",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "85638634-4ea2-4fa3-b076-9eb6c0d2eb04",
+      "author": "ryan",
+      "text": "Selected five no-prior-optimizer Suco candidates by 90-day feedback volume: Address, Project Timeline, and Credit Rating Metadata AI (200 capped), Home Value AI (200 capped), Proper Questioning- AI (200 capped), DNC SA - AI v2.0 (129), and Early Transfer AI (91). Dispatching each for 4 cycles, 200 max samples, 90-day feedback window.",
+      "created_at": "2026-05-02T18:07:43.821556Z"
+    },
+    {
+      "id": "89d69366-4555-46de-9358-7891a81f3348",
+      "author": "ryan",
+      "text": "Dispatched five optimizer procedures via CLI MCP harness with max_iterations=4, max_samples=200, days=90. Procedures: Address/Project Timeline/Credit Rating Metadata AI -> 709a016a-d223-4040-bf70-92bdf3e53ce2 (pid 71343); Home Value AI -> b3b15ea9-ffd8-4c9b-8170-016d1dcf9576 (pid 71375); Proper Questioning- AI -> b74b64a6-3a95-48c2-9fa2-d38e1e5508cc (pid 71450); DNC SA - AI v2.0 -> d9d4b83c-b75f-4bc1-bd4a-894e68cfe0c8 (pid 71477); Early Transfer AI -> d281a5e0-8001-40cf-845d-8539bf4764f5 (pid 71566). Verified all five subprocesses are live and routed into the Tactus runtime from direct CLI logs.",
+      "created_at": "2026-05-02T18:09:41.167168Z"
+    },
+    {
+      "id": "54c0f403-885a-4020-8088-b1dd2836d0d0",
+      "author": "ryan",
+      "text": "Diagnosed five stalled Suco optimizer procedure parents. Each parent was alive, but both baseline evaluation child processes were zombies, so handle polling treated dead children as running because os.kill(pid, 0) succeeds for zombies. Added runtime fix to reap exited children and fail/complete handles promptly; focused execute_tactus tests pass.",
+      "created_at": "2026-05-02T18:49:40.965214Z"
+    },
+    {
+      "id": "76d0edf8-e83d-44a8-8a2d-fcd58b62a062",
+      "author": "ryan",
+      "text": "Retried the five Suco optimizer candidates after the zombie-process handle fix. New procedure IDs: Address metadata 07120bf4, Home Value 9870b4ce, Proper Questioning d0a2e58a, DNC SA 52d418f1, Early Transfer 6d1ecea3. All launched with 4 cycles, 200 samples, 90 days through the CLI MCP harness against the current working tree.",
+      "created_at": "2026-05-02T18:51:01.101666Z"
+    },
+    {
+      "id": "e25f716f-0e42-4de1-b99d-1695089ea14d",
+      "author": "ryan",
+      "text": "Checking optimizer promotion safety: verifying the feedback optimizer YAML and execute_tactus runtime/tool surface do not allow autonomous champion promotion.",
+      "created_at": "2026-05-02T19:04:45.885104Z"
+    },
+    {
+      "id": "4e8c0b3b-8ef0-41c8-bbcd-561850a04ad2",
+      "author": "ryan",
+      "text": "Promotion safety hardening: verified optimizer YAML does not call champion promotion, removed plexus.score.set_champion from execute_tactus helper bindings and direct runtime handlers, verified api.list no longer exposes it and direct plexus.score.set_champion calls fail as nil. Stopped the five optimizer runs launched before the hardening and restarted them from the patched runtime: 12a2d4ae, 18305dad, fc6cd08e, db83e85a, 5f44ee55.",
+      "created_at": "2026-05-02T19:07:19.200619Z"
+    },
+    {
+      "id": "84c7d32e-df4d-4c4d-91d6-2fb83f71c940",
+      "author": "ryan",
+      "text": "Completed promotion safety check and hardening. execute_tactus api.list verified plexus.score no longer includes set_champion; a direct plexus.score.set_champion call returns nil-field failure. Removed stale docs that advertised promotion from execute_tactus. Regression tests pass: MCP/tools/tactus_runtime/execute_test.py plus optimizer config tests.",
+      "created_at": "2026-05-02T19:08:48.553247Z"
+    }
+  ],
+  "created_at": "2026-05-02T18:05:03.281286Z",
+  "updated_at": "2026-05-02T19:08:48.553247Z",
+  "closed_at": null,
+  "custom": {}
+}

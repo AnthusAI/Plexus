@@ -258,12 +258,10 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("score_info", "score", "info"),
     ("score_evaluations", "score", "evaluations"),
     ("score_predict", "score", "predict"),
-    ("score_set_champion", "score", "set_champion"),
     ("score_contradictions", "score", "contradictions"),
     ("score_pull", "score", "pull"),
     ("score_update", "score", "update"),
     ("score_test", "score", "test"),
-    ("set_champion", "score", "set_champion"),
     ("item_info", "item", "info"),
     ("item_last", "item", "last"),
     ("feedback_find", "feedback", "find"),
@@ -355,7 +353,6 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("score", "info"): "_call_score",
     ("score", "evaluations"): "_call_score",
     ("score", "predict"): "_call_score",
-    ("score", "set_champion"): "_call_score",
     ("score", "contradictions"): "_call_score",
     ("score", "pull"): "_call_score",
     ("score", "update"): "_call_score",
@@ -3389,6 +3386,40 @@ TERMINAL_HANDLE_STATUSES = frozenset(
 )
 
 
+def _exited_process_status(process_id: Any) -> dict[str, Any] | None:
+    try:
+        pid = int(process_id)
+    except (TypeError, ValueError):
+        return None
+
+    try:
+        waited_pid, status = os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return {"process_status": "not_running"}
+        except PermissionError:
+            return {"process_status": "running_unknown"}
+        return None
+    except ProcessLookupError:
+        return {"process_status": "not_running"}
+
+    if waited_pid == 0:
+        return None
+
+    try:
+        exit_code = os.waitstatus_to_exitcode(status)
+    except ValueError:
+        exit_code = None
+
+    return {
+        "process_status": "exited",
+        "process_exit_status": status,
+        "process_exit_code": exit_code,
+    }
+
+
 def _normalize_handle_status(status: Any) -> str:
     normalized = str(status or "running").strip().lower()
     status_map = {
@@ -4512,7 +4543,6 @@ class PlexusRuntimeModule:
         score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_evaluations: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_predict: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
-        score_set_champion: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_contradictions: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_pull: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_update: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
@@ -4559,9 +4589,6 @@ class PlexusRuntimeModule:
             score_evaluations if score_evaluations is not None else _default_score_evaluations
         )
         self._score_predict = score_predict if score_predict is not None else _default_score_predict
-        self._score_set_champion = (
-            score_set_champion if score_set_champion is not None else _default_score_set_champion
-        )
         self._score_contradictions = (
             score_contradictions if score_contradictions is not None else _default_score_contradictions
         )
@@ -4714,8 +4741,8 @@ class PlexusRuntimeModule:
 
     def _call_score(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "score" or method not in {
-            "info", "evaluations", "predict", "set_champion", "contradictions",
-            "pull", "update", "test",
+            "info", "evaluations", "predict", "contradictions", "pull", "update",
+            "test",
         }:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
@@ -4738,7 +4765,9 @@ class PlexusRuntimeModule:
                 return self._score_update(parsed)
             if method == "test":
                 return self._score_test(parsed)
-            return self._score_set_champion(parsed)
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
         finally:
             self._budget.record_after("score", method)
 
@@ -5183,6 +5212,22 @@ class PlexusRuntimeModule:
         if record.get("kind") == "evaluation" and not evaluation_id:
             process_id = dispatch_result.get("process_id")
             if process_id:
+                process_status = _exited_process_status(process_id)
+                if process_status:
+                    next_status = (
+                        "failed"
+                        if process_status.get("process_exit_code") not in (0, None)
+                        else "completed_unknown"
+                    )
+                    update = {
+                        "status": next_status,
+                        **process_status,
+                    }
+                    if next_status == "failed":
+                        update["error"] = (
+                            "Evaluation subprocess exited before emitting an evaluation ID."
+                        )
+                    return self._handle_store.update(handle_id, update)
                 try:
                     os.kill(int(process_id), 0)
                 except ProcessLookupError:
@@ -5203,6 +5248,24 @@ class PlexusRuntimeModule:
             return self._handle_store.update(handle_id, {"last_status_error": str(exc)})
 
         status = _normalize_handle_status(evaluation.get("status"))
+        if dispatch_result.get("process_id"):
+            process_status = _exited_process_status(dispatch_result.get("process_id"))
+            if process_status:
+                evaluation = {**evaluation, **process_status}
+            if process_status and status not in TERMINAL_HANDLE_STATUSES:
+                status = (
+                    "failed"
+                    if process_status.get("process_exit_code") not in (0, None)
+                    else "completed_unknown"
+                )
+                evaluation = {
+                    **evaluation,
+                    "error": (
+                        "Evaluation subprocess exited before the evaluation reached a terminal status."
+                        if status == "failed"
+                        else evaluation.get("error")
+                    ),
+                }
         return self._handle_store.update(
             handle_id,
             {
