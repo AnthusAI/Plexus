@@ -271,6 +271,8 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("feedback_latest_update", "feedback", "latest_update"),
     ("acceptance_rate", "report", "acceptance_rate"),
     ("report_acceptance_rate", "report", "acceptance_rate"),
+    ("score_champion_version_timeline", "report", "score_champion_version_timeline"),
+    ("report_score_champion_version_timeline", "report", "score_champion_version_timeline"),
     ("rubric_memory_recent_entries", "rubric_memory", "recent_entries"),
     ("rubric_memory_evidence_pack", "rubric_memory", "evidence_pack"),
     ("rubric_memory_sme_question_gate", "rubric_memory", "sme_question_gate"),
@@ -286,6 +288,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("procedure_list", "procedure", "list"),
     ("procedure_chat_sessions", "procedure", "chat_sessions"),
     ("procedure_chat_messages", "procedure", "chat_messages"),
+    ("procedure_steering_messages", "procedure", "steering_messages"),
     ("procedure_run", "procedure", "run"),
     ("procedure_optimize", "procedure", "optimize"),
     ("procedure_continue", "procedure", "continue"),
@@ -316,6 +319,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("procedures", "procedure", "list"),
     ("procedure_sessions", "procedure", "chat_sessions"),
     ("procedure_messages", "procedure", "chat_messages"),
+    ("procedure_steering", "procedure", "steering_messages"),
 )
 
 # Long-running operations require handle/streaming semantics that the v0 prototype
@@ -367,6 +371,7 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("evaluation", "run"): "_call_evaluation_run",
     ("report", "run"): "_call_report_run",
     ("report", "acceptance_rate"): "_call_report_run",
+    ("report", "score_champion_version_timeline"): "_call_report_run",
     ("report", "configurations_list"): "_call_report_read",
     ("dataset", "build_from_feedback_window"): "_call_dataset",
     ("dataset", "check_associated"): "_call_dataset",
@@ -374,6 +379,7 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("procedure", "info"): "_call_procedure_read",
     ("procedure", "chat_sessions"): "_call_procedure_read",
     ("procedure", "chat_messages"): "_call_procedure_read",
+    ("procedure", "steering_messages"): "_call_procedure_read",
     ("procedure", "run"): "_call_procedure_run",
     ("procedure", "optimize"): "_call_procedure_run",
     ("procedure", "continue"): "_call_procedure_run",
@@ -906,6 +912,25 @@ def _default_procedure_chat_messages(args: dict[str, Any]) -> dict[str, Any]:
         },
         "sessions": processed_sessions,
     }
+
+
+def _default_procedure_steering_messages(args: dict[str, Any]) -> dict[str, Any]:
+    """Return flat procedure steering messages for runtime agent injection."""
+
+    from plexus.cli.procedure.chat_recorder import ProcedureChatRecorder
+    from plexus.dashboard.api.client import PlexusDashboardClient
+
+    procedure_id = args.get("procedure_id") or args.get("id")
+    if not procedure_id:
+        raise ValueError("plexus.procedure.steering_messages requires id or procedure_id")
+
+    recorder = ProcedureChatRecorder(PlexusDashboardClient(), str(procedure_id))
+    result = recorder.get_steering_messages(
+        after=args.get("after"),
+        agent_name=args.get("agent_name"),
+        limit=int(args.get("limit") or 50),
+    )
+    return {"success": True, "procedure_id": str(procedure_id), **result}
 
 
 def _default_feedback_alignment(args: dict[str, Any]) -> dict[str, Any]:
@@ -2904,6 +2929,7 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
             "contradictions" if block_class == "FeedbackContradictions" else
             "acceptance-rate" if block_class == "AcceptanceRate" else
             "correction-rate" if block_class == "CorrectionRate" else
+            "score-champion-version-timeline" if block_class == "ScoreChampionVersionTimeline" else
             "recent",
             "--scorecard", str(block_config.get("scorecard", "")),
         ]
@@ -2920,6 +2946,9 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
                 cmd.append("--include-item-acceptance-rate")
             if block_config.get("max_items") is not None:
                 cmd += ["--max-items", str(block_config["max_items"])]
+        if block_class == "ScoreChampionVersionTimeline":
+            if block_config.get("include_unchanged"):
+                cmd.append("--include-unchanged")
         if fresh:
             cmd.append("--fresh")
 
@@ -4552,6 +4581,7 @@ class PlexusRuntimeModule:
             "info": _default_procedure_info,
             "chat_sessions": _default_procedure_chat_sessions,
             "chat_messages": _default_procedure_chat_messages,
+            "steering_messages": _default_procedure_steering_messages,
         }
         if procedure_listers:
             default_procedure_readers.update(procedure_listers)
@@ -4891,7 +4921,7 @@ class PlexusRuntimeModule:
         return {"status": "success", "cached": raw.get("cached") if isinstance(raw, dict) else None, **data}
 
     def _call_report_run(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "report" or method not in {"run", "acceptance_rate"}:
+        if namespace != "report" or method not in {"run", "acceptance_rate", "score_champion_version_timeline"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -4904,6 +4934,14 @@ class PlexusRuntimeModule:
                           k: parsed[k] for k in (
                               "scorecard", "score", "days", "start_date", "end_date",
                               "include_item_acceptance_rate", "max_items",
+                          ) if k in parsed
+                      }}}
+        if method == "score_champion_version_timeline":
+            parsed = {**parsed, "block_class": "ScoreChampionVersionTimeline",
+                      "block_config": {**parsed.get("block_config", {}), **{
+                          k: parsed[k] for k in (
+                              "scorecard", "score", "days", "start_date", "end_date",
+                              "include_unchanged",
                           ) if k in parsed
                       }}}
 
@@ -5620,9 +5658,9 @@ Runtime ground rules:
 Helper aliases injected before your snippet runs:
 - High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,
   `item`, `last_item`, `feedback`, `feedback_alignment`, `acceptance_rate`,
-  `dataset`, `report`, `report_configs`, `procedure`, `procedures`,
-  `procedure_sessions`, `procedure_messages`, `procedure_continue`,
-  `procedure_branch`.
+  `score_champion_version_timeline`, `dataset`, `report`, `report_configs`,
+  `procedure`, `procedures`, `procedure_sessions`, `procedure_messages`,
+  `procedure_continue`, `procedure_branch`.
 - Canonical `namespace_method`: `scorecards_list`, `score_info`,
   `evaluation_info`, `evaluation_run`, `handle_status`, `handle_await`,
   `handle_cancel`, `docs_list`, `docs_get`, `api_list`, plus one helper

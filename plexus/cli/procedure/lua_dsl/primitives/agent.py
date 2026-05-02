@@ -124,7 +124,8 @@ class AgentPrimitive:
         tool_primitive,
         stop_primitive,
         iterations_primitive,
-        chat_recorder=None
+        chat_recorder=None,
+        state_primitive=None
     ):
         """
         Initialize an agent primitive.
@@ -139,6 +140,7 @@ class AgentPrimitive:
             stop_primitive: StopPrimitive instance for stop detection
             iterations_primitive: IterationsPrimitive for tracking turns
             chat_recorder: Optional ProcedureChatRecorder for logging conversations
+            state_primitive: Optional StatePrimitive for steering watermarks
         """
         self.name = name
         self.system_prompt = system_prompt
@@ -149,6 +151,7 @@ class AgentPrimitive:
         self.stop_primitive = stop_primitive
         self.iterations_primitive = iterations_primitive
         self.chat_recorder = chat_recorder
+        self.state_primitive = state_primitive
 
         # Conversation history
         self._conversation: List[Any] = []
@@ -285,6 +288,8 @@ class AgentPrimitive:
             # Inject additional context if provided
             if options and 'inject' in options:
                 self._inject_message(options['inject'])
+
+            self._inject_pending_steering()
 
             # Increment iteration counter
             self.iterations_primitive.increment()
@@ -457,6 +462,57 @@ class AgentPrimitive:
 
         self._conversation.append(HumanMessage(content=message))
         logger.debug(f"Injected message into agent '{self.name}' conversation")
+
+    def _inject_pending_steering(self) -> None:
+        """Inject new procedure steering notes once per agent before an LLM call."""
+        if not self.chat_recorder or not self.state_primitive:
+            return
+
+        getter = getattr(self.chat_recorder, "get_steering_messages", None)
+        if not callable(getter):
+            return
+
+        watermark_key = f"procedure_steering_watermark:{self.name}"
+        after = self.state_primitive.get(watermark_key, "")
+        try:
+            result = getter(after=after, agent_name=self.name, limit=20)
+        except Exception as exc:
+            logger.warning("Could not load procedure steering for agent '%s': %s", self.name, exc)
+            return
+
+        messages = result.get("messages") if isinstance(result, dict) else None
+        if not isinstance(messages, list) or not messages:
+            return
+
+        parts = ["=== USER STEERING RECEIVED MID-RUN ==="]
+        injected_count = 0
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            created_at = str(message.get("created_at") or "")
+            content = str(message.get("content") or "").strip()
+            if not content:
+                continue
+            injected_count += 1
+            timestamp = f" [{created_at}]" if created_at else ""
+            parts.append(f"{injected_count}.{timestamp} {content}")
+
+        if injected_count == 0:
+            return
+
+        parts.append("Treat this as advisory operator guidance for this and future procedure work.")
+        parts.append("=== END USER STEERING ===")
+
+        try:
+            from langchain_core.messages import SystemMessage
+        except ImportError:  # pragma: no cover - compatibility only
+            from langchain.schema import SystemMessage
+
+        self._conversation.append(SystemMessage(content="\n".join(parts)))
+        watermark = result.get("watermark") if isinstance(result, dict) else None
+        if isinstance(watermark, str) and watermark:
+            self.state_primitive.set(watermark_key, watermark)
+        logger.info("Injected %d steering message(s) into agent '%s'", injected_count, self.name)
 
     def _execute_tool_calls(self, tool_calls: List[Any]) -> List[Dict[str, Any]]:
         """

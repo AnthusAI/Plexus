@@ -195,117 +195,6 @@ def _mcp_tool_result_to_text(result: Any) -> str:
     return str(result)
 
 
-async def _create_console_plexus_dispatch_tool(mcp_client: Any) -> Optional[Any]:
-    """Create the single Console-facing Plexus MCP dispatcher tool."""
-    list_tools = getattr(mcp_client, "list_tools", None)
-    call_tool = getattr(mcp_client, "call_tool", None)
-    if not callable(list_tools) or not callable(call_tool):
-        return None
-
-    mcp_tools = await list_tools()
-    tool_catalog = []
-    for tool in mcp_tools or []:
-        name = _mcp_tool_value(tool, "name")
-        if not name:
-            continue
-        description = " ".join(str(_mcp_tool_value(tool, "description", "") or "").split())
-        if len(description) > 180:
-            description = f"{description[:177]}..."
-        tool_catalog.append((str(name), description))
-
-    if not tool_catalog:
-        return None
-
-    tool_catalog.sort(key=lambda item: item[0])
-    allowed_tool_names = [name for name, _description in tool_catalog]
-    allowed_tool_set = set(allowed_tool_names)
-    catalog_text = "\n".join(
-        f"- {name}: {description}" if description else f"- {name}"
-        for name, description in tool_catalog
-    )
-
-    description = (
-        "Call exactly one Plexus MCP tool by name. Use `tool_name` for the exact "
-        "underlying MCP tool name and `arguments` for that tool's JSON arguments. "
-        "Available Plexus MCP tools:\n"
-        f"{catalog_text}"
-    )
-
-    async def plexus(tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> str:
-        if tool_name not in allowed_tool_set:
-            raise ValueError(
-                f"Unknown Plexus MCP tool '{tool_name}'. Available tools: "
-                f"{', '.join(allowed_tool_names)}"
-            )
-        if arguments is None:
-            arguments = {}
-        elif isinstance(arguments, str):
-            try:
-                parsed_arguments = json.loads(arguments)
-            except json.JSONDecodeError as exc:
-                raise TypeError("`arguments` must be a JSON object") from exc
-            arguments = parsed_arguments
-        if not isinstance(arguments, dict):
-            raise TypeError("`arguments` must be a JSON object")
-
-        result = await call_tool(tool_name, arguments)
-        return _mcp_tool_result_to_text(result)
-
-    from pydantic_ai import Tool
-
-    async def _prepare(_ctx: Any, tool_def: Any) -> Any:
-        from pydantic_ai.tools import ToolDefinition
-
-        return ToolDefinition(
-            name=tool_def.name,
-            description=tool_def.description or "",
-            parameters_json_schema={
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "tool_name": {
-                        "type": "string",
-                        "enum": allowed_tool_names,
-                        "description": "Exact Plexus MCP tool name to call.",
-                    },
-                    "arguments": {
-                        "type": "object",
-                        "description": "JSON arguments for the selected MCP tool.",
-                        "additionalProperties": True,
-                        "default": {},
-                    },
-                },
-                "required": ["tool_name"],
-            },
-        )
-
-    tool = Tool(
-        plexus,
-        name="plexus",
-        description=description,
-        prepare=_prepare,
-    )
-    tool._mcp_input_schema = {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "tool_name": {
-                "type": "string",
-                "enum": allowed_tool_names,
-                "description": "Exact Plexus MCP tool name to call.",
-            },
-            "arguments": {
-                "type": "object",
-                "description": "JSON arguments for the selected MCP tool.",
-                "additionalProperties": True,
-                "default": {},
-            },
-        },
-        "required": ["tool_name"],
-    }
-    return tool
-
-
 def _persist_inference_costs_to_state(storage: Any, procedure_id: str, cost_events: List[Any]) -> None:
     if not cost_events:
         return
@@ -1341,29 +1230,27 @@ async def _execute_tactus(
                 from pydantic_ai.toolsets import FunctionToolset
                 from tactus.adapters.mcp import PydanticAIMCPAdapter
 
-                if procedure_id == CONSOLE_CHAT_BUILTIN_ID:
-                    console_tool = await _create_console_plexus_dispatch_tool(mcp_client_for_bridge)
-                    if console_tool and "plexus" not in runtime.toolset_registry:
-                        runtime.toolset_registry["plexus"] = FunctionToolset(tools=[console_tool])
-                        logger.info("Registered console Plexus dispatcher toolset")
-                else:
-                    mcp_adapter = PydanticAIMCPAdapter(
-                        mcp_client_for_bridge,
-                        runtime=runtime,
+                # Bridge embedded MCP tools into the Tactus toolset registry.
+                # In the `execute_tactus` world we want ONE model-facing tool surface:
+                # a single toolset named "plexus" containing the MCP tools (usually only
+                # `execute_tactus` in local console chat).
+                mcp_adapter = PydanticAIMCPAdapter(
+                    mcp_client_for_bridge,
+                    runtime=runtime,
+                )
+                mcp_tools = await mcp_adapter.load_tools()
+                if mcp_tools and "plexus" not in runtime.toolset_registry:
+                    runtime.toolset_registry["plexus"] = FunctionToolset(tools=mcp_tools)
+                    logger.info(
+                        "Registered bridged MCP toolset 'plexus' with %d tool(s)",
+                        len(mcp_tools),
                     )
-                    mcp_tools = await mcp_adapter.load_tools()
-                    if mcp_tools and "plexus" not in runtime.toolset_registry:
-                        runtime.toolset_registry["plexus"] = FunctionToolset(tools=mcp_tools)
-                        logger.info(
-                            "Registered bridged MCP toolset 'plexus' with %d tool(s)",
-                            len(mcp_tools),
-                        )
-                        # Also register each tool individually so agent configs can reference
-                        # specific tool names directly (e.g., tools: [execute_tactus]).
-                        for tool in mcp_tools:
-                            tool_name = getattr(tool, "name", None)
-                            if tool_name and tool_name not in runtime.toolset_registry:
-                                runtime.toolset_registry[tool_name] = FunctionToolset(tools=[tool])
+                    # Also register each tool individually so agent configs can reference
+                    # specific tool names directly (e.g., tools: [execute_tactus]).
+                    for tool in mcp_tools:
+                        tool_name = getattr(tool, "name", None)
+                        if tool_name and tool_name not in runtime.toolset_registry:
+                            runtime.toolset_registry[tool_name] = FunctionToolset(tools=[tool])
             except Exception as exc:
                 logger.warning("Could not bridge MCP tools into Tactus toolset registry: %s", exc)
 
@@ -1456,8 +1343,25 @@ async def _execute_tactus(
                 except Exception:  # noqa: BLE001
                     pass  # account_id is best-effort; proceed without it
 
-            if not runtime_context.get("console_user_message"):
-                get_console_trigger_message = getattr(chat_recorder, "get_latest_console_trigger_message", None)
+            get_console_trigger_message = getattr(chat_recorder, "get_latest_console_trigger_message", None)
+            get_console_session_history = getattr(chat_recorder, "get_console_session_history", None)
+            is_console_context = (
+                procedure_id == CONSOLE_CHAT_BUILTIN_ID
+                or any(
+                    runtime_context.get(key)
+                    for key in (
+                        "console_user_message",
+                        "console_session_history",
+                        "console_chat",
+                    )
+                )
+                # If the chat recorder supports console-trigger hydration, treat this as
+                # console-like context even when the caller did not pass console keys.
+                or callable(get_console_trigger_message)
+                or callable(get_console_session_history)
+            )
+
+            if is_console_context and not runtime_context.get("console_user_message"):
                 console_trigger_message = (
                     get_console_trigger_message()
                     if callable(get_console_trigger_message)
@@ -1466,8 +1370,7 @@ async def _execute_tactus(
                 if isinstance(console_trigger_message, str) and console_trigger_message.strip():
                     runtime_context["console_user_message"] = console_trigger_message.strip()
 
-            if not runtime_context.get("console_session_history"):
-                get_console_session_history = getattr(chat_recorder, "get_console_session_history", None)
+            if is_console_context and not runtime_context.get("console_session_history"):
                 console_session_history = (
                     get_console_session_history()
                     if callable(get_console_session_history)

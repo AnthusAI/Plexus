@@ -409,6 +409,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
               ? 'Acceptance Rate'
               : blockData.type === 'RecentFeedback'
               ? 'Recent Feedback'
+              : blockData.type === 'ScoreChampionVersionTimeline'
+              ? 'Score Champion Version Timeline'
               : blockData.name ?? undefined;
         const blockProps = {
           id: blockData.id,
@@ -467,6 +469,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           ? 'Acceptance Rate'
           : blockClass === 'RecentFeedback'
           ? 'Recent Feedback'
+          : blockClass === 'ScoreChampionVersionTimeline'
+          ? 'Score Champion Version Timeline'
           : blockClass || 'Report block';
         return (
           <div className="my-4 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/10 p-4">
