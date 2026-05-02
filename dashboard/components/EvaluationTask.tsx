@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, MoreHorizontal, MessageSquareCode, Share, Trash2, Link as LinkIcon, AlertTriangle } from 'lucide-react'
+import { Coins, FlaskConical, Square, X, MoreHorizontal, MessageSquareCode, Share, Trash2, Link as LinkIcon, AlertTriangle } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
 import { Button } from '@/components/ui/button'
@@ -2916,6 +2916,24 @@ ${categoryLines}${mechanicalLines}
                 </Link>
               </div>
             )}
+            <Timestamp time={props.task.time} variant="relative" />
+            <ProgressBarTiming
+              startedAt={data.startedAt || (data.task as any)?.startedAt}
+              completedAt={(data.task as any)?.completedAt}
+              isInProgress={data.status?.toUpperCase() === 'RUNNING'}
+              className="text-muted-foreground"
+            />
+            {task.data?.cost != null && task.data.cost > 0 && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Coins className="h-3.5 w-3.5 flex-shrink-0" aria-label="Cost" />
+                <span>
+                  ${task.data.cost.toFixed(4)} total
+                  {task.data.processedItems > 0 && (
+                    <> &middot; ${(task.data.cost / task.data.processedItems).toFixed(6)}/item</>
+                  )}
+                </span>
+              </div>
+            )}
             {baselineEvaluationId && (
               <RelatedResourceCard
                 label="Original baseline"
@@ -2946,24 +2964,6 @@ ${categoryLines}${mechanicalLines}
                 {null}
               </RelatedResourceCard>
             )}
-            {task.data?.cost != null && task.data.cost > 0 && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>Cost:</span>
-                <span>
-                  ${task.data.cost.toFixed(4)} total
-                  {task.data.processedItems > 0 && (
-                    <> &middot; ${(task.data.cost / task.data.processedItems).toFixed(6)}/item</>
-                  )}
-                </span>
-              </div>
-            )}
-            <Timestamp time={props.task.time} variant="relative" />
-            <ProgressBarTiming
-              startedAt={data.startedAt || (data.task as any)?.startedAt}
-              completedAt={(data.task as any)?.completedAt}
-              isInProgress={data.status?.toUpperCase() === 'RUNNING'}
-              className="text-muted-foreground"
-            />
             {(taskWithDefaults.procedureId || (taskWithDefaults.scorecardId && taskWithDefaults.scoreId && taskWithDefaults.scoreVersionId)) && (
               <div className="space-y-0">
                 {taskWithDefaults.procedureId && (
