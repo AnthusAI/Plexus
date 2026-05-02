@@ -58,9 +58,10 @@ jest.mock("recharts", () => ({
 }));
 
 jest.mock("@/components/blocks/ReportBlock", () => {
-  const MockReportBlock = ({ title, children }: any) => (
+  const MockReportBlock = ({ title, subtitle, subtitleClassName, children }: any) => (
     <div>
       <div>{title}</div>
+      {subtitle ? <div data-testid="report-subtitle" className={subtitleClassName}>{subtitle}</div> : null}
       {children}
     </div>
   );
@@ -208,6 +209,10 @@ describe("ScoreChampionVersionTimeline", () => {
     render(<ScoreChampionVersionTimeline {...baseProps} />);
 
     expect(screen.getByText("Score Champion Version Timeline")).toBeInTheDocument();
+    expect(screen.getByTestId("report-subtitle")).toHaveTextContent("Scorecard A");
+    expect(screen.getByTestId("report-subtitle")).toHaveClass("text-lg");
+    expect(screen.getByTestId("report-subtitle")).toHaveClass("font-semibold");
+    expect(screen.queryByText("Scorecard: Scorecard A")).not.toBeInTheDocument();
     expect(screen.getByText("Score 1")).toBeInTheDocument();
     expect(screen.getByText("Score 2")).toBeInTheDocument();
     expect(screen.getByText("$2.50")).toBeInTheDocument();
@@ -425,7 +430,9 @@ describe("ScoreChampionVersionTimeline", () => {
       />
     );
 
-    await waitFor(() => expect(screen.getByText("Scorecard: Scorecard A")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Score 1")).toBeInTheDocument());
+    expect(screen.getByText("Scorecard A")).toBeInTheDocument();
+    expect(screen.queryByText("Scorecard: Scorecard A")).not.toBeInTheDocument();
     expect(screen.getByText("Score 1")).toBeInTheDocument();
     expect(screen.getByText("Score 2")).toBeInTheDocument();
     expect(mockDownloadData).toHaveBeenCalledWith({
