@@ -8,6 +8,7 @@ including tool calls and responses, for later analysis and display in the UI.
 import logging
 import os
 import json
+import math
 import re
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -46,6 +47,11 @@ def _slim_tool_response_for_storage(value: Any) -> Any:
             return _slim_tool_response_for_storage(json.loads(value))
         except (json.JSONDecodeError, ValueError):
             return value[:_SLIM_MAX_STR] if len(value) > _SLIM_MAX_STR else value
+    # AWSJSON rejects NaN/Infinity; convert them to stable strings.
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return str(value)
+        return value
     if isinstance(value, dict):
         slimmed = {}
         for k, v in value.items():
@@ -56,7 +62,10 @@ def _slim_tool_response_for_storage(value: Any) -> Any:
         return slimmed
     if isinstance(value, list):
         return [_slim_tool_response_for_storage(item) for item in value]
-    return value  # int, float, bool, None
+    if isinstance(value, (int, bool)) or value is None:
+        return value
+    # Last resort for non-JSON primitives (datetime, Decimal, etc.).
+    return str(value)[:_SLIM_MAX_STR]
 
 
 class ProcedureChatRecorder:
@@ -139,6 +148,7 @@ class ProcedureChatRecorder:
         }
         """
         after_value = str(after or "")
+        created_at_condition = {'gt': after_value} if after_value else None
         safe_limit = max(1, min(int(limit or 50), 200))
         messages: List[Dict[str, Any]] = []
         next_token: Optional[str] = None
@@ -148,7 +158,7 @@ class ProcedureChatRecorder:
                 query,
                 {
                     'procedureId': self.procedure_id,
-                    'createdAt': {'gt': after_value},
+                    'createdAt': created_at_condition,
                     'limit': safe_limit,
                     'nextToken': next_token,
                 }
@@ -896,7 +906,19 @@ class ProcedureChatRecorder:
                 )
                 return self.session_id
 
-            console_chat_metadata = self._get_latest_console_chat_metadata(account_id)
+            is_console_context = isinstance(context, dict) and any(
+                context.get(key)
+                for key in (
+                    'console_user_message',
+                    'console_session_history',
+                    'console_chat',
+                )
+            )
+            console_chat_metadata = (
+                self._get_latest_console_chat_metadata(account_id)
+                if is_console_context
+                else None
+            )
             console_session_id = None
             if isinstance(console_chat_metadata, dict):
                 session_id = console_chat_metadata.get('session_id')
