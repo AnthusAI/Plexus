@@ -119,6 +119,9 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- If user intent is unclear, ask one concise clarifying question.\n"
                 ),
                 "initial_message": "Ready.",
+                # Tactus resolves tools through named toolsets. The Plexus runtime registers
+                # `execute_tactus` as its own toolset key, so the assistant can be restricted
+                # to that single model-facing tool.
                 "tools": ["execute_tactus"],
             }
         },
