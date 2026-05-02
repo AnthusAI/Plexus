@@ -239,6 +239,7 @@ def test_score_champion_version_timeline_uses_dedicated_block(mock_run_feedback_
     assert kwargs["scorecard"] == "1438"
     assert kwargs["score"] is None
     assert kwargs["days"] == 21
+    assert kwargs["extra_config"] == {"include_unchanged": False}
 
 
 @patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
@@ -258,6 +259,7 @@ def test_score_champion_version_timeline_supports_single_score_explicit_window(m
             "2026-04-01",
             "--end-date",
             "2026-05-01",
+            "--include-unchanged",
             "--fresh",
         ],
     )
@@ -268,6 +270,7 @@ def test_score_champion_version_timeline_supports_single_score_explicit_window(m
     assert kwargs["score"] == "48059"
     assert kwargs["start_date"] == "2026-04-01"
     assert kwargs["end_date"] == "2026-05-01"
+    assert kwargs["extra_config"] == {"include_unchanged": True}
     assert kwargs["fresh"] is True
 
 

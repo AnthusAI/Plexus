@@ -654,6 +654,11 @@ def volume(
 @click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
 @click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
 @click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
+@click.option(
+    "--include-unchanged",
+    is_flag=True,
+    help="Include initial champion entries with no previous champion. Hidden by default because they are not changes.",
+)
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
 @click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
 @click.option("--include-log", is_flag=True, help="Include report block log output.")
@@ -667,6 +672,7 @@ def score_champion_version_timeline(
     ttl_hours: float,
     fresh: bool,
     background: bool,
+    include_unchanged: bool,
     account_identifier: Optional[str],
     output_format: str,
     include_log: bool,
@@ -684,6 +690,7 @@ def score_champion_version_timeline(
         ttl_hours=ttl_hours,
         fresh=fresh,
         background=background,
+        extra_config={"include_unchanged": include_unchanged},
     )
     _print_result(
         title="ScoreChampionVersionTimeline",
