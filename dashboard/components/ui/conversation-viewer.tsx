@@ -80,6 +80,73 @@ const EVALUATION_TOOL_NAMES = new Set([
   'plexus_evaluation_info',
 ])
 
+type ExecuteTactusEnvelope = {
+  ok?: boolean
+  value?: unknown
+  error?: unknown
+  api_calls?: unknown
+}
+
+const isExecuteTactusEnvelope = (value: unknown): value is ExecuteTactusEnvelope => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  const record = value as Record<string, unknown>
+  return (
+    'ok' in record
+    || 'value' in record
+    || 'error' in record
+    || 'api_calls' in record
+  )
+}
+
+const extractExecuteTactusApiCalls = (value: unknown): string[] => {
+  if (!isExecuteTactusEnvelope(value)) {
+    return []
+  }
+  const apiCalls = (value as ExecuteTactusEnvelope).api_calls
+  if (!Array.isArray(apiCalls)) {
+    return []
+  }
+  return apiCalls
+    .map((entry) => {
+      if (typeof entry === 'string') return entry
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+        const name = (entry as Record<string, unknown>).api_call
+        if (typeof name === 'string') return name
+      }
+      return null
+    })
+    .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+}
+
+const extractExecuteTactusValue = (value: unknown): unknown => {
+  if (!isExecuteTactusEnvelope(value)) {
+    return value
+  }
+  return (value as ExecuteTactusEnvelope).value
+}
+
+const isExecuteTactusEvaluationEnvelope = (value: unknown): boolean => {
+  const apiCalls = extractExecuteTactusApiCalls(value)
+  if (apiCalls.some((call) => call === 'plexus.evaluation.run' || call.startsWith('plexus.evaluation.'))) {
+    return true
+  }
+  const payload = extractExecuteTactusValue(value)
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>
+    return typeof record.evaluation_id === 'string' || typeof record.evaluationId === 'string'
+  }
+  if (Array.isArray(payload)) {
+    return payload.some((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false
+      const record = entry as Record<string, unknown>
+      return typeof record.evaluation_id === 'string' || typeof record.evaluationId === 'string' || typeof record.id === 'string'
+    })
+  }
+  return false
+}
+
 const CONSOLE_CHAT_MODEL_OPTIONS = [
   { value: 'gpt-5.4', label: 'GPT-5.4' },
   { value: 'gpt-5.3', label: 'GPT-5.3' },
@@ -732,6 +799,16 @@ const mapMessageToToolViewModel = (message: ChatMessage): ConsoleToolViewModel |
   }
 }
 
+const isEvaluationToolViewModel = (toolViewModel: ConsoleToolViewModel): boolean => {
+  if (EVALUATION_TOOL_NAMES.has(toolViewModel.toolName)) {
+    return true
+  }
+  if (toolViewModel.toolName === 'execute_tactus') {
+    return isExecuteTactusEvaluationEnvelope(toolViewModel.output)
+  }
+  return false
+}
+
 // Collapsible text component with Markdown support for long messages
 function CollapsibleText({ 
   content, 
@@ -1046,7 +1123,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
             <div className="space-y-2">
               <Tool
                 defaultOpen={
-                  EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
+                  isEvaluationToolViewModel(toolViewModel) ||
                   toolViewModel.state === 'output-error'
                 }
               >
@@ -1060,14 +1137,20 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                     <ToolInput input={toolViewModel.input} />
                   )}
                   {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
-                    EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
+                    isEvaluationToolViewModel(toolViewModel) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
                       <React.Suspense fallback={
                         <div className="rounded-md bg-card p-3">
                           <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
                           <div className="h-3 w-full animate-pulse rounded bg-muted/80" />
                         </div>
                       }>
-                        <EvaluationToolOutput toolOutput={toolViewModel.output} />
+                        <EvaluationToolOutput
+                          toolOutput={
+                            toolViewModel.toolName === 'execute_tactus'
+                              ? extractExecuteTactusValue(toolViewModel.output)
+                              : toolViewModel.output
+                          }
+                        />
                       </React.Suspense>
                     ) : (
                       <ToolOutput
