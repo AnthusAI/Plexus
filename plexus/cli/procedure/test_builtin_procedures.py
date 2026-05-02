@@ -24,7 +24,7 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     assert parsed["agents"]["assistant"]["verbosity"] == "low"
     assert parsed["agents"]["assistant"]["max_tokens"] == 1024
     assert parsed["agents"]["assistant"]["stream"] is True
-    assert parsed["agents"]["assistant"]["tools"] == ["plexus"]
+    assert parsed["agents"]["assistant"]["tools"] == ["execute_tactus"]
     assert isinstance(parsed.get("code"), str)
     assert "State.set(\"stage\", \"preparing\")" in parsed["code"]
     assert "Previous user message before latest (if any):" in parsed["code"]
