@@ -1,0 +1,31 @@
+{
+  "id": "plx-139ddb5d-c62d-4eae-824d-3e427f26bced",
+  "title": "Accept remaining CodeQL suggestions for release PR",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "85ce57ec-5892-48dd-859b-ad7af53b7f9e",
+      "author": "ryan",
+      "text": "Behavior spec: release PR #277 should incorporate the remaining CodeQL mechanical suggestions without behavior changes: unique duplicate test names, math.isfinite finite-number check, remove unused imports, avoid unnecessary lambda wrappers, and resolve duplicate chat_recorder method definition.",
+      "created_at": "2026-05-02T19:57:16.948510Z"
+    },
+    {
+      "id": "04b92acf-1111-4e39-91a8-87cbc789c575",
+      "author": "ryan",
+      "text": "Accepted the remaining CodeQL suggestions: removed shadowed steering-message method, kept one metadata parser, made duplicate test names unique, replaced finite-number self-comparison with math.isfinite, removed unused datetime/timezone import, and replaced unnecessary object lambdas. Verified with python -m pytest on the affected Python test files: 155 passed.",
+      "created_at": "2026-05-02T19:59:18.886759Z"
+    }
+  ],
+  "created_at": "2026-05-02T19:57:12.712530Z",
+  "updated_at": "2026-05-02T19:59:18.902783Z",
+  "closed_at": "2026-05-02T19:59:18.902783Z",
+  "custom": {}
+}
