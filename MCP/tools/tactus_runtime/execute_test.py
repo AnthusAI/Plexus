@@ -224,6 +224,215 @@ def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> 
     assert facade.api_calls == ["plexus.scorecards.list", "plexus.scorecards.info"]
 
 
+def test_default_rubric_memory_recent_entries_runs_provider_awaitable(monkeypatch) -> None:
+    class FakeCitation:
+        def model_dump(self, mode: str = "json") -> dict:
+            return {"id": "citation-1", "mode": mode}
+
+    class FakeContext:
+        markdown_context = "Recent rubric context"
+        citation_index = [FakeCitation()]
+        machine_context = {"topic": "project-intent"}
+        diagnostics = []
+
+    class FakeProvider:
+        def __init__(self, api_client) -> None:
+            self.api_client = api_client
+
+        async def retrieve_recent(self, **kwargs):
+            assert kwargs["score_id"] == "score-1"
+            return FakeContext()
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_rubric_memory_score_id",
+        lambda client, scorecard_identifier, score_identifier, score_id: "score-1",
+    )
+    monkeypatch.setattr(
+        "plexus.rubric_memory.RubricMemoryRecentBriefingProvider",
+        FakeProvider,
+    )
+
+    result = execute._default_rubric_memory_recent_entries(
+        {"scorecard_identifier": "card", "score_identifier": "score"}
+    )
+
+    assert result["success"] is True
+    assert result["score_id"] == "score-1"
+    assert result["markdown_context"] == "Recent rubric context"
+    assert result["citation_index"] == [{"id": "citation-1", "mode": "json"}]
+
+
+def test_default_rubric_memory_evidence_pack_runs_provider_awaitable(monkeypatch) -> None:
+    class FakeCitation:
+        def model_dump(self, mode: str = "json") -> dict:
+            return {"id": "citation-2", "mode": mode}
+
+    class FakeContext:
+        markdown_context = "Evidence context"
+        citation_index = [FakeCitation()]
+        machine_context = {"item": "item-1"}
+        diagnostics = []
+
+    class FakeProvider:
+        def __init__(self, api_client) -> None:
+            self.api_client = api_client
+
+        async def retrieve_for_score_item(self, **kwargs):
+            assert kwargs["score_id"] == "score-1"
+            return FakeContext()
+
+        async def generate_for_score_item(self, **kwargs):
+            raise AssertionError("synthesize=false should use retrieval-only context")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_rubric_memory_score_id",
+        lambda client, scorecard_identifier, score_identifier, score_id: "score-1",
+    )
+    monkeypatch.setattr(
+        "plexus.rubric_memory.RubricMemoryContextProvider",
+        FakeProvider,
+    )
+
+    result = execute._default_rubric_memory_evidence_pack(
+        {"scorecard_identifier": "card", "score_identifier": "score"}
+    )
+
+    assert result["success"] is True
+    assert result["synthesized"] is False
+    assert result["score_id"] == "score-1"
+    assert result["markdown_context"] == "Evidence context"
+    assert result["citation_index"] == [{"id": "citation-2", "mode": "json"}]
+
+
+def test_default_score_set_champion_serializes_champion_history_metadata(
+    monkeypatch,
+) -> None:
+    captured_version_inputs: list[dict] = []
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "GetScoreVersionForChampionGuard" in query:
+                return {
+                    "getScore": {"id": "score-1", "championVersionId": "version-1"},
+                    "getScoreVersion": {
+                        "id": "version-1",
+                        "scoreId": "score-1",
+                        "configuration": "name: test",
+                        "metadata": None,
+                        "createdAt": "2026-05-01T00:00:00.000Z",
+                    },
+                }
+            if "mutation UpdateScore(" in query:
+                return {
+                    "updateScore": {
+                        "id": variables["input"]["id"],
+                        "championVersionId": variables["input"]["championVersionId"],
+                    }
+                }
+            if "UpdateScoreVersionMetadata" in query:
+                captured_version_inputs.append(variables["input"])
+                return {
+                    "updateScoreVersion": {
+                        "id": variables["input"]["id"],
+                        "isFeatured": variables["input"].get("isFeatured"),
+                        "metadata": variables["input"].get("metadata"),
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    result = execute._default_score_set_champion(
+        {"score_id": "score-1", "version_id": "version-1"}
+    )
+
+    assert result["success"] is True
+    assert len(captured_version_inputs) == 1
+    update_input = captured_version_inputs[0]
+    assert update_input["scoreId"] == "score-1"
+    assert update_input["createdAt"] == "2026-05-01T00:00:00.000Z"
+    assert update_input["isFeatured"] == "true"
+    assert isinstance(update_input["metadata"], str)
+    metadata = json.loads(update_input["metadata"])
+    assert metadata["championHistory"][0]["scoreId"] == "score-1"
+    assert metadata["championHistory"][0]["versionId"] == "version-1"
+    assert metadata["championHistory"][0]["exitedAt"] is None
+
+
+def test_default_score_set_champion_does_not_duplicate_open_history_entry(
+    monkeypatch,
+) -> None:
+    captured_version_inputs: list[dict] = []
+    existing_metadata = {
+        "championHistory": [
+            {
+                "scoreId": "score-1",
+                "versionId": "version-1",
+                "enteredAt": "2026-05-01T00:00:00+00:00",
+                "exitedAt": None,
+                "previousChampionVersionId": None,
+                "nextChampionVersionId": None,
+                "transitionId": "transition-existing",
+            }
+        ]
+    }
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "GetScoreVersionForChampionGuard" in query:
+                return {
+                    "getScore": {"id": "score-1", "championVersionId": "version-1"},
+                    "getScoreVersion": {
+                        "id": "version-1",
+                        "scoreId": "score-1",
+                        "configuration": "name: test",
+                        "metadata": json.dumps(existing_metadata),
+                        "createdAt": "2026-05-01T00:00:00.000Z",
+                    },
+                }
+            if "mutation UpdateScore(" in query:
+                return {
+                    "updateScore": {
+                        "id": variables["input"]["id"],
+                        "championVersionId": variables["input"]["championVersionId"],
+                    }
+                }
+            if "UpdateScoreVersionMetadata" in query:
+                captured_version_inputs.append(variables["input"])
+                return {
+                    "updateScoreVersion": {
+                        "id": variables["input"]["id"],
+                        "isFeatured": variables["input"].get("isFeatured"),
+                        "metadata": variables["input"].get("metadata"),
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    result = execute._default_score_set_champion(
+        {"score_id": "score-1", "version_id": "version-1"}
+    )
+
+    assert result["success"] is True
+    metadata = json.loads(captured_version_inputs[0]["metadata"])
+    assert metadata["championHistory"] == existing_metadata["championHistory"]
+
+
 def test_dispatch_routes_scorecards_to_direct_handlers() -> None:
     assert execute.DIRECT_HANDLERS[("scorecards", "list")] == "_call_scorecards"
     assert execute.DIRECT_HANDLERS[("scorecards", "info")] == "_call_scorecards"

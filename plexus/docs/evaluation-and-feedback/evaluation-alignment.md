@@ -25,13 +25,13 @@ Pulling a score will **OVERWRITE your local work-in-progress YAML** with the rem
 # ❌ NEVER DO THIS during evaluation alignment
 plexus score pull --scorecard "Quality Assurance" --score "Compliance Check"
 
-# ❌ NEVER DO THIS either
-plexus_score_pull(...)
+# ❌ NEVER DO THIS either through execute_tactus
+return plexus.score.pull{ scorecard_identifier = "...", score_identifier = "..." }
 ```
 
 ### ALWAYS Use --yaml Flag for Evaluations
 
-**EVERY evaluation MUST use the `--yaml` flag (or `yaml=True` in MCP tools)** to load your local YAML.
+**EVERY evaluation MUST use the `--yaml` flag (or `yaml = true` inside `execute_tactus`)** to load your local YAML.
 
 Without this flag, the evaluation tool will fetch the remote score version and **OVERWRITE your local YAML**.
 
@@ -43,21 +43,21 @@ plexus evaluate accuracy --yaml --scorecard "Quality Assurance" --score "Complia
 plexus evaluate accuracy --scorecard "Quality Assurance" --score "Compliance Check"
 ```
 
-```python
+```lua
 # ✅ CORRECT - Uses local YAML
-plexus_evaluation_run(
-    scorecard_name="Quality Assurance",
-    score_name="Compliance Check",
-    yaml=True,        # REQUIRED
-    n_samples=20
-)
+return plexus.evaluation.run{
+  scorecard_name = "Quality Assurance",
+  score_name = "Compliance Check",
+  yaml = true, -- REQUIRED
+  n_samples = 20,
+}
 
 # ❌ WRONG - Will overwrite local YAML (yaml defaults to True, but be explicit!)
-plexus_evaluation_run(
-    scorecard_name="Quality Assurance",
-    score_name="Compliance Check",
-    yaml=False  # This fetches from API
-)
+return plexus.evaluation.run{
+  scorecard_name = "Quality Assurance",
+  score_name = "Compliance Check",
+  yaml = false, -- This fetches from API
+}
 ```
 
 ## Process Overview
@@ -77,23 +77,27 @@ plexus_evaluation_run(
 7. **Comparison**: (Main agent) Compare new metrics to baseline - did it improve?
 8. **Iterate**: Repeat steps 3-7 until performance meets target or no further improvement possible
 
-## MCP Tools (Start Here)
+## Plexus Runtime APIs (Start Here)
 
-**MCP Tools the Main Agent Uses:**
-- `get_plexus_documentation`: Always open this doc before starting alignment
-- `plexus_evaluation_run`: Run evaluations using LOCAL YAML (yaml=True) - returns confusion matrix and metrics
-- `plexus_evaluation_info`: Get detailed results for existing evaluation by ID
-- `plexus_predict`: Test predictions on specific items using LOCAL YAML (yaml=True)
+Use the single MCP tool `execute_tactus`. Inside the snippet, call the
+host-injected `plexus` module.
+
+**Runtime APIs the Main Agent Uses:**
+- `plexus.docs.get`: Always open this doc before starting alignment
+- `plexus.api.list`: Discover available runtime namespaces and methods
+- `plexus.evaluation.run`: Run evaluations using LOCAL YAML (`yaml = true`) and return confusion matrix and metrics
+- `plexus.evaluation.info`: Get detailed results for an existing evaluation ID
+- `plexus.score.predict`: Test predictions on specific items using LOCAL YAML (`yaml = true`)
 - `Task` tool with `subagent_type="evaluation-analyzer"`: Delegate confusion matrix analysis
 
-**MCP Tools the Sub-Agents Use:**
-- evaluation-analyzer uses: `plexus_evaluation_info`, `plexus_evaluation_score_result_find`
-- evaluation-score-result-analyzer uses: `plexus_evaluation_score_result_find` (deprecated - evaluation-analyzer can call directly)
+**Runtime APIs the Sub-Agents Use:**
+- evaluation-analyzer uses: `plexus.evaluation.info` with `include_score_results = true`
+- evaluation-score-result-analyzer is deprecated; evaluation-analyzer can inspect score results directly from the evaluation payload
 
-**IMPORTANT**: The `evaluation-analyzer` sub-agent can now safely call `plexus_evaluation_score_result_find` directly because the tool defaults to `include_text=False`, which prevents context overflow. Full transcript text is only included when explicitly requested with `include_text=True`.
+**IMPORTANT**: The `evaluation-analyzer` sub-agent should start with `plexus.evaluation.info{ include_score_results = true }` and inspect the returned score-result metadata before requesting full transcript context elsewhere. Full transcript text should only be fetched selectively for 1-2 items when edit comments are insufficient.
 
 **What These Tools Return:**
-Both `plexus_evaluation_run` and `plexus_evaluation_info` return identical structured data:
+Both `plexus.evaluation.run` and `plexus.evaluation.info` return identical structured data:
 - `evaluation_id`: Unique evaluation identifier
 - `accuracy`: Overall accuracy percentage
 - `metrics`: Array of metric objects (Accuracy, Alignment/AC1, Precision, Recall)
@@ -107,12 +111,12 @@ This is **programmatic output** - no analysis or interpretation. The caller anal
 
 **If you don't have local YAML yet**, pull it ONCE at the very beginning:
 
-```python
+```lua
 # ✅ ONLY do this ONCE at the start if local YAML doesn't exist
-plexus_score_pull(
-    scorecard_identifier="Quality Assurance v1.0",
-    score_identifier="Compliance Check"
-)
+return plexus.score.pull{
+  scorecard_identifier = "Quality Assurance v1.0",
+  score_identifier = "Compliance Check",
+}
 ```
 
 **After this initial pull, NEVER pull again during the alignment process!**
@@ -126,15 +130,15 @@ ls -la scorecards/Quality\ Assurance\ v1.0/Compliance\ Check.yaml
 
 Establish a quantitative baseline using your current local YAML.
 
-**CRITICAL**: Always use `yaml=True` to ensure local YAML is used.
+**CRITICAL**: Always use `yaml = true` to ensure local YAML is used.
 
-```python
-plexus_evaluation_run(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    n_samples=200,           # or omit for default (10)
-    yaml=True                # REQUIRED: Use local YAML
-)
+```lua
+return plexus.evaluation.run{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  n_samples = 200, -- or omit for default (10)
+  yaml = true,     -- REQUIRED: Use local YAML
+}
 ```
 
 **What This Does:**
@@ -155,34 +159,37 @@ plexus_evaluation_run(
 
 ### Context-Safe Score Result Examination
 
-The `plexus_evaluation_score_result_find` tool has smart default behavior:
-- **Default (`include_text=False`)**: Returns predictions, explanations, edit comments, item IDs, and trace data WITHOUT full transcript text (~26K tokens for 3-5 items)
-- **Optional (`include_text=True`)**: Includes full transcript text when needed for detailed analysis (⚠️ 10K+ tokens per item)
+The evaluation payload is the context-safe starting point:
+- **Default**: Use `plexus.evaluation.info{ include_score_results = true }` to inspect predictions, explanations, edit comments, item IDs, and trace data before fetching transcript text.
+- **Optional**: Request item transcript text only when needed for detailed analysis (10K+ tokens per item).
 
 **How This Protects Context:**
 1. **Main Agent**: Runs evaluations, gets confusion matrix, delegates segment analysis
-2. **evaluation-analyzer**: Calls `plexus_evaluation_score_result_find` with default parameters to examine 5+ items efficiently
+2. **evaluation-analyzer**: Calls `plexus.evaluation.info{ include_score_results = true }` and filters the returned score results by confusion-matrix segment
 3. **Optional**: If edit comments are insufficient, evaluation-analyzer can request transcripts for 1-2 specific items
 
 ### Usage Example - Comprehensive Analysis
 
-```python
+```lua
 # Get the latest evaluation ID first
-evaluation_info = plexus_evaluation_info(
-    use_latest=True,
-    account_key="call-criteria",
-    output_format="json"
-)
+return plexus.evaluation.info{
+  use_latest = true,
+  account_key = "call-criteria",
+  output_format = "json",
+}
+```
 
+```python
 # Use evaluation-analyzer sub-agent to examine ALL error segments
-# The agent will use plexus_evaluation_score_result_find with default behavior (no transcripts)
+# The agent will use execute_tactus with plexus.evaluation.info and
+# include_score_results = true, then filter locally without transcripts.
 Task(
     subagent_type="evaluation-analyzer",
     description="Comprehensive confusion matrix analysis",
     prompt=f"""Analyze ALL error segments from evaluation {evaluation_id}.
 
     Examine BOTH false positives AND false negatives (5 items each):
-    1. Use plexus_evaluation_score_result_find with default parameters (no transcripts)
+    1. Use execute_tactus with plexus.evaluation.info{ evaluation_id='<id>', include_score_results=true } and filter score results locally (no transcripts)
     2. Review edit comments and explanations to identify patterns
     3. If edit comments are insufficient, request transcripts for 1-2 specific items
     4. False positives: What benign patterns trigger false alarms?
@@ -208,16 +215,16 @@ Task(
     2. What edit comments reveal about correct labeling
     3. What YAML changes could fix these errors
 
-    Examine 5 items using plexus_evaluation_score_result_find with default parameters.
+    Examine 5 items using execute_tactus with plexus.evaluation.info{ evaluation_id='<id>', include_score_results=true } and local filtering.
     Only request transcripts if edit comments don't provide sufficient detail.
     Note any potential impact on false positives."""
 )
 ```
 
 **Important Notes:**
-- **Default behavior is SAFE**: `plexus_evaluation_score_result_find` defaults to `include_text=False`
+- **Default behavior is SAFE**: start from `plexus.evaluation.info{ include_score_results = true }` and avoid transcript text
 - **Start without transcript text**: Review edit comments, explanations, and trace data first (~26K tokens for 5 items)
-- **Request transcript text selectively**: Only use `include_text=True` for 1-2 items when edit comments are insufficient
+- **Request transcript text selectively**: Only use `include_text = true` for 1-2 items when edit comments are insufficient
 - The evaluation-analyzer can call the find tool directly with smart context management
 
 **Why This Works:**
@@ -295,18 +302,17 @@ threshold: 0.8  # was 0.7
 
 Test your YAML changes against the same dataset.
 
-**CRITICAL**: Use `yaml=True` and `remote=False` again!
+**CRITICAL**: Use `yaml = true` again.
 
-```python
+```lua
 # ✅ CORRECT - Uses your modified local YAML
-plexus_evaluation_run(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    n_samples=200,           # Same sample size as baseline
-    remote=False,            # REQUIRED
-    yaml=True,               # REQUIRED
-    latest=False             # REQUIRED
-)
+return plexus.evaluation.run{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  n_samples = 200, -- Same sample size as baseline
+  yaml = true,     -- REQUIRED
+  latest = false,
+}
 ```
 
 **Compare to baseline:**
@@ -320,7 +326,7 @@ plexus_evaluation_run(
 **If metrics improved:**
 - Document what changed and why
 - Consider additional refinements
-- Test on edge cases using `plexus_predict` with `yaml=True`
+- Test on edge cases using `plexus.score.predict` with `yaml = true`
 
 **If metrics regressed:**
 - Revert YAML changes
@@ -337,57 +343,59 @@ plexus_evaluation_run(
 
 Test specific items using local YAML to validate behavior:
 
-```python
+```lua
 # ✅ Test single item with local YAML
-plexus_predict(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    item_id="88ed6e27-b5ae-4641-b024-d47f4c6ba631",
-    yaml=True,          # REQUIRED: Use local YAML
-    include_input=True,
-    include_trace=True,      # See detailed execution
-    output_format="yaml"
-)
+return plexus.score.predict{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  item_id = "88ed6e27-b5ae-4641-b024-d47f4c6ba631",
+  yaml = true,          -- REQUIRED: Use local YAML
+  include_input = true,
+  include_trace = true, -- See detailed execution
+  output_format = "yaml",
+}
 
 # ✅ Test multiple items with local YAML
-plexus_predict(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    item_ids="item1,item2,item3",
-    yaml=True,          # REQUIRED: Use local YAML
-    output_format="yaml"
-)
+return plexus.score.predict{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  item_ids = "item1,item2,item3",
+  yaml = true, -- REQUIRED: Use local YAML
+  output_format = "yaml",
+}
 ```
 
 ## Complete Workflow Example
 
 ### 1. Initial Setup (ONCE)
-```python
+```lua
 # Only if local YAML doesn't exist - DO THIS ONCE
-plexus_score_pull(
-    scorecard_identifier="Quality Assurance v1.0",
-    score_identifier="Compliance Check"
-)
+return plexus.score.pull{
+  scorecard_identifier = "Quality Assurance v1.0",
+  score_identifier = "Compliance Check",
+}
 ```
 
 ### 2. Baseline Evaluation
-```python
-plexus_evaluation_run(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    n_samples=200,
-    yaml=True       # REQUIRED
-)
+```lua
+return plexus.evaluation.run{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  n_samples = 200,
+  yaml = true, -- REQUIRED
+}
 ```
 
 Record: Accuracy=0.75, AC1=0.68, FN=25, FP=15
 
 ### 3. Error Analysis with Sub-Agents
-```python
+```lua
 # Get latest evaluation
-evaluation_info = plexus_evaluation_info(use_latest=True)
-eval_id = "evaluation_123"
+return plexus.evaluation.info{ use_latest = true }
+```
 
+```python
+eval_id = "evaluation_123"
 # Use evaluation-analyzer sub-agent to examine ALL error segments
 Task(
     subagent_type="evaluation-analyzer",
@@ -465,14 +473,14 @@ exclusion_patterns:
 ```
 
 ### 6. Re-Evaluate
-```python
+```lua
 # ✅ Test modified local YAML
-plexus_evaluation_run(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    n_samples=200,
-    yaml=True       # REQUIRED
-)
+return plexus.evaluation.run{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  n_samples = 200,
+  yaml = true, -- REQUIRED
+}
 ```
 
 New results: Accuracy=0.82, AC1=0.76, FN=12, FP=10
@@ -490,21 +498,16 @@ Task(
     description="Analyze remaining false negatives",
     prompt=f"""Analyze remaining 12 false negatives from latest evaluation.
 
-    Use plexus_evaluation_score_result_find with default parameters to examine 5 items.
+    Use execute_tactus with plexus.evaluation.info{ evaluation_id='<id>', include_score_results=true } and filter locally to examine 5 items.
     Review edit comments and explanations to identify what patterns are still being missed.
     Only request transcripts if edit comments don't provide sufficient detail."""
 )
 ```
 
 ### 8. When Done, Push Changes
-```python
-# Only after alignment is complete and approved
-plexus_score_push(
-    scorecard_identifier="Quality Assurance v1.0",
-    score_identifier="Compliance Check",
-    version_note="Improved implicit medication review detection - reduced FN from 25 to 12"
-)
-```
+Only after alignment is complete and explicitly approved, use the release workflow
+for score updates. Do not push or promote changes as part of the iterative
+alignment loop.
 
 ## Dataset Considerations
 
@@ -543,18 +546,18 @@ limit: 100
 ### A/B Testing with Different Thresholds
 
 Test multiple threshold values:
-```python
+```lua
 # Test threshold=0.6
 # (edit YAML, set threshold: 0.6)
-plexus_evaluation_run(..., yaml=True, remote=False)
+return plexus.evaluation.run{ scorecard_name = "Quality Assurance v1.0", score_name = "Compliance Check", yaml = true }
 
 # Test threshold=0.7
 # (edit YAML, set threshold: 0.7)
-plexus_evaluation_run(..., yaml=True, remote=False)
+return plexus.evaluation.run{ scorecard_name = "Quality Assurance v1.0", score_name = "Compliance Check", yaml = true }
 
 # Test threshold=0.8
 # (edit YAML, set threshold: 0.8)
-plexus_evaluation_run(..., yaml=True, remote=False)
+return plexus.evaluation.run{ scorecard_name = "Quality Assurance v1.0", score_name = "Compliance Check", yaml = true }
 ```
 
 Compare metrics to find optimal threshold.
@@ -570,12 +573,12 @@ Task(
     description="Initial false negative analysis",
     prompt=f"""Analyze false negatives from evaluation {eval_id}.
 
-    Use plexus_evaluation_score_result_find with:
+    Use execute_tactus with plexus.evaluation.info{ include_score_results=true } and filter locally with:
     - predicted_value: "no"
     - actual_value: "yes"
     - limit: 5
     - offset: 0
-    (include_text defaults to False)
+    (include_text defaults to false)
 
     Identify initial patterns from edit comments and explanations."""
 )
@@ -602,7 +605,7 @@ Task(
     description="Analyze false positives",
     prompt=f"""Analyze false positive segment (predicted=yes, actual=no) from evaluation {eval_id}.
 
-    Use plexus_evaluation_score_result_find to examine 5 items with default parameters.
+    Use execute_tactus with plexus.evaluation.info{ include_score_results=true } and local filtering to examine 5 items.
     Focus on edit comments to identify what benign patterns triggered false alarms.
     Only request transcripts if edit comments are unclear."""
 )
@@ -621,12 +624,12 @@ Task(
 ### Multi-Score Evaluation
 
 Evaluate entire scorecard:
-```python
-plexus_evaluation_run(
-    scorecard_name="Quality Assurance v1.0",
-    # No score_name = evaluate all scores in scorecard
-    yaml=True
-)
+```lua
+return plexus.evaluation.run{
+  scorecard_name = "Quality Assurance v1.0",
+  -- No score_name = evaluate all scores in scorecard
+  yaml = true,
+}
 ```
 
 ## Implementation Checklist
@@ -637,7 +640,7 @@ plexus_evaluation_run(
 - [ ] Note baseline metrics to measure improvement
 
 **During Each Iteration (Main Agent):**
-- [ ] Run evaluation with `plexus_evaluation_run(..., yaml=True)`
+- [ ] Run evaluation with `plexus.evaluation.run{ scorecard_name = "...", score_name = "...", yaml = true }`
 - [ ] Delegate to `evaluation-analyzer` sub-agent with evaluation_id and target segment
 - [ ] Review pattern insights from sub-agent
 - [ ] Form specific, testable hypothesis based on patterns
@@ -647,19 +650,19 @@ plexus_evaluation_run(
 - [ ] Document what changed and why
 
 **What Sub-Agents Do (Automatic):**
-- [ ] evaluation-analyzer: Gets confusion matrix, calls `plexus_evaluation_score_result_find` with default parameters (no transcript text), examines edit comments and explanations, optionally requests transcript text for 1-2 items if needed, returns concise insights
+- [ ] evaluation-analyzer: Gets confusion matrix, calls `plexus.evaluation.info{ include_score_results = true }`, filters score results locally without transcript text, examines edit comments and explanations, optionally requests transcript text for 1-2 items if needed, returns concise insights
 
 **Never:**
 - [ ] ❌ Run `plexus score pull` after initial setup
-- [ ] ❌ Run evaluation without `yaml=True` flag
-- [ ] ❌ Request transcript text (`include_text=True`) for many items at once
+- [ ] ❌ Run evaluation without `yaml = true`
+- [ ] ❌ Request transcript text (`include_text = true`) for many items at once
 - [ ] ❌ Push changes without testing first
 
 **Always:**
-- [ ] ✅ Main agent runs evaluations with `plexus_evaluation_run`
+- [ ] ✅ Main agent runs evaluations with `plexus.evaluation.run`
 - [ ] ✅ Main agent delegates analysis to `evaluation-analyzer` sub-agent
 - [ ] ✅ evaluation-analyzer starts with default parameters (no transcript text) for efficiency
-- [ ] ✅ Use `yaml=True` for evaluations and predictions
+- [ ] ✅ Use `yaml = true` for evaluations and predictions
 - [ ] ✅ Edit local YAML files directly (don't pull!)
 - [ ] ✅ Compare metrics to baseline after each change
 
@@ -667,11 +670,11 @@ plexus_evaluation_run(
 
 ### "My changes aren't reflected in evaluation results"
 
-**Cause:** Evaluation ran without `yaml=True` flag and pulled remote version, overwriting your local YAML.
+**Cause:** Evaluation ran without `yaml = true` and pulled remote version, overwriting your local YAML.
 
 **Fix:**
 1. Restore your local YAML from backup or git
-2. Always use `yaml=True` in all evaluation calls
+2. Always use `yaml = true` in all evaluation calls
 
 ### "I accidentally pulled and lost my changes"
 
@@ -695,7 +698,7 @@ Task(
     description="Analyze false negative patterns",
     prompt=f"""Analyze false negative segment (predicted=no, actual=yes) from evaluation {eval_id}.
 
-    Use plexus_evaluation_score_result_find with default parameters to examine 5 items.
+    Use execute_tactus with plexus.evaluation.info{ evaluation_id='<id>', include_score_results=true } and local filtering to examine 5 items.
     Focus on identifying:
     - Common patterns AI is missing (based on edit comments and explanations)
     - What edit comments reveal about labeling criteria
@@ -721,8 +724,8 @@ Task(
 - Changes are conflicting (revert and try one change at a time)
 
 **Debug approach:**
-1. Use `plexus_predict` with `yaml=True` on specific failing items
-2. Add `include_trace=True` to see detailed execution
+1. Use `plexus.score.predict` with `yaml = true` on specific failing items
+2. Add `include_trace = true` to see detailed execution
 3. Verify your YAML changes are being loaded (check trace output)
 4. Test hypothesis on single item before re-evaluating full dataset
 
@@ -736,7 +739,7 @@ Task(
 
 **Remember the golden rules:**
 - ⚠️ **NEVER `plexus score pull` after initial setup**
-- ⚠️ **ALWAYS use `yaml=True` for evaluations and predictions**
+- **ALWAYS use `yaml = true` for evaluations and predictions**
 - ⚠️ **ALWAYS use `evaluation-analyzer` sub-agent for result analysis**
 - ⚠️ **START with default behavior (no transcript text) for efficiency**
 - ⚠️ **REQUEST transcript text sparingly (1-2 items) when edit comments are insufficient**
