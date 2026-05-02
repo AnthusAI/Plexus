@@ -304,10 +304,22 @@
       "author": "ryan",
       "text": "Closing broken develop -> main PR #253 and replacing it with a fresh develop -> main PR because branch protection/review state was invalidated by subsequent updates.",
       "created_at": "2026-04-29T21:43:18.642719Z"
+    },
+    {
+      "id": "2d92cdea-7190-4495-a988-ac9fa62aeb47",
+      "author": "ryan",
+      "text": "Starting implementation: unify ConversationViewer auto-follow behavior for tool-call bursts so ProcedureTask detail mode follows bottom like Console while respecting manual scroll lock.",
+      "created_at": "2026-05-02T17:04:33.179983Z"
+    },
+    {
+      "id": "1ca59230-c0f5-4a97-8d63-fb810f78390a",
+      "author": "ryan",
+      "text": "Implemented shared ConversationViewer auto-follow update: tool-call tail activity now participates in live-follow logic, and manual scroll-up now locks follow until bottom is reached again. Added/updated conversation viewer tests for tool-call follow + scroll-lock behavior. Verified with Jest: conversation-viewer-streaming-updates, conversation-viewer-session-routing, ProcedureTask.optimizer-auth.",
+      "created_at": "2026-05-02T17:06:15.984325Z"
     }
   ],
   "created_at": "2026-04-27T12:42:41.687340Z",
-  "updated_at": "2026-04-29T21:43:18.642719Z",
+  "updated_at": "2026-05-02T17:06:15.984325Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
