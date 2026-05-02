@@ -192,7 +192,7 @@ const metricKeys = [
 
 type MetricKey = (typeof metricKeys)[number];
 
-const chartMargin = { top: 8, right: 52, left: 20, bottom: 40 };
+const chartMargin = { top: 8, right: 52, left: 20, bottom: 36 };
 
 type ChartPoint = ChampionPoint & {
   entered_at_timestamp: number;
@@ -379,7 +379,7 @@ const MetricLegend: React.FC<{ metrics: MetricKey[] }> = ({ metrics }) => {
   if (!metrics.length) return null;
 
   return (
-    <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-1 text-[11px] text-foreground">
+    <div className="-mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-[11px] text-foreground">
       {metrics.map((key) => {
         const isAccuracy = key.endsWith("_accuracy");
         const color = chartConfig[key].color;
@@ -426,7 +426,7 @@ const ChampionTransitionMarkers: React.FC<{
             width={20}
             height={8}
             rx={4}
-            fill="hsl(var(--muted))"
+            className="fill-card"
             aria-label={`Champion changed to ${shortId(point.version_id)} on ${formatDateTime(point.entered_at)}`}
           >
             <title>{`${formatDateTime(point.entered_at)}: ${shortId(point.version_id)}`}</title>
@@ -443,7 +443,7 @@ const TimelineTooltip: React.FC<any> = ({ active, payload }) => {
   if (!point) return null;
 
   return (
-    <div className="rounded-md bg-popover p-3 text-popover-foreground text-xs space-y-1">
+    <div className="rounded-lg bg-popover p-3 text-popover-foreground text-xs space-y-1">
       <div className="font-medium">{point.version_note || shortId(point.version_id)}</div>
       <div className="text-muted-foreground">{formatDateTime(point.entered_at)}</div>
       <div>Version: {shortId(point.version_id)}</div>
@@ -520,7 +520,7 @@ const PerformanceGaugeCard: React.FC<{
   const deltaClassName = delta >= 0 ? "text-green-500" : "text-red-500";
 
   return (
-    <div className="rounded-md bg-card p-3" data-testid={`performance-gauge-${title.toLowerCase()}`}>
+    <div className="rounded-lg bg-card p-3" data-testid={`performance-gauge-${title.toLowerCase()}`}>
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <div className="text-sm font-medium">{title}</div>
         <div className={`text-sm font-semibold ${deltaClassName}`}>
@@ -574,7 +574,7 @@ const PerformanceSummarySection: React.FC<{
   if (!selected) return null;
 
   return (
-    <div className="rounded-md bg-background p-3" data-testid="performance-summary">
+    <div className="rounded-lg bg-background p-3" data-testid="performance-summary">
       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
         <div>
           <div className="text-base font-semibold">Performance Improvement</div>
@@ -595,7 +595,7 @@ const PerformanceSummarySection: React.FC<{
 const SmeMarkdown: React.FC<{ children: string; testId: string }> = ({ children, testId }) => (
   <div
     data-testid={testId}
-    className="rounded-md bg-background p-3 text-sm text-foreground"
+    className="rounded-lg bg-background p-3 text-sm text-foreground"
   >
     <ReactMarkdown
       remarkPlugins={markdownPlugins}
@@ -640,7 +640,7 @@ const SmeInformationSection: React.FC<{ sme?: SmeInformation | null }> = ({ sme 
   if (!sme.agenda) return null;
 
   return (
-    <div className="rounded-md bg-card p-3">
+    <div className="rounded-lg bg-card p-3">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
         <div className="text-sm font-medium">SME Information</div>
         <div className="font-mono text-xs text-muted-foreground">{shortId(sme.procedure_id)}</div>
@@ -684,14 +684,14 @@ const MonacoDiffPanel: React.FC<{
 
   if (!left && !right) {
     return (
-      <pre className="whitespace-pre-wrap rounded-md bg-background p-3 text-xs text-foreground">
+      <pre className="whitespace-pre-wrap rounded-lg bg-background p-3 text-xs text-foreground">
         {fallbackDiff || emptyText}
       </pre>
     );
   }
 
   return (
-    <div className="h-[420px] rounded-md bg-background">
+    <div className="h-[420px] rounded-lg bg-background">
       <DiffEditor
         height="100%"
         language={language}
@@ -722,7 +722,7 @@ const ChampionDiffSection: React.FC<{
   const rightHref = scoreVersionHref(scorecardId, scoreId, diff.right_version_id);
 
   return (
-    <div className="rounded-md bg-card p-3">
+    <div className="rounded-lg bg-card p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-sm font-medium">Champion Diff</div>
@@ -752,7 +752,7 @@ const ChampionDiffSection: React.FC<{
 
       {isOpen ? (
         diff.message ? (
-          <div className="mt-3 rounded-md bg-background p-3 text-sm text-foreground">{diff.message}</div>
+          <div className="mt-3 rounded-lg bg-background p-3 text-sm text-foreground">{diff.message}</div>
         ) : (
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "code" | "guidelines")}>
             <TabsList className="mt-3">
@@ -804,208 +804,210 @@ const ScoreTimelineSection: React.FC<{
   ).length;
 
   return (
-    <section className="space-y-3 rounded-md bg-muted px-4 pb-4 pt-0">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">{score.score_name}</h3>
-          <div className="text-xs text-muted-foreground">
-            {championChangeCount} champion change{championChangeCount === 1 ? "" : "s"}
-            {newChampionCount > 0
-              ? `, ${newChampionCount} new champion${newChampionCount === 1 ? "" : "s"}`
-              : ""}
-          </div>
+    <section className="rounded-lg bg-muted p-3">
+      <div className="space-y-1">
+        <div className="flex min-w-0 items-baseline justify-between gap-3">
+          <h3 className="m-0 min-w-0 text-lg font-semibold leading-tight">{score.score_name}</h3>
+          <LinkedShortId
+            id={score.score_id}
+            href={currentScoreHref}
+            label="Open score"
+            className="text-xs text-muted-foreground"
+            iconSize="md"
+          />
         </div>
-        <LinkedShortId
-          id={score.score_id}
-          href={currentScoreHref}
-          label="Open score"
-          className="text-xs text-muted-foreground"
-          iconSize="md"
-        />
-      </div>
-
-      <PerformanceSummarySection summary={score.performance_summary} />
-
-      <div className="grid gap-2 sm:grid-cols-4">
-        <div className="rounded-md bg-card p-3">
-          <div className="text-xs text-muted-foreground">Procedures</div>
-          <div className="text-lg font-semibold">{formatInteger(score.optimization_summary?.procedure_count)}</div>
-        </div>
-        <div className="rounded-md bg-card p-3">
-          <div className="text-xs text-muted-foreground">Evaluations</div>
-          <div className="text-lg font-semibold">{formatInteger(score.optimization_summary?.evaluation_count)}</div>
-        </div>
-        <div className="rounded-md bg-card p-3">
-          <div className="text-xs text-muted-foreground">Score Results</div>
-          <div className="text-lg font-semibold">{formatInteger(score.optimization_summary?.score_result_count)}</div>
-        </div>
-        <div className="rounded-md bg-card p-3">
-          <div className="text-xs text-muted-foreground">Optimization Cost</div>
-          <div className="text-lg font-semibold">
-            {formatCurrency(score.optimization_summary?.optimization_cost?.overall)}
-          </div>
+        <div className="text-xs text-muted-foreground">
+          {championChangeCount} champion change{championChangeCount === 1 ? "" : "s"}
+          {newChampionCount > 0
+            ? `, ${newChampionCount} new champion${newChampionCount === 1 ? "" : "s"}`
+            : ""}
         </div>
       </div>
 
-      {chartData.length > 0 ? (
-        <div className="rounded-md bg-background p-2">
-          <ChartContainer config={chartConfig} className="h-[260px] w-full">
-            <LineChart data={chartData} margin={chartMargin}>
-              <CartesianGrid stroke="hsl(var(--foreground) / 0.12)" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="entered_at_timestamp"
-                type="number"
-                domain={xDomain || ["dataMin", "dataMax"]}
-                tickFormatter={formatAxisDate}
-                tick={{ fill: "hsl(var(--foreground) / 0.7)", fontSize: 10 }}
-                axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
-                tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
-                tickMargin={4}
-                padding={{ left: 28, right: 28 }}
-              />
-              <YAxis
-                yAxisId="alignment"
-                domain={[-1, 1]}
-                ticks={[-1, -0.5, 0, 0.5, 1]}
-                axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
-                tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
-                tick={<LeftAxisTick />}
-                width={52}
-              />
-              <YAxis
-                yAxisId="accuracy"
-                orientation="right"
-                domain={[0, 100]}
-                ticks={[0, 25, 50, 75, 100]}
-                axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
-                tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
-                tick={<RightAxisTick />}
-                width={56}
-              />
-              <Tooltip content={<TimelineTooltip />} />
-              <Customized component={<ChampionTransitionMarkers chartData={chartData} />} />
-              {availableMetricKeys.includes("feedback_alignment") ? (
-                <Line
-                  yAxisId="alignment"
-                  type="monotone"
-                  dataKey="feedback_alignment"
-                  name="Feedback AC1"
-                  stroke={chartConfig.feedback_alignment.color}
-                  strokeWidth={2}
-                  dot={<CircleDot fill={chartConfig.feedback_alignment.color} />}
-                  activeDot={{ r: 6 }}
-                  connectNulls
-                  isAnimationActive={false}
-                />
-              ) : null}
-              {availableMetricKeys.includes("regression_alignment") ? (
-                <Line
-                  yAxisId="alignment"
-                  type="monotone"
-                  dataKey="regression_alignment"
-                  name="Regression AC1"
-                  stroke={chartConfig.regression_alignment.color}
-                  strokeWidth={2}
-                  dot={<CircleDot fill={chartConfig.regression_alignment.color} />}
-                  activeDot={{ r: 6 }}
-                  connectNulls
-                  isAnimationActive={false}
-                />
-              ) : null}
-              {availableMetricKeys.includes("feedback_accuracy") ? (
-                <Line
-                  yAxisId="accuracy"
-                  type="monotone"
-                  dataKey="feedback_accuracy"
-                  name="Feedback Accuracy"
-                  stroke={chartConfig.feedback_accuracy.color}
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={<SquareDot fill={chartConfig.feedback_accuracy.color} />}
-                  activeDot={{ r: 6 }}
-                  connectNulls
-                  isAnimationActive={false}
-                />
-              ) : null}
-              {availableMetricKeys.includes("regression_accuracy") ? (
-                <Line
-                  yAxisId="accuracy"
-                  type="monotone"
-                  dataKey="regression_accuracy"
-                  name="Regression Accuracy"
-                  stroke={chartConfig.regression_accuracy.color}
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={<SquareDot fill={chartConfig.regression_accuracy.color} />}
-                  activeDot={{ r: 6 }}
-                  connectNulls
-                  isAnimationActive={false}
-                />
-              ) : null}
-            </LineChart>
-          </ChartContainer>
-          <MetricLegend metrics={availableMetricKeys} />
-        </div>
-      ) : (
-        <div className="rounded-md bg-card p-4 text-sm text-foreground">
-          No parseable champion transition dates for this score.
-        </div>
-      )}
+      <div className="space-y-3 pt-3">
+        <PerformanceSummarySection summary={score.performance_summary} />
 
-      {score.points?.length ? (
-        <div
-          data-testid={`version-table-${score.score_id}`}
-          className="h-auto max-h-none self-start overflow-visible rounded-md bg-background"
-        >
+        <div className="grid gap-2 sm:grid-cols-4">
+          <div className="rounded-lg bg-card p-3">
+            <div className="text-xs text-muted-foreground">Procedures</div>
+            <div className="text-lg font-semibold">{formatInteger(score.optimization_summary?.procedure_count)}</div>
+          </div>
+          <div className="rounded-lg bg-card p-3">
+            <div className="text-xs text-muted-foreground">Evaluations</div>
+            <div className="text-lg font-semibold">{formatInteger(score.optimization_summary?.evaluation_count)}</div>
+          </div>
+          <div className="rounded-lg bg-card p-3">
+            <div className="text-xs text-muted-foreground">Score Results</div>
+            <div className="text-lg font-semibold">{formatInteger(score.optimization_summary?.score_result_count)}</div>
+          </div>
+          <div className="rounded-lg bg-card p-3">
+            <div className="text-xs text-muted-foreground">Optimization Cost</div>
+            <div className="text-lg font-semibold">
+              {formatCurrency(score.optimization_summary?.optimization_cost?.overall)}
+            </div>
+          </div>
+        </div>
+
+        {chartData.length > 0 ? (
+          <div className="rounded-lg bg-background p-2">
+            <ChartContainer config={chartConfig} className="h-[260px] w-full">
+              <LineChart data={chartData} margin={chartMargin}>
+                <CartesianGrid stroke="hsl(var(--foreground) / 0.12)" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="entered_at_timestamp"
+                  type="number"
+                  domain={xDomain || ["dataMin", "dataMax"]}
+                  tickFormatter={formatAxisDate}
+                  tick={{ fill: "hsl(var(--foreground) / 0.7)", fontSize: 10 }}
+                  axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
+                  tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
+                  tickMargin={4}
+                  padding={{ left: 28, right: 28 }}
+                />
+                <YAxis
+                  yAxisId="alignment"
+                  domain={[-1, 1]}
+                  ticks={[-1, -0.5, 0, 0.5, 1]}
+                  axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
+                  tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
+                  tick={<LeftAxisTick />}
+                  width={52}
+                />
+                <YAxis
+                  yAxisId="accuracy"
+                  orientation="right"
+                  domain={[0, 100]}
+                  ticks={[0, 25, 50, 75, 100]}
+                  axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
+                  tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
+                  tick={<RightAxisTick />}
+                  width={56}
+                />
+                <Tooltip content={<TimelineTooltip />} />
+                <Customized component={<ChampionTransitionMarkers chartData={chartData} />} />
+                {availableMetricKeys.includes("feedback_alignment") ? (
+                  <Line
+                    yAxisId="alignment"
+                    type="monotone"
+                    dataKey="feedback_alignment"
+                    name="Feedback AC1"
+                    stroke={chartConfig.feedback_alignment.color}
+                    strokeWidth={2}
+                    dot={<CircleDot fill={chartConfig.feedback_alignment.color} />}
+                    activeDot={{ r: 6 }}
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                ) : null}
+                {availableMetricKeys.includes("regression_alignment") ? (
+                  <Line
+                    yAxisId="alignment"
+                    type="monotone"
+                    dataKey="regression_alignment"
+                    name="Regression AC1"
+                    stroke={chartConfig.regression_alignment.color}
+                    strokeWidth={2}
+                    dot={<CircleDot fill={chartConfig.regression_alignment.color} />}
+                    activeDot={{ r: 6 }}
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                ) : null}
+                {availableMetricKeys.includes("feedback_accuracy") ? (
+                  <Line
+                    yAxisId="accuracy"
+                    type="monotone"
+                    dataKey="feedback_accuracy"
+                    name="Feedback Accuracy"
+                    stroke={chartConfig.feedback_accuracy.color}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={<SquareDot fill={chartConfig.feedback_accuracy.color} />}
+                    activeDot={{ r: 6 }}
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                ) : null}
+                {availableMetricKeys.includes("regression_accuracy") ? (
+                  <Line
+                    yAxisId="accuracy"
+                    type="monotone"
+                    dataKey="regression_accuracy"
+                    name="Regression Accuracy"
+                    stroke={chartConfig.regression_accuracy.color}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={<SquareDot fill={chartConfig.regression_accuracy.color} />}
+                    activeDot={{ r: 6 }}
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                ) : null}
+              </LineChart>
+            </ChartContainer>
+            <MetricLegend metrics={availableMetricKeys} />
+          </div>
+        ) : (
+          <div className="rounded-lg bg-card p-4 text-sm text-foreground">
+            No parseable champion transition dates for this score.
+          </div>
+        )}
+
+        {score.points?.length ? (
           <div
-            role="table"
-            aria-label={`${score.score_name} champion versions`}
-            className="w-full text-sm"
+            data-testid={`version-table-${score.score_id}`}
+            className="h-auto max-h-none self-start overflow-visible rounded-lg bg-background"
           >
             <div
-              role="row"
-              className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1fr)] bg-card text-xs text-muted-foreground"
+              role="table"
+              aria-label={`${score.score_name} champion versions`}
+              className="w-full text-sm"
             >
-              <div role="columnheader" className="px-3 py-2 font-medium">Champion Entered</div>
-              <div role="columnheader" className="px-3 py-2 font-medium">Version</div>
-              <div role="columnheader" className="px-3 py-2 font-medium">Feedback AC1</div>
-              <div role="columnheader" className="px-3 py-2 font-medium">Regression AC1</div>
-              <div role="columnheader" className="px-3 py-2 font-medium">Previous Champion</div>
-            </div>
-            {score.points.map((point, index) => (
               <div
-                key={`${score.score_id}-${point.version_id}-${point.entered_at}`}
                 role="row"
-                className={`grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1fr)] ${index % 2 === 0 ? "bg-background" : "bg-muted"}`}
+                className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1fr)] bg-card text-xs text-muted-foreground"
               >
-                <div role="cell" className="min-w-0 truncate px-3 py-2">{formatDateTime(point.entered_at)}</div>
-                <div role="cell" className="px-3 py-2 text-xs">
-                  <LinkedShortId
-                    id={point.version_id}
-                    href={scoreVersionHref(scorecardId, score.score_id, point.version_id)}
-                    label="Open score version"
-                  />
-                </div>
-                <div role="cell" className="px-3 py-2">{formatNumber(point.feedback_metrics?.alignment)}</div>
-                <div role="cell" className="px-3 py-2">{formatNumber(point.regression_metrics?.alignment)}</div>
-                <div role="cell" className="px-3 py-2 text-xs">
-                  <LinkedShortId
-                    id={point.previous_champion_version_id}
-                    href={scoreVersionHref(scorecardId, score.score_id, point.previous_champion_version_id)}
-                    label="Open previous champion score version"
-                  />
-                </div>
+                <div role="columnheader" className="px-3 py-2 font-medium">Champion Entered</div>
+                <div role="columnheader" className="px-3 py-2 font-medium">Version</div>
+                <div role="columnheader" className="px-3 py-2 font-medium">Feedback AC1</div>
+                <div role="columnheader" className="px-3 py-2 font-medium">Regression AC1</div>
+                <div role="columnheader" className="px-3 py-2 font-medium">Previous Champion</div>
               </div>
-            ))}
+              {score.points.map((point, index) => (
+                <div
+                  key={`${score.score_id}-${point.version_id}-${point.entered_at}`}
+                  role="row"
+                  className={`grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1fr)] ${index % 2 === 0 ? "bg-background" : "bg-muted"}`}
+                >
+                  <div role="cell" className="min-w-0 truncate px-3 py-2">{formatDateTime(point.entered_at)}</div>
+                  <div role="cell" className="px-3 py-2 text-xs">
+                    <LinkedShortId
+                      id={point.version_id}
+                      href={scoreVersionHref(scorecardId, score.score_id, point.version_id)}
+                      label="Open score version"
+                    />
+                  </div>
+                  <div role="cell" className="px-3 py-2">{formatNumber(point.feedback_metrics?.alignment)}</div>
+                  <div role="cell" className="px-3 py-2">{formatNumber(point.regression_metrics?.alignment)}</div>
+                  <div role="cell" className="px-3 py-2 text-xs">
+                    <LinkedShortId
+                      id={point.previous_champion_version_id}
+                      href={scoreVersionHref(scorecardId, score.score_id, point.previous_champion_version_id)}
+                      label="Open previous champion score version"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      {score.diff ? (
-        <ChampionDiffSection diff={score.diff} scorecardId={scorecardId} scoreId={score.score_id} />
-      ) : null}
+        {score.diff ? (
+          <ChampionDiffSection diff={score.diff} scorecardId={scorecardId} scoreId={score.score_id} />
+        ) : null}
 
-      <SmeInformationSection sme={score.sme} />
+        <SmeInformationSection sme={score.sme} />
+      </div>
     </section>
   );
 };
@@ -1097,7 +1099,7 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
         warning={output.warning}
         dateRange={output.date_range}
       >
-        <div className="rounded-md bg-card p-4 text-sm text-foreground">
+        <div className="rounded-lg bg-card p-4 text-sm text-foreground">
           Report block is processing. Champion version metrics will appear when computation completes.
         </div>
       </ReportBlock>
@@ -1116,29 +1118,29 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
     >
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-md bg-card p-3">
+          <div className="rounded-lg bg-card p-3">
             <div className="text-xs text-muted-foreground">Scores With Changes</div>
             <div className="text-xl font-semibold">
               {formatInteger(output.summary?.scores_with_champion_changes ?? scores.length)}
             </div>
           </div>
-          <div className="rounded-md bg-card p-3">
+          <div className="rounded-lg bg-card p-3">
             <div className="text-xs text-muted-foreground">Champion Changes</div>
             <div className="text-xl font-semibold">{formatInteger(output.summary?.champion_change_count)}</div>
           </div>
-          <div className="rounded-md bg-card p-3">
+          <div className="rounded-lg bg-card p-3">
             <div className="text-xs text-muted-foreground">Optimization Cost</div>
             <div className="text-xl font-semibold">{formatCurrency(output.summary?.optimization_cost?.overall)}</div>
           </div>
-          <div className="rounded-md bg-card p-3">
+          <div className="rounded-lg bg-card p-3">
             <div className="text-xs text-muted-foreground">Procedures</div>
             <div className="text-xl font-semibold">{formatInteger(output.summary?.procedure_count)}</div>
           </div>
-          <div className="rounded-md bg-card p-3">
+          <div className="rounded-lg bg-card p-3">
             <div className="text-xs text-muted-foreground">Evaluations</div>
             <div className="text-xl font-semibold">{formatInteger(output.summary?.evaluation_count)}</div>
           </div>
-          <div className="rounded-md bg-card p-3">
+          <div className="rounded-lg bg-card p-3">
             <div className="text-xs text-muted-foreground">Score Results</div>
             <div className="text-xl font-semibold">{formatInteger(output.summary?.score_result_count)}</div>
           </div>
@@ -1160,7 +1162,7 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
             ))}
           </div>
         ) : (
-          <div className="rounded-md bg-card p-4 text-sm text-foreground">
+          <div className="rounded-lg bg-card p-4 text-sm text-foreground">
             {output.message || "No champion version changes found in the requested time window."}
           </div>
         )}
