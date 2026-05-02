@@ -34,10 +34,82 @@
       "author": "ryan",
       "text": "Added include_unchanged option for ScoreChampionVersionTimeline. Default is changes-only: champion history entries without previousChampionVersionId are filtered out. CLI exposes --include-unchanged and Tactus passes include_unchanged through block_config/local runner. Focused tests pass. Live Suco 21-day default run now reports 35 scores, 48 champion changes, and 0 points without previous_champion_version_id.",
       "created_at": "2026-05-02T18:14:19.689656Z"
+    },
+    {
+      "id": "cced17d5-eeec-48b2-b9a9-3a1e66ceec43",
+      "author": "ryan",
+      "text": "Switched report diffs from raw preformatted unified diffs to Monaco DiffEditor using the existing project Monaco theme setup. Backend now includes raw left/right configuration and guidelines text alongside unified diff strings. Focused backend and frontend tests pass. Live Suco run confirms raw diff fields are present for real score changes; output saved to /tmp/suco_score_champion_version_timeline_cli_21d_monaco_diff.json.",
+      "created_at": "2026-05-02T18:17:39.350412Z"
+    },
+    {
+      "id": "2c8bd4e1-09ec-46fa-b3bc-df3172dac82b",
+      "author": "ryan",
+      "text": "Rendered SME agenda and worksheet content through ReactMarkdown with GFM and line-break support instead of preformatted text, preserving normal foreground contrast. Focused ScoreChampionVersionTimeline frontend test passes.",
+      "created_at": "2026-05-02T18:20:04.594453Z"
+    },
+    {
+      "id": "7d943c42-9547-44da-a7cd-3fcaae6c67f4",
+      "author": "ryan",
+      "text": "Adjusted the champion version table wrapper to explicitly size to row content: h-auto, max-h-none, self-start, and visible vertical overflow. Added focused renderer test coverage to prevent fixed-height table wrappers from returning. Test passed: ScoreChampionVersionTimeline frontend 7/7.",
+      "created_at": "2026-05-02T18:20:56.425280Z"
+    },
+    {
+      "id": "51f40437-afc4-4279-8ebb-cb2e4bcf7b18",
+      "author": "ryan",
+      "text": "Removed visible Evaluation Record Cost from ScoreChampionVersionTimeline. The report now shows procedure cost only, both at the top-level summary and per-score metric cards. Updated docs language/sample accordingly. Focused frontend test passes 7/7.",
+      "created_at": "2026-05-02T18:21:58.673799Z"
+    },
+    {
+      "id": "e0774f6a-168b-453f-9cca-5c4b5f6369fa",
+      "author": "ryan",
+      "text": "Clarified champion change counting semantics. champion_change_count now counts only points with a previous champion version. New initial champions are counted separately as new_champion_count / scores_with_new_champions when include_unchanged is used. UI per-score label uses champion_change_count and appends new champion count only when present. Focused backend tests 12/12 and frontend tests 7/7 pass.",
+      "created_at": "2026-05-02T18:23:30.296523Z"
+    },
+    {
+      "id": "c3d53e7b-484a-4d62-80a4-059634541e3a",
+      "author": "ryan",
+      "text": "Aligned the ScoreChampionVersionTimeline chart with the optimizer/procedure metrics chart: removed the synthetic timeline_marker series that plotted dots at y=0, put dots on the actual feedback/regression metric series, normalized accuracy onto a 0-100 right axis, kept AC1 on the -1..1 left axis, and added procedure-style circle/square legend markers. Updated the focused frontend test to assert no timeline_marker line and correct axis assignment. Test: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
+      "created_at": "2026-05-02T18:26:05.314240Z"
+    },
+    {
+      "id": "597710ac-ad27-4baf-b684-aaf3bf239669",
+      "author": "ryan",
+      "text": "Adjusted champion-transition markers so they no longer plot as metric values: markers now render on a separate bottom rail aligned to the shared x-domain, while AC1/accuracy dots remain only on real metric series. Focused frontend test still passes: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
+      "created_at": "2026-05-02T18:27:19.990211Z"
+    },
+    {
+      "id": "e5f9c804-94b0-4ee2-a6b9-0a9219e4b555",
+      "author": "ryan",
+      "text": "Fixed likely report lockup source by lazy-mounting champion diffs: each score now shows a collapsed diff summary by default, and Monaco DiffEditor is only created after the user opens that score's diff. The tab content also mounts only the active diff editor instead of code and guidelines together. Focused frontend test passes: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
+      "created_at": "2026-05-02T18:28:34.622876Z"
+    },
+    {
+      "id": "f6dfa28a-0c9f-4991-8045-33e6fb48cbd3",
+      "author": "ryan",
+      "text": "Removed nested vertical scroll panes from the champion timeline report content: SME markdown now expands naturally instead of using max-height overflow, and diff fallback text no longer creates a vertical overflow pane. Remaining overflow in the block is horizontal-only for the version table. Focused frontend test passes: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
+      "created_at": "2026-05-02T18:29:22.381846Z"
+    },
+    {
+      "id": "420ed848-618f-402f-a5dc-32cee9d7eb40",
+      "author": "ryan",
+      "text": "Investigated why Address, Project Timeline, and Credit Rating Metadata AI appears. Fresh Suco output shows it is not a no-previous/no-evaluation row: it has previous_champion_version_id d3454470..., one optimizer procedure, feedback eval 73f78ae0... (AC1 0.8189, accuracy 85, 200 items), and regression eval c0b7197b... (AC1 0.7775, accuracy 85, 200 items). Also tightened backend inclusion so single-point champion rows with no evaluations/procedures are omitted. Backend test passes: pytest plexus/reports/blocks/score_champion_version_timeline_test.py -q.",
+      "created_at": "2026-05-02T18:35:29.975816Z"
+    },
+    {
+      "id": "b77ffa26-4330-4921-b481-509648f4eb94",
+      "author": "ryan",
+      "text": "Reworked the champion version list so it no longer uses native table layout, which was preserving extra vertical space. It is now a compact ARIA table built from CSS grid rows, so a header plus one version row takes only header+row height. Focused frontend test passes: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
+      "created_at": "2026-05-02T18:36:11.826803Z"
+    },
+    {
+      "id": "83b25d1b-ee43-4f76-9bb9-81c4f5f5ece7",
+      "author": "ryan",
+      "text": "Changed champion transition rail markers from dots to flat rounded pills and adjusted rail insets to align with the chart plot/x-axis scale. Focused frontend test passes: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
+      "created_at": "2026-05-02T18:36:46.822462Z"
     }
   ],
   "created_at": "2026-05-02T18:05:21.700758Z",
-  "updated_at": "2026-05-02T18:14:19.689656Z",
+  "updated_at": "2026-05-02T18:36:46.822462Z",
   "closed_at": "2026-05-02T18:10:42.895877Z",
   "custom": {}
 }
