@@ -5172,8 +5172,6 @@ code: |
 
   local max_cycles = params.max_iterations
   local cycle = #iterations  -- 0 for fresh run; N for continuation (resumes from where prior run left off)
-  -- Track last mailbox read time for message injection (Phase 4)
-  local _last_mailbox_ts = State.get("last_mailbox_check") or ""
 
   while cycle < max_cycles do
     cycle = cycle + 1
@@ -5210,34 +5208,6 @@ code: |
             return "break_cycle"
           end
         end
-      end
-    end
-
-    -- Phase 4: Mailbox check — pick up any user messages injected via conversation viewer
-    do
-      local _proc_id = State.get("_procedure_id")
-      if _proc_id then
-        local _ok, _msgs = pcall(call_plexus_tool, "plexus_procedure_chat_messages", {
-          procedure_id = _proc_id,
-          limit = 20
-        })
-        if _ok and type(_msgs) == "table" then
-          local _new_msgs = {}
-          for _, m in ipairs(_msgs) do
-            if m.role == "USER" and (m.humanInteraction == "CHAT" or m.interactionType == "CHAT")
-               and (m.createdAt or "") > _last_mailbox_ts then
-              table.insert(_new_msgs, m.content or "")
-            end
-          end
-          if #_new_msgs > 0 then
-            local _injected = table.concat(_new_msgs, "\n---\n")
-            params.hint = ((params.hint or "") ~= "" and (params.hint .. "\n\n") or "")
-              .. "[User guidance injected mid-run]: " .. _injected
-            Human.notify({message = "Received " .. #_new_msgs .. " user message(s) via chat: " .. _injected, level = "info"})
-          end
-        end
-        _last_mailbox_ts = os.date("!%Y-%m-%dT%H:%M:%SZ")
-        State.set("last_mailbox_check", _last_mailbox_ts)
       end
     end
 

@@ -82,9 +82,137 @@ class ProcedureChatRecorder:
             return data.get(field_name)
         return result.get(field_name)
 
+    @staticmethod
+    def _parse_metadata(value: Any) -> Dict[str, Any]:
+        """Return metadata as a dict when stored as JSON or a native mapping."""
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str) and value.strip():
+            try:
+                parsed = json.loads(value)
+            except Exception:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return {}
+
     def _response_target(self) -> str:
         """Return the target used by response-status GraphQL indexes."""
         return self.procedure_id or self.session_id
+
+    def get_steering_messages(
+        self,
+        *,
+        after: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        """Return completed user-authored procedure steering messages after a watermark."""
+        query = """
+        query ListProcedureSteeringMessages(
+            $procedureId: String!
+            $createdAt: ModelStringKeyConditionInput
+            $limit: Int
+            $nextToken: String
+        ) {
+            listChatMessageByProcedureIdAndCreatedAt(
+                procedureId: $procedureId
+                createdAt: $createdAt
+                sortDirection: ASC
+                limit: $limit
+                nextToken: $nextToken
+            ) {
+                items {
+                    id
+                    accountId
+                    sessionId
+                    procedureId
+                    role
+                    content
+                    messageType
+                    humanInteraction
+                    responseStatus
+                    metadata
+                    createdAt
+                }
+                nextToken
+            }
+        }
+        """
+        after_value = str(after or "")
+        safe_limit = max(1, min(int(limit or 50), 200))
+        messages: List[Dict[str, Any]] = []
+        next_token: Optional[str] = None
+
+        while True:
+            result = self.client.execute(
+                query,
+                {
+                    'procedureId': self.procedure_id,
+                    'createdAt': {'gt': after_value},
+                    'limit': safe_limit,
+                    'nextToken': next_token,
+                }
+            )
+            if isinstance(result, dict) and result.get('errors'):
+                raise RuntimeError(
+                    f"Procedure steering message query failed: {result['errors']}"
+                )
+
+            page = self._graphql_field(result, 'listChatMessageByProcedureIdAndCreatedAt')
+            if not isinstance(page, dict):
+                break
+
+            page_items = page.get('items', [])
+            if isinstance(page_items, list):
+                for item in page_items:
+                    if not isinstance(item, dict):
+                        continue
+                    metadata = self._parse_metadata(item.get('metadata'))
+                    if metadata.get('source') != 'procedure-steering-input':
+                        continue
+                    if item.get('role') != 'USER':
+                        continue
+                    if item.get('messageType') != 'MESSAGE':
+                        continue
+                    if item.get('humanInteraction') != 'CHAT':
+                        continue
+                    if item.get('responseStatus') != 'COMPLETED':
+                        continue
+                    content = str(item.get('content') or '').strip()
+                    if not content:
+                        continue
+
+                    target_agents = metadata.get('target_agents')
+                    if agent_name and isinstance(target_agents, list):
+                        targets = {str(target) for target in target_agents}
+                        if 'all_agents' not in targets and agent_name not in targets:
+                            continue
+
+                    messages.append({
+                        'id': item.get('id'),
+                        'account_id': item.get('accountId'),
+                        'session_id': item.get('sessionId'),
+                        'procedure_id': item.get('procedureId'),
+                        'created_at': item.get('createdAt'),
+                        'content': content,
+                        'metadata': metadata,
+                    })
+
+            next_token = page.get('nextToken')
+            if not next_token or len(messages) >= safe_limit:
+                break
+
+        messages = sorted(
+            messages[:safe_limit],
+            key=lambda item: str(item.get('created_at') or ''),
+        )
+        watermark = after_value
+        if messages:
+            watermark = str(messages[-1].get('created_at') or after_value)
+        return {
+            'messages': messages,
+            'watermark': watermark,
+        }
 
     def _get_resume_session_id(self) -> Optional[str]:
         """Return existing session id when procedure is waiting for human input."""
