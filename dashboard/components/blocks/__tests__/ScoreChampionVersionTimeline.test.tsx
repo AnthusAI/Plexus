@@ -236,7 +236,9 @@ describe("ScoreChampionVersionTimeline", () => {
     expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("width", "20");
     expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("height", "8");
     expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("y", "130");
-    expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("fill", "hsl(var(--muted))");
+    expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveClass("fill-card");
+    expect(screen.getAllByTestId("champion-transition-marker")[0]).not.toHaveClass("opacity-70");
+    expect(screen.getAllByTestId("champion-transition-marker")[0]).not.toHaveAttribute("fill", "hsl(var(--foreground))");
     expect(screen.getByTestId("line-feedback_alignment")).toHaveAttribute("data-y-axis-id", "alignment");
     expect(screen.getByTestId("line-feedback_accuracy")).toHaveAttribute("data-y-axis-id", "accuracy");
     expect(screen.getByTestId("line-feedback_accuracy")).toHaveAttribute("data-stroke-dasharray", "5 5");
