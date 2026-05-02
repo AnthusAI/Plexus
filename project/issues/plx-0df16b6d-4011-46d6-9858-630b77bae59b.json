@@ -214,10 +214,82 @@
       "author": "ryan",
       "text": "Applied stronger visual tightening based on review feedback: score cards now have no top padding (pt-0), and champion-transition marker rectangles now use the muted background color hsl(var(--muted)) instead of muted-foreground.",
       "created_at": "2026-05-02T19:04:12.311783Z"
+    },
+    {
+      "id": "dec68486-7600-4be7-a71e-5f251edd8ab5",
+      "author": "ryan",
+      "text": "Tightened the chart marker-to-legend spacing more aggressively: reduced chart bottom margin and pulled the legend upward with a negative top margin so it sits closer to the champion-transition marker rail.",
+      "created_at": "2026-05-02T19:04:58.644367Z"
+    },
+    {
+      "id": "59895ba9-cb7a-404c-ba50-38e43f9e26aa",
+      "author": "ryan",
+      "text": "Removed the remaining visual whitespace above score names by tightening the score title line height (leading-none) and applying a small standard negative top margin (-mt-1) to the score card header row. The card top padding was already pt-0; the remaining gap was the text line box.",
+      "created_at": "2026-05-02T19:05:33.558151Z"
+    },
+    {
+      "id": "7beacff1-7796-4677-a518-aa47c74c0e51",
+      "author": "ryan",
+      "text": "Corrected champion-transition marker color to use Tailwind fill-muted directly with opacity-70, instead of relying on SVG fill attributes or muted-foreground. Test now asserts fill-muted and explicitly guards against foreground fill.",
+      "created_at": "2026-05-02T19:06:46.175613Z"
+    },
+    {
+      "id": "4feeae60-1634-439e-8f9d-e9f8a401152c",
+      "author": "ryan",
+      "text": "Changed champion-transition marker rectangles from fill-muted to fill-card per design review, keeping opacity-70 and existing shape/position.",
+      "created_at": "2026-05-02T19:07:56.563031Z"
+    },
+    {
+      "id": "6b2fd79e-ce8c-4a78-b14c-b0e892d600e9",
+      "author": "ryan",
+      "text": "Addressed repeated score-card header whitespace feedback at the header element level: score card remains pt-0, header row is pulled up from -mt-1 to -mt-3, and the score title explicitly sets m-0 plus leading-none to eliminate default heading/line-box whitespace above the title.",
+      "created_at": "2026-05-02T19:08:55.928104Z"
+    },
+    {
+      "id": "0f57b3b9-962c-482c-908f-f7b7fe9b824f",
+      "author": "ryan",
+      "text": "Adjusted ScoreChampionVersionTimeline rectangle corner radius to match the standard card radius. The score cards and rectangular report panels now use rounded-lg instead of rounded-md, while intentionally small controls/icons remain unchanged.",
+      "created_at": "2026-05-02T19:09:43.428470Z"
+    },
+    {
+      "id": "c20063df-6d23-4d17-8dfa-6c16ec9b79b9",
+      "author": "ryan",
+      "text": "Removed the negative-margin workaround from the score card header and made the header flush with the score card top: the card remains pt-0, the h3 remains m-0/leading-none, and the header row now uses items-start instead of baseline alignment so the score title sits at the top edge without extra baseline offset.",
+      "created_at": "2026-05-02T19:10:26.288482Z"
+    },
+    {
+      "id": "f0b70099-5aea-4b6f-a5d2-dc991d1362cf",
+      "author": "ryan",
+      "text": "Restructured each ScoreChampionVersionTimeline score card to make the score header a flush top block, separate from the padded body. The section has no top padding; the body below the header owns its own pt-3/pb-4 spacing. This removes top padding above the score name rather than relying on negative margin offsets.",
+      "created_at": "2026-05-02T19:11:32.181519Z"
+    },
+    {
+      "id": "6bad34fc-4fb7-4f5e-addb-32556eadf490",
+      "author": "ryan",
+      "text": "Fixed score card header alignment after review: header row now has a small pt-1 inset, score title is pulled up with -mt-1 to counter font metric slack, and the score ID/link gets pt-0.5 so it no longer touches the card top. This aligns the score title and score ID as one visual row.",
+      "created_at": "2026-05-02T19:12:01.450160Z"
+    },
+    {
+      "id": "b3dbb6c7-0dfa-43a7-af3f-34927b706335",
+      "author": "ryan",
+      "text": "Removed opacity from champion-transition marker rectangles. They now use exactly fill-card with no opacity modifier or SVG fill attribute.",
+      "created_at": "2026-05-02T19:12:45.805308Z"
+    },
+    {
+      "id": "61de7b4e-3ca3-4043-89c1-7debdaf593c6",
+      "author": "ryan",
+      "text": "Adjusted ScoreChampionVersionTimeline score card spacing to standard p-3 header padding. Removed the title/ID micro-offsets and matched the body to px-3 pb-3 so top and bottom card padding are balanced.",
+      "created_at": "2026-05-02T19:13:12.286222Z"
+    },
+    {
+      "id": "9428aca0-2d0e-48ba-96d1-98716bb3781d",
+      "author": "ryan",
+      "text": "Reworked score card header alignment: title and score ID are now in the same explicit title row with items-baseline, with the subtitle on its own row below. The card uses standard p-3 and the body starts with pt-3, avoiding the previous two-line flex/header mismatch.",
+      "created_at": "2026-05-02T19:13:54.079625Z"
     }
   ],
   "created_at": "2026-05-02T18:05:21.700758Z",
-  "updated_at": "2026-05-02T19:04:12.311783Z",
+  "updated_at": "2026-05-02T19:13:54.079625Z",
   "closed_at": "2026-05-02T18:10:42.895877Z",
   "custom": {}
 }
