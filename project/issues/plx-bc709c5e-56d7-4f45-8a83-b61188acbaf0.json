@@ -1,0 +1,55 @@
+{
+  "id": "plx-bc709c5e-56d7-4f45-8a83-b61188acbaf0",
+  "title": "Order EvaluationTask detail metadata rows",
+  "description": "EvaluationTask detail metadata rows should render in the requested sequence.\n\nBehavior spec:\nFeature: EvaluationTask detail metadata ordering\nScenario: Related evaluation metadata is shown below timing indicators\nGiven an EvaluationTask is shown in detail mode\nWhen dispatch/timing and related-resource metadata are available\nThen the dispatch indicator appears before the task timestamp\nAnd the task timestamp appears before the duration\nAnd the baseline evaluation rows appear after those timing fields\nAnd the Procedure and Score Version rows appear after the baseline rows.\n\nDefinition of Done:\n- Reorder the existing EvaluationTask detail JSX without adding alternate display paths.\n- Keep row content and styling unchanged except for order.\n- Add or update focused coverage for the ordering.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e31e0cb5-abe5-4fa7-bcbb-8c9db24da922",
+      "author": "ryan",
+      "text": "Starting implementation. Scope is EvaluationTask detail row ordering only: timing indicators first, baseline related-resource rows next, Procedure/Score Version related-resource rows after that.",
+      "created_at": "2026-05-02T17:47:16.283537Z"
+    },
+    {
+      "id": "73585f79-9dd1-490d-8bec-48a32408bb45",
+      "author": "ryan",
+      "text": "Correction from user: the first field in the requested order is the EvaluationTask cost row, not a dispatch/local/claimed/announced indicator. Updated implementation target: Cost, then task timestamp, then duration, then Original/Current baseline rows, then Procedure/Score Version rows.",
+      "created_at": "2026-05-02T17:47:31.312414Z"
+    },
+    {
+      "id": "8260ee41-3d22-4905-aede-704ff46291bf",
+      "author": "ryan",
+      "text": "Implemented locally after correction: EvaluationTask detail now renders the cost row, task timestamp, and duration before the baseline related-resource rows. Original/Current baseline rows remain before Procedure and Score Version rows. Added ordering coverage that checks Cost -> Timestamp -> Elapsed -> Original baseline -> Current best baseline -> Procedure -> Score Version. Verification: npm test -- EvaluationTask.category-filter.test.tsx passed with existing act warnings.",
+      "created_at": "2026-05-02T17:48:22.910110Z"
+    },
+    {
+      "id": "09d9ac05-d385-4985-be33-0e6ca032f482",
+      "author": "ryan",
+      "text": "Follow-up: replaced the EvaluationTask detail Cost: text label with the standard lucide Coins icon, preserving the cost amount and ordering. Updated focused ordering test to assert the accessible Cost icon renders and the literal Cost: text is absent. Verification: npm test -- EvaluationTask.category-filter.test.tsx passed with existing act warnings.",
+      "created_at": "2026-05-02T17:49:01.372854Z"
+    },
+    {
+      "id": "9432281e-bd6e-4c01-92dd-280e9510715f",
+      "author": "ryan",
+      "text": "Correction from user: cost should render after duration. Updated target order is task timestamp, duration, cost, then Original/Current baseline rows, then Procedure/Score Version rows.",
+      "created_at": "2026-05-02T17:49:09.053045Z"
+    },
+    {
+      "id": "309bde9d-525a-4369-9cea-286d48d1b93b",
+      "author": "ryan",
+      "text": "Follow-up correction implemented: moved the Coins cost row after ProgressBarTiming/duration. Focused ordering test now asserts Timestamp -> Elapsed -> Cost -> Original baseline -> Current best baseline -> Procedure -> Score Version, and still verifies the accessible Cost icon with no literal Cost: label. Verification: npm test -- EvaluationTask.category-filter.test.tsx passed with existing act warnings.",
+      "created_at": "2026-05-02T17:49:32.478213Z"
+    }
+  ],
+  "created_at": "2026-05-02T17:47:12.332548Z",
+  "updated_at": "2026-05-02T17:49:48.404164Z",
+  "closed_at": "2026-05-02T17:49:48.404164Z",
+  "custom": {}
+}
