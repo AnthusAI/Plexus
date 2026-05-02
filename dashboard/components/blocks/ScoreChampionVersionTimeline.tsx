@@ -804,10 +804,12 @@ const ScoreTimelineSection: React.FC<{
   ).length;
 
   return (
-    <section className="rounded-lg bg-muted p-3">
+    <section className="rounded-lg bg-muted px-3 pb-3 pt-4">
       <div className="space-y-1">
         <div className="flex min-w-0 items-baseline justify-between gap-3">
-          <h3 className="m-0 min-w-0 text-lg font-semibold leading-tight">{score.score_name}</h3>
+          <div role="heading" aria-level={3} className="min-w-0 text-lg font-semibold leading-none">
+            {score.score_name}
+          </div>
           <LinkedShortId
             id={score.score_id}
             href={currentScoreHref}
@@ -1072,6 +1074,7 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
     props.name && !props.name.startsWith("block_")
       ? props.name
       : output.block_title || "Score Champion Version Timeline";
+  const subtitle = output.scorecard_name || output.block_description;
 
   const sharedXDomain = React.useMemo<[number, number] | undefined>(() => {
     const start = output.date_range?.start ? new Date(output.date_range.start).getTime() : NaN;
@@ -1094,7 +1097,8 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
         {...props}
         output={output as any}
         title={title}
-        subtitle={output.block_description}
+        subtitle={subtitle}
+        subtitleClassName="mt-1 text-lg font-semibold text-foreground"
         error={attachmentLoadError || output.error}
         warning={output.warning}
         dateRange={output.date_range}
@@ -1111,7 +1115,8 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
       {...props}
       output={output as any}
       title={title}
-      subtitle={output.block_description}
+      subtitle={subtitle}
+      subtitleClassName="mt-1 text-lg font-semibold text-foreground"
       error={attachmentLoadError || output.error}
       warning={output.warning}
       dateRange={output.date_range}
@@ -1144,10 +1149,6 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
             <div className="text-xs text-muted-foreground">Score Results</div>
             <div className="text-xl font-semibold">{formatInteger(output.summary?.score_result_count)}</div>
           </div>
-        </div>
-
-        <div className="text-sm text-foreground">
-          {output.scorecard_name ? `Scorecard: ${output.scorecard_name}` : null}
         </div>
 
         {scores.length > 0 ? (
