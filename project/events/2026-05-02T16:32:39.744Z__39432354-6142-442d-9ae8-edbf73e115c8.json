@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "39432354-6142-442d-9ae8-edbf73e115c8",
+  "issue_id": "plx-d3e38fd2-8d77-444d-b465-f2c4a330d090",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-02T16:32:39.744Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Dashboard money, cost, and price iconography should use the lucide Coins icon.\n\nBehavior spec:\nFeature: Dashboard money icon consistency\nScenario: A user views a cost or price affordance\nGiven a dashboard UI element represents money, cost, or price\nWhen an icon is shown for that concept\nThen the icon is Coins\nAnd CircleDollarSign is not used because it is US-biased.\n\nDefinition of Done:\n- Replace remaining CircleDollarSign dashboard usage with Coins.\n- Verify no CircleDollarSign imports/usages remain in dashboard source.\n- Run focused relevant tests.",
+    "issue_type": "chore",
+    "labels": [],
+    "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+    "priority": 2,
+    "status": "open",
+    "title": "Standardize dashboard money icons on Coins"
+  }
+}
