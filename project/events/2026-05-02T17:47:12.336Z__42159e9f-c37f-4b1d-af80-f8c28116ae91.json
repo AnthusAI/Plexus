@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "42159e9f-c37f-4b1d-af80-f8c28116ae91",
+  "issue_id": "plx-bc709c5e-56d7-4f45-8a83-b61188acbaf0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-02T17:47:12.336Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "EvaluationTask detail metadata rows should render in the requested sequence.\n\nBehavior spec:\nFeature: EvaluationTask detail metadata ordering\nScenario: Related evaluation metadata is shown below timing indicators\nGiven an EvaluationTask is shown in detail mode\nWhen dispatch/timing and related-resource metadata are available\nThen the dispatch indicator appears before the task timestamp\nAnd the task timestamp appears before the duration\nAnd the baseline evaluation rows appear after those timing fields\nAnd the Procedure and Score Version rows appear after the baseline rows.\n\nDefinition of Done:\n- Reorder the existing EvaluationTask detail JSX without adding alternate display paths.\n- Keep row content and styling unchanged except for order.\n- Add or update focused coverage for the ordering.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+    "priority": 2,
+    "status": "open",
+    "title": "Order EvaluationTask detail metadata rows"
+  }
+}

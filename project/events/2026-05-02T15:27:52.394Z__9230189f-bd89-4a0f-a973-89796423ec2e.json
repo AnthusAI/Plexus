@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9230189f-bd89-4a0f-a973-89796423ec2e",
+  "issue_id": "plx-2dfab8af-5d18-4119-af06-e86585adc6bd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-02T15:27:52.394Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: Live procedure steering\n\nScenario: Steering message is sent from a running procedure conversation\nGiven an operator is viewing a procedure conversation\nWhen they type a chat message into the procedure conversation input\nThen the message is persisted as a completed user steering note\nAnd it does not dispatch a console chat response\n\nScenario: Steering influences future agent calls\nGiven a procedure has received a steering note\nWhen any procedure agent makes a future LLM call\nThen the steering note is included as advisory context before the call\nAnd each agent receives the steering note at most once\n\nScenario: Steering reaches summaries and reports\nGiven a steering note was sent before a summary or report agent call\nWhen that agent builds its LLM context\nThen the steering note is included so summaries, diagnostics, and prescriptions can be influenced.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Operators can steer running procedures from procedure chat"
+  }
+}

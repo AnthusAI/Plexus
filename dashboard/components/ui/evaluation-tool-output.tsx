@@ -180,6 +180,11 @@ function extractEvaluationIds(parsed: unknown): string[] {
   if (parsed && typeof parsed === 'object') {
     const id = (parsed as any).evaluation_id || (parsed as any).id
     if (typeof id === 'string' && id.trim()) return [id.trim()]
+    const value = (parsed as any).value
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const valueId = (value as any).evaluation_id || (value as any).id
+      if (typeof valueId === 'string' && valueId.trim()) return [valueId.trim()]
+    }
   }
   return []
 }
