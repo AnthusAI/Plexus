@@ -1759,7 +1759,7 @@ def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -
         "plexus.cli.report.utils.resolve_account_id_for_command",
         lambda _client, _account: "acct-1",
     )
-    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
     monkeypatch.setattr("subprocess.Popen", fake_popen)
 
     result = execute._default_report_runner(
@@ -1801,7 +1801,7 @@ def test_default_report_runner_launches_score_champion_timeline_command(monkeypa
         "plexus.cli.report.utils.resolve_account_id_for_command",
         lambda _client, _account: "acct-1",
     )
-    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
     monkeypatch.setattr("subprocess.Popen", fake_popen)
 
     result = execute._default_report_runner(
