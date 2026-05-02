@@ -1284,15 +1284,6 @@ export default function ProcedureTask({
     >
       {variant === 'grid' ? (
         <div className="space-y-1.5">
-          <Timestamp time={taskObject.time} variant="relative" />
-          {taskObject.startedAt && (
-            <ProgressBarTiming
-              startedAt={taskObject.startedAt}
-              completedAt={taskObject.completedAt}
-              isInProgress={taskObject.status === 'RUNNING'}
-              className="text-muted-foreground"
-            />
-          )}
           {taskObject.description && (
             <div className="text-sm text-muted-foreground line-clamp-2">
               {taskObject.description}
