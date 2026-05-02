@@ -106,10 +106,64 @@
       "author": "ryan",
       "text": "Changed champion transition rail markers from dots to flat rounded pills and adjusted rail insets to align with the chart plot/x-axis scale. Focused frontend test passes: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
       "created_at": "2026-05-02T18:36:46.822462Z"
+    },
+    {
+      "id": "bcd517ed-e2cc-4631-b696-a56d0a33e9fb",
+      "author": "ryan",
+      "text": "Fixed per-score optimization cost aggregation. Procedure costs now read both metadata.dashboard_state and metadata.state, and support the ProcedureTask cost shape (costs.evaluation.incurred_total/reused_total/total plus costs.inference.total). Procedure rows with no recorded cost now contribute 0 instead of making the score total N/A. Verified Suco 21-day fresh output: procedure scores now show dollar amounts/0.0 instead of N/A; total remains .4337581. Backend test passes: pytest plexus/reports/blocks/score_champion_version_timeline_test.py -q.",
+      "created_at": "2026-05-02T18:44:01.118777Z"
+    },
+    {
+      "id": "346f50c8-af5a-476e-aeac-fb9c40edffd9",
+      "author": "ryan",
+      "text": "Updated SME rendering so the SME Information component is omitted entirely when there is no SME agenda. Removed the previous empty/no-agenda panel and added a frontend regression test. Focused test passes: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
+      "created_at": "2026-05-02T18:44:45.209610Z"
+    },
+    {
+      "id": "2f7950a7-0a46-413c-9c78-59ae285ac1fc",
+      "author": "ryan",
+      "text": "Fixed champion marker x-alignment by rendering the rounded pill markers inside the Recharts SVG via Customized, using the same x-axis scale as the chart ticks instead of a separate HTML rail with hand-computed percentages. Focused frontend test passes: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
+      "created_at": "2026-05-02T18:46:21.464905Z"
+    },
+    {
+      "id": "916bfdb9-3ff0-43fa-889b-3a06e30ef51e",
+      "author": "ryan",
+      "text": "Tightened vertical spacing around the champion-version pill timeline by reducing chart bottom margin, lowering x-axis tick margin, and moving the SVG pill markers closer to the x-axis area. Focused frontend test passes: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
+      "created_at": "2026-05-02T18:47:11.494797Z"
+    },
+    {
+      "id": "8374de65-4a83-4c3a-b91c-621d65d811b1",
+      "author": "ryan",
+      "text": "Reordered per-score sections so Champion Diff appears before SME markdown/long-form text. Diff remains collapsed/lazy-mounted by default. Focused frontend test passes: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
+      "created_at": "2026-05-02T18:47:43.150504Z"
+    },
+    {
+      "id": "dc4d3c98-abe4-4cb6-aae1-ddc85e40c069",
+      "author": "ryan",
+      "text": "Made SME agenda/worksheet markdown scannable by default: each block now shows a short clipped preview with Show more/Show less controls, preserving markdown rendering while avoiding long text forcing users to scroll past full SME content. Focused frontend test passes: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
+      "created_at": "2026-05-02T18:48:27.925280Z"
+    },
+    {
+      "id": "3598a9e2-1659-46b1-969f-caafbf529fce",
+      "author": "ryan",
+      "text": "Moved champion-version pill markers below the chart plot area into the bottom margin so they no longer appear near the -1 AC1 region as data points. Horizontal x-axis alignment still comes from the Recharts x-scale. Focused frontend test passes: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx.",
+      "created_at": "2026-05-02T18:49:08.757667Z"
+    },
+    {
+      "id": "93daac94-cf95-405e-9d1f-b11b2a195cc0",
+      "author": "ryan",
+      "text": "Added score and score-version detail links to ScoreChampionVersionTimeline using the same lucide link icon/internal link styling pattern as evaluation task detail views. Focused frontend test now covers score, current version, previous champion, and latest champion links. Test run: npm test -- --runTestsByPath components/blocks/__tests__/ScoreChampionVersionTimeline.test.tsx (pass).",
+      "created_at": "2026-05-02T18:51:06.547020Z"
+    },
+    {
+      "id": "65e3af5e-cd58-4e10-9b6f-a1c13c282abc",
+      "author": "ryan",
+      "text": "Adjusted top ScoreChampionVersionTimeline summary metrics to remove the redundant Scores Analyzed tile and use a three-column desktop grid for the remaining six metrics.",
+      "created_at": "2026-05-02T18:51:35.794136Z"
     }
   ],
   "created_at": "2026-05-02T18:05:21.700758Z",
-  "updated_at": "2026-05-02T18:36:46.822462Z",
+  "updated_at": "2026-05-02T18:51:35.794136Z",
   "closed_at": "2026-05-02T18:10:42.895877Z",
   "custom": {}
 }

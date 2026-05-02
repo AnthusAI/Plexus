@@ -559,3 +559,93 @@ async def test_optimization_summary_counts_procedures_evaluations_score_results_
     assert output["scores"][0]["sme"]["agenda"] == "Review boundary cases with the SME."
     assert output["scores"][0]["sme"]["worksheet"] == "Confirm the transfer criteria."
     assert output["scores"][0]["sme"]["run_summary"] == {"cycles": 2}
+
+
+@pytest.mark.asyncio
+async def test_optimization_summary_reads_procedure_state_cost_shape(mock_api_client, monkeypatch):
+    block = ScoreChampionVersionTimeline(
+        config={"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+    scorecard = SimpleNamespace(id="sc-1", name="Scorecard")
+    versions = [
+        _version("v0", configuration="name: old\n"),
+        _version("v1", entered_at="2026-04-10T12:00:00+00:00", previous_id="v0", configuration="name: new\n"),
+    ]
+    evaluations = [
+        _evaluation(
+            "eval-1",
+            evaluation_type="feedback",
+            alignment=0.8,
+            accuracy=90,
+            processed_items=12,
+            created_at="2026-04-11T00:00:00+00:00",
+        ),
+    ]
+    procedures = [
+        {
+            "id": "procedure-1",
+            "status": "COMPLETED",
+            "createdAt": "2026-04-11T00:00:00+00:00",
+            "updatedAt": "2026-04-11T01:00:00+00:00",
+            "metadata": {
+                "procedure_type": "Optimizer Procedure",
+                "state": {
+                    "costs": {
+                        "evaluation": {
+                            "incurred_total": 1.25,
+                            "reused_total": 0.5,
+                            "total": 1.75,
+                        },
+                        "inference": {
+                            "total": 0.33,
+                        },
+                    }
+                },
+            },
+        },
+        {
+            "id": "procedure-2",
+            "status": "COMPLETED",
+            "createdAt": "2026-04-12T00:00:00+00:00",
+            "updatedAt": "2026-04-12T01:00:00+00:00",
+            "metadata": {
+                "procedure_type": "Optimizer Procedure",
+                "state": {
+                    "costs": {
+                        "evaluation": {
+                            "incurred_total": 2.0,
+                        },
+                        "inference": {
+                            "total": 0.4,
+                        },
+                    }
+                },
+            },
+        },
+    ]
+
+    monkeypatch.setattr(
+        block,
+        "_fetch_optimizer_procedures_for_score",
+        AsyncMock(return_value=procedures),
+    )
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(
+            block,
+            "_resolve_scores_for_mode",
+            new=AsyncMock(return_value=[{"score_id": "score-1", "score_name": "Score 1"}]),
+        ),
+        patch.object(block, "_fetch_score_versions", new=AsyncMock(return_value=versions)),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=evaluations)),
+    ):
+        output, _ = await block.generate()
+
+    score_cost = output["scores"][0]["optimization_summary"]["optimization_cost"]
+    assert score_cost["evaluation"] == 3.25
+    assert score_cost["inference"] == 0.73
+    assert score_cost["overall"] == 3.98
+    assert output["summary"]["optimization_cost"]["overall"] == 3.98

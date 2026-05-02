@@ -644,7 +644,9 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
 
         procedure = procedures[0]
         metadata = self._parse_json_object(procedure.get("metadata"))
-        state = await self._load_dashboard_state(metadata.get("dashboard_state"))
+        state = await self._load_dashboard_state(
+            metadata.get("dashboard_state") or metadata.get("state")
+        )
         end_of_run_report = state.get("end_of_run_report") if isinstance(state, dict) else None
         end_of_run_report = end_of_run_report if isinstance(end_of_run_report, dict) else {}
 
@@ -674,7 +676,7 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
 
     async def _procedure_cost_payload(self, procedure: Dict[str, Any]) -> Dict[str, Optional[float]]:
         metadata = self._parse_json_object(procedure.get("metadata"))
-        dashboard_state_ref = metadata.get("dashboard_state")
+        dashboard_state_ref = metadata.get("dashboard_state") or metadata.get("state")
         state = await self._load_dashboard_state(dashboard_state_ref)
         costs = state.get("costs") if isinstance(state, dict) else None
         if not isinstance(costs, dict):
@@ -688,11 +690,37 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
         overall = totals.get("overall") if isinstance(totals.get("overall"), dict) else {}
         inference = totals.get("inference") if isinstance(totals.get("inference"), dict) else {}
         evaluation = totals.get("evaluation") if isinstance(totals.get("evaluation"), dict) else {}
+        inference_costs = costs.get("inference") if isinstance(costs.get("inference"), dict) else {}
+        evaluation_costs = costs.get("evaluation") if isinstance(costs.get("evaluation"), dict) else {}
+
+        evaluation_incurred = self._first_finite(
+            evaluation.get("incurred"),
+            evaluation_costs.get("incurred_total"),
+        )
+        evaluation_reused = self._first_finite(
+            evaluation.get("reused"),
+            evaluation_costs.get("reused_total"),
+        )
+        evaluation_total = self._first_finite(
+            evaluation.get("total"),
+            evaluation_costs.get("total"),
+            self._sum_optional_numbers(evaluation_incurred, evaluation_reused),
+        )
+        inference_total = self._first_finite(
+            inference.get("total"),
+            inference_costs.get("total"),
+        )
+        overall_incurred = self._first_finite(
+            overall.get("incurred"),
+            overall.get("total"),
+            self._sum_optional_numbers(evaluation_incurred, inference_total),
+            self._sum_optional_numbers(evaluation_total, inference_total),
+        )
 
         return {
-            "overall": self._first_finite(overall.get("incurred"), overall.get("total")),
-            "inference": self._finite_number(inference.get("total")),
-            "evaluation": self._first_finite(evaluation.get("incurred"), evaluation.get("total")),
+            "overall": overall_incurred,
+            "inference": inference_total,
+            "evaluation": self._first_finite(evaluation_incurred, evaluation_total),
         }
 
     async def _load_dashboard_state(self, dashboard_state_ref: Any) -> Dict[str, Any]:
@@ -963,12 +991,25 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
             found = True
         return total if found else None
 
+    def _sum_optional_numbers(self, *values: Any) -> Optional[float]:
+        return self._sum_number(values)
+
     def _sum_cost_payloads(self, payloads: Any) -> Dict[str, Optional[float]]:
         rows = list(payloads)
+        if not rows:
+            return {
+                "overall": None,
+                "inference": None,
+                "evaluation": None,
+            }
+
+        def sum_cost_field(field: str) -> float:
+            return self._sum_number(row.get(field) for row in rows if isinstance(row, dict)) or 0.0
+
         return {
-            "overall": self._sum_number(row.get("overall") for row in rows if isinstance(row, dict)),
-            "inference": self._sum_number(row.get("inference") for row in rows if isinstance(row, dict)),
-            "evaluation": self._sum_number(row.get("evaluation") for row in rows if isinstance(row, dict)),
+            "overall": sum_cost_field("overall"),
+            "inference": sum_cost_field("inference"),
+            "evaluation": sum_cost_field("evaluation"),
         }
 
     def _graphql_datetime(self, value: datetime) -> str:
