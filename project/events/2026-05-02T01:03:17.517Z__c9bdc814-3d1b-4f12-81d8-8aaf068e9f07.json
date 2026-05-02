@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c9bdc814-3d1b-4f12-81d8-8aaf068e9f07",
+  "issue_id": "plx-56f4abf4-2ee6-40c6-b86b-b1ec40860a11",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-02T01:03:17.517Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "The Items dashboard search is broken for item identifiers. Support searching by any item identifier, not just primary IDs or limited fields. Verify against dashboard tests and the relevant data query path.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix item dashboard identifier search"
+  }
+}
