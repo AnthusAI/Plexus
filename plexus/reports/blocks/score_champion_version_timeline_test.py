@@ -427,6 +427,86 @@ async def test_diff_uses_previous_champion_before_first_transition_to_latest_tra
 
 
 @pytest.mark.asyncio
+async def test_performance_summary_compares_previous_champion_to_latest_transition(mock_api_client):
+    block = ScoreChampionVersionTimeline(
+        config={"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
+        params={"account_id": "acct-1"},
+        api_client=mock_api_client,
+    )
+    scorecard = SimpleNamespace(id="sc-1", name="Scorecard")
+    versions = [
+        _version("v0", configuration="name: original\n"),
+        _version("v1", entered_at="2026-04-10T12:00:00+00:00", previous_id="v0", configuration="name: middle\n"),
+        _version("v2", entered_at="2026-04-20T12:00:00+00:00", previous_id="v1", configuration="name: latest\n"),
+    ]
+    evaluations_by_version = {
+        "v0": [
+            _evaluation(
+                "eval-v0-feedback",
+                evaluation_type="feedback",
+                alignment=0.55,
+                accuracy=72,
+                created_at="2026-04-01T00:00:00+00:00",
+            ),
+            _evaluation(
+                "eval-v0-regression",
+                evaluation_type="accuracy",
+                alignment=0.60,
+                accuracy=75,
+                created_at="2026-04-01T00:00:00+00:00",
+            ),
+        ],
+        "v1": [],
+        "v2": [
+            _evaluation(
+                "eval-v2-feedback",
+                evaluation_type="feedback",
+                alignment=0.82,
+                accuracy=88,
+                created_at="2026-04-21T00:00:00+00:00",
+            ),
+            _evaluation(
+                "eval-v2-regression",
+                evaluation_type="accuracy",
+                alignment=0.73,
+                accuracy=81,
+                created_at="2026-04-21T00:00:00+00:00",
+            ),
+        ],
+    }
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(
+            block,
+            "_resolve_scores_for_mode",
+            new=AsyncMock(return_value=[{"score_id": "score-1", "score_name": "Score 1"}]),
+        ),
+        patch.object(block, "_fetch_score_versions", new=AsyncMock(return_value=versions)),
+        patch.object(
+            block,
+            "_fetch_evaluations_for_version",
+            new=AsyncMock(side_effect=lambda version_id: evaluations_by_version[version_id]),
+        ),
+    ):
+        output, _ = await block.generate()
+
+    performance = output["scores"][0]["performance_summary"]
+    assert performance["before_version_id"] == "v0"
+    assert performance["after_version_id"] == "v2"
+    assert performance["feedback"]["before_evaluation_id"] == "eval-v0-feedback"
+    assert performance["feedback"]["after_evaluation_id"] == "eval-v2-feedback"
+    assert performance["feedback"]["alignment"]["before"] == 0.55
+    assert performance["feedback"]["alignment"]["after"] == 0.82
+    assert performance["feedback"]["alignment"]["delta"] == pytest.approx(0.27)
+    assert performance["feedback"]["accuracy"] == {"before": 72, "after": 88, "delta": 16}
+    assert performance["regression"]["alignment"]["before"] == 0.60
+    assert performance["regression"]["alignment"]["after"] == 0.73
+    assert performance["regression"]["alignment"]["delta"] == pytest.approx(0.13)
+    assert performance["regression"]["accuracy"] == {"before": 75, "after": 81, "delta": 6}
+
+
+@pytest.mark.asyncio
 async def test_date_range_normalizes_to_activity_with_one_day_padding(mock_api_client):
     block = ScoreChampionVersionTimeline(
         config={"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},

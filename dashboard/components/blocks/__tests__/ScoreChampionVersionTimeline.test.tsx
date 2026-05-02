@@ -15,6 +15,19 @@ jest.mock("@monaco-editor/react", () => ({
   ),
 }));
 
+jest.mock("@/components/gauge", () => ({
+  Gauge: ({ title, value, beforeValue, min, max, showComparisonLabel }: any) => (
+    <div
+      data-testid={`gauge-${String(title).toLowerCase()}`}
+      data-value={value}
+      data-before-value={beforeValue}
+      data-min={min}
+      data-max={max}
+      data-show-comparison-label={showComparisonLabel ? "true" : "false"}
+    />
+  ),
+}));
+
 jest.mock("@/components/ui/chart", () => ({
   ChartContainer: ({ children }: any) => <div data-testid="chart-container">{children}</div>,
 }));
@@ -95,6 +108,16 @@ describe("ScoreChampionVersionTimeline", () => {
           score_result_count: 25,
           optimization_cost: { overall: 1.5, inference: 0.4, evaluation: 1.1 },
           associated_evaluation_cost: 0.5,
+        },
+        performance_summary: {
+          before_version_id: "version-0",
+          after_version_id: "version-1",
+          feedback: {
+            before_evaluation_id: "eval-before-feedback",
+            after_evaluation_id: "eval-feedback",
+            alignment: { before: 0.55, after: 0.82, delta: 0.27 },
+            accuracy: { before: 72, after: 88, delta: 16 },
+          },
         },
         sme: {
           procedure_id: "procedure-1",
@@ -194,12 +217,26 @@ describe("ScoreChampionVersionTimeline", () => {
     expect(screen.queryByText("Evaluation Record Cost")).not.toBeInTheDocument();
     expect(screen.queryByText(/Eval records:/)).not.toBeInTheDocument();
     expect(screen.getAllByTestId("chart-container")).toHaveLength(2);
+    expect(screen.getByText("Performance Improvement")).toBeInTheDocument();
+    expect(screen.getByText("Feedback dataset")).toBeInTheDocument();
+    expect(screen.getAllByText("+0.270").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("+16.0 pts").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("gauge-alignment")).toHaveAttribute("data-before-value", "0.55");
+    expect(screen.getByTestId("gauge-alignment")).toHaveAttribute("data-value", "0.82");
+    expect(screen.getByTestId("gauge-alignment")).toHaveAttribute("data-min", "-1");
+    expect(screen.getByTestId("gauge-alignment")).toHaveAttribute("data-max", "1");
+    expect(screen.getByTestId("gauge-alignment")).toHaveAttribute("data-show-comparison-label", "true");
+    expect(screen.getByTestId("gauge-accuracy")).toHaveAttribute("data-before-value", "72");
+    expect(screen.getByTestId("gauge-accuracy")).toHaveAttribute("data-value", "88");
+    expect(screen.getByTestId("gauge-accuracy")).toHaveAttribute("data-min", "0");
+    expect(screen.getByTestId("gauge-accuracy")).toHaveAttribute("data-max", "100");
     expect(screen.queryByTestId("line-timeline_marker")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("champion-transition-marker-layer")).toHaveLength(2);
     expect(screen.getAllByTestId("champion-transition-marker")).toHaveLength(2);
     expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("width", "20");
     expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("height", "8");
-    expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("y", "103");
+    expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("y", "130");
+    expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("fill", "hsl(var(--muted))");
     expect(screen.getByTestId("line-feedback_alignment")).toHaveAttribute("data-y-axis-id", "alignment");
     expect(screen.getByTestId("line-feedback_accuracy")).toHaveAttribute("data-y-axis-id", "accuracy");
     expect(screen.getByTestId("line-feedback_accuracy")).toHaveAttribute("data-stroke-dasharray", "5 5");
@@ -214,9 +251,12 @@ describe("ScoreChampionVersionTimeline", () => {
     for (const table of screen.getAllByTestId(/^version-table-/)) {
       expect(table.className).toContain("h-auto");
       expect(table.className).toContain("max-h-none");
-      expect(table.className).toContain("overflow-y-visible");
+      expect(table.className).toContain("overflow-visible");
+      expect(table.className).not.toContain("overflow-x-auto");
       expect(table.className).not.toMatch(/h-\[/);
       expect(table.className).not.toMatch(/max-h-\[/);
+      expect(table.querySelector('[role="table"]')?.className).toContain("w-full");
+      expect(table.querySelector('[role="table"]')?.className).not.toContain("min-w-");
     }
   });
 
@@ -282,13 +322,13 @@ describe("ScoreChampionVersionTimeline", () => {
     render(<ScoreChampionVersionTimeline {...baseProps} />);
 
     expect(screen.getAllByText("Champion Diff")).toHaveLength(2);
-    expect(screen.getAllByText("Show diff")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Expand champion diff")).toHaveLength(2);
     expect(screen.queryByTestId("diff-editor-yaml")).not.toBeInTheDocument();
     expect(screen.queryByTestId("diff-editor-markdown")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByText("Show diff")[0]);
+    fireEvent.click(screen.getAllByLabelText("Expand champion diff")[0]);
 
-    expect(screen.getByText("Hide diff")).toBeInTheDocument();
+    expect(screen.getByLabelText("Collapse champion diff")).toBeInTheDocument();
     expect(screen.getByText("Code")).toBeInTheDocument();
     expect(screen.getByText("Guidelines")).toBeInTheDocument();
     const codeDiff = screen.getByTestId("diff-editor-yaml");
@@ -301,7 +341,8 @@ describe("ScoreChampionVersionTimeline", () => {
     render(<ScoreChampionVersionTimeline {...baseProps} />);
 
     expect(screen.getByText("SME Information")).toBeInTheDocument();
-    expect(screen.getAllByText("Show more")).toHaveLength(2);
+    expect(screen.getByLabelText("Expand Agenda")).toBeInTheDocument();
+    expect(screen.getByLabelText("Expand Worksheet")).toBeInTheDocument();
     const agenda = screen.getByTestId("sme-agenda-markdown");
     const worksheet = screen.getByTestId("sme-worksheet-markdown");
     expect(agenda.tagName).toBe("DIV");
@@ -329,9 +370,9 @@ describe("ScoreChampionVersionTimeline", () => {
     expect(collapsedWrapper?.className).toContain("max-h-24");
     expect(collapsedWrapper?.className).toContain("overflow-hidden");
 
-    fireEvent.click(screen.getAllByText("Show more")[0]);
+    fireEvent.click(screen.getByLabelText("Expand Agenda"));
 
-    expect(screen.getByText("Show less")).toBeInTheDocument();
+    expect(screen.getByLabelText("Collapse Agenda")).toBeInTheDocument();
     expect(agenda.parentElement?.className).not.toContain("max-h-24");
     expect(agenda.parentElement?.className).not.toContain("overflow-hidden");
   });

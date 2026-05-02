@@ -135,6 +135,10 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
                     latest_transition=transitions[-1],
                     version_by_id=version_by_id,
                 )
+                performance_summary = await self._build_performance_summary(
+                    first_transition=transitions[0],
+                    latest_transition=transitions[-1],
+                )
                 optimization_summary = await self._optimization_summary(
                     procedures=procedures,
                     evaluations=list(completed_evaluations_by_id.values()),
@@ -151,6 +155,7 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
                         "score_id": score["score_id"],
                         "score_name": score["score_name"],
                         "optimization_summary": optimization_summary,
+                        "performance_summary": performance_summary,
                         "sme": await self._latest_sme_info(procedures),
                         "points": points,
                         "champion_change_count": self._champion_change_count(points),
@@ -822,6 +827,77 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
                 fromfile=f"{left_version_id}/guidelines",
                 tofile=f"{right_version_id}/guidelines",
             ),
+        }
+
+    async def _build_performance_summary(
+        self,
+        *,
+        first_transition: Dict[str, Any],
+        latest_transition: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        before_version_id = first_transition.get("previous_champion_version_id")
+        after_version_id = latest_transition.get("version_id")
+        if not before_version_id or not after_version_id:
+            return None
+
+        before_evaluations = await self._fetch_evaluations_for_version(before_version_id)
+        after_evaluations = await self._fetch_evaluations_for_version(after_version_id)
+
+        summary: Dict[str, Any] = {
+            "before_version_id": before_version_id,
+            "after_version_id": after_version_id,
+        }
+        for evaluation_type, dataset_key in (("feedback", "feedback"), ("accuracy", "regression")):
+            before_eval = self._select_best_evaluation(before_evaluations, evaluation_type)
+            after_eval = self._select_best_evaluation(after_evaluations, evaluation_type)
+            dataset_payload = self._performance_dataset_payload(
+                before_eval=before_eval,
+                after_eval=after_eval,
+            )
+            if dataset_payload:
+                summary[dataset_key] = dataset_payload
+
+        return summary if any(key in summary for key in ("feedback", "regression")) else None
+
+    def _performance_dataset_payload(
+        self,
+        *,
+        before_eval: Optional[Dict[str, Any]],
+        after_eval: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not before_eval or not after_eval:
+            return None
+
+        before_metrics = self._parse_metrics(before_eval)
+        after_metrics = self._parse_metrics(after_eval)
+        payload: Dict[str, Any] = {
+            "before_evaluation_id": before_eval.get("id"),
+            "after_evaluation_id": after_eval.get("id"),
+        }
+
+        for metric_name in ("alignment", "accuracy"):
+            change = self._metric_change_payload(
+                before_metrics.get(metric_name),
+                after_metrics.get(metric_name),
+            )
+            if change:
+                payload[metric_name] = change
+
+        return payload if any(key in payload for key in ("alignment", "accuracy")) else None
+
+    def _metric_change_payload(
+        self,
+        before_value: Optional[float],
+        after_value: Optional[float],
+    ) -> Optional[Dict[str, float]]:
+        before = self._finite_number(before_value)
+        after = self._finite_number(after_value)
+        if before is None or after is None:
+            return None
+        return {
+            "before": before,
+            "after": after,
+            "delta": after - before,
         }
 
     def _parse_metrics(self, evaluation: Dict[str, Any]) -> Dict[str, Optional[float]]:
