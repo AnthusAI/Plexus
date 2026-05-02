@@ -441,9 +441,11 @@ def test_dispatch_routes_scorecards_to_direct_handlers() -> None:
 
 
 def test_dispatch_routes_score_to_direct_handlers() -> None:
-    for method in ("info", "evaluations", "predict", "set_champion"):
+    for method in ("info", "evaluations", "predict"):
         assert execute.DIRECT_HANDLERS[("score", method)] == "_call_score"
         assert ("score", method) not in execute.MCP_TOOL_MAP
+    assert ("score", "set_champion") not in execute.DIRECT_HANDLERS
+    assert ("score", "set_champion") not in execute.MCP_TOOL_MAP
 
 
 def test_dispatch_routes_procedure_reads_to_direct_handlers() -> None:
@@ -1657,6 +1659,92 @@ def test_handle_peek_refreshes_evaluation_status() -> None:
     assert snapshot["status"] == "completed"
     assert snapshot["evaluation"] == {"id": "eval-1", "status": "COMPLETED"}
     assert module.api_calls == ["plexus.handle.peek"]
+
+
+def test_handle_peek_marks_no_id_exited_process_failed(monkeypatch) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"process_id": 4242},
+    )
+
+    monkeypatch.setattr(execute.os, "waitpid", lambda pid, options: (pid, 256))
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "failed"
+    assert snapshot["process_status"] == "exited"
+    assert snapshot["process_exit_code"] == 1
+    assert snapshot["error"] == (
+        "Evaluation subprocess exited before emitting an evaluation ID."
+    )
+
+
+def test_handle_peek_marks_running_evaluation_exited_process_failed(monkeypatch) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"evaluation_id": "eval-1", "process_id": 4242},
+    )
+
+    monkeypatch.setattr(execute.os, "waitpid", lambda pid, options: (pid, 256))
+
+    def fake_evaluation_info(args: dict) -> dict:
+        return {"id": args["evaluation_id"], "status": "RUNNING"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "failed"
+    assert snapshot["evaluation"]["process_status"] == "exited"
+    assert snapshot["evaluation"]["process_exit_code"] == 1
+    assert snapshot["evaluation"]["error"] == (
+        "Evaluation subprocess exited before the evaluation reached a terminal status."
+    )
+
+
+def test_handle_peek_reaps_completed_evaluation_process(monkeypatch) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"evaluation_id": "eval-1", "process_id": 4242},
+    )
+
+    monkeypatch.setattr(execute.os, "waitpid", lambda pid, options: (pid, 0))
+
+    def fake_evaluation_info(args: dict) -> dict:
+        return {"id": args["evaluation_id"], "status": "COMPLETED"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "completed"
+    assert snapshot["evaluation"]["process_status"] == "exited"
+    assert snapshot["evaluation"]["process_exit_code"] == 0
 
 
 def test_handle_cancel_terminates_process() -> None:
