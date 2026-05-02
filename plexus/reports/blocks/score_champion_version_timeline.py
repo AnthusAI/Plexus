@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import difflib
 import json
+import math
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -1022,7 +1023,7 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
             number = float(value)
         except (TypeError, ValueError):
             return None
-        if number != number or number in (float("inf"), float("-inf")):
+        if not math.isfinite(number):
             return None
         return number
 

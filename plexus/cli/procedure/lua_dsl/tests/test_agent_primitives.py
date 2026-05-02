@@ -163,7 +163,7 @@ class TestAgentTurn:
         # System + Initial + AI Response 1 + Injected + AI Response 2
         assert len(agent_primitive._conversation) == 5
 
-    def test_turn_injects_procedure_steering_once_per_agent(
+    def test_turn_injects_procedure_steering_once_before_next_llm_call(
         self,
         mock_llm,
         mock_tool_primitive,
@@ -174,7 +174,7 @@ class TestAgentTurn:
         """Each agent receives new procedure steering once before its next LLM call."""
         state = {}
         state_primitive = Mock()
-        state_primitive.get.side_effect = lambda key: state.get(key)
+        state_primitive.get.side_effect = lambda key, default=None: state.get(key, default)
         state_primitive.set.side_effect = lambda key, value: state.__setitem__(key, value)
         mock_chat_recorder.get_steering_messages.return_value = {
             "messages": [
