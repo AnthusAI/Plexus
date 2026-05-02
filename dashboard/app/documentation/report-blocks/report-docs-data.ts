@@ -312,7 +312,7 @@ scorecard: "Customer Service QA"
 score: "Medication Review: Dosage"
 days: 30
 include_unchanged: false`,
-    interpretation: ["By default, initial champion entries with no previous champion are omitted because they are not changes; set include_unchanged to true to show them.", "Only versions with championHistory enteredAt values inside the requested window are included.", "The displayed date range is narrowed to one day before the earliest champion activity when the request window is much broader than the activity.", "Missing feedback or regression evaluations are shown as unavailable instead of suppressing the champion point.", "Procedure, evaluation, score-result, and cost totals summarize optimizer work during the window.", "SME agenda and worksheet content comes from the most recent optimizer procedure for each score.", "Diffs compare the previous champion before the first in-window transition to the latest in-window champion."],
+    interpretation: ["By default, initial champion entries with no previous champion are omitted because they are not changes; set include_unchanged to true to show them.", "Only versions with championHistory enteredAt values inside the requested window are included.", "The displayed date range is narrowed to one day before the earliest champion activity when the request window is much broader than the activity.", "Missing feedback or regression evaluations are shown as unavailable instead of suppressing the champion point.", "Procedure, evaluation, score-result, and procedure cost totals summarize optimizer work during the window.", "SME agenda and worksheet content comes from the most recent optimizer procedure for each score.", "Diffs compare the previous champion before the first in-window transition to the latest in-window champion."],
     sampleOutput: {
       report_type: "score_champion_version_timeline",
       block_title: "Score Champion Version Timeline",
@@ -329,24 +329,26 @@ include_unchanged: false`,
       summary: {
         scores_analyzed: 1,
         scores_with_champion_changes: 1,
+        scores_with_new_champions: 0,
         champion_change_count: 2,
+        new_champion_count: 0,
         procedure_count: 1,
         evaluation_count: 4,
         score_result_count: 600,
         optimization_cost: { overall: 2.42, inference: 0.38, evaluation: 2.04 },
-        associated_evaluation_cost: 0.64,
         evaluations_scanned: 4,
       },
       scores: [
         {
           score_id: "score-dosage",
           score_name: "Medication Review: Dosage",
+          champion_change_count: 2,
+          new_champion_count: 0,
           optimization_summary: {
             procedure_count: 1,
             evaluation_count: 4,
             score_result_count: 600,
             optimization_cost: { overall: 2.42, inference: 0.38, evaluation: 2.04 },
-            associated_evaluation_cost: 0.64,
           },
           points: [
             {

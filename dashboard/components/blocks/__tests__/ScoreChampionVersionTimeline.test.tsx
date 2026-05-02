@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import ScoreChampionVersionTimeline from "@/components/blocks/ScoreChampionVersionTimeline";
 
@@ -23,12 +23,14 @@ jest.mock("@/components/ui/tabs", () => ({
   Tabs: ({ children }: any) => <div>{children}</div>,
   TabsContent: ({ children }: any) => <div>{children}</div>,
   TabsList: ({ children }: any) => <div>{children}</div>,
-  TabsTrigger: ({ children }: any) => <button>{children}</button>,
+  TabsTrigger: ({ children, ...props }: any) => <button {...props}>{children}</button>,
 }));
 
 jest.mock("recharts", () => ({
   CartesianGrid: () => null,
-  Line: ({ dataKey }: any) => <div data-testid={`line-${dataKey}`} />,
+  Line: ({ dataKey, yAxisId, strokeDasharray }: any) => (
+    <div data-testid={`line-${dataKey}`} data-y-axis-id={yAxisId} data-stroke-dasharray={strokeDasharray || ""} />
+  ),
   LineChart: ({ children }: any) => <div data-testid="line-chart">{children}</div>,
   Tooltip: () => null,
   XAxis: ({ domain }: any) => <div data-testid="x-axis" data-domain={Array.isArray(domain) ? domain.join(",") : ""} />,
@@ -65,7 +67,9 @@ describe("ScoreChampionVersionTimeline", () => {
     summary: {
       scores_analyzed: 2,
       scores_with_champion_changes: 2,
+      scores_with_new_champions: 0,
       champion_change_count: 2,
+      new_champion_count: 0,
       procedure_count: 3,
       evaluation_count: 4,
       score_result_count: 120,
@@ -89,8 +93,8 @@ describe("ScoreChampionVersionTimeline", () => {
           procedure_status: "COMPLETED",
           procedure_updated_at: "2026-04-11T01:00:00+00:00",
           available: true,
-          agenda: "Review boundary cases with the SME.",
-          worksheet: "Confirm the transfer criteria.",
+          agenda: "## SME Agenda\n\n- Review boundary cases with the SME.",
+          worksheet: "### Worksheet\n\nConfirm the transfer criteria.",
           generated_at: "2026-04-11T02:00:00+00:00",
         },
         points: [
@@ -110,6 +114,8 @@ describe("ScoreChampionVersionTimeline", () => {
             regression_metrics: null,
           },
         ],
+        champion_change_count: 1,
+        new_champion_count: 0,
         diff: {
           left_version_id: "version-0",
           right_version_id: "version-1",
@@ -144,6 +150,8 @@ describe("ScoreChampionVersionTimeline", () => {
             regression_metrics: null,
           },
         ],
+        champion_change_count: 1,
+        new_champion_count: 0,
         diff: {
           left_version_id: "version-1",
           right_version_id: "version-2",
@@ -175,13 +183,33 @@ describe("ScoreChampionVersionTimeline", () => {
     expect(screen.getByText("120")).toBeInTheDocument();
     expect(screen.getByText("$1.50")).toBeInTheDocument();
     expect(screen.getByText("$1.00")).toBeInTheDocument();
+    expect(screen.queryByText("Evaluation Record Cost")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Eval records:/)).not.toBeInTheDocument();
     expect(screen.getAllByTestId("chart-container")).toHaveLength(2);
-    expect(screen.getAllByTestId("line-timeline_marker")).toHaveLength(2);
-    expect(screen.getByTestId("line-feedback_alignment")).toBeInTheDocument();
-    expect(screen.getByTestId("line-feedback_accuracy")).toBeInTheDocument();
+    expect(screen.queryByTestId("line-timeline_marker")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("champion-transition-rail")).toHaveLength(2);
+    expect(screen.getAllByTestId("champion-transition-marker")).toHaveLength(2);
+    expect(screen.getAllByTestId("champion-transition-marker")[0].className).toContain("w-5");
+    expect(screen.getAllByTestId("champion-transition-marker")[0].className).not.toContain("w-2.5");
+    expect(screen.getAllByText("Champion changes")).toHaveLength(2);
+    expect(screen.getByTestId("line-feedback_alignment")).toHaveAttribute("data-y-axis-id", "alignment");
+    expect(screen.getByTestId("line-feedback_accuracy")).toHaveAttribute("data-y-axis-id", "accuracy");
+    expect(screen.getByTestId("line-feedback_accuracy")).toHaveAttribute("data-stroke-dasharray", "5 5");
     expect(screen.queryByTestId("line-regression_alignment")).not.toBeInTheDocument();
     expect(screen.queryByTestId("line-regression_accuracy")).not.toBeInTheDocument();
     expect(screen.queryByText("Select score")).not.toBeInTheDocument();
+  });
+
+  it("keeps version tables sized to their row content", () => {
+    render(<ScoreChampionVersionTimeline {...baseProps} />);
+
+    for (const table of screen.getAllByTestId(/^version-table-/)) {
+      expect(table.className).toContain("h-auto");
+      expect(table.className).toContain("max-h-none");
+      expect(table.className).toContain("overflow-y-visible");
+      expect(table.className).not.toMatch(/h-\[/);
+      expect(table.className).not.toMatch(/max-h-\[/);
+    }
   });
 
   it("uses the same x-axis date range for each score chart", () => {
@@ -219,30 +247,43 @@ describe("ScoreChampionVersionTimeline", () => {
     expect(screen.queryByTestId("chart-container")).not.toBeInTheDocument();
   });
 
-  it("renders code and guidelines in Monaco diff editors", () => {
+  it("lazily renders diff editors only after a diff is opened", () => {
     render(<ScoreChampionVersionTimeline {...baseProps} />);
 
     expect(screen.getAllByText("Champion Diff")).toHaveLength(2);
-    expect(screen.getAllByText("Code")).toHaveLength(2);
-    expect(screen.getAllByText("Guidelines")).toHaveLength(2);
+    expect(screen.getAllByText("Show diff")).toHaveLength(2);
+    expect(screen.queryByTestId("diff-editor-yaml")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("diff-editor-markdown")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByText("Show diff")[0]);
+
+    expect(screen.getByText("Hide diff")).toBeInTheDocument();
+    expect(screen.getByText("Code")).toBeInTheDocument();
+    expect(screen.getByText("Guidelines")).toBeInTheDocument();
     const codeDiff = screen.getByTestId("diff-editor-yaml");
-    const guidelinesDiff = screen.getByTestId("diff-editor-markdown");
     expect(codeDiff).toHaveAttribute("data-original", "name: old");
     expect(codeDiff).toHaveAttribute("data-modified", "name: new");
-    expect(guidelinesDiff).toHaveAttribute("data-original", "Old guideline");
-    expect(guidelinesDiff).toHaveAttribute("data-modified", "New guideline");
+    expect(screen.queryByTestId("diff-editor-markdown")).not.toBeInTheDocument();
   });
 
   it("renders SME information above the champion diff", () => {
     render(<ScoreChampionVersionTimeline {...baseProps} />);
 
     expect(screen.getByText("SME Information")).toBeInTheDocument();
-    const agenda = screen.getByText("Review boundary cases with the SME.");
-    const worksheet = screen.getByText("Confirm the transfer criteria.");
-    expect(agenda).toBeInTheDocument();
-    expect(worksheet).toBeInTheDocument();
+    const agenda = screen.getByTestId("sme-agenda-markdown");
+    const worksheet = screen.getByTestId("sme-worksheet-markdown");
+    expect(agenda.tagName).toBe("DIV");
+    expect(worksheet.tagName).toBe("DIV");
+    expect(agenda).toHaveTextContent("SME Agenda");
+    expect(agenda).toHaveTextContent("Review boundary cases with the SME.");
+    expect(worksheet).toHaveTextContent("Worksheet");
+    expect(worksheet).toHaveTextContent("Confirm the transfer criteria.");
     expect(agenda).toHaveClass("text-foreground");
     expect(worksheet).toHaveClass("text-foreground");
+    expect(agenda.className).not.toContain("overflow-auto");
+    expect(agenda.className).not.toContain("max-h-");
+    expect(worksheet.className).not.toContain("overflow-auto");
+    expect(worksheet.className).not.toContain("max-h-");
 
     const content = document.body.textContent || "";
     expect(content.indexOf("SME Information")).toBeLessThan(content.indexOf("Champion Diff"));

@@ -135,17 +135,26 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
                     latest_transition=transitions[-1],
                     version_by_id=version_by_id,
                 )
+                optimization_summary = await self._optimization_summary(
+                    procedures=procedures,
+                    evaluations=list(completed_evaluations_by_id.values()),
+                )
+
+                if not self._has_reportable_score_activity(
+                    points=points,
+                    optimization_summary=optimization_summary,
+                ):
+                    continue
 
                 score_outputs.append(
                     {
                         "score_id": score["score_id"],
                         "score_name": score["score_name"],
-                        "optimization_summary": await self._optimization_summary(
-                            procedures=procedures,
-                            evaluations=list(completed_evaluations_by_id.values()),
-                        ),
+                        "optimization_summary": optimization_summary,
                         "sme": await self._latest_sme_info(procedures),
                         "points": points,
+                        "champion_change_count": self._champion_change_count(points),
+                        "new_champion_count": self._new_champion_count(points),
                         "diff": diff,
                     }
                 )
@@ -176,8 +185,22 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
                 "scores": score_outputs,
                 "summary": {
                     "scores_analyzed": len(scores_to_analyze),
-                    "scores_with_champion_changes": len(score_outputs),
-                    "champion_change_count": sum(len(score["points"]) for score in score_outputs),
+                    "scores_with_champion_changes": sum(
+                        1
+                        for score in score_outputs
+                        if score["champion_change_count"] > 0
+                    ),
+                    "scores_with_new_champions": sum(
+                        1
+                        for score in score_outputs
+                        if score["new_champion_count"] > 0
+                    ),
+                    "champion_change_count": sum(
+                        score["champion_change_count"] for score in score_outputs
+                    ),
+                    "new_champion_count": sum(
+                        score["new_champion_count"] for score in score_outputs
+                    ),
                     "procedure_count": sum(
                         score["optimization_summary"]["procedure_count"]
                         for score in score_outputs
@@ -203,8 +226,9 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
                     "procedure_records_scanned": procedure_records_scanned,
                 },
                 "message": (
-                    f"Found {sum(len(score['points']) for score in score_outputs)} "
-                    f"champion transition(s) across {len(score_outputs)} score(s)."
+                    f"Found {sum(score['champion_change_count'] for score in score_outputs)} "
+                    f"champion change(s) across "
+                    f"{sum(1 for score in score_outputs if score['champion_change_count'] > 0)} score(s)."
                     if score_outputs
                     else "No champion version changes found in the requested time window."
                 ),
@@ -240,6 +264,29 @@ class ScoreChampionVersionTimeline(FeedbackRatesBase):
         if padded_start <= requested_start:
             return requested_start, requested_end
         return padded_start, requested_end
+
+    def _champion_change_count(self, points: List[Dict[str, Any]]) -> int:
+        return sum(1 for point in points if point.get("previous_champion_version_id"))
+
+    def _new_champion_count(self, points: List[Dict[str, Any]]) -> int:
+        return sum(1 for point in points if not point.get("previous_champion_version_id"))
+
+    def _has_reportable_score_activity(
+        self,
+        *,
+        points: List[Dict[str, Any]],
+        optimization_summary: Dict[str, Any],
+    ) -> bool:
+        if any(
+            [
+                (optimization_summary.get("procedure_count") or 0) > 0,
+                (optimization_summary.get("evaluation_count") or 0) > 0,
+                (optimization_summary.get("score_result_count") or 0) > 0,
+            ]
+        ):
+            return True
+
+        return self._champion_change_count(points) > 1
 
     async def _resolve_scores_for_mode(
         self,
