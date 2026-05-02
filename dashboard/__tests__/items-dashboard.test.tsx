@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import ItemsDashboard, {
+import {
   ITEM_IDENTIFIER_SEARCH_QUERY,
   buildItemIdentifierSearchVariables,
   firstItemIdFromIdentifierSearchResponse,
