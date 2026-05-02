@@ -3,11 +3,13 @@
 import React from "react";
 import { downloadData } from "aws-amplify/storage";
 import { DiffEditor, type Monaco } from "@monaco-editor/react";
+import Link from "next/link";
+import { Link as LinkIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
-import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Customized, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 
 import { parseOutputString } from "@/lib/utils";
 import { ChartContainer } from "@/components/ui/chart";
@@ -162,11 +164,7 @@ const metricKeys = [
 
 type MetricKey = (typeof metricKeys)[number];
 
-const chartMargin = { top: 8, right: 52, left: 20, bottom: 16 };
-const alignmentAxisWidth = 52;
-const accuracyAxisWidth = 56;
-const plotInsetLeft = chartMargin.left + alignmentAxisWidth;
-const plotInsetRight = chartMargin.right;
+const chartMargin = { top: 8, right: 52, left: 20, bottom: 24 };
 
 type ChartPoint = ChampionPoint & {
   entered_at_timestamp: number;
@@ -213,6 +211,53 @@ const shortId = (value?: string | null): string => {
   if (!value) return "N/A";
   return value.length > 12 ? value.slice(0, 8) : value;
 };
+
+const scoreHref = (scorecardId?: string | null, scoreId?: string | null): string | null => {
+  if (!scorecardId || !scoreId) return null;
+  return `/lab/scorecards/${encodeURIComponent(scorecardId)}/scores/${encodeURIComponent(scoreId)}`;
+};
+
+const scoreVersionHref = (
+  scorecardId?: string | null,
+  scoreId?: string | null,
+  scoreVersionId?: string | null
+): string | null => {
+  if (!scorecardId || !scoreId || !scoreVersionId) return null;
+  return `${scoreHref(scorecardId, scoreId)}/versions/${encodeURIComponent(scoreVersionId)}`;
+};
+
+const RecordLink: React.FC<{
+  href?: string | null;
+  label: string;
+  size?: "sm" | "md";
+}> = ({ href, label, size = "sm" }) => {
+  if (!href) return null;
+
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      title={label}
+      className="shrink-0 rounded-sm text-foreground transition-colors hover:bg-card"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <LinkIcon className={size === "md" ? "h-4 w-4" : "h-3.5 w-3.5"} />
+    </Link>
+  );
+};
+
+const LinkedShortId: React.FC<{
+  id?: string | null;
+  href?: string | null;
+  label: string;
+  className?: string;
+  iconSize?: "sm" | "md";
+}> = ({ id, href, label, className = "", iconSize = "sm" }) => (
+  <span className={`inline-flex min-w-0 items-center gap-1.5 ${className}`}>
+    <span className="truncate font-mono">{shortId(id)}</span>
+    {id ? <RecordLink href={href} label={label} size={iconSize} /> : null}
+  </span>
+);
 
 const chartAccuracy = (value: number | null | undefined): number | null => {
   if (value === null || value === undefined || Number.isNaN(value)) return null;
@@ -288,47 +333,42 @@ const MetricLegend: React.FC<{ metrics: MetricKey[] }> = ({ metrics }) => {
   );
 };
 
-const ChampionTransitionRail: React.FC<{
+const ChampionTransitionMarkers: React.FC<{
   chartData: ChartPoint[];
-  xDomain: [number, number] | undefined;
-}> = ({ chartData, xDomain }) => {
+  xAxisMap?: Record<string, any>;
+  offset?: { top?: number; height?: number };
+}> = ({ chartData, xAxisMap, offset }) => {
   if (!chartData.length) return null;
 
-  const fallbackStart = chartData[0]?.entered_at_timestamp ?? 0;
-  const fallbackEnd = chartData[chartData.length - 1]?.entered_at_timestamp ?? fallbackStart;
-  const start = xDomain?.[0] ?? fallbackStart;
-  const end = xDomain?.[1] ?? fallbackEnd;
-  const range = end - start;
+  const xAxis = Object.values(xAxisMap || {})[0] as any;
+  const scale = xAxis?.scale;
+  if (typeof scale !== "function") return null;
+
+  const y = (offset?.top || 0) + (offset?.height || 0) + 3;
 
   return (
-    <div data-testid="champion-transition-rail" className="mt-1">
-      <div className="mb-1 text-center text-[11px] text-muted-foreground">Champion changes</div>
-      <div className="h-6 rounded-md bg-muted">
-        <div
-          className="relative h-full"
-          style={{ marginLeft: plotInsetLeft, marginRight: plotInsetRight }}
-        >
-          {chartData.map((point) => {
-            const percent =
-              range > 0
-                ? Math.min(100, Math.max(0, ((point.entered_at_timestamp - start) / range) * 100))
-                : 50;
+    <g data-testid="champion-transition-marker-layer" aria-label="Champion changes">
+      {chartData.map((point) => {
+        const x = scale(point.entered_at_timestamp);
+        if (typeof x !== "number" || Number.isNaN(x)) return null;
 
-            return (
-              <button
-                key={`${point.version_id}-${point.entered_at}`}
-                type="button"
-                data-testid="champion-transition-marker"
-                className="absolute top-1/2 h-2 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground"
-                style={{ left: `${percent}%` }}
-                title={`${formatDateTime(point.entered_at)}: ${shortId(point.version_id)}`}
-                aria-label={`Champion changed to ${shortId(point.version_id)} on ${formatDateTime(point.entered_at)}`}
-              />
-            );
-          })}
-        </div>
-      </div>
-    </div>
+        return (
+          <rect
+            key={`${point.version_id}-${point.entered_at}`}
+            data-testid="champion-transition-marker"
+            x={x - 10}
+            y={y}
+            width={20}
+            height={8}
+            rx={4}
+            fill="hsl(var(--foreground))"
+            aria-label={`Champion changed to ${shortId(point.version_id)} on ${formatDateTime(point.entered_at)}`}
+          >
+            <title>{`${formatDateTime(point.entered_at)}: ${shortId(point.version_id)}`}</title>
+          </rect>
+        );
+      })}
+    </g>
   );
 };
 
@@ -397,8 +437,36 @@ const SmeMarkdown: React.FC<{ children: string; testId: string }> = ({ children,
   </div>
 );
 
+const ExpandableSmeMarkdown: React.FC<{
+  children: string;
+  label: string;
+  testId: string;
+}> = ({ children, label, testId }) => {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <div className="text-xs font-medium text-muted-foreground">{label}</div>
+        <button
+          type="button"
+          className="rounded-md bg-background px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
+          onClick={() => setIsExpanded((current) => !current)}
+          aria-expanded={isExpanded}
+        >
+          {isExpanded ? "Show less" : "Show more"}
+        </button>
+      </div>
+      <div className={isExpanded ? "" : "max-h-24 overflow-hidden"}>
+        <SmeMarkdown testId={testId}>{children}</SmeMarkdown>
+      </div>
+    </div>
+  );
+};
+
 const SmeInformationSection: React.FC<{ sme?: SmeInformation | null }> = ({ sme }) => {
   if (!sme) return null;
+  if (!sme.agenda) return null;
 
   return (
     <div className="rounded-md bg-card p-3">
@@ -412,26 +480,16 @@ const SmeInformationSection: React.FC<{ sme?: SmeInformation | null }> = ({ sme 
         {sme.generated_at ? <span>Generated: {formatDateTime(sme.generated_at)}</span> : null}
       </div>
 
-      {sme.available ? (
-        <div className="mt-3 space-y-3">
-          {sme.agenda ? (
-            <div>
-              <div className="mb-1 text-xs font-medium text-muted-foreground">Agenda</div>
-              <SmeMarkdown testId="sme-agenda-markdown">{sme.agenda}</SmeMarkdown>
-            </div>
-          ) : null}
-          {sme.worksheet ? (
-            <div>
-              <div className="mb-1 text-xs font-medium text-muted-foreground">Worksheet</div>
-              <SmeMarkdown testId="sme-worksheet-markdown">{sme.worksheet}</SmeMarkdown>
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="mt-3 rounded-md bg-background p-3 text-sm text-foreground">
-          No SME agenda or worksheet was produced by the latest optimizer procedure.
-        </div>
-      )}
+      <div className="mt-3 space-y-3">
+        <ExpandableSmeMarkdown label="Agenda" testId="sme-agenda-markdown">
+          {sme.agenda}
+        </ExpandableSmeMarkdown>
+        {sme.worksheet ? (
+          <ExpandableSmeMarkdown label="Worksheet" testId="sme-worksheet-markdown">
+            {sme.worksheet}
+          </ExpandableSmeMarkdown>
+        ) : null}
+      </div>
     </div>
   );
 };
@@ -482,17 +540,33 @@ const MonacoDiffPanel: React.FC<{
   );
 };
 
-const ChampionDiffSection: React.FC<{ diff: VersionDiff }> = ({ diff }) => {
+const ChampionDiffSection: React.FC<{
+  diff: VersionDiff;
+  scorecardId?: string | null;
+  scoreId?: string | null;
+}> = ({ diff, scorecardId, scoreId }) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<"code" | "guidelines">("code");
+  const leftHref = scoreVersionHref(scorecardId, scoreId, diff.left_version_id);
+  const rightHref = scoreVersionHref(scorecardId, scoreId, diff.right_version_id);
 
   return (
     <div className="rounded-md bg-card p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-sm font-medium">Champion Diff</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {shortId(diff.left_version_id)} to {shortId(diff.right_version_id)}
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <LinkedShortId
+              id={diff.left_version_id}
+              href={leftHref}
+              label="Open previous champion score version"
+            />
+            <span>to</span>
+            <LinkedShortId
+              id={diff.right_version_id}
+              href={rightHref}
+              label="Open latest champion score version"
+            />
           </div>
         </div>
         <button
@@ -546,9 +620,11 @@ const ChampionDiffSection: React.FC<{ diff: VersionDiff }> = ({ diff }) => {
 const ScoreTimelineSection: React.FC<{
   score: ChampionScoreSeries;
   xDomain: [number, number] | undefined;
-}> = ({ score, xDomain }) => {
+  scorecardId?: string | null;
+}> = ({ score, xDomain, scorecardId }) => {
   const chartData = React.useMemo(() => buildChartData(score), [score]);
   const availableMetricKeys = React.useMemo(() => availableMetricsFor(chartData), [chartData]);
+  const currentScoreHref = scoreHref(scorecardId, score.score_id);
   const championChangeCount = score.champion_change_count ?? (score.points || []).filter(
     (point) => Boolean(point.previous_champion_version_id)
   ).length;
@@ -568,7 +644,13 @@ const ScoreTimelineSection: React.FC<{
               : ""}
           </div>
         </div>
-        <div className="font-mono text-xs text-muted-foreground">{shortId(score.score_id)}</div>
+        <LinkedShortId
+          id={score.score_id}
+          href={currentScoreHref}
+          label="Open score"
+          className="text-xs text-muted-foreground"
+          iconSize="md"
+        />
       </div>
 
       <div className="grid gap-2 sm:grid-cols-4">
@@ -605,7 +687,7 @@ const ScoreTimelineSection: React.FC<{
                 tick={{ fill: "hsl(var(--foreground) / 0.7)", fontSize: 10 }}
                 axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
                 tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
-                tickMargin={8}
+                tickMargin={4}
                 padding={{ left: 28, right: 28 }}
               />
               <YAxis
@@ -628,6 +710,7 @@ const ScoreTimelineSection: React.FC<{
                 width={56}
               />
               <Tooltip content={<TimelineTooltip />} />
+              <Customized component={<ChampionTransitionMarkers chartData={chartData} />} />
               {availableMetricKeys.includes("feedback_alignment") ? (
                 <Line
                   yAxisId="alignment"
@@ -688,7 +771,6 @@ const ScoreTimelineSection: React.FC<{
               ) : null}
             </LineChart>
           </ChartContainer>
-          <ChampionTransitionRail chartData={chartData} xDomain={xDomain} />
           <MetricLegend metrics={availableMetricKeys} />
         </div>
       ) : (
@@ -724,11 +806,21 @@ const ScoreTimelineSection: React.FC<{
                 className={`grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr] ${index % 2 === 0 ? "bg-background" : "bg-muted"}`}
               >
                 <div role="cell" className="px-3 py-2">{formatDateTime(point.entered_at)}</div>
-                <div role="cell" className="px-3 py-2 font-mono text-xs">{shortId(point.version_id)}</div>
+                <div role="cell" className="px-3 py-2 text-xs">
+                  <LinkedShortId
+                    id={point.version_id}
+                    href={scoreVersionHref(scorecardId, score.score_id, point.version_id)}
+                    label="Open score version"
+                  />
+                </div>
                 <div role="cell" className="px-3 py-2">{formatNumber(point.feedback_metrics?.alignment)}</div>
                 <div role="cell" className="px-3 py-2">{formatNumber(point.regression_metrics?.alignment)}</div>
-                <div role="cell" className="px-3 py-2 font-mono text-xs">
-                  {shortId(point.previous_champion_version_id)}
+                <div role="cell" className="px-3 py-2 text-xs">
+                  <LinkedShortId
+                    id={point.previous_champion_version_id}
+                    href={scoreVersionHref(scorecardId, score.score_id, point.previous_champion_version_id)}
+                    label="Open previous champion score version"
+                  />
                 </div>
               </div>
             ))}
@@ -736,11 +828,11 @@ const ScoreTimelineSection: React.FC<{
         </div>
       ) : null}
 
-      <SmeInformationSection sme={score.sme} />
-
       {score.diff ? (
-        <ChampionDiffSection diff={score.diff} />
+        <ChampionDiffSection diff={score.diff} scorecardId={scorecardId} scoreId={score.score_id} />
       ) : null}
+
+      <SmeInformationSection sme={score.sme} />
     </section>
   );
 };
@@ -850,11 +942,7 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
       dateRange={output.date_range}
     >
       <div className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-md bg-card p-3">
-            <div className="text-xs text-muted-foreground">Scores Analyzed</div>
-            <div className="text-xl font-semibold">{formatInteger(output.summary?.scores_analyzed)}</div>
-          </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-md bg-card p-3">
             <div className="text-xs text-muted-foreground">Scores With Changes</div>
             <div className="text-xl font-semibold">
@@ -890,7 +978,12 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
         {scores.length > 0 ? (
           <div className="space-y-4">
             {scores.map((score) => (
-              <ScoreTimelineSection key={score.score_id} score={score} xDomain={sharedXDomain} />
+              <ScoreTimelineSection
+                key={score.score_id}
+                score={score}
+                xDomain={sharedXDomain}
+                scorecardId={output.scorecard_id}
+              />
             ))}
           </div>
         ) : (

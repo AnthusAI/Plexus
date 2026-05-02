@@ -28,12 +28,19 @@ jest.mock("@/components/ui/tabs", () => ({
 
 jest.mock("recharts", () => ({
   CartesianGrid: () => null,
+  Customized: ({ component }: any) =>
+    React.isValidElement(component)
+      ? React.cloneElement(component, {
+          xAxisMap: { 0: { scale: (value: number) => value / 1000000000 } },
+          offset: { top: 0, height: 100 },
+        } as any)
+      : null,
   Line: ({ dataKey, yAxisId, strokeDasharray }: any) => (
-    <div data-testid={`line-${dataKey}`} data-y-axis-id={yAxisId} data-stroke-dasharray={strokeDasharray || ""} />
+    <g data-testid={`line-${dataKey}`} data-y-axis-id={yAxisId} data-stroke-dasharray={strokeDasharray || ""} />
   ),
-  LineChart: ({ children }: any) => <div data-testid="line-chart">{children}</div>,
+  LineChart: ({ children }: any) => <svg data-testid="line-chart">{children}</svg>,
   Tooltip: () => null,
-  XAxis: ({ domain }: any) => <div data-testid="x-axis" data-domain={Array.isArray(domain) ? domain.join(",") : ""} />,
+  XAxis: ({ domain }: any) => <g data-testid="x-axis" data-domain={Array.isArray(domain) ? domain.join(",") : ""} />,
   YAxis: () => null,
 }));
 
@@ -59,6 +66,7 @@ describe("ScoreChampionVersionTimeline", () => {
     report_type: "score_champion_version_timeline",
     block_title: "Score Champion Version Timeline",
     block_description: "Champion changes",
+    scorecard_id: "scorecard-1",
     scorecard_name: "Scorecard A",
     date_range: {
       start: "2026-04-01T00:00:00+00:00",
@@ -187,11 +195,11 @@ describe("ScoreChampionVersionTimeline", () => {
     expect(screen.queryByText(/Eval records:/)).not.toBeInTheDocument();
     expect(screen.getAllByTestId("chart-container")).toHaveLength(2);
     expect(screen.queryByTestId("line-timeline_marker")).not.toBeInTheDocument();
-    expect(screen.getAllByTestId("champion-transition-rail")).toHaveLength(2);
+    expect(screen.getAllByTestId("champion-transition-marker-layer")).toHaveLength(2);
     expect(screen.getAllByTestId("champion-transition-marker")).toHaveLength(2);
-    expect(screen.getAllByTestId("champion-transition-marker")[0].className).toContain("w-5");
-    expect(screen.getAllByTestId("champion-transition-marker")[0].className).not.toContain("w-2.5");
-    expect(screen.getAllByText("Champion changes")).toHaveLength(2);
+    expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("width", "20");
+    expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("height", "8");
+    expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("y", "103");
     expect(screen.getByTestId("line-feedback_alignment")).toHaveAttribute("data-y-axis-id", "alignment");
     expect(screen.getByTestId("line-feedback_accuracy")).toHaveAttribute("data-y-axis-id", "accuracy");
     expect(screen.getByTestId("line-feedback_accuracy")).toHaveAttribute("data-stroke-dasharray", "5 5");
@@ -210,6 +218,29 @@ describe("ScoreChampionVersionTimeline", () => {
       expect(table.className).not.toMatch(/h-\[/);
       expect(table.className).not.toMatch(/max-h-\[/);
     }
+  });
+
+  it("links score and score-version short ids to their detail routes", () => {
+    const { container } = render(<ScoreChampionVersionTimeline {...baseProps} />);
+
+    expect(
+      container.querySelector('a[href="/lab/scorecards/scorecard-1/scores/score-1"][aria-label="Open score"]')
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector(
+        'a[href="/lab/scorecards/scorecard-1/scores/score-1/versions/version-1"][aria-label="Open score version"]'
+      )
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector(
+        'a[href="/lab/scorecards/scorecard-1/scores/score-1/versions/version-0"][aria-label="Open previous champion score version"]'
+      )
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector(
+        'a[href="/lab/scorecards/scorecard-1/scores/score-1/versions/version-1"][aria-label="Open latest champion score version"]'
+      )
+    ).toBeInTheDocument();
   });
 
   it("uses the same x-axis date range for each score chart", () => {
@@ -266,10 +297,11 @@ describe("ScoreChampionVersionTimeline", () => {
     expect(screen.queryByTestId("diff-editor-markdown")).not.toBeInTheDocument();
   });
 
-  it("renders SME information above the champion diff", () => {
+  it("renders champion diff above SME information", () => {
     render(<ScoreChampionVersionTimeline {...baseProps} />);
 
     expect(screen.getByText("SME Information")).toBeInTheDocument();
+    expect(screen.getAllByText("Show more")).toHaveLength(2);
     const agenda = screen.getByTestId("sme-agenda-markdown");
     const worksheet = screen.getByTestId("sme-worksheet-markdown");
     expect(agenda.tagName).toBe("DIV");
@@ -286,7 +318,49 @@ describe("ScoreChampionVersionTimeline", () => {
     expect(worksheet.className).not.toContain("max-h-");
 
     const content = document.body.textContent || "";
-    expect(content.indexOf("SME Information")).toBeLessThan(content.indexOf("Champion Diff"));
+    expect(content.indexOf("Champion Diff")).toBeLessThan(content.indexOf("SME Information"));
+  });
+
+  it("keeps SME markdown collapsed until expanded", () => {
+    render(<ScoreChampionVersionTimeline {...baseProps} />);
+
+    const agenda = screen.getByTestId("sme-agenda-markdown");
+    const collapsedWrapper = agenda.parentElement;
+    expect(collapsedWrapper?.className).toContain("max-h-24");
+    expect(collapsedWrapper?.className).toContain("overflow-hidden");
+
+    fireEvent.click(screen.getAllByText("Show more")[0]);
+
+    expect(screen.getByText("Show less")).toBeInTheDocument();
+    expect(agenda.parentElement?.className).not.toContain("max-h-24");
+    expect(agenda.parentElement?.className).not.toContain("overflow-hidden");
+  });
+
+  it("does not render SME information when there is no SME agenda", () => {
+    render(
+      <ScoreChampionVersionTimeline
+        {...baseProps}
+        output={{
+          ...output,
+          scores: [
+            {
+              ...output.scores[0],
+              sme: {
+                procedure_id: "procedure-1",
+                procedure_status: "COMPLETED",
+                available: false,
+                agenda: null,
+                worksheet: "Worksheet without agenda should not render.",
+              },
+            },
+          ],
+        }}
+      />
+    );
+
+    expect(screen.queryByText("SME Information")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sme-agenda-markdown")).not.toBeInTheDocument();
+    expect(screen.queryByText("Worksheet without agenda should not render.")).not.toBeInTheDocument();
   });
 
   it("loads compacted report output attachments", async () => {
