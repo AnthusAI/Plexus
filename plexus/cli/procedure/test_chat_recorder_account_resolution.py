@@ -88,7 +88,7 @@ def test_get_latest_console_trigger_message_returns_chat_content():
     assert message == "Hello from trigger"
 
 
-def test_get_steering_messages_returns_flat_filtered_rows():
+def test_get_steering_messages_returns_completed_flat_filtered_rows():
     client = Mock()
     client.execute.return_value = {
         "data": {
