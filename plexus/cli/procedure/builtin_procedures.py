@@ -106,18 +106,18 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "  return plexus.score.update({ scorecard_identifier = \"My SC\","
                     " score_identifier = \"My Score\","
                     " guidelines = \"<new guidelines markdown>\" })\n\n"
-                    "IMPORTANT for score.update:\n"
-                    "- Always pass scorecard_identifier + score_identifier (names are fine, no need to resolve IDs first).\n"
-                    "- To update YAML: pass the complete code string.\n"
-                    "- To update only guidelines: pass only guidelines (omit code).\n"
-                    "- To update metadata (description, name, key): pass the field directly, e.g. description = \"new text\".\n\n"
-                    "TIPS:\n"
-                    "- For long-running ops (eval, optimize), use async=true and return the handle_id.\n"
-                    "- Never invent data; query Plexus for current values.\n"
-                    "- If user intent is unclear, ask one concise clarifying question.\n"
+                "IMPORTANT for score.update:\n"
+                "- Always pass scorecard_identifier + score_identifier (names are fine, no need to resolve IDs first).\n"
+                "- To update YAML: pass the complete code string.\n"
+                "- To update only guidelines: pass only guidelines (omit code).\n"
+                "- To update metadata (description, name, key): pass the field directly, e.g. description = \"new text\".\n\n"
+                "TIPS:\n"
+                "- For long-running ops (eval, optimize), use async=true and return the handle_id.\n"
+                "- Never invent data; query Plexus for current values.\n"
+                "- If user intent is unclear, ask one concise clarifying question.\n"
                 ),
                 "initial_message": "Ready.",
-                "tools": ["plexus"],
+                "tools": ["execute_tactus"],
             }
         },
         "stages": ["preparing", "responding", "complete"],
