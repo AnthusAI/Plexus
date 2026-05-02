@@ -238,7 +238,7 @@ def test_dispatch_routes_score_to_direct_handlers() -> None:
 
 
 def test_dispatch_routes_procedure_reads_to_direct_handlers() -> None:
-    for method in ("list", "info", "chat_sessions", "chat_messages", "steering_messages"):
+    for method in ("list", "info", "chat_sessions", "chat_messages"):
         assert execute.DIRECT_HANDLERS[("procedure", method)] == "_call_procedure_read"
         assert ("procedure", method) not in execute.MCP_TOOL_MAP
 
@@ -246,7 +246,7 @@ def test_dispatch_routes_procedure_reads_to_direct_handlers() -> None:
 def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
     monkeypatch,
 ) -> None:
-    """plexus.procedure read methods must NOT loop back."""
+    """plexus.procedure.list/info/chat_sessions/chat_messages must NOT loop back."""
 
     monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "call-criteria")
 
@@ -272,7 +272,6 @@ def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
             "info": make_reader("info"),
             "chat_sessions": make_reader("chat_sessions"),
             "chat_messages": make_reader("chat_messages"),
-            "steering_messages": make_reader("steering_messages"),
         },
     )
 
@@ -280,21 +279,18 @@ def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
     facade.procedure.info({"id": "proc-1"})
     facade.procedure.chat_sessions({"id": "proc-1", "limit": 2})
     facade.procedure.chat_messages({"id": "proc-1", "session_id": "session-1"})
-    facade.procedure.steering_messages({"id": "proc-1", "agent_name": "report_writer"})
 
     assert [m for m, _ in received] == [
         "list",
         "info",
         "chat_sessions",
         "chat_messages",
-        "steering_messages",
     ]
     assert facade.api_calls == [
         "plexus.procedure.list",
         "plexus.procedure.info",
         "plexus.procedure.chat_sessions",
         "plexus.procedure.chat_messages",
-        "plexus.procedure.steering_messages",
     ]
 
 
@@ -1682,6 +1678,44 @@ def test_report_run_async_creates_handle_and_records_budget() -> None:
     assert handles.created[0]["child_budget"] == budget
 
 
+def test_score_champion_version_timeline_convenience_maps_report_block() -> None:
+    seen_args: dict = {}
+    handles = _MemoryHandleStore()
+
+    def fake_runner(args: dict) -> dict:
+        seen_args.update(args)
+        return {
+            "status": "dispatched",
+            "cache_key": "champion-timeline-cache",
+            "task_id": "task-1",
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        handle_store=handles,
+        report_runner=fake_runner,
+    )
+
+    budget = _child_budget()
+    handle = module.report.score_champion_version_timeline(
+        {
+            "scorecard": "Suco - Home Improvement",
+            "days": 21,
+            "async": True,
+            "budget": budget,
+        }
+    )
+
+    assert handle["kind"] == "report"
+    assert seen_args["block_class"] == "ScoreChampionVersionTimeline"
+    assert seen_args["block_config"] == {
+        "scorecard": "Suco - Home Improvement",
+        "days": 21,
+    }
+    assert module.api_calls == ["plexus.report.run"]
+
+
 def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -> None:
     captured: dict = {}
 
@@ -1744,6 +1778,53 @@ def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -
     ][-7:]
     assert captured["kwargs"]["stdout"] is not None
     assert captured["kwargs"]["stderr"] is not None
+
+
+def test_default_report_runner_launches_score_champion_timeline_command(monkeypatch) -> None:
+    captured: dict = {}
+
+    class FakeProcess:
+        pid = 12345
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return FakeProcess()
+
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+
+    result = execute._default_report_runner(
+        {
+            "block_class": "ScoreChampionVersionTimeline",
+            "block_config": {
+                "scorecard": "Suco - Home Improvement",
+                "score": "Project Type AI",
+                "days": 21,
+            },
+            "fresh": True,
+        }
+    )
+
+    assert result == {"status": "running", "block_class": "ScoreChampionVersionTimeline", "pid": 12345}
+    assert captured["cmd"][1:] == [
+        "-m",
+        "plexus",
+        "feedback",
+        "report",
+        "score-champion-version-timeline",
+        "--scorecard",
+        "Suco - Home Improvement",
+        "--score",
+        "Project Type AI",
+        "--days",
+        "21",
+        "--fresh",
+    ]
 
 
 def test_report_run_blocking_requires_handle_protocol() -> None:

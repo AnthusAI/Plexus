@@ -16,6 +16,7 @@ import FeedbackAlignmentTimeline from "@/components/blocks/FeedbackAlignmentTime
 import FeedbackContradictions from "@/components/blocks/FeedbackContradictions";
 import FeedbackVolumeTimeline from "@/components/blocks/FeedbackVolumeTimeline";
 import RecentFeedback from "@/components/blocks/RecentFeedback";
+import ScoreChampionVersionTimeline from "@/components/blocks/ScoreChampionVersionTimeline";
 import ScoreInfo from "@/components/blocks/ScoreInfo";
 import TopicAnalysis from "@/components/blocks/TopicAnalysis";
 import VectorTopicMemory from "@/components/blocks/VectorTopicMemory";
@@ -38,6 +39,7 @@ const componentByType = {
   FeedbackContradictions,
   FeedbackVolumeTimeline,
   RecentFeedback,
+  ScoreChampionVersionTimeline,
   ScoreInfo,
   TopicAnalysis,
   VectorTopicMemory,
@@ -165,6 +167,9 @@ export default function ReportDocPage({ doc }: Props) {
           </CardHeader>
           <CardContent className="space-y-4">
             <CodeBlock>{doc.cli}</CodeBlock>
+            {doc.tactus ? (
+              <CodeBlock>{doc.tactus}</CodeBlock>
+            ) : null}
             {!doc.relatedCheck ? (
               <CodeBlock>{`plexus report config create --name "${doc.title} Example" --file ${doc.slug}.md
 plexus report run --config "${doc.title} Example"`}</CodeBlock>
