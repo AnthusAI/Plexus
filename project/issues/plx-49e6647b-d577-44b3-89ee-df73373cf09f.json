@@ -1,0 +1,31 @@
+{
+  "id": "plx-49e6647b-d577-44b3-89ee-df73373cf09f",
+  "title": "Accept CodeQL unused import suggestion for release PR",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "80be8167-8140-4528-8803-d390eba6d9a5",
+      "author": "ryan",
+      "text": "Behavior spec: the release PR should not carry the CodeQL unused default import finding in dashboard/__tests__/items-dashboard.test.tsx; keep only the named imports used by the identifier-search helper tests.",
+      "created_at": "2026-05-02T19:55:13.170121Z"
+    },
+    {
+      "id": "237f5b29-1db0-4131-b817-c788c9e830de",
+      "author": "ryan",
+      "text": "Accepted CodeQL suggestion by removing the unused default ItemsDashboard import while keeping the named identifier-search helper imports. Verified with: cd dashboard && npm test -- items-dashboard.test.tsx.",
+      "created_at": "2026-05-02T19:56:24.847094Z"
+    }
+  ],
+  "created_at": "2026-05-02T19:54:12.543391Z",
+  "updated_at": "2026-05-02T19:56:24.860134Z",
+  "closed_at": "2026-05-02T19:56:24.860134Z",
+  "custom": {}
+}

@@ -1,0 +1,31 @@
+{
+  "id": "plx-93975eb9-1e2d-48e0-b584-75420d90d1f3",
+  "title": "Prepare develop to main release PR",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9ca724a9-853b-4f6d-ada5-93e0e03d3716",
+      "author": "ryan",
+      "text": "Preparing develop-to-main release PR. Waiting for develop CI on 236e799f to pass before opening PR.",
+      "created_at": "2026-05-02T19:41:07.631304Z"
+    },
+    {
+      "id": "a4b101b3-d45f-4499-98e4-88d2eb4a9612",
+      "author": "ryan",
+      "text": "Created develop-to-main release PR #277: https://github.com/AnthusAI/Plexus/pull/277. Description covers procedure/execute_tactus runtime changes, dashboard task UI refinements, score champion timeline reporting, score-version procedure indexing, item search fixes, docs, and included develop PRs #268-#276.",
+      "created_at": "2026-05-02T19:51:21.249324Z"
+    }
+  ],
+  "created_at": "2026-05-02T19:41:02.496998Z",
+  "updated_at": "2026-05-02T19:51:21.643609Z",
+  "closed_at": "2026-05-02T19:51:21.643609Z",
+  "custom": {}
+}
