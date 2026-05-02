@@ -49,9 +49,6 @@ import {
   procedureToOptimizerRunView,
   PROCEDURE_CREATE_SUBSCRIPTION_FOR_CARDS,
   PROCEDURE_DELETE_SUBSCRIPTION_FOR_CARDS,
-  PROCEDURE_SCORE_VERSION_CREATE_SUBSCRIPTION_FOR_CARDS,
-  PROCEDURE_SCORE_VERSION_DELETE_SUBSCRIPTION_FOR_CARDS,
-  PROCEDURE_SCORE_VERSION_UPDATE_SUBSCRIPTION_FOR_CARDS,
   PROCEDURE_UPDATE_SUBSCRIPTION_FOR_CARDS,
   refreshOptimizerRunManifest,
   scorecardGuideRelativePath,
@@ -377,32 +374,6 @@ export function ScoreProcedureList({
       },
       'delete procedure'
     )
-    if (scope === 'version') {
-      const upsertProcedureLink = (rawLink: any) => {
-        if (rawLink?.scoreVersionId !== versionId) return
-        upsertProcedure(rawLink.procedure)
-      }
-
-      subscribe(
-        PROCEDURE_SCORE_VERSION_CREATE_SUBSCRIPTION_FOR_CARDS,
-        (data) => upsertProcedureLink(data?.onCreateProcedureScoreVersion),
-        'create procedure score version'
-      )
-      subscribe(
-        PROCEDURE_SCORE_VERSION_UPDATE_SUBSCRIPTION_FOR_CARDS,
-        (data) => upsertProcedureLink(data?.onUpdateProcedureScoreVersion),
-        'update procedure score version'
-      )
-      subscribe(
-        PROCEDURE_SCORE_VERSION_DELETE_SUBSCRIPTION_FOR_CARDS,
-        (data) => {
-          const deleted = data?.onDeleteProcedureScoreVersion
-          if (deleted?.scoreVersionId !== versionId || !deleted?.procedureId) return
-          setRuns((previous) => previous.filter((run) => run.procedureId !== deleted.procedureId))
-        },
-        'delete procedure score version'
-      )
-    }
     subscribe(
       EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS,
       (data) => {

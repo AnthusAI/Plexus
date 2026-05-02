@@ -157,40 +157,6 @@ export const PROCEDURE_DELETE_SUBSCRIPTION_FOR_CARDS = `
   }
 `
 
-export const PROCEDURE_SCORE_VERSION_CREATE_SUBSCRIPTION_FOR_CARDS = `
-  subscription OnCreateProcedureScoreVersionForCards {
-    onCreateProcedureScoreVersion {
-      id
-      scoreVersionId
-      procedure {
-        ${PROCEDURE_CARD_FIELDS}
-      }
-    }
-  }
-`
-
-export const PROCEDURE_SCORE_VERSION_UPDATE_SUBSCRIPTION_FOR_CARDS = `
-  subscription OnUpdateProcedureScoreVersionForCards {
-    onUpdateProcedureScoreVersion {
-      id
-      scoreVersionId
-      procedure {
-        ${PROCEDURE_CARD_FIELDS}
-      }
-    }
-  }
-`
-
-export const PROCEDURE_SCORE_VERSION_DELETE_SUBSCRIPTION_FOR_CARDS = `
-  subscription OnDeleteProcedureScoreVersionForCards {
-    onDeleteProcedureScoreVersion {
-      id
-      procedureId
-      scoreVersionId
-    }
-  }
-`
-
 export const EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS = `
   subscription OnCreateEvaluationForCards {
     onCreateEvaluation {
@@ -1145,22 +1111,20 @@ async function loadProcedureRecordsByScoreVersionId(
   do {
     const procedureResponse = await client.graphql({
       query: `
-        query ListProcedureScoreVersionByScoreVersionIdAndUpdatedAtWorkbench(
+        query ListProcedureByScoreVersionIdAndUpdatedAtWorkbench(
           $scoreVersionId: String!
           $sortDirection: ModelSortDirection
           $limit: Int
           $nextToken: String
         ) {
-          listProcedureScoreVersionByScoreVersionIdAndUpdatedAt(
+          listProcedureByScoreVersionIdAndUpdatedAt(
             scoreVersionId: $scoreVersionId
             sortDirection: $sortDirection
             limit: $limit
             nextToken: $nextToken
           ) {
             items {
-              procedure {
-                ${PROCEDURE_CARD_FIELDS}
-              }
+              ${PROCEDURE_CARD_FIELDS}
             }
             nextToken
           }
@@ -1174,8 +1138,8 @@ async function loadProcedureRecordsByScoreVersionId(
       },
     }) as any
 
-    const page = procedureResponse.data?.listProcedureScoreVersionByScoreVersionIdAndUpdatedAt
-    procedures.push(...(page?.items ?? []).map((item: any) => item?.procedure).filter(Boolean))
+    const page = procedureResponse.data?.listProcedureByScoreVersionIdAndUpdatedAt
+    procedures.push(...(page?.items ?? []))
     nextToken = page?.nextToken ?? null
   } while (nextToken)
 
