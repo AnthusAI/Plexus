@@ -1683,7 +1683,7 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
         """
         query GetScoreVersionForChampionGuard($scoreId: ID!, $versionId: ID!) {
             getScore(id: $scoreId) { id championVersionId }
-            getScoreVersion(id: $versionId) { id scoreId configuration metadata }
+            getScoreVersion(id: $versionId) { id scoreId configuration metadata createdAt }
         }
         """,
         {"scoreId": str(score_id), "versionId": str(version_id)},
@@ -1747,6 +1747,14 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
     promoted_at = datetime.now(timezone.utc).isoformat()
     transition_id = str(_uuid.uuid4())
 
+    def _metadata_dict(metadata: Any) -> dict:
+        if not metadata:
+            return {}
+        if isinstance(metadata, str):
+            parsed = json.loads(metadata)
+            return dict(parsed or {})
+        return dict(metadata or {})
+
     def _build_meta(
         metadata: Any,
         *,
@@ -1759,15 +1767,21 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
         previous_champion_version_id: str | None = None,
         next_champion_version_id: str | None = None,
     ) -> dict:
-        next_meta: dict = dict(metadata or {})
+        next_meta: dict = _metadata_dict(metadata)
         history: list = list(next_meta.get("championHistory") or [])
         if incoming:
-            history.append({
-                "scoreId": score_id, "versionId": version_id,
-                "enteredAt": entered_at, "exitedAt": None,
-                "previousChampionVersionId": previous_champion_version_id,
-                "nextChampionVersionId": None, "transitionId": transition_id,
-            })
+            open_idx = next((
+                i for i in range(len(history) - 1, -1, -1)
+                if history[i].get("versionId") == version_id
+                and not history[i].get("exitedAt")
+            ), None)
+            if open_idx is None:
+                history.append({
+                    "scoreId": score_id, "versionId": version_id,
+                    "enteredAt": entered_at, "exitedAt": None,
+                    "previousChampionVersionId": previous_champion_version_id,
+                    "nextChampionVersionId": None, "transitionId": transition_id,
+                })
         else:
             open_idx = next((i for i in range(len(history) - 1, -1, -1)
                              if not history[i].get("exitedAt")), None)
@@ -1803,7 +1817,11 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
         ),
     )
     client.execute(update_version_mutation, {"input": {
-        "id": str(version_id), "metadata": incoming_meta, "isFeatured": "true"
+        "id": str(version_id),
+        "scoreId": str(score_id),
+        "createdAt": version_data.get("createdAt"),
+        "metadata": json.dumps(incoming_meta),
+        "isFeatured": "true",
     }})
     if previous_champion_version_id and previous_champion_version_id != str(version_id):
         outgoing_meta = _build_meta(
@@ -1813,7 +1831,7 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
             next_champion_version_id=str(version_id),
         )
         client.execute(update_version_mutation, {"input": {
-            "id": previous_champion_version_id, "metadata": outgoing_meta
+            "id": previous_champion_version_id, "metadata": json.dumps(outgoing_meta)
         }})
 
     return {
@@ -4347,7 +4365,7 @@ def _default_rubric_memory_recent_entries(args: dict[str, Any]) -> dict[str, Any
             limit=limit,
         )
 
-    context = _run_async_from_sync(_run)
+    context = _run_async_from_sync(_run())
     return {
         "success": True,
         "score_id": resolved_score_id,
@@ -4389,7 +4407,7 @@ def _default_rubric_memory_evidence_pack(args: dict[str, Any]) -> dict[str, Any]
     method = provider.generate_for_score_item if synthesize else provider.retrieve_for_score_item
 
     context = _run_async_from_sync(
-        lambda: method(
+        method(
             scorecard_identifier=scorecard_identifier,
             score_identifier=score_identifier,
             score_id=resolved_score_id,
@@ -4453,7 +4471,7 @@ def _default_rubric_memory_sme_question_gate(args: dict[str, Any]) -> dict[str, 
         candidate_agenda_items=candidate_items,
         optimizer_context=optimizer_context,
     )
-    result = _run_async_from_sync(lambda: RubricMemorySMEQuestionGateService().gate(request))
+    result = _run_async_from_sync(RubricMemorySMEQuestionGateService().gate(request))
     return {"success": True, **result.model_dump(mode="json")}
 
 
