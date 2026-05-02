@@ -9,6 +9,12 @@ jest.mock("aws-amplify/storage", () => ({
   downloadData: (...args: any[]) => mockDownloadData(...args),
 }));
 
+jest.mock("@monaco-editor/react", () => ({
+  DiffEditor: ({ language, original, modified }: any) => (
+    <div data-testid={`diff-editor-${language}`} data-original={original} data-modified={modified} />
+  ),
+}));
+
 jest.mock("@/components/ui/chart", () => ({
   ChartContainer: ({ children }: any) => <div data-testid="chart-container">{children}</div>,
 }));
@@ -78,6 +84,15 @@ describe("ScoreChampionVersionTimeline", () => {
           optimization_cost: { overall: 1.5, inference: 0.4, evaluation: 1.1 },
           associated_evaluation_cost: 0.5,
         },
+        sme: {
+          procedure_id: "procedure-1",
+          procedure_status: "COMPLETED",
+          procedure_updated_at: "2026-04-11T01:00:00+00:00",
+          available: true,
+          agenda: "Review boundary cases with the SME.",
+          worksheet: "Confirm the transfer criteria.",
+          generated_at: "2026-04-11T02:00:00+00:00",
+        },
         points: [
           {
             point_index: 0,
@@ -98,7 +113,11 @@ describe("ScoreChampionVersionTimeline", () => {
         diff: {
           left_version_id: "version-0",
           right_version_id: "version-1",
+          configuration_left: "name: old",
+          configuration_right: "name: new",
           configuration_diff: "--- version-0/configuration\n+++ version-1/configuration\n-name: old\n+name: new",
+          guidelines_left: "Old guideline",
+          guidelines_right: "New guideline",
           guidelines_diff: "--- version-0/guidelines\n+++ version-1/guidelines\n-Old guideline\n+New guideline",
         },
       },
@@ -200,14 +219,33 @@ describe("ScoreChampionVersionTimeline", () => {
     expect(screen.queryByTestId("chart-container")).not.toBeInTheDocument();
   });
 
-  it("renders code and guidelines diff tabs", () => {
+  it("renders code and guidelines in Monaco diff editors", () => {
     render(<ScoreChampionVersionTimeline {...baseProps} />);
 
     expect(screen.getAllByText("Champion Diff")).toHaveLength(2);
     expect(screen.getAllByText("Code")).toHaveLength(2);
     expect(screen.getAllByText("Guidelines")).toHaveLength(2);
-    expect(screen.getByText(/name: new/)).toBeInTheDocument();
-    expect(screen.getByText(/New guideline/)).toBeInTheDocument();
+    const codeDiff = screen.getByTestId("diff-editor-yaml");
+    const guidelinesDiff = screen.getByTestId("diff-editor-markdown");
+    expect(codeDiff).toHaveAttribute("data-original", "name: old");
+    expect(codeDiff).toHaveAttribute("data-modified", "name: new");
+    expect(guidelinesDiff).toHaveAttribute("data-original", "Old guideline");
+    expect(guidelinesDiff).toHaveAttribute("data-modified", "New guideline");
+  });
+
+  it("renders SME information above the champion diff", () => {
+    render(<ScoreChampionVersionTimeline {...baseProps} />);
+
+    expect(screen.getByText("SME Information")).toBeInTheDocument();
+    const agenda = screen.getByText("Review boundary cases with the SME.");
+    const worksheet = screen.getByText("Confirm the transfer criteria.");
+    expect(agenda).toBeInTheDocument();
+    expect(worksheet).toBeInTheDocument();
+    expect(agenda).toHaveClass("text-foreground");
+    expect(worksheet).toHaveClass("text-foreground");
+
+    const content = document.body.textContent || "";
+    expect(content.indexOf("SME Information")).toBeLessThan(content.indexOf("Champion Diff"));
   });
 
   it("loads compacted report output attachments", async () => {

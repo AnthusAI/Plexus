@@ -1,0 +1,43 @@
+{
+  "id": "plx-0df16b6d-4011-46d6-9858-630b77bae59b",
+  "title": "Normalize champion timeline range and report styling",
+  "description": "Implement follow-up improvements for ScoreChampionVersionTimeline.\n\nBehavior specs:\n\nFeature: Score champion timeline display refinement\n\nScenario: Timeline has sparse champion activity inside a larger requested window\nGiven a report request covers a broad time window\nAnd the earliest champion transition found is later than the requested start\nWhen the ScoreChampionVersionTimeline output is generated\nThen the effective chart range starts one day before the earliest in-window champion transition\nAnd still ends at the requested end time.\n\nScenario: Timeline regions render with Plexus dashboard visual conventions\nGiven a ScoreChampionVersionTimeline report is rendered\nWhen the user views score sections, SME information, metric summaries, tables, and diffs\nThen regions are separated by flat theme background colors rather than thin borders or outlines\nAnd primary report content uses the standard foreground text color so SME messages remain readable.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7c7b9d85-39bd-49e3-b9fa-a43edd316d24",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6a9eeeec-c930-4141-8041-7f465565d339",
+      "author": "ryan",
+      "text": "Started implementation. Scope is limited to ScoreChampionVersionTimeline backend effective date range normalization and dashboard renderer styling/contrast cleanup. Existing unrelated local changes will be left untouched.",
+      "created_at": "2026-05-02T18:05:24.190037Z"
+    },
+    {
+      "id": "23d2864f-1e4c-4dde-aa38-463235459660",
+      "author": "ryan",
+      "text": "Implemented effective date range normalization and styling cleanup. Focused tests pass: backend ScoreChampionVersionTimeline tests now 10 passing; frontend renderer tests 6 passing. Live Suco 21-day run now reports requested_date_range 2026-04-11T18:07:40Z..2026-05-02T18:07:40Z and effective date_range 2026-04-28T19:40:06Z..2026-05-02T18:07:40Z, one day before first activity at 2026-04-29T19:40:06Z.",
+      "created_at": "2026-05-02T18:09:00.516960Z"
+    },
+    {
+      "id": "4c6f6031-fbd2-45e8-a79b-ba7f265883aa",
+      "author": "ryan",
+      "text": "Verification complete: backend and frontend ScoreChampionVersionTimeline focused tests pass with effective range normalization and dashboard renderer styling updates.",
+      "created_at": "2026-05-02T18:10:42.805410Z"
+    },
+    {
+      "id": "8896bb3d-c35c-4442-9eae-f511a2291224",
+      "author": "ryan",
+      "text": "Added include_unchanged option for ScoreChampionVersionTimeline. Default is changes-only: champion history entries without previousChampionVersionId are filtered out. CLI exposes --include-unchanged and Tactus passes include_unchanged through block_config/local runner. Focused tests pass. Live Suco 21-day default run now reports 35 scores, 48 champion changes, and 0 points without previous_champion_version_id.",
+      "created_at": "2026-05-02T18:14:19.689656Z"
+    }
+  ],
+  "created_at": "2026-05-02T18:05:21.700758Z",
+  "updated_at": "2026-05-02T18:14:19.689656Z",
+  "closed_at": "2026-05-02T18:10:42.895877Z",
+  "custom": {}
+}

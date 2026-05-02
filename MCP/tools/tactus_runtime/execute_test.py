@@ -238,7 +238,7 @@ def test_dispatch_routes_score_to_direct_handlers() -> None:
 
 
 def test_dispatch_routes_procedure_reads_to_direct_handlers() -> None:
-    for method in ("list", "info", "chat_sessions", "chat_messages"):
+    for method in ("list", "info", "chat_sessions", "chat_messages", "steering_messages"):
         assert execute.DIRECT_HANDLERS[("procedure", method)] == "_call_procedure_read"
         assert ("procedure", method) not in execute.MCP_TOOL_MAP
 
@@ -246,7 +246,7 @@ def test_dispatch_routes_procedure_reads_to_direct_handlers() -> None:
 def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
     monkeypatch,
 ) -> None:
-    """plexus.procedure.list/info/chat_sessions/chat_messages must NOT loop back."""
+    """plexus.procedure read methods must NOT loop back."""
 
     monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "call-criteria")
 
@@ -272,6 +272,7 @@ def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
             "info": make_reader("info"),
             "chat_sessions": make_reader("chat_sessions"),
             "chat_messages": make_reader("chat_messages"),
+            "steering_messages": make_reader("steering_messages"),
         },
     )
 
@@ -279,18 +280,21 @@ def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
     facade.procedure.info({"id": "proc-1"})
     facade.procedure.chat_sessions({"id": "proc-1", "limit": 2})
     facade.procedure.chat_messages({"id": "proc-1", "session_id": "session-1"})
+    facade.procedure.steering_messages({"id": "proc-1", "agent_name": "report_writer"})
 
     assert [m for m, _ in received] == [
         "list",
         "info",
         "chat_sessions",
         "chat_messages",
+        "steering_messages",
     ]
     assert facade.api_calls == [
         "plexus.procedure.list",
         "plexus.procedure.info",
         "plexus.procedure.chat_sessions",
         "plexus.procedure.chat_messages",
+        "plexus.procedure.steering_messages",
     ]
 
 
@@ -1702,6 +1706,7 @@ def test_score_champion_version_timeline_convenience_maps_report_block() -> None
         {
             "scorecard": "Suco - Home Improvement",
             "days": 21,
+            "include_unchanged": True,
             "async": True,
             "budget": budget,
         }
@@ -1712,6 +1717,7 @@ def test_score_champion_version_timeline_convenience_maps_report_block() -> None
     assert seen_args["block_config"] == {
         "scorecard": "Suco - Home Improvement",
         "days": 21,
+        "include_unchanged": True,
     }
     assert module.api_calls == ["plexus.report.run"]
 
@@ -1805,6 +1811,7 @@ def test_default_report_runner_launches_score_champion_timeline_command(monkeypa
                 "scorecard": "Suco - Home Improvement",
                 "score": "Project Type AI",
                 "days": 21,
+                "include_unchanged": True,
             },
             "fresh": True,
         }
@@ -1823,6 +1830,7 @@ def test_default_report_runner_launches_score_champion_timeline_command(monkeypa
         "Project Type AI",
         "--days",
         "21",
+        "--include-unchanged",
         "--fresh",
     ]
 

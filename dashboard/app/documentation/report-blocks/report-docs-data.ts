@@ -299,7 +299,9 @@ bucket_count: 8`,
     avoidWhen: ["You need every optimizer candidate; use procedure optimizer views.", "The score predates championHistory metadata and has no recorded transitions."],
     cli: `plexus feedback report score-champion-version-timeline \\
   --scorecard "Customer Service QA" \\
-  --days 30`,
+  --days 30
+
+# Add --include-unchanged to include initial champion entries with no previous champion.`,
     tactus: `return plexus.report.score_champion_version_timeline{
   scorecard = "Customer Service QA",
   days = 30,
@@ -308,25 +310,44 @@ bucket_count: 8`,
     config: `class: ScoreChampionVersionTimeline
 scorecard: "Customer Service QA"
 score: "Medication Review: Dosage"
-days: 30`,
-    interpretation: ["Only versions with championHistory enteredAt values inside the window are included.", "Missing feedback or regression evaluations are shown as unavailable instead of suppressing the champion point.", "Diffs compare the previous champion before the first in-window transition to the latest in-window champion."],
+days: 30
+include_unchanged: false`,
+    interpretation: ["By default, initial champion entries with no previous champion are omitted because they are not changes; set include_unchanged to true to show them.", "Only versions with championHistory enteredAt values inside the requested window are included.", "The displayed date range is narrowed to one day before the earliest champion activity when the request window is much broader than the activity.", "Missing feedback or regression evaluations are shown as unavailable instead of suppressing the champion point.", "Procedure, evaluation, score-result, and cost totals summarize optimizer work during the window.", "SME agenda and worksheet content comes from the most recent optimizer procedure for each score.", "Diffs compare the previous champion before the first in-window transition to the latest in-window champion."],
     sampleOutput: {
       report_type: "score_champion_version_timeline",
       block_title: "Score Champion Version Timeline",
       block_description: "Champion version changes and associated evaluation metrics",
       scope: "single_score",
       scorecard_name: "Customer Service QA",
-      date_range: dateRange,
+      requested_date_range: dateRange,
+      date_range: {
+        start: "2026-03-11T14:20:00Z",
+        end: dateRange.end,
+        normalized_to_activity: true,
+      },
+      include_unchanged: false,
       summary: {
         scores_analyzed: 1,
         scores_with_champion_changes: 1,
         champion_change_count: 2,
+        procedure_count: 1,
+        evaluation_count: 4,
+        score_result_count: 600,
+        optimization_cost: { overall: 2.42, inference: 0.38, evaluation: 2.04 },
+        associated_evaluation_cost: 0.64,
         evaluations_scanned: 4,
       },
       scores: [
         {
           score_id: "score-dosage",
           score_name: "Medication Review: Dosage",
+          optimization_summary: {
+            procedure_count: 1,
+            evaluation_count: 4,
+            score_result_count: 600,
+            optimization_cost: { overall: 2.42, inference: 0.38, evaluation: 2.04 },
+            associated_evaluation_cost: 0.64,
+          },
           points: [
             {
               point_index: 0,
@@ -351,10 +372,23 @@ days: 30`,
               regression_metrics: { alignment: 0.72, accuracy: 81 },
             },
           ],
+          sme: {
+            procedure_id: "procedure-optimizer-102",
+            procedure_status: "COMPLETED",
+            procedure_updated_at: "2026-03-26T10:30:00Z",
+            available: true,
+            agenda: "Review dosage exception wording with SME.",
+            worksheet: "Confirm whether ambiguous dosage mentions should be excluded.",
+            generated_at: "2026-03-26T10:35:00Z",
+          },
           diff: {
             left_version_id: "version-100",
             right_version_id: "version-102",
+            configuration_left: "name: old",
+            configuration_right: "name: new",
             configuration_diff: "--- version-100/configuration\n+++ version-102/configuration\n@@ -1 +1 @@\n-name: old\n+name: new",
+            guidelines_left: "Old rubric",
+            guidelines_right: "New rubric",
             guidelines_diff: "--- version-100/guidelines\n+++ version-102/guidelines\n@@ -1 +1 @@\n-Old rubric\n+New rubric",
           },
         },
