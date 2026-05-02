@@ -175,7 +175,7 @@ const docSections: DocSidebarItem[] = [
       { name: "Worker Nodes", href: "/documentation/advanced/worker-nodes" },
       { name: "Python SDK Reference", href: "/documentation/advanced/sdk" },
       { name: "Universal Code Snippets", href: "/documentation/advanced/universal-code" },
-      { name: "MCP Server", href: "/documentation/advanced/mcp-server" },
+      { name: "MCP / Tactus Runtime", href: "/documentation/advanced/mcp-server" },
     ],
   },
 ]
