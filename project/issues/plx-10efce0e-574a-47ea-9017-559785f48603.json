@@ -3,7 +3,7 @@
   "title": "Verify deployed score-version procedure GSI",
   "description": "Confirm the deployed score-version procedure association index works for the Scorecards dashboard Procedures tab. Test the direct query path against real deployed data and capture any follow-up issues.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-05-02T00:48:15.157480Z",
-  "updated_at": "2026-05-02T00:51:12.966354Z",
-  "closed_at": null,
+  "updated_at": "2026-05-02T01:02:11.785046Z",
+  "closed_at": "2026-05-02T01:02:11.785046Z",
   "custom": {}
 }
