@@ -202,8 +202,6 @@ def main() -> int:
         "role": "USER",
         "messageType": "MESSAGE",
         "humanInteraction": "CHAT",
-        "responseStatus": "PENDING",
-        "responseTarget": session_id,
         "content": args.message,
         "metadata": json.dumps({"source": "console-chat-smoke", "sent_at": now}),
         "createdAt": now,
@@ -247,8 +245,7 @@ def main() -> int:
     if args.mode == "direct":
         direct_env = os.environ.copy()
         direct_env["PLEXUS_DISPATCH_TASK_ID"] = task_id
-        plexus_cmd = os.environ.get("PLEXUS_CMD", "plexus")
-        command = plexus_cmd.split() + ["procedure", "run", args.procedure_id, "-o", "json"]
+        command = ["plexus", "procedure", "run", args.procedure_id, "-o", "json"]
         print(f"Direct run: {' '.join(command)}")
         result = subprocess.run(command, text=True, capture_output=True, check=False, env=direct_env)
         if result.returncode != 0:

@@ -3,24 +3,6 @@ import { render, screen } from '@testing-library/react'
 import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBar'
 
 describe('EvaluationListAccuracyBar', () => {
-  it('renders a blank slot with the same bar footprint', () => {
-    render(
-      <EvaluationListAccuracyBar
-        variant="blank"
-        progress={100}
-        accuracy={80}
-        baselineAccuracy={70}
-        currentBaselineAccuracy={75}
-      />
-    )
-
-    const bar = screen.getByTestId('evaluation-list-accuracy-bar')
-    expect(bar).toHaveClass('w-full', 'h-8', 'rounded-md')
-    expect(screen.queryByText('80%')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Original baseline marker')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Current best baseline marker')).not.toBeInTheDocument()
-  })
-
   it('renders visibly separate original and current baseline markers when accuracies overlap', () => {
     render(
       <EvaluationListAccuracyBar

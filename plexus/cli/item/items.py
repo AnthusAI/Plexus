@@ -471,7 +471,6 @@ def create(account: Optional[str], evaluation_id: Optional[str], text: Optional[
         import traceback
         print(traceback.format_exc())
 
-
 @items.command()
 @click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
 @click.option('--evaluation-id', help='Filter by evaluation ID')
@@ -879,10 +878,7 @@ def upsert(account: Optional[str], json_file: Optional[str], data: Optional[str]
         batch_end = min(batch_start + batch_size, len(items_data))
         batch = items_data[batch_start:batch_end]
         
-        console.print(
-            f"\n[bold]Processing batch {batch_start // batch_size + 1} "
-            f"({batch_start + 1}-{batch_end} of {len(items_data)})[/bold]"
-        )
+        console.print(f"\n[bold]Processing batch {batch_start//batch_size + 1} ({batch_start + 1}-{batch_end} of {len(items_data)})[/bold]")
         
         for i, item_data in enumerate(batch, batch_start + 1):
             try:
@@ -981,4 +977,4 @@ item.add_command(last)
 item.add_command(info)
 item.add_command(update)
 item.add_command(upsert)
-item.add_command(delete)
+item.add_command(delete) 

@@ -1,10 +1,24 @@
 -- Rubric-memory SME question gate.
 -- {{PROVIDER}} and {{MODEL}} are substituted by Python before execution.
 
+finish = Tool {
+    name = "finish",
+    description = "Return the final SME question gate JSON.",
+    input = {
+        result_json = field.string{
+            required = true,
+            description = "The complete SME question gate result JSON string."
+        },
+    },
+    function(args)
+        return { result_json = args.result_json }
+    end
+}
+
 gate_agent = Agent {
     provider = "{{PROVIDER}}",
     model = "{{MODEL}}",
-    model_type = "responses",
+    model_type = "chat",
     temperature = 1.0,
     max_tokens = {{MAX_TOKENS}},
     system_prompt = [[
@@ -23,9 +37,7 @@ Rules:
 - Return concise final_agenda_markdown suitable for humans.
 - Return only valid JSON. Do not return Markdown outside JSON.
 ]],
-    output = {
-        text = field.string{required = true},
-    },
+    tools = {finish},
 }
 
 Procedure {
@@ -38,7 +50,9 @@ Procedure {
     function(input)
         local gate_message = input.gate_input_json .. [[
 
-Return a JSON object with:
+You must call the finish tool exactly once.
+The finish tool has a required argument named result_json.
+Set result_json to a JSON object with:
 {
   "items": [
     {
@@ -57,32 +71,11 @@ Return a JSON object with:
 If every item is suppressed, final_agenda_markdown must be "(No SME decisions needed this cycle)".
 ]]
 
-        local function get_field(value, key)
-            if value == nil then
-                return nil
-            end
-            local ok, field_value = pcall(function()
-                return value[key]
-            end)
-            if ok then
-                return field_value
-            end
-            return nil
-        end
-
-        local result = gate_agent({ message = gate_message })
-        local output = get_field(result, "output") or result
-        local text = get_field(output, "text") or get_field(output, "response") or output
+        gate_agent({ message = gate_message })
+        local text = tostring(finish.last_call() or "")
 
         if type(text) ~= "string" then
-            local ok_json, encoded = pcall(function()
-                return Json.encode(text)
-            end)
-            if ok_json and type(encoded) == "string" then
-                text = encoded
-            else
-                text = tostring(text or "")
-            end
+            text = tostring(text or "")
         end
         return { text = text }
     end

@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { generateClient } from 'aws-amplify/api'
 import { downloadData } from 'aws-amplify/storage'
-import { Copy, Link as LinkIcon, Pin, PinOff, Star } from 'lucide-react'
+import { Copy, ExternalLink, Pin, PinOff, Star } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -462,7 +462,7 @@ export function ScoreOptimizerWorkbench({
                       asChild
                     >
                       <a href={`/lab/procedures/${run.procedureId}`} target="_blank" rel="noreferrer">
-                        <LinkIcon className="mr-2 h-3.5 w-3.5" />
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
                         Open procedure
                       </a>
                     </Button>
@@ -508,7 +508,7 @@ export function ScoreOptimizerWorkbench({
                     {best?.best_feedback_evaluation_id && (
                       <Button variant="outline" size="sm" asChild>
                         <a href={evaluationUrl(best.best_feedback_evaluation_id) ?? '#'} target="_blank" rel="noreferrer">
-                          <LinkIcon className="mr-2 h-3.5 w-3.5" />
+                          <ExternalLink className="mr-2 h-3.5 w-3.5" />
                           Feedback evaluation
                         </a>
                       </Button>
@@ -516,7 +516,7 @@ export function ScoreOptimizerWorkbench({
                     {best?.best_accuracy_evaluation_id && (
                       <Button variant="outline" size="sm" asChild>
                         <a href={evaluationUrl(best.best_accuracy_evaluation_id) ?? '#'} target="_blank" rel="noreferrer">
-                          <LinkIcon className="mr-2 h-3.5 w-3.5" />
+                          <ExternalLink className="mr-2 h-3.5 w-3.5" />
                           Regression alignment evaluation
                         </a>
                       </Button>
@@ -624,7 +624,7 @@ export function ScoreOptimizerWorkbench({
                   {candidate.bestFeedbackEvaluationId && (
                     <Button variant="outline" size="sm" asChild>
                       <a href={evaluationUrl(candidate.bestFeedbackEvaluationId) ?? '#'} target="_blank" rel="noreferrer">
-                        <LinkIcon className="mr-2 h-3.5 w-3.5" />
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
                         Feedback evaluation
                       </a>
                     </Button>
@@ -632,7 +632,7 @@ export function ScoreOptimizerWorkbench({
                   {selectedMetricResult?.evaluationId && (
                     <Button variant="outline" size="sm" asChild>
                       <a href={evaluationUrl(selectedMetricResult.evaluationId) ?? '#'} target="_blank" rel="noreferrer">
-                        <LinkIcon className="mr-2 h-3.5 w-3.5" />
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
                         Selected metric evaluation
                       </a>
                     </Button>
@@ -640,7 +640,7 @@ export function ScoreOptimizerWorkbench({
                   {candidate.bestAccuracyEvaluationId && (
                     <Button variant="outline" size="sm" asChild>
                       <a href={evaluationUrl(candidate.bestAccuracyEvaluationId) ?? '#'} target="_blank" rel="noreferrer">
-                        <LinkIcon className="mr-2 h-3.5 w-3.5" />
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
                         Regression alignment evaluation
                       </a>
                     </Button>

@@ -40,9 +40,6 @@ class RubricAuthorityResolver:
                 f"Score {score_id} does not have a champion ScoreVersion."
             )
 
-        return await self.resolve_score_version(champion_id)
-
-    async def resolve_score_version(self, score_version_id: str) -> RubricAuthority:
         version_result = await asyncio.to_thread(
             self.api_client.execute,
             """
@@ -53,17 +50,17 @@ class RubricAuthorityResolver:
                 }
             }
             """,
-            {"id": score_version_id},
+            {"id": champion_id},
         )
         score_version = (version_result or {}).get("getScoreVersion") or {}
         rubric_text = (score_version.get("guidelines") or "").strip()
         if not rubric_text:
             raise RubricAuthorityError(
-                f"ScoreVersion {score_version_id} does not contain rubric text."
+                f"ScoreVersion {champion_id} does not contain rubric text."
             )
 
         return RubricAuthority(
-            score_version_id=score_version_id,
+            score_version_id=champion_id,
             rubric_text=rubric_text,
             score_code=score_version.get("configuration") or "",
         )

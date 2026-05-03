@@ -2,6 +2,8 @@ import json
 import sys
 import types
 
+import pytest
+
 from plexus.rca_analysis import (
     CONFIG_FIXABILITY_OPTIONS,
     MECHANICAL_SUBTYPES,
@@ -9,7 +11,6 @@ from plexus.rca_analysis import (
     MISCLASSIFICATION_EXCLUDED_ANALYSES,
     MISCLASSIFICATION_LABEL_PROVENANCE_SOURCES,
     _invoke_rca_openai_text,
-    _compact_rca_paragraph,
     build_rca_analysis_failure_classification,
     build_misclassification_analysis_summary,
     build_misclassification_classification_contract,
@@ -658,60 +659,9 @@ def test_explainer_retries_invalid_output(monkeypatch):
     assert calls == ["rca_triage_explainer", "rca_triage_explainer_repair"]
 
 
-def test_compact_rca_paragraph_removes_generated_headings():
-    result = _compact_rca_paragraph(
-        "\n".join([
-            "Executive Summary: Root Cause",
-            "The score treated a generic medication mention as confirmation.",
-            "The current rubric requires a clearer medication-specific link.",
-            "This extra sentence should be removed.",
-        ]),
-        max_sentences=2,
-        max_chars=500,
-    )
-
-    assert "Executive Summary" not in result
-    assert result == (
-        "The score treated a generic medication mention as confirmation. "
-        "The current rubric requires a clearer medication-specific link."
-    )
-
-
-def test_explainer_compacts_wordy_rationale(monkeypatch):
-    def fake_invoke(*, call_site, **kwargs):
-        return "\n".join([
-            "RATIONALE_PARAGRAPH: Executive Summary: The item failed because the score "
-            + "treated a generic medication mention as confirmation. The current rubric "
-            + "requires a clearer medication-specific link. This extra sentence should be removed.",
-            "EVIDENCE_QUOTE: generic medication mention",
-            "CONFIG_FIXABILITY: likely_fixable",
-            "CITATION_IDS:",
-        ])
-
-    monkeypatch.setattr("plexus.rca_analysis._invoke_rca_openai_text", fake_invoke)
-
-    result = explain_misclassification_item_classification(
-        item_context=_base_item_context(),
-        classification={
-            "primary_category": "score_configuration_problem",
-            "category_reason": "test",
-            "mechanical_subtype": None,
-        },
-    )
-
-    assert "Executive Summary" not in result["rationale_paragraph"]
-    assert result["rationale_paragraph"] == (
-        "The item failed because the score treated a generic medication mention as confirmation. "
-        "The current rubric requires a clearer medication-specific link."
-    )
-
-
 def test_invoke_rca_openai_text_captures_context(tmp_path, monkeypatch):
-    calls = []
-
     class FakeResponses:
         def create(self, **kwargs):
-            calls.append(kwargs)
             return types.SimpleNamespace(output_text="ok")
 
     class FakeOpenAI:
@@ -729,8 +679,6 @@ def test_invoke_rca_openai_text_captures_context(tmp_path, monkeypatch):
     )
 
     assert result == "ok"
-    assert calls[0]["reasoning"] == {"effort": "low"}
-    assert calls[0]["max_output_tokens"] == 1000
     json_files = list(tmp_path.glob("*.json"))
     markdown_files = list(tmp_path.glob("*.md"))
     assert len(json_files) == 1

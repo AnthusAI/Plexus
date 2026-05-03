@@ -20,11 +20,10 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     assert parsed["class"] == "Tactus"
     assert "console_session_history" in parsed.get("input", {})
     assert parsed["agents"]["assistant"]["model"] == "gpt-5.4-mini"
-    assert parsed["agents"]["assistant"]["reasoning_effort"] == "medium"
+    assert parsed["agents"]["assistant"]["reasoning_effort"] == "low"
     assert parsed["agents"]["assistant"]["verbosity"] == "low"
-    assert parsed["agents"]["assistant"]["max_tokens"] == 1024
+    assert parsed["agents"]["assistant"]["max_tokens"] == 220
     assert parsed["agents"]["assistant"]["stream"] is True
-    assert parsed["agents"]["assistant"]["tools"] == ["execute_tactus"]
     assert isinstance(parsed.get("code"), str)
     assert "State.set(\"stage\", \"preparing\")" in parsed["code"]
     assert "Previous user message before latest (if any):" in parsed["code"]
@@ -49,7 +48,7 @@ def test_service_get_procedure_yaml_uses_builtin_without_db_lookup(mock_get_by_i
 
 
 @pytest.mark.asyncio
-async def test_run_procedure_builtin_routes_to_tactus_executor():
+async def test_run_experiment_builtin_routes_to_tactus_executor():
     client = Mock()
     service = ProcedureService(client)
     expected_result = {
@@ -65,7 +64,7 @@ async def test_run_procedure_builtin_routes_to_tactus_executor():
         "plexus.cli.procedure.procedure_executor.execute_procedure",
         new=AsyncMock(return_value=expected_result),
     ) as execute_mock:
-        result = await service.run_procedure(CONSOLE_CHAT_BUILTIN_ID, account_id="acct-1")
+        result = await service.run_experiment(CONSOLE_CHAT_BUILTIN_ID, account_id="acct-1")
 
     assert result == expected_result
     create_mcp_mock.assert_awaited_once()
@@ -76,7 +75,7 @@ async def test_run_procedure_builtin_routes_to_tactus_executor():
 
 
 @pytest.mark.asyncio
-async def test_run_procedure_builtin_passes_console_context_overrides():
+async def test_run_experiment_builtin_passes_console_context_overrides():
     client = Mock()
     service = ProcedureService(client)
     expected_result = {
@@ -92,7 +91,7 @@ async def test_run_procedure_builtin_passes_console_context_overrides():
         "plexus.cli.procedure.procedure_executor.execute_procedure",
         new=AsyncMock(return_value=expected_result),
     ) as execute_mock:
-        result = await service.run_procedure(
+        result = await service.run_experiment(
             CONSOLE_CHAT_BUILTIN_ID,
             account_id="acct-1",
             console_user_message="Multiply that by three.",
@@ -114,7 +113,7 @@ async def test_run_procedure_builtin_passes_console_context_overrides():
 
 
 @pytest.mark.asyncio
-async def test_run_procedure_builtin_skips_mcp_server_when_disabled():
+async def test_run_experiment_builtin_skips_mcp_server_when_disabled():
     client = Mock()
     service = ProcedureService(client)
     expected_result = {
@@ -130,7 +129,7 @@ async def test_run_procedure_builtin_skips_mcp_server_when_disabled():
         "plexus.cli.procedure.procedure_executor.execute_procedure",
         new=AsyncMock(return_value=expected_result),
     ) as execute_mock:
-        result = await service.run_procedure(
+        result = await service.run_experiment(
             CONSOLE_CHAT_BUILTIN_ID,
             account_id="acct-1",
             enable_mcp=False,

@@ -15,8 +15,7 @@ METRICS_TABLE_PATTERNS = {
     'scoreResult': 'ScoreResult',
     'task': 'Task',
     'evaluation': 'Evaluation',
-    'procedure': 'Procedure',
-    'feedbackitem': 'FeedbackItem'
+    'procedure': 'Procedure'
 }
 
 

@@ -7,7 +7,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
-from plexus.Evaluation import FeedbackEvaluation, _sanitize_rca_generated_prose
+from plexus.Evaluation import FeedbackEvaluation
 
 
 @pytest.fixture
@@ -43,28 +43,6 @@ def mock_rca_attachment_upload():
 
 class TestFeedbackEvaluation:
     """Tests for FeedbackEvaluation class."""
-
-    def test_rca_generated_prose_sanitizer_removes_headings_and_limits_length(self):
-        raw = """
-        # Executive Summary: Root Causes of Dosage-Verification Misclassification
-
-        The score accepted medication discussion as dosage confirmation. It also ignored
-        that the current rubric does not require a separate customer acknowledgement.
-        The old prompt language appears to be pulling the model back toward the prior rule.
-        This fourth sentence should not survive.
-
-        Configuration Recommendation
-        Add a clearer rule.
-        """
-
-        result = _sanitize_rca_generated_prose(raw, max_sentences=2, max_chars=500)
-
-        assert "Executive Summary" not in result
-        assert "Configuration Recommendation" not in result
-        assert result == (
-            "The score accepted medication discussion as dosage confirmation. It also ignored "
-            "that the current rubric does not require a separate customer acknowledgement."
-        )
     
     def test_initialization(self, mock_api_client):
         """Test FeedbackEvaluation initialization."""

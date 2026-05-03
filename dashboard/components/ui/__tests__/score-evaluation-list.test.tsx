@@ -50,37 +50,13 @@ describe('ScoreEvaluationList', () => {
     jest.clearAllMocks()
     for (const key of Object.keys(subscriptionHandlers)) delete subscriptionHandlers[key]
 
-    mockGraphql.mockImplementation(({ query }: { query: string; variables?: Record<string, any> }) => {
+    mockGraphql.mockImplementation(({ query }: { query: string }) => {
       const text = String(query)
       if (text.includes('onCreateEvaluation')) return subscriptionResult('createEvaluation')
       if (text.includes('onUpdateEvaluation')) return subscriptionResult('updateEvaluation')
       if (text.includes('onDeleteEvaluation')) return subscriptionResult('deleteEvaluation')
       if (text.includes('onUpdateTaskStage')) return subscriptionResult('updateTaskStage')
       if (text.includes('onUpdateTask')) return subscriptionResult('updateTask')
-
-      if (text.includes('listEvaluationByScoreVersionIdAndCreatedAt')) {
-        return Promise.resolve({
-          data: {
-            listEvaluationByScoreVersionIdAndCreatedAt: {
-              items: [
-                {
-                  id: 'eval-version-2',
-                  type: 'accuracy',
-                  status: 'FAILED',
-                  updatedAt: '2026-04-24T00:00:00Z',
-                  createdAt: '2026-04-24T00:00:00Z',
-                  scoreId: 'score-1',
-                  scoreVersionId: 'version-2',
-                  parameters: JSON.stringify({ notes: 'Version evaluation note' }),
-                  accuracy: 75.0,
-                  cost: 0.2,
-                  metrics: JSON.stringify({ alignment: 0.51, precision: 0.91, recall: 0.62 }),
-                },
-              ],
-            },
-          },
-        })
-      }
 
       return Promise.resolve({
       data: {
@@ -92,7 +68,6 @@ describe('ScoreEvaluationList', () => {
               status: 'COMPLETED',
               updatedAt: '2026-04-25T00:00:00Z',
               createdAt: '2026-04-25T00:00:00Z',
-              scoreId: 'score-1',
               scoreVersionId: 'version-1',
               parameters: JSON.stringify({ notes: 'Evaluation note 1' }),
               accuracy: 92.5,
@@ -111,7 +86,6 @@ describe('ScoreEvaluationList', () => {
               status: 'FAILED',
               updatedAt: '2026-04-24T00:00:00Z',
               createdAt: '2026-04-24T00:00:00Z',
-              scoreId: 'score-1',
               scoreVersionId: 'version-2',
               parameters: JSON.stringify({ notes: 'Evaluation note 2' }),
               accuracy: 75.0,
@@ -124,7 +98,6 @@ describe('ScoreEvaluationList', () => {
               status: 'COMPLETED',
               updatedAt: '2026-04-23T00:00:00Z',
               createdAt: '2026-04-23T00:00:00Z',
-              scoreId: 'score-1',
               scoreVersionId: 'version-3',
               parameters: JSON.stringify({ notes: 'Evaluation note 3' }),
               accuracy: 80.0,
@@ -154,25 +127,14 @@ describe('ScoreEvaluationList', () => {
     expect(screen.getByRole('menuitem', { name: /copy evaluation id/i })).toBeInTheDocument()
   })
 
-  it('loads version-scoped evaluations through the scoreVersionId index', async () => {
+  it('filters version-scoped evaluations to the selected version', async () => {
     render(<ScoreEvaluationList scoreId="score-1" scope="version" versionId="version-2" />)
 
     await waitFor(() => {
-      expect(screen.getByText('eval-version-2')).toBeInTheDocument()
+      expect(screen.getByText('eval-2')).toBeInTheDocument()
     })
 
     expect(screen.queryByText('eval-1')).not.toBeInTheDocument()
-    expect(mockGraphql).toHaveBeenCalledWith(
-      expect.objectContaining({
-        query: expect.stringContaining('listEvaluationByScoreVersionIdAndCreatedAt'),
-        variables: expect.objectContaining({ scoreVersionId: 'version-2' }),
-      })
-    )
-    expect(
-      mockGraphql.mock.calls.some(([call]) =>
-        String(call.query).includes('listEvaluationByScoreIdAndUpdatedAt')
-      )
-    ).toBe(false)
   })
 
   it('sorts by precision, recall, and cost with missing values after present values', async () => {

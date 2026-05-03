@@ -28,54 +28,38 @@ The Plexus MCP server is the bridge between your AI assistant and the Plexus bac
 
 It is located in the `/MCP` directory and is production-tested for real-world usage, including the ability to safely update mission-critical score configurations.
 
-### The Tool: `execute_tactus`
+### Available Tools
 
-The server exposes a single tool: **`execute_tactus`**.  It accepts a `tactus`
-string (a Lua-flavoured DSL snippet) and executes it inside a sandboxed Plexus
-runtime that injects a `plexus` module.  All Plexus functionality is reached
-through sub-namespaces on that module.
+The server provides over 45 specialized tools organized by category:
 
-#### Key namespaces
+#### Scorecard Management
+- `plexus_scorecards_list`: List and filter scorecards
+- `plexus_scorecard_info`: Get detailed structure of a scorecard
+- `plexus_scorecard_create`: Create new scorecards
+- `plexus_scorecard_update`: Update scorecard metadata
 
-| Namespace | Methods | Purpose |
-|---|---|---|
-| `plexus.scorecards` | `list`, `info` | Enumerate and inspect scorecards |
-| `plexus.score` | `info`, `evaluations`, `predict`, `set_champion` | Score details and predictions |
-| `plexus.evaluation` | `run`, `info`, `find_recent`, `compare` | Run and inspect evaluations |
-| `plexus.feedback` | `find`, `alignment` | Feedback items and confusion matrices |
-| `plexus.item` | `last`, `info` | Inspect content items |
-| `plexus.procedure` | `run`, `list`, `info`, `chat_sessions`, `chat_messages` | Procedures |
-| `plexus.report` | `run`, `configurations_list` | Reports |
-| `plexus.dataset` | `build_from_feedback_window`, `check_associated` | Datasets |
-| `plexus.docs` | `list`, `get` | Built-in documentation |
-| `plexus.api` | `list` | Discover all available namespaces/methods |
+#### Score Configuration
+- `plexus_score_info`: Get score details and version history
+- `plexus_score_update`: **RECOMMENDED** - Update score configuration via YAML
+- `plexus_score_create`: Create new scores
+- `plexus_score_pull/push`: Local file-based configuration management
 
-#### Quick examples
+#### Evaluation & Testing
+- `plexus_evaluation_run`: Run accuracy or feedback evaluations
+- `plexus_evaluation_info`: Get detailed evaluation metrics
+- `plexus_predict`: Test scores on specific items
 
-```lua
--- List scorecards
-return plexus.scorecards.list({})
+#### Feedback Analysis
+- `plexus_feedback_analysis`: Generate confusion matrices and AC1 stats
+- `plexus_feedback_find`: Find specific feedback items (FN/FP)
 
--- Get score info
-return plexus.score.info({ id = "my-score-key" })
+#### Task & Item Management
+- `plexus_task_last/info`: Monitor background task progress
+- `plexus_item_last/info`: Inspect specific content items
 
--- Run an evaluation
-return plexus.evaluation.run({
-  scorecard = "My Scorecard", score = "My Score", count = 50
-})
-
--- Predict on an item
-return plexus.score.predict({
-  scorecard_name = "My Scorecard",
-  score_name     = "My Score",
-  item_id        = "abc-123"
-})
-
--- Self-discovery
-return plexus.api.list()
-return plexus.docs.list({})
-return plexus.docs.get({ name = "score-yaml-format" })
-```
+#### Procedures & Experiments
+- `plexus_procedure_create/run`: Orchestrate multi-step workflows
+- `plexus_procedure_list/info`: Manage existing procedures
 
 ### Installation and Setup
 
@@ -121,7 +105,7 @@ This workflow uses a chain of skills and agents:
 1. **Setup Phase** (User + `plexus-score-setup` skill):
    - User requests new score
    - Agent gathers metadata (Name, Key, Description)
-   - Agent creates DB records via `plexus.score.*` (through `execute_tactus`)
+   - Agent creates DB records via `plexus_score_create`
 
 2. **Guidelines Phase** (User + `plexus-score-guidelines-updater`):
    - Agent interviews user about criteria
@@ -138,33 +122,32 @@ This workflow uses a chain of skills and agents:
 ### 2. Improving Score Accuracy (Feedback Loop)
 
 1. **Analysis** (`plexus-alignment-analyzer`):
-   - Run `plexus.feedback.alignment` (through `execute_tactus`)
+   - Run `plexus_feedback_analysis`
    - Identify confusion patterns
-   - Find specific examples via `plexus.feedback.find`
+   - Find specific examples via `plexus_feedback_find`
 
 2. **Refinement** (`plexus-score-config-updater`):
    - Update prompts/logic in YAML
-   - Run `plexus.evaluation.run` (feedback mode) to verify fix
+   - Run `plexus_evaluation_run` (feedback mode) to verify fix
    - Push new version if metrics improve
 
 ### 3. Running Evaluations
 
 1. **Execution**:
-   - Use `plexus.evaluation.run` (through `execute_tactus`) to dispatch evaluation
-   - Monitor via `plexus.evaluation.info`
+   - Use `plexus_evaluation_run` to dispatch evaluation
+   - Monitor via `plexus_task_info`
 
 2. **Analysis**:
-   - Use `plexus.evaluation.info` to get results
+   - Use `plexus_evaluation_info` to get results
    - Agent interprets AC1, Accuracy, and Recall metrics
    - Agent recommends next steps
 
 ## Best Practices
 
 - **Use the Specialized Agents**: Don't try to edit YAML yourself. Delegate to `plexus-score-config-updater`.
-- **Use execute_tactus**: All Plexus data access and actions go through `execute_tactus`. There are no other MCP tools.
-- **Trust the Runtime**: Use `plexus.*` namespaces for reading/writing data, not file edits (unless instructed).
+- **Trust the Tools**: Use MCP tools for reading/writing data, not file edits (unless instructed).
 - **Validate First**: Always run an evaluation or prediction test before declaring a task complete.
-- **Check Documentation**: Use `plexus.docs.get({ name = "..." })` inside `execute_tactus` if you are unsure about formats.
+- **Check Documentation**: Use `get_plexus_documentation` if you are unsure about formats.
 
 ## Debugging Procedures
 

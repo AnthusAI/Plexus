@@ -46,18 +46,3 @@ def test_metrics_stack_subscribes_to_procedure_table_stream():
 
 def test_amplify_discovery_includes_procedure_table():
     assert METRICS_TABLE_PATTERNS["procedure"] == "Procedure"
-
-
-def test_feedback_item_streams_are_classified_as_feedback_items():
-    arn = "arn:aws:dynamodb:us-west-2:123456789012:table/FeedbackItem-abc123/stream/2026-04-29T00:00:00.000"
-
-    assert determine_record_type(arn) == "feedbackItems"
-
-
-def test_metrics_stack_subscribes_to_feedback_item_table_stream():
-    assert "feedbackitem" in METRICS_TABLE_TYPES
-    assert METRICS_STREAM_CONFIGS["feedbackitem"] == {"batch_size": 10, "batch_window": 15}
-
-
-def test_amplify_discovery_includes_feedback_item_table():
-    assert METRICS_TABLE_PATTERNS["feedbackitem"] == "FeedbackItem"

@@ -1045,40 +1045,9 @@ class FeedbackItem(BaseModel):
         debug: bool = False,
     ) -> Optional['FeedbackItem']:
         """Mark a feedback item invalid without changing any other fields."""
-        return cls.set_invalidity(
-            client=client,
-            feedback_item_id=feedback_item_id,
-            is_invalid=True,
-            debug=debug,
-        )
-
-    @classmethod
-    def reinstate(
-        cls,
-        client: 'PlexusDashboardClient',
-        feedback_item_id: str,
-        debug: bool = False,
-    ) -> Optional['FeedbackItem']:
-        """Mark a feedback item valid again without changing any other fields."""
-        return cls.set_invalidity(
-            client=client,
-            feedback_item_id=feedback_item_id,
-            is_invalid=False,
-            debug=debug,
-        )
-
-    @classmethod
-    def set_invalidity(
-        cls,
-        client: 'PlexusDashboardClient',
-        feedback_item_id: str,
-        is_invalid: bool,
-        debug: bool = False,
-    ) -> Optional['FeedbackItem']:
-        """Set the invalidation flag without changing any other fields."""
         return cls._update_feedback_item(
             client=client,
             feedback_item_id=feedback_item_id,
-            feedback_data={"isInvalid": is_invalid},
+            feedback_data={"isInvalid": True},
             debug=debug,
         )

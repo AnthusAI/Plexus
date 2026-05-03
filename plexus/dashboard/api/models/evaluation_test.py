@@ -97,31 +97,6 @@ def test_update_evaluation(sample_evaluation):
     assert 'updatedAt' in variables['input']
     assert sample_evaluation.status == "RUNNING"
 
-def test_update_evaluation_raises_when_payload_missing(sample_evaluation):
-    """Test that missing update payloads are not silently ignored."""
-    sample_evaluation._client.execute.return_value = {}
-
-    with pytest.raises(Exception, match="Failed to update Evaluation"):
-        sample_evaluation.update(status="COMPLETED")
-
-def test_update_evaluation_uses_long_running_retry_for_terminal_status(sample_evaluation):
-    """Test terminal lifecycle writes use the durable retry policy."""
-    sample_evaluation._client.execute.return_value = {
-        'updateEvaluation': {
-            'id': 'test-id',
-            'type': 'accuracy',
-            'accountId': 'acc-123',
-            'status': 'COMPLETED',
-            'createdAt': datetime.now(timezone.utc).isoformat(),
-            'updatedAt': datetime.now(timezone.utc).isoformat()
-        }
-    }
-
-    sample_evaluation.update(status="COMPLETED")
-
-    assert sample_evaluation._client.execute.call_args.kwargs["retry_policy"] == "long_running_write"
-    assert sample_evaluation.status == "COMPLETED"
-
 def test_error_handling_in_update(sample_evaluation):
     """Test that update errors are surfaced."""
     # Make the mutation raise an error

@@ -57,54 +57,6 @@ const getProcedureStartTimeMs = (procedure: ProcedureWithTask): number => {
 const sortProceduresByStartTime = (procedures: ProcedureWithTask[]): ProcedureWithTask[] =>
   [...procedures].sort((a, b) => getProcedureStartTimeMs(b) - getProcedureStartTimeMs(a))
 
-const mergeProcedureTaskRealtimeUpdate = (
-  existing: Task | null | undefined,
-  updated: Partial<Task> | null | undefined
-): Task | null => {
-  if (!existing) return (updated as Task) ?? null
-  if (!updated) return existing
-  return {
-    ...existing,
-    ...updated,
-    metadata: updated.metadata ?? existing.metadata,
-    stages: updated.stages ?? existing.stages,
-  } as Task
-}
-
-const procedureMetadataToString = (value: unknown): string | null | undefined => {
-  if (value === null || value === undefined) return value as null | undefined
-  return typeof value === 'string' ? value : JSON.stringify(value)
-}
-
-const mergeProcedureMetadata = (incomingValue: unknown, existingValue: unknown): string | null | undefined => {
-  const incoming = procedureMetadataToString(incomingValue)
-  const existing = procedureMetadataToString(existingValue)
-  if (!incoming) return existing
-  if (!existing) return incoming
-  try {
-    const a = JSON.parse(existing)
-    const b = JSON.parse(incoming)
-    return JSON.stringify({ ...a, ...b })
-  } catch {
-    return incoming
-  }
-}
-
-const mergeProcedureRealtimeUpdate = (
-  existing: ProcedureWithTask,
-  updated: Partial<ProcedureWithTask>
-): ProcedureWithTask => ({
-  ...existing,
-  ...updated,
-  scorecardId: updated.scorecardId ?? existing.scorecardId,
-  scorecard: updated.scorecard ?? existing.scorecard,
-  scoreId: updated.scoreId ?? existing.scoreId,
-  score: updated.score ?? existing.score,
-  metadata: mergeProcedureMetadata(updated.metadata, existing.metadata),
-  task: mergeProcedureTaskRealtimeUpdate(existing.task, updated.task),
-  feedbackEvaluationSummary: existing.feedbackEvaluationSummary ?? updated.feedbackEvaluationSummary ?? null,
-})
-
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
@@ -438,7 +390,9 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             sortProceduresByStartTime(prevProcedures.map(procedure => {
               if (procedure.id === procedureId) {
                 // Merge new task data with existing task, preserving stages
-                const updatedTask = mergeProcedureTaskRealtimeUpdate(procedure.task, data);
+                const updatedTask = procedure.task
+                  ? { ...procedure.task, ...data, stages: procedure.task.stages } // Preserve existing stages
+                  : data;
                 return { ...procedure, task: updatedTask };
               }
               return procedure;
@@ -520,32 +474,18 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         next: ({ data }: { data?: { onCreateProcedure: any } }) => {
           const procedure = data?.onCreateProcedure;
           if (!procedure || procedure.accountId !== accountId) return;
-          // Subscription payloads don't resolve @belongsTo relations — re-fetch the full record.
-          void (getAmplifyClient().graphql({
-            query: `query GetProcedureForCard($id: ID!) { getProcedure(id: $id) { ${PROCEDURE_CARD_FIELDS} } }`,
-            variables: { id: procedure.id }
-          }) as any).then((result: any) => {
-            const full = result?.data?.getProcedure ?? procedure
-            const procedureWithTask = { ...full, task: null } as ProcedureWithTask
-            setProcedures(prev => {
-              if (prev.some(p => p.id === full.id)) return prev;
-              return sortProceduresByStartTime([procedureWithTask, ...prev]);
-            });
-            void hydrateProcedurePerformanceSummaries([procedureWithTask]).then(([hydratedProcedure]) => {
-              if (!hydratedProcedure) return
-              setProcedures(prev =>
-                sortProceduresByStartTime(
-                  prev.map(p => p.id === hydratedProcedure.id ? { ...p, ...hydratedProcedure, task: p.task ?? hydratedProcedure.task } : p)
-                )
+          const procedureWithTask = { ...procedure, task: null } as ProcedureWithTask
+          setProcedures(prev => {
+            if (prev.some(p => p.id === procedure.id)) return prev;
+            return sortProceduresByStartTime([procedureWithTask, ...prev]);
+          });
+          void hydrateProcedurePerformanceSummaries([procedureWithTask]).then(([hydratedProcedure]) => {
+            if (!hydratedProcedure) return
+            setProcedures(prev =>
+              sortProceduresByStartTime(
+                prev.map(p => p.id === hydratedProcedure.id ? { ...p, ...hydratedProcedure, task: p.task ?? hydratedProcedure.task } : p)
               )
-            })
-          }).catch(() => {
-            // Fall back to bare subscription payload
-            const procedureWithTask = { ...procedure, task: null } as ProcedureWithTask
-            setProcedures(prev => {
-              if (prev.some(p => p.id === procedure.id)) return prev;
-              return sortProceduresByStartTime([procedureWithTask, ...prev]);
-            });
+            )
           })
         },
         error: (error: Error) => console.error('Error in create procedure subscription:', error)
@@ -562,15 +502,13 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         next: ({ data }: { data?: { onUpdateProcedure: any } }) => {
           const updated = data?.onUpdateProcedure;
           if (!updated || updated.accountId !== accountId) return;
-          // Subscription payloads don't resolve @belongsTo relations — preserve existing
-          // scorecard/score/metadata from the stored record so they don't get wiped.
           let existingTask: Task | null | undefined = null
           setProcedures(prev =>
             sortProceduresByStartTime(
               prev.map(p => {
                 if (p.id !== updated.id) return p
                 existingTask = p.task
-                return mergeProcedureRealtimeUpdate(p, updated)
+                return { ...p, ...updated, task: p.task }
               })
             )
           );
@@ -578,7 +516,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             if (!hydratedProcedure) return
             setProcedures(prev =>
               sortProceduresByStartTime(
-                prev.map(p => p.id === hydratedProcedure.id ? mergeProcedureRealtimeUpdate(p, hydratedProcedure) : p)
+                prev.map(p => p.id === hydratedProcedure.id ? { ...p, ...hydratedProcedure, task: p.task ?? hydratedProcedure.task } : p)
               )
             )
           })
@@ -746,7 +684,6 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       type: 'Procedure',
       procedure_id: procedureId,
       task_type: 'Procedure',
-      dispatch_mode: 'local',
     }
     if (runParameters && Object.keys(runParameters).length > 0) {
       metadata.run_parameters = runParameters
@@ -997,43 +934,27 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   }
 
   // Transform procedures to ProcedureTaskData - memoized to prevent unnecessary re-renders
-  const transformProcedure = useCallback((procedure: ProcedureWithTask): ProcedureTaskData => {
-    let procedureType = 'Procedure'
-    try {
-      const meta = typeof procedure.metadata === 'string' ? JSON.parse(procedure.metadata) : procedure.metadata
-      if (meta?.procedure_type) {
-        procedureType = meta.procedure_type
-      } else if (
-        procedure.name?.startsWith('Optimizer:') ||
-        procedure.name === 'Feedback Alignment Optimizer'
-      ) {
-        procedureType = 'Optimizer Procedure'
-      }
-    } catch { /* ignore malformed metadata */ }
-    return ({
+  const transformProcedure = useCallback((procedure: ProcedureWithTask): ProcedureTaskData => ({
     id: procedure.id,
     title: procedure.scorecard?.name
-      ? procedure.scorecard.name
+      ? `${procedure.scorecard.name} - ${procedure.score?.name || 'Score'}`
       : (procedure.name || 'Procedure'),
     featured: procedure.featured || false,
     createdAt: procedure.createdAt,
     updatedAt: procedure.updatedAt,
     scorecard: procedure.scorecard
       ? { name: procedure.scorecard.name }
-      : null,
+      : (procedure.name ? { name: procedure.name } : null),
     score: procedure.score ? { name: procedure.score.name } : null,
-    procedureType: procedureType,
     description: procedure.description || undefined,
     task: procedure.task ? {
       id: procedure.task.id,
-      type: procedureType,
+      type: procedure.task.type || 'Procedure',
       status: procedure.task.status || 'PENDING',
       target: procedure.task.target || '',
       command: procedure.task.command || '',
       description: procedure.task.description || undefined,
       dispatchStatus: procedure.task.dispatchStatus || undefined,
-      workerNodeId: (procedure.task as any).workerNodeId || undefined,
-      celeryTaskId: (procedure.task as any).celeryTaskId || undefined,
       metadata: typeof procedure.task.metadata === 'string' ? procedure.task.metadata : JSON.stringify(procedure.task.metadata),
       createdAt: procedure.task.createdAt || undefined,
       startedAt: procedure.task.startedAt || undefined,
@@ -1047,7 +968,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       } : undefined
     } : undefined,
     feedbackEvaluationSummary: procedure.feedbackEvaluationSummary ?? null,
-  })}, [])
+  }), [])
   
 
   if ((isInitialLoading || isFetchingProcedures || isLoadingAccounts) && procedures.length === 0) {

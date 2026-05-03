@@ -8,15 +8,9 @@ import sys
 from unittest.mock import Mock, patch, MagicMock
 from io import StringIO
 
-# Add the current repository root first so namespace package imports such as
-# MCP.tools... resolve to this checkout before any sibling Plexus worktree.
+# Add the MCP directory to the path for imports
 mcp_dir = os.path.dirname(os.path.abspath(__file__))
-repo_root = os.path.dirname(mcp_dir)
-for path in (mcp_dir, repo_root):
-    if path in sys.path:
-        sys.path.remove(path)
 sys.path.insert(0, mcp_dir)
-sys.path.insert(0, repo_root)
 
 @pytest.fixture
 def mock_environment():

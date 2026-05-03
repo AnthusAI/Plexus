@@ -10,9 +10,3 @@ class FeedbackAnalysis(FeedbackAlignment):
     support for `days` and explicit `start_date` / `end_date` windows.
     """
 
-    async def generate(self):
-        # Keep legacy FeedbackAnalysis execution lightweight/safe by default.
-        # Memory analysis remains available as an explicit opt-in.
-        if "memory_analysis" not in self.config:
-            self.config["memory_analysis"] = False
-        return await super().generate()

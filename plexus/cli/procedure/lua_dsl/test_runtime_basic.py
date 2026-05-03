@@ -74,29 +74,6 @@ def test_agent_model_override_rejects_non_object_context():
         )
 
 
-def test_expand_allowed_tool_names_for_plexus_alias():
-    """'plexus' alias expands to concrete Plexus tool names."""
-    from plexus.cli.procedure.lua_dsl.runtime import LuaDSLRuntime
-
-    expanded = LuaDSLRuntime._expand_allowed_tool_names(
-        ["plexus"],
-        [
-            "plexus_scorecards_list",
-            "plexus_chat_send",
-            "get_plexus_documentation",
-            "think",
-            "non_plexus_tool",
-        ],
-    )
-
-    assert "plexus_scorecards_list" in expanded
-    assert "plexus_chat_send" in expanded
-    assert "get_plexus_documentation" in expanded
-    assert "think" in expanded
-    assert "non_plexus_tool" not in expanded
-    assert "plexus" not in expanded
-
-
 def test_lua_sandbox():
     """Test Lua sandbox."""
     from plexus.cli.procedure.lua_dsl.lua_sandbox import LuaSandbox

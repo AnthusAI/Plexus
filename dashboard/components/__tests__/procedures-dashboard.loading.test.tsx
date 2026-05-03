@@ -78,7 +78,6 @@ jest.mock('@/components/ProcedureTask', () => ({
   default: ({ variant, procedure }: any) => (
     <div data-testid={variant === 'grid' ? `procedure-card-${procedure.id}` : `procedure-detail-${procedure.id}`}>
       task:{procedure.task?.status || 'none'}
-      <span>subtitle:{procedure.scorecard?.name || ''}/{procedure.score?.name || ''}</span>
     </div>
   ),
 }))
@@ -321,97 +320,6 @@ describe('Procedures dashboard loading UX', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('procedure-card-proc-live')).toBeInTheDocument()
-    })
-  })
-
-  it('preserves score subtitles when sparse realtime procedure updates arrive', async () => {
-    let updateHandler: ((payload: any) => void) | null = null
-
-    mockGraphql.mockImplementation(({ query }: { query: string }) => {
-      const text = String(query)
-      if (text.includes('onCreateProcedure')) {
-        return createSubscriptionResult()
-      }
-      if (text.includes('onUpdateProcedure')) {
-        return {
-          subscribe: ({ next }: { next: (payload: any) => void }) => {
-            updateHandler = next
-            return { unsubscribe: jest.fn() }
-          },
-        }
-      }
-      if (text.includes('listProcedureByAccountIdAndUpdatedAt')) {
-        return Promise.resolve({
-          data: {
-            listProcedureByAccountIdAndUpdatedAt: {
-              items: [
-                {
-                  id: 'proc-subtitle',
-                  name: 'Procedure Subtitle',
-                  featured: false,
-                  code: null,
-                  createdAt: '2026-04-20T00:00:00.000Z',
-                  updatedAt: '2026-04-20T00:00:00.000Z',
-                  accountId: 'account-1',
-                  scorecardId: 'scorecard-1',
-                  scorecard: { id: 'scorecard-1', name: 'Retention' },
-                  scoreId: 'score-1',
-                  score: { id: 'score-1', name: 'Cancellation Risk' },
-                },
-              ],
-              nextToken: null,
-            },
-          },
-        })
-      }
-      if (text.includes('listTaskByAccountIdAndUpdatedAt')) {
-        return Promise.resolve({
-          data: {
-            listTaskByAccountIdAndUpdatedAt: {
-              items: [
-                {
-                  id: 'task-subtitle',
-                  type: 'Procedure',
-                  status: 'PENDING',
-                  target: 'procedure/run/proc-subtitle',
-                  command: 'procedure run',
-                  metadata: JSON.stringify({ procedure_id: 'proc-subtitle' }),
-                  stages: { items: [] },
-                },
-              ],
-            },
-          },
-        })
-      }
-      return Promise.resolve({ data: {} })
-    })
-
-    render(<ProceduresDashboard />)
-
-    await waitFor(() => {
-      expect(screen.getByText('subtitle:Retention/Cancellation Risk')).toBeInTheDocument()
-    })
-
-    act(() => {
-      updateHandler?.({
-        data: {
-          onUpdateProcedure: {
-            id: 'proc-subtitle',
-            name: 'Procedure Subtitle',
-            status: 'RUNNING',
-            updatedAt: '2026-04-20T00:01:00.000Z',
-            accountId: 'account-1',
-            scorecardId: null,
-            scorecard: null,
-            scoreId: null,
-            score: null,
-          },
-        },
-      })
-    })
-
-    await waitFor(() => {
-      expect(screen.getByText('subtitle:Retention/Cancellation Risk')).toBeInTheDocument()
     })
   })
 

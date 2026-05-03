@@ -29,8 +29,6 @@ export const TASK_CARD_FIELDS = `
   command
   description
   dispatchStatus
-  workerNodeId
-  celeryTaskId
   metadata
   createdAt
   startedAt
@@ -83,7 +81,6 @@ export const EVALUATION_CARD_FIELDS = `
   updatedAt
   createdAt
   parameters
-  scoreId
   scoreVersionId
   accuracy
   processedItems
@@ -207,8 +204,6 @@ export type ProcedureFeedbackEvaluationSummary = {
   totalItems?: number | null
   baselineEvaluationId?: string | null
   currentBaselineEvaluationId?: string | null
-  baselineAccuracy?: number | null
-  currentBaselineAccuracy?: number | null
   updatedAt?: string | null
 }
 
@@ -271,8 +266,6 @@ export type OptimizerRunView = {
     command?: string | null
     description?: string | null
     dispatchStatus?: string | null
-    celeryTaskId?: string | null
-    workerNodeId?: string | null
     metadata?: unknown
     createdAt?: string | null
     startedAt?: string | null
@@ -612,61 +605,7 @@ export function feedbackEvaluationSummaryFromView(
     totalItems: evaluation.totalItems ?? null,
     baselineEvaluationId: evaluation.baselineEvaluationId ?? null,
     currentBaselineEvaluationId: evaluation.currentBaselineEvaluationId ?? null,
-    baselineAccuracy: null,
-    currentBaselineAccuracy: null,
     updatedAt: evaluation.updatedAt ?? evaluation.createdAt ?? null,
-  }
-}
-
-async function loadEvaluationAccuraciesById(
-  evaluationIds: Array<string | null | undefined>
-): Promise<Map<string, number | null>> {
-  const uniqueIds = [...new Set(evaluationIds.filter((id): id is string => typeof id === 'string' && id.length > 0))]
-  const entries = await Promise.all(
-    uniqueIds.map(async (evaluationId) => {
-      try {
-        const evaluation = await loadScoreEvaluationById(evaluationId)
-        return [evaluationId, evaluation?.accuracy ?? null] as const
-      } catch (error) {
-        console.error('Failed to load procedure baseline evaluation accuracy', evaluationId, error)
-        return [evaluationId, null] as const
-      }
-    })
-  )
-  return new Map(entries)
-}
-
-function applyBaselineAccuraciesToSummary(
-  summary: ProcedureFeedbackEvaluationSummary | null,
-  accuraciesByEvaluationId: Map<string, number | null>
-): ProcedureFeedbackEvaluationSummary | null {
-  if (!summary) return null
-  return {
-    ...summary,
-    baselineAccuracy: summary.baselineEvaluationId
-      ? accuraciesByEvaluationId.get(summary.baselineEvaluationId) ?? null
-      : null,
-    currentBaselineAccuracy: summary.currentBaselineEvaluationId
-      ? accuraciesByEvaluationId.get(summary.currentBaselineEvaluationId) ?? null
-      : null,
-  }
-}
-
-function applyProcedureBaselineAssociations(
-  summary: ProcedureFeedbackEvaluationSummary | null,
-  manifest: OptimizerManifest | null | undefined
-): ProcedureFeedbackEvaluationSummary | null {
-  if (!summary) return null
-  return {
-    ...summary,
-    baselineEvaluationId:
-      summary.baselineEvaluationId ??
-      manifest?.baseline?.original_feedback_evaluation_id ??
-      null,
-    currentBaselineEvaluationId:
-      summary.currentBaselineEvaluationId ??
-      manifest?.baseline?.current_feedback_evaluation_id ??
-      null,
   }
 }
 
@@ -714,17 +653,9 @@ export async function hydrateProcedureRunFeedbackEvaluation(
 
   try {
     const evaluation = await loadScoreEvaluationById(evaluationId)
-    const summary = applyProcedureBaselineAssociations(
-      feedbackEvaluationSummaryFromView(evaluation),
-      run.manifest
-    )
-    const accuraciesByEvaluationId = await loadEvaluationAccuraciesById([
-      summary?.baselineEvaluationId,
-      summary?.currentBaselineEvaluationId,
-    ])
     return {
       ...run,
-      feedbackEvaluationSummary: applyBaselineAccuraciesToSummary(summary, accuraciesByEvaluationId),
+      feedbackEvaluationSummary: feedbackEvaluationSummaryFromView(evaluation),
     }
   } catch (error) {
     console.error('Failed to load procedure feedback evaluation', evaluationId, error)
@@ -758,25 +689,13 @@ export async function hydrateProcedureRunsFeedbackEvaluations(
       .filter((evaluation): evaluation is ScoreEvaluationView => Boolean(evaluation?.id))
       .map((evaluation) => [evaluation.id, evaluation])
   )
-  const summariesByRun = runs.map((run) => {
+
+  return runs.map((run) => {
     const evaluationId = currentProcedureFeedbackEvaluationId(run.manifest)
     const evaluation = evaluationId ? evaluationsById.get(evaluationId) : null
-    return applyProcedureBaselineAssociations(
-      feedbackEvaluationSummaryFromView(evaluation),
-      run.manifest
-    )
-  })
-  const baselineEvaluationIds = summariesByRun.flatMap((summary) => [
-    summary?.baselineEvaluationId,
-    summary?.currentBaselineEvaluationId,
-  ])
-  const baselineAccuraciesByEvaluationId = await loadEvaluationAccuraciesById(baselineEvaluationIds)
-
-  return runs.map((run, index) => {
-    const summary = summariesByRun[index] ?? null
     return {
       ...run,
-      feedbackEvaluationSummary: applyBaselineAccuraciesToSummary(summary, baselineAccuraciesByEvaluationId),
+      feedbackEvaluationSummary: feedbackEvaluationSummaryFromView(evaluation),
     }
   })
 }
@@ -903,8 +822,6 @@ function normalizeTaskRecord(task: any): ProcedureTaskRecord | null {
     command: task.command ?? null,
     description: task.description ?? null,
     dispatchStatus: task.dispatchStatus ?? null,
-    celeryTaskId: task.celeryTaskId ?? null,
-    workerNodeId: task.workerNodeId ?? null,
     metadata: task.metadata ?? null,
     createdAt: task.createdAt ?? null,
     startedAt: task.startedAt ?? null,
@@ -1133,7 +1050,7 @@ export async function refreshOptimizerRunManifest(run: OptimizerRunView): Promis
   }
 }
 
-async function loadProcedureRecordsByScoreId(scoreId: string, pageSize: number): Promise<ProcedureRecord[]> {
+export async function loadOptimizerRuns(scoreId: string, pageSize: number = 100): Promise<OptimizerRunView[]> {
   const client = getAmplifyClient()
   const procedures: ProcedureRecord[] = []
   let nextToken: string | null | undefined = null
@@ -1173,59 +1090,6 @@ async function loadProcedureRecordsByScoreId(scoreId: string, pageSize: number):
     nextToken = page?.nextToken ?? null
   } while (nextToken)
 
-  return procedures
-}
-
-async function loadProcedureRecordsByScoreVersionId(
-  scoreVersionId: string,
-  pageSize: number
-): Promise<ProcedureRecord[]> {
-  const client = getAmplifyClient()
-  const procedures: ProcedureRecord[] = []
-  let nextToken: string | null | undefined = null
-
-  do {
-    const procedureResponse = await client.graphql({
-      query: `
-        query ListProcedureByScoreVersionIdAndUpdatedAtWorkbench(
-          $scoreVersionId: String!
-          $sortDirection: ModelSortDirection
-          $limit: Int
-          $nextToken: String
-        ) {
-          listProcedureByScoreVersionIdAndUpdatedAt(
-            scoreVersionId: $scoreVersionId
-            sortDirection: $sortDirection
-            limit: $limit
-            nextToken: $nextToken
-          ) {
-            items {
-              ${PROCEDURE_CARD_FIELDS}
-            }
-            nextToken
-          }
-        }
-      `,
-      variables: {
-        scoreVersionId,
-        sortDirection: 'DESC',
-        limit: pageSize,
-        nextToken,
-      },
-    }) as any
-
-    const page = procedureResponse.data?.listProcedureByScoreVersionIdAndUpdatedAt
-    procedures.push(...(page?.items ?? []))
-    nextToken = page?.nextToken ?? null
-  } while (nextToken)
-
-  return procedures
-}
-
-async function procedureRecordsToOptimizerRunViews(
-  procedures: ProcedureRecord[]
-): Promise<OptimizerRunView[]> {
-  const client = getAmplifyClient()
   const accountIds = [...new Set(procedures.map((procedure) => procedure.accountId).filter(Boolean))]
   const taskResponses = await Promise.all(
     accountIds.map((accountId) =>
@@ -1271,19 +1135,6 @@ async function procedureRecordsToOptimizerRunViews(
       return procedureToOptimizerRunView(procedure, task)
     })
   )
-}
-
-export async function loadOptimizerRuns(scoreId: string, pageSize: number = 100): Promise<OptimizerRunView[]> {
-  const procedures = await loadProcedureRecordsByScoreId(scoreId, pageSize)
-  return procedureRecordsToOptimizerRunViews(procedures)
-}
-
-export async function loadScoreVersionOptimizerRuns(
-  scoreVersionId: string,
-  pageSize: number = 100
-): Promise<OptimizerRunView[]> {
-  const procedures = await loadProcedureRecordsByScoreVersionId(scoreVersionId, pageSize)
-  return procedureRecordsToOptimizerRunViews(procedures)
 }
 
 export function evaluationToScoreEvaluationView(item: any): ScoreEvaluationView {
@@ -1342,38 +1193,5 @@ export async function loadScoreEvaluations(scoreId: string, limit: number = 100)
   }) as any
 
   const items = response.data?.listEvaluationByScoreIdAndUpdatedAt?.items ?? []
-  return items.map(evaluationToScoreEvaluationView)
-}
-
-export async function loadScoreVersionEvaluations(
-  scoreVersionId: string,
-  limit: number = 100
-): Promise<ScoreEvaluationView[]> {
-  const response = await getAmplifyClient().graphql({
-    query: `
-      query ListEvaluationByScoreVersionIdAndCreatedAtForWorkbench(
-        $scoreVersionId: String!
-        $sortDirection: ModelSortDirection!
-        $limit: Int
-      ) {
-        listEvaluationByScoreVersionIdAndCreatedAt(
-          scoreVersionId: $scoreVersionId
-          sortDirection: $sortDirection
-          limit: $limit
-        ) {
-          items {
-            ${EVALUATION_CARD_FIELDS}
-          }
-        }
-      }
-    `,
-    variables: {
-      scoreVersionId,
-      sortDirection: 'DESC',
-      limit,
-    },
-  }) as any
-
-  const items = response.data?.listEvaluationByScoreVersionIdAndCreatedAt?.items ?? []
   return items.map(evaluationToScoreEvaluationView)
 }

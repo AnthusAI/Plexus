@@ -94,9 +94,7 @@ class GraphQLClient:
     def generate_composite_key(self,
                                record_type: str,
                                time_range_start: str,
-                               number_of_minutes: int,
-                               scorecard_id: Optional[str] = None,
-                               score_id: Optional[str] = None) -> str:
+                               number_of_minutes: int) -> str:
         """
         Generate composite key for AggregatedMetrics.
         
@@ -108,10 +106,6 @@ class GraphQLClient:
         Returns:
             Composite key string
         """
-        if score_id:
-            return f"{record_type}#{score_id}#{time_range_start}#{number_of_minutes}"
-        if scorecard_id:
-            return f"{record_type}#{scorecard_id}#{time_range_start}#{number_of_minutes}"
         return f"{record_type}#{time_range_start}#{number_of_minutes}"
     
     def create_aggregated_metrics(self,
@@ -123,8 +117,7 @@ class GraphQLClient:
                                   count: int,
                                   complete: bool = False,
                                   scorecard_id: Optional[str] = None,
-                                  score_id: Optional[str] = None,
-                                  metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                                  score_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Create a new AggregatedMetrics record with composite key.
         
@@ -153,19 +146,12 @@ class GraphQLClient:
                 numberOfMinutes
                 count
                 complete
-                metadata
             }
         }
         """
         
         now = datetime.utcnow().isoformat() + 'Z'
-        composite_key = self.generate_composite_key(
-            record_type,
-            time_range_start,
-            number_of_minutes,
-            scorecard_id=scorecard_id,
-            score_id=score_id
-        )
+        composite_key = self.generate_composite_key(record_type, time_range_start, number_of_minutes)
         
         input_data = {
             'accountId': account_id,
@@ -184,8 +170,6 @@ class GraphQLClient:
             input_data['scorecardId'] = scorecard_id
         if score_id:
             input_data['scoreId'] = score_id
-        if metadata is not None:
-            input_data['metadata'] = metadata
         
         variables = {'input': input_data}
         
@@ -202,8 +186,7 @@ class GraphQLClient:
                                   count: int,
                                   complete: bool = False,
                                   scorecard_id: Optional[str] = None,
-                                  score_id: Optional[str] = None,
-                                  metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                                  score_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Update an existing AggregatedMetrics record using composite key.
         
@@ -229,7 +212,6 @@ class GraphQLClient:
                 compositeKey
                 count
                 complete
-                metadata
                 updatedAt
             }
         }
@@ -256,8 +238,6 @@ class GraphQLClient:
             variables['input']['scorecardId'] = scorecard_id
         if score_id:
             variables['input']['scoreId'] = score_id
-        if metadata is not None:
-            variables['input']['metadata'] = metadata
         
         data = self.execute_query(mutation, variables)
         return data.get('updateAggregatedMetrics', {})
@@ -271,8 +251,7 @@ class GraphQLClient:
                                   count: int,
                                   complete: bool = False,
                                   scorecard_id: Optional[str] = None,
-                                  score_id: Optional[str] = None,
-                                  metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                                  score_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Create or update an AggregatedMetrics record using composite key.
         With composite keys, we can directly create - DynamoDB will handle upsert.
@@ -293,13 +272,7 @@ class GraphQLClient:
         """
         # With composite primary key, we can just create/update directly
         # Try update first (more common case), fall back to create
-        composite_key = self.generate_composite_key(
-            record_type,
-            time_range_start,
-            number_of_minutes,
-            scorecard_id=scorecard_id,
-            score_id=score_id
-        )
+        composite_key = self.generate_composite_key(record_type, time_range_start, number_of_minutes)
         
         try:
             # Try update first
@@ -313,8 +286,7 @@ class GraphQLClient:
                 count=count,
                 complete=complete,
                 scorecard_id=scorecard_id,
-                score_id=score_id,
-                metadata=metadata
+                score_id=score_id
             )
         except Exception as e:
             # If update fails, fall back to create
@@ -332,8 +304,7 @@ class GraphQLClient:
                     count=count,
                     complete=complete,
                     scorecard_id=scorecard_id,
-                    score_id=score_id,
-                    metadata=metadata
+                    score_id=score_id
                 )
             else:
                 raise

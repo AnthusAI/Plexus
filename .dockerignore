@@ -33,12 +33,6 @@ project/
 *.jsonl.gz
 *.jsonl.gz.gz
 
-# ConsoleChatResponder imports the in-process Plexus MCP tool modules at runtime.
-# Re-include the full MCP tree after the broad project exclusions so Docker
-# cannot prune parent directories needed for Python namespace package imports.
-!MCP/
-!MCP/**
-
 # IDE
 .vscode/
 .cursor/

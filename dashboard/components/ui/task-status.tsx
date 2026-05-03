@@ -72,7 +72,6 @@ export interface TaskStatusProps {
   isLoading?: boolean
   errorLabel?: string
   dispatchStatus?: string
-  dispatchMode?: string
   celeryTaskId?: string
   workerNodeId?: string
   showPreExecutionStages?: boolean
@@ -90,7 +89,6 @@ export interface TaskStatusProps {
   elapsedSeconds?: number | null
   estimatedRemainingSeconds?: number | null
   hideElapsedTime?: boolean
-  hidePreExecutionStatus?: boolean
 }
 
 function formatDuration(seconds: number): string {
@@ -123,7 +121,6 @@ export const TaskStatus = React.memo(({
   isLoading,
   errorLabel,
   dispatchStatus,
-  dispatchMode,
   celeryTaskId,
   workerNodeId,
   showPreExecutionStages = false,
@@ -140,8 +137,7 @@ export const TaskStatus = React.memo(({
   onCommandDisplayChange,
   elapsedSeconds,
   estimatedRemainingSeconds,
-  hideElapsedTime = false,
-  hidePreExecutionStatus = false
+  hideElapsedTime = false
 }: TaskStatusProps) => {
 
   if (stages.length > 0) {
@@ -341,20 +337,6 @@ export const TaskStatus = React.memo(({
   , [status]);
 
   const getPreExecutionStatus = () => {
-    if (dispatchMode === 'pending') {
-      return {
-        message: 'Pending...',
-        icon: Radio,
-        animation: 'animate-pulse'
-      }
-    }
-    if (dispatchMode === 'local') {
-      return {
-        message: 'Local',
-        icon: Radio,
-        animation: ''
-      }
-    }
     if (workerNodeId && workerNodeId.trim() !== '') {
       return { 
         message: 'Claimed...', 
@@ -380,13 +362,12 @@ export const TaskStatus = React.memo(({
   // 1. Task is in PENDING state
   // 2. Has no stages (not started processing yet)
   // 3. Either has a worker node ID or showPreExecutionStages is true
-  const shouldShowPreExecution = !hidePreExecutionStatus &&
-    status === 'PENDING' &&
+  const shouldShowPreExecution = status === 'PENDING' && 
     (!stages || stages.length === 0) && 
-    (dispatchMode === 'pending' || dispatchMode === 'local' || (workerNodeId && workerNodeId.trim() !== '') || showPreExecutionStages)
+    ((workerNodeId && workerNodeId.trim() !== '') || showPreExecutionStages)
 
   const preExecutionStatus = shouldShowPreExecution ? getPreExecutionStatus() : null
-  const showEmptyState = !hidePreExecutionStatus && dispatchMode !== 'pending' && dispatchMode !== 'local' && !stages.length && !preExecutionStatus && status === 'PENDING'
+  const showEmptyState = !stages.length && !preExecutionStatus && status === 'PENDING'
 
   const displayMessage = isError && errorMessage ? errorMessage : statusMessage
 
@@ -404,10 +385,7 @@ export const TaskStatus = React.memo(({
     return (
       <div className="[&>*+*]:mt-2">
         <StyleTag />
-        <div className={cn(
-          "rounded-lg px-1 py-1 space-y-1 -mx-1",
-          isSelected ? "bg-foreground/10" : "bg-muted/70"
-        )}>
+        <div className="rounded-lg bg-background px-1 py-1 space-y-1 -mx-1">
           {command && commandDisplay !== 'hide' && (
             <div 
               className={cn(
@@ -505,7 +483,7 @@ export const TaskStatus = React.memo(({
       <StyleTag />
       <div className={cn(
         "rounded-lg px-1 py-1 space-y-1 -mx-1 px-2",
-        variant === 'detail' || isSelected ? "bg-foreground/10" : "bg-muted/70"
+        variant === 'detail' ? "bg-gauge-background" : "bg-background"
       )}>
         {command && commandDisplay !== 'hide' && (
           <div 
@@ -624,7 +602,6 @@ export const TaskStatus = React.memo(({
     prevProps.isLoading === nextProps.isLoading &&
     prevProps.errorLabel === nextProps.errorLabel &&
     prevProps.dispatchStatus === nextProps.dispatchStatus &&
-    prevProps.dispatchMode === nextProps.dispatchMode &&
     prevProps.celeryTaskId === nextProps.celeryTaskId &&
     prevProps.workerNodeId === nextProps.workerNodeId &&
     prevProps.showPreExecutionStages === nextProps.showPreExecutionStages &&
@@ -638,7 +615,6 @@ export const TaskStatus = React.memo(({
     prevProps.statusMessageDisplay === nextProps.statusMessageDisplay &&
     prevProps.elapsedSeconds === nextProps.elapsedSeconds &&
     prevProps.estimatedRemainingSeconds === nextProps.estimatedRemainingSeconds &&
-    prevProps.hideElapsedTime === nextProps.hideElapsedTime &&
-    prevProps.hidePreExecutionStatus === nextProps.hidePreExecutionStatus
+    prevProps.hideElapsedTime === nextProps.hideElapsedTime
   );
 }); 

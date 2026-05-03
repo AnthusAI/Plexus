@@ -56,73 +56,26 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
             "prompt_used": {"type": "string", "required": True},
             "iterations": {"type": "number", "required": True},
         },
-                "agents": {
+        "agents": {
             "assistant": {
                 "model": "gpt-5.4-mini",
-                "reasoning_effort": "medium",
+                "reasoning_effort": "low",
                 "verbosity": "low",
-                "max_tokens": 1024,
+                "max_tokens": 220,
                 "stream": True,
                 "system_prompt": (
                     "You are the Plexus Console assistant in an interactive chat.\n\n"
                     "You are a practical, accurate engineering copilot.\n"
                     "Respond directly to the user's latest message.\n"
                     "Keep responses concise, specific, and actionable.\n\n"
-                    "Use the `execute_tactus` tool to query or act on Plexus data.\n"
-                    "Pass a short Lua snippet; `plexus` is a global with all functionality.\n\n"
-                    "READ OPERATIONS:\n"
-                    "  return plexus.scorecards.list({})\n"
-                    "  return plexus.scorecard.info({ scorecard_identifier = \"My Scorecard\" })\n"
-                    "  return plexus.score.info({ scorecard_identifier = \"My Scorecard\", score_identifier = \"My Score\" })\n"
-                    "  -- find recent evaluations (prefer score_version_id when available):\n"
-                    "  return plexus.evaluation.find_recent({ score_version_id = \"<uuid>\", evaluation_type = \"accuracy\", max_age_hours = 24 })\n"
-                    "  return plexus.evaluation.info({ evaluation_id = \"<uuid>\" })\n"
-                    "  return plexus.item.last({ count = 1 })\n"
-                    "  return plexus.score.predict({ scorecard_identifier = \"...\", score_identifier = \"...\", item_id = \"...\" })\n"
-                    "  return plexus.feedback.alignment({ scorecard_name = \"My Scorecard\", score_name = \"My Score\", days = 30 })\n\n"
-                    "WRITE / TRIGGER OPERATIONS:\n"
-                    "  -- Run a feedback evaluation (async — returns a handle):\n"
-                    "  local h = plexus.evaluation.run({ scorecard_name = \"My Scorecard\", score_name = \"My Score\","
-                    " evaluation_type = \"feedback\", max_feedback_items = 50, sampling_mode = \"newest\", days = 30,"
-                    " async = true, budget = { usd = 2.0, wallclock_seconds = 900, depth = 1, tool_calls = 5 } })\n"
-                    "  return { handle_id = h.id, status = h.status }\n\n"
-                    "  -- Run an accuracy evaluation:\n"
-                    "  local h = plexus.evaluation.run({ scorecard_name = \"My Scorecard\", score_name = \"My Score\","
-                    " evaluation_type = \"accuracy\", n_samples = 100, async = true,"
-                    " budget = { usd = 2.0, wallclock_seconds = 900, depth = 1, tool_calls = 5 } })\n"
-                    "  return { handle_id = h.id }\n\n"
-                    "  -- Start a feedback alignment optimization (takes scorecard+score names):\n"
-                    "  local h = plexus.procedure.optimize({ scorecard = \"My Scorecard\","
-                    " score = \"My Score\", async = true,"
-                    " budget = { usd = 2.0, wallclock_seconds = 900, depth = 1, tool_calls = 5 } })\n"
-                    "  return { procedure_id = h.procedure_id, status = h.status }\n\n"
-                    "  -- Run an existing procedure by its DB ID:\n"
-                    "  local h = plexus.procedure.run({ procedure_id = \"<uuid>\", async = true,"
-                    " budget = { usd = 2.0, wallclock_seconds = 900, depth = 1, tool_calls = 5 } })\n"
-                    "  return { procedure_id = h.procedure_id }\n\n"
-                    "  -- Update a score's YAML configuration (use scorecard+score name OR score_id):\n"
-                    "  return plexus.score.update({ scorecard_identifier = \"My SC\","
-                    " score_identifier = \"My Score\", code = \"<full yaml>\","
-                    " note = \"what changed\" })\n\n"
-                    "  -- Update a score's guidelines text:\n"
-                    "  return plexus.score.update({ scorecard_identifier = \"My SC\","
-                    " score_identifier = \"My Score\","
-                    " guidelines = \"<new guidelines markdown>\" })\n\n"
-                    "IMPORTANT for score.update:\n"
-                    "- Always pass scorecard_identifier + score_identifier (names are fine, no need to resolve IDs first).\n"
-                    "- To update YAML: pass the complete code string.\n"
-                    "- To update only guidelines: pass only guidelines (omit code).\n"
-                    "- To update metadata (description, name, key): pass the field directly, e.g. description = \"new text\".\n\n"
-                    "TIPS:\n"
-                    "- For long-running ops (eval, optimize), use async=true and return the handle_id.\n"
-                    "- Never invent data; query Plexus for current values.\n"
+                    "CONTEXT:\n"
+                    "- Recent conversation turns are provided as prior context.\n"
+                    "- Refer back to earlier turns to preserve continuity.\n"
                     "- If user intent is unclear, ask one concise clarifying question.\n"
+                    "- Avoid filler and never invent data.\n"
                 ),
                 "initial_message": "Ready.",
-                # Tactus resolves tools through named toolsets. The Plexus runtime registers
-                # `execute_tactus` as its own toolset key, so the assistant can be restricted
-                # to that single model-facing tool.
-                "tools": ["execute_tactus"],
+                "tools": [],
             }
         },
         "stages": ["preparing", "responding", "complete"],
