@@ -157,40 +157,6 @@ export const PROCEDURE_DELETE_SUBSCRIPTION_FOR_CARDS = `
   }
 `
 
-export const PROCEDURE_SCORE_VERSION_CREATE_SUBSCRIPTION_FOR_CARDS = `
-  subscription OnCreateProcedureScoreVersionForCards {
-    onCreateProcedureScoreVersion {
-      id
-      scoreVersionId
-      procedure {
-        ${PROCEDURE_CARD_FIELDS}
-      }
-    }
-  }
-`
-
-export const PROCEDURE_SCORE_VERSION_UPDATE_SUBSCRIPTION_FOR_CARDS = `
-  subscription OnUpdateProcedureScoreVersionForCards {
-    onUpdateProcedureScoreVersion {
-      id
-      scoreVersionId
-      procedure {
-        ${PROCEDURE_CARD_FIELDS}
-      }
-    }
-  }
-`
-
-export const PROCEDURE_SCORE_VERSION_DELETE_SUBSCRIPTION_FOR_CARDS = `
-  subscription OnDeleteProcedureScoreVersionForCards {
-    onDeleteProcedureScoreVersion {
-      id
-      procedureId
-      scoreVersionId
-    }
-  }
-`
-
 export const EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS = `
   subscription OnCreateEvaluationForCards {
     onCreateEvaluation {
@@ -241,6 +207,8 @@ export type ProcedureFeedbackEvaluationSummary = {
   totalItems?: number | null
   baselineEvaluationId?: string | null
   currentBaselineEvaluationId?: string | null
+  baselineAccuracy?: number | null
+  currentBaselineAccuracy?: number | null
   updatedAt?: string | null
 }
 
@@ -644,7 +612,61 @@ export function feedbackEvaluationSummaryFromView(
     totalItems: evaluation.totalItems ?? null,
     baselineEvaluationId: evaluation.baselineEvaluationId ?? null,
     currentBaselineEvaluationId: evaluation.currentBaselineEvaluationId ?? null,
+    baselineAccuracy: null,
+    currentBaselineAccuracy: null,
     updatedAt: evaluation.updatedAt ?? evaluation.createdAt ?? null,
+  }
+}
+
+async function loadEvaluationAccuraciesById(
+  evaluationIds: Array<string | null | undefined>
+): Promise<Map<string, number | null>> {
+  const uniqueIds = [...new Set(evaluationIds.filter((id): id is string => typeof id === 'string' && id.length > 0))]
+  const entries = await Promise.all(
+    uniqueIds.map(async (evaluationId) => {
+      try {
+        const evaluation = await loadScoreEvaluationById(evaluationId)
+        return [evaluationId, evaluation?.accuracy ?? null] as const
+      } catch (error) {
+        console.error('Failed to load procedure baseline evaluation accuracy', evaluationId, error)
+        return [evaluationId, null] as const
+      }
+    })
+  )
+  return new Map(entries)
+}
+
+function applyBaselineAccuraciesToSummary(
+  summary: ProcedureFeedbackEvaluationSummary | null,
+  accuraciesByEvaluationId: Map<string, number | null>
+): ProcedureFeedbackEvaluationSummary | null {
+  if (!summary) return null
+  return {
+    ...summary,
+    baselineAccuracy: summary.baselineEvaluationId
+      ? accuraciesByEvaluationId.get(summary.baselineEvaluationId) ?? null
+      : null,
+    currentBaselineAccuracy: summary.currentBaselineEvaluationId
+      ? accuraciesByEvaluationId.get(summary.currentBaselineEvaluationId) ?? null
+      : null,
+  }
+}
+
+function applyProcedureBaselineAssociations(
+  summary: ProcedureFeedbackEvaluationSummary | null,
+  manifest: OptimizerManifest | null | undefined
+): ProcedureFeedbackEvaluationSummary | null {
+  if (!summary) return null
+  return {
+    ...summary,
+    baselineEvaluationId:
+      summary.baselineEvaluationId ??
+      manifest?.baseline?.original_feedback_evaluation_id ??
+      null,
+    currentBaselineEvaluationId:
+      summary.currentBaselineEvaluationId ??
+      manifest?.baseline?.current_feedback_evaluation_id ??
+      null,
   }
 }
 
@@ -692,9 +714,17 @@ export async function hydrateProcedureRunFeedbackEvaluation(
 
   try {
     const evaluation = await loadScoreEvaluationById(evaluationId)
+    const summary = applyProcedureBaselineAssociations(
+      feedbackEvaluationSummaryFromView(evaluation),
+      run.manifest
+    )
+    const accuraciesByEvaluationId = await loadEvaluationAccuraciesById([
+      summary?.baselineEvaluationId,
+      summary?.currentBaselineEvaluationId,
+    ])
     return {
       ...run,
-      feedbackEvaluationSummary: feedbackEvaluationSummaryFromView(evaluation),
+      feedbackEvaluationSummary: applyBaselineAccuraciesToSummary(summary, accuraciesByEvaluationId),
     }
   } catch (error) {
     console.error('Failed to load procedure feedback evaluation', evaluationId, error)
@@ -728,13 +758,25 @@ export async function hydrateProcedureRunsFeedbackEvaluations(
       .filter((evaluation): evaluation is ScoreEvaluationView => Boolean(evaluation?.id))
       .map((evaluation) => [evaluation.id, evaluation])
   )
-
-  return runs.map((run) => {
+  const summariesByRun = runs.map((run) => {
     const evaluationId = currentProcedureFeedbackEvaluationId(run.manifest)
     const evaluation = evaluationId ? evaluationsById.get(evaluationId) : null
+    return applyProcedureBaselineAssociations(
+      feedbackEvaluationSummaryFromView(evaluation),
+      run.manifest
+    )
+  })
+  const baselineEvaluationIds = summariesByRun.flatMap((summary) => [
+    summary?.baselineEvaluationId,
+    summary?.currentBaselineEvaluationId,
+  ])
+  const baselineAccuraciesByEvaluationId = await loadEvaluationAccuraciesById(baselineEvaluationIds)
+
+  return runs.map((run, index) => {
+    const summary = summariesByRun[index] ?? null
     return {
       ...run,
-      feedbackEvaluationSummary: feedbackEvaluationSummaryFromView(evaluation),
+      feedbackEvaluationSummary: applyBaselineAccuraciesToSummary(summary, baselineAccuraciesByEvaluationId),
     }
   })
 }
@@ -1145,22 +1187,20 @@ async function loadProcedureRecordsByScoreVersionId(
   do {
     const procedureResponse = await client.graphql({
       query: `
-        query ListProcedureScoreVersionByScoreVersionIdAndUpdatedAtWorkbench(
+        query ListProcedureByScoreVersionIdAndUpdatedAtWorkbench(
           $scoreVersionId: String!
           $sortDirection: ModelSortDirection
           $limit: Int
           $nextToken: String
         ) {
-          listProcedureScoreVersionByScoreVersionIdAndUpdatedAt(
+          listProcedureByScoreVersionIdAndUpdatedAt(
             scoreVersionId: $scoreVersionId
             sortDirection: $sortDirection
             limit: $limit
             nextToken: $nextToken
           ) {
             items {
-              procedure {
-                ${PROCEDURE_CARD_FIELDS}
-              }
+              ${PROCEDURE_CARD_FIELDS}
             }
             nextToken
           }
@@ -1174,8 +1214,8 @@ async function loadProcedureRecordsByScoreVersionId(
       },
     }) as any
 
-    const page = procedureResponse.data?.listProcedureScoreVersionByScoreVersionIdAndUpdatedAt
-    procedures.push(...(page?.items ?? []).map((item: any) => item?.procedure).filter(Boolean))
+    const page = procedureResponse.data?.listProcedureByScoreVersionIdAndUpdatedAt
+    procedures.push(...(page?.items ?? []))
     nextToken = page?.nextToken ?? null
   } while (nextToken)
 

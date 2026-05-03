@@ -5,6 +5,13 @@ import ConversationViewer from "../conversation-viewer"
 
 const mockScrollToIndex = jest.fn()
 
+jest.mock("../evaluation-tool-output", () => ({
+  __esModule: true,
+  default: ({ toolOutput }: { toolOutput: unknown }) => (
+    <div data-testid="evaluation-tool-output">{JSON.stringify(toolOutput)}</div>
+  ),
+}))
+
 jest.mock("react-virtuoso", () => {
   const React = require("react")
   const Virtuoso = React.forwardRef(function MockVirtuoso(props: any, ref: any) {
@@ -517,6 +524,43 @@ describe("ConversationViewer streaming updates", () => {
     expect(mockGraphql).not.toHaveBeenCalled()
   })
 
+  it("saves procedure steering messages without console dispatch behavior", async () => {
+    render(
+      <ConversationViewer
+        procedureId="proc-1"
+        defaultSidebarCollapsed={false}
+        enableProcedureSteering={true}
+      />
+    )
+
+    await screen.findByText("Hel")
+
+    expect(screen.queryByText("Model")).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Focus the final summary on reviewer contradictions." },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageCreate).toHaveBeenCalled()
+    })
+
+    const createdMessage = mockChatMessageCreate.mock.calls[0]?.[0]
+    expect(createdMessage.role).toBe("USER")
+    expect(createdMessage.humanInteraction).toBe("CHAT")
+    expect(createdMessage.messageType).toBe("MESSAGE")
+    expect(createdMessage.responseTarget).toBe("proc-1")
+    expect(createdMessage.responseStatus).toBe("COMPLETED")
+    expect(JSON.parse(createdMessage.metadata)).toEqual({
+      source: "procedure-steering-input",
+      scope: "all_agents",
+      sent_at: expect.any(String),
+    })
+    expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
+    expect(mockGraphql).not.toHaveBeenCalled()
+  })
+
   it("writes non-default selected model into outgoing metadata", async () => {
     render(
       <ConversationViewer
@@ -692,6 +736,159 @@ describe("ConversationViewer streaming updates", () => {
       expect(screen.getByText("plexus_search output-available")).toBeInTheDocument()
       expect(screen.getAllByTestId("tool")).toHaveLength(2)
     })
+  })
+
+  it("renders execute_tactus evaluation envelopes using EvaluationToolOutput", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-exec-tactus-eval",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "TOOL_CALL",
+          humanInteraction: "INTERNAL",
+          toolName: "execute_tactus",
+          toolParameters: JSON.stringify({ tactus: "evaluate{ scorecard = 'X', score = 'Y' }" }),
+          toolResponse: JSON.stringify({
+            ok: true,
+            api_calls: ["plexus.evaluation.run"],
+            value: { evaluation_id: "eval-1" },
+          }),
+          content: "execute_tactus(...)",
+          createdAt: "2026-03-27T00:00:03.000Z",
+          sequenceNumber: 3,
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId("evaluation-tool-output")).toBeInTheDocument()
+      expect(screen.getByTestId("evaluation-tool-output").textContent).toContain("eval-1")
+    })
+  })
+
+  it("renders execute_tactus evaluation output when value includes evaluationId without api_calls", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-exec-tactus-eval-id-only",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "TOOL_CALL",
+          humanInteraction: "INTERNAL",
+          toolName: "execute_tactus",
+          toolParameters: JSON.stringify({ tactus: "return plexus.evaluation.info({ evaluation_id = 'eval-2' })" }),
+          toolResponse: JSON.stringify({
+            ok: true,
+            value: { evaluationId: "eval-2" },
+          }),
+          content: "execute_tactus(...)",
+          createdAt: "2026-03-27T00:00:04.000Z",
+          sequenceNumber: 4,
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId("evaluation-tool-output")).toBeInTheDocument()
+      expect(screen.getByTestId("evaluation-tool-output").textContent).toContain("eval-2")
+    })
+  })
+
+  it("keeps execute_tactus non-evaluation envelopes on generic ToolOutput", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-exec-tactus-non-eval",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "TOOL_CALL",
+          humanInteraction: "INTERNAL",
+          toolName: "execute_tactus",
+          toolParameters: JSON.stringify({ tactus: "return plexus.scorecards.list({})" }),
+          toolResponse: JSON.stringify({
+            ok: true,
+            api_calls: ["plexus.scorecards.list"],
+            value: [{ id: "scorecard-1", name: "QA Scorecard" }],
+          }),
+          content: "execute_tactus(...)",
+          createdAt: "2026-03-27T00:00:05.000Z",
+          sequenceNumber: 5,
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("execute_tactus output-available")).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId("evaluation-tool-output")).not.toBeInTheDocument()
+    expect(screen.getByText(/scorecard-1/)).toBeInTheDocument()
+  })
+
+  it("keeps malformed execute_tactus envelopes on generic ToolOutput", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-exec-tactus-malformed",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "TOOL_CALL",
+          humanInteraction: "INTERNAL",
+          toolName: "execute_tactus",
+          toolParameters: JSON.stringify({ tactus: "return plexus.api.list({})" }),
+          toolResponse: "{not-json",
+          content: "execute_tactus(...)",
+          createdAt: "2026-03-27T00:00:06.000Z",
+          sequenceNumber: 6,
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("execute_tactus input-available")).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId("evaluation-tool-output")).not.toBeInTheDocument()
+    expect(screen.getByText(/return plexus\.api\.list/)).toBeInTheDocument()
   })
 
   it("keeps USER message before ASSISTANT when timestamps are identical", async () => {

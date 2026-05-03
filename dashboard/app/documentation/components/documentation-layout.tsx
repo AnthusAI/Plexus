@@ -147,6 +147,7 @@ const docSections: DocSidebarItem[] = [
       { name: "RecentFeedback", href: "/documentation/report-blocks/recent-feedback" },
       { name: "FeedbackAlignmentTimeline", href: "/documentation/report-blocks/feedback-alignment-timeline" },
       { name: "FeedbackVolumeTimeline", href: "/documentation/report-blocks/feedback-volume-timeline" },
+      { name: "ScoreChampionVersionTimeline", href: "/documentation/report-blocks/score-champion-version-timeline" },
       { name: "AcceptanceRateTimeline", href: "/documentation/report-blocks/acceptance-rate-timeline" },
       { name: "AcceptanceRate", href: "/documentation/report-blocks/acceptance-rate" },
       { name: "CorrectionRate", href: "/documentation/report-blocks/correction-rate" },
@@ -175,7 +176,7 @@ const docSections: DocSidebarItem[] = [
       { name: "Worker Nodes", href: "/documentation/advanced/worker-nodes" },
       { name: "Python SDK Reference", href: "/documentation/advanced/sdk" },
       { name: "Universal Code Snippets", href: "/documentation/advanced/universal-code" },
-      { name: "MCP Server", href: "/documentation/advanced/mcp-server" },
+      { name: "MCP / Tactus Runtime", href: "/documentation/advanced/mcp-server" },
     ],
   },
 ]

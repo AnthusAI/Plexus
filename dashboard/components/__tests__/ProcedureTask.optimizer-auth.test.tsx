@@ -72,6 +72,10 @@ describe('ProcedureTask optimizer auth flow', () => {
     ;(global as any).fetch = jest.fn()
   })
 
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
   it('renders local dispatch mode before stale dispatcher fields', () => {
     render(
       <ProcedureTask
@@ -107,6 +111,42 @@ describe('ProcedureTask optimizer auth flow', () => {
 
     expect(screen.getByText('Pending...')).toBeInTheDocument()
     expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
+  it('renders grid dispatch, timestamp, and duration indicators once', async () => {
+    jest.useFakeTimers()
+    jest.setSystemTime(new Date('2026-01-01T00:10:00.000Z'))
+
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          task: {
+            ...baseProcedure.task,
+            status: 'RUNNING',
+            startedAt: '2026-01-01T00:00:00.000Z',
+            dispatchStatus: 'ANNOUNCED',
+            workerNodeId: 'BlackbookM3-15348',
+            metadata: JSON.stringify({ procedure_id: 'proc-1', dispatch_mode: 'local' }),
+          },
+        }}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Local')).toHaveLength(1)
+      expect(screen.getAllByText(/minutes ago/)).toHaveLength(1)
+      expect(screen.getAllByText('Elapsed:')).toHaveLength(1)
+      expect(screen.getAllByTestId('timer-icon')).toHaveLength(1)
+    })
+
+    const dispatchRow = screen.getByText('Local').closest('div')
+    expect(dispatchRow).toHaveClass('text-sm', 'text-muted-foreground', 'gap-1')
+    expect(dispatchRow?.querySelector('svg')).toHaveClass('h-4', 'w-4', 'flex-shrink-0')
+
+    jest.useRealTimers()
   })
 
   it('still renders claimed for true dispatcher-owned tasks', () => {
@@ -239,6 +279,50 @@ describe('ProcedureTask optimizer auth flow', () => {
 
     expect(screen.getByLabelText('Procedure actions')).toBeInTheDocument()
     expect(screen.getByText(/^Optimization Procedure$/)).toBeInTheDocument()
+  })
+
+  it('reserves a blank accuracy bar slot in grid mode before feedback summary is loaded', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          feedbackEvaluationSummary: null,
+        } as any}
+      />
+    )
+
+    const bar = screen.getByTestId('evaluation-list-accuracy-bar')
+    expect(bar).toHaveClass('w-full', 'h-8', 'rounded-md')
+    expect(screen.queryByText('0%')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Original baseline marker')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Current best baseline marker')).not.toBeInTheDocument()
+  })
+
+  it('renders feedback accuracy with baseline markers in grid mode', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          feedbackEvaluationSummary: {
+            id: 'eval-feedback-1',
+            status: 'COMPLETED',
+            accuracy: 87,
+            processedItems: 87,
+            totalItems: 100,
+            baselineEvaluationId: 'baseline-eval-1',
+            currentBaselineEvaluationId: 'current-baseline-eval-1',
+            baselineAccuracy: 72,
+            currentBaselineAccuracy: 81,
+          },
+        } as any}
+      />
+    )
+
+    expect(screen.getAllByText('87%').length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('Original baseline marker')).toBeInTheDocument()
+    expect(screen.getByLabelText('Current best baseline marker')).toBeInTheDocument()
   })
 
   it('keeps local procedure runs labeled Local even when a worker node id is present', () => {

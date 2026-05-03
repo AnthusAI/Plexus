@@ -1,163 +1,141 @@
-# Plexus MCP Server - Refactored Structure
+# Plexus MCP Server
 
-This directory contains the Plexus MCP server where each tool is organized into separate files for better maintainability and organization.
+The Plexus MCP server exposes one programmable tool: `execute_tactus`.
 
-> **For a comprehensive guide on using these tools with AI agents, see the [Agent Integration Guide](../AGENTS.md).**
+Instead of publishing a separate MCP tool for every Plexus operation, the server
+runs short Tactus/Lua snippets inside a sandboxed runtime. The runtime injects
+`plexus` as a global host module, so agents can call Plexus APIs
+programmatically without repeating the import boilerplate:
 
-## Directory Structure
-
-```
-MCP/
-├── server.py                    # Main server entry point
-├── shared/                      # Shared utilities and setup
-│   ├── setup.py                # Core setup and Plexus imports
-│   └── utils.py                # Common utility functions
-└── tools/                      # Individual tool implementations
-    ├── scorecard/              # Scorecard management tools
-    │   └── scorecards.py       # List, info, evaluation tools
-    ├── score/                  # Score management tools
-    │   └── management.py       # Score CRUD, configuration tools
-    ├── report/                 # Report management tools
-    │   └── reports.py          # Report listing and details
-    ├── item/                   # Item management tools
-    ├── task/                   # Task management tools
-    ├── feedback/               # Feedback analysis tools
-    └── util/                   # Utility tools
-        └── debug.py            # Debug, think, documentation tools
-```
-
-## Key Changes
-
-### 1. Modular Organization
-- Each category of tools is in its own directory
-- Individual tool files focus on related functionality
-- Clear separation of concerns
-
-### 2. Shared Infrastructure
-- `shared/setup.py`: Handles Plexus imports, stdout redirection, and core initialization
-- `shared/utils.py`: Common utility functions like URL generation, account management, helper functions
-
-### 3. Tool Registration Pattern
-Each tool file exports a `register_*_tools(mcp: FastMCP)` function that registers its tools with the MCP server:
-
-```python
-def register_scorecard_tools(mcp: FastMCP):
-    """Register scorecard tools with the MCP server"""
-    
-    @mcp.tool()
-    async def plexus_scorecards_list(...):
-        # Implementation
-```
-
-### 4. Consistent Error Handling
-All tools use the same pattern for:
-- Stdout capture and redirection
-- Error logging
-- Import error handling
-- Client creation and credential validation
-
-## Usage
-
-### Running the Server
-```bash
-# With environment directory
-python server.py --env-dir /path/to/env/dir
-
-# With specific transport
-python server.py --transport stdio
-
-# With custom host/port for SSE
-python server.py --host 0.0.0.0 --port 8003
-```
-
-### Setting Up MCP Server with Claude Code
-
-To use the Plexus MCP server with Claude Code, you need to configure it properly to handle complex arguments.
-
-#### Simple Setup (without complex arguments)
-```bash
-bclaude mcp add plexus /opt/anaconda3/envs/py311/bin/python /Users/ryan.porter/Projects/Plexus/MCP/plexus_fastmcp_wrapper.py
-```
-
-#### Advanced Setup (with arguments like --target-cwd)
-The `bclaude mcp add` command has limitations with complex arguments. For advanced configurations, manually edit your `~/.claude.json` file:
-
-```json
-{
-  "mcpServers": {
-    "plexus": {
-      "command": "/opt/anaconda3/envs/py311/bin/python",
-      "args": [
-        "/Users/ryan.porter/Projects/Plexus/MCP/plexus_fastmcp_wrapper.py",
-        "--target-cwd",
-        "/Users/ryan.porter/Projects/Plexus/"
-      ]
-    }
-  }
+```lua
+return plexus.score.info{
+  scorecard_identifier = "Quality Assurance v1.0",
+  score_identifier = "Compliance Check",
 }
 ```
 
-**Why this is necessary:** The `bclaude mcp add` command cannot properly parse complex argument strings with flags. When you try to pass a quoted string like `"command --flag value"`, it treats the entire string as the command name rather than parsing the arguments separately.
+The MCP interface stays small while the Plexus runtime surface can grow behind
+the `plexus` host module. This follows the broader Tactus
+[One Tool For Everything](https://tactus.anth.us/use-cases/one-tool-programmable-api/)
+pattern.
 
-#### Verifying the Connection
+## Discovery
+
+Start every session by discovering the available runtime API and docs from
+inside `execute_tactus`:
+
+```lua
+return plexus.api.list()
+```
+
+```lua
+return plexus.docs.list()
+```
+
+```lua
+return plexus.docs.get{ key = "overview" }
+```
+
+Docs live under `plexus/docs/` and are exposed through `plexus.docs.*`. The
+runtime rejects path traversal and unknown documentation keys.
+
+## Common Calls
+
+Run a local prediction:
+
+```lua
+return plexus.score.predict{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  item_id = "item-123",
+  yaml = true,
+}
+```
+
+Find feedback items:
+
+```lua
+return plexus.feedback.find{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  initial_value = "No",
+  final_value = "Yes",
+  limit = 5,
+  days = 30,
+}
+```
+
+Run a long evaluation with an async handle:
+
+```lua
+local handle = plexus.evaluation.run{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  n_samples = 200,
+  yaml = true,
+  async = true,
+  budget = {
+    usd = 0.25,
+    wallclock_seconds = 900,
+    depth = 1,
+    tool_calls = 20,
+  },
+}
+
+return { evaluation_handle = handle }
+```
+
+Poll, await, or cancel a handle in a later `execute_tactus` call:
+
+```lua
+return plexus.handle.await{ id = "<handle-id>", timeout = "PT10M" }
+```
+
+## Runtime Contract
+
+`execute_tactus` returns a structured envelope with:
+
+- `ok`: whether execution completed successfully
+- `value`: the returned Lua/Tactus value, when successful
+- `error`: structured error details, when unsuccessful
+- `cost`: budget and usage information
+- `api_calls`: Plexus runtime calls made by the snippet
+- `trace_id` and trace metadata for debugging
+
+Long-running calls such as `plexus.evaluation.run`, `plexus.report.run`, and
+`plexus.procedure.run` require `async = true` with an explicit child `budget`.
+Blocking calls that need handle semantics fail with a structured
+`requires_handle_protocol` error.
+
+## Server Entry Points
+
+The main server entry point is `MCP/server.py`. It registers only
+`execute_tactus`:
+
 ```bash
-bclaude mcp list
+python MCP/server.py --transport stdio
 ```
 
-You should see:
-```
-plexus: /opt/anaconda3/envs/py311/bin/python /Users/ryan.porter/Projects/Plexus/MCP/plexus_fastmcp_wrapper.py - ✓ Connected
-```
+Authenticated ASGI usage is wired through `MCP/asgi_app.py`.
 
-### Adding New Tools
-1. Create a new tool file in the appropriate category directory
-2. Implement the tool functions with `@mcp.tool()` decorators
-3. Create a `register_*_tools(mcp)` function
-4. Import and call the registration function in `server.py`
+## Adding Plexus Capabilities
 
-Example:
-```python
-# tools/new_category/new_tools.py
-def register_new_tools(mcp: FastMCP):
-    @mcp.tool()
-    async def new_tool():
-        # Implementation
-        pass
+Do not add a new top-level MCP tool for each feature. Add capabilities to the
+Tactus runtime instead:
 
-# server.py
-from tools.new_category.new_tools import register_new_tools
+1. Implement or wire the Plexus SDK/service function.
+2. Expose it through `MCP/tools/tactus_runtime/execute.py`, preferably as a
+   direct handler.
+3. Make it discoverable through `plexus.api.list()`.
+4. Document the workflow under `plexus/docs/`.
+5. Add tests in `MCP/tools/tactus_runtime/execute_test.py`.
 
-def register_all_tools():
-    # ... existing registrations
-    register_new_tools(mcp)
-```
+This keeps the external MCP schema stable while giving agents a richer,
+composable programming surface.
 
-## Migration Status
+## Related Runtime Docs
 
-### Completed
-- ✅ Shared setup and utilities
-- ✅ Utility tools (debug, think, documentation)
-- ✅ Scorecard tools (list, info, evaluation)
-- ✅ Score management tools (info, delete - partial)
-- ✅ Report tools (list, info - partial)
-- ✅ Main server structure
-
-### Remaining
-- ⏳ Complete score tools (configuration, pull, push, update)
-- ⏳ Complete report tools (last, configurations)
-- ⏳ Item management tools (last, info)
-- ⏳ Task management tools (last, info)
-- ⏳ Feedback analysis tools (summary, find, predict)
-
-## Benefits of This Structure
-
-1. **Maintainability**: Easier to find and modify specific functionality
-2. **Testability**: Individual tool modules can be tested in isolation
-3. **Scalability**: Easy to add new tool categories without bloating main file
-4. **Collaboration**: Multiple developers can work on different tool categories
-5. **Code Reuse**: Shared utilities prevent duplication
-6. **Clear Dependencies**: Import structure makes dependencies explicit
-
-## Backward Compatibility
-
-The refactored server provides the same MCP tool interface as the original monolithic file, ensuring existing clients continue to work without changes.
+- `MCP/tools/tactus_runtime/HANDLE_PROTOCOL.md`
+- `plexus/docs/overview.md`
+- `plexus/docs/discovery.md`
+- `plexus/docs/evaluation-and-feedback/`

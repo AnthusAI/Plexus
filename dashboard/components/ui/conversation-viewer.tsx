@@ -33,6 +33,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
+import { Timestamp } from "@/components/ui/timestamp"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,6 +80,127 @@ const EVALUATION_TOOL_NAMES = new Set([
   'plexus_evaluation_run',
   'plexus_evaluation_info',
 ])
+
+type ExecuteTactusEnvelopeSummary = {
+  apiCalls: string[]
+  evaluationIds: string[]
+  ok: boolean | null
+  error: string | null
+  hasEnvelope: boolean
+}
+
+const coerceObjectRecord = (value: unknown): Record<string, unknown> | null => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  if (typeof value !== 'string') {
+    return null
+  }
+  const text = value.trim()
+  if (!text.startsWith('{') || !text.endsWith('}')) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+const collectEvaluationIdsFromValue = (value: unknown): string[] => {
+  const ids = new Set<string>()
+
+  const maybeAdd = (candidate: unknown): void => {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      ids.add(candidate.trim())
+    }
+  }
+
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(visit)
+      return
+    }
+    if (!node || typeof node !== 'object') {
+      return
+    }
+    const record = node as Record<string, unknown>
+    maybeAdd(record.evaluation_id)
+    maybeAdd(record.evaluationId)
+
+    // Treat plain "id" as evaluation only when surrounding fields resemble evaluation output.
+    const hasEvaluationContext = [
+      'evaluation_id',
+      'evaluationId',
+      'evaluation_type',
+      'metrics',
+      'accuracy',
+      'processed_items',
+      'score_name',
+      'scorecard_name',
+      'confusion_matrix',
+      'dashboard_url',
+      'status',
+    ].some((key) => key in record)
+    if (hasEvaluationContext) {
+      maybeAdd(record.id)
+    }
+  }
+
+  visit(value)
+  return Array.from(ids)
+}
+
+const parseExecuteTactusEnvelope = (output: unknown): ExecuteTactusEnvelopeSummary => {
+  const record = coerceObjectRecord(output)
+  if (!record) {
+    return {
+      apiCalls: [],
+      evaluationIds: [],
+      ok: null,
+      error: null,
+      hasEnvelope: false,
+    }
+  }
+
+  const rawApiCalls = record.api_calls
+  const apiCalls = Array.isArray(rawApiCalls)
+    ? rawApiCalls.filter((call): call is string => typeof call === 'string')
+    : []
+
+  return {
+    apiCalls,
+    evaluationIds: collectEvaluationIdsFromValue(record.value),
+    ok: typeof record.ok === 'boolean' ? record.ok : null,
+    error: typeof record.error === 'string' ? record.error : null,
+    hasEnvelope: (
+      'ok' in record
+      || 'value' in record
+      || 'error' in record
+      || 'api_calls' in record
+    ),
+  }
+}
+
+const isExecuteTactusEvaluationOutput = (output: unknown): boolean => {
+  const summary = parseExecuteTactusEnvelope(output)
+  return summary.apiCalls.some((call) => call.startsWith('plexus.evaluation.'))
+    || summary.evaluationIds.length > 0
+}
+
+const shouldRenderEvaluationToolOutput = (toolViewModel: ConsoleToolViewModel): boolean => {
+  if (toolViewModel.toolName === 'execute_tactus') {
+    return isExecuteTactusEvaluationOutput(toolViewModel.output)
+  }
+  if (EVALUATION_TOOL_NAMES.has(toolViewModel.toolName)) {
+    return true
+  }
+  return false
+}
 
 const CONSOLE_CHAT_MODEL_OPTIONS = [
   { value: 'gpt-5.4', label: 'GPT-5.4' },
@@ -179,6 +301,7 @@ export interface ConversationViewerProps {
   defaultSidebarWidth?: number
   forceProcedureIdForDispatch?: string
   defaultAccountIdForNewSession?: string
+  enableProcedureSteering?: boolean
 }
 
 
@@ -247,31 +370,35 @@ const serializeSessionMetadata = (value: unknown): string | undefined => {
   return undefined
 }
 
-const getSessionDisplayName = (session: Pick<ChatSession, "id" | "name">): string => {
+const getSessionExplicitName = (session: Pick<ChatSession, "name">): string => {
   const explicitName = String(session.name || "").trim()
-  if (explicitName) {
-    return explicitName
-  }
-  const sessionId = String(session.id || "").trim()
-  if (!sessionId) {
-    return "New Chat"
-  }
-  return `Session ${sessionId.slice(0, 8)}`
+  return explicitName
 }
 
-const getSessionHeaderTitle = (session: Pick<ChatSession, "id" | "name" | "metadata">): string => {
-  const explicitName = String(session.name || "").trim()
+const getSessionTitleAttribute = (session: Pick<ChatSession, "name">): string | undefined => {
+  const explicitName = getSessionExplicitName(session)
+  return explicitName || undefined
+}
+
+const SessionLabel = ({
+  session,
+  latestMessageAt,
+  timestampClassName,
+}: {
+  session: Pick<ChatSession, "name" | "metadata">
+  latestMessageAt?: string
+  timestampClassName?: string
+}) => {
+  const explicitName = getSessionExplicitName(session)
   if (explicitName) {
-    return explicitName
+    return <span className="truncate">{explicitName}</span>
   }
   if (isHiddenUntilNamedSession(session)) {
-    return "New Chat"
+    return <span className="truncate">New Chat</span>
   }
-  const sessionId = String(session.id || "").trim()
-  if (!sessionId) {
-    return "New Chat"
-  }
-  return `Session ${sessionId.slice(0, 8)}`
+  return latestMessageAt
+    ? <Timestamp time={latestMessageAt} variant="relative" className={timestampClassName} />
+    : null
 }
 
 const isHiddenUntilNamedSession = (session: Pick<ChatSession, "name" | "metadata">): boolean => {
@@ -1046,7 +1173,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
             <div className="space-y-2">
               <Tool
                 defaultOpen={
-                  EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
+                  shouldRenderEvaluationToolOutput(toolViewModel) ||
                   toolViewModel.state === 'output-error'
                 }
               >
@@ -1060,7 +1187,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                     <ToolInput input={toolViewModel.input} />
                   )}
                   {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
-                    EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
+                    shouldRenderEvaluationToolOutput(toolViewModel) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
                       <React.Suspense fallback={
                         <div className="rounded-md bg-card p-3">
                           <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
@@ -1329,6 +1456,7 @@ function ConversationViewer({
   defaultSidebarWidth = 320,
   forceProcedureIdForDispatch,
   defaultAccountIdForNewSession,
+  enableProcedureSteering = false,
 }: ConversationViewerProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(defaultSidebarCollapsed)
   const [sidebarWidth, setSidebarWidth] = useState(() => Math.min(Math.max(defaultSidebarWidth, 240), 520))
@@ -1355,6 +1483,8 @@ function ConversationViewer({
   const [isRenamingSession, setIsRenamingSession] = useState(false)
   const [pendingAssistantBySession, setPendingAssistantBySession] = useState<Record<string, PendingAssistantState>>({})
   const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
+  const manualScrollLockRef = React.useRef(false)
+  const lastScrollerTopRef = React.useRef<number | null>(null)
   const promptSubmitLockRef = React.useRef(false)
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const [atBottom, setAtBottom] = useState(true)
@@ -1406,6 +1536,26 @@ function ConversationViewer({
   const messages = propMessages || internalMessages  
   const selectedSessionId = propSelectedSessionId || internalSelectedSessionId
   const isExternallyControlledSession = Boolean(propSelectedSessionId?.trim())
+  const latestMessageAtBySession = React.useMemo(() => {
+    const latestBySession = new Map<string, string>()
+
+    for (const message of messages) {
+      if (!message.sessionId || !message.createdAt) {
+        continue
+      }
+      const messageTime = new Date(message.createdAt).getTime()
+      if (Number.isNaN(messageTime)) {
+        continue
+      }
+
+      const existing = latestBySession.get(message.sessionId)
+      if (!existing || messageTime > new Date(existing).getTime()) {
+        latestBySession.set(message.sessionId, message.createdAt)
+      }
+    }
+
+    return latestBySession
+  }, [messages])
 
   useEffect(() => {
     selectedSessionIdRef.current = selectedSessionId
@@ -2285,9 +2435,6 @@ function ConversationViewer({
     ].join(':')
   }, [selectedSessionId, showThinkingPlaceholder, sortedMessages])
   const shouldForceFollow = autoFollowEnabled
-    || showThinkingPlaceholder
-    || Boolean(pendingAssistantState)
-    || hasStreamingAssistantTail
   const pendingMessageForPrompt = React.useMemo(
     () => [...sortedMessages].reverse().find(message => unresolvedPendingMessageIds.has(message.id)) || null,
     [sortedMessages, unresolvedPendingMessageIds]
@@ -2382,18 +2529,59 @@ function ConversationViewer({
     setAtBottom(isNowAtBottom)
     if (isNowAtBottom) {
       setAutoFollowEnabled(true)
+      manualScrollLockRef.current = false
+      lastScrollerTopRef.current = null
       return
     }
-    if (showThinkingPlaceholder || Boolean(pendingAssistantState) || hasStreamingAssistantTail) {
-      return
+    if (manualScrollLockRef.current) {
+      setAutoFollowEnabled(false)
     }
-    setAutoFollowEnabled(false)
-  }, [hasStreamingAssistantTail, pendingAssistantState, showThinkingPlaceholder])
+  }, [])
 
   useEffect(() => {
     setAutoFollowEnabled(true)
     setAtBottom(true)
+    manualScrollLockRef.current = false
+    lastScrollerTopRef.current = null
   }, [selectedSessionId])
+
+  const handleScrollerScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const currentTop = event.currentTarget.scrollTop
+    const previousTop = lastScrollerTopRef.current
+    if (previousTop !== null && currentTop < previousTop - 1) {
+      manualScrollLockRef.current = true
+    }
+    lastScrollerTopRef.current = currentTop
+  }, [])
+
+  const handleScrollerWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    if (event.deltaY < 0) {
+      manualScrollLockRef.current = true
+    }
+  }, [])
+
+  const VirtuosoScroller = React.useMemo(
+    () =>
+      React.forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<"div">>(
+        function ConversationVirtuosoScroller({ onScroll, onWheel, ...props }, ref) {
+          return (
+            <div
+              ref={ref}
+              {...props}
+              onScroll={(event) => {
+                handleScrollerScroll(event)
+                onScroll?.(event)
+              }}
+              onWheel={(event) => {
+                handleScrollerWheel(event)
+                onWheel?.(event)
+              }}
+            />
+          )
+        }
+      ),
+    [handleScrollerScroll, handleScrollerWheel]
+  )
 
   useEffect(() => {
     if (!shouldForceFollow) {
@@ -2581,7 +2769,9 @@ function ConversationViewer({
 
         const clientSendStartedAt = new Date().toISOString()
         const nowIso = new Date().toISOString()
-        const responseTarget = getConsoleResponseTarget()
+        const responseTarget = enableProcedureSteering
+          ? targetSessionProcedureId
+          : getConsoleResponseTarget()
         const optimisticMessageId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         const optimisticMessage: ChatMessage = {
           id: optimisticMessageId,
@@ -2593,7 +2783,7 @@ function ConversationViewer({
           humanInteraction: 'CHAT',
           content: nextValue,
           responseTarget,
-          responseStatus: 'PENDING',
+          responseStatus: enableProcedureSteering ? 'COMPLETED' : 'PENDING',
           createdAt: nowIso,
         }
 
@@ -2609,15 +2799,32 @@ function ConversationViewer({
         let messagePersisted = false
         try {
           const client = getClient()
-          const dispatchMessageText = nextValue.length > 4000
-            ? `${nextValue.slice(0, 4000)}…`
-            : nextValue
-          const model = getConsoleSelectedModel()
-          const clientHistorySnapshot = buildClientHistorySnapshot(
-            messages,
-            targetSessionId,
-            nextValue,
-          )
+          const metadata = enableProcedureSteering
+            ? {
+                source: 'procedure-steering-input',
+                scope: 'all_agents',
+                sent_at: nowIso,
+              }
+            : {
+                source: 'console-prompt-input',
+                sent_at: nowIso,
+                model: {
+                  id: getConsoleSelectedModel(),
+                },
+                instrumentation: {
+                  client_send_started_at: clientSendStartedAt,
+                  client_prompt_length_chars: nextValue.length,
+                  client_user_message_text: nextValue.length > 4000
+                    ? `${nextValue.slice(0, 4000)}…`
+                    : nextValue,
+                  client_selected_model: getConsoleSelectedModel(),
+                  client_history_snapshot: buildClientHistorySnapshot(
+                    messages,
+                    targetSessionId,
+                    nextValue,
+                  ),
+                },
+              }
           const created = await (client.models.ChatMessage.create as any)({
             accountId: targetSessionAccountId,
             sessionId: targetSessionId,
@@ -2626,22 +2833,9 @@ function ConversationViewer({
             messageType: 'MESSAGE',
             humanInteraction: 'CHAT',
             content: nextValue,
-            metadata: JSON.stringify({
-              source: 'console-prompt-input',
-              sent_at: nowIso,
-              model: {
-                id: model,
-              },
-              instrumentation: {
-                client_send_started_at: clientSendStartedAt,
-                client_prompt_length_chars: nextValue.length,
-                client_user_message_text: dispatchMessageText,
-                client_selected_model: model,
-                client_history_snapshot: clientHistorySnapshot,
-              },
-            }),
+            metadata: JSON.stringify(metadata),
             responseTarget,
-            responseStatus: 'PENDING',
+            responseStatus: enableProcedureSteering ? 'COMPLETED' : 'PENDING',
           })
 
           const createdMessageId = created?.data?.id
@@ -2657,11 +2851,13 @@ function ConversationViewer({
               : message
           )))
 
-          markPendingAssistant(
-            targetSessionId,
-            persistedCreatedAt,
-            createdMessageId,
-          )
+          if (!enableProcedureSteering) {
+            markPendingAssistant(
+              targetSessionId,
+              persistedCreatedAt,
+              createdMessageId,
+            )
+          }
 
           setPromptValue('')
         } catch (error) {
@@ -2710,6 +2906,7 @@ function ConversationViewer({
       clearPendingAssistant,
       getConsoleResponseTarget,
       getConsoleSelectedModel,
+      enableProcedureSteering,
       markAuthUnavailable,
       markPendingAssistant,
       submitHitlResponse,
@@ -2777,10 +2974,16 @@ function ConversationViewer({
                 className="w-full justify-start text-left p-2 h-auto"
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                  {getSessionExplicitName(session) && (
+                    <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-medium truncate">
-                      {getSessionDisplayName(session)}
+                      <SessionLabel
+                        session={session}
+                        latestMessageAt={latestMessageAtBySession.get(session.id)}
+                        timestampClassName="text-xs font-medium"
+                      />
                     </div>
                   <div className="text-xs text-muted-foreground">
                       {session.messageCount ? `${session.messageCount} messages` : 'No messages'}
@@ -2802,7 +3005,7 @@ function ConversationViewer({
                 size="sm"
                 onClick={() => handleSessionSelect(session.id)}
                 className="w-full h-8 p-0"
-                title={getSessionDisplayName(session)}
+                title={getSessionTitleAttribute(session)}
               >
                 <MessageSquare className="h-4 w-4" />
               </Button>
@@ -2827,11 +3030,17 @@ function ConversationViewer({
           <div data-testid="conversation-main-header" className="h-12 border-b border-border px-3 pt-0.5">
             <div className="flex h-full items-center justify-between">
               <div className="flex min-w-0 items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                {getSessionExplicitName(selectedSession) && (
+                  <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                )}
                 <div className="min-w-0 flex items-center gap-2">
-                  <h3 className="font-medium text-sm truncate">
-                    {getSessionHeaderTitle(selectedSession)}
-                  </h3>
+                  <div className="font-medium text-sm truncate">
+                    <SessionLabel
+                      session={selectedSession}
+                      latestMessageAt={latestMessageAtBySession.get(selectedSession.id)}
+                      timestampClassName="font-medium text-sm"
+                    />
+                  </div>
                   <span className="text-xs text-muted-foreground truncate">
                     {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
                   </span>
@@ -2986,6 +3195,7 @@ function ConversationViewer({
                   )
                 )}
                 components={{
+                  Scroller: VirtuosoScroller,
                   Footer: () => (!showThinkingPlaceholder ? <div aria-hidden className="h-8" /> : null),
                 }}
               />
@@ -3016,22 +3226,24 @@ function ConversationViewer({
                 />
             </PromptInputBody>
             <PromptInputFooter className="justify-between gap-2">
-              <PromptInputSelect
-                value={selectedModel}
-                onValueChange={setSelectedModel}
-                disabled={isPromptDisabled || isPromptSubmitting}
-              >
-                <PromptInputSelectTrigger className="h-8 w-40 text-xs">
-                  <PromptInputSelectValue placeholder="Model" />
-                </PromptInputSelectTrigger>
-                <PromptInputSelectContent>
-                  {CONSOLE_CHAT_MODEL_OPTIONS.map((option) => (
-                    <PromptInputSelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </PromptInputSelectItem>
-                  ))}
-                </PromptInputSelectContent>
-              </PromptInputSelect>
+              {!enableProcedureSteering && (
+                <PromptInputSelect
+                  value={selectedModel}
+                  onValueChange={setSelectedModel}
+                  disabled={isPromptDisabled || isPromptSubmitting}
+                >
+                  <PromptInputSelectTrigger className="h-8 w-40 text-xs">
+                    <PromptInputSelectValue placeholder="Model" />
+                  </PromptInputSelectTrigger>
+                  <PromptInputSelectContent>
+                    {CONSOLE_CHAT_MODEL_OPTIONS.map((option) => (
+                      <PromptInputSelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </PromptInputSelectItem>
+                    ))}
+                  </PromptInputSelectContent>
+                </PromptInputSelect>
+              )}
               <PromptInputSubmit disabled={isPromptDisabled || !promptValue.trim() || isPromptSubmitting} />
             </PromptInputFooter>
           </PromptInput>

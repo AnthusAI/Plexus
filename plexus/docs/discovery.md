@@ -18,7 +18,7 @@ Result shape:
 ```lua
 {
   ["plexus.scorecards"] = { "info", "list" },
-  ["plexus.score"] = { "evaluations", "info", "predict", "set_champion" },
+  ["plexus.score"] = { "contradictions", "evaluations", "info", "predict", "pull", "test", "update" },
   ["plexus.evaluation"] = { "compare", "find_recent", "info", "run" },
   ["plexus.handle"] = { "await", "cancel", "peek", "status" },
   ["plexus.docs"] = { "get", "list" },
@@ -48,6 +48,9 @@ Example return value:
   "evaluation-and-feedback/evaluation-alignment",
   "evaluation-and-feedback/feedback-alignment",
   "evaluation-and-feedback/optimizer-cookbook",
+  "evaluation-and-feedback/optimizer-cookbook-normal",
+  "evaluation-and-feedback/optimizer-cookbook-structural",
+  "evaluation-and-feedback/optimizer-cookbook-creative",
   "handles-and-budgets",
   "long-running-apis",
   "overview",
