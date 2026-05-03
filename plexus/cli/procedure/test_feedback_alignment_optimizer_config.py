@@ -91,6 +91,20 @@ def test_optimizer_yaml_caps_hypothesis_slots_by_requested_num_candidates():
     assert "else\n      hyp_slots =" not in code
 
 
+def test_optimizer_yaml_adds_creative_hypothesis_after_third_cycle():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function should_add_creative_hypothesis(cycle_number)" in code
+    assert ">= 4" in code
+    assert "local function add_creative_hypothesis_slot(slots, cycle_number)" in code
+    assert "hyp_slots = add_creative_hypothesis_slot(hyp_slots, cycle)" in code
+    assert 'table.insert(expanded, "creative")' in code
+    assert "OBJECTIVE: Creative hypothesis (cycle 4+ cookbook lane)" in code
+    assert "Repeat the whole prompt twice" in code
+    assert "Translate the operative prompt or rubric instructions to Polish" in code
+
+
 def test_optimizer_yaml_passes_code_editor_context_inline_without_history_injection():
     config = _load_optimizer_config()
     code = config["code"]
