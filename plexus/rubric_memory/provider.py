@@ -28,12 +28,39 @@ class RubricMemoryContextProvider:
         self.citation_formatter = citation_formatter or RubricMemoryCitationFormatter()
         self.last_diagnostics: list[dict[str, Any]] = []
 
+    def _unavailable_context(
+        self,
+        *,
+        scorecard_identifier: str,
+        score_identifier: str,
+        reason: str,
+    ) -> RubricMemoryCitationContext:
+        diagnostics = [
+            {
+                "kind": "rubric_memory_unavailable",
+                "reason": reason,
+                "scorecard": scorecard_identifier,
+                "score": score_identifier,
+            }
+        ]
+        self.last_diagnostics = diagnostics
+        return RubricMemoryCitationContext(
+            markdown_context="",
+            citation_index=[],
+            machine_context={
+                "available": False,
+                "reason": reason,
+            },
+            diagnostics=diagnostics,
+        )
+
     async def generate_for_score_item(
         self,
         *,
         scorecard_identifier: str,
         score_identifier: str,
         score_id: str,
+        score_version_id: str | None = None,
         transcript_text: str = "",
         model_value: str = "",
         model_explanation: str = "",
@@ -41,7 +68,12 @@ class RubricMemoryContextProvider:
         feedback_comment: str = "",
         topic_hint: str | None = None,
     ) -> RubricMemoryCitationContext:
-        authority = await RubricAuthorityResolver(self.api_client).resolve(score_id)
+        authority_resolver = RubricAuthorityResolver(self.api_client)
+        authority = (
+            await authority_resolver.resolve_score_version(score_version_id)
+            if score_version_id
+            else await authority_resolver.resolve(score_id)
+        )
         request = RubricEvidencePackRequest(
             scorecard_identifier=scorecard_identifier,
             score_identifier=score_identifier,
@@ -63,6 +95,7 @@ class RubricMemoryContextProvider:
         scorecard_identifier: str,
         score_identifier: str,
         score_id: str,
+        score_version_id: str | None = None,
         transcript_text: str = "",
         model_value: str = "",
         model_explanation: str = "",
@@ -74,6 +107,7 @@ class RubricMemoryContextProvider:
             scorecard_identifier=scorecard_identifier,
             score_identifier=score_identifier,
             score_id=score_id,
+            score_version_id=score_version_id,
             item_contexts=[
                 {
                     "key": "item",
@@ -95,14 +129,31 @@ class RubricMemoryContextProvider:
         score_identifier: str,
         score_id: str,
         item_contexts: Sequence[dict[str, str]],
+        score_version_id: str | None = None,
         topic_hint: str | None = None,
     ) -> dict[str, RubricMemoryCitationContext]:
         """Retrieve citation context for existing LLM consumers without synthesis."""
-        authority = await RubricAuthorityResolver(self.api_client).resolve(score_id)
-        retriever = BiblicusRubricEvidenceRetriever.from_score(
-            scorecard_name=scorecard_identifier,
-            score_name=score_identifier,
+        authority_resolver = RubricAuthorityResolver(self.api_client)
+        authority = (
+            await authority_resolver.resolve_score_version(score_version_id)
+            if score_version_id
+            else await authority_resolver.resolve(score_id)
         )
+        try:
+            retriever = BiblicusRubricEvidenceRetriever.from_score(
+                scorecard_name=scorecard_identifier,
+                score_name=score_identifier,
+            )
+        except FileNotFoundError as exc:
+            unavailable = self._unavailable_context(
+                scorecard_identifier=scorecard_identifier,
+                score_identifier=score_identifier,
+                reason=str(exc),
+            )
+            return {
+                item_context["key"]: unavailable
+                for item_context in item_contexts
+            }
         contexts: dict[str, RubricMemoryCitationContext] = {}
         diagnostics: list[dict[str, Any]] = []
         for item_context in item_contexts:
@@ -133,10 +184,17 @@ class RubricMemoryContextProvider:
         self,
         request: RubricEvidencePackRequest,
     ) -> RubricMemoryCitationContext:
-        retriever = BiblicusRubricEvidenceRetriever.from_score(
-            scorecard_name=request.scorecard_identifier,
-            score_name=request.score_identifier,
-        )
+        try:
+            retriever = BiblicusRubricEvidenceRetriever.from_score(
+                scorecard_name=request.scorecard_identifier,
+                score_name=request.score_identifier,
+            )
+        except FileNotFoundError as exc:
+            return self._unavailable_context(
+                scorecard_identifier=request.scorecard_identifier,
+                score_identifier=request.score_identifier,
+                reason=str(exc),
+            )
         service = RubricEvidencePackService(
             retriever=retriever,
             synthesizer=TactusRubricEvidenceSynthesizer(),
@@ -236,10 +294,28 @@ class RubricMemoryContextProvider:
         scorecard_identifier: str,
         score_identifier: str,
     ) -> dict[str, Any]:
-        paths = S3RubricMemoryCorpusResolver().resolve(
-            scorecard_name=scorecard_identifier,
-            score_name=score_identifier,
-        )
+        try:
+            paths = S3RubricMemoryCorpusResolver().resolve(
+                scorecard_name=scorecard_identifier,
+                score_name=score_identifier,
+            )
+        except FileNotFoundError as exc:
+            return {
+                "available": False,
+                "roots": [
+                    {
+                        "scope_level": "unknown",
+                        "path": str(exc),
+                        "exists": False,
+                    }
+                ],
+                "diagnostics": [
+                    {
+                        "kind": "rubric_memory_unavailable",
+                        "reason": str(exc),
+                    }
+                ],
+            }
         roots = [
             {
                 "scope_level": source.scope_level,

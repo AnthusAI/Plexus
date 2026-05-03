@@ -87,4 +87,31 @@ describe('TaskStatus', () => {
     // Complete turns bg-true only if the last pipeline stage is also COMPLETED
     expect(complete2.className).toMatch(/bg-true|bg-progress-background|bg-neutral/)
   })
+
+  test('shows Local before worker claim labels for local dispatch mode', () => {
+    render(
+      <TaskStatus
+        status="PENDING"
+        dispatchMode="local"
+        workerNodeId="worker-1"
+        showPreExecutionStages
+      />
+    )
+
+    expect(screen.getByText('Local')).toBeInTheDocument()
+    expect(screen.queryByText('Claimed...')).not.toBeInTheDocument()
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
+  test('uses Pending as the reserved pre-execution state while dispatch mode is unknown', () => {
+    render(
+      <TaskStatus
+        status="PENDING"
+        dispatchMode="pending"
+      />
+    )
+
+    expect(screen.getByText('Pending...')).toBeInTheDocument()
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
 })

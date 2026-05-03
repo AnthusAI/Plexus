@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "eaa59680-9fb9-435a-b620-b136d2a4ea5a",
+  "issue_id": "plx-51488a8b-15e2-45a9-9fa5-f4cabba0eff4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T18:53:12.124Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Set up Cursor MCP configuration so this workspace can launch the local Plexus MCP server and exercise execute_tactus as an actual Cursor MCP tool during real hardening runs.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-07dc0d44-08df-4248-97af-1f928bc2e19d",
+    "priority": 0,
+    "status": "open",
+    "title": "Configure Cursor MCP server for local execute_tactus testing"
+  }
+}

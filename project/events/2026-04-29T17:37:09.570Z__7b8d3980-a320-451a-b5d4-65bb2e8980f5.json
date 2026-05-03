@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7b8d3980-a320-451a-b5d4-65bb2e8980f5",
+  "issue_id": "plx-8cfdd2b4-4d40-4403-9228-ea83b0fea08b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T17:37:09.570Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Address empirical miss from provider-full-openai-gpt54-mini-budgetcontract-005 by clarifying false_negative_feedback_summary fixture field guidance (item_id/pattern/comment) and adding non-empty representative_item_id validation in harness checks/tests.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+    "priority": 1,
+    "status": "open",
+    "title": "Tighten false-negative summary prompt/checker after empirical miss"
+  }
+}

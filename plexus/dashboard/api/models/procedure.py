@@ -48,6 +48,8 @@ class Procedure(BaseModel):
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
         scoreVersionId: Optional[str] = None,
+        attachedFiles: Optional[List[str]] = None,
+        metadata: Optional[str] = None,
         client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
@@ -66,6 +68,8 @@ class Procedure(BaseModel):
         self.scorecardId = scorecardId
         self.scoreId = scoreId
         self.scoreVersionId = scoreVersionId
+        self.attachedFiles = attachedFiles or []
+        self.metadata = metadata
 
     @classmethod
     def fields(cls) -> str:
@@ -112,6 +116,8 @@ class Procedure(BaseModel):
             scorecardId=data.get('scorecardId'),
             scoreId=data.get('scoreId'),
             scoreVersionId=data.get('scoreVersionId'),
+            attachedFiles=data.get('attachedFiles') or [],
+            metadata=data.get('metadata'),
             client=client
         )
 
@@ -126,6 +132,7 @@ class Procedure(BaseModel):
         parentProcedureId: Optional[str] = None,
         isTemplate: bool = False,
         code: Optional[str] = None,
+        name: Optional[str] = None,
         state: str = "start",
         scoreVersionId: Optional[str] = None
     ) -> 'Procedure':
@@ -140,6 +147,7 @@ class Procedure(BaseModel):
             parentProcedureId: Optional ID of the parent procedure (if this is an instance)
             isTemplate: Whether this procedure is a template (default: False)
             code: Optional YAML code for the procedure
+            name: Optional explicit name (overrides name extracted from code)
             state: Initial state (default: "start")
             scoreVersionId: Optional ID of the score version
 
@@ -151,10 +159,8 @@ class Procedure(BaseModel):
         else:
             logger.debug(f"Creating standalone procedure")
 
-        # Generate name from code or use default
-        name = "Lua DSL Procedure"
-        if code:
-            # Try to extract name from YAML
+        # Determine name: explicit > extracted from code > default
+        if not name and code:
             try:
                 import yaml
                 yaml_data = yaml.safe_load(code)
@@ -162,13 +168,15 @@ class Procedure(BaseModel):
                     name = yaml_data['name']
             except:
                 pass
+        if not name:
+            name = "Lua DSL Procedure"
 
         input_data = {
             'accountId': accountId,
             'name': name,
             'featured': featured,
             'isTemplate': isTemplate,
-            # Note: 'state' is NOT supported in CreateProcedureInput GraphQL schema
+            'status': 'RUNNING',
         }
 
         # Add optional fields if provided
@@ -178,7 +186,8 @@ class Procedure(BaseModel):
             input_data['scoreId'] = scoreId
         if parentProcedureId:
             input_data['parentProcedureId'] = parentProcedureId
-        if code:
+        # Only store code in DynamoDB if it fits (400KB limit); large YAML goes to S3
+        if code and len(code.encode("utf-8")) < 350_000:
             input_data['code'] = code
         if scoreVersionId:
             input_data['scoreVersionId'] = scoreVersionId
@@ -268,23 +277,29 @@ class Procedure(BaseModel):
         scorecardId: Optional[str] = None,
         scoreId: Optional[str] = None,
         code: Optional[str] = None,
+        metadata: Optional[str] = None,
+        status: Optional[str] = None,
+        name: Optional[str] = None,
     ) -> 'Procedure':
         """Update this procedure.
-        
+
         Args:
             featured: Whether this procedure should be featured
             scorecardId: New scorecard ID (optional)
             scoreId: New score ID (optional)
             code: New procedure YAML/code (optional)
-            
+            metadata: JSON metadata string (optional) — use to store code_s3_key etc.
+            status: New status string e.g. 'RUNNING', 'COMPLETE', 'ERROR' (optional)
+            name: New display name (optional)
+
         Returns:
             Updated Procedure instance
         """
         if not self._client:
             raise ValueError("Cannot update procedure without client")
-            
+
         logger.debug(f"Updating procedure {self.id}")
-        
+
         input_data = {'id': self.id}
         if featured is not None:
             input_data['featured'] = featured
@@ -294,6 +309,12 @@ class Procedure(BaseModel):
             input_data['scoreId'] = scoreId
         if code is not None:
             input_data['code'] = code
+        if metadata is not None:
+            input_data['metadata'] = metadata
+        if status is not None:
+            input_data['status'] = status
+        if name is not None:
+            input_data['name'] = name
             
         mutation = """
         mutation UpdateProcedure($input: UpdateProcedureInput!) {
@@ -312,6 +333,8 @@ class Procedure(BaseModel):
         self.scoreId = updated_procedure.scoreId
         self.code = updated_procedure.code
         self.updatedAt = updated_procedure.updatedAt
+        self.status = updated_procedure.status
+        self.name = updated_procedure.name
         
         return self
 

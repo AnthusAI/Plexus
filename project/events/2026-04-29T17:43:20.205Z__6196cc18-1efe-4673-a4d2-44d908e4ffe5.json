@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6196cc18-1efe-4673-a4d2-44d908e4ffe5",
+  "issue_id": "plx-fa344e6d-b3dd-4641-b4a5-8cafe5f6730a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-29T17:43:20.205Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Update the metrics aggregation Lambda to query, dedupe, classify, and write account/scorecard/score scoped FeedbackItem buckets.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-9f0720f4-4a36-41fb-9c8b-044316722e95",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement scoped FeedbackItem Lambda aggregation"
+  }
+}

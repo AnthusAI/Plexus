@@ -378,108 +378,77 @@ if not CORE_IMPORTED:
 mcp = FastMCP(
     name="Plexus MCP Server",
     instructions="""
-    Access Plexus Dashboard functionality, run evaluations, and manage scorecards.
-    
-    ## Scorecard Management
-    - plexus_scorecards_list: List available scorecards with optional filtering by name or key
-    - plexus_scorecard_info: Get detailed information about a specific scorecard, including sections and scores
-    
-    ## Score Management
-    - plexus_score_info: Get detailed information about a specific score, including location, configuration, champion version details, and version history. Supports intelligent search across scorecards.
-    - plexus_score_update: **RECOMMENDED** - Update a score's configuration by creating a new version with provided YAML content. Supports parent_version_id for version lineage. Use this for most score updates.
-    - plexus_score_pull: Pull a score's champion version YAML configuration to a local file (for local development workflows)
-    - plexus_score_push: Push a score's local YAML configuration file to create a new version (for local development workflows)
-    - plexus_score_delete: Delete a specific score by ID (uses shared ScoreService - includes safety confirmation step)
-    
-    ## Evaluation Tools
-    - plexus_evaluation_run: Run an accuracy evaluation on a Plexus scorecard using the same code path as the CLI. 
-      The server will confirm dispatch but will not track progress or results. 
-      Monitor evaluation status via Plexus Dashboard or system logs.
-    - plexus_evaluation_info: Get detailed information about a specific evaluation by ID or get the latest evaluation.
-      Supports multiple output formats (json, yaml, text) and optional examples/quadrants.
-    - plexus_score_result_investigate: Investigate a single score result by running LLM inference to determine why
-      the prediction was wrong and suggest a concrete fix. Fetches score result, feedback item, transcript, and
-      score configuration, then uses an LLM to analyze the misclassification. Use after plexus_evaluation_score_result_find.
-    
-    ## Report Tools
-    - plexus_reports_list: List available reports with optional filtering by report configuration
-    - plexus_report_info: Get detailed information about a specific report
-    - plexus_report_last: Get the most recent report, optionally filtered by report configuration
-    - plexus_report_configurations_list: List available report configurations
-    
-    ## Item Tools
-    - plexus_item_last: Get the most recent item for an account, with optional score results
-    - plexus_item_info: Get detailed information about a specific item by its ID, with optional score results
-    
-    ## Task Tools
-    - plexus_task_last: Get the most recent task for an account, with optional filtering by task type
-    - plexus_task_info: Get detailed information about a specific task by its ID, including task stages
-    
-    ## Feedback Alignment & Score Testing Tools
-    - plexus_feedback_alignment: Generate comprehensive feedback alignment with confusion matrix, accuracy, and AC1 agreement - RUN THIS FIRST to understand overall performance before using find
-    - plexus_feedback_find: Find feedback items where human reviewers corrected predictions to identify score improvement opportunities
-    - plexus_feedback_invalidate: Invalidate exactly one approved feedback item by feedback ID or item identifier
-    - plexus_predict: Run predictions on single or multiple items using specific score configurations for testing and validation
-    
-    ## Documentation Tools
-    - get_plexus_documentation: Access specific documentation files by name (e.g., 'score-yaml-format' for Score YAML configuration guide, 'feedback-alignment' for feedback alignment and score testing guide)
-    
-    ## Experiment Tools
-    - plexus_procedure_create: Create a new procedure
-    - plexus_procedure_list: List procedures for an account
-    - plexus_procedure_info: Get detailed procedure information
-    - plexus_procedure_run: Run a procedure 
-    - plexus_procedure_chat_sessions: Get chat sessions for a procedure (optional - shows conversation activity)
-    - plexus_procedure_chat_messages: Get detailed chat messages for debugging conversation flow and tool calls/responses
-    
-    ## Utility Tools
-    - think: REQUIRED tool to use before other tools to structure reasoning and plan approach
+    Plexus is a programmable AI-scoring runtime.  Use the single `execute_tactus`
+    tool to interact with it.  The tool executes a snippet of Tactus (Lua-flavoured
+    DSL) inside a sandboxed Plexus runtime that injects a `plexus` module with
+    sub-namespaces for every major feature area.
+
+    ## Quick examples
+
+    List scorecards:
+    ```
+    return plexus.scorecards.list({})
+    ```
+
+    Get score info:
+    ```
+    return plexus.score.info({ id = "my-score-key" })
+    ```
+
+    Run an evaluation:
+    ```
+    return plexus.evaluation.run({
+      scorecard = "My Scorecard",
+      score     = "My Score",
+      count     = 50
+    })
+    ```
+
+    Look up a recent item:
+    ```
+    return plexus.item.last({ count = 1 })
+    ```
+
+    Predict on an item:
+    ```
+    return plexus.score.predict({
+      scorecard_name = "My Scorecard",
+      score_name     = "My Score",
+      item_id        = "abc-123"
+    })
+    ```
+
+    ## Self-documenting
+
+    To discover what namespaces and methods are available, call:
+    ```
+    return plexus.api.list()
+    ```
+
+    To read documentation for a specific topic:
+    ```
+    return plexus.docs.get({ name = "score-yaml-format" })
+    ```
+
+    To list available documentation topics:
+    ```
+    return plexus.docs.list({})
+    ```
     """
 )
 
-# --- Tool Registrations ---
+# --- Tool Registration ---
 
-# Register tools from separate modules
+# Only the execute_tactus tool is registered; all Plexus functionality is
+# exposed through that single tool via the Tactus runtime.
 try:
-    from tools.util.think import register_think_tool
-    from tools.scorecard.scorecards import register_scorecard_tools
-    from tools.report.reports import register_report_tools
-    from tools.score.scores import register_score_tools
-    from tools.score.guidelines import register_guidelines_tools
-    from tools.item.items import register_item_tools
-    from tools.task.tasks import register_task_tools
-    from tools.feedback.feedback import register_feedback_tools
-    from tools.evaluation.evaluations import register_evaluation_tools
-    from tools.prediction.predictions import register_prediction_tools
-    from tools.documentation.docs import register_documentation_tools
-    from tools.cost.analysis import register_cost_analysis_tools
-    from tools.dataset.datasets import register_dataset_tools
-    from tools.procedure.procedures import register_procedure_tools
-    from tools.rubric_memory.rubric_memory import register_rubric_memory_tools
-    from tools.chat.chats import register_chat_tools
-    
-    register_think_tool(mcp)
-    register_scorecard_tools(mcp)
-    register_report_tools(mcp)
-    register_score_tools(mcp)
-    register_guidelines_tools(mcp)
-    register_item_tools(mcp)
-    register_task_tools(mcp)
-    register_feedback_tools(mcp)
-    register_evaluation_tools(mcp)
-    register_prediction_tools(mcp)
-    register_documentation_tools(mcp)
-    register_cost_analysis_tools(mcp)
-    register_dataset_tools(mcp)
-    register_procedure_tools(mcp)
-    register_rubric_memory_tools(mcp)
-    register_chat_tools(mcp)
-
-    logger.info("Successfully registered separated tools")
+    from tools.tactus_runtime.execute import register_tactus_tools
+    register_tactus_tools(mcp)
+    logger.info("Successfully registered execute_tactus tool")
 except ImportError as e:
-    logger.warning(f"Could not import separated tools: {e}")
+    logger.warning(f"Could not import execute_tactus tool: {e}")
 except Exception as e:
-    logger.error(f"Error registering separated tools: {e}", exc_info=True)
+    logger.error(f"Error registering execute_tactus tool: {e}", exc_info=True)
 
 # --- Tool Implementations ---
 
@@ -649,81 +618,10 @@ if __name__ == "__main__":
     # Also initialize the local one for backward compatibility
     initialize_default_account()
 
-    # Register ALL modular tools
-    print("=" * 80, file=sys.stderr)
-    print("STARTING MODULAR TOOL REGISTRATION", file=sys.stderr)
-    print("=" * 80, file=sys.stderr)
-    try:
-        print("Importing tool registration functions...", file=sys.stderr)
-        from tools.util.think import register_think_tool
-        from tools.util.docs import register_docs_tool
-        from tools.scorecard.scorecards import register_scorecard_tools
-        from tools.score.scores import register_score_tools
-        from tools.score.guidelines import register_guidelines_tools
-        from tools.evaluation.evaluations import register_evaluation_tools
-        from tools.procedure.procedures import register_procedure_tools
-        from tools.report.reports import register_report_tools
-        from tools.feedback.feedback import register_feedback_tools
-        from tools.task.tasks import register_task_tools
-        from tools.item.items import register_item_tools
-        from tools.prediction.predictions import register_prediction_tools
-        from tools.chat.chats import register_chat_tools
-        print("✓ All imports successful", file=sys.stderr)
-
-        print("Registering utility tools...", file=sys.stderr)
-        register_think_tool(mcp)
-        register_docs_tool(mcp)
-        print("✓ Registered utility tools", file=sys.stderr)
-
-        print("Registering scorecard tools...", file=sys.stderr)
-        register_scorecard_tools(mcp)
-        print("✓ Registered scorecard tools", file=sys.stderr)
-
-        print("Registering score management tools...", file=sys.stderr)
-        register_score_tools(mcp)
-        register_guidelines_tools(mcp)
-        print("✓ Registered score management tools", file=sys.stderr)
-
-        print("Registering evaluation tools...", file=sys.stderr)
-        register_evaluation_tools(mcp)
-        print("✓ Registered evaluation tools", file=sys.stderr)
-
-        print("Registering procedure tools...", file=sys.stderr)
-        register_procedure_tools(mcp)
-        print("✓ Registered procedure tools", file=sys.stderr)
-
-        print("Registering report tools...", file=sys.stderr)
-        register_report_tools(mcp)
-        print("✓ Registered report tools", file=sys.stderr)
-
-        print("Registering feedback tools...", file=sys.stderr)
-        register_feedback_tools(mcp)
-        print("✓ Registered feedback tools", file=sys.stderr)
-
-        print("Registering task tools...", file=sys.stderr)
-        register_task_tools(mcp)
-        print("✓ Registered task tools", file=sys.stderr)
-
-        print("Registering item tools...", file=sys.stderr)
-        register_item_tools(mcp)
-        print("✓ Registered item tools", file=sys.stderr)
-
-        print("Registering prediction tools...", file=sys.stderr)
-        register_prediction_tools(mcp)
-        print("✓ Registered prediction tools", file=sys.stderr)
-
-        print("Registering chat tools...", file=sys.stderr)
-        register_chat_tools(mcp)
-        print("✓ Registered chat tools", file=sys.stderr)
-
-        print("=" * 80, file=sys.stderr)
-        print("ALL MODULAR TOOLS REGISTERED SUCCESSFULLY", file=sys.stderr)
-        print("=" * 80, file=sys.stderr)
-    except Exception as e:
-        print(f"✗ ERROR registering modular tools: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        # Continue anyway - some tools may still work
+    # Tool registration happens once at module-import time (see the
+    # `register_*_tools(mcp)` calls near the top of this file). Do NOT
+    # re-register here: doing so produces "Component already exists" warnings
+    # and doubles import cost.
 
     # Run the server with appropriate transport
     try:

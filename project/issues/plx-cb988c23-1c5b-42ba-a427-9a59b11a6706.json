@@ -1,0 +1,18 @@
+{
+  "id": "plx-cb988c23-1c5b-42ba-a427-9a59b11a6706",
+  "title": "Tactus host-module mechanism (Tier 1)",
+  "description": "# Tactus host-module mechanism (Tier 1)\n\n## Purpose\n\nUpstream Tactus work to allow host applications (Plexus, score-processor-lambda, future hosts) to register Python-backed modules accessible via Lua `require()` from sandboxed Tactus code, without adding host-specific code to the Tactus standard library.\n\n## Background\n\nTactus already has `require()` working with a Python-backed `package.preload` searcher (see `tactus/core/lua_sandbox.py` `_setup_safe_require`, `_setup_python_stdlib_loader` and `tactus/stdlib/loader.py` `StdlibModuleLoader`). The searcher is currently restricted to names starting with `tactus.` loaded from `tactus/stdlib/*.py`.\n\nWhat's missing is a public host API to register additional Python-backed modules from outside Tactus, with name namespaces other than `tactus.*`.\n\n## Scope (Tier 1, minimal)\n\n- Add `TactusRuntime.register_python_module(name, module, version=None)` host API.\n- Extend the Python-backed `package.preload` searcher to consult a host-registered map in addition to `tactus/stdlib/`.\n- Relax the `tactus.` prefix restriction to allow arbitrary registered names.\n- Tests modeled on `tests/stdlib/test_require_python.py`.\n- Optional hardening: remove `string.dump` from sandbox while we are in there.\n\n## Out of scope (Tier 2, separate future initiative)\n\nReal package system: manifests, semver versioning, dependency graphs, file-system discovery (`tactus_modules/`), capability declarations, central registry, `tactus install` CLI, polyglot package format. Tier 1 is forward-compatible with all of these — a Tier 2 `TactusPackage` registered programmatically by the host would be equivalent to a Tier 1 `register_python_module` call.\n\n## Estimate\n\n~50 lines of Tactus code + ~100 lines of tests. 1–2 days of focused work.\n\n## Coordination\n\nTactus is internal — this lands as a normal Tactus stdlib enhancement. Plexus pins to a Tactus feature branch during development; Tactus releases the feature in a normal version when stable.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a097a1b9-7d32-4d78-96fe-8a9aad61e097",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-04-28T21:01:41.087402Z",
+  "updated_at": "2026-04-28T21:01:41.087402Z",
+  "closed_at": null,
+  "custom": {}
+}

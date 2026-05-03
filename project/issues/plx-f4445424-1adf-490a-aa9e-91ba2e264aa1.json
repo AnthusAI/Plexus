@@ -1,0 +1,31 @@
+{
+  "id": "plx-f4445424-1adf-490a-aa9e-91ba2e264aa1",
+  "title": "Build stub PlexusModule for the spike (read-only operations)",
+  "description": "# Build stub PlexusModule for the spike\n\n## What\n\nA minimal Python module that, when registered into a TactusRuntime, exposes the read-only subset of the v1 Lua API surface needed for the spike tasks. Stubs only — backed by hand-curated fixture data, not real Plexus services.\n\n## Surface to stub\n\n- `plexus.scorecards.list`, `plexus.scorecards.info`\n- `plexus.score.info`, `plexus.score.predict`, `plexus.score.evaluations`\n- `plexus.feedback.find`, `plexus.feedback.alignment`\n- `plexus.evaluation.info`, `plexus.evaluation.find_recent`\n- `plexus.item.info`, `plexus.item.last`\n- `plexus.task.info`, `plexus.task.last`\n- `plexus.docs.list`, `plexus.docs.get`\n- `plexus.budget.remaining`, `plexus.budget.with`\n- `plexus.cost.analysis`\n\n## Stubbing approach\n\n- Backed by JSON fixture files under `spikes/runtime-mcp-validation/fixtures/`.\n- Realistic data shapes — must match what the real PlexusModule will eventually return so the spike validates against the actual API.\n- Predictable / idempotent so test runs are reproducible.\n\n## Constraints\n\n- Stub must be invokable from sandboxed Tactus Lua via `local plexus = require('plexus')`. Requires the host-module mechanism from Epic 2 (or a temporary in-spike workaround that mutates `package.preload` directly via Lupa). Decision: prefer waiting for Epic 2's API; if it's not ready, use the workaround and document the tech-debt.\n- Stubbed `plexus.evaluation.run` lives in a separate task (next).\n\n## Deliverable\n\n`spikes/runtime-mcp-validation/plexus_module_stub.py` plus fixtures, registerable into a TactusRuntime.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d25a326a-bc1f-4453-b650-51d6aa443283",
+      "author": "ryan",
+      "text": "Progress: created the fixture-backed PlexusModule stub for the spike.\n\nFiles added:\n- `spikes/runtime-mcp-validation/plexus_module_stub.py`\n- `spikes/runtime-mcp-validation/fixtures/plexus_stub_data.json`\n\nImplemented namespaces and methods for the read-only spike surface:\n- `plexus.scorecards.{list,info}`\n- `plexus.score.{info,evaluations,predict,set_champion}` (set_champion records HITL request; no real mutation)\n- `plexus.item.{info,last}`\n- `plexus.feedback.{find,alignment}`\n- `plexus.evaluation.{info,find_recent,compare}`\n- `plexus.docs.{list,get}`\n- `plexus.budget.{remaining,with}` (stubbed sub-budget recording)\n- `plexus.cost.analysis`\n- `plexus.dataset.{build_from_feedback_window,check_associated}`\n- `plexus.report.{configurations_list,run}`\n- `plexus.procedure.{info,chat_sessions,chat_messages}`\n- `plexus.api.list`\n\nValidation run:\n- `python -m py_compile spikes/runtime-mcp-validation/plexus_module_stub.py`\n- Direct sanity-check of representative APIs: scorecard list, score info, predict, feedback find, evaluation compare, dataset build, docs list, HITL recording, and ITEM_NOT_FOUND structured error.\n\nTask remains `in_progress` pending review/landing.",
+      "created_at": "2026-04-28T22:10:39.575105Z"
+    },
+    {
+      "id": "688119d8-6a7e-4832-92ec-254bf2c4181f",
+      "author": "ryan",
+      "text": "Added `spikes/runtime-mcp-validation/host_module_contract.md` to pin down the Plexus/Tactus integration contract for the spike.\n\nKey contract points:\n- Production Plexus registers `plexus` with `runtime.register_python_module(\"plexus\", plexus_module)`.\n- Lua code uses only `local plexus = require(\"plexus\")`.\n- `plexus` is an explicit host capability, not a stdlib module or arbitrary Python import.\n- Host modules must resolve before local `.tac` files so `plexus.tac` cannot shadow the capability.\n- Existing `tactus.*` stdlib Python imports remain fallback after `.tac` searchers.\n- The current harness shim is explicitly temporary and should be replaced once Plexus depends on a Tactus version with host modules.",
+      "created_at": "2026-04-29T00:28:44.738390Z"
+    }
+  ],
+  "created_at": "2026-04-28T21:06:00.128355Z",
+  "updated_at": "2026-04-29T00:28:44.738390Z",
+  "closed_at": null,
+  "custom": {}
+}

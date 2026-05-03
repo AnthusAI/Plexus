@@ -147,6 +147,8 @@ class ProcedureService:
         template_id: Optional[str] = None,
         score_version_id: Optional[str] = None,
         stage_configs: Optional[Dict[str, Any]] = None,
+        name: Optional[str] = None,
+        dispatch_mode: Optional[str] = None,
     ) -> ProcedureCreationResult:
         """Create a new procedure.
 
@@ -254,19 +256,52 @@ class ProcedureService:
                         if resolved:
                             score_id = resolved
 
-            # Create experiment
             procedure = Procedure.create(
                 client=self.client,
                 accountId=account_id,
                 scorecardId=scorecard_id,
                 scoreId=score_id,
-                parentProcedureId=template.id if template else None,  # Changed from templateId
-                isTemplate=False,  # Mark as instance, not template
-                code=yaml_config,  # Store YAML in procedure
+                parentProcedureId=template.id if template else None,
+                isTemplate=False,
                 featured=featured,
-                scoreVersionId=score_version_id
+                scoreVersionId=score_version_id,
+                code=yaml_config,
+                name=name,
             )
-            
+
+            # Upload YAML as code.tac to S3 and record the key in metadata.
+            # Also seed scorecard_name/score_name so the dashboard subtitle renders
+            # immediately without waiting for the first Lua State checkpoint.
+            try:
+                import json as _json
+                current_meta = {}
+                try:
+                    current_meta = _json.loads(procedure.metadata or "{}") or {}
+                except Exception:
+                    pass
+                if scorecard_identifier:
+                    current_meta["scorecard_name"] = scorecard_identifier
+                if score_identifier:
+                    current_meta["score_name"] = score_identifier
+                if yaml_config:
+                    try:
+                        _yaml_data = yaml.safe_load(yaml_config)
+                        if isinstance(_yaml_data, dict) and _yaml_data.get("procedure_type"):
+                            current_meta["procedure_type"] = _yaml_data["procedure_type"]
+                    except Exception:
+                        pass
+                if yaml_config:
+                    try:
+                        from plexus.reports.s3_utils import upload_procedure_file
+                        s3_key = upload_procedure_file(procedure.id, "code.tac", yaml_config, content_type="text/plain")
+                        current_meta["code_s3_key"] = s3_key
+                        logger.info(f"Uploaded code.tac to S3 for procedure {procedure.id}: {s3_key}")
+                    except Exception as exc:
+                        logger.warning(f"Could not upload code.tac for procedure {procedure.id}: {exc}")
+                procedure.update(metadata=_json.dumps(current_meta))
+            except Exception as exc:
+                logger.warning(f"Could not update metadata for procedure {procedure.id}: {exc}")
+
             # Get or create Task with stages from state machine
             task = self._get_or_create_task_with_stages_for_procedure(
                 procedure_id=procedure.id,
@@ -274,6 +309,7 @@ class ProcedureService:
                 scorecard_id=scorecard_id,
                 score_id=score_id,
                 stage_configs=stage_configs,
+                dispatch_mode=dispatch_mode,
             )
             if task:
                 logger.info(f"Using Task {task.id} with {len(task.get_stages())} stages for procedure {procedure.id}")
@@ -462,7 +498,21 @@ class ProcedureService:
             if hasattr(procedure, 'code') and procedure.code:
                 logger.info(f"Using YAML from Procedure.code field for {procedure_id}")
                 return procedure.code
-            
+
+            # FIRST-B: Download code.tac from S3 if key is stored in metadata
+            try:
+                import json as _json
+                meta = _json.loads(procedure.metadata or "{}") or {}
+                s3_key = meta.get("code_s3_key")
+                if s3_key:
+                    from plexus.reports.s3_utils import download_procedure_code
+                    s3_code = download_procedure_code(procedure_id, [s3_key])
+                    if s3_code:
+                        logger.info(f"Loaded YAML from S3 code.tac for procedure {procedure_id}")
+                        return s3_code
+            except Exception as exc:
+                logger.warning(f"Could not load code.tac from S3 for {procedure_id}: {exc}")
+
             # SECOND: Get template if procedure has one
             # NOTE: templateId was renamed to parentProcedureId
             parent_id = getattr(procedure, 'parentProcedureId', None) or getattr(procedure, 'templateId', None)
@@ -719,7 +769,7 @@ class ProcedureService:
             logger.error(f"Error resolving score identifier: {str(e)}")
             return None
     
-    async def run_experiment(self, procedure_id: str, **options) -> Dict[str, Any]:
+    async def run_procedure(self, procedure_id: str, **options) -> Dict[str, Any]:
         """
         Run an procedure with the given ID.
 
@@ -829,6 +879,11 @@ class ProcedureService:
                         if task_id_for_tracking:
                             context['task_id'] = task_id_for_tracking
 
+                        recent_rubric_memory_briefing = await self._build_optimizer_recent_rubric_memory_briefing(
+                            context
+                        )
+                        if recent_rubric_memory_briefing:
+                            context['recent_rubric_memory_briefing'] = recent_rubric_memory_briefing
                         rubric_memory_briefing = await self._build_optimizer_rubric_memory_briefing(
                             context
                         )
@@ -1249,6 +1304,11 @@ Based on this data, you should prioritize examining error types with the highest
         scorecard_name = experiment_context.get('scorecard_name')
         score_name = experiment_context.get('score_name')
         score_id = experiment_context.get('score_id')
+        score_version_id = (
+            experiment_context.get('score_version_id')
+            or experiment_context.get('start_version')
+            or experiment_context.get('version')
+        )
         if not scorecard_name or not score_name or not score_id:
             return None
         try:
@@ -1267,15 +1327,53 @@ Based on this data, you should prioritize examining error types with the highest
                     ),
                 )
                 return None
-            context = await provider.generate_for_score_item(
+            context = await provider.retrieve_for_score_item(
                 scorecard_identifier=scorecard_name,
                 score_identifier=score_name,
                 score_id=score_id,
+                score_version_id=score_version_id,
                 topic_hint="Score-level optimizer rubric-memory briefing",
             )
             return context.markdown_context
         except Exception as exc:
             logger.warning("Could not build optimizer rubric-memory briefing: %s", exc)
+            return None
+
+    async def _build_optimizer_recent_rubric_memory_briefing(
+        self,
+        experiment_context: Dict[str, Any],
+    ) -> Optional[str]:
+        """Generate optional recent rubric-memory briefing for optimizer preflight."""
+        scorecard_name = experiment_context.get('scorecard_name')
+        score_name = experiment_context.get('score_name')
+        score_id = experiment_context.get('score_id')
+        score_version_id = (
+            experiment_context.get('score_version_id')
+            or experiment_context.get('start_version')
+            or experiment_context.get('version')
+        )
+        if not scorecard_name or not score_name or not score_id:
+            return None
+        try:
+            from plexus.rubric_memory import RubricMemoryRecentBriefingProvider
+
+            context = await RubricMemoryRecentBriefingProvider(
+                api_client=self.client,
+            ).retrieve_recent(
+                scorecard_identifier=scorecard_name,
+                score_identifier=score_name,
+                score_id=score_id,
+                score_version_id=score_version_id,
+                query=(
+                    "recent SME stakeholder policy update rubric guideline "
+                    "change clarification before optimization"
+                ),
+                days=30,
+                limit=16,
+            )
+            return context.markdown_context
+        except Exception as exc:
+            logger.warning("Could not build optimizer recent rubric-memory briefing: %s", exc)
             return None
     
     def _reset_procedure_to_start(self, procedure_id: str, account_id: str) -> bool:
@@ -1639,6 +1737,7 @@ Based on this data, you should prioritize examining error types with the highest
         scorecard_id: Optional[str] = None,
         score_id: Optional[str] = None,
         stage_configs: Optional[Dict[str, Any]] = None,
+        dispatch_mode: Optional[str] = None,
     ) -> Optional['Task']:
         """
         Get or create a Task with stages based on the procedure's state machine.
@@ -1712,15 +1811,18 @@ Based on this data, you should prioritize examining error types with the highest
             if stage_configs is None:
                 stage_configs = get_stages_from_state_machine()
 
-            # Build metadata
             metadata = {
                 "type": "Procedure",
                 "procedure_id": procedure_id,
-                "task_type": "Procedure"
+                "task_type": "Procedure",
             }
+            normalized_dispatch_mode = (dispatch_mode or "").strip().lower()
+            if normalized_dispatch_mode:
+                metadata["dispatch_mode"] = normalized_dispatch_mode
 
             # Create the Task
             logger.info(f"Creating Task for procedure {procedure_id}")
+            initial_dispatch_status = "LOCAL" if normalized_dispatch_mode == "local" else "ANNOUNCED"
             task = Task.create(
                 client=self.client,
                 accountId=account_id,
@@ -1729,7 +1831,7 @@ Based on this data, you should prioritize examining error types with the highest
                 target=f"procedure/{procedure_id}",
                 command=f"procedure {procedure_id}",
                 description=f"Procedure workflow for {procedure_id}",
-                dispatchStatus="ANNOUNCED",
+                dispatchStatus=initial_dispatch_status,
                 metadata=json.dumps(metadata)
                 # createdAt and updatedAt are auto-generated by the database
             )

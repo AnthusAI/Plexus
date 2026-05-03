@@ -1,0 +1,30 @@
+id: start_async_evaluation_and_return_handle
+name: "Start an async evaluation and return a handle"
+prompt: |
+  Start a feedback evaluation for Compliance Tone asynchronously for the last 1000
+  approved feedback items. Do not wait for completion. Return the handle id,
+  current status, and how I can check on it later.
+  Call plexus.evaluation.run with score_id score_compliance_tone, item_count 1000,
+  and async = true. Include an explicit budget table with usd, wallclock_seconds,
+  depth, and tool_calls. Then call plexus.handle.status once for the returned
+  handle to report its current status, but do not await completion.
+  Return exactly these fields: handle_id, status, and check_later_with.
+  The check_later_with value must be exactly "plexus.handle.status".
+expected_outcome:
+  kind: async_handle
+  fields:
+    handle_id_present: true
+    status: running
+    includes_followup_api: plexus.handle.status
+coverage_tags:
+  - long_running
+  - async_handle
+  - evaluation_run
+  - session_model
+required_apis:
+  - plexus.evaluation.run
+  - plexus.handle.status
+max_attempts_for_first_try_pass: 1
+fixture_notes: |
+  The stub should support async=true and return a stable handle. The model should
+  not poll to completion unless the prompt asks it to.

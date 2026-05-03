@@ -33,6 +33,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
+import { Timestamp } from "@/components/ui/timestamp"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +46,7 @@ import {
   PanelLeftClose,
   ChevronDownIcon,
   MoreHorizontal,
+  Pencil,
   Trash2,
   AlertCircle,
   Plus
@@ -61,6 +63,15 @@ import {
   parseMessageMetadata,
 } from "@/lib/procedure-hitl"
 import { cn } from "@/lib/utils"
+import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 const EvaluationToolOutput = React.lazy(() => import('./evaluation-tool-output'))
 const STANDARD_SESSION_CATEGORY = 'Optimize'
@@ -69,6 +80,127 @@ const EVALUATION_TOOL_NAMES = new Set([
   'plexus_evaluation_run',
   'plexus_evaluation_info',
 ])
+
+type ExecuteTactusEnvelopeSummary = {
+  apiCalls: string[]
+  evaluationIds: string[]
+  ok: boolean | null
+  error: string | null
+  hasEnvelope: boolean
+}
+
+const coerceObjectRecord = (value: unknown): Record<string, unknown> | null => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  if (typeof value !== 'string') {
+    return null
+  }
+  const text = value.trim()
+  if (!text.startsWith('{') || !text.endsWith('}')) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+const collectEvaluationIdsFromValue = (value: unknown): string[] => {
+  const ids = new Set<string>()
+
+  const maybeAdd = (candidate: unknown): void => {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      ids.add(candidate.trim())
+    }
+  }
+
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(visit)
+      return
+    }
+    if (!node || typeof node !== 'object') {
+      return
+    }
+    const record = node as Record<string, unknown>
+    maybeAdd(record.evaluation_id)
+    maybeAdd(record.evaluationId)
+
+    // Treat plain "id" as evaluation only when surrounding fields resemble evaluation output.
+    const hasEvaluationContext = [
+      'evaluation_id',
+      'evaluationId',
+      'evaluation_type',
+      'metrics',
+      'accuracy',
+      'processed_items',
+      'score_name',
+      'scorecard_name',
+      'confusion_matrix',
+      'dashboard_url',
+      'status',
+    ].some((key) => key in record)
+    if (hasEvaluationContext) {
+      maybeAdd(record.id)
+    }
+  }
+
+  visit(value)
+  return Array.from(ids)
+}
+
+const parseExecuteTactusEnvelope = (output: unknown): ExecuteTactusEnvelopeSummary => {
+  const record = coerceObjectRecord(output)
+  if (!record) {
+    return {
+      apiCalls: [],
+      evaluationIds: [],
+      ok: null,
+      error: null,
+      hasEnvelope: false,
+    }
+  }
+
+  const rawApiCalls = record.api_calls
+  const apiCalls = Array.isArray(rawApiCalls)
+    ? rawApiCalls.filter((call): call is string => typeof call === 'string')
+    : []
+
+  return {
+    apiCalls,
+    evaluationIds: collectEvaluationIdsFromValue(record.value),
+    ok: typeof record.ok === 'boolean' ? record.ok : null,
+    error: typeof record.error === 'string' ? record.error : null,
+    hasEnvelope: (
+      'ok' in record
+      || 'value' in record
+      || 'error' in record
+      || 'api_calls' in record
+    ),
+  }
+}
+
+const isExecuteTactusEvaluationOutput = (output: unknown): boolean => {
+  const summary = parseExecuteTactusEnvelope(output)
+  return summary.apiCalls.some((call) => call.startsWith('plexus.evaluation.'))
+    || summary.evaluationIds.length > 0
+}
+
+const shouldRenderEvaluationToolOutput = (toolViewModel: ConsoleToolViewModel): boolean => {
+  if (toolViewModel.toolName === 'execute_tactus') {
+    return isExecuteTactusEvaluationOutput(toolViewModel.output)
+  }
+  if (EVALUATION_TOOL_NAMES.has(toolViewModel.toolName)) {
+    return true
+  }
+  return false
+}
 
 const CONSOLE_CHAT_MODEL_OPTIONS = [
   { value: 'gpt-5.4', label: 'GPT-5.4' },
@@ -114,6 +246,7 @@ export interface ChatSession {
   procedureId?: string
   name?: string
   category?: string
+  metadata?: any
   createdAt: string
   updatedAt?: string
   messageCount?: number
@@ -168,6 +301,7 @@ export interface ConversationViewerProps {
   defaultSidebarWidth?: number
   forceProcedureIdForDispatch?: string
   defaultAccountIdForNewSession?: string
+  enableProcedureSteering?: boolean
 }
 
 
@@ -208,6 +342,76 @@ const parseJsonField = (value: unknown): any => {
   } catch {
     return undefined
   }
+}
+
+const parseSessionMetadata = (value: unknown): Record<string, any> => {
+  const parsed = parseJsonField(value)
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return parsed as Record<string, any>
+  }
+  return {}
+}
+
+const serializeSessionMetadata = (value: unknown): string | undefined => {
+  if (value === undefined || value === null) {
+    return undefined
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    return trimmed || undefined
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return undefined
+    }
+  }
+  return undefined
+}
+
+const getSessionExplicitName = (session: Pick<ChatSession, "name">): string => {
+  const explicitName = String(session.name || "").trim()
+  return explicitName
+}
+
+const getSessionTitleAttribute = (session: Pick<ChatSession, "name">): string | undefined => {
+  const explicitName = getSessionExplicitName(session)
+  return explicitName || undefined
+}
+
+const SessionLabel = ({
+  session,
+  latestMessageAt,
+  timestampClassName,
+}: {
+  session: Pick<ChatSession, "name" | "metadata">
+  latestMessageAt?: string
+  timestampClassName?: string
+}) => {
+  const explicitName = getSessionExplicitName(session)
+  if (explicitName) {
+    return <span className="truncate">{explicitName}</span>
+  }
+  if (isHiddenUntilNamedSession(session)) {
+    return <span className="truncate">New Chat</span>
+  }
+  return latestMessageAt
+    ? <Timestamp time={latestMessageAt} variant="relative" className={timestampClassName} />
+    : null
+}
+
+const isHiddenUntilNamedSession = (session: Pick<ChatSession, "name" | "metadata">): boolean => {
+  const explicitName = String(session.name || "").trim()
+  if (explicitName) {
+    return false
+  }
+  const metadata = parseSessionMetadata(session.metadata)
+  const consoleMetadata = metadata.console
+  if (!consoleMetadata || typeof consoleMetadata !== "object") {
+    return false
+  }
+  return Boolean((consoleMetadata as { hidden_until_named?: boolean }).hidden_until_named)
 }
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
@@ -969,7 +1173,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
             <div className="space-y-2">
               <Tool
                 defaultOpen={
-                  EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) ||
+                  shouldRenderEvaluationToolOutput(toolViewModel) ||
                   toolViewModel.state === 'output-error'
                 }
               >
@@ -983,7 +1187,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
                     <ToolInput input={toolViewModel.input} />
                   )}
                   {(message.messageType === 'TOOL_RESPONSE' || (message.messageType === 'TOOL_CALL' && toolViewModel.output !== undefined)) && (
-                    EVALUATION_TOOL_NAMES.has(toolViewModel.toolName) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
+                    shouldRenderEvaluationToolOutput(toolViewModel) && toolViewModel.state !== 'output-error' && toolViewModel.output != null ? (
                       <React.Suspense fallback={
                         <div className="rounded-md bg-card p-3">
                           <div className="h-4 w-40 animate-pulse rounded bg-muted mb-2" />
@@ -1252,6 +1456,7 @@ function ConversationViewer({
   defaultSidebarWidth = 320,
   forceProcedureIdForDispatch,
   defaultAccountIdForNewSession,
+  enableProcedureSteering = false,
 }: ConversationViewerProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(defaultSidebarCollapsed)
   const [sidebarWidth, setSidebarWidth] = useState(() => Math.min(Math.max(defaultSidebarWidth, 240), 520))
@@ -1260,6 +1465,7 @@ function ConversationViewer({
   
   // Internal state for data loading mode
   const [internalSessions, setInternalSessions] = useState<ChatSession[]>([])
+  const [sessionOverridesById, setSessionOverridesById] = useState<Record<string, Partial<ChatSession>>>({})
   const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([])
   const [internalSelectedSessionId, setInternalSelectedSessionId] = useState<string>()
   const [isLoading, setIsLoading] = useState(false)
@@ -1272,8 +1478,13 @@ function ConversationViewer({
   const [selectedModel, setSelectedModel] = useState(DEFAULT_CONSOLE_CHAT_MODEL)
   const [isPromptSubmitting, setIsPromptSubmitting] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false)
+  const [renameSessionValue, setRenameSessionValue] = useState("")
+  const [isRenamingSession, setIsRenamingSession] = useState(false)
   const [pendingAssistantBySession, setPendingAssistantBySession] = useState<Record<string, PendingAssistantState>>({})
   const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
+  const manualScrollLockRef = React.useRef(false)
+  const lastScrollerTopRef = React.useRef<number | null>(null)
   const promptSubmitLockRef = React.useRef(false)
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const [atBottom, setAtBottom] = useState(true)
@@ -1314,10 +1525,37 @@ function ConversationViewer({
   }, [maxSidebarWidth])
 
   // Determine which data source to use
-  const sessions = propSessions || internalSessions
+  const baseSessions = propSessions || internalSessions
+  const sessions = React.useMemo(
+    () => baseSessions.map((session) => ({
+      ...session,
+      ...(sessionOverridesById[session.id] || {}),
+    })),
+    [baseSessions, sessionOverridesById]
+  )
   const messages = propMessages || internalMessages  
   const selectedSessionId = propSelectedSessionId || internalSelectedSessionId
   const isExternallyControlledSession = Boolean(propSelectedSessionId?.trim())
+  const latestMessageAtBySession = React.useMemo(() => {
+    const latestBySession = new Map<string, string>()
+
+    for (const message of messages) {
+      if (!message.sessionId || !message.createdAt) {
+        continue
+      }
+      const messageTime = new Date(message.createdAt).getTime()
+      if (Number.isNaN(messageTime)) {
+        continue
+      }
+
+      const existing = latestBySession.get(message.sessionId)
+      if (!existing || messageTime > new Date(existing).getTime()) {
+        latestBySession.set(message.sessionId, message.createdAt)
+      }
+    }
+
+    return latestBySession
+  }, [messages])
 
   useEffect(() => {
     selectedSessionIdRef.current = selectedSessionId
@@ -1647,6 +1885,7 @@ function ConversationViewer({
             procedureId: session.procedureId,
             name: session.name,
             category: session.category,
+            metadata: parseSessionMetadata(session.metadata),
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
             messageCount: 0 // Will be updated when we load messages
@@ -1773,6 +2012,7 @@ function ConversationViewer({
             procedureId: session.procedureId,
             name: session.name,
             category: session.category,
+            metadata: parseSessionMetadata(session.metadata),
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
             messageCount: 0 // Will be updated when we load messages
@@ -1805,6 +2045,7 @@ function ConversationViewer({
                   previous.updatedAt !== session.updatedAt
                   || previous.name !== session.name
                   || previous.category !== session.category
+                  || JSON.stringify(previous.metadata || {}) !== JSON.stringify(session.metadata || {})
                 )
               })
 
@@ -1817,9 +2058,15 @@ function ConversationViewer({
               ? mergedSessions.some(session => session.id === currentSelectedSessionId)
               : false
 
-            if (!selectedStillExists && !isExternallyControlledSession && mergedSessions.length > 0) {
-              const newestSessionId = mergedSessions[0].id
-              setInternalSelectedSessionId(newestSessionId)
+            if (!selectedStillExists && !isExternallyControlledSession) {
+              if (currentSelectedSessionId) {
+                // Preserve a neutral sidebar state when the active session is temporarily
+                // unavailable (for example hidden-until-named sessions during refresh lag).
+                setInternalSelectedSessionId(undefined)
+              } else if (mergedSessions.length > 0) {
+                const newestSessionId = mergedSessions[0].id
+                setInternalSelectedSessionId(newestSessionId)
+              }
             }
 
             return mergedSessions
@@ -1838,9 +2085,12 @@ function ConversationViewer({
     const pollTimer = window.setInterval(checkForNewSessions, 15000)
     checkForNewSessions()
 
+    let createSubscription: { unsubscribe: () => void } | null = null
+    let updateSubscription: { unsubscribe: () => void } | null = null
+
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      const subscription = getClient().models.ChatSession.onCreate().subscribe({
+      createSubscription = getClient().models.ChatSession.onCreate().subscribe({
         next: () => {
           // Don't rely on the subscription data, just use it as a notification
           checkForNewSessions()
@@ -1849,24 +2099,43 @@ function ConversationViewer({
           if (markAuthUnavailable(error, 'session_on_create_subscription')) {
             return
           }
-          console.error('Chat session subscription error:', error)
+          console.error('Chat session create subscription error:', error)
         }
       })
-
-      return () => {
-        window.clearInterval(pollTimer)
-        subscription.unsubscribe()
-      }
     } catch (error) {
-      if (markAuthUnavailable(error, 'session_subscription_setup')) {
+      if (markAuthUnavailable(error, 'session_create_subscription_setup')) {
         return () => {
           window.clearInterval(pollTimer)
         }
       }
-      console.error('Error setting up chat session notification:', error)
+      console.error('Error setting up chat session create notification:', error)
+    }
+
+    try {
+      // @ts-ignore - Amplify Gen2 typing issue with subscriptions
+      updateSubscription = getClient().models.ChatSession.onUpdate().subscribe({
+        next: () => {
+          checkForNewSessions()
+        },
+        error: (error: Error) => {
+          if (markAuthUnavailable(error, 'session_on_update_subscription')) {
+            return
+          }
+          console.error('Chat session update subscription error:', error)
+        }
+      })
+    } catch (error) {
+      if (markAuthUnavailable(error, 'session_update_subscription_setup')) {
+        return () => {
+          window.clearInterval(pollTimer)
+        }
+      }
+      console.error('Error setting up chat session update notification:', error)
     }
     return () => {
       window.clearInterval(pollTimer)
+      createSubscription?.unsubscribe()
+      updateSubscription?.unsubscribe()
     }
   }, [effectiveId, isAuthUnavailable, isExternallyControlledSession, markAuthUnavailable, onSessionSelect])
 
@@ -2072,6 +2341,7 @@ function ConversationViewer({
     const bTime = new Date(b.updatedAt || b.createdAt).getTime()
     return bTime - aTime
   })
+  const visibleSessions = sortedSessions.filter((session) => !isHiddenUntilNamedSession(session))
 
   // Filter messages for selected session
   const filteredMessages = selectedSessionId
@@ -2165,9 +2435,6 @@ function ConversationViewer({
     ].join(':')
   }, [selectedSessionId, showThinkingPlaceholder, sortedMessages])
   const shouldForceFollow = autoFollowEnabled
-    || showThinkingPlaceholder
-    || Boolean(pendingAssistantState)
-    || hasStreamingAssistantTail
   const pendingMessageForPrompt = React.useMemo(
     () => [...sortedMessages].reverse().find(message => unresolvedPendingMessageIds.has(message.id)) || null,
     [sortedMessages, unresolvedPendingMessageIds]
@@ -2200,22 +2467,121 @@ function ConversationViewer({
   )
   const canCreateSession = Boolean(fallbackSessionAccountId && fallbackSessionProcedureId)
 
+  const openRenameDialog = React.useCallback(() => {
+    if (!selectedSession) {
+      return
+    }
+    setRenameSessionValue((selectedSession.name || "").trim())
+    setRenameDialogOpen(true)
+  }, [selectedSession])
+
+  const handleRenameSession = React.useCallback(async () => {
+    if (!selectedSession || isRenamingSession) {
+      return
+    }
+    const nextName = renameSessionValue.trim()
+    if (!nextName) {
+      toast.error("Session title cannot be empty")
+      return
+    }
+    setIsRenamingSession(true)
+    try {
+      const client = getClient()
+      const updatedAt = new Date().toISOString()
+      const nextMetadata = {
+        ...parseSessionMetadata(selectedSession.metadata),
+        title_source: "manual",
+        console: {
+          ...(parseSessionMetadata(selectedSession.metadata).console || {}),
+          hidden_until_named: false,
+        },
+      }
+      await (client.models.ChatSession.update as any)({
+        id: selectedSession.id,
+        name: nextName,
+        metadata: serializeSessionMetadata(nextMetadata),
+        updatedAt,
+      })
+      setInternalSessions(prev => prev.map(session => (
+        session.id === selectedSession.id
+          ? { ...session, name: nextName, metadata: nextMetadata, updatedAt }
+          : session
+      )))
+      setSessionOverridesById(prev => ({
+        ...prev,
+        [selectedSession.id]: {
+          name: nextName,
+          metadata: nextMetadata,
+          updatedAt,
+        },
+      }))
+      setRenameDialogOpen(false)
+      toast.success("Session renamed")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to rename session"
+      toast.error(message)
+    } finally {
+      setIsRenamingSession(false)
+    }
+  }, [isRenamingSession, renameSessionValue, selectedSession])
+
   const handleAtBottomStateChange = React.useCallback((isNowAtBottom: boolean) => {
     setAtBottom(isNowAtBottom)
     if (isNowAtBottom) {
       setAutoFollowEnabled(true)
+      manualScrollLockRef.current = false
+      lastScrollerTopRef.current = null
       return
     }
-    if (showThinkingPlaceholder || Boolean(pendingAssistantState) || hasStreamingAssistantTail) {
-      return
+    if (manualScrollLockRef.current) {
+      setAutoFollowEnabled(false)
     }
-    setAutoFollowEnabled(false)
-  }, [hasStreamingAssistantTail, pendingAssistantState, showThinkingPlaceholder])
+  }, [])
 
   useEffect(() => {
     setAutoFollowEnabled(true)
     setAtBottom(true)
+    manualScrollLockRef.current = false
+    lastScrollerTopRef.current = null
   }, [selectedSessionId])
+
+  const handleScrollerScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const currentTop = event.currentTarget.scrollTop
+    const previousTop = lastScrollerTopRef.current
+    if (previousTop !== null && currentTop < previousTop - 1) {
+      manualScrollLockRef.current = true
+    }
+    lastScrollerTopRef.current = currentTop
+  }, [])
+
+  const handleScrollerWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    if (event.deltaY < 0) {
+      manualScrollLockRef.current = true
+    }
+  }, [])
+
+  const VirtuosoScroller = React.useMemo(
+    () =>
+      React.forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<"div">>(
+        function ConversationVirtuosoScroller({ onScroll, onWheel, ...props }, ref) {
+          return (
+            <div
+              ref={ref}
+              {...props}
+              onScroll={(event) => {
+                handleScrollerScroll(event)
+                onScroll?.(event)
+              }}
+              onWheel={(event) => {
+                handleScrollerWheel(event)
+                onWheel?.(event)
+              }}
+            />
+          )
+        }
+      ),
+    [handleScrollerScroll, handleScrollerWheel]
+  )
 
   useEffect(() => {
     if (!shouldForceFollow) {
@@ -2256,17 +2622,20 @@ function ConversationViewer({
     }
   }, [selectedSessionId, shouldForceFollow, showThinkingPlaceholder])
 
-  const createNewSession = React.useCallback(async () => {
+  const createNewSession = React.useCallback(async (options?: { hiddenUntilNamed?: boolean }) => {
     if (!fallbackSessionAccountId || !fallbackSessionProcedureId) {
       throw new Error('Missing account or procedure context to create a session')
     }
 
     const client = getClient()
     const createdAt = new Date().toISOString()
+    const hiddenUntilNamed = Boolean(options?.hiddenUntilNamed)
+    const sessionMetadata = hiddenUntilNamed ? { console: { hidden_until_named: true } } : undefined
     const created = await (client.models.ChatSession.create as any)({
       accountId: fallbackSessionAccountId,
       procedureId: fallbackSessionProcedureId,
       category: STANDARD_SESSION_CATEGORY,
+      metadata: serializeSessionMetadata(sessionMetadata),
       createdAt,
       updatedAt: createdAt,
     })
@@ -2282,12 +2651,27 @@ function ConversationViewer({
       procedureId: fallbackSessionProcedureId,
       category: created?.data?.category || STANDARD_SESSION_CATEGORY,
       name: created?.data?.name,
+      metadata: parseSessionMetadata(created?.data?.metadata || sessionMetadata),
       createdAt: created?.data?.createdAt || createdAt,
       updatedAt: created?.data?.updatedAt || createdAt,
       messageCount: 0,
     }
 
     setInternalSessions(prev => [createdSession, ...prev.filter(session => session.id !== sessionId)])
+    if (hiddenUntilNamed) {
+      setSessionOverridesById(prev => ({
+        ...prev,
+        [sessionId]: {
+          metadata: {
+            ...parseSessionMetadata(createdSession.metadata),
+            console: {
+              ...(parseSessionMetadata(createdSession.metadata).console || {}),
+              hidden_until_named: true,
+            },
+          },
+        },
+      }))
+    }
     if (onSessionSelect) {
       onSessionSelect(sessionId)
     } else {
@@ -2311,7 +2695,7 @@ function ConversationViewer({
 
     setIsCreatingSession(true)
     try {
-      await createNewSession()
+      await createNewSession({ hiddenUntilNamed: true })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create session'
       console.error('[ConsoleChat] session create failed', {
@@ -2350,7 +2734,7 @@ function ConversationViewer({
 
         if (!targetSessionId) {
           try {
-            const newSession = await createNewSession()
+            const newSession = await createNewSession({ hiddenUntilNamed: true })
             targetSessionId = newSession.id
             targetSessionAccountId = newSession.accountId
             targetSessionProcedureId = newSession.procedureId
@@ -2385,7 +2769,9 @@ function ConversationViewer({
 
         const clientSendStartedAt = new Date().toISOString()
         const nowIso = new Date().toISOString()
-        const responseTarget = getConsoleResponseTarget()
+        const responseTarget = enableProcedureSteering
+          ? targetSessionProcedureId
+          : getConsoleResponseTarget()
         const optimisticMessageId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         const optimisticMessage: ChatMessage = {
           id: optimisticMessageId,
@@ -2397,7 +2783,7 @@ function ConversationViewer({
           humanInteraction: 'CHAT',
           content: nextValue,
           responseTarget,
-          responseStatus: 'PENDING',
+          responseStatus: enableProcedureSteering ? 'COMPLETED' : 'PENDING',
           createdAt: nowIso,
         }
 
@@ -2413,15 +2799,32 @@ function ConversationViewer({
         let messagePersisted = false
         try {
           const client = getClient()
-          const dispatchMessageText = nextValue.length > 4000
-            ? `${nextValue.slice(0, 4000)}…`
-            : nextValue
-          const model = getConsoleSelectedModel()
-          const clientHistorySnapshot = buildClientHistorySnapshot(
-            messages,
-            targetSessionId,
-            nextValue,
-          )
+          const metadata = enableProcedureSteering
+            ? {
+                source: 'procedure-steering-input',
+                scope: 'all_agents',
+                sent_at: nowIso,
+              }
+            : {
+                source: 'console-prompt-input',
+                sent_at: nowIso,
+                model: {
+                  id: getConsoleSelectedModel(),
+                },
+                instrumentation: {
+                  client_send_started_at: clientSendStartedAt,
+                  client_prompt_length_chars: nextValue.length,
+                  client_user_message_text: nextValue.length > 4000
+                    ? `${nextValue.slice(0, 4000)}…`
+                    : nextValue,
+                  client_selected_model: getConsoleSelectedModel(),
+                  client_history_snapshot: buildClientHistorySnapshot(
+                    messages,
+                    targetSessionId,
+                    nextValue,
+                  ),
+                },
+              }
           const created = await (client.models.ChatMessage.create as any)({
             accountId: targetSessionAccountId,
             sessionId: targetSessionId,
@@ -2430,22 +2833,9 @@ function ConversationViewer({
             messageType: 'MESSAGE',
             humanInteraction: 'CHAT',
             content: nextValue,
-            metadata: JSON.stringify({
-              source: 'console-prompt-input',
-              sent_at: nowIso,
-              model: {
-                id: model,
-              },
-              instrumentation: {
-                client_send_started_at: clientSendStartedAt,
-                client_prompt_length_chars: nextValue.length,
-                client_user_message_text: dispatchMessageText,
-                client_selected_model: model,
-                client_history_snapshot: clientHistorySnapshot,
-              },
-            }),
+            metadata: JSON.stringify(metadata),
             responseTarget,
-            responseStatus: 'PENDING',
+            responseStatus: enableProcedureSteering ? 'COMPLETED' : 'PENDING',
           })
 
           const createdMessageId = created?.data?.id
@@ -2461,11 +2851,13 @@ function ConversationViewer({
               : message
           )))
 
-          markPendingAssistant(
-            targetSessionId,
-            persistedCreatedAt,
-            createdMessageId,
-          )
+          if (!enableProcedureSteering) {
+            markPendingAssistant(
+              targetSessionId,
+              persistedCreatedAt,
+              createdMessageId,
+            )
+          }
 
           setPromptValue('')
         } catch (error) {
@@ -2514,6 +2906,7 @@ function ConversationViewer({
       clearPendingAssistant,
       getConsoleResponseTarget,
       getConsoleSelectedModel,
+      enableProcedureSteering,
       markAuthUnavailable,
       markPendingAssistant,
       submitHitlResponse,
@@ -2539,7 +2932,7 @@ function ConversationViewer({
         {/* Sidebar Header */}
         <div data-testid="conversation-sidebar-header" className="h-12 px-3 border-b border-border flex items-center justify-between">
           {!isSidebarCollapsed && (
-            <h3 className="text-sm font-medium">Chat Sessions ({sortedSessions.length})</h3>
+            <h3 className="text-sm font-medium">Chat Sessions ({visibleSessions.length})</h3>
           )}
           <div className="flex items-center gap-1">
             {!isSidebarCollapsed && (
@@ -2572,7 +2965,7 @@ function ConversationViewer({
         {/* Session List */}
         {!isSidebarCollapsed && (
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {sortedSessions.map((session) => (
+            {visibleSessions.map((session) => (
               <Button
                 key={session.id}
                 variant={selectedSessionId === session.id ? "secondary" : "ghost"}
@@ -2581,10 +2974,16 @@ function ConversationViewer({
                 className="w-full justify-start text-left p-2 h-auto"
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                  {getSessionExplicitName(session) && (
+                    <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-medium truncate">
-                      {session.name || session.category || `Session ${session.id.slice(0, 8)}`}
+                      <SessionLabel
+                        session={session}
+                        latestMessageAt={latestMessageAtBySession.get(session.id)}
+                        timestampClassName="text-xs font-medium"
+                      />
                     </div>
                   <div className="text-xs text-muted-foreground">
                       {session.messageCount ? `${session.messageCount} messages` : 'No messages'}
@@ -2599,14 +2998,14 @@ function ConversationViewer({
         {/* Collapsed Sidebar Content */}
         {isSidebarCollapsed && (
           <div className="flex-1 p-2 space-y-2">
-            {sortedSessions.slice(0, 5).map((session) => (
+            {visibleSessions.slice(0, 5).map((session) => (
               <Button
                 key={session.id}
                 variant={selectedSessionId === session.id ? "secondary" : "ghost"}
                 size="sm"
                 onClick={() => handleSessionSelect(session.id)}
                 className="w-full h-8 p-0"
-                title={session.name || session.category || `Session ${session.id.slice(0, 8)}`}
+                title={getSessionTitleAttribute(session)}
               >
                 <MessageSquare className="h-4 w-4" />
               </Button>
@@ -2631,11 +3030,17 @@ function ConversationViewer({
           <div data-testid="conversation-main-header" className="h-12 border-b border-border px-3 pt-0.5">
             <div className="flex h-full items-center justify-between">
               <div className="flex min-w-0 items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                {getSessionExplicitName(selectedSession) && (
+                  <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                )}
                 <div className="min-w-0 flex items-center gap-2">
-                  <h3 className="font-medium text-sm truncate">
-                    {selectedSession.name || selectedSession.category || `Session ${selectedSession.id.slice(0, 8)}`}
-                  </h3>
+                  <div className="font-medium text-sm truncate">
+                    <SessionLabel
+                      session={selectedSession}
+                      latestMessageAt={latestMessageAtBySession.get(selectedSession.id)}
+                      timestampClassName="font-medium text-sm"
+                    />
+                  </div>
                   <span className="text-xs text-muted-foreground truncate">
                     {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
                   </span>
@@ -2655,6 +3060,15 @@ function ConversationViewer({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.preventDefault()
+                      openRenameDialog()
+                    }}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Rename session
+                  </DropdownMenuItem>
                   <DropdownMenuItem 
                     onSelect={() => {
                       if (onSessionDelete) {
@@ -2670,6 +3084,36 @@ function ConversationViewer({
             </div>
           </div>
         )}
+
+        <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Rename Session</DialogTitle>
+              <DialogDescription>Set a custom title for this chat session.</DialogDescription>
+            </DialogHeader>
+            <Input
+              value={renameSessionValue}
+              onChange={(event) => setRenameSessionValue(event.target.value)}
+              placeholder="Session title"
+              autoFocus
+            />
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setRenameDialogOpen(false)}
+                disabled={isRenamingSession}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleRenameSession}
+                disabled={isRenamingSession || !renameSessionValue.trim()}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         
         {/* Messages List */}
         <div className="min-h-0 flex-1">
@@ -2751,6 +3195,7 @@ function ConversationViewer({
                   )
                 )}
                 components={{
+                  Scroller: VirtuosoScroller,
                   Footer: () => (!showThinkingPlaceholder ? <div aria-hidden className="h-8" /> : null),
                 }}
               />
@@ -2781,22 +3226,24 @@ function ConversationViewer({
                 />
             </PromptInputBody>
             <PromptInputFooter className="justify-between gap-2">
-              <PromptInputSelect
-                value={selectedModel}
-                onValueChange={setSelectedModel}
-                disabled={isPromptDisabled || isPromptSubmitting}
-              >
-                <PromptInputSelectTrigger className="h-8 w-40 text-xs">
-                  <PromptInputSelectValue placeholder="Model" />
-                </PromptInputSelectTrigger>
-                <PromptInputSelectContent>
-                  {CONSOLE_CHAT_MODEL_OPTIONS.map((option) => (
-                    <PromptInputSelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </PromptInputSelectItem>
-                  ))}
-                </PromptInputSelectContent>
-              </PromptInputSelect>
+              {!enableProcedureSteering && (
+                <PromptInputSelect
+                  value={selectedModel}
+                  onValueChange={setSelectedModel}
+                  disabled={isPromptDisabled || isPromptSubmitting}
+                >
+                  <PromptInputSelectTrigger className="h-8 w-40 text-xs">
+                    <PromptInputSelectValue placeholder="Model" />
+                  </PromptInputSelectTrigger>
+                  <PromptInputSelectContent>
+                    {CONSOLE_CHAT_MODEL_OPTIONS.map((option) => (
+                      <PromptInputSelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </PromptInputSelectItem>
+                    ))}
+                  </PromptInputSelectContent>
+                </PromptInputSelect>
+              )}
               <PromptInputSubmit disabled={isPromptDisabled || !promptValue.trim() || isPromptSubmitting} />
             </PromptInputFooter>
           </PromptInput>

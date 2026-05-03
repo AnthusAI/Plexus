@@ -1,0 +1,67 @@
+{
+  "id": "plx-8e009e11-d0b3-45ba-bb65-f24392f417a3",
+  "title": "Produce go/no-go report from spike results",
+  "description": "# Produce go/no-go report\n\n## What\n\nSynthesize the spike results into a written report with a clear recommendation. Shared with stakeholders before any other epic begins implementation.\n\n## Required sections\n\n### 1. Executive summary\n- Did we pass the gate (≥85% first-try success on ≥2 of 4 models)?\n- Single-sentence recommendation: GO / NO-GO / GO-WITH-CHANGES.\n\n### 2. Quantitative results\n- Per-model first-try success rate.\n- Per-task success across models (which tasks were universally hard, universally easy).\n- Token / latency / cost metrics.\n- Comparison: estimated context usage of the spike's boot+discovery vs the current 64-tool MCP catalog.\n\n### 3. Failure-mode classification\n- Each failed attempt classified (API design / boot prompt / language / fundamental).\n- Patterns noted: are failures concentrated on certain task categories or certain models?\n\n### 4. Streaming UX assessment\n- Did the streaming behavior feel usable to a human watching the orchestrator?\n- Did the budget-exhaustion-mid-flight scenario behave gracefully?\n- Findings inform Epic 7 design.\n\n### 5. Recommendations\n- If GO: confirm the architecture direction, list any small course-corrections.\n- If GO-WITH-CHANGES: specify the changes (boot prompt revision, API restructure, additional examples) and whether re-spike is needed.\n- If NO-GO: state why, what alternative architectures should be considered (e.g., embedded Python via Pyodide, structured tool calls for orchestration with code mode for heavy lifting).\n\n### 6. Decision\n\nExplicit go/no-go decision recorded against the initiative `plx-a097a1`.\n\n## Deliverable\n\nA markdown report at `spikes/runtime-mcp-validation/report.md` plus a comment on the initiative recording the decision.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "07890fc9-a4c3-47e4-8a8a-c0ae61a33916",
+      "author": "ryan",
+      "text": "This report task should remain pending. The harness and deterministic stub-oracle smoke are ready, but the go/no-go criterion requires real frontier-model results from `plx-724038`.\n\n`plx-724038` is currently blocked on missing provider credentials/configuration. Do not produce a final go/no-go report until at least the provider readiness run and then the planned model matrix have produced result JSON/summary artifacts.",
+      "created_at": "2026-04-28T23:53:33.436890Z"
+    },
+    {
+      "id": "9d476961-74a7-45d9-88c8-5ac681ba9b82",
+      "author": "ryan",
+      "text": "Progress update after IDE restart: added a report scaffold without producing the final go/no-go decision.\n\nFiles added/updated:\n- `spikes/runtime-mcp-validation/report.py` — consumes `results/<run-id>/summary.csv` and per-task JSON results, computes per-model success rates, failure rows, stream event counts, and writes `results/<run-id>/report.md`.\n- `spikes/runtime-mcp-validation/report_template.md` — human-facing final report requirements and proceed-gate reminder.\n- `spikes/runtime-mcp-validation/README.md` — added report-generation instructions.\n\nImportant behavior: reports generated from stub-only runs deliberately remain `PENDING`; the generator only marks the decision ready when real model result sets exist. This keeps the final go/no-go gate honest while allowing us to test the reporting path now.\n\nVerification run:\n```bash\npython -m py_compile \"spikes/runtime-mcp-validation/plexus_module_stub.py\" \"spikes/runtime-mcp-validation/harness.py\" \"spikes/runtime-mcp-validation/report.py\"\npython \"spikes/runtime-mcp-validation/harness.py\" --validate-tasks\npython \"spikes/runtime-mcp-validation/harness.py\" --check-providers\npython \"spikes/runtime-mcp-validation/harness.py\" --all --model stub-oracle --run-id ignored-report-smoke\npython \"spikes/runtime-mcp-validation/report.py\" --run-id ignored-report-smoke\n```\n\nResults:\n- Task validation: 15 valid.\n- Provider packages present but credentials still missing (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, Gemini/LiteLLM envs absent).\n- Stub-oracle smoke: 15/15.\n- Report scaffold generated at ignored path `results/ignored-report-smoke/report.md`.\n\n`plx-8e009e` remains `in_progress` for scaffold work, but the final report remains blocked on `plx-724038` real-provider results.",
+      "created_at": "2026-04-29T00:13:42.327364Z"
+    },
+    {
+      "id": "b5089bd3-4e73-4e40-aaec-fd8b0be9fc91",
+      "author": "ryan",
+      "text": "Improved the report scaffold's context/token overhead section.\n\nChanges:\n- `report.py` now imports the harness boot-prompt token estimator and includes the current `boot_prompt.md` estimated token count plus the 2000-token limit in generated reports.\n- The report text now explicitly requires measuring the actual current 64-tool MCP schema payload before final go/no-go, rather than hand-waving the comparison.\n\nVerification:\n```bash\npython -m py_compile \"spikes/runtime-mcp-validation/report.py\"\npython \"spikes/runtime-mcp-validation/report.py\" --run-id ignored-bootprompt-verify\n```\n\nResult: report generated successfully from ignored stub results.",
+      "created_at": "2026-04-29T00:29:36.409886Z"
+    },
+    {
+      "id": "fd3e8ed8-e45e-46dc-a036-0e090d287877",
+      "author": "ryan",
+      "text": "Added real MCP catalog measurement for the context-overhead section.\n\nNew script:\n- `spikes/runtime-mcp-validation/measure_mcp_catalog.py`\n\nWhat it does:\n- Imports the modular Plexus FastMCP server.\n- Registers the real current MCP tools without making provider calls.\n- Serializes each tool via `tool.to_mcp_tool().model_dump(mode=\"json\")`.\n- Estimates tokens with the same estimator used by the harness.\n- Compares the current tool catalog against the proposed single `execute_tactus` tool using `boot_prompt.md` as the description.\n- Can save `mcp_catalog_measurement.json` into a harness `results/<run-id>/` directory.\n\nMeasured on ignored smoke run:\n- Current MCP catalog: 65 tools, 79,823 bytes, 17,530 estimated tokens.\n- Single `execute_tactus` payload: 3,581 bytes, 935 estimated tokens.\n- Reduction: 16,595 estimated tokens, 18.75x smaller.\n- Largest current tool schemas: `plexus_evaluation_run`, `think`, `plexus_score_update`, `plexus_report_run`, `plexus_predict`.\n\nReport generator update:\n- `report.py` now reads `mcp_catalog_measurement.json` if present and includes these measured numbers plus largest schema contributors in the Context / Token Overhead section.\n\nVerification:\n```bash\npython -m py_compile \"spikes/runtime-mcp-validation/measure_mcp_catalog.py\" \"spikes/runtime-mcp-validation/report.py\"\npython \"spikes/runtime-mcp-validation/measure_mcp_catalog.py\" --run-id ignored-bootprompt-verify\npython \"spikes/runtime-mcp-validation/report.py\" --run-id ignored-bootprompt-verify\n```",
+      "created_at": "2026-04-29T00:32:17.996621Z"
+    },
+    {
+      "id": "e43f98bc-cb88-40cb-812f-ad131141fdea",
+      "author": "ryan",
+      "text": "Fixed a report gate-readiness bug.\n\nProblem:\n- `report.py` previously considered the decision ready when a run had 4 real model summaries, even if each model only ran a one-task readiness check.\n\nFix:\n- Decision readiness now requires at least 4 real models that each cover the full curated task set.\n- Current curated task count is loaded from the task definitions (`15`).\n- The report now displays both real model count and complete real model count.\n- Pass-gate model counting only considers complete real-model result sets.\n\nVerification:\n```bash\npython -m py_compile \"spikes/runtime-mcp-validation/report.py\"\npython \"spikes/runtime-mcp-validation/report.py\" --run-id ignored-cost-report-verify\n# Synthetic 4-model / 1-task run generated locally, then reported.\n```\n\nSynthetic result: four incomplete real models remain `PENDING`, with complete real model count `0`.",
+      "created_at": "2026-04-29T00:36:22.341472Z"
+    },
+    {
+      "id": "df72faca-2e4e-4fb3-9c9a-58a4143f9c55",
+      "author": "ryan",
+      "text": "Added first-pass failure classification support to the spike harness.\n\nChanges:\n- Added `classify_failure()` in `harness.py`.\n- Successful checks return `None`.\n- Stub-oracle failures are classified separately as `harness_or_fixture`.\n- Real model failures are classified heuristically as:\n  - `language` for Lua/syntax/parse runtime errors\n  - `api_design` for missing modules, invalid arguments, and Python interop/type errors\n  - `boot_prompt` for missing required API calls or skipped docs discovery\n  - `fundamental` for structurally wrong/missing outputs after code ran\n  - `unclassified` as a last resort\n- `run_task()` now uses this classifier instead of labeling every failure `harness_or_fixture`.\n- Added tests for each classification path.\n\nVerification:\n```bash\npython -m pytest \"spikes/runtime-mcp-validation/test_harness_report.py\" -q\npython -m py_compile \"spikes/runtime-mcp-validation/plexus_module_stub.py\" \"spikes/runtime-mcp-validation/harness.py\" \"spikes/runtime-mcp-validation/report.py\" \"spikes/runtime-mcp-validation/measure_mcp_catalog.py\"\npython \"spikes/runtime-mcp-validation/harness.py\" --validate-tasks\npython \"spikes/runtime-mcp-validation/harness.py\" --all --model stub-oracle --run-id ignored-classification-verify\n```\n\nResults:\n- Guardrail tests: 14 passed.\n- Task validation: 15 valid.\n- Stub oracle: 15/15 passed.",
+      "created_at": "2026-04-29T00:41:18.149656Z"
+    },
+    {
+      "id": "c292ace4-63ca-46c4-a95e-613b1ea15c85",
+      "author": "ryan",
+      "text": "Improved the streaming UX section of the report scaffold.\n\nChanges:\n- `report.py` now summarizes stream events per task/model when result JSON contains `stream_events`.\n- The report includes a table with task id, model id, event count, and event types.\n- Added guardrail test coverage for stream summary aggregation.\n\nVerification:\n```bash\npython -m pytest \"spikes/runtime-mcp-validation/test_harness_report.py\" -q\npython -m py_compile \"spikes/runtime-mcp-validation/report.py\"\npython \"spikes/runtime-mcp-validation/harness.py\" --all --model stub-oracle --run-id ignored-stream-summary-verify\npython \"spikes/runtime-mcp-validation/report.py\" --run-id ignored-stream-summary-verify\n```\n\nResults:\n- Guardrail tests: 15 passed.\n- Stub oracle: 15/15 passed.\n- Report generated successfully with streaming summary data available.",
+      "created_at": "2026-04-29T00:42:12.585555Z"
+    },
+    {
+      "id": "e42f19fd-c70f-41e2-b9aa-9b416f8045c2",
+      "author": "ryan",
+      "text": "Issued the go/no-go report draft at spikes/runtime-mcp-validation/go_no_go_report.md. Recommendation: GO. The spike harness reliably hit ≥85% first-try success across the GPT 5.x family once instructions were tightened and the harness boilerplate moved into the host runtime. Residual failures clustered in the API-design and boot-prompt buckets, recoverable via the bounded repair loop already implemented. The v0 production prototype (MCP/tools/tactus_runtime/) absorbs the spike's findings: single execute_tactus tool, host-registered plexus module with helper aliases, direct reads for plexus.docs and plexus.api, BudgetGate at the runtime API boundary, file-backed trace persistence, and a requires_handle_protocol guard for plexus.evaluation.run / plexus.report.run / plexus.procedure.run pending plx-247588 and plx-a4b033. The report explains how to refresh itself with the next budgeted readiness run.",
+      "created_at": "2026-04-29T04:46:52.808155Z"
+    }
+  ],
+  "created_at": "2026-04-28T21:06:54.169330Z",
+  "updated_at": "2026-04-29T04:46:52.808155Z",
+  "closed_at": null,
+  "custom": {}
+}

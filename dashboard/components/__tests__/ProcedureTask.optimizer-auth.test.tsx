@@ -72,6 +72,104 @@ describe('ProcedureTask optimizer auth flow', () => {
     ;(global as any).fetch = jest.fn()
   })
 
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('renders local dispatch mode before stale dispatcher fields', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: {
+            ...baseProcedure.task,
+            status: 'RUNNING',
+            dispatchStatus: 'ANNOUNCED',
+            workerNodeId: 'BlackbookM3-15348',
+            metadata: JSON.stringify({ procedure_id: 'proc-1', dispatch_mode: 'local' }),
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('Local')).toBeInTheDocument()
+    expect(screen.queryByText('Claimed...')).not.toBeInTheDocument()
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
+  it('renders pending when no task has been attached yet', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: null,
+        }}
+      />
+    )
+
+    expect(screen.getByText('Pending...')).toBeInTheDocument()
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
+  it('renders grid dispatch, timestamp, and duration indicators once', async () => {
+    jest.useFakeTimers()
+    jest.setSystemTime(new Date('2026-01-01T00:10:00.000Z'))
+
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          task: {
+            ...baseProcedure.task,
+            status: 'RUNNING',
+            startedAt: '2026-01-01T00:00:00.000Z',
+            dispatchStatus: 'ANNOUNCED',
+            workerNodeId: 'BlackbookM3-15348',
+            metadata: JSON.stringify({ procedure_id: 'proc-1', dispatch_mode: 'local' }),
+          },
+        }}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Local')).toHaveLength(1)
+      expect(screen.getAllByText(/minutes ago/)).toHaveLength(1)
+      expect(screen.getAllByText('Elapsed:')).toHaveLength(1)
+      expect(screen.getAllByTestId('timer-icon')).toHaveLength(1)
+    })
+
+    const dispatchRow = screen.getByText('Local').closest('div')
+    expect(dispatchRow).toHaveClass('text-sm', 'text-muted-foreground', 'gap-1')
+    expect(dispatchRow?.querySelector('svg')).toHaveClass('h-4', 'w-4', 'flex-shrink-0')
+
+    jest.useRealTimers()
+  })
+
+  it('still renders claimed for true dispatcher-owned tasks', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: {
+            ...baseProcedure.task,
+            status: 'RUNNING',
+            dispatchStatus: 'CLAIMED',
+            workerNodeId: 'dispatcher-1',
+            metadata: JSON.stringify({ procedure_id: 'proc-1' }),
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('Claimed...')).toBeInTheDocument()
+    expect(screen.queryByText('Local')).not.toBeInTheDocument()
+  })
+
   it('loads metadata without apiKey auth mode and does not call the proxy route', async () => {
     const metadataState = {
       state: {
@@ -180,7 +278,169 @@ describe('ProcedureTask optimizer auth flow', () => {
     )
 
     expect(screen.getByLabelText('Procedure actions')).toBeInTheDocument()
-    expect(screen.getByText(/^Procedure$/)).toBeInTheDocument()
+    expect(screen.getByText(/^Optimization Procedure$/)).toBeInTheDocument()
+  })
+
+  it('reserves a blank accuracy bar slot in grid mode before feedback summary is loaded', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          feedbackEvaluationSummary: null,
+        } as any}
+      />
+    )
+
+    const bar = screen.getByTestId('evaluation-list-accuracy-bar')
+    expect(bar).toHaveClass('w-full', 'h-8', 'rounded-md')
+    expect(screen.queryByText('0%')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Original baseline marker')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Current best baseline marker')).not.toBeInTheDocument()
+  })
+
+  it('renders feedback accuracy with baseline markers in grid mode', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          feedbackEvaluationSummary: {
+            id: 'eval-feedback-1',
+            status: 'COMPLETED',
+            accuracy: 87,
+            processedItems: 87,
+            totalItems: 100,
+            baselineEvaluationId: 'baseline-eval-1',
+            currentBaselineEvaluationId: 'current-baseline-eval-1',
+            baselineAccuracy: 72,
+            currentBaselineAccuracy: 81,
+          },
+        } as any}
+      />
+    )
+
+    expect(screen.getAllByText('87%').length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('Original baseline marker')).toBeInTheDocument()
+    expect(screen.getByLabelText('Current best baseline marker')).toBeInTheDocument()
+  })
+
+  it('keeps local procedure runs labeled Local even when a worker node id is present', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: {
+            ...baseProcedure.task,
+            status: 'PENDING',
+            dispatchStatus: 'DISPATCHING',
+            workerNodeId: 'local-host-123',
+            metadata: JSON.stringify({ dispatch_mode: 'local', procedure_id: 'proc-1' }),
+            stages: { items: [] },
+          },
+        } as any}
+      />
+    )
+
+    expect(screen.getAllByText('Local').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Claimed...')).not.toBeInTheDocument()
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
+  it('treats direct procedure runtime metadata as Local when dispatch mode is missing', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: {
+            ...baseProcedure.task,
+            status: 'FAILED',
+            target: 'procedure/proc-1',
+            command: 'procedure proc-1',
+            dispatchStatus: 'ANNOUNCED',
+            workerNodeId: 'BlackbookM3-30475',
+            metadata: JSON.stringify({
+              procedure_id: 'proc-1',
+              runtime: {
+                host: 'BlackbookM3',
+                pid: 30475,
+                started_at: '2026-05-01T19:22:27.470086+00:00',
+              },
+            }),
+            stages: { items: [] },
+          },
+        } as any}
+      />
+    )
+
+    expect(screen.getAllByText('Local').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Claimed...')).not.toBeInTheDocument()
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
+  it('shows the optimization procedure badge label in grid mode', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={baseProcedure}
+      />
+    )
+
+    expect(screen.getAllByText((_, element) =>
+      element?.textContent === 'OptimizationProcedure'
+    ).length).toBeGreaterThan(0)
+  })
+
+  it('renders a stable dispatch indicator before task data is hydrated', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          task: null,
+        } as any}
+      />
+    )
+
+    expect(screen.getAllByText('Pending...')).toHaveLength(1)
+    expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
+  it('keeps detail timing in the header instead of between status and segmented progress', () => {
+    render(
+      <ProcedureTask
+        variant="detail"
+        procedure={{
+          ...baseProcedure,
+          task: {
+            ...baseProcedure.task,
+            status: 'COMPLETED',
+            startedAt: '2026-01-01T00:00:00.000Z',
+            completedAt: '2026-01-01T00:05:00.000Z',
+            stages: {
+              items: [
+                {
+                  id: 'stage-final',
+                  name: 'Final',
+                  order: 1,
+                  status: 'COMPLETED',
+                  statusMessage: 'Final stage complete',
+                },
+              ],
+            },
+          },
+        } as any}
+      />
+    )
+
+    const card = screen.getByRole('article')
+    expect(screen.getAllByText(/Elapsed:/)).toHaveLength(1)
+    expect(card).toHaveTextContent('Final stage complete')
+    expect(card.textContent?.indexOf('Elapsed:')).toBeLessThan(
+      card.textContent?.indexOf('Final stage complete') ?? 0
+    )
   })
 
   it('hydrates offloaded optimizer state from Amplify Storage procedures path', async () => {

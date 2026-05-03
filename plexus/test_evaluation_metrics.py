@@ -269,6 +269,42 @@ class TestScoreTextProcessing:
         assert mock_evaluation._create_score_result.await_args.kwargs["feedback_item_id"] == "fi-top-level"
 
     @pytest.mark.asyncio
+    async def test_score_text_resolves_item_id_from_report_identifier(self, mock_evaluation):
+        mock_evaluation.override_data = {}
+        mock_evaluation.processed_items_by_score = {}
+        mock_evaluation.total_skipped = 0
+        mock_evaluation.scorecard.scores = [{"name": "test_score"}]
+        mock_evaluation.dashboard_client = MagicMock()
+        mock_evaluation.experiment_id = "eval-123"
+        mock_evaluation.account_id = "acct-123"
+        mock_evaluation._create_score_result = AsyncMock()
+
+        mock_result = create_mock_score_result("yes", "yes")
+        mock_evaluation.scorecard.score_entire_text = AsyncMock(
+            return_value={"test_score": mock_result}
+        )
+
+        resolved_item = MagicMock()
+        resolved_item.id = "acct-123--309517289"
+
+        row = pd.Series({
+            "text": "search dataset transcript",
+            "content_id": "309517289",
+            "columns": {
+                "form_id": "form-309517289",
+            },
+            "test_score_label": "yes",
+        })
+
+        with patch("plexus.dashboard.api.models.item.Item.get_by_id", return_value=None):
+            with patch("plexus.dashboard.api.models.item.Item.find_by_identifier", return_value=resolved_item):
+                await mock_evaluation.score_text(row, score_name="test_score")
+
+        passed_result = mock_evaluation._create_score_result.await_args.kwargs["result"]
+        assert passed_result["resolved_item_id"] == "acct-123--309517289"
+        assert mock_evaluation._create_score_result.await_args.kwargs["content_id"] == "309517289"
+
+    @pytest.mark.asyncio
     async def test_score_text_raises_when_score_returns_error_result(self, mock_evaluation):
         mock_evaluation.override_data = {}
         mock_evaluation.processed_items_by_score = {}

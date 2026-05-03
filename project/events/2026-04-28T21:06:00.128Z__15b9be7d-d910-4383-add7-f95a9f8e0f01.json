@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "15b9be7d-d910-4383-add7-f95a9f8e0f01",
+  "issue_id": "plx-f4445424-1adf-490a-aa9e-91ba2e264aa1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-04-28T21:06:00.128Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "# Build stub PlexusModule for the spike\n\n## What\n\nA minimal Python module that, when registered into a TactusRuntime, exposes the read-only subset of the v1 Lua API surface needed for the spike tasks. Stubs only — backed by hand-curated fixture data, not real Plexus services.\n\n## Surface to stub\n\n- `plexus.scorecards.list`, `plexus.scorecards.info`\n- `plexus.score.info`, `plexus.score.predict`, `plexus.score.evaluations`\n- `plexus.feedback.find`, `plexus.feedback.alignment`\n- `plexus.evaluation.info`, `plexus.evaluation.find_recent`\n- `plexus.item.info`, `plexus.item.last`\n- `plexus.task.info`, `plexus.task.last`\n- `plexus.docs.list`, `plexus.docs.get`\n- `plexus.budget.remaining`, `plexus.budget.with`\n- `plexus.cost.analysis`\n\n## Stubbing approach\n\n- Backed by JSON fixture files under `spikes/runtime-mcp-validation/fixtures/`.\n- Realistic data shapes — must match what the real PlexusModule will eventually return so the spike validates against the actual API.\n- Predictable / idempotent so test runs are reproducible.\n\n## Constraints\n\n- Stub must be invokable from sandboxed Tactus Lua via `local plexus = require('plexus')`. Requires the host-module mechanism from Epic 2 (or a temporary in-spike workaround that mutates `package.preload` directly via Lupa). Decision: prefer waiting for Epic 2's API; if it's not ready, use the workaround and document the tech-debt.\n- Stubbed `plexus.evaluation.run` lives in a separate task (next).\n\n## Deliverable\n\n`spikes/runtime-mcp-validation/plexus_module_stub.py` plus fixtures, registerable into a TactusRuntime.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-f978d268-4996-4ac5-9868-546c9f6994cc",
+    "priority": 0,
+    "status": "open",
+    "title": "Build stub PlexusModule for the spike (read-only operations)"
+  }
+}

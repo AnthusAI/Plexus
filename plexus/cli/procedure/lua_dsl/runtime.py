@@ -117,6 +117,42 @@ class LuaDSLRuntime:
             raise LuaDSLRuntimeError(f"context.agent_models.{agent_name} must not be blank")
         return model
 
+    @staticmethod
+    def _expand_allowed_tool_names(
+        configured_tool_names: List[str],
+        all_tool_names: List[str],
+    ) -> List[str]:
+        """
+        Expand pseudo toolset aliases into concrete tool names.
+
+        Supported aliases:
+        - 'plexus': include all tools with name prefix 'plexus_' plus
+          core helper tools provided by Plexus MCP registration.
+        """
+        normalized = [str(name).strip() for name in (configured_tool_names or []) if str(name).strip()]
+        if not normalized:
+            return []
+
+        expanded: set[str] = set(normalized)
+        if "plexus" in expanded:
+            for tool_name in all_tool_names:
+                if tool_name.startswith("plexus_"):
+                    expanded.add(tool_name)
+            expanded.update(
+                {
+                    "think",
+                    "get_plexus_documentation",
+                    "score_editor_setup",
+                    "score_editor_get_result",
+                    "score_editor_get_content",
+                    "str_replace_editor",
+                    "submit_score_version",
+                }
+            )
+            expanded.discard("plexus")
+
+        return list(expanded)
+
     async def execute(self, yaml_config: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Execute a Lua-based procedure workflow.
@@ -480,10 +516,17 @@ class LuaDSLRuntime:
                 logger.info(f"Injected output schema guidance into agent '{agent_name}' prompt")
 
             # Filter tools for this agent
-            allowed_tool_names = agent_config.get('tools', [])
-            filtered_tools = [tool for tool in all_mcp_tools if tool.name in allowed_tool_names]
+            configured_tool_names = agent_config.get('tools', [])
+            expanded_tool_names = self._expand_allowed_tool_names(
+                configured_tool_names,
+                [tool.name for tool in all_mcp_tools],
+            )
+            filtered_tools = [tool for tool in all_mcp_tools if tool.name in expanded_tool_names]
 
-            logger.info(f"Agent '{agent_name}' has {len(filtered_tools)} tools: {allowed_tool_names}")
+            logger.info(
+                f"Agent '{agent_name}' has {len(filtered_tools)} tools "
+                f"(configured={configured_tool_names}, expanded={expanded_tool_names})"
+            )
 
             # Convert to LangChain format
             langchain_tools = convert_mcp_tools_to_langchain(filtered_tools)
@@ -531,7 +574,8 @@ class LuaDSLRuntime:
                 tool_primitive=self.tool_primitive,
                 stop_primitive=self.stop_primitive,
                 iterations_primitive=self.iterations_primitive,
-                chat_recorder=chat_recorder
+                chat_recorder=chat_recorder,
+                state_primitive=self.state_primitive
             )
 
             self.agents[agent_name] = agent_primitive

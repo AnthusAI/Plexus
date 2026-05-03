@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3d25fc6f-36fd-4d98-b5e5-556c9a282992",
+  "issue_id": "plx-ed7cd410-9891-4f00-8a0e-cccaee688bd2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T16:09:53.093Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Promoting a score version through the live MCP score_set_champion path failed with GraphQL error: updating the ScoreVersion isFeatured field requires all fields for the byScoreIdAndIsFeaturedAndCreatedAt composite key, including scoreId and createdAt. Fix the promotion implementation and cover it with tests, then verify through the CLI MCP client harness.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix score champion promotion mutation composite key update"
+  }
+}
