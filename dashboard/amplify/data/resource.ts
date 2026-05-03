@@ -25,7 +25,7 @@ type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" |
     "estimatedRemainingSeconds" | "totalItems" | "processedItems" | "errorMessage" | 
     "scoreGoal" | "metricsExplanation" | "inferences" | "cost";
 type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
-    "status" | "modelProvider" | "modelName" | "batchId";
+    "status" | "modelProvider" | "modelName";
 type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation" | "createdByType";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
@@ -35,7 +35,7 @@ type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
 type TaskStageIndexFields = "taskId" | "name" | "order" | "status";
-type ShareLinkIndexFields = "token" | "resourceType" | "resourceId" | "accountId";
+type ShareLinkIndexFields = "token" | "resourceId" | "accountId";
 type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
 type ReportConfigurationIndexFields = "accountId" | "name";
 type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
@@ -48,7 +48,7 @@ type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | 
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
 type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "updatedAt" | "createdAt" | "category" | "version" | "status";
-type ProcedureScoreVersionIndexFields = "procedureId" | "scoreVersionId" | "scoreId" | "updatedAt";
+type ProcedureScoreVersionIndexFields = "procedureId" | "scoreVersionId" | "updatedAt";
 
 // New index types for Feedback Alignment
 // type FeedbackAlignmentIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -304,8 +304,7 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId" as BatchJobIndexFields),
             idx("scorecardId" as BatchJobIndexFields),
-            idx("scoreId" as BatchJobIndexFields),
-            idx("batchId" as BatchJobIndexFields)
+            idx("scoreId" as BatchJobIndexFields)
         ]),
 
     Item: a
@@ -564,7 +563,6 @@ const schema = a.schema({
         .secondaryIndexes((idx: (field: ShareLinkIndexFields) => any) => [
             idx("token"),
             idx("accountId"),
-            idx("resourceType"),
             idx("resourceId")
         ]),
 
@@ -759,9 +757,7 @@ const schema = a.schema({
             // Score-specific access pattern  
             idx("scoreId").sortKeys(["timeRangeStart", "recordType"]).name("byScoreTimeRangeRecord"),
             // Maintenance/cleanup access pattern
-            idx("accountId").sortKeys(["recordType", "timeRangeStart"]).name("byAccountRecordType"),
-            // Additional useful indexes
-            idx("recordType").sortKeys(["timeRangeStart"]).name("byRecordTypeAndTime")
+            idx("accountId").sortKeys(["recordType", "timeRangeStart"]).name("byAccountRecordType")
         ]),
 
 
@@ -923,8 +919,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: ProcedureScoreVersionIndexFields) => any) => [
             idx("procedureId").sortKeys(["updatedAt"]),
-            idx("scoreVersionId").sortKeys(["updatedAt"]),
-            idx("scoreId").sortKeys(["updatedAt"])
+            idx("scoreVersionId").sortKeys(["updatedAt"])
         ]),
 
     ChatSession: a
@@ -951,8 +946,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
-            idx("procedureId").sortKeys(["createdAt"]),
-            idx("status").sortKeys(["updatedAt"])
+            idx("procedureId").sortKeys(["createdAt"])
         ]),
 
     ChatMessage: a
