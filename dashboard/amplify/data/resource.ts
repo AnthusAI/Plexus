@@ -302,8 +302,7 @@ const schema = a.schema({
         .secondaryIndexes((idx) => [
             idx("accountId" as BatchJobIndexFields),
             idx("scorecardId" as BatchJobIndexFields),
-            idx("scoreId" as BatchJobIndexFields),
-            idx("batchId" as BatchJobIndexFields)
+            idx("scoreId" as BatchJobIndexFields)
         ]),
 
     Item: a
@@ -562,7 +561,6 @@ const schema = a.schema({
         .secondaryIndexes((idx: (field: ShareLinkIndexFields) => any) => [
             idx("token"),
             idx("accountId"),
-            idx("resourceType"),
             idx("resourceId")
         ]),
 
@@ -757,9 +755,7 @@ const schema = a.schema({
             // Score-specific access pattern  
             idx("scoreId").sortKeys(["timeRangeStart", "recordType"]).name("byScoreTimeRangeRecord"),
             // Maintenance/cleanup access pattern
-            idx("accountId").sortKeys(["recordType", "timeRangeStart"]).name("byAccountRecordType"),
-            // Additional useful indexes
-            idx("recordType").sortKeys(["timeRangeStart"]).name("byRecordTypeAndTime")
+            idx("accountId").sortKeys(["recordType", "timeRangeStart"]).name("byAccountRecordType")
         ]),
 
 
@@ -924,8 +920,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("accountId").sortKeys(["updatedAt"]),
-            idx("procedureId").sortKeys(["createdAt"]),
-            idx("status").sortKeys(["updatedAt"])
+            idx("procedureId").sortKeys(["createdAt"])
         ]),
 
     ChatMessage: a
