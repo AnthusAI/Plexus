@@ -777,6 +777,120 @@ describe("ConversationViewer streaming updates", () => {
     })
   })
 
+  it("renders execute_tactus evaluation output when value includes evaluationId without api_calls", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-exec-tactus-eval-id-only",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "TOOL_CALL",
+          humanInteraction: "INTERNAL",
+          toolName: "execute_tactus",
+          toolParameters: JSON.stringify({ tactus: "return plexus.evaluation.info({ evaluation_id = 'eval-2' })" }),
+          toolResponse: JSON.stringify({
+            ok: true,
+            value: { evaluationId: "eval-2" },
+          }),
+          content: "execute_tactus(...)",
+          createdAt: "2026-03-27T00:00:04.000Z",
+          sequenceNumber: 4,
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId("evaluation-tool-output")).toBeInTheDocument()
+      expect(screen.getByTestId("evaluation-tool-output").textContent).toContain("eval-2")
+    })
+  })
+
+  it("keeps execute_tactus non-evaluation envelopes on generic ToolOutput", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-exec-tactus-non-eval",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "TOOL_CALL",
+          humanInteraction: "INTERNAL",
+          toolName: "execute_tactus",
+          toolParameters: JSON.stringify({ tactus: "return plexus.scorecards.list({})" }),
+          toolResponse: JSON.stringify({
+            ok: true,
+            api_calls: ["plexus.scorecards.list"],
+            value: [{ id: "scorecard-1", name: "QA Scorecard" }],
+          }),
+          content: "execute_tactus(...)",
+          createdAt: "2026-03-27T00:00:05.000Z",
+          sequenceNumber: 5,
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("execute_tactus output-available")).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId("evaluation-tool-output")).not.toBeInTheDocument()
+    expect(screen.getByText(/scorecard-1/)).toBeInTheDocument()
+  })
+
+  it("keeps malformed execute_tactus envelopes on generic ToolOutput", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-exec-tactus-malformed",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "TOOL_CALL",
+          humanInteraction: "INTERNAL",
+          toolName: "execute_tactus",
+          toolParameters: JSON.stringify({ tactus: "return plexus.api.list({})" }),
+          toolResponse: "{not-json",
+          content: "execute_tactus(...)",
+          createdAt: "2026-03-27T00:00:06.000Z",
+          sequenceNumber: 6,
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("execute_tactus input-available")).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId("evaluation-tool-output")).not.toBeInTheDocument()
+    expect(screen.getByText(/return plexus\.api\.list/)).toBeInTheDocument()
+  })
+
   it("keeps USER message before ASSISTANT when timestamps are identical", async () => {
     mockChatMessageList.mockResolvedValue({
       data: [

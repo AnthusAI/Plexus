@@ -80,34 +80,125 @@ const EVALUATION_TOOL_NAMES = new Set([
   'plexus_evaluation_info',
 ])
 
-const isExecuteTactusEvaluationOutput = (output: unknown): boolean => {
-  if (!output || typeof output !== 'object' || Array.isArray(output)) {
-    return false
-  }
+type ExecuteTactusEnvelopeSummary = {
+  apiCalls: string[]
+  evaluationIds: string[]
+  ok: boolean | null
+  error: string | null
+  hasEnvelope: boolean
+}
 
-  const record = output as Record<string, unknown>
-  const apiCalls = record.api_calls
-  if (Array.isArray(apiCalls) && apiCalls.some(call => (
-    call === 'plexus.evaluation.run' || call === 'plexus.evaluation.info'
-  ))) {
-    return true
-  }
-
-  const value = record.value
+const coerceObjectRecord = (value: unknown): Record<string, unknown> | null => {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const valueRecord = value as Record<string, unknown>
-    return typeof valueRecord.evaluation_id === 'string' || typeof valueRecord.id === 'string'
+    return value as Record<string, unknown>
+  }
+  if (typeof value !== 'string') {
+    return null
+  }
+  const text = value.trim()
+  if (!text.startsWith('{') || !text.endsWith('}')) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+const collectEvaluationIdsFromValue = (value: unknown): string[] => {
+  const ids = new Set<string>()
+
+  const maybeAdd = (candidate: unknown): void => {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      ids.add(candidate.trim())
+    }
   }
 
-  return false
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(visit)
+      return
+    }
+    if (!node || typeof node !== 'object') {
+      return
+    }
+    const record = node as Record<string, unknown>
+    maybeAdd(record.evaluation_id)
+    maybeAdd(record.evaluationId)
+
+    // Treat plain "id" as evaluation only when surrounding fields resemble evaluation output.
+    const hasEvaluationContext = [
+      'evaluation_id',
+      'evaluationId',
+      'evaluation_type',
+      'metrics',
+      'accuracy',
+      'processed_items',
+      'score_name',
+      'scorecard_name',
+      'confusion_matrix',
+      'dashboard_url',
+      'status',
+    ].some((key) => key in record)
+    if (hasEvaluationContext) {
+      maybeAdd(record.id)
+    }
+  }
+
+  visit(value)
+  return Array.from(ids)
+}
+
+const parseExecuteTactusEnvelope = (output: unknown): ExecuteTactusEnvelopeSummary => {
+  const record = coerceObjectRecord(output)
+  if (!record) {
+    return {
+      apiCalls: [],
+      evaluationIds: [],
+      ok: null,
+      error: null,
+      hasEnvelope: false,
+    }
+  }
+
+  const rawApiCalls = record.api_calls
+  const apiCalls = Array.isArray(rawApiCalls)
+    ? rawApiCalls.filter((call): call is string => typeof call === 'string')
+    : []
+
+  return {
+    apiCalls,
+    evaluationIds: collectEvaluationIdsFromValue(record.value),
+    ok: typeof record.ok === 'boolean' ? record.ok : null,
+    error: typeof record.error === 'string' ? record.error : null,
+    hasEnvelope: (
+      'ok' in record
+      || 'value' in record
+      || 'error' in record
+      || 'api_calls' in record
+    ),
+  }
+}
+
+const isExecuteTactusEvaluationOutput = (output: unknown): boolean => {
+  const summary = parseExecuteTactusEnvelope(output)
+  return summary.apiCalls.some((call) => call.startsWith('plexus.evaluation.'))
+    || summary.evaluationIds.length > 0
 }
 
 const shouldRenderEvaluationToolOutput = (toolViewModel: ConsoleToolViewModel): boolean => {
+  if (toolViewModel.toolName === 'execute_tactus') {
+    return isExecuteTactusEvaluationOutput(toolViewModel.output)
+  }
   if (EVALUATION_TOOL_NAMES.has(toolViewModel.toolName)) {
     return true
   }
-  return toolViewModel.toolName === 'execute_tactus'
-    && isExecuteTactusEvaluationOutput(toolViewModel.output)
+  return false
 }
 
 const CONSOLE_CHAT_MODEL_OPTIONS = [
