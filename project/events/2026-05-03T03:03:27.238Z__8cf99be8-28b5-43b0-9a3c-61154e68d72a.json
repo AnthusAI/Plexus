@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8cf99be8-28b5-43b0-9a3c-61154e68d72a",
+  "issue_id": "plx-260463b3-5151-4c28-af21-d20a9d6737cb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T03:03:27.238Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Remove stale guardrails wording from optimizer prompts"
+  }
+}
