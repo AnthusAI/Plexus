@@ -1,0 +1,25 @@
+{
+  "id": "plx-9adeb715-5ed2-4301-9528-66b3a155a57a",
+  "title": "Split optimizer cookbooks by hypothesis lane",
+  "description": "Implement lane-specific optimizer cookbooks: normal, structural, and creative. Wire hypothesis generation to inject only the relevant cookbook per slot, move creative recipes out of YAML, update tests, and verify with optimizer config and Tactus runtime suites.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "87c6158e-ffbe-4f1d-ac0e-5812e1d68114",
+      "author": "ryan",
+      "text": "Implemented lane-specific optimizer cookbooks, slot-based cookbook injection, tests for creative isolation and structural/normal cookbook content, and verified with optimizer config tests, Tactus runtime tests, and CLI MCP harness docs smoke.",
+      "created_at": "2026-05-03T16:39:40.284634Z"
+    }
+  ],
+  "created_at": "2026-05-03T16:35:36.361598Z",
+  "updated_at": "2026-05-03T16:39:47.785030Z",
+  "closed_at": "2026-05-03T16:39:47.785030Z",
+  "custom": {}
+}

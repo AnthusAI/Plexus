@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d0bbe369-8029-45ba-b73f-bf9b0e987a73",
+  "issue_id": "plx-f9615f77-f6fd-4137-9b9a-3a3971ff5d9f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-02T17:29:17.720Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "EvaluationTask detail related-resource cards regressed: the link icon moved into the right metadata slot and the right-side timestamp disappeared.\n\nBehavior spec:\nFeature: EvaluationTask related resource metadata\nScenario: Procedure and score version links show stable metadata\nGiven an EvaluationTask is shown in detail mode with a linked procedure and score version\nWhen the related resource cards render\nThen each card shows its link icon inline next to the linked identifier/title\nAnd each card shows its relative timestamp in the right-side metadata area\nAnd both timestamps use the shared Timestamp component styling.\n\nDefinition of Done:\n- Procedure and Score Version RelatedResourceCard usages keep inline link icons.\n- Right-side timestamps render through a shared timestamp prop/path.\n- Focused EvaluationTask tests cover the layout.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-b13120eb-5b86-4098-94e6-422ffc0412a3",
+    "priority": 2,
+    "status": "open",
+    "title": "Restore EvaluationTask related resource timestamp layout"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "plx-30c742ad-bd90-49a0-9144-46cdd0dcc0e4",
+  "title": "Run six remaining Suco optimizer candidates",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "de987c51-63a3-4c11-8104-c80ae55f9a94",
+      "author": "ryan",
+      "text": "Starting direct CLI optimizer runs for six Suco candidates: Homeowner Verification AI, Branding/Agent name AI, Recorded Line AI, Pre-Handoff AI, Walk in Tub AI, Property Type AI. Parameters: max_iterations=6, days=90, max_samples=40.",
+      "created_at": "2026-05-03T13:32:19.418705Z"
+    },
+    {
+      "id": "1e8e7f39-17c6-4e90-98b4-40a2aa539cd8",
+      "author": "ryan",
+      "text": "Direct CLI optimizer procedures started via detached Python launcher. Run dir: /tmp/plexus-optimizer-runs/20260503-093348-suco-six-popen\n\nPIDs and procedures:\n- Homeowner Verification AI: PID 90476, procedure 76edbb75-853a-42dc-95a4-e7e49d8c2261\n- Branding/Agent name AI: PID 90477, procedure c5ba3c6c-fc09-4e2e-aea3-6a5bfdc5cb40\n- Recorded Line AI: PID 90478, procedure fb1ef571-2eb7-4f74-bc65-51ef32775651\n- Pre-Handoff AI: PID 90479, procedure b6398c07-ffe3-4404-b1de-7f9645e65ae2\n- Walk in Tub AI: PID 90480, procedure a369650d-26a5-4d74-bed0-1011d675fbe9\n- Property Type AI: PID 90481, procedure 20e4ac47-c67f-4a2d-ae70-8fab88988cee\n\nParameters: --days 90 --max-samples 40 --max-iterations 6. Initial logs show procedure/task/stage creation and running optimization.",
+      "created_at": "2026-05-03T13:34:22.569514Z"
+    },
+    {
+      "id": "c28f5514-7d41-4461-9260-1499085ea5ec",
+      "author": "ryan",
+      "text": "Promoted four improved Suco optimizer winners to champion after verification: Walk in Tub AI -> 48504c95-2a81-47d4-840f-3a025f9b92b8; Recorded Line AI -> 9a011129-a6d0-4144-bed8-19664bcb63c9; Branding/Agent name AI -> d704e73a-ed41-4155-bc70-c35ab4fe4528; Pre-Handoff AI -> b0b5b99d-f0b0-430e-8fe8-18ca11f2e832. Homeowner Verification AI and Property Type AI had no improvement and were not promoted.",
+      "created_at": "2026-05-03T16:09:35.066352Z"
+    }
+  ],
+  "created_at": "2026-05-03T13:31:59.252220Z",
+  "updated_at": "2026-05-03T16:13:03.855480Z",
+  "closed_at": "2026-05-03T16:13:03.855480Z",
+  "custom": {}
+}

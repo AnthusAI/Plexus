@@ -1,0 +1,31 @@
+{
+  "id": "plx-02b91d10-45ee-44f2-b532-b5fcb1fd7827",
+  "title": "Backfill Suco champion evaluation associations",
+  "description": "Critical reporting depends on champion ScoreVersions having associated COMPLETED Evaluation records via scoreVersionId. Suco - Home Improvement champion versions may have historical completed evaluations that were not linked, so score champion version timeline/reporting can miss performance data.\n\nBehavior spec:\nFeature: Champion evaluation association backfill\nScenario: Backfilling Suco champion versions\nGiven the Suco - Home Improvement scorecard has scores with champion versions\nAnd completed evaluations exist for those champion versions but lack scoreVersionId associations\nWhen the backfill is run for that scorecard\nThen each eligible completed evaluation is associated to the correct champion ScoreVersion\nAnd evaluations that cannot be confidently matched are reported without mutation\nAnd no champion version is changed by the backfill.\n\nOut of scope: champion promotion changes or weakening promotion safeguards.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7c7b9d85-39bd-49e3-b9fa-a43edd316d24",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "373f51bd-73c9-41b1-8bb7-c6bb48c30139",
+      "author": "ryan",
+      "text": "Starting investigation. Current worktree has unrelated optimizer cookbook edits; I will avoid touching them. Goal is to find existing association/backfill support, add a precise path if missing, and run/report Suco - Home Improvement champion evaluation association backfill without changing champions.",
+      "created_at": "2026-05-03T16:38:08.701502Z"
+    },
+    {
+      "id": "c5c4abf8-5342-4a53-b43f-ba750bcb420b",
+      "author": "ryan",
+      "text": "Backfill completed for Suco - Home Improvement. Dry run identified 27 unlinked evaluations by scoreId: 25 COMPLETED and 2 RUNNING. Applied scoreVersionId to 26 records with exactly one championHistory interval match: 5 COMPLETED for Contact Info AI and 19 COMPLETED + 2 RUNNING for Inappropriate Conversations- AI. Left one COMPLETED evaluation unmodified for Property Type and Home Value Metadata AI (evaluation c1d85eec-b07b-481d-82cf-b7248e03fade) because it had zero champion interval candidates. Verification found no remaining matchable unlinked evaluations; one unlinked completed record remains intentionally skipped.",
+      "created_at": "2026-05-03T16:44:47.285902Z"
+    }
+  ],
+  "created_at": "2026-05-03T16:38:06.100399Z",
+  "updated_at": "2026-05-03T16:44:47.302149Z",
+  "closed_at": "2026-05-03T16:44:47.302149Z",
+  "custom": {}
+}

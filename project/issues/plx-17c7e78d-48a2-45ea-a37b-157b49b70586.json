@@ -1,0 +1,18 @@
+{
+  "id": "plx-17c7e78d-48a2-45ea-a37b-157b49b70586",
+  "title": "Implement ScoreChampionVersionTimeline report block",
+  "description": "Implement the backend report block, dashboard renderer, docs, and tests for ScoreChampionVersionTimeline according to the approved plan. Record progress and close only after verification.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7c7b9d85-39bd-49e3-b9fa-a43edd316d24",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-02T17:08:39.936349Z",
+  "updated_at": "2026-05-02T17:08:43.899250Z",
+  "closed_at": null,
+  "custom": {}
+}
