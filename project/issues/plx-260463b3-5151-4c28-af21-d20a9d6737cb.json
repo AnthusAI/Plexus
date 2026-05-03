@@ -1,0 +1,31 @@
+{
+  "id": "plx-260463b3-5151-4c28-af21-d20a9d6737cb",
+  "title": "Remove stale guardrails wording from optimizer prompts",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5b98dff9-d021-421b-bdda-6cd7b81cfbde",
+      "author": "ryan",
+      "text": "Renamed the optimizer skill's stale 'Hard Guardrails' section to 'Operating Rules' and verified no guardrails/read-guardrails wording remains in the skill, optimizer YAML, planning-context files, or active creative-run logs.",
+      "created_at": "2026-05-03T03:04:01.742402Z"
+    },
+    {
+      "id": "1ed48f54-229f-404e-b108-76a16958d7a6",
+      "author": "ryan",
+      "text": "Follow-up while verifying: the first detached six-cycle optimizer launch failed because the runtime could not find the 'plexus' executable on PATH. Relaunched with /Users/ryan/miniconda3/bin prepended to PATH. New procedures: Appropriate Rebuttal- AI 1557eaf9-5a38-4774-a722-7cc2c761c726 (pid 46742), Early Transfer AI d13a9830-3dcd-41e7-adb4-6a379817bc38 (pid 46743), Project Intent AI e8e7c224-6d1f-49cb-885b-de1974bdeee9 (pid 46744).",
+      "created_at": "2026-05-03T03:05:07.136102Z"
+    }
+  ],
+  "created_at": "2026-05-03T03:03:27.238287Z",
+  "updated_at": "2026-05-03T03:05:07.136102Z",
+  "closed_at": "2026-05-03T03:04:01.767415Z",
+  "custom": {}
+}

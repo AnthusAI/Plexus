@@ -10,9 +10,40 @@
   "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "3e024333-19af-4443-bc11-2926ff9d6f2a",
+      "author": "ryan",
+      "text": "Testing optimizer harmful-repeat guard on live Project Intent AI smoke run b3673aec. Cycle 1 completed and rejected synthesis due recent AC1 regression. Cycle 2 correctly rejected a repeated harmful transcript-first hypothesis and retried with hard exclusion. Continuing run to completion; Project Intent AI only has 11 qualifying 90-day feedback items so regression dataset path is disabled in this smoke.",
+      "created_at": "2026-05-02T01:45:21.331391Z"
+    },
+    {
+      "id": "f1bcc620-655e-4154-86ac-f321de520c4c",
+      "author": "ryan",
+      "text": "Completed live CLI smoke run b3673aec for Project Intent AI. Procedure completed successfully, but no candidate improved recent AC1. Findings: harmful-repeat guard fired in cycle 2 and blocked repeated transcript-first/model-swap territory; old YAML still synthesized despite all cycle-2 hypotheses failing because neutral disabled-regression deltas were treated as not-bad. Patched YAML to skip synthesis when zero hypotheses succeeded and no positive signal exists. Also patched execute_tactus rubric-memory wrappers to pass actual awaitables instead of functions; added unit coverage. Remaining environment issue: CLI lacks AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME, so rubric-memory contradiction context remains unavailable until env is configured.",
+      "created_at": "2026-05-02T02:00:43.443254Z"
+    },
+    {
+      "id": "ebd33c21-8822-44f0-ac7f-f1583d9b02dc",
+      "author": "ryan",
+      "text": "User confirmed missing rubric-memory corpus for this project is expected and should not block optimizer/report runs. Next patch: treat missing rubric-memory corpus as unavailable optional context and continue, while still surfacing diagnostics.",
+      "created_at": "2026-05-02T15:00:13.920888Z"
+    },
+    {
+      "id": "34da30c8-356d-4077-990e-46353ce22fea",
+      "author": "ryan",
+      "text": "Patched rubric-memory providers to return empty citation contexts with rubric_memory_unavailable diagnostics when a project's S3 knowledge-base corpus is absent. Verified fresh execute_tactus harness call with ../Plexus-3/.env loaded now returns ok=true, zero citations, and a missing-corpus diagnostic instead of failing the procedure/report path.",
+      "created_at": "2026-05-02T15:03:12.192814Z"
+    },
+    {
+      "id": "60b90eca-ca27-46b7-8640-699eb91e9984",
+      "author": "ryan",
+      "text": "Selected next optimizer targets after checking Suco Home Improvement candidates with no recent procedure runs and enough 90-day feedback: Project Timeline AI (>=200 feedback) for the other session, Customer Questions AI (>=200 feedback) for this session. Starting Customer Questions AI for 3 cycles / 200 samples / 90 days via CLI MCP harness.",
+      "created_at": "2026-05-02T15:44:32.154905Z"
+    }
+  ],
   "created_at": "2026-04-02T16:07:18.359999Z",
-  "updated_at": "2026-04-02T16:07:18.359999Z",
+  "updated_at": "2026-05-02T15:44:32.154905Z",
   "closed_at": null,
   "custom": {}
 }

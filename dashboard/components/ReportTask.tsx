@@ -31,6 +31,7 @@ export interface ReportTaskData {
    * Report blocks data from the backend
    */
   reportBlocks?: Array<{
+    id?: string;
     type: string;
     config: Record<string, any>;
     output: Record<string, any>;
@@ -90,6 +91,14 @@ interface ReportBlockDisplayProps {
   onContentChange: (content: string) => void;
 }
 
+const normalizedBlockValue = (value?: string | null): string => (value || '').trim();
+
+const blockTypeMatches = (block: ReportBlock, blockClass: string): boolean =>
+  normalizedBlockValue(block.type) === normalizedBlockValue(blockClass);
+
+const blockNameMatches = (block: ReportBlock, blockName: string): boolean =>
+  normalizedBlockValue(block.name) === normalizedBlockValue(blockName);
+
 const ReportTask: React.FC<ReportTaskProps> = ({ 
   variant, 
   task, 
@@ -101,12 +110,12 @@ const ReportTask: React.FC<ReportTaskProps> = ({
   isSelected
 }) => {
   // Helper to transform raw blocks into ReportBlock format
-  const transformBlocks = useCallback((rawBlocks: Array<{ type?: string; name?: string; position: number; output?: any; log?: string; config?: any; attachedFiles?: any[]; dataSet?: any }>): ReportBlock[] => {
+  const transformBlocks = useCallback((rawBlocks: Array<{ id?: string; type?: string; name?: string; position: number; output?: any; log?: string; config?: any; attachedFiles?: any[]; dataSet?: any }>): ReportBlock[] => {
     return rawBlocks.map(blockProp => {
       const parsedOutput = parseOutputString(blockProp.output);
       const blockTypeToUse = blockProp.type || (typeof parsedOutput === 'object' && parsedOutput?.class) || 'unknown';
       return {
-        id: blockProp.name || `block-${blockProp.position}`,
+        id: blockProp.id || blockProp.name || `block-${blockProp.position}`,
         name: blockProp.name,
         position: blockProp.position,
         type: blockTypeToUse,
@@ -374,9 +383,10 @@ const ReportTask: React.FC<ReportTaskProps> = ({
       // Match by type + name when name is present (handles multiple blocks of same type)
       const blockData = (
         nameFromMeta
-          ? reportBlocks.find(b => b.type === blockClass && b.name === nameFromMeta)
-            ?? reportBlocks.find(b => b.type === blockClass)
-          : reportBlocks.find(b => b.type === blockClass)
+          ? reportBlocks.find(b => blockTypeMatches(b, blockClass) && blockNameMatches(b, nameFromMeta))
+            ?? reportBlocks.find(b => blockNameMatches(b, nameFromMeta))
+            ?? reportBlocks.find(b => blockTypeMatches(b, blockClass))
+          : reportBlocks.find(b => blockTypeMatches(b, blockClass))
       ) ?? null;
 
       if (blockData) {
@@ -384,31 +394,33 @@ const ReportTask: React.FC<ReportTaskProps> = ({
         const complete = isReportComplete(task.status, reportBlocks);
         const blockPending = isBlockPending(blockData, complete, task.status);
         
-        // Add a unique key that includes task.id to force re-render when report data changes
-        const blockKey = `${task.id}-block-${blockData.id}-${blockData.position}-${Date.now()}`;
+        const blockKey = `${task.id}-block-${blockData.id}-${blockData.position}`;
         
         // Make sure attachedFiles is always an array
         const attachedFiles = Array.isArray(blockData.attachedFiles) ? blockData.attachedFiles : [];
+        const renderType = blockClass || blockData.type;
         
         // Set up enhanced props for the block when the report is not complete
         const displayName = blockData.name && !blockData.name.startsWith('block_')
           ? blockData.name
-          : blockData.type === 'FeedbackAlignment'
+          : renderType === 'FeedbackAlignment'
             ? 'Feedback Alignment'
-            : blockData.type === 'VectorTopicMemory'
+            : renderType === 'VectorTopicMemory'
               ? 'Vector Topic Memory'
-              : blockData.type === 'ActionItems'
+              : renderType === 'ActionItems'
               ? 'Action Items'
-              : blockData.type === 'FeedbackAlignmentTimeline'
+              : renderType === 'FeedbackAlignmentTimeline'
               ? 'Feedback Alignment Timeline'
-              : blockData.type === 'FeedbackVolumeTimeline'
+              : renderType === 'FeedbackVolumeTimeline'
               ? 'Feedback Volume Timeline'
-              : blockData.type === 'CorrectionRate'
+              : renderType === 'CorrectionRate'
               ? 'Correction Rate'
-              : blockData.type === 'AcceptanceRate'
+              : renderType === 'AcceptanceRate'
               ? 'Acceptance Rate'
-              : blockData.type === 'RecentFeedback'
+              : renderType === 'RecentFeedback'
               ? 'Recent Feedback'
+              : renderType === 'ScoreChampionVersionTimeline'
+              ? 'Score Champion Version Timeline'
               : blockData.name ?? undefined;
         const blockProps = {
           id: blockData.id,
@@ -422,7 +434,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           log: blockData.log || undefined,
           name: displayName,
           position: blockData.position,
-          type: blockData.type,
+          type: renderType,
           attachedFiles: attachedFiles,
           // Add a note when the block is generating
           subtitle: blockPending ? "Generating..." : undefined,
@@ -436,7 +448,7 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           <div
             key={blockKey}
             className="my-4"
-            id={blockData.type === 'VectorTopicMemory' ? 'vector-topic-memory' : undefined}
+            id={renderType === 'VectorTopicMemory' ? 'vector-topic-memory' : undefined}
           >
             <BlockRenderer {...blockProps} />
             
@@ -467,6 +479,8 @@ const ReportTask: React.FC<ReportTaskProps> = ({
           ? 'Acceptance Rate'
           : blockClass === 'RecentFeedback'
           ? 'Recent Feedback'
+          : blockClass === 'ScoreChampionVersionTimeline'
+          ? 'Score Champion Version Timeline'
           : blockClass || 'Report block';
         return (
           <div className="my-4 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/10 p-4">

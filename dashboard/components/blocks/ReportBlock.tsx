@@ -47,6 +47,8 @@ export interface ReportBlockProps {
   title?: string
   /** Optional subtitle for additional context */
   subtitle?: string
+  /** Optional className for subtitle styling */
+  subtitleClassName?: string
   /** Whether to show the title header section */
   showTitle?: boolean
   /** Optional notes for the report block */
@@ -104,6 +106,7 @@ const ReportBlock: BlockComponent = ({
   attachedFiles,
   title,
   subtitle,
+  subtitleClassName,
   showTitle = true,
   notes,
   error,
@@ -610,7 +613,7 @@ ${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).
                 </h3>
               )}
               {subtitle && (
-                <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+                <p className={subtitleClassName || "text-sm text-muted-foreground mt-1"}>{subtitle}</p>
               )}
               {displayDateRange && (
                 <p className="text-sm text-muted-foreground mt-1">

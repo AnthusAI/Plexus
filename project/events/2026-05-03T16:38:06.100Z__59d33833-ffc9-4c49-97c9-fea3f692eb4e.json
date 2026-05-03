@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "59d33833-ffc9-4c49-97c9-fea3f692eb4e",
+  "issue_id": "plx-02b91d10-45ee-44f2-b532-b5fcb1fd7827",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T16:38:06.100Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Critical reporting depends on champion ScoreVersions having associated COMPLETED Evaluation records via scoreVersionId. Suco - Home Improvement champion versions may have historical completed evaluations that were not linked, so score champion version timeline/reporting can miss performance data.\n\nBehavior spec:\nFeature: Champion evaluation association backfill\nScenario: Backfilling Suco champion versions\nGiven the Suco - Home Improvement scorecard has scores with champion versions\nAnd completed evaluations exist for those champion versions but lack scoreVersionId associations\nWhen the backfill is run for that scorecard\nThen each eligible completed evaluation is associated to the correct champion ScoreVersion\nAnd evaluations that cannot be confidently matched are reported without mutation\nAnd no champion version is changed by the backfill.\n\nOut of scope: champion promotion changes or weakening promotion safeguards.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-7c7b9d85-39bd-49e3-b9fa-a43edd316d24",
+    "priority": 0,
+    "status": "open",
+    "title": "Backfill Suco champion evaluation associations"
+  }
+}

@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { Task, TaskHeader, TaskContent, BaseTaskProps } from '@/components/Task'
-import { FlaskConical, Square, X, MoreHorizontal, MessageSquareCode, Share, Trash2, Link as LinkIcon, AlertTriangle } from 'lucide-react'
+import { Coins, FlaskConical, Square, X, MoreHorizontal, MessageSquareCode, Share, Trash2, Link as LinkIcon, AlertTriangle } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { CardButton } from '@/components/CardButton'
 import { Button } from '@/components/ui/button'
@@ -2119,7 +2119,9 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   const [procedureLoadFailed, setProcedureLoadFailed] = useState(false);
   const [baselineMetrics, setBaselineMetrics] = useState<EvaluationMetric[] | null>(null);
   const [baselineAccuracy, setBaselineAccuracy] = useState<number | null>(null);
+  const [baselineEvaluationCreatedAt, setBaselineEvaluationCreatedAt] = useState<string | null>(null);
   const [currentBaselineAccuracy, setCurrentBaselineAccuracy] = useState<number | null>(null);
+  const [currentBaselineEvaluationCreatedAt, setCurrentBaselineEvaluationCreatedAt] = useState<string | null>(null);
 
   const data = task.data ?? {} as EvaluationTaskData
   const hasInlineActionMenu = Boolean(onShare || onDelete)
@@ -2256,6 +2258,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
     if (!baselineEvaluationId) {
       setBaselineMetrics(null);
       setBaselineAccuracy(null);
+      setBaselineEvaluationCreatedAt(null);
       return;
     }
 
@@ -2268,6 +2271,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
               getEvaluation(id: $id) {
                 id
                 accuracy
+                createdAt
                 metrics
               }
             }
@@ -2277,6 +2281,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
 
         const baselineEval = (result as any).data?.getEvaluation;
         setBaselineAccuracy(baselineEval?.accuracy ?? null);
+        setBaselineEvaluationCreatedAt(baselineEval?.createdAt ?? null);
         if (baselineEval?.metrics) {
           try {
             const parsed = parseJsonDeep(baselineEval.metrics);
@@ -2303,6 +2308,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
       } catch (error) {
         console.error('Error fetching baseline evaluation metrics:', error);
         setBaselineMetrics(null);
+        setBaselineEvaluationCreatedAt(null);
       }
     };
 
@@ -2313,6 +2319,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
   useEffect(() => {
     if (!currentBaselineEvaluationId) {
       setCurrentBaselineAccuracy(null);
+      setCurrentBaselineEvaluationCreatedAt(null);
       return;
     }
 
@@ -2325,6 +2332,7 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
               getEvaluation(id: $id) {
                 id
                 accuracy
+                createdAt
               }
             }
           `,
@@ -2333,9 +2341,11 @@ const EvaluationTask = React.memo(function EvaluationTaskComponent({
 
         const eval_ = (result as any).data?.getEvaluation;
         setCurrentBaselineAccuracy(eval_?.accuracy ?? null);
+        setCurrentBaselineEvaluationCreatedAt(eval_?.createdAt ?? null);
       } catch (error) {
         console.error('Error fetching current baseline evaluation:', error);
         setCurrentBaselineAccuracy(null);
+        setCurrentBaselineEvaluationCreatedAt(null);
       }
     };
 
@@ -2906,6 +2916,24 @@ ${categoryLines}${mechanicalLines}
                 </Link>
               </div>
             )}
+            <Timestamp time={props.task.time} variant="relative" />
+            <ProgressBarTiming
+              startedAt={data.startedAt || (data.task as any)?.startedAt}
+              completedAt={(data.task as any)?.completedAt}
+              isInProgress={data.status?.toUpperCase() === 'RUNNING'}
+              className="text-muted-foreground"
+            />
+            {task.data?.cost != null && task.data.cost > 0 && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Coins className="h-3.5 w-3.5 flex-shrink-0" aria-label="Cost" />
+                <span>
+                  ${task.data.cost.toFixed(4)} total
+                  {task.data.processedItems > 0 && (
+                    <> &middot; ${(task.data.cost / task.data.processedItems).toFixed(6)}/item</>
+                  )}
+                </span>
+              </div>
+            )}
             {baselineEvaluationId && (
               <RelatedResourceCard
                 label="Original baseline"
@@ -2914,6 +2942,8 @@ ${categoryLines}${mechanicalLines}
                 rowDensity="dense"
                 href={`/lab/evaluations/${baselineEvaluationId}`}
                 linkLabel="Open original baseline evaluation"
+                inlineLink={true}
+                rightTimestamp={baselineEvaluationCreatedAt}
                 summary={<span className="font-mono truncate">{shortHash(baselineEvaluationId)}</span>}
               >
                 {null}
@@ -2927,29 +2957,13 @@ ${categoryLines}${mechanicalLines}
                 rowDensity="dense"
                 href={`/lab/evaluations/${currentBaselineEvaluationId}`}
                 linkLabel="Open current best baseline evaluation"
+                inlineLink={true}
+                rightTimestamp={currentBaselineEvaluationCreatedAt}
                 summary={<span className="font-mono truncate">{shortHash(currentBaselineEvaluationId)}</span>}
               >
                 {null}
               </RelatedResourceCard>
             )}
-            {task.data?.cost != null && task.data.cost > 0 && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>Cost:</span>
-                <span>
-                  ${task.data.cost.toFixed(4)} total
-                  {task.data.processedItems > 0 && (
-                    <> &middot; ${(task.data.cost / task.data.processedItems).toFixed(6)}/item</>
-                  )}
-                </span>
-              </div>
-            )}
-            <Timestamp time={props.task.time} variant="relative" />
-            <ProgressBarTiming
-              startedAt={data.startedAt || (data.task as any)?.startedAt}
-              completedAt={(data.task as any)?.completedAt}
-              isInProgress={data.status?.toUpperCase() === 'RUNNING'}
-              className="text-muted-foreground"
-            />
             {(taskWithDefaults.procedureId || (taskWithDefaults.scorecardId && taskWithDefaults.scoreId && taskWithDefaults.scoreVersionId)) && (
               <div className="space-y-0">
                 {taskWithDefaults.procedureId && (
@@ -2961,14 +2975,10 @@ ${categoryLines}${mechanicalLines}
                     rowDensity="dense"
                     href={`/lab/procedures/${taskWithDefaults.procedureId}`}
                     linkLabel="Open procedure"
-                    rightMeta={
-                      procedureInfo?.updatedAt ? (
-                        <Timestamp time={procedureInfo.updatedAt} variant="relative" className="whitespace-nowrap text-xs text-muted-foreground" />
-                      ) : null
-                    }
+                    rightTimestamp={procedureInfo?.updatedAt}
                     summary={
                       <span className="truncate">
-                        {procedureInfo?.name || (procedureLoadFailed ? 'Unavailable' : taskWithDefaults.procedureId)}
+                        {procedureInfo?.name || (procedureLoadFailed ? 'Unavailable' : shortHash(taskWithDefaults.procedureId))}
                       </span>
                     }
                   >
@@ -2984,11 +2994,7 @@ ${categoryLines}${mechanicalLines}
                     rowDensity="dense"
                     href={`/lab/scorecards/${taskWithDefaults.scorecardId}/scores/${taskWithDefaults.scoreId}/versions/${taskWithDefaults.scoreVersionId}`}
                     linkLabel="Open score version"
-                    rightMeta={
-                      scoreVersionInfo?.createdAt ? (
-                        <Timestamp time={scoreVersionInfo.createdAt} variant="relative" className="whitespace-nowrap text-xs text-muted-foreground" />
-                      ) : null
-                    }
+                    rightTimestamp={scoreVersionInfo?.createdAt}
                     summary={<span className="font-mono truncate">{shortHash(taskWithDefaults.scoreVersionId)}</span>}
                   >
                     {scoreVersionInfo ? (

@@ -1,0 +1,49 @@
+{
+  "id": "plx-003e2b86-aa03-4ca2-be06-ae91a1f5ec17",
+  "title": "Run 8-cycle optimizer test for Project Intent AI",
+  "description": "Run the local feedback alignment optimizer YAML as a real procedure test against a previously attempted Suco Home Improvement score. Use Project Intent AI as the test case, max_iterations=8, max_samples=200, days=90, and monitor process-level CLI output for failures and behavior coverage.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8d336866-0101-4d12-9a85-a2aa4f11cc7a",
+      "author": "ryan",
+      "text": "First CLI attempt created procedure 042be585-ce0e-43cf-b4e4-18a5422e84ca but warned it could not resolve scorecard 'Suco Home Improvement'. Stopped it immediately and restarting with the correct scorecard display name 'Suco - Home Improvement'.",
+      "created_at": "2026-05-03T16:52:31.493592Z"
+    },
+    {
+      "id": "2092a02c-1a9e-4a63-8755-c15d7a0fc7d5",
+      "author": "ryan",
+      "text": "Corrected CLI run created procedure 3142ea11-c96d-4771-97e2-295da7382978 and resolved scorecard/score, but failed during baseline before hypothesis cycles. Exact failure: Failed to run baseline recent evaluation: [Errno 2] No such file or directory: 'plexus'. Need rerun with a PATH that exposes the plexus console command or install the local console script.",
+      "created_at": "2026-05-03T16:55:21.642915Z"
+    },
+    {
+      "id": "4673fe4f-1c12-495f-be69-dc6bee8880d2",
+      "author": "ryan",
+      "text": "Switching test target from Project Intent AI to Annual Income AI. Project Intent AI only had 11 feedback items; Annual Income AI has 23 recent feedback items with low alignment/accuracy and systematic false negatives, making it a better stress case for more cycles and creative-lane behavior.",
+      "created_at": "2026-05-03T16:57:14.399044Z"
+    },
+    {
+      "id": "cdf25ba1-6d0f-4105-95c6-06a1754504a4",
+      "author": "ryan",
+      "text": "Stopped Annual Income procedure 808107ee-839f-4f49-bb28-3b892ef2133e during cycle 2 because it was launched with default num_candidates=3. That exercises normal slots and later creative, but not structural/reframe/full_rewrite lane selection. Restarting with num_candidates=6 for the actual 8-cycle lane-behavior test.",
+      "created_at": "2026-05-03T17:16:12.157894Z"
+    },
+    {
+      "id": "39a371a1-f3da-4949-8482-7bb7745a33c4",
+      "author": "ryan",
+      "text": "Stopped Annual Income AI procedure faf99787-2b64-455f-9471-aacd89f98da1 during cycle 7 after confirming the behaviors needed for this test. Observed normal, structural, reframe, creative, and full_rewrite slots; creative lane produced transcript-first/instruction-last, alternating reminder, and compact boundary-stress ideas; ultra-creative plateau mode triggered after six stagnant cycles. No candidate improved alignment before stop; active champion remained f98a14a2-2c8b-4278-86d1-37a235d884a5. Baseline was already strong at recent AC1 0.781 / accuracy 86.957, and only 23 feedback rows were available, so regression tracking was disabled.",
+      "created_at": "2026-05-03T18:55:31.121087Z"
+    }
+  ],
+  "created_at": "2026-05-03T16:51:13.140511Z",
+  "updated_at": "2026-05-03T18:55:31.137432Z",
+  "closed_at": "2026-05-03T18:55:31.137432Z",
+  "custom": {}
+}

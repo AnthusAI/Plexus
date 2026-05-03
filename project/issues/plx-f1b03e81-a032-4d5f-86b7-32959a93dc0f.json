@@ -1,0 +1,31 @@
+{
+  "id": "plx-f1b03e81-a032-4d5f-86b7-32959a93dc0f",
+  "title": "Promote successful Suco optimizer winners",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f69afc0e-2f98-4b0e-aa1d-54aa21945583",
+      "author": "ryan",
+      "text": "Optimizer winner review selected five clear Suco promotion targets: Annual Income AI -> f98a14a2-2c8b-4278-86d1-37a235d884a5, Blind Transfer- AI -> cc4747cf-1023-4b23-9c88-bbabb6bc1f40, Customer Questions AI -> a850f29c-2f08-4f2b-92f7-71b7aa7e8ad6, Misleading AI -> fc95800b-f0cc-4e83-9ae6-a6cfa5463004, Project Type AI -> c0549e4b-da3c-4f25-9c83-c226a369f289. Excluding candidates from runs with no winning/success signal or poor alignment.",
+      "created_at": "2026-05-02T17:31:03.239145Z"
+    },
+    {
+      "id": "ec613f7d-02a7-49df-94d6-01718fe5d458",
+      "author": "ryan",
+      "text": "Promoted five best-aligned Suco optimizer versions to champion via CLI MCP harness. Verified all five score records now point to the expected new champion versions and championHistory contains the closed previous-champion entry plus the open new-champion entry.",
+      "created_at": "2026-05-02T17:31:54.983237Z"
+    }
+  ],
+  "created_at": "2026-05-02T17:26:22.023967Z",
+  "updated_at": "2026-05-02T17:31:57.361677Z",
+  "closed_at": "2026-05-02T17:31:57.361677Z",
+  "custom": {}
+}

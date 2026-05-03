@@ -60,9 +60,6 @@ describe('ScoreProcedureList', () => {
     for (const key of Object.keys(subscriptionHandlers)) delete subscriptionHandlers[key]
 
     mockGraphql.mockImplementation(({ query }: { query: string; variables?: Record<string, any> }) => {
-      if (query.includes('onCreateProcedureScoreVersion')) return subscriptionResult('createProcedureScoreVersion')
-      if (query.includes('onUpdateProcedureScoreVersion')) return subscriptionResult('updateProcedureScoreVersion')
-      if (query.includes('onDeleteProcedureScoreVersion')) return subscriptionResult('deleteProcedureScoreVersion')
       if (query.includes('onCreateProcedure')) return subscriptionResult('createProcedure')
       if (query.includes('onUpdateProcedure')) return subscriptionResult('updateProcedure')
       if (query.includes('onDeleteProcedure')) return subscriptionResult('deleteProcedure')
@@ -146,24 +143,21 @@ describe('ScoreProcedureList', () => {
           },
         }
       }
-      if (query.includes('listProcedureScoreVersionByScoreVersionIdAndUpdatedAt')) {
+      if (query.includes('listProcedureByScoreVersionIdAndUpdatedAt')) {
         return {
           data: {
-            listProcedureScoreVersionByScoreVersionIdAndUpdatedAt: {
+            listProcedureByScoreVersionIdAndUpdatedAt: {
               items: [
                 {
-                  id: 'link-proc-version',
-                  procedure: {
-                    id: 'proc-version',
-                    name: 'Version Associated Run',
-                    description: 'Direct version procedure',
-                    status: 'COMPLETED',
-                    metadata: null,
-                    updatedAt: '2026-04-26T00:00:00Z',
-                    scoreId: 'score-1',
-                    scoreVersionId: null,
-                    accountId: 'account-1',
-                  },
+                  id: 'proc-version',
+                  name: 'Version Associated Run',
+                  description: 'Direct version procedure',
+                  status: 'COMPLETED',
+                  metadata: null,
+                  updatedAt: '2026-04-26T00:00:00Z',
+                  scoreId: 'score-1',
+                  scoreVersionId: 'version-2',
+                  accountId: 'account-1',
                 },
               ],
             },
@@ -299,7 +293,7 @@ describe('ScoreProcedureList', () => {
     )
   })
 
-  it('loads version-scoped procedures through the procedure-score-version index', async () => {
+  it('loads version-scoped procedures through the procedure scoreVersionId index', async () => {
     render(
       <ScoreProcedureList
         scoreId="score-1"
@@ -319,7 +313,7 @@ describe('ScoreProcedureList', () => {
     expect(screen.queryByText('Other Run')).not.toBeInTheDocument()
     expect(mockGraphql).toHaveBeenCalledWith(
       expect.objectContaining({
-        query: expect.stringContaining('listProcedureScoreVersionByScoreVersionIdAndUpdatedAt'),
+        query: expect.stringContaining('listProcedureByScoreVersionIdAndUpdatedAt'),
         variables: expect.objectContaining({ scoreVersionId: 'version-2' }),
       })
     )
