@@ -1290,13 +1290,14 @@ export default function ProcedureTask({
             </div>
           )}
           {renderProcedureStatus('grid')}
-          {feedbackEvaluationSummary && (
-            <EvaluationListAccuracyBar
-              progress={feedbackProgress}
-              accuracy={feedbackEvaluationSummary.accuracy ?? 0}
-              isSelected={isSelected}
-            />
-          )}
+          <EvaluationListAccuracyBar
+            variant={feedbackEvaluationSummary ? 'default' : 'blank'}
+            progress={feedbackProgress}
+            accuracy={feedbackEvaluationSummary?.accuracy ?? 0}
+            isSelected={isSelected}
+            baselineAccuracy={feedbackEvaluationSummary?.baselineAccuracy ?? undefined}
+            currentBaselineAccuracy={feedbackEvaluationSummary?.currentBaselineAccuracy ?? undefined}
+          />
         </div>
       ) : (
         <div className="p-3">
