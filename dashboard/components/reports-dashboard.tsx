@@ -825,6 +825,7 @@ export default function ReportsDashboard({
           }
           
           return {
+            id: block.id,
             type: block.type || outputData.class || 'unknown', // Use API type first, then output.class as fallback
             config: outputData, // Use output as config
             output: outputData,
@@ -839,23 +840,6 @@ export default function ReportsDashboard({
         
         // Force a state update by creating a new array
         setSelectedReportBlocks([...transformedBlocks]);
-        
-        // Create a new snapshot of the reports array with the updated report
-        // This forces a re-render of the component tree
-        setReports(prevReports => {
-          return prevReports.map(r => {
-            if (r.id === reportId) {
-              // Keep this log to verify the report is being updated
-              // Create a new object to trigger reference change
-              return { 
-                ...r,
-                // Add a timestamp to force React to detect the change
-                _lastUpdated: Date.now() 
-              };
-            }
-            return r;
-          });
-        });
       } else {
         setSelectedReportBlocks([]);
       }
@@ -1150,9 +1134,6 @@ export default function ReportsDashboard({
     const displayName = report.name || 'Report';
     const displaySubtitle = report.subtitle || report.reportConfiguration?.description;
 
-    // Generate a unique key that changes whenever blocks are updated
-    const reportKey = `${report.id}-${selectedReportBlocks?.length || 0}-${Date.now()}`;
-
     return (
       <ReportTask
         variant="detail"
@@ -1214,7 +1195,7 @@ export default function ReportsDashboard({
         isFullWidth={isFullWidth}
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
         onClose={handleCloseReport}
-        key={reportKey} // Force re-render when blocks change with timestamp
+        key={report.id}
       />
     );
   }, [selectedReportId, reports, selectedReportBlocks, isFullWidth, handleCloseReport, handleDelete, copyLinkToClipboard]); // Dependencies
