@@ -1,0 +1,303 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.procedure.test_chat_recorder_account_resolution module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.procedure.test_continuation_service module" href="plexus.cli.procedure.test_continuation_service.html" />
+    <link rel="prev" title="plexus.cli.procedure.test_builtin_procedures module" href="plexus.cli.procedure.test_builtin_procedures.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.html">plexus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.chat.html">plexus.cli.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.execute.html">plexus.cli.execute package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.rubric_memory.html">plexus.cli.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.procedure.test_chat_recorder_account_resolution module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.procedure.test_chat_recorder_account_resolution.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.procedure.test_chat_recorder_account_resolution">
+<span id="plexus-cli-procedure-test-chat-recorder-account-resolution-module"></span><h1>plexus.cli.procedure.test_chat_recorder_account_resolution module<a class="headerlink" href="#module-plexus.cli.procedure.test_chat_recorder_account_resolution" title="Link to this heading"></a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_end_session_supports_legacy_status_positional_call">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_end_session_supports_legacy_status_positional_call</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_end_session_supports_legacy_status_positional_call" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_end_session_supports_tactus_signature_with_session_id">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_end_session_supports_tactus_signature_with_session_id</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_end_session_supports_tactus_signature_with_session_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_console_session_history_merges_truncated_snapshot_with_db">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_get_console_session_history_merges_truncated_snapshot_with_db</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_console_session_history_merges_truncated_snapshot_with_db" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_console_session_history_prefers_db_when_snapshot_lacks_assistant_context">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_get_console_session_history_prefers_db_when_snapshot_lacks_assistant_context</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_console_session_history_prefers_db_when_snapshot_lacks_assistant_context" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_console_session_history_prefers_snapshot_over_db_when_both_exist">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_get_console_session_history_prefers_snapshot_over_db_when_both_exist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_console_session_history_prefers_snapshot_over_db_when_both_exist" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_console_session_history_returns_filtered_messages">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_get_console_session_history_returns_filtered_messages</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_console_session_history_returns_filtered_messages" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_console_session_history_uses_client_snapshot_when_server_history_is_stale">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_get_console_session_history_uses_client_snapshot_when_server_history_is_stale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_console_session_history_uses_client_snapshot_when_server_history_is_stale" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_latest_console_trigger_message_prefers_dispatch_task">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_get_latest_console_trigger_message_prefers_dispatch_task</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_latest_console_trigger_message_prefers_dispatch_task" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_latest_console_trigger_message_prefers_inline_trigger_content">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_get_latest_console_trigger_message_prefers_inline_trigger_content</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_latest_console_trigger_message_prefers_inline_trigger_content" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_latest_console_trigger_message_returns_chat_content">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_get_latest_console_trigger_message_returns_chat_content</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_latest_console_trigger_message_returns_chat_content" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_latest_console_trigger_message_uses_dispatch_task_when_account_context_mismatches">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_get_latest_console_trigger_message_uses_dispatch_task_when_account_context_mismatches</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_latest_console_trigger_message_uses_dispatch_task_when_account_context_mismatches" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_steering_messages_returns_completed_flat_filtered_rows">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_get_steering_messages_returns_completed_flat_filtered_rows</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_steering_messages_returns_completed_flat_filtered_rows" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_steering_messages_returns_flat_filtered_rows">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_get_steering_messages_returns_flat_filtered_rows</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_get_steering_messages_returns_flat_filtered_rows" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_record_message_uses_chat_stream_retry_policy">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_record_message_uses_chat_stream_retry_policy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_record_message_uses_chat_stream_retry_policy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_resolve_account_id_falls_back_to_client_resolver">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_resolve_account_id_falls_back_to_client_resolver</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_resolve_account_id_falls_back_to_client_resolver" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_resolve_account_id_prefers_context">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_resolve_account_id_prefers_context</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_resolve_account_id_prefers_context" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_resolve_account_id_uses_procedure_record">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_resolve_account_id_uses_procedure_record</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_resolve_account_id_uses_procedure_record" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_creates_console_category_when_console_trigger_missing_session_id">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_start_session_creates_console_category_when_console_trigger_missing_session_id</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_creates_console_category_when_console_trigger_missing_session_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_ignores_stale_console_metadata_when_latest_task_is_not_console">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_start_session_ignores_stale_console_metadata_when_latest_task_is_not_console</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_ignores_stale_console_metadata_when_latest_task_is_not_console" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_prefers_dispatch_task_console_metadata">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_start_session_prefers_dispatch_task_console_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_prefers_dispatch_task_console_metadata" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_reuses_console_session_from_task_metadata">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_start_session_reuses_console_session_from_task_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_reuses_console_session_from_task_metadata" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_reuses_explicit_console_session_from_context">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_start_session_reuses_explicit_console_session_from_context</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_reuses_explicit_console_session_from_context" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_reuses_waiting_session_and_continues_sequence">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_start_session_reuses_waiting_session_and_continues_sequence</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_reuses_waiting_session_and_continues_sequence" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_uses_dispatch_task_console_metadata_when_account_resolution_is_stale">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.test_chat_recorder_account_resolution.</span></span><span class="sig-name descname"><span class="pre">test_start_session_uses_dispatch_task_console_metadata_when_account_resolution_is_stale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">monkeypatch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.cli.procedure.test_chat_recorder_account_resolution.test_start_session_uses_dispatch_task_console_metadata_when_account_resolution_is_stale" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.procedure.test_builtin_procedures.html" class="btn btn-neutral float-left" title="plexus.cli.procedure.test_builtin_procedures module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.procedure.test_continuation_service.html" class="btn btn-neutral float-right" title="plexus.cli.procedure.test_continuation_service module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

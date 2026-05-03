@@ -1,0 +1,374 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.rubric_memory.citations module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.rubric_memory.context_formatter module" href="plexus.rubric_memory.context_formatter.html" />
+    <link rel="prev" title="plexus.rubric_memory.authority module" href="plexus.rubric_memory.authority.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.html">plexus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.BiblicusRubricEvidenceRetriever"><code class="docutils literal notranslate"><span class="pre">BiblicusRubricEvidenceRetriever</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.ConfidenceInputs"><code class="docutils literal notranslate"><span class="pre">ConfidenceInputs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.ConfidenceLevel"><code class="docutils literal notranslate"><span class="pre">ConfidenceLevel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.EvidenceClassification"><code class="docutils literal notranslate"><span class="pre">EvidenceClassification</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.EvidenceSnippet"><code class="docutils literal notranslate"><span class="pre">EvidenceSnippet</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.LocalRubricMemoryCorpusPaths"><code class="docutils literal notranslate"><span class="pre">LocalRubricMemoryCorpusPaths</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.LocalRubricMemoryCorpusResolver"><code class="docutils literal notranslate"><span class="pre">LocalRubricMemoryCorpusResolver</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.LocalRubricMemorySource"><code class="docutils literal notranslate"><span class="pre">LocalRubricMemorySource</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.PreparedRubricMemoryCorpus"><code class="docutils literal notranslate"><span class="pre">PreparedRubricMemoryCorpus</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricAuthority"><code class="docutils literal notranslate"><span class="pre">RubricAuthority</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricAuthorityError"><code class="docutils literal notranslate"><span class="pre">RubricAuthorityError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricAuthorityResolver"><code class="docutils literal notranslate"><span class="pre">RubricAuthorityResolver</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricEvidencePack"><code class="docutils literal notranslate"><span class="pre">RubricEvidencePack</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricEvidencePackContextFormatter"><code class="docutils literal notranslate"><span class="pre">RubricEvidencePackContextFormatter</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricEvidencePackRequest"><code class="docutils literal notranslate"><span class="pre">RubricEvidencePackRequest</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricEvidencePackService"><code class="docutils literal notranslate"><span class="pre">RubricEvidencePackService</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricEvidenceRetriever"><code class="docutils literal notranslate"><span class="pre">RubricEvidenceRetriever</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricEvidenceSynthesizer"><code class="docutils literal notranslate"><span class="pre">RubricEvidenceSynthesizer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricHistoryEvent"><code class="docutils literal notranslate"><span class="pre">RubricHistoryEvent</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryCitation"><code class="docutils literal notranslate"><span class="pre">RubricMemoryCitation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryCitationContext"><code class="docutils literal notranslate"><span class="pre">RubricMemoryCitationContext</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryCitationFormatter"><code class="docutils literal notranslate"><span class="pre">RubricMemoryCitationFormatter</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryCitationValidation"><code class="docutils literal notranslate"><span class="pre">RubricMemoryCitationValidation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryContextProvider"><code class="docutils literal notranslate"><span class="pre">RubricMemoryContextProvider</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryGatedSMEQuestion"><code class="docutils literal notranslate"><span class="pre">RubricMemoryGatedSMEQuestion</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryPreparedCorpusManager"><code class="docutils literal notranslate"><span class="pre">RubricMemoryPreparedCorpusManager</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryQueryPlan"><code class="docutils literal notranslate"><span class="pre">RubricMemoryQueryPlan</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryQueryPlanner"><code class="docutils literal notranslate"><span class="pre">RubricMemoryQueryPlanner</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryRecentBriefingProvider"><code class="docutils literal notranslate"><span class="pre">RubricMemoryRecentBriefingProvider</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemorySMEQuestion"><code class="docutils literal notranslate"><span class="pre">RubricMemorySMEQuestion</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemorySMEQuestionGateRequest"><code class="docutils literal notranslate"><span class="pre">RubricMemorySMEQuestionGateRequest</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemorySMEQuestionGateResult"><code class="docutils literal notranslate"><span class="pre">RubricMemorySMEQuestionGateResult</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemorySMEQuestionGateService"><code class="docutils literal notranslate"><span class="pre">RubricMemorySMEQuestionGateService</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.S3RubricMemoryCorpusPaths"><code class="docutils literal notranslate"><span class="pre">S3RubricMemoryCorpusPaths</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.S3RubricMemoryCorpusResolver"><code class="docutils literal notranslate"><span class="pre">S3RubricMemoryCorpusResolver</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.S3RubricMemoryObject"><code class="docutils literal notranslate"><span class="pre">S3RubricMemoryObject</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.S3RubricMemorySource"><code class="docutils literal notranslate"><span class="pre">S3RubricMemorySource</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.SMEQuestionAnswerStatus"><code class="docutils literal notranslate"><span class="pre">SMEQuestionAnswerStatus</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.SMEQuestionGateAction"><code class="docutils literal notranslate"><span class="pre">SMEQuestionGateAction</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.TactusRubricEvidenceSynthesizer"><code class="docutils literal notranslate"><span class="pre">TactusRubricEvidenceSynthesizer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.TactusRubricMemorySMEQuestionGateSynthesizer"><code class="docutils literal notranslate"><span class="pre">TactusRubricMemorySMEQuestionGateSynthesizer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.candidate_agenda_items_from_markdown"><code class="docutils literal notranslate"><span class="pre">candidate_agenda_items_from_markdown()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.format_gated_sme_agenda"><code class="docutils literal notranslate"><span class="pre">format_gated_sme_agenda()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.validate_rubric_memory_citations"><code class="docutils literal notranslate"><span class="pre">validate_rubric_memory_citations()</span></code></a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.rubric_memory.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+      <li class="breadcrumb-item active">plexus.rubric_memory.citations module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.rubric_memory.citations.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.rubric_memory.citations">
+<span id="plexus-rubric-memory-citations-module"></span><h1>plexus.rubric_memory.citations module<a class="headerlink" href="#module-plexus.rubric_memory.citations" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitation">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.rubric_memory.citations.</span></span><span class="sig-name descname"><span class="pre">RubricMemoryCitation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">MinLen</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">min_length</span></span><span class="o"><span class="pre">=</span></span><span class="m"><span class="pre">1</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kind</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'official_rubric'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'corpus_evidence'</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">excerpt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">MinLen</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">min_length</span></span><span class="o"><span class="pre">=</span></span><span class="m"><span class="pre">1</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_uri</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'unknown'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_timestamp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">authority_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'unknown'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_version_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">MinLen</span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">min_length</span></span><span class="o"><span class="pre">=</span></span><span class="m"><span class="pre">1</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">evidence_classification</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'unknown'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitation" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Stable citation handle for official rubric authority or corpus evidence.</p>
+<p>Create a new model by parsing and validating input data from keyword arguments.</p>
+<p>Raises [<cite>ValidationError</cite>][pydantic_core.ValidationError] if the input data cannot be
+validated to form a valid model.</p>
+<p><cite>self</cite> is explicitly positional-only to allow <cite>self</cite> as a field name.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitation.authority_level">
+<span class="sig-name descname"><span class="pre">authority_level</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitation.authority_level" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitation.evidence_classification">
+<span class="sig-name descname"><span class="pre">evidence_classification</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitation.evidence_classification" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitation.excerpt">
+<span class="sig-name descname"><span class="pre">excerpt</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitation.excerpt" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitation.id">
+<span class="sig-name descname"><span class="pre">id</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitation.id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitation.kind">
+<span class="sig-name descname"><span class="pre">kind</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'official_rubric'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'corpus_evidence'</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitation.kind" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitation.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'extra':</span> <span class="pre">'forbid'}</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitation.model_config" title="Link to this definition"></a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitation.scope_level">
+<span class="sig-name descname"><span class="pre">scope_level</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitation.scope_level" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitation.score_version_id">
+<span class="sig-name descname"><span class="pre">score_version_id</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitation.score_version_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitation.source_timestamp">
+<span class="sig-name descname"><span class="pre">source_timestamp</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">datetime</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitation.source_timestamp" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitation.source_uri">
+<span class="sig-name descname"><span class="pre">source_uri</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitation.source_uri" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationContext">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.rubric_memory.citations.</span></span><span class="sig-name descname"><span class="pre">RubricMemoryCitationContext</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">markdown_context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">citation_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#plexus.rubric_memory.citations.RubricMemoryCitation" title="plexus.rubric_memory.citations.RubricMemoryCitation"><span class="pre">RubricMemoryCitation</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">machine_context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">~typing.Any]</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diagnostics</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list[dict[str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">~typing.Any]]</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationContext" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Human-readable rubric-memory context plus machine-readable citations.</p>
+<p>Create a new model by parsing and validating input data from keyword arguments.</p>
+<p>Raises [<cite>ValidationError</cite>][pydantic_core.ValidationError] if the input data cannot be
+validated to form a valid model.</p>
+<p><cite>self</cite> is explicitly positional-only to allow <cite>self</cite> as a field name.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationContext.citation_ids">
+<span class="sig-name descname"><span class="pre">citation_ids</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">set</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationContext.citation_ids" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationContext.citation_index">
+<span class="sig-name descname"><span class="pre">citation_index</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#plexus.rubric_memory.citations.RubricMemoryCitation" title="plexus.rubric_memory.citations.RubricMemoryCitation"><span class="pre">RubricMemoryCitation</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationContext.citation_index" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationContext.diagnostics">
+<span class="sig-name descname"><span class="pre">diagnostics</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationContext.diagnostics" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationContext.machine_context">
+<span class="sig-name descname"><span class="pre">machine_context</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationContext.machine_context" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationContext.markdown_context">
+<span class="sig-name descname"><span class="pre">markdown_context</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationContext.markdown_context" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationContext.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'extra':</span> <span class="pre">'forbid'}</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationContext.model_config" title="Link to this definition"></a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationFormatter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.rubric_memory.citations.</span></span><span class="sig-name descname"><span class="pre">RubricMemoryCitationFormatter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_excerpt_characters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">900</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationFormatter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Convert a RubricEvidencePack into deterministic citation context.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationFormatter.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_excerpt_characters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">900</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationFormatter.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationFormatter.from_pack">
+<span class="sig-name descname"><span class="pre">from_pack</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pack</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.rubric_memory.models.html#plexus.rubric_memory.models.RubricEvidencePack" title="plexus.rubric_memory.models.RubricEvidencePack"><span class="pre">RubricEvidencePack</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.rubric_memory.citations.RubricMemoryCitationContext" title="plexus.rubric_memory.citations.RubricMemoryCitationContext"><span class="pre">RubricMemoryCitationContext</span></a></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationFormatter.from_pack" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationFormatter.from_recent_evidence">
+<span class="sig-name descname"><span class="pre">from_recent_evidence</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.rubric_memory.models.html#plexus.rubric_memory.models.RubricEvidencePackRequest" title="plexus.rubric_memory.models.RubricEvidencePackRequest"><span class="pre">RubricEvidencePackRequest</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">evidence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="plexus.rubric_memory.models.html#plexus.rubric_memory.models.EvidenceSnippet" title="plexus.rubric_memory.models.EvidenceSnippet"><span class="pre">EvidenceSnippet</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.rubric_memory.citations.RubricMemoryCitationContext" title="plexus.rubric_memory.citations.RubricMemoryCitationContext"><span class="pre">RubricMemoryCitationContext</span></a></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationFormatter.from_recent_evidence" title="Link to this definition"></a></dt>
+<dd><p>Format recency-biased retrieved evidence for optimizer briefings.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationFormatter.from_retrieved_evidence">
+<span class="sig-name descname"><span class="pre">from_retrieved_evidence</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.rubric_memory.models.html#plexus.rubric_memory.models.RubricEvidencePackRequest" title="plexus.rubric_memory.models.RubricEvidencePackRequest"><span class="pre">RubricEvidencePackRequest</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">evidence</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="plexus.rubric_memory.models.html#plexus.rubric_memory.models.EvidenceSnippet" title="plexus.rubric_memory.models.EvidenceSnippet"><span class="pre">EvidenceSnippet</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.rubric_memory.citations.RubricMemoryCitationContext" title="plexus.rubric_memory.citations.RubricMemoryCitationContext"><span class="pre">RubricMemoryCitationContext</span></a></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationFormatter.from_retrieved_evidence" title="Link to this definition"></a></dt>
+<dd><p>Format retrieved evidence as LLM input context without synthesis.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationValidation">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.rubric_memory.citations.</span></span><span class="sig-name descname"><span class="pre">RubricMemoryCitationValidation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">supplied_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">valid_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">missing_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unused_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">omitted_citations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">warnings</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationValidation" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></p>
+<p>Non-blocking diagnostics for citation use by an LLM consumer.</p>
+<p>Create a new model by parsing and validating input data from keyword arguments.</p>
+<p>Raises [<cite>ValidationError</cite>][pydantic_core.ValidationError] if the input data cannot be
+validated to form a valid model.</p>
+<p><cite>self</cite> is explicitly positional-only to allow <cite>self</cite> as a field name.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationValidation.missing_ids">
+<span class="sig-name descname"><span class="pre">missing_ids</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationValidation.missing_ids" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationValidation.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'extra':</span> <span class="pre">'forbid'}</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationValidation.model_config" title="Link to this definition"></a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationValidation.omitted_citations">
+<span class="sig-name descname"><span class="pre">omitted_citations</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationValidation.omitted_citations" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationValidation.supplied_ids">
+<span class="sig-name descname"><span class="pre">supplied_ids</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationValidation.supplied_ids" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationValidation.unused_ids">
+<span class="sig-name descname"><span class="pre">unused_ids</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationValidation.unused_ids" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationValidation.valid_ids">
+<span class="sig-name descname"><span class="pre">valid_ids</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationValidation.valid_ids" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.RubricMemoryCitationValidation.warnings">
+<span class="sig-name descname"><span class="pre">warnings</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.RubricMemoryCitationValidation.warnings" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.rubric_memory.citations.validate_rubric_memory_citations">
+<span class="sig-prename descclassname"><span class="pre">plexus.rubric_memory.citations.</span></span><span class="sig-name descname"><span class="pre">validate_rubric_memory_citations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">supplied_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.rubric_memory.citations.RubricMemoryCitationContext" title="plexus.rubric_memory.citations.RubricMemoryCitationContext"><span class="pre">RubricMemoryCitationContext</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">require_citation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.rubric_memory.citations.RubricMemoryCitationValidation" title="plexus.rubric_memory.citations.RubricMemoryCitationValidation"><span class="pre">RubricMemoryCitationValidation</span></a></span></span><a class="headerlink" href="#plexus.rubric_memory.citations.validate_rubric_memory_citations" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.rubric_memory.authority.html" class="btn btn-neutral float-left" title="plexus.rubric_memory.authority module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.rubric_memory.context_formatter.html" class="btn btn-neutral float-right" title="plexus.rubric_memory.context_formatter module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

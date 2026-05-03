@@ -1,0 +1,312 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.rubric_memory.s3_corpus module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.rubric_memory.service module" href="plexus.rubric_memory.service.html" />
+    <link rel="prev" title="plexus.rubric_memory.retrieval module" href="plexus.rubric_memory.retrieval.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.html">plexus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.BiblicusRubricEvidenceRetriever"><code class="docutils literal notranslate"><span class="pre">BiblicusRubricEvidenceRetriever</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.ConfidenceInputs"><code class="docutils literal notranslate"><span class="pre">ConfidenceInputs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.ConfidenceLevel"><code class="docutils literal notranslate"><span class="pre">ConfidenceLevel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.EvidenceClassification"><code class="docutils literal notranslate"><span class="pre">EvidenceClassification</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.EvidenceSnippet"><code class="docutils literal notranslate"><span class="pre">EvidenceSnippet</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.LocalRubricMemoryCorpusPaths"><code class="docutils literal notranslate"><span class="pre">LocalRubricMemoryCorpusPaths</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.LocalRubricMemoryCorpusResolver"><code class="docutils literal notranslate"><span class="pre">LocalRubricMemoryCorpusResolver</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.LocalRubricMemorySource"><code class="docutils literal notranslate"><span class="pre">LocalRubricMemorySource</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.PreparedRubricMemoryCorpus"><code class="docutils literal notranslate"><span class="pre">PreparedRubricMemoryCorpus</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricAuthority"><code class="docutils literal notranslate"><span class="pre">RubricAuthority</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricAuthorityError"><code class="docutils literal notranslate"><span class="pre">RubricAuthorityError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricAuthorityResolver"><code class="docutils literal notranslate"><span class="pre">RubricAuthorityResolver</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricEvidencePack"><code class="docutils literal notranslate"><span class="pre">RubricEvidencePack</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricEvidencePackContextFormatter"><code class="docutils literal notranslate"><span class="pre">RubricEvidencePackContextFormatter</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricEvidencePackRequest"><code class="docutils literal notranslate"><span class="pre">RubricEvidencePackRequest</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricEvidencePackService"><code class="docutils literal notranslate"><span class="pre">RubricEvidencePackService</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricEvidenceRetriever"><code class="docutils literal notranslate"><span class="pre">RubricEvidenceRetriever</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricEvidenceSynthesizer"><code class="docutils literal notranslate"><span class="pre">RubricEvidenceSynthesizer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricHistoryEvent"><code class="docutils literal notranslate"><span class="pre">RubricHistoryEvent</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryCitation"><code class="docutils literal notranslate"><span class="pre">RubricMemoryCitation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryCitationContext"><code class="docutils literal notranslate"><span class="pre">RubricMemoryCitationContext</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryCitationFormatter"><code class="docutils literal notranslate"><span class="pre">RubricMemoryCitationFormatter</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryCitationValidation"><code class="docutils literal notranslate"><span class="pre">RubricMemoryCitationValidation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryContextProvider"><code class="docutils literal notranslate"><span class="pre">RubricMemoryContextProvider</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryGatedSMEQuestion"><code class="docutils literal notranslate"><span class="pre">RubricMemoryGatedSMEQuestion</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryPreparedCorpusManager"><code class="docutils literal notranslate"><span class="pre">RubricMemoryPreparedCorpusManager</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryQueryPlan"><code class="docutils literal notranslate"><span class="pre">RubricMemoryQueryPlan</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryQueryPlanner"><code class="docutils literal notranslate"><span class="pre">RubricMemoryQueryPlanner</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemoryRecentBriefingProvider"><code class="docutils literal notranslate"><span class="pre">RubricMemoryRecentBriefingProvider</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemorySMEQuestion"><code class="docutils literal notranslate"><span class="pre">RubricMemorySMEQuestion</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemorySMEQuestionGateRequest"><code class="docutils literal notranslate"><span class="pre">RubricMemorySMEQuestionGateRequest</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemorySMEQuestionGateResult"><code class="docutils literal notranslate"><span class="pre">RubricMemorySMEQuestionGateResult</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.RubricMemorySMEQuestionGateService"><code class="docutils literal notranslate"><span class="pre">RubricMemorySMEQuestionGateService</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.S3RubricMemoryCorpusPaths"><code class="docutils literal notranslate"><span class="pre">S3RubricMemoryCorpusPaths</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.S3RubricMemoryCorpusResolver"><code class="docutils literal notranslate"><span class="pre">S3RubricMemoryCorpusResolver</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.S3RubricMemoryObject"><code class="docutils literal notranslate"><span class="pre">S3RubricMemoryObject</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.S3RubricMemorySource"><code class="docutils literal notranslate"><span class="pre">S3RubricMemorySource</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.SMEQuestionAnswerStatus"><code class="docutils literal notranslate"><span class="pre">SMEQuestionAnswerStatus</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.SMEQuestionGateAction"><code class="docutils literal notranslate"><span class="pre">SMEQuestionGateAction</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.TactusRubricEvidenceSynthesizer"><code class="docutils literal notranslate"><span class="pre">TactusRubricEvidenceSynthesizer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.TactusRubricMemorySMEQuestionGateSynthesizer"><code class="docutils literal notranslate"><span class="pre">TactusRubricMemorySMEQuestionGateSynthesizer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.candidate_agenda_items_from_markdown"><code class="docutils literal notranslate"><span class="pre">candidate_agenda_items_from_markdown()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.format_gated_sme_agenda"><code class="docutils literal notranslate"><span class="pre">format_gated_sme_agenda()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.rubric_memory.html#plexus.rubric_memory.validate_rubric_memory_citations"><code class="docutils literal notranslate"><span class="pre">validate_rubric_memory_citations()</span></code></a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.rubric_memory.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+      <li class="breadcrumb-item active">plexus.rubric_memory.s3_corpus module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.rubric_memory.s3_corpus.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.rubric_memory.s3_corpus">
+<span id="plexus-rubric-memory-s3-corpus-module"></span><h1>plexus.rubric_memory.s3_corpus module<a class="headerlink" href="#module-plexus.rubric_memory.s3_corpus" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.rubric_memory.s3_corpus.</span></span><span class="sig-name descname"><span class="pre">S3RubricMemoryCorpusPaths</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bucket_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_knowledge_base_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix_knowledge_base_prefixes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_knowledge_base_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sources</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#plexus.rubric_memory.s3_corpus.S3RubricMemorySource" title="plexus.rubric_memory.s3_corpus.S3RubricMemorySource"><span class="pre">S3RubricMemorySource</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Convention-derived S3 rubric-memory prefixes for one score.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bucket_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_knowledge_base_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix_knowledge_base_prefixes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_knowledge_base_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sources</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#plexus.rubric_memory.s3_corpus.S3RubricMemorySource" title="plexus.rubric_memory.s3_corpus.S3RubricMemorySource"><span class="pre">S3RubricMemorySource</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.bucket_name">
+<span class="sig-name descname"><span class="pre">bucket_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.bucket_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.prefix_knowledge_base_prefixes">
+<span class="sig-name descname"><span class="pre">prefix_knowledge_base_prefixes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.prefix_knowledge_base_prefixes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.score_knowledge_base_prefix">
+<span class="sig-name descname"><span class="pre">score_knowledge_base_prefix</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.score_knowledge_base_prefix" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.scorecard_knowledge_base_prefix">
+<span class="sig-name descname"><span class="pre">scorecard_knowledge_base_prefix</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.scorecard_knowledge_base_prefix" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.scorecard_prefix">
+<span class="sig-name descname"><span class="pre">scorecard_prefix</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.scorecard_prefix" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.sources">
+<span class="sig-name descname"><span class="pre">sources</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#plexus.rubric_memory.s3_corpus.S3RubricMemorySource" title="plexus.rubric_memory.s3_corpus.S3RubricMemorySource"><span class="pre">S3RubricMemorySource</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths.sources" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusResolver">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.rubric_memory.s3_corpus.</span></span><span class="sig-name descname"><span class="pre">S3RubricMemoryCorpusResolver</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">bucket_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">s3_client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusResolver" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Resolve rubric-memory S3 prefixes using the name-based hierarchy.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusResolver.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">bucket_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">s3_client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusResolver.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusResolver.resolve">
+<span class="sig-name descname"><span class="pre">resolve</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths" title="plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusPaths"><span class="pre">S3RubricMemoryCorpusPaths</span></a></span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryCorpusResolver.resolve" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryObject">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.rubric_memory.s3_corpus.</span></span><span class="sig-name descname"><span class="pre">S3RubricMemoryObject</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">etag</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_modified</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryObject" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>One raw S3 object in a rubric-memory corpus source.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryObject.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">etag</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">last_modified</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">datetime</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryObject.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryObject.etag">
+<span class="sig-name descname"><span class="pre">etag</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryObject.etag" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryObject.key">
+<span class="sig-name descname"><span class="pre">key</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryObject.key" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryObject.last_modified">
+<span class="sig-name descname"><span class="pre">last_modified</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">datetime</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryObject.last_modified" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemoryObject.size">
+<span class="sig-name descname"><span class="pre">size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryObject.size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemorySource">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.rubric_memory.s3_corpus.</span></span><span class="sig-name descname"><span class="pre">S3RubricMemorySource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bucket_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">objects</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryObject" title="plexus.rubric_memory.s3_corpus.S3RubricMemoryObject"><span class="pre">S3RubricMemoryObject</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemorySource" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>An S3 rubric-memory prefix with its score hierarchy scope.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemorySource.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bucket_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope_level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">objects</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryObject" title="plexus.rubric_memory.s3_corpus.S3RubricMemoryObject"><span class="pre">S3RubricMemoryObject</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemorySource.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemorySource.bucket_name">
+<span class="sig-name descname"><span class="pre">bucket_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemorySource.bucket_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemorySource.objects">
+<span class="sig-name descname"><span class="pre">objects</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#plexus.rubric_memory.s3_corpus.S3RubricMemoryObject" title="plexus.rubric_memory.s3_corpus.S3RubricMemoryObject"><span class="pre">S3RubricMemoryObject</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemorySource.objects" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemorySource.prefix">
+<span class="sig-name descname"><span class="pre">prefix</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemorySource.prefix" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.rubric_memory.s3_corpus.S3RubricMemorySource.scope_level">
+<span class="sig-name descname"><span class="pre">scope_level</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.rubric_memory.s3_corpus.S3RubricMemorySource.scope_level" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.rubric_memory.retrieval.html" class="btn btn-neutral float-left" title="plexus.rubric_memory.retrieval module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.rubric_memory.service.html" class="btn btn-neutral float-right" title="plexus.rubric_memory.service module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

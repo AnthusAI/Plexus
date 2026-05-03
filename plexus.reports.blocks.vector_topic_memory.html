@@ -1,0 +1,225 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.reports.blocks.vector_topic_memory module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.reports.action_items_utils module" href="plexus.reports.action_items_utils.html" />
+    <link rel="prev" title="plexus.reports.blocks.topic_analysis module" href="plexus.reports.blocks.topic_analysis.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.html">plexus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.reports.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.reports.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.reports.html">plexus.reports package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.reports.blocks.html">plexus.reports.blocks package</a></li>
+      <li class="breadcrumb-item active">plexus.reports.blocks.vector_topic_memory module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.reports.blocks.vector_topic_memory.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.reports.blocks.vector_topic_memory">
+<span id="plexus-reports-blocks-vector-topic-memory-module"></span><h1>plexus.reports.blocks.vector_topic_memory module<a class="headerlink" href="#module-plexus.reports.blocks.vector_topic_memory" title="Link to this heading"></a></h1>
+<p>VectorTopicMemory ReportBlock — full orchestration.</p>
+<p>Rebuilds topic memory by re-indexing datasets into S3 Vectors.
+Uses S3 embedding cache, global clustering, and memory weights.</p>
+<p>Supports two data sources:
+- Feedback items: scorecard + days (same as FeedbackAlignment) — uses transcript text from Items
+- ScoreResults: scorecard + days with content_source=score_result_no_explanation —</p>
+<blockquote>
+<div><p>uses ScoreResult.explanation where value=’No’ from normal production predictions</p>
+</div></blockquote>
+<ul class="simple">
+<li><p>DataSource/DataSet: data.source or data.dataset — uses Parquet from DatasetResolver</p></li>
+</ul>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.reports.blocks.vector_topic_memory.VectorTopicMemory">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.reports.blocks.vector_topic_memory.</span></span><span class="sig-name descname"><span class="pre">VectorTopicMemory</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="plexus.dashboard.api.client.html#plexus.dashboard.api.client.PlexusDashboardClient" title="plexus.dashboard.api.client.PlexusDashboardClient"><span class="pre">PlexusDashboardClient</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.reports.blocks.vector_topic_memory.VectorTopicMemory" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="plexus.reports.blocks.base.html#plexus.reports.blocks.base.BaseReportBlock" title="plexus.reports.blocks.base.BaseReportBlock"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseReportBlock</span></code></a></p>
+<p>ReportBlock that rebuilds a full topic memory view by re-indexing
+datasets into an AWS S3 Vectors index.</p>
+<dl>
+<dt>Config:</dt><dd><p>scorecard (str): Scorecard identifier. When provided with days, uses feedback items (same as FeedbackAlignment).
+days (int): Number of days of feedback to include. Used with scorecard.
+data: { source?: str, dataset?: str, content_column?: str, fresh?: bool, content_source?: str }</p>
+<blockquote>
+<div><dl class="simple">
+<dt>content_source:</dt><dd><ul class="simple">
+<li><p>edit_comment (default): FeedbackItem.editCommentValue for mismatches</p></li>
+<li><p>transcript: Item transcript text linked from feedback items</p></li>
+<li><p>score_result_no_explanation: ScoreResult.explanation for normal production predictions with value=’No’</p></li>
+</ul>
+</dd>
+</dl>
+</div></blockquote>
+<p>s3_vectors: { bucket_name: str, index_name: str, index_arn?: str, region?: str }
+embedding: { model_id?: str, preprocessing_version?: str }
+clustering: { min_topic_size?: int }</p>
+<blockquote>
+<div><p>coarse_min_topic_fraction?: float   # default 0.02 when min_topic_fraction is not set
+coarse_target_max_topics_per_score?: int  # default 12 when target_max_topics_per_score is not set</p>
+</div></blockquote>
+<p>mode: “full” | “incremental”  # incremental = KNN assign only, no re-cluster
+label:</p>
+<blockquote>
+<div><p>batch_one_pass?: bool  # default true: one LLM call for all selected buckets
+batch_model?: str      # default gpt-4o
+batch_prompt?: str     # optional user prompt override; supports {{topic_bundles_json}}
+request_timeout_seconds?: int  # default 60
+batch_request_timeout_seconds?: int  # default request_timeout_seconds</p>
+</div></blockquote>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.reports.blocks.vector_topic_memory.VectorTopicMemory.DEFAULT_DESCRIPTION">
+<span class="sig-name descname"><span class="pre">DEFAULT_DESCRIPTION</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'Persistent</span> <span class="pre">vector-based</span> <span class="pre">topic</span> <span class="pre">memory</span> <span class="pre">from</span> <span class="pre">S3</span> <span class="pre">Vectors</span> <span class="pre">index'</span></span><a class="headerlink" href="#plexus.reports.blocks.vector_topic_memory.VectorTopicMemory.DEFAULT_DESCRIPTION" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.reports.blocks.vector_topic_memory.VectorTopicMemory.DEFAULT_NAME">
+<span class="sig-name descname"><span class="pre">DEFAULT_NAME</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'Vector</span> <span class="pre">Topic</span> <span class="pre">Memory'</span></span><a class="headerlink" href="#plexus.reports.blocks.vector_topic_memory.VectorTopicMemory.DEFAULT_NAME" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.reports.blocks.vector_topic_memory.VectorTopicMemory.MEDIUM_TERM_DAYS">
+<span class="sig-name descname"><span class="pre">MEDIUM_TERM_DAYS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">30</span></span><a class="headerlink" href="#plexus.reports.blocks.vector_topic_memory.VectorTopicMemory.MEDIUM_TERM_DAYS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.reports.blocks.vector_topic_memory.VectorTopicMemory.SHORT_TERM_DAYS">
+<span class="sig-name descname"><span class="pre">SHORT_TERM_DAYS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">14</span></span><a class="headerlink" href="#plexus.reports.blocks.vector_topic_memory.VectorTopicMemory.SHORT_TERM_DAYS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.reports.blocks.vector_topic_memory.VectorTopicMemory.generate">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">generate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.reports.blocks.vector_topic_memory.VectorTopicMemory.generate" title="Link to this definition"></a></dt>
+<dd><p>Orchestrates: resolve dataset -&gt; embed -&gt; index -&gt; cluster -&gt; memory weights.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.reports.blocks.topic_analysis.html" class="btn btn-neutral float-left" title="plexus.reports.blocks.topic_analysis module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.reports.action_items_utils.html" class="btn btn-neutral float-right" title="plexus.reports.action_items_utils module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

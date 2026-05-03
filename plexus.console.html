@@ -1,0 +1,241 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.console package &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.console.chat_runtime module" href="plexus.console.chat_runtime.html" />
+    <link rel="prev" title="plexus.config.test_loader module" href="plexus.config.test_loader.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.console package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+      <li class="breadcrumb-item active">plexus.console package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.console.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.console">
+<span id="plexus-console-package"></span><h1>plexus.console package<a class="headerlink" href="#module-plexus.console" title="Link to this heading"></a></h1>
+<p>Console chat runtime helpers.</p>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="plexus.console.chat_runtime.html">plexus.console.chat_runtime module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.__init__"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.account_id"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.account_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.content"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.content</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.created_at"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.created_at</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.human_interaction"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.human_interaction</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.id"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.message_type"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.message_type</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.procedure_id"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.procedure_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.response_status"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.response_status</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.response_target"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.response_target</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.role"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.role</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.selected_model"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.selected_model</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.ConsoleMessage.session_id"><code class="docutils literal notranslate"><span class="pre">ConsoleMessage.session_id</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.build_response_owner"><code class="docutils literal notranslate"><span class="pre">build_response_owner()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.claim_message"><code class="docutils literal notranslate"><span class="pre">claim_message()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.fetch_assistant_chat_messages_between"><code class="docutils literal notranslate"><span class="pre">fetch_assistant_chat_messages_between()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.fetch_chat_session"><code class="docutils literal notranslate"><span class="pre">fetch_chat_session()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.fetch_first_assistant_chunk_timestamp"><code class="docutils literal notranslate"><span class="pre">fetch_first_assistant_chunk_timestamp()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.fetch_message"><code class="docutils literal notranslate"><span class="pre">fetch_message()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.fetch_recent_user_chat_turns"><code class="docutils literal notranslate"><span class="pre">fetch_recent_user_chat_turns()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.fetch_session_history"><code class="docutils literal notranslate"><span class="pre">fetch_session_history()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.mark_message_completed"><code class="docutils literal notranslate"><span class="pre">mark_message_completed()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.mark_message_failed"><code class="docutils literal notranslate"><span class="pre">mark_message_failed()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.maybe_auto_title_session"><code class="docutils literal notranslate"><span class="pre">maybe_auto_title_session()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.normalize_response_target"><code class="docutils literal notranslate"><span class="pre">normalize_response_target()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.parse_chat_message"><code class="docutils literal notranslate"><span class="pre">parse_chat_message()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.process_console_message"><code class="docutils literal notranslate"><span class="pre">process_console_message()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.process_pending_local_messages"><code class="docutils literal notranslate"><span class="pre">process_pending_local_messages()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.run_console_chat_response"><code class="docutils literal notranslate"><span class="pre">run_console_chat_response()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.run_console_chat_response_async"><code class="docutils literal notranslate"><span class="pre">run_console_chat_response_async()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.should_handle_message"><code class="docutils literal notranslate"><span class="pre">should_handle_message()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.update_chat_session_title"><code class="docutils literal notranslate"><span class="pre">update_chat_session_title()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.chat_runtime.html#plexus.console.chat_runtime.utc_now"><code class="docutils literal notranslate"><span class="pre">utc_now()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.console.test_chat_runtime.html">plexus.console.test_chat_runtime module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakeClient"><code class="docutils literal notranslate"><span class="pre">FakeClient</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakeClient.__init__"><code class="docutils literal notranslate"><span class="pre">FakeClient.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakeClient.execute"><code class="docutils literal notranslate"><span class="pre">FakeClient.execute()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakeHistoryClient"><code class="docutils literal notranslate"><span class="pre">FakeHistoryClient</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakeHistoryClient.__init__"><code class="docutils literal notranslate"><span class="pre">FakeHistoryClient.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakeHistoryClient.execute"><code class="docutils literal notranslate"><span class="pre">FakeHistoryClient.execute()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakePendingClient"><code class="docutils literal notranslate"><span class="pre">FakePendingClient</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakePendingClient.__init__"><code class="docutils literal notranslate"><span class="pre">FakePendingClient.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakePendingClient.execute"><code class="docutils literal notranslate"><span class="pre">FakePendingClient.execute()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakeRaisingClaimClient"><code class="docutils literal notranslate"><span class="pre">FakeRaisingClaimClient</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakeRaisingClaimClient.execute"><code class="docutils literal notranslate"><span class="pre">FakeRaisingClaimClient.execute()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakeSessionTitleClient"><code class="docutils literal notranslate"><span class="pre">FakeSessionTitleClient</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakeSessionTitleClient.__init__"><code class="docutils literal notranslate"><span class="pre">FakeSessionTitleClient.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.FakeSessionTitleClient.execute"><code class="docutils literal notranslate"><span class="pre">FakeSessionTitleClient.execute()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_claim_message_uses_conditional_pending_to_running_update"><code class="docutils literal notranslate"><span class="pre">test_claim_message_uses_conditional_pending_to_running_update()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_duplicate_claim_exception_returns_false"><code class="docutils literal notranslate"><span class="pre">test_duplicate_claim_exception_returns_false()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_duplicate_claim_returns_false_without_running_response"><code class="docutils literal notranslate"><span class="pre">test_duplicate_claim_returns_false_without_running_response()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_fetch_session_history_filters_and_sorts_messages"><code class="docutils literal notranslate"><span class="pre">test_fetch_session_history_filters_and_sorts_messages()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_maybe_auto_title_session_replaces_title_on_second_user_turn"><code class="docutils literal notranslate"><span class="pre">test_maybe_auto_title_session_replaces_title_on_second_user_turn()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_maybe_auto_title_session_respects_manual_title_lock"><code class="docutils literal notranslate"><span class="pre">test_maybe_auto_title_session_respects_manual_title_lock()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_maybe_auto_title_session_sets_title_on_first_user_turn"><code class="docutils literal notranslate"><span class="pre">test_maybe_auto_title_session_sets_title_on_first_user_turn()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_maybe_auto_title_session_skips_third_and_later_turns"><code class="docutils literal notranslate"><span class="pre">test_maybe_auto_title_session_skips_third_and_later_turns()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_parse_chat_message_defaults_missing_response_target_to_cloud"><code class="docutils literal notranslate"><span class="pre">test_parse_chat_message_defaults_missing_response_target_to_cloud()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_parse_chat_message_extracts_selected_model_from_metadata"><code class="docutils literal notranslate"><span class="pre">test_parse_chat_message_extracts_selected_model_from_metadata()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_parse_chat_message_ignores_non_object_metadata"><code class="docutils literal notranslate"><span class="pre">test_parse_chat_message_ignores_non_object_metadata()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_process_console_message_falls_back_to_trigger_created_at"><code class="docutils literal notranslate"><span class="pre">test_process_console_message_falls_back_to_trigger_created_at()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_process_console_message_ignores_auto_title_failures"><code class="docutils literal notranslate"><span class="pre">test_process_console_message_ignores_auto_title_failures()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_process_console_message_ignores_local_target_for_cloud_worker"><code class="docutils literal notranslate"><span class="pre">test_process_console_message_ignores_local_target_for_cloud_worker()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_process_console_message_logs_latency_summary"><code class="docutils literal notranslate"><span class="pre">test_process_console_message_logs_latency_summary()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_process_console_message_marks_failed_when_harness_raises"><code class="docutils literal notranslate"><span class="pre">test_process_console_message_marks_failed_when_harness_raises()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_process_console_message_runs_harness_and_marks_completed"><code class="docutils literal notranslate"><span class="pre">test_process_console_message_runs_harness_and_marks_completed()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_process_pending_local_messages_paginates_until_limit"><code class="docutils literal notranslate"><span class="pre">test_process_pending_local_messages_paginates_until_limit()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_process_pending_local_messages_uses_response_status_sort_key"><code class="docutils literal notranslate"><span class="pre">test_process_pending_local_messages_uses_response_status_sort_key()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_run_console_chat_response_passes_console_context_to_builtin"><code class="docutils literal notranslate"><span class="pre">test_run_console_chat_response_passes_console_context_to_builtin()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_run_console_chat_response_passes_selected_model_override"><code class="docutils literal notranslate"><span class="pre">test_run_console_chat_response_passes_selected_model_override()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_should_handle_only_matching_pending_user_chat_message"><code class="docutils literal notranslate"><span class="pre">test_should_handle_only_matching_pending_user_chat_message()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.console.test_chat_runtime.html#plexus.console.test_chat_runtime.test_should_handle_rejects_non_chat_message_shapes"><code class="docutils literal notranslate"><span class="pre">test_should_handle_rejects_non_chat_message_shapes()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.config.test_loader.html" class="btn btn-neutral float-left" title="plexus.config.test_loader module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.console.chat_runtime.html" class="btn btn-neutral float-right" title="plexus.console.chat_runtime module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

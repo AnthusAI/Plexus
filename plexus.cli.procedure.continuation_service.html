@@ -1,0 +1,251 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.cli.procedure.continuation_service module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.cli.procedure.conversation_filter module" href="plexus.cli.procedure.conversation_filter.html" />
+    <link rel="prev" title="plexus.cli.procedure.cloudwatch_logger module" href="plexus.cli.procedure.cloudwatch_logger.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.agentic.html">plexus.agentic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.analysis.html">plexus.analysis package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.chat.html">plexus.chat package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.config.html">plexus.config package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.console.html">plexus.console package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.core.html">plexus.core package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.input_sources.html">plexus.input_sources package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.linting.html">plexus.linting package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.metrics.html">plexus.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.reports.html">plexus.reports package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rubric_memory.html">plexus.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.utils.html">plexus.utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.cli.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.analyze.html">plexus.cli.analyze package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.batch.html">plexus.cli.batch package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.bertopic.html">plexus.cli.bertopic package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.chat.html">plexus.cli.chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.cost.html">plexus.cli.cost package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data.html">plexus.cli.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.data_lake.html">plexus.cli.data_lake package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.dataset.html">plexus.cli.dataset package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.evaluation.html">plexus.cli.evaluation package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.execute.html">plexus.cli.execute package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.feedback.html">plexus.cli.feedback package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.item.html">plexus.cli.item package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.metrics.html">plexus.cli.metrics package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.prediction.html">plexus.cli.prediction package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="plexus.cli.procedure.html">plexus.cli.procedure package</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="plexus.cli.procedure.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="plexus.cli.procedure.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.record_count.html">plexus.cli.record_count package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.report.html">plexus.cli.report package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.result.html">plexus.cli.result package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.rubric_memory.html">plexus.cli.rubric_memory package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score.html">plexus.cli.score package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.score_chat.html">plexus.cli.score_chat package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.scorecard.html">plexus.cli.scorecard package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.shared.html">plexus.cli.shared package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.task.html">plexus.cli.task package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.training.html">plexus.cli.training package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.cli.tuning.html">plexus.cli.tuning package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plexus.cli.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.html">plexus.cli package</a></li>
+          <li class="breadcrumb-item"><a href="plexus.cli.procedure.html">plexus.cli.procedure package</a></li>
+      <li class="breadcrumb-item active">plexus.cli.procedure.continuation_service module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.cli.procedure.continuation_service.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.cli.procedure.continuation_service">
+<span id="plexus-cli-procedure-continuation-service-module"></span><h1>plexus.cli.procedure.continuation_service module<a class="headerlink" href="#module-plexus.cli.procedure.continuation_service" title="Link to this heading"></a></h1>
+<p>Continuation service for procedure continuation and branching.</p>
+<p>Provides high-level helpers used by both the CLI commands and MCP tools:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>prepare_continuation(client, procedure_id, additional_cycles, hint)</dt><dd><p>Updates YAML params and clears checkpoints so the optimizer resumes
+from where it left off when re-dispatched.</p>
+</dd>
+<dt>prepare_branch(client, source_id, cycle, additional_cycles, hint, name)</dt><dd><p>Creates a new Procedure record with cloned state truncated to cycle N,
+ready to run from cycle N+1.</p>
+</dd>
+</dl>
+</div></blockquote>
+<p>Neither function dispatches the procedure run — callers are responsible for
+invoking ProcedureService.run_procedure or run_procedure_with_task_tracking
+after calling these functions.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.continuation_service.build_continuation_context">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.continuation_service.</span></span><span class="sig-name descname"><span class="pre">build_continuation_context</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.continuation_service.build_continuation_context" title="Link to this definition"></a></dt>
+<dd><p>Reconstruct optimizer context for continue/branch redispatches.</p>
+<p>Continuation runs do not get the original CLI <cite>context</cite> automatically. Recover it
+from the best available sources, in increasing confidence order:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>procedure YAML resolved params</p></li>
+<li><p>existing task metadata.run_parameters</p></li>
+<li><p>recent baseline evaluation parameters</p></li>
+<li><p>preserved optimizer State / procedure identifiers</p></li>
+</ol>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.continuation_service.prepare_branch">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.continuation_service.</span></span><span class="sig-name descname"><span class="pre">prepare_branch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cycle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">additional_cycles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_accuracy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.continuation_service.prepare_branch" title="Link to this definition"></a></dt>
+<dd><p>Create a new procedure branched from source_id after cycle N.</p>
+<p>Steps:
+1. Load source procedure YAML + accountId
+2. Update YAML params: max_iterations = cycle + additional_cycles, hint
+3. Create new Procedure record via GraphQL
+4. Clone State from source to new procedure, truncated to cycle N</p>
+<blockquote>
+<div><p>(new procedure gets empty checkpoints → optimizer starts fresh from cycle N+1)</p>
+</div></blockquote>
+<dl class="simple">
+<dt>Returns dict with:</dt><dd><p>source_id, target_id, cycle, additional_cycles, new_max_iterations,
+target_name, hint_applied (bool)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.cli.procedure.continuation_service.prepare_continuation">
+<span class="sig-prename descclassname"><span class="pre">plexus.cli.procedure.continuation_service.</span></span><span class="sig-name descname"><span class="pre">prepare_continuation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">procedure_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">additional_cycles</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_accuracy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.cli.procedure.continuation_service.prepare_continuation" title="Link to this definition"></a></dt>
+<dd><p>Prepare a completed procedure for continuation.</p>
+<p>Steps:
+1. Load current YAML (from DynamoDB code field or S3 via ProcedureService)
+2. Count completed cycles from S3 State
+3. Update params.max_iterations.value = completed + additional_cycles
+4. Optionally update params.hint.value and params.target_accuracy.value
+5. Save updated YAML back to procedure.code via GraphQL
+6. Clear checkpoints only (preserve State) via reset_checkpoints_only</p>
+<dl class="simple">
+<dt>Returns dict with:</dt><dd><p>procedure_id, completed_cycles, additional_cycles, new_max_iterations,
+hint_applied (bool)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.cli.procedure.cloudwatch_logger.html" class="btn btn-neutral float-left" title="plexus.cli.procedure.cloudwatch_logger module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.cli.procedure.conversation_filter.html" class="btn btn-neutral float-right" title="plexus.cli.procedure.conversation_filter module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

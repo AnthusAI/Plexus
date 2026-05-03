@@ -1,0 +1,247 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.runtime_budget module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.score_rubric_consistency module" href="plexus.score_rubric_consistency.html" />
+    <link rel="prev" title="plexus.rca_analysis module" href="plexus.rca_analysis.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.CustomLogging.html">plexus.CustomLogging module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Evaluation.html">plexus.Evaluation module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.LangChainUser.html">plexus.LangChainUser module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.PromptTemplateLoader.html">plexus.PromptTemplateLoader module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Registries.html">plexus.Registries module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Scorecard.html">plexus.Scorecard module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.ScorecardResults.html">plexus.ScorecardResults module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.ScorecardResultsAnalysis.html">plexus.ScorecardResultsAnalysis module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.bedrock_models.html">plexus.bedrock_models module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.confidence_calibration.html">plexus.confidence_calibration module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rca_analysis.html">plexus.rca_analysis module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.runtime_budget module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.runtime_budget.RuntimeBudgetLimitExceeded"><code class="docutils literal notranslate"><span class="pre">RuntimeBudgetLimitExceeded</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.runtime_budget.RuntimeBudgetMeter"><code class="docutils literal notranslate"><span class="pre">RuntimeBudgetMeter</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.runtime_budget.RuntimeBudgetSpec"><code class="docutils literal notranslate"><span class="pre">RuntimeBudgetSpec</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.runtime_budget.runtime_budget_spec_from_env"><code class="docutils literal notranslate"><span class="pre">runtime_budget_spec_from_env()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.score_rubric_consistency.html">plexus.score_rubric_consistency module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_evaluation_cost_details.html">plexus.test_evaluation_cost_details module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_evaluation_metrics.html">plexus.test_evaluation_metrics module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_prediction_commands.html">plexus.test_prediction_commands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_score.html">plexus.test_score module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.training_data_lake.html">plexus.training_data_lake module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+      <li class="breadcrumb-item active">plexus.runtime_budget module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.runtime_budget.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.runtime_budget">
+<span id="plexus-runtime-budget-module"></span><h1>plexus.runtime_budget module<a class="headerlink" href="#module-plexus.runtime_budget" title="Link to this heading"></a></h1>
+<dl class="py exception">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetLimitExceeded">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.runtime_budget.</span></span><span class="sig-name descname"><span class="pre">RuntimeBudgetLimitExceeded</span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetLimitExceeded" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">RuntimeError</span></code></p>
+<p>Raised when worker execution exceeds its assigned runtime budget.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetMeter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.runtime_budget.</span></span><span class="sig-name descname"><span class="pre">RuntimeBudgetMeter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.runtime_budget.RuntimeBudgetSpec" title="plexus.runtime_budget.RuntimeBudgetSpec"><span class="pre">RuntimeBudgetSpec</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">clock</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetMeter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Worker-side runtime budget meter for propagated child budgets.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetMeter.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.runtime_budget.RuntimeBudgetSpec" title="plexus.runtime_budget.RuntimeBudgetSpec"><span class="pre">RuntimeBudgetSpec</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">clock</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetMeter.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetMeter.check_wallclock">
+<span class="sig-name descname"><span class="pre">check_wallclock</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">operation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetMeter.check_wallclock" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetMeter.elapsed_seconds">
+<span class="sig-name descname"><span class="pre">elapsed_seconds</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetMeter.elapsed_seconds" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetMeter.enforce_wallclock">
+<span class="sig-name descname"><span class="pre">enforce_wallclock</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">operation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetMeter.enforce_wallclock" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetMeter.from_env">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_env</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env_var</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'PLEXUS_CHILD_BUDGET'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.runtime_budget.RuntimeBudgetMeter" title="plexus.runtime_budget.RuntimeBudgetMeter"><span class="pre">RuntimeBudgetMeter</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetMeter.from_env" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetMeter.maybe_enforce_wallclock">
+<span class="sig-name descname"><span class="pre">maybe_enforce_wallclock</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">operation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetMeter.maybe_enforce_wallclock" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetMeter.record_tool_call">
+<span class="sig-name descname"><span class="pre">record_tool_call</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">operation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetMeter.record_tool_call" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetMeter.record_usd">
+<span class="sig-name descname"><span class="pre">record_usd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">operation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">usd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetMeter.record_usd" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetSpec">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.runtime_budget.</span></span><span class="sig-name descname"><span class="pre">RuntimeBudgetSpec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">usd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'float'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wallclock_seconds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'float'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tool_calls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'int'</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetSpec" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetSpec.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">usd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wallclock_seconds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tool_calls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetSpec.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetSpec.depth">
+<span class="sig-name descname"><span class="pre">depth</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetSpec.depth" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetSpec.from_dict">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.runtime_budget.RuntimeBudgetSpec" title="plexus.runtime_budget.RuntimeBudgetSpec"><span class="pre">RuntimeBudgetSpec</span></a></span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetSpec.from_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetSpec.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetSpec.to_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetSpec.tool_calls">
+<span class="sig-name descname"><span class="pre">tool_calls</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetSpec.tool_calls" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetSpec.usd">
+<span class="sig-name descname"><span class="pre">usd</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetSpec.usd" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.runtime_budget.RuntimeBudgetSpec.wallclock_seconds">
+<span class="sig-name descname"><span class="pre">wallclock_seconds</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#plexus.runtime_budget.RuntimeBudgetSpec.wallclock_seconds" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.runtime_budget.runtime_budget_spec_from_env">
+<span class="sig-prename descclassname"><span class="pre">plexus.runtime_budget.</span></span><span class="sig-name descname"><span class="pre">runtime_budget_spec_from_env</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env_var</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'PLEXUS_CHILD_BUDGET'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.runtime_budget.RuntimeBudgetSpec" title="plexus.runtime_budget.RuntimeBudgetSpec"><span class="pre">RuntimeBudgetSpec</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.runtime_budget.runtime_budget_spec_from_env" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.rca_analysis.html" class="btn btn-neutral float-left" title="plexus.rca_analysis module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.score_rubric_consistency.html" class="btn btn-neutral float-right" title="plexus.score_rubric_consistency module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

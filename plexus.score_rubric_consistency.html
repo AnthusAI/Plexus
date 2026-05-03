@@ -1,0 +1,292 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>plexus.score_rubric_consistency module &mdash; Plexus 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="plexus.test_evaluation_cost_details module" href="plexus.test_evaluation_cost_details.html" />
+    <link rel="prev" title="plexus.runtime_budget module" href="plexus.runtime_budget.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Plexus
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="plexus.html">plexus package</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="plexus.html#subpackages">Subpackages</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="plexus.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="plexus.CustomLogging.html">plexus.CustomLogging module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Evaluation.html">plexus.Evaluation module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.LangChainUser.html">plexus.LangChainUser module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.PromptTemplateLoader.html">plexus.PromptTemplateLoader module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Registries.html">plexus.Registries module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.Scorecard.html">plexus.Scorecard module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.ScorecardResults.html">plexus.ScorecardResults module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.ScorecardResultsAnalysis.html">plexus.ScorecardResultsAnalysis module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.bedrock_models.html">plexus.bedrock_models module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.confidence_calibration.html">plexus.confidence_calibration module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.plexus_logging.html">plexus.plexus_logging package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.rca_analysis.html">plexus.rca_analysis module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.runtime_budget.html">plexus.runtime_budget module</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">plexus.score_rubric_consistency module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyRequest"><code class="docutils literal notranslate"><span class="pre">ScoreRubricConsistencyRequest</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult"><code class="docutils literal notranslate"><span class="pre">ScoreRubricConsistencyResult</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyService"><code class="docutils literal notranslate"><span class="pre">ScoreRubricConsistencyService</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.score_rubric_consistency.fetch_score_version_for_consistency"><code class="docutils literal notranslate"><span class="pre">fetch_score_version_for_consistency()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#plexus.score_rubric_consistency.merge_consistency_result_into_parameters"><code class="docutils literal notranslate"><span class="pre">merge_consistency_result_into_parameters()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_evaluation_cost_details.html">plexus.test_evaluation_cost_details module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_evaluation_metrics.html">plexus.test_evaluation_metrics module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_prediction_commands.html">plexus.test_prediction_commands module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.test_score.html">plexus.test_score module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plexus.training_data_lake.html">plexus.training_data_lake module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.data.html">plexus.data package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.scores.html">plexus.scores package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.processors.html">plexus.processors package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.storage.html">plexus.storage package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.cli.html">plexus.cli package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plexus.dashboard.html">plexus.dashboard package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Plexus</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="plexus.html">plexus package</a></li>
+      <li class="breadcrumb-item active">plexus.score_rubric_consistency module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/plexus.score_rubric_consistency.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-plexus.score_rubric_consistency">
+<span id="plexus-score-rubric-consistency-module"></span><h1>plexus.score_rubric_consistency module<a class="headerlink" href="#module-plexus.score_rubric_consistency" title="Link to this heading"></a></h1>
+<p>Score-version rubric consistency checks.</p>
+<p>This module owns the lightweight preflight that asks whether the score code for a
+specific ScoreVersion appears consistent with that same version’s rubric text.
+The result is designed to be persisted on Evaluation.parameters and displayed as
+operator context before RCA.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyRequest">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.score_rubric_consistency.</span></span><span class="sig-name descname"><span class="pre">ScoreRubricConsistencyRequest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_version_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rubric_text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyRequest" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_version_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rubric_text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.item_text">
+<span class="sig-name descname"><span class="pre">item_text</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.item_text" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.rubric_text">
+<span class="sig-name descname"><span class="pre">rubric_text</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.rubric_text" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.score_code">
+<span class="sig-name descname"><span class="pre">score_code</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.score_code" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.score_identifier">
+<span class="sig-name descname"><span class="pre">score_identifier</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.score_identifier" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.score_version_id">
+<span class="sig-name descname"><span class="pre">score_version_id</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.score_version_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.scorecard_identifier">
+<span class="sig-name descname"><span class="pre">scorecard_identifier</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyRequest.scorecard_identifier" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyResult">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.score_rubric_consistency.</span></span><span class="sig-name descname"><span class="pre">ScoreRubricConsistencyResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_version_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">paragraph</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checked_at</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'str'</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diagnostics</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'Dict[str,</span> <span class="pre">Any]'</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyResult.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scorecard_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_version_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">paragraph</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checked_at</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diagnostics</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyResult.checked_at">
+<span class="sig-name descname"><span class="pre">checked_at</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult.checked_at" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyResult.diagnostics">
+<span class="sig-name descname"><span class="pre">diagnostics</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult.diagnostics" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyResult.model">
+<span class="sig-name descname"><span class="pre">model</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult.model" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyResult.paragraph">
+<span class="sig-name descname"><span class="pre">paragraph</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult.paragraph" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyResult.score_identifier">
+<span class="sig-name descname"><span class="pre">score_identifier</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult.score_identifier" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyResult.score_version_id">
+<span class="sig-name descname"><span class="pre">score_version_id</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult.score_version_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyResult.scorecard_identifier">
+<span class="sig-name descname"><span class="pre">scorecard_identifier</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult.scorecard_identifier" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyResult.status">
+<span class="sig-name descname"><span class="pre">status</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult.status" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyResult.to_parameters_payload">
+<span class="sig-name descname"><span class="pre">to_parameters_payload</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult.to_parameters_payload" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyService">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">plexus.score_rubric_consistency.</span></span><span class="sig-name descname"><span class="pre">ScoreRubricConsistencyService</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">invoke_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gpt-5-mini'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyService" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Generate a concise score-code vs rubric consistency assessment.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyService.DEFAULT_MODEL">
+<span class="sig-name descname"><span class="pre">DEFAULT_MODEL</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'gpt-5-mini'</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyService.DEFAULT_MODEL" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyService.VALID_STATUSES">
+<span class="sig-name descname"><span class="pre">VALID_STATUSES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'consistent',</span> <span class="pre">'inconclusive',</span> <span class="pre">'potential_conflict'}</span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyService.VALID_STATUSES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyService.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">invoke_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'gpt-5-mini'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyService.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyService.generate">
+<span class="sig-name descname"><span class="pre">generate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyRequest" title="plexus.score_rubric_consistency.ScoreRubricConsistencyRequest"><span class="pre">ScoreRubricConsistencyRequest</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult" title="plexus.score_rubric_consistency.ScoreRubricConsistencyResult"><span class="pre">ScoreRubricConsistencyResult</span></a></span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyService.generate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.ScoreRubricConsistencyService.generate_from_api">
+<span class="sig-name descname"><span class="pre">generate_from_api</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scorecard_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_identifier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_version_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult" title="plexus.score_rubric_consistency.ScoreRubricConsistencyResult"><span class="pre">ScoreRubricConsistencyResult</span></a></span></span><a class="headerlink" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyService.generate_from_api" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.fetch_score_version_for_consistency">
+<span class="sig-prename descclassname"><span class="pre">plexus.score_rubric_consistency.</span></span><span class="sig-name descname"><span class="pre">fetch_score_version_for_consistency</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">score_version_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.score_rubric_consistency.fetch_score_version_for_consistency" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="plexus.score_rubric_consistency.merge_consistency_result_into_parameters">
+<span class="sig-prename descclassname"><span class="pre">plexus.score_rubric_consistency.</span></span><span class="sig-name descname"><span class="pre">merge_consistency_result_into_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">parameters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">result</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#plexus.score_rubric_consistency.ScoreRubricConsistencyResult" title="plexus.score_rubric_consistency.ScoreRubricConsistencyResult"><span class="pre">ScoreRubricConsistencyResult</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#plexus.score_rubric_consistency.merge_consistency_result_into_parameters" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="plexus.runtime_budget.html" class="btn btn-neutral float-left" title="plexus.runtime_budget module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plexus.test_evaluation_cost_details.html" class="btn btn-neutral float-right" title="plexus.test_evaluation_cost_details module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright Anthus AI Solutions.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
