@@ -732,6 +732,61 @@ async def test_recent_briefing_filters_to_recent_dated_s3_sources_and_ranks_rece
     )
 
 
+@pytest.mark.asyncio
+async def test_recent_briefing_returns_empty_context_when_corpus_is_absent(monkeypatch):
+    class _AuthorityResolver:
+        def __init__(self, _api_client):
+            pass
+
+        async def resolve(self, score_id):
+            assert score_id == "score-1"
+            return RubricAuthority(
+                score_version_id="score-version-1",
+                rubric_text="Official rubric.",
+                score_code="classifier prompt",
+            )
+
+    class _Resolver:
+        def __init__(self, **_kwargs):
+            pass
+
+        def resolve(self, **_kwargs):
+            raise FileNotFoundError("knowledge-base prefix missing")
+
+    monkeypatch.setattr(
+        "plexus.rubric_memory.recent.RubricAuthorityResolver",
+        _AuthorityResolver,
+    )
+    monkeypatch.setattr(
+        "plexus.rubric_memory.recent.S3RubricMemoryCorpusResolver",
+        _Resolver,
+    )
+
+    context = await RubricMemoryRecentBriefingProvider(
+        api_client=object(),
+        reference_date=date(2026, 4, 29),
+    ).retrieve_recent(
+        scorecard_identifier="Scorecard A",
+        score_identifier="Score A",
+        score_id="score-1",
+        days=30,
+    )
+
+    assert context.markdown_context == ""
+    assert context.citation_index == []
+    assert context.machine_context["context_kind"] == "recent_briefing"
+    assert context.machine_context["available"] is False
+    assert context.diagnostics == [
+        {
+            "kind": "rubric_memory_unavailable",
+            "reason": "knowledge-base prefix missing",
+            "score_version_id": "score-version-1",
+            "scorecard": "Scorecard A",
+            "score": "Score A",
+        }
+    ]
+
+
 def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
     monkeypatch,
     tmp_path,
@@ -1652,6 +1707,35 @@ async def test_context_provider_records_prepared_corpus_and_query_plan_diagnosti
 
 
 @pytest.mark.asyncio
+async def test_context_provider_returns_empty_context_when_corpus_is_absent(monkeypatch):
+    monkeypatch.setattr(
+        "plexus.rubric_memory.provider.BiblicusRubricEvidenceRetriever.from_score",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            FileNotFoundError("knowledge-base prefix missing")
+        ),
+    )
+
+    context = await RubricMemoryContextProvider(api_client=object()).generate_for_request(
+        _request()
+    )
+
+    assert context.markdown_context == ""
+    assert context.citation_index == []
+    assert context.machine_context == {
+        "available": False,
+        "reason": "knowledge-base prefix missing",
+    }
+    assert context.diagnostics == [
+        {
+            "kind": "rubric_memory_unavailable",
+            "reason": "knowledge-base prefix missing",
+            "scorecard": "Scorecard A",
+            "score": "Score A",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_context_provider_retrieves_item_context_without_synthesis(monkeypatch):
     class _AuthorityResolver:
         def __init__(self, _api_client):
@@ -1754,6 +1838,45 @@ async def test_context_provider_retrieves_item_context_without_synthesis(monkeyp
     }
     assert diagnostics_by_kind["prepared_corpus"]["status"] == "reused"
     assert diagnostics_by_kind["query_plan"]["generated_phrase_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_context_provider_returns_empty_item_contexts_when_corpus_is_absent(monkeypatch):
+    class _AuthorityResolver:
+        def __init__(self, _api_client):
+            pass
+
+        async def resolve(self, score_id):
+            assert score_id == "score-1"
+            return RubricAuthority(
+                score_version_id="score-version-1",
+                rubric_text="Official rubric.",
+                score_code="classifier prompt",
+            )
+
+    monkeypatch.setattr(
+        "plexus.rubric_memory.provider.RubricAuthorityResolver",
+        _AuthorityResolver,
+    )
+    monkeypatch.setattr(
+        "plexus.rubric_memory.provider.BiblicusRubricEvidenceRetriever.from_score",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            FileNotFoundError("knowledge-base prefix missing")
+        ),
+    )
+
+    contexts = await RubricMemoryContextProvider(api_client=object()).retrieve_for_score_items(
+        scorecard_identifier="Scorecard A",
+        score_identifier="Score A",
+        score_id="score-1",
+        item_contexts=[{"key": "item-1"}],
+    )
+
+    context = contexts["item-1"]
+    assert context.markdown_context == ""
+    assert context.citation_index == []
+    assert context.machine_context["available"] is False
+    assert context.diagnostics[0]["kind"] == "rubric_memory_unavailable"
 
 
 @pytest.mark.asyncio
