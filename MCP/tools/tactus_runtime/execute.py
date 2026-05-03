@@ -1828,7 +1828,11 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
             next_champion_version_id=str(version_id),
         )
         client.execute(update_version_mutation, {"input": {
-            "id": previous_champion_version_id, "metadata": json.dumps(outgoing_meta)
+            "id": previous_champion_version_id,
+            "scoreId": previous_version_meta.get("scoreId") or str(score_id),
+            "createdAt": previous_version_meta.get("createdAt"),
+            "isFeatured": previous_version_meta.get("isFeatured"),
+            "metadata": json.dumps(outgoing_meta),
         }})
 
     return {
@@ -2812,16 +2816,17 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
         if process.poll() is not None:
             break
 
-    # Clean up temp file
-    try:
-        os.unlink(id_file_path)
-    except OSError:
-        pass
+    if evaluation_id:
+        try:
+            os.unlink(id_file_path)
+        except OSError:
+            pass
 
     return {
         "status": "dispatched",
         "process_id": process.pid,
         "evaluation_id": evaluation_id,
+        "evaluation_id_file": None if evaluation_id else id_file_path,
         "command": cmd,
         "evaluation_type": evaluation_type,
         "scorecard": scorecard_name,
@@ -5209,6 +5214,33 @@ class PlexusRuntimeModule:
         evaluation_id = dispatch_result.get("evaluation_id") or dispatch_result.get(
             "id"
         )
+        if record.get("kind") == "evaluation" and not evaluation_id:
+            id_file_path = dispatch_result.get("evaluation_id_file")
+            if id_file_path:
+                try:
+                    with open(str(id_file_path), "r", encoding="utf-8") as id_file:
+                        late_evaluation_id = id_file.read().strip()
+                except FileNotFoundError:
+                    late_evaluation_id = ""
+                if late_evaluation_id:
+                    try:
+                        os.unlink(str(id_file_path))
+                    except OSError:
+                        pass
+                    dispatch_result = {
+                        **dispatch_result,
+                        "evaluation_id": late_evaluation_id,
+                        "evaluation_id_file": None,
+                        "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{late_evaluation_id}",
+                    }
+                    record = self._handle_store.update(
+                        handle_id,
+                        {
+                            "dispatch_result": dispatch_result,
+                            "status_url": dispatch_result["dashboard_url"],
+                        },
+                    )
+                    evaluation_id = late_evaluation_id
         if record.get("kind") == "evaluation" and not evaluation_id:
             process_id = dispatch_result.get("process_id")
             if process_id:
