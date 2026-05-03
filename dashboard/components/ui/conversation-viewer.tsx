@@ -33,6 +33,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
+import { Timestamp } from "@/components/ui/timestamp"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -369,31 +370,35 @@ const serializeSessionMetadata = (value: unknown): string | undefined => {
   return undefined
 }
 
-const getSessionDisplayName = (session: Pick<ChatSession, "id" | "name">): string => {
+const getSessionExplicitName = (session: Pick<ChatSession, "name">): string => {
   const explicitName = String(session.name || "").trim()
-  if (explicitName) {
-    return explicitName
-  }
-  const sessionId = String(session.id || "").trim()
-  if (!sessionId) {
-    return "New Chat"
-  }
-  return `Session ${sessionId.slice(0, 8)}`
+  return explicitName
 }
 
-const getSessionHeaderTitle = (session: Pick<ChatSession, "id" | "name" | "metadata">): string => {
-  const explicitName = String(session.name || "").trim()
+const getSessionTitleAttribute = (session: Pick<ChatSession, "name">): string | undefined => {
+  const explicitName = getSessionExplicitName(session)
+  return explicitName || undefined
+}
+
+const SessionLabel = ({
+  session,
+  latestMessageAt,
+  timestampClassName,
+}: {
+  session: Pick<ChatSession, "name" | "metadata">
+  latestMessageAt?: string
+  timestampClassName?: string
+}) => {
+  const explicitName = getSessionExplicitName(session)
   if (explicitName) {
-    return explicitName
+    return <span className="truncate">{explicitName}</span>
   }
   if (isHiddenUntilNamedSession(session)) {
-    return "New Chat"
+    return <span className="truncate">New Chat</span>
   }
-  const sessionId = String(session.id || "").trim()
-  if (!sessionId) {
-    return "New Chat"
-  }
-  return `Session ${sessionId.slice(0, 8)}`
+  return latestMessageAt
+    ? <Timestamp time={latestMessageAt} variant="relative" className={timestampClassName} />
+    : null
 }
 
 const isHiddenUntilNamedSession = (session: Pick<ChatSession, "name" | "metadata">): boolean => {
@@ -1531,6 +1536,26 @@ function ConversationViewer({
   const messages = propMessages || internalMessages  
   const selectedSessionId = propSelectedSessionId || internalSelectedSessionId
   const isExternallyControlledSession = Boolean(propSelectedSessionId?.trim())
+  const latestMessageAtBySession = React.useMemo(() => {
+    const latestBySession = new Map<string, string>()
+
+    for (const message of messages) {
+      if (!message.sessionId || !message.createdAt) {
+        continue
+      }
+      const messageTime = new Date(message.createdAt).getTime()
+      if (Number.isNaN(messageTime)) {
+        continue
+      }
+
+      const existing = latestBySession.get(message.sessionId)
+      if (!existing || messageTime > new Date(existing).getTime()) {
+        latestBySession.set(message.sessionId, message.createdAt)
+      }
+    }
+
+    return latestBySession
+  }, [messages])
 
   useEffect(() => {
     selectedSessionIdRef.current = selectedSessionId
@@ -2949,10 +2974,16 @@ function ConversationViewer({
                 className="w-full justify-start text-left p-2 h-auto"
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                  {getSessionExplicitName(session) && (
+                    <MessageSquare className="h-4 w-4 flex-shrink-0" />
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="text-xs font-medium truncate">
-                      {getSessionDisplayName(session)}
+                      <SessionLabel
+                        session={session}
+                        latestMessageAt={latestMessageAtBySession.get(session.id)}
+                        timestampClassName="text-xs font-medium"
+                      />
                     </div>
                   <div className="text-xs text-muted-foreground">
                       {session.messageCount ? `${session.messageCount} messages` : 'No messages'}
@@ -2974,7 +3005,7 @@ function ConversationViewer({
                 size="sm"
                 onClick={() => handleSessionSelect(session.id)}
                 className="w-full h-8 p-0"
-                title={getSessionDisplayName(session)}
+                title={getSessionTitleAttribute(session)}
               >
                 <MessageSquare className="h-4 w-4" />
               </Button>
@@ -2999,11 +3030,17 @@ function ConversationViewer({
           <div data-testid="conversation-main-header" className="h-12 border-b border-border px-3 pt-0.5">
             <div className="flex h-full items-center justify-between">
               <div className="flex min-w-0 items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                {getSessionExplicitName(selectedSession) && (
+                  <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                )}
                 <div className="min-w-0 flex items-center gap-2">
-                  <h3 className="font-medium text-sm truncate">
-                    {getSessionHeaderTitle(selectedSession)}
-                  </h3>
+                  <div className="font-medium text-sm truncate">
+                    <SessionLabel
+                      session={selectedSession}
+                      latestMessageAt={latestMessageAtBySession.get(selectedSession.id)}
+                      timestampClassName="font-medium text-sm"
+                    />
+                  </div>
                   <span className="text-xs text-muted-foreground truncate">
                     {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
                   </span>
