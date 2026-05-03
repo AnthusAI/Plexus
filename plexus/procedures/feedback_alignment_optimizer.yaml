@@ -3368,6 +3368,25 @@ code: |
     return capped
   end
 
+  local function should_add_creative_hypothesis(cycle_number)
+    return (tonumber(cycle_number) or 0) >= 4
+  end
+
+  local function add_creative_hypothesis_slot(slots, cycle_number)
+    if not should_add_creative_hypothesis(cycle_number) then
+      return slots
+    end
+    local expanded = {}
+    for i, slot in ipairs(slots or {}) do
+      expanded[i] = slot
+      if slot == "creative" then
+        return expanded
+      end
+    end
+    table.insert(expanded, "creative")
+    return expanded
+  end
+
   local function build_cookbook_section(opts)
     local parts = {COOKBOOK_STATIC}
     local stagnant = opts.consecutive_stagnant_cycles or 0
@@ -3574,6 +3593,18 @@ code: |
       table.insert(parts, "Assume the current framing is wrong or exhausted.")
       table.insert(parts, "You may start from the baseline version and redesign major prompt sections, graph structure, preprocessing, or model allocation.")
       table.insert(parts, "Do not preserve existing structure just because it exists.")
+    elseif slot == "creative" then
+      table.insert(parts, "OBJECTIVE: Creative hypothesis (cycle 4+ cookbook lane)")
+      table.insert(parts, "This slot is mandatory from cycle 4 onward, even if the run is not formally plateaued.")
+      table.insert(parts, "Propose one weird, testable hypothesis that is materially different from the standard lanes.")
+      table.insert(parts, "Use this lane for counterintuitive prompt transformations when normal policy edits have had multiple cycles to work.")
+      table.insert(parts, "")
+      table.insert(parts, "CREATIVE COOKBOOK — current recipes:")
+      table.insert(parts, "  - Repeat the whole prompt twice so the scoring model sees the instructions redundantly.")
+      table.insert(parts, "  - Translate the operative prompt or rubric instructions to Polish.")
+      table.insert(parts, "")
+      table.insert(parts, "Pick exactly one creative recipe or a tightly scoped combination, and explain why it could change alignment.")
+      table.insert(parts, "The hypothesis must still be implementable by editing score_config.yaml and must still pass smoke tests.")
     end
 
     -- Guide approach selection based on historical effectiveness
@@ -5388,6 +5419,7 @@ code: |
       consecutive_stagnant_cycles = consecutive_stagnant_cycles
     })
     hyp_slots = cap_hypothesis_slots(hyp_slots, params.num_candidates)
+    hyp_slots = add_creative_hypothesis_slot(hyp_slots, cycle)
     local slot_names = table.concat(hyp_slots, ", ")
     if cycle_escalation_mode == "ultra_creative" then
       Human.notify({message = string.format(
