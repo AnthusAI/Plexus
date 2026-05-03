@@ -91,6 +91,33 @@ def test_optimizer_yaml_caps_hypothesis_slots_by_requested_num_candidates():
     assert "else\n      hyp_slots =" not in code
 
 
+def test_optimizer_yaml_adds_creative_hypothesis_after_third_cycle():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function should_add_creative_hypothesis(cycle_number)" in code
+    assert ">= 4" in code
+    assert "local function add_creative_hypothesis_slot(slots, cycle_number)" in code
+    assert "hyp_slots = add_creative_hypothesis_slot(hyp_slots, cycle)" in code
+    assert 'table.insert(expanded, "creative")' in code
+    assert "OBJECTIVE: Creative hypothesis (cycle 4+ cookbook lane)" in code
+    assert "Do NOT let it displace rubric-oriented hypotheses" in code
+    assert "Repeat the whole prompt twice" in code
+    assert "Put the transcript first and the classifier instruction at the very end" in code
+    assert "Translate the operative prompt or rubric instructions to Polish" in code
+
+
+def test_optimizer_yaml_includes_late_structural_prompt_shape_lane():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "C4:  Prompt-shape / attention-structure transformations" in code
+    assert "lightweight alternative to CoT" in code
+    assert "repeating the decisive question/rule" in code
+    assert "reorder label definitions or valid_classes" in code
+    assert "C5:  Full rewrite" in code
+
+
 def test_optimizer_yaml_passes_code_editor_context_inline_without_history_injection():
     config = _load_optimizer_config()
     code = config["code"]
@@ -374,12 +401,31 @@ def test_optimizer_yaml_never_promotes_champion_and_reports_manual_follow_up():
     assert "winning_version_id = last_accepted_version_id" in code
 
 
+def test_optimizer_yaml_rejects_non_completed_evaluation_handles():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local eval_status = string.upper(tostring(eval_data.status or waited.status or \"\"))" in code
+    assert 'if eval_status ~= "COMPLETED" then' in code
+    assert '"Evaluation did not complete: status=" .. tostring(eval_data.status or waited.status)' in code
+    assert "score_version_id = eval_result.score_version_id or eval_result.scoreVersionId" in code
+
+
 def test_optimizer_yaml_marks_one_cycle_runs_as_verification_only():
     config = _load_optimizer_config()
     code = config["code"]
 
     assert "Single-cycle verification run: this will validate one optimization cycle only and will not perform champion promotion." in code
     assert 'local completion_mode = params.max_iterations == 1 and "Verification complete" or "Optimization complete"' in code
+
+
+def test_optimizer_yaml_skips_synthesis_when_no_hypothesis_has_positive_signal():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "if #succeeded == 0 and not any_partial_positive then" in code
+    assert "no_successful_hypotheses_no_positive_signal" in code
+    assert "no hypotheses succeeded and no positive signal was found" in code
 
 
 def test_optimizer_yaml_uses_safe_tool_call_arg_helper_instead_of_direct_args_dereferences():
@@ -429,6 +475,19 @@ def test_optimizer_yaml_escalates_plateaus_instead_of_stopping_or_shrinking():
     assert 'table.insert(slots, "full_rewrite")' in code
     assert 'The run is stuck. Search harder instead of shrinking the hypothesis set.' in code
     assert 'Recent cycles are flat. Broaden search instead of reducing ambition.' in code
+
+
+def test_optimizer_yaml_rejects_repeated_strongly_harmful_hypothesis_territory():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local HYPOTHESIS_REPEAT_STOPWORDS" in code
+    assert "hypothesis_repeats_strongly_harmful_prior" in code
+    assert "fb_d < -0.05 or acc_d < -0.05" in code
+    assert "overlaps strongly harmful cycle" in code
+    assert "rejected as repeated harmful territory" in code
+    assert "blocked for harmful repeat, retrying with hard exclusion" in code
+    assert "Do not target the same policy family, wording family, or evidence rule." in code
 
 
 def test_optimizer_yaml_keeps_bold_lane_and_uses_escalation_advisor():
