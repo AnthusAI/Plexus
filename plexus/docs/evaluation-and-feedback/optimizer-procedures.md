@@ -1,8 +1,8 @@
 # Feedback Alignment Optimizer — Procedure Reference
 
 This document is for AI agents who trigger, monitor, review, continue, or branch
-optimizer procedure runs. For the optimizer agent's own change-strategy reference,
-see `optimizer-cookbook`.
+optimizer procedure runs. For the optimizer agent's own change-strategy
+reference, see the lane-specific `optimizer-cookbook-*` docs.
 
 ---
 
@@ -311,7 +311,7 @@ After reviewing an optimizer run's output:
    - May need reviewer calibration or guideline clarification
 
 3. **If structural limit identified (model, input format):**
-   - Consult `optimizer-cookbook` C-category changes
+   - Consult `optimizer-cookbook-structural` C-category changes
    - Consider DeepgramInputSource, transcript filtering, model swap
    - Branch from last good cycle to try structural approach
 
