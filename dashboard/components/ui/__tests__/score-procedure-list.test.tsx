@@ -59,7 +59,7 @@ describe('ScoreProcedureList', () => {
     jest.clearAllMocks()
     for (const key of Object.keys(subscriptionHandlers)) delete subscriptionHandlers[key]
 
-    mockGraphql.mockImplementation(({ query }: { query: string }) => {
+    mockGraphql.mockImplementation(({ query }: { query: string; variables?: Record<string, any> }) => {
       if (query.includes('onCreateProcedure')) return subscriptionResult('createProcedure')
       if (query.includes('onUpdateProcedure')) return subscriptionResult('updateProcedure')
       if (query.includes('onDeleteProcedure')) return subscriptionResult('deleteProcedure')
@@ -137,6 +137,27 @@ describe('ScoreProcedureList', () => {
                       },
                     ],
                   },
+                },
+              ],
+            },
+          },
+        }
+      }
+      if (query.includes('listProcedureByScoreVersionIdAndUpdatedAt')) {
+        return {
+          data: {
+            listProcedureByScoreVersionIdAndUpdatedAt: {
+              items: [
+                {
+                  id: 'proc-version',
+                  name: 'Version Associated Run',
+                  description: 'Direct version procedure',
+                  status: 'COMPLETED',
+                  metadata: null,
+                  updatedAt: '2026-04-26T00:00:00Z',
+                  scoreId: 'score-1',
+                  scoreVersionId: 'version-2',
+                  accountId: 'account-1',
                 },
               ],
             },
@@ -272,7 +293,7 @@ describe('ScoreProcedureList', () => {
     )
   })
 
-  it('filters version-scoped procedures to runs that touched the selected version', async () => {
+  it('loads version-scoped procedures through the procedure scoreVersionId index', async () => {
     render(
       <ScoreProcedureList
         scoreId="score-1"
@@ -285,10 +306,22 @@ describe('ScoreProcedureList', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Optimizer Run 1')).toBeInTheDocument()
+      expect(screen.getByText('Version Associated Run')).toBeInTheDocument()
     })
 
+    expect(screen.queryByText('Optimizer Run 1')).not.toBeInTheDocument()
     expect(screen.queryByText('Other Run')).not.toBeInTheDocument()
+    expect(mockGraphql).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.stringContaining('listProcedureByScoreVersionIdAndUpdatedAt'),
+        variables: expect.objectContaining({ scoreVersionId: 'version-2' }),
+      })
+    )
+    expect(
+      mockGraphql.mock.calls.some(([call]) =>
+        String(call.query).includes('listProcedureByScoreIdAndUpdatedAt')
+      )
+    ).toBe(false)
   })
 
   it('inserts live matching procedures and updates task/stage state', async () => {

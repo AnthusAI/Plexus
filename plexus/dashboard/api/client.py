@@ -71,7 +71,6 @@ from threading import Thread, Event
 import time
 from datetime import datetime, timezone
 import logging
-from plexus.utils import truncate_dict_strings_inner
 # Configure minimal logging for GraphQL operations
 # Only show warnings and errors from external libraries
 transport_logger = logging.getLogger('gql.transport')
@@ -149,6 +148,8 @@ _GRAPHQL_RETRY_POLICIES = {
     LONG_RUNNING_WRITE_RETRY_POLICY_NAME: LONG_RUNNING_WRITE_RETRY_POLICY,
     CHAT_STREAM_WRITE_RETRY_POLICY_NAME: CHAT_STREAM_WRITE_RETRY_POLICY,
 }
+
+from plexus.utils import truncate_dict_strings_inner
 
 _RETRYABLE_QUERY_ERROR_TYPES = {
     "DynamoDB:ThrottlingException",

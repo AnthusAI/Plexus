@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useCallback } from "react"
 import { ChartContainer } from "@/components/ui/chart"
 import { CartesianGrid, Line, LineChart, ReferenceLine, Tooltip, XAxis, YAxis } from "recharts"
+import { curveCardinal } from "victory-vendor/d3-shape"
 import { Button } from "@/components/ui/button"
 import { TrendingUp, X } from "lucide-react"
 import type { ChartConfig } from "@/components/ui/chart"
@@ -39,6 +40,7 @@ interface OptimizerMetricsChartProps {
 
 const RECENT_COLOR = "var(--chart-1)"
 const REGRESSION_COLOR = "var(--chart-2)"
+const OPTIMIZER_TIMELINE_CURVE = curveCardinal.tension(0.55)
 
 function getLineColor(key: string, view: DatasetView): string {
   if (key.startsWith("overall_recent")) return RECENT_COLOR
@@ -472,7 +474,7 @@ export default function OptimizerMetricsChart({ iterations, datasetView: control
                   yAxisId={axis}
                   hide={!visible}
                   legendType="none"
-                  type="monotone"
+                  type={OPTIMIZER_TIMELINE_CURVE}
                   dataKey={key}
                   name={(chartConfig as Record<string, { label: string }>)[key]?.label || key}
                   stroke={color}

@@ -13,11 +13,14 @@ from typing import Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from .base import BaseModel
+from ..client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 if TYPE_CHECKING:
     from ..client import _BaseAPIClient
 
 logger = logging.getLogger(__name__)
+
+_TERMINAL_STATUSES = {"COMPLETED", "FAILED", "CANCELLED", "CANCELED"}
 
 
 def _evaluation_cost_details_enabled() -> bool:
@@ -277,8 +280,18 @@ class Evaluation(BaseModel):
                 }
             }
 
-            result = self._client.execute(mutation, variables)
-            payload = (result or {}).get("updateEvaluation") or {}
+            retry_policy = (
+                LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+                if str(kwargs.get("status") or "").upper() in _TERMINAL_STATUSES
+                else None
+            )
+            execute_kwargs = {"retry_policy": retry_policy} if retry_policy else {}
+            result = self._client.execute(mutation, variables, **execute_kwargs)
+            payload = (result or {}).get("updateEvaluation")
+            if not payload:
+                raise RuntimeError(
+                    f"Failed to update Evaluation {self.id}: missing updateEvaluation payload"
+                )
             for field, value in payload.items():
                 if field in ['createdAt', 'updatedAt', 'startedAt'] and isinstance(value, str):
                     try:

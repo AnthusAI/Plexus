@@ -14,9 +14,38 @@ import queue
 import threading
 import uuid
 import yaml
+from contextlib import nullcontext
 from typing import Dict, Any, Optional, List
 
+from plexus.runtime_budget import (
+    RuntimeBudgetLimitExceeded,
+    RuntimeBudgetMeter,
+    RuntimeBudgetSpec,
+)
+
 logger = logging.getLogger(__name__)
+
+CONSOLE_CHAT_BUILTIN_ID = "builtin:console/chat"
+
+
+class ProcedureExecutionCancelled(RuntimeError):
+    """Raised when a procedure worker observes a dashboard cancellation request."""
+
+
+def _is_dashboard_task_cancelled(client: Any, task_id: Optional[str]) -> bool:
+    if not task_id:
+        return False
+    try:
+        from plexus.dashboard.api.models.task import Task
+
+        task = Task.get_by_id(task_id, client)
+        return str(getattr(task, "status", "") or "").upper() in {
+            "CANCELLED",
+            "CANCELED",
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Could not check cancellation status for task %s: %s", task_id, exc)
+        return False
 
 
 def _install_tactus_dspy_context_capture_patch() -> None:
@@ -129,6 +158,41 @@ def _cost_event_signature(entry: Dict[str, Any]) -> str:
             "timestamp",
         )
     )
+
+
+def _mcp_tool_value(tool: Any, key: str, default: Any = None) -> Any:
+    if isinstance(tool, dict):
+        return tool.get(key, default)
+    return getattr(tool, key, default)
+
+
+def _mcp_tool_result_to_text(result: Any) -> str:
+    def _content_to_text(content: Any) -> str:
+        if not isinstance(content, list):
+            return str(content)
+
+        text_parts: List[str] = []
+        for item in content:
+            if isinstance(item, dict) and "text" in item:
+                text_parts.append(str(item["text"]))
+            elif hasattr(item, "text"):
+                text_parts.append(str(getattr(item, "text")))
+            else:
+                text_parts.append(str(item))
+        return "\n".join(text_parts)
+
+    if isinstance(result, dict):
+        content = result.get("content")
+        if content is not None:
+            return _content_to_text(content)
+        if "text" in result:
+            return str(result["text"])
+        return json.dumps(result, indent=2, default=str)
+
+    if isinstance(result, list):
+        return _content_to_text(result)
+
+    return str(result)
 
 
 def _persist_inference_costs_to_state(storage: Any, procedure_id: str, cost_events: List[Any]) -> None:
@@ -469,10 +533,11 @@ class _PlexusTraceLogBridge:
 
     supports_streaming = True
 
-    def __init__(self, trace_sink: Any, on_cost_event: Optional[Any] = None):
+    def __init__(self, trace_sink: Any, on_cost_event: Optional[Any] = None, cw_logger: Optional[Any] = None):
         self.trace_sink = trace_sink
         self.cost_events = []
         self._on_cost_event = on_cost_event
+        self._cw_logger = cw_logger
         self._events: "queue.Queue[Any]" = queue.Queue()
         self._closed = threading.Event()
         self._worker = threading.Thread(
@@ -493,6 +558,8 @@ class _PlexusTraceLogBridge:
             if callable(self._on_cost_event):
                 try:
                     self._on_cost_event(event)
+                except RuntimeBudgetLimitExceeded:
+                    raise
                 except Exception as exc:
                     logger.warning("Failed processing incremental cost event: %s", exc)
             # Also forward cost events to the trace sink so assistant/tool chat
@@ -513,11 +580,18 @@ class _PlexusTraceLogBridge:
                     continue
 
                 try:
-                    record_fn = getattr(self.trace_sink, "record", None)
-                    if callable(record_fn):
-                        loop.run_until_complete(record_fn(event))
-                except Exception as exc:
-                    logger.warning("Failed recording streamed trace event: %s", exc)
+                    try:
+                        record_fn = getattr(self.trace_sink, "record", None)
+                        if callable(record_fn):
+                            loop.run_until_complete(record_fn(event))
+                    except Exception as exc:
+                        logger.warning("Failed recording streamed trace event: %s", exc)
+
+                    if self._cw_logger is not None:
+                        try:
+                            self._cw_logger.log_run_event_from_tactus(event)
+                        except Exception as exc:
+                            logger.debug("CloudWatch run log failed: %s", exc)
                 finally:
                     self._events.task_done()
         finally:
@@ -581,20 +655,9 @@ async def execute_procedure(
                 **options
             )
 
-        elif procedure_class == 'SOPAgent' or not procedure_class:
-            # Route to existing SOP agent system
-            return await _execute_sop_agent(
-                procedure_id,
-                procedure_code,
-                client,
-                mcp_server,
-                context,
-                **options
-            )
-
         else:
             # Unknown class
-            error_msg = f"Unknown procedure class: {procedure_class}. Supported: Tactus, SOPAgent"
+            error_msg = f"Unknown procedure class: {procedure_class!r}. Only 'Tactus' is supported."
             logger.error(error_msg)
             return {
                 'success': False,
@@ -645,6 +708,8 @@ async def _execute_tactus(
     """
     logger.info(f"Executing procedure {procedure_id} with Tactus runtime")
     log_bridge: Optional[_PlexusTraceLogBridge] = None
+    cw_logger = None
+    _uninstall_cw_llm_patch = None
 
     try:
         from tactus.core import TactusRuntime
@@ -874,6 +939,16 @@ async def _execute_tactus(
                         if alias_lines:
                             shim_parts.append('\n'.join(alias_lines) + '\n')
 
+                    # Always inject the plexus global from the registered Python module.
+                    # register_python_module("plexus") makes it available via require(),
+                    # but Lua procedures use it as a plain global, so we expose it here.
+                    shim_parts.insert(0,
+                        'if plexus == nil then\n'
+                        '  local ok, _mod = pcall(require, "plexus")\n'
+                        '  if ok and _mod ~= nil then plexus = _mod end\n'
+                        'end\n'
+                    )
+
                     if shim_parts:
                         parsed_source = dict(parsed_source)
                         parsed_source['procedure'] = '\n'.join(shim_parts) + '\n' + lua_source
@@ -984,6 +1059,32 @@ async def _execute_tactus(
         # Create Plexus adapters
         storage = PlexusStorageAdapter(client, procedure_id)
         chat_recorder = ProcedureChatRecorder(client, procedure_id)
+        child_budget = (
+            context.get("_plexus_child_budget")
+            if isinstance(context, dict)
+            else None
+        )
+        try:
+            child_budget_meter = (
+                RuntimeBudgetMeter(RuntimeBudgetSpec.from_dict(child_budget))
+                if isinstance(child_budget, dict)
+                else None
+            )
+        except ValueError as budget_error:
+            raise RuntimeBudgetLimitExceeded(str(budget_error)) from budget_error
+
+        if child_budget_meter is not None:
+            try:
+                parsed_source = yaml.safe_load(procedure_source)
+                if isinstance(parsed_source, dict):
+                    parsed_source = dict(parsed_source)
+                    parsed_source["max_depth"] = child_budget_meter.spec.depth
+                    procedure_source = yaml.safe_dump(parsed_source, sort_keys=False)
+            except Exception as budget_depth_error:  # noqa: BLE001
+                raise RuntimeBudgetLimitExceeded(
+                    f"Could not apply child depth budget: {budget_depth_error}"
+                ) from budget_depth_error
+
         # Allow callers to inject a custom HITL adapter (e.g. TerminalHITLAdapter for CLI)
         hitl = options.pop("hitl_adapter", None)
         if hitl is None:
@@ -993,11 +1094,28 @@ async def _execute_tactus(
         def _on_incremental_cost_event(event: Any) -> None:
             # Persist each inference cost event as it arrives so dashboards can
             # display near-real-time optimizer spend during long-running cycles.
+            if child_budget_meter is not None:
+                child_budget_meter.record_usd(
+                    "procedure.llm",
+                    getattr(event, "total_cost", None) or getattr(event, "cost", None),
+                )
             _persist_inference_costs_to_state(storage, procedure_id, [event])
+
+        # Generate invocation_run_id here so it can be used for CloudWatch stream naming.
+        invocation_run_id = str(uuid.uuid4())
+
+        _account_key = getattr(getattr(client, "context", None), "account_key", None) or "unknown"
+        from .cloudwatch_logger import _create_procedure_cloudwatch_logger, _install_cloudwatch_llm_context_patch
+        cw_logger = _create_procedure_cloudwatch_logger(
+            account_key=_account_key,
+            procedure_id=procedure_id,
+            invocation_run_id=invocation_run_id,
+        )
 
         log_bridge = _PlexusTraceLogBridge(
             trace_sink,
             on_cost_event=_on_incremental_cost_event,
+            cw_logger=cw_logger,
         )
 
         # Create Tactus runtime with Plexus adapters.
@@ -1006,9 +1124,6 @@ async def _execute_tactus(
             "procedure_id", "storage_backend", "hitl_handler", "chat_recorder",
             "trace_sink", "log_handler", "mcp_server", "openai_api_key", "run_id",
         ]
-        # Generate a unique run_id for this invocation so that checkpoints from
-        # previous runs (which have run_id=None) are never replayed.
-        invocation_run_id = str(uuid.uuid4())
 
         runtime_kwargs: Dict[str, Any] = {
             "procedure_id": procedure_id,
@@ -1061,6 +1176,9 @@ async def _execute_tactus(
             runtime.log_handler = log_bridge
 
         _install_tactus_dspy_context_capture_patch()
+        _uninstall_cw_llm_patch = None
+        if cw_logger is not None:
+            _uninstall_cw_llm_patch = _install_cloudwatch_llm_context_patch(cw_logger)
 
         # Bridge legacy in-process MCP server to Tactus toolset registry.
         # Newer Tactus versions resolve agent tools through named toolsets.
@@ -1101,11 +1219,21 @@ async def _execute_tactus(
             except Exception as exc:
                 logger.warning("Could not register ScoreEditorToolset: %s", exc)
 
+            try:
+                from .tactus_adapters.rubric_memory_toolset import register_on_transport as register_rubric_memory
+                register_rubric_memory(mcp_server.transport)
+            except Exception as exc:
+                logger.warning("Could not register rubric memory tools: %s", exc)
+
         if mcp_client_for_bridge:
             try:
-                from tactus.adapters.mcp import PydanticAIMCPAdapter
                 from pydantic_ai.toolsets import FunctionToolset
+                from tactus.adapters.mcp import PydanticAIMCPAdapter
 
+                # Bridge embedded MCP tools into the Tactus toolset registry.
+                # In the `execute_tactus` world we want ONE model-facing tool surface:
+                # a single toolset named "plexus" containing the MCP tools (usually only
+                # `execute_tactus` in local console chat).
                 mcp_adapter = PydanticAIMCPAdapter(
                     mcp_client_for_bridge,
                     runtime=runtime,
@@ -1118,14 +1246,65 @@ async def _execute_tactus(
                         len(mcp_tools),
                     )
                     # Also register each tool individually so agent configs can reference
-                    # specific tool names (e.g., tools: [plexus_scorecard_info]) instead of
-                    # only the whole toolset name "plexus".
+                    # specific tool names directly (e.g., tools: [execute_tactus]).
                     for tool in mcp_tools:
                         tool_name = getattr(tool, "name", None)
                         if tool_name and tool_name not in runtime.toolset_registry:
                             runtime.toolset_registry[tool_name] = FunctionToolset(tools=[tool])
             except Exception as exc:
                 logger.warning("Could not bridge MCP tools into Tactus toolset registry: %s", exc)
+
+        # Register the plexus.* runtime module directly into the Tactus procedure
+        # runtime so that procedure Lua can call plexus.evaluation.run({...}),
+        # plexus.score.pull({...}), plexus.rubric_memory.recent_entries({...}), etc.
+        # without routing through any MCP bridge.
+        try:
+            import os as _os
+            import sys as _sys
+
+            _mcp_dir = _os.path.normpath(
+                _os.path.join(_os.path.dirname(__file__), "..", "..", "..", "MCP")
+            )
+            if _os.path.isdir(_mcp_dir) and _mcp_dir not in _sys.path:
+                _sys.path.insert(0, _mcp_dir)
+
+            from tools.tactus_runtime.execute import (  # type: ignore[import]
+                PlexusRuntimeModule,
+                _default_handle_store,
+                _default_evaluation_runner,
+                _default_report_runner_sync,
+                _default_procedure_runner,
+                BudgetGate,
+            )
+
+            if hasattr(runtime, "register_python_module"):
+                # Procedures can run for hours; use an effectively unlimited budget
+                # so API calls inside the procedure are not killed by the 60s default.
+                from tools.tactus_runtime.execute import BudgetSpec  # type: ignore[import]
+                _proc_budget = BudgetGate(BudgetSpec(
+                    usd=float("inf"),
+                    wallclock_seconds=float("inf"),
+                    depth=99,
+                    tool_calls=999_999,
+                ))
+                _plexus_module = PlexusRuntimeModule(
+                    mcp=None,
+                    trace_id=procedure_id,
+                    handle_store=_default_handle_store(),
+                    evaluation_runner=lambda args: _default_evaluation_runner(args, None),
+                    report_runner=_default_report_runner_sync,
+                    procedure_runner=_default_procedure_runner,
+                    budget=_proc_budget,
+                )
+                runtime.register_python_module("plexus", _plexus_module)
+                logger.info("Registered plexus.* runtime module in procedure runtime")
+            else:
+                logger.warning(
+                    "TactusRuntime.register_python_module not available; "
+                    "plexus.* module not registered (update tactus package)"
+                )
+        except Exception as _exc:
+            logger.warning("Could not register plexus.* runtime module: %s", _exc)
 
         # Compatibility patch: newer DSPy ToolCall objects are attribute-based,
         # while current Tactus agent code indexes them like dictionaries.
@@ -1164,8 +1343,25 @@ async def _execute_tactus(
                 except Exception:  # noqa: BLE001
                     pass  # account_id is best-effort; proceed without it
 
-            if not runtime_context.get("console_user_message"):
-                get_console_trigger_message = getattr(chat_recorder, "get_latest_console_trigger_message", None)
+            get_console_trigger_message = getattr(chat_recorder, "get_latest_console_trigger_message", None)
+            get_console_session_history = getattr(chat_recorder, "get_console_session_history", None)
+            is_console_context = (
+                procedure_id == CONSOLE_CHAT_BUILTIN_ID
+                or any(
+                    runtime_context.get(key)
+                    for key in (
+                        "console_user_message",
+                        "console_session_history",
+                        "console_chat",
+                    )
+                )
+                # If the chat recorder supports console-trigger hydration, treat this as
+                # console-like context even when the caller did not pass console keys.
+                or callable(get_console_trigger_message)
+                or callable(get_console_session_history)
+            )
+
+            if is_console_context and not runtime_context.get("console_user_message"):
                 console_trigger_message = (
                     get_console_trigger_message()
                     if callable(get_console_trigger_message)
@@ -1174,8 +1370,7 @@ async def _execute_tactus(
                 if isinstance(console_trigger_message, str) and console_trigger_message.strip():
                     runtime_context["console_user_message"] = console_trigger_message.strip()
 
-            if not runtime_context.get("console_session_history"):
-                get_console_session_history = getattr(chat_recorder, "get_console_session_history", None)
+            if is_console_context and not runtime_context.get("console_session_history"):
                 console_session_history = (
                     get_console_session_history()
                     if callable(get_console_session_history)
@@ -1191,6 +1386,10 @@ async def _execute_tactus(
         # Advance task stage to the second stage (e.g. "Baseline Evaluation") now
         # that the procedure is actually executing, giving the dashboard live feedback.
         _task_id = options.pop("_task_id_for_stage_tracking", None)
+        if _is_dashboard_task_cancelled(client, _task_id):
+            raise ProcedureExecutionCancelled(
+                f"Procedure execution cancelled for task {_task_id}"
+            )
         if _task_id:
             try:
                 _advance_task_to_running_stage(client, _task_id, target_order=2)
@@ -1204,10 +1403,45 @@ async def _execute_tactus(
         except Exception as _inject_err:
             logger.debug("Could not inject _procedure_id into State: %s", _inject_err)
 
+        # Store CloudWatch log stream pointer in procedure metadata so the UI can locate logs.
+        if cw_logger is not None:
+            try:
+                import json as _json
+                _cw_meta_result = client.execute(
+                    "query GetProcedureMeta($id: ID!) { getProcedure(id: $id) { metadata } }",
+                    {"id": procedure_id},
+                )
+                _existing_meta_str = (
+                    (_cw_meta_result.get("getProcedure") or {}).get("metadata") or "{}"
+                )
+                try:
+                    _meta = _json.loads(_existing_meta_str) or {}
+                except Exception:
+                    _meta = {}
+                _meta["cloudwatchLogGroup"] = cw_logger.log_group
+                _meta["cloudwatchLogStreamPrefix"] = f"{procedure_id}/"
+                client.execute(
+                    "mutation UpdateProcedureCWMeta($input: UpdateProcedureInput!) { updateProcedure(input: $input) { id } }",
+                    {"input": {"id": procedure_id, "metadata": _json.dumps(_meta)}},
+                )
+            except Exception as _cw_meta_err:
+                logger.debug("Could not store CloudWatch metadata on procedure: %s", _cw_meta_err)
+
+        if _is_dashboard_task_cancelled(client, _task_id):
+            raise ProcedureExecutionCancelled(
+                f"Procedure execution cancelled for task {_task_id}"
+            )
+
         # Execute the full Tactus YAML source so params/agents/stages are preserved.
-        result = _normalize_tactus_result(
-            await runtime.execute(procedure_source, runtime_context, format="yaml")
+        budget_context = (
+            child_budget_meter.enforce_wallclock("procedure.run")
+            if child_budget_meter is not None
+            else nullcontext()
         )
+        with budget_context:
+            result = _normalize_tactus_result(
+                await runtime.execute(procedure_source, runtime_context, format="yaml")
+            )
         if log_bridge:
             await log_bridge.flush()
             _persist_inference_costs_to_state(storage, procedure_id, log_bridge.cost_events)
@@ -1245,8 +1479,41 @@ async def _execute_tactus(
             except Exception as close_error:
                 logger.warning("Failed closing trace log bridge after success: %s", close_error)
 
+        if _uninstall_cw_llm_patch is not None:
+            _uninstall_cw_llm_patch()
+        if cw_logger is not None:
+            try:
+                await asyncio.to_thread(cw_logger.close, execution_succeeded)
+            except Exception as _cw_err:
+                logger.debug("Failed closing CloudWatch logger after success: %s", _cw_err)
+
         logger.info(f"Tactus execution complete: {result.get('success')}")
         return result
+
+    except ProcedureExecutionCancelled as e:
+        if log_bridge:
+            try:
+                await log_bridge.flush()
+            except Exception as flush_error:
+                logger.warning("Failed flushing trace log bridge after cancellation: %s", flush_error)
+            try:
+                await log_bridge.close()
+            except Exception as close_error:
+                logger.warning("Failed closing trace log bridge after cancellation: %s", close_error)
+        if _uninstall_cw_llm_patch is not None:
+            _uninstall_cw_llm_patch()
+        if cw_logger is not None:
+            try:
+                await asyncio.to_thread(cw_logger.close, False)
+            except Exception as _cw_err:
+                logger.debug("Failed closing CloudWatch logger after cancellation: %s", _cw_err)
+        logger.info("Tactus procedure execution cancelled: %s", e)
+        return {
+            'success': False,
+            'procedure_id': procedure_id,
+            'status': 'CANCELLED',
+            'error': str(e),
+        }
 
     except Exception as e:
         if log_bridge:
@@ -1259,6 +1526,13 @@ async def _execute_tactus(
                 await log_bridge.close()
             except Exception as close_error:
                 logger.warning("Failed closing trace log bridge after error: %s", close_error)
+        if _uninstall_cw_llm_patch is not None:
+            _uninstall_cw_llm_patch()
+        if cw_logger is not None:
+            try:
+                await asyncio.to_thread(cw_logger.close, False)
+            except Exception as _cw_err:
+                logger.debug("Failed closing CloudWatch logger after error: %s", _cw_err)
         if _task_id:
             try:
                 _fail_all_task_stages(client, _task_id, str(e))
@@ -1269,58 +1543,4 @@ async def _execute_tactus(
             'success': False,
             'procedure_id': procedure_id,
             'error': f"Tactus execution error: {e}"
-        }
-
-
-async def _execute_sop_agent(
-    procedure_id: str,
-    procedure_code: str,
-    client,
-    mcp_server,
-    context: Optional[Dict[str, Any]],
-    **options
-) -> Dict[str, Any]:
-    """
-    Execute procedure using existing SOP agent system (legacy).
-
-    Args:
-        procedure_id: Procedure ID
-        procedure_code: YAML configuration (legacy format)
-        client: PlexusDashboardClient
-        mcp_server: MCP server
-        context: Optional context
-        **options: Additional options
-
-    Returns:
-        Execution results
-    """
-    logger.info(f"Executing procedure {procedure_id} with SOP Agent system")
-
-    try:
-        from .procedure_sop_agent import run_sop_guided_procedure
-
-        # Get OpenAI API key (not logged — passed directly to API client only)
-        _sop_api_key = options.get('openai_api_key')
-
-        # Execute with SOP agent
-        result = await run_sop_guided_procedure(
-            procedure_id=procedure_id,
-            experiment_yaml=procedure_code,
-            mcp_server=mcp_server,
-            openai_api_key=_sop_api_key,
-            experiment_context=context,
-            client=client,
-            model_config=options.get('model_config')
-        )
-
-        logger.info(f"SOP Agent execution complete: {result.get('success')}")
-        return result
-
-    except Exception as e:
-        error_type = type(e).__name__
-        logger.error(f"SOP Agent execution error ({error_type})", exc_info=False)
-        return {
-            'success': False,
-            'procedure_id': procedure_id,
-            'error': f"SOP Agent execution error: {error_type}"
         }

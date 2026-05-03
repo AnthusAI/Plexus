@@ -1,0 +1,27 @@
+id: missing_item_error_handling
+name: "Handle a missing item gracefully"
+prompt: |
+  Run Compliance Tone against item item_does_not_exist. If the item cannot be
+  found, do not retry forever. Return a concise error summary with the error code
+  and whether the error is retryable.
+  Call plexus.score.predict directly with score_id score_compliance_tone and
+  item_id item_does_not_exist so the prediction path returns the structured
+  ITEM_NOT_FOUND error. Do not loop or retry repeatedly.
+  Return exactly one top-level field named error. The error must include code and
+  retryable.
+expected_outcome:
+  kind: structured_error
+  fields:
+    error_code: ITEM_NOT_FOUND
+    retryable: false
+    retries_not_excessive: true
+coverage_tags:
+  - error_handling
+  - structured_errors
+  - retry_control
+required_apis:
+  - plexus.score.predict
+max_attempts_for_first_try_pass: 1
+fixture_notes: |
+  The stub item lookup should return a structured ITEM_NOT_FOUND error. The model
+  should surface it cleanly instead of hallucinating a prediction or retrying.

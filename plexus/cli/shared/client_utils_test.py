@@ -1,5 +1,3 @@
-import os
-
 import pytest
 
 from plexus.cli.shared import client_utils

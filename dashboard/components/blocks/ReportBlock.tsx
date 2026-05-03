@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from 'react'
-import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Code, Eye, MessageSquareCode, Copy, Database, ExternalLink } from 'lucide-react';
+import { ScrollText, Download, Paperclip, AlertTriangle, AlertCircle, Eye, MessageSquareCode, Copy, Database, Link as LinkIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { downloadData, getUrl } from 'aws-amplify/storage';
 import { CardButton } from '@/components/CardButton';
@@ -47,6 +47,8 @@ export interface ReportBlockProps {
   title?: string
   /** Optional subtitle for additional context */
   subtitle?: string
+  /** Optional className for subtitle styling */
+  subtitleClassName?: string
   /** Whether to show the title header section */
   showTitle?: boolean
   /** Optional notes for the report block */
@@ -104,6 +106,7 @@ const ReportBlock: BlockComponent = ({
   attachedFiles,
   title,
   subtitle,
+  subtitleClassName,
   showTitle = true,
   notes,
   error,
@@ -610,7 +613,7 @@ ${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).
                 </h3>
               )}
               {subtitle && (
-                <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
+                <p className={subtitleClassName || "text-sm text-muted-foreground mt-1"}>{subtitle}</p>
               )}
               {displayDateRange && (
                 <p className="text-sm text-muted-foreground mt-1">
@@ -629,7 +632,7 @@ ${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).
                     >
                       {dataSet.name || dataSet.id}
                     </a>
-                    <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                    <LinkIcon className="h-3 w-3 text-muted-foreground" />
                     {dataSet.dataSourceVersion?.dataSource?.name && (
                       <>
                         <span className="text-muted-foreground mx-1">•</span>
@@ -641,7 +644,7 @@ ${Object.entries(config).map(([key, value]) => `${key}: ${formatValue(value)}`).
                         >
                           {dataSet.dataSourceVersion.dataSource.name}
                         </a>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                        <LinkIcon className="h-3 w-3 text-muted-foreground" />
                       </>
                     )}
                   </div>

@@ -9,11 +9,13 @@ from plexus.cli.procedure.procedure_executor import _PlexusTraceLogBridge, _exec
 
 class _FakeRuntime:
     last_context = None
+    last_instance = None
 
     def __init__(self, **_kwargs):
         self.toolset_registry = {}
         self.tool_primitive = None
         self.log_handler = None
+        _FakeRuntime.last_instance = self
 
     async def execute(self, _source, _context, format="yaml"):
         assert format == "yaml"
@@ -275,6 +277,47 @@ class _CollectingTraceSink:
         return None
 
 
+class _FakeMCPClient:
+    def __init__(self):
+        self.calls = []
+
+    async def list_tools(self):
+        return [
+            {
+                "name": "plexus_scorecards_list",
+                "description": "List scorecards from Plexus.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "string"},
+                    },
+                },
+            },
+            {
+                "name": "plexus_scorecard_info",
+                "description": "Get scorecard details.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "scorecard_identifier": {"type": "string"},
+                    },
+                    "required": ["scorecard_identifier"],
+                },
+            },
+        ]
+
+    async def call_tool(self, name, arguments):
+        self.calls.append((name, arguments))
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"called {name} with {arguments}",
+                }
+            ]
+        }
+
+
 @pytest.mark.asyncio
 async def test_trace_bridge_forwards_cost_events_to_trace_sink():
     from tactus.protocols.models import CostEvent
@@ -348,6 +391,55 @@ async def test_execute_tactus_initializes_embedded_mcp_transport(monkeypatch):
 
     assert result["success"] is True
     assert mcp_server.transport.connected is True
+
+
+@pytest.mark.asyncio
+async def test_console_tactus_bridges_mcp_tools_into_toolset_registry(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _FakeRuntime)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+
+    mcp_client = _FakeMCPClient()
+    result = await _execute_tactus(
+        procedure_id="builtin:console/chat",
+        procedure_source=(
+            "name: Console\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  local function run(input)\n"
+            "    return { success = true }\n"
+            "  end\n"
+            "  return run(input)\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=mcp_client,
+        context={},
+    )
+
+    assert result["success"] is True
+    toolset = _FakeRuntime.last_instance.toolset_registry["plexus"]
+    assert set(toolset.tools.keys()) == {"plexus_scorecards_list", "plexus_scorecard_info"}
+
+    scorecards_tool = toolset.tools["plexus_scorecards_list"]
+    output = await scorecards_tool.function(limit="1")
+    assert output == "called plexus_scorecards_list with {'limit': '1'}"
+    assert mcp_client.calls == [("plexus_scorecards_list", {"limit": "1"})]
 
 
 @pytest.mark.asyncio
@@ -1069,6 +1161,120 @@ async def test_execute_tactus_persists_inference_costs_from_cost_events(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_execute_tactus_fails_when_child_budget_cost_is_exceeded(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _Recorder(SimpleNamespace):
+        async def record_assistant_message(self, _content: str):
+            return "msg-1"
+
+    class _StorageWithState(SimpleNamespace):
+        def __init__(self):
+            super().__init__()
+            self.state = {}
+
+        def state_set(self, _procedure_id, key, value):
+            self.state[key] = value
+
+        def state_get(self, _procedure_id, key, default=None):
+            return self.state.get(key, default)
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithCostEvents)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: _StorageWithState(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: _Recorder(),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-cost-budget",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={
+            "_plexus_child_budget": {
+                "usd": 0.001,
+                "wallclock_seconds": 30,
+                "depth": 1,
+                "tool_calls": 4,
+            }
+        },
+    )
+
+    assert result["success"] is False
+    assert "child USD budget" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_applies_child_depth_budget_to_runtime_source(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _RuntimeCapturesSource(_FakeRuntime):
+        last_source = None
+
+        async def execute(self, source, context, format="yaml"):
+            self.__class__.last_source = source
+            return await super().execute(source, context, format=format)
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeCapturesSource)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-depth-budget",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={
+            "_plexus_child_budget": {
+                "usd": 0.1,
+                "wallclock_seconds": 30,
+                "depth": 2,
+                "tool_calls": 4,
+            }
+        },
+    )
+
+    assert result["success"] is True
+    assert "max_depth: 2" in _RuntimeCapturesSource.last_source
+
+
+@pytest.mark.asyncio
 async def test_execute_tactus_completes_stages_only_on_success(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
@@ -1285,6 +1491,73 @@ async def test_execute_tactus_marks_stages_failed_when_runtime_raises(monkeypatc
 
     assert result["success"] is False
     assert failed == [("task-exception", "runtime exploded")]
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_stops_before_runtime_when_task_cancelled(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    completed = []
+    failed = []
+    advanced = []
+
+    class RuntimeShouldNotExecute(_FakeRuntime):
+        async def execute(self, *_args, **_kwargs):
+            raise AssertionError("runtime should not execute after dashboard cancellation")
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", RuntimeShouldNotExecute)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._is_dashboard_task_cancelled",
+        lambda _client, task_id: task_id == "task-cancelled",
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._advance_task_to_running_stage",
+        lambda _client, task_id, target_order=2: advanced.append(task_id),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._complete_all_task_stages",
+        lambda _client, task_id: completed.append(task_id),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.procedure_executor._fail_all_task_stages",
+        lambda _client, task_id, error_message="": failed.append((task_id, error_message)),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-stage-cancelled",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={},
+        _task_id_for_stage_tracking="task-cancelled",
+    )
+
+    assert result["success"] is False
+    assert result["status"] == "CANCELLED"
+    assert "task-cancelled" in result["error"]
+    assert advanced == []
+    assert completed == []
+    assert failed == []
 
 
 def test_scorecard_create_dry_run_skips_approval():

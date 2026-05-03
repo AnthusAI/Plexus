@@ -13,10 +13,11 @@ Uses the shared ProcedureService for consistent behavior.
 """
 
 import click
+import builtins
 import json
 import yaml
 import time
-from typing import Optional
+from typing import Any, Optional
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -24,10 +25,77 @@ from rich.text import Text
 from rich.json import JSON
 from datetime import datetime
 
+
+def _json_safe(obj: Any) -> Any:
+    """Recursively convert non-serializable objects (e.g. Pydantic models) to plain dicts/lists."""
+    _dict = __builtins__["dict"] if isinstance(__builtins__, dict) else dict  # type: ignore[index]
+    _list = __builtins__["list"] if isinstance(__builtins__, dict) else list  # type: ignore[index]
+    if type(obj) is _dict or (hasattr(obj, "items") and hasattr(obj, "keys") and not hasattr(obj, "model_dump")):
+        try:
+            return {k: _json_safe(v) for k, v in obj.items()}
+        except Exception:
+            pass
+    if type(obj) is _list or isinstance(obj, (tuple,)):
+        try:
+            return [_json_safe(v) for v in obj]
+        except Exception:
+            pass
+    if hasattr(obj, "model_dump"):
+        try:
+            return _json_safe(obj.model_dump())
+        except Exception:
+            return str(obj)
+    if hasattr(obj, "__dict__") and not isinstance(obj, type):
+        try:
+            return _json_safe(vars(obj))
+        except Exception:
+            pass
+    try:
+        import json as _json
+        _json.dumps(obj)
+        return obj
+    except (TypeError, ValueError):
+        return str(obj)
+
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
 from plexus.cli.shared.optimizer_results import OptimizerResultsService
 from .service import ProcedureService
+
+
+def _lua_to_python(obj):
+    """Recursively convert Lua-style tables to native Python containers."""
+    try:
+        if isinstance(obj, builtins.dict):
+            converted_items = [(_lua_to_python(k), _lua_to_python(v)) for k, v in obj.items()]
+            if _has_contiguous_one_based_integer_keys(converted_items):
+                return [value for _, value in sorted(converted_items, key=lambda item: item[0])]
+            return {key: value for key, value in converted_items}
+        elif hasattr(obj, 'keys') and hasattr(obj, 'values'):
+            converted_items = [(_lua_to_python(k), _lua_to_python(v)) for k, v in obj.items()]
+            if _has_contiguous_one_based_integer_keys(converted_items):
+                return [value for _, value in sorted(converted_items, key=lambda item: item[0])]
+            return {key: value for key, value in converted_items}
+        elif isinstance(obj, builtins.list):
+            return [_lua_to_python(v) for v in obj]
+        elif isinstance(obj, builtins.tuple):
+            return [_lua_to_python(v) for v in obj]
+        elif hasattr(obj, '__iter__') and not isinstance(obj, (builtins.str, bytes)):
+            return [_lua_to_python(v) for v in obj]
+        else:
+            return obj
+    except (TypeError, ValueError):
+        return str(obj)
+
+
+def _has_contiguous_one_based_integer_keys(items):
+    if not items:
+        return False
+    keys = [key for key, _ in items]
+    if not all(isinstance(key, builtins.int) and not isinstance(key, builtins.bool) for key in keys):
+        return False
+    return sorted(keys) == builtins.list(builtins.range(1, len(keys) + 1))
+
 
 @click.group()
 def procedure():
@@ -383,7 +451,7 @@ def timeout_stale(account: Optional[str], threshold_seconds: int, lookback_hours
     )
 
     if output == 'json':
-        console.print(JSON.from_data(result))
+        console.print(JSON.from_data(_json_safe(result)))
         return
     if output == 'yaml':
         console.print(yaml.dump(result, default_flow_style=False))
@@ -727,9 +795,9 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
     
     # Run the procedure with task tracking (async)
     import asyncio
-    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
     
-    result = asyncio.run(run_experiment_with_task_tracking(
+    result = asyncio.run(run_procedure_with_task_tracking(
         procedure_id=procedure_id,
         client=client,
         account_id=account_id,
@@ -741,7 +809,7 @@ def run(procedure_id: Optional[str], yaml_file: Optional[str], max_iterations: O
         return
     
     if output == 'json':
-        console.print(JSON.from_data(result))
+        console.print(JSON.from_data(_json_safe(result)))
     elif output == 'yaml':
         console.print(yaml.dump(result, default_flow_style=False))
     else:
@@ -858,7 +926,7 @@ def test_specs(
         return
 
     if output == 'json':
-        console.print(JSON.from_data(result))
+        console.print(JSON.from_data(_json_safe(result)))
         return
     if output == 'yaml':
         console.print(yaml.dump(result, default_flow_style=False, sort_keys=False))
@@ -1160,6 +1228,8 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         yaml_config=yaml_config,
         featured=False,
         score_version_id=version,
+        name=f"Optimizer: {scorecard}",
+        dispatch_mode="local",
     )
 
     if not result.success:
@@ -1181,13 +1251,13 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
 
     # Run with task tracking
     import asyncio
-    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
 
     options = {
         'context': params,
     }
 
-    exec_result = asyncio.run(run_experiment_with_task_tracking(
+    exec_result = asyncio.run(run_procedure_with_task_tracking(
         procedure_id=procedure_id,
         client=client,
         account_id=account_id,
@@ -1200,25 +1270,6 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
 
     # Convert Lua tables to native Python types for serialization
     import json as json_mod
-
-    def _lua_to_python(obj):
-        """Recursively convert Lua tables to Python dicts/lists."""
-        try:
-            if hasattr(obj, 'keys') and hasattr(obj, 'values') and not isinstance(obj, dict):
-                # Lua table acting as dict
-                return {_lua_to_python(k): _lua_to_python(v) for k, v in obj.items()}
-            elif isinstance(obj, dict):
-                return {k: _lua_to_python(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [_lua_to_python(v) for v in obj]
-            elif isinstance(obj, tuple):
-                return [_lua_to_python(v) for v in obj]
-            elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes)):
-                return [_lua_to_python(v) for v in obj]
-            else:
-                return obj
-        except (TypeError, ValueError):
-            return str(obj)
 
     try:
         exec_result_clean = json_mod.loads(json_mod.dumps(_lua_to_python(exec_result), default=str))
@@ -1333,8 +1384,11 @@ def reset(procedure_id: str, after: Optional[str], checkpoints_only: bool):
               help='Number of additional cycles to run (default: 3)')
 @click.option('--hint', '-h', 'hint', default=None,
               help='Optional instructions to guide the continuation run')
+@click.option('--target-accuracy', type=float, default=None,
+              help='Override target AC1 for early-stop (e.g. 1.0 to disable early-stop)')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table')
-def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], output: str):
+def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str],
+              target_accuracy: Optional[float], output: str):
     """Continue a completed optimizer procedure for additional cycles.
 
     Updates max_iterations, clears Tactus replay checkpoints (preserving
@@ -1345,6 +1399,7 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
         plexus procedure continue abc-123
         plexus procedure continue abc-123 --additional-cycles 5
         plexus procedure continue abc-123 -n 2 --hint "focus on false positives"
+        plexus procedure continue abc-123 -n 7 --target-accuracy 1.0
     """
     client = create_client()
     if not client:
@@ -1359,7 +1414,7 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
     console.print(f"Preparing continuation for procedure {procedure_id} (+{additional_cycles} cycles)...")
 
     try:
-        info = prepare_continuation(client, procedure_id, additional_cycles, hint)
+        info = prepare_continuation(client, procedure_id, additional_cycles, hint, target_accuracy)
     except Exception as e:
         console.print(f"[red]Error preparing continuation: {e}[/red]")
         import traceback
@@ -1379,7 +1434,7 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
     account_id = resolve_account_id_for_command(client, None)
 
     import asyncio
-    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
     context = build_continuation_context(
         client,
         procedure_id,
@@ -1388,7 +1443,7 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
     )
 
     try:
-        result = asyncio.run(run_experiment_with_task_tracking(
+        result = asyncio.run(run_procedure_with_task_tracking(
             procedure_id=procedure_id,
             client=client,
             account_id=account_id,
@@ -1431,9 +1486,11 @@ def continue_(procedure_id: str, additional_cycles: int, hint: Optional[str], ou
 @click.option('--hint', '-h', 'hint', default=None,
               help='Optional instructions for the branch run')
 @click.option('--name', default=None, help='Name for the new branch procedure')
+@click.option('--target-accuracy', type=float, default=None,
+              help='Override target AC1 for early-stop (e.g. 1.0 to disable early-stop)')
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table')
 def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[str],
-           name: Optional[str], output: str):
+           name: Optional[str], target_accuracy: Optional[float], output: str):
     """Branch a procedure from cycle N into a new procedure.
 
     Creates a new procedure whose State is a copy of source_id truncated to
@@ -1444,6 +1501,7 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
         plexus procedure branch abc-123 --cycle 2
         plexus procedure branch abc-123 --cycle 2 --additional-cycles 5
         plexus procedure branch abc-123 -c 3 -n 4 --hint "try structural prompt changes"
+        plexus procedure branch abc-123 -c 3 -n 4 --target-accuracy 1.0
     """
     client = create_client()
     if not client:
@@ -1458,7 +1516,7 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
     console.print(f"Branching {source_id} from cycle {cycle} (+{additional_cycles} cycles)...")
 
     try:
-        info = prepare_branch(client, source_id, cycle, additional_cycles, hint, name)
+        info = prepare_branch(client, source_id, cycle, additional_cycles, hint, name, target_accuracy)
     except Exception as e:
         console.print(f"[red]Error preparing branch: {e}[/red]")
         import traceback
@@ -1478,7 +1536,7 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
     account_id = resolve_account_id_for_command(client, None)
 
     import asyncio
-    from plexus.cli.shared.experiment_runner import run_experiment_with_task_tracking
+    from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
     context = build_continuation_context(
         client,
         target_id,
@@ -1487,7 +1545,7 @@ def branch(source_id: str, cycle: int, additional_cycles: int, hint: Optional[st
     )
 
     try:
-        result = asyncio.run(run_experiment_with_task_tracking(
+        result = asyncio.run(run_procedure_with_task_tracking(
             procedure_id=target_id,
             client=client,
             account_id=account_id,

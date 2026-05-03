@@ -88,6 +88,78 @@ def test_get_latest_console_trigger_message_returns_chat_content():
     assert message == "Hello from trigger"
 
 
+def test_get_steering_messages_returns_completed_flat_filtered_rows():
+    client = Mock()
+    client.execute.return_value = {
+        "data": {
+            "listChatMessageByProcedureIdAndCreatedAt": {
+                "items": [
+                    {
+                        "id": "msg-1",
+                        "accountId": "acct-1",
+                        "sessionId": "sess-1",
+                        "procedureId": "proc-1",
+                        "role": "USER",
+                        "messageType": "MESSAGE",
+                        "humanInteraction": "CHAT",
+                        "content": "Emphasize contradictions in the summary.",
+                        "metadata": '{"source":"procedure-steering-input","scope":"all_agents"}',
+                        "createdAt": "2026-05-02T15:00:00.000Z",
+                    },
+                    {
+                        "id": "msg-2",
+                        "accountId": "acct-1",
+                        "sessionId": "sess-1",
+                        "procedureId": "proc-1",
+                        "role": "USER",
+                        "messageType": "MESSAGE",
+                        "humanInteraction": "CHAT",
+                        "content": "Regular console chat",
+                        "metadata": '{"source":"console-prompt-input"}',
+                        "createdAt": "2026-05-02T15:01:00.000Z",
+                    },
+                    {
+                        "id": "msg-3",
+                        "accountId": "acct-1",
+                        "sessionId": "sess-1",
+                        "procedureId": "proc-1",
+                        "role": "ASSISTANT",
+                        "messageType": "MESSAGE",
+                        "humanInteraction": "CHAT_ASSISTANT",
+                        "content": "Assistant response",
+                        "metadata": '{"source":"procedure-steering-input"}',
+                        "createdAt": "2026-05-02T15:02:00.000Z",
+                    },
+                ],
+                "nextToken": None,
+            }
+        }
+    }
+    recorder = ProcedureChatRecorder(client, "proc-1")
+
+    result = recorder.get_steering_messages(
+        after="2026-05-02T14:00:00.000Z",
+        agent_name="report_writer",
+        limit=10,
+    )
+
+    assert result["watermark"] == "2026-05-02T15:00:00.000Z"
+    assert result["messages"] == [
+        {
+            "id": "msg-1",
+            "account_id": "acct-1",
+            "session_id": "sess-1",
+            "procedure_id": "proc-1",
+            "created_at": "2026-05-02T15:00:00.000Z",
+            "content": "Emphasize contradictions in the summary.",
+            "metadata": {"source": "procedure-steering-input", "scope": "all_agents"},
+        }
+    ]
+    variables = client.execute.call_args.args[1]
+    assert variables["procedureId"] == "proc-1"
+    assert variables["createdAt"] == {"gt": "2026-05-02T14:00:00.000Z"}
+
+
 def test_get_latest_console_trigger_message_prefers_dispatch_task(monkeypatch):
     monkeypatch.setenv("PLEXUS_DISPATCH_TASK_ID", "task-dispatch-2")
     client = Mock()
@@ -772,3 +844,78 @@ async def test_record_message_uses_chat_stream_retry_policy():
     message_input = client.execute.call_args.args[1]["input"]
     assert message_input["responseTarget"] == "proc-write-1"
     assert message_input["responseStatus"] == "COMPLETED"
+
+
+def test_get_steering_messages_returns_flat_filtered_rows():
+    client = Mock()
+    client.execute.return_value = {
+        "data": {
+            "listChatMessageByProcedureIdAndCreatedAt": {
+                "items": [
+                    {
+                        "id": "m-steer",
+                        "accountId": "acct-1",
+                        "sessionId": "sess-1",
+                        "procedureId": "proc-1",
+                        "role": "USER",
+                        "content": "Prioritize reviewer contradiction analysis.",
+                        "messageType": "MESSAGE",
+                        "humanInteraction": "CHAT",
+                        "responseStatus": "COMPLETED",
+                        "metadata": '{"source": "procedure-steering-input", "scope": "all_agents"}',
+                        "createdAt": "2026-04-01T00:00:02.000Z",
+                    },
+                    {
+                        "id": "m-console",
+                        "accountId": "acct-1",
+                        "sessionId": "sess-1",
+                        "procedureId": "proc-1",
+                        "role": "USER",
+                        "content": "Console request",
+                        "messageType": "MESSAGE",
+                        "humanInteraction": "CHAT",
+                        "responseStatus": "COMPLETED",
+                        "metadata": '{"source": "console-prompt-input"}',
+                        "createdAt": "2026-04-01T00:00:03.000Z",
+                    },
+                    {
+                        "id": "m-assistant",
+                        "accountId": "acct-1",
+                        "sessionId": "sess-1",
+                        "procedureId": "proc-1",
+                        "role": "ASSISTANT",
+                        "content": "Assistant text",
+                        "messageType": "MESSAGE",
+                        "humanInteraction": "CHAT_ASSISTANT",
+                        "responseStatus": "COMPLETED",
+                        "metadata": '{"source": "procedure-steering-input", "scope": "all_agents"}',
+                        "createdAt": "2026-04-01T00:00:04.000Z",
+                    },
+                ],
+                "nextToken": None,
+            }
+        }
+    }
+    recorder = ProcedureChatRecorder(client, "proc-1")
+
+    result = recorder.get_steering_messages(
+        after="2026-04-01T00:00:00.000Z",
+        agent_name="report_writer",
+        limit=20,
+    )
+
+    assert result["watermark"] == "2026-04-01T00:00:02.000Z"
+    assert result["messages"] == [
+        {
+            "id": "m-steer",
+            "account_id": "acct-1",
+            "session_id": "sess-1",
+            "procedure_id": "proc-1",
+            "created_at": "2026-04-01T00:00:02.000Z",
+            "content": "Prioritize reviewer contradiction analysis.",
+            "metadata": {"source": "procedure-steering-input", "scope": "all_agents"},
+        }
+    ]
+    variables = client.execute.call_args.args[1]
+    assert variables["procedureId"] == "proc-1"
+    assert variables["createdAt"] == {"gt": "2026-04-01T00:00:00.000Z"}

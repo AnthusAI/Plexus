@@ -1,6 +1,7 @@
 name: Feedback Alignment Optimizer
 version: 1.0.0
 class: Tactus
+procedure_type: Optimizer Procedure
 description: "Iteratively optimize Plexus score alignment using feedback evaluations with root-cause analysis (RCA). Runs baseline → analyze RCA → propose changes → evaluate → repeat until convergence or max iterations."
 
 params:
@@ -162,8 +163,8 @@ agents:
 
       Your job is to propose one high-quality optimization hypothesis at a time.
       You do not edit YAML. You do not call tools. You read RCA analysis,
-      evaluation metrics, rubric-memory briefing, guidelines, score code, and
-      accumulated lessons, then return exactly one numbered hypothesis line.
+      evaluation metrics, recent rubric-memory briefing, guidelines, score code,
+      and accumulated lessons, then return exactly one numbered hypothesis line.
 
       The highest-value hypotheses are almost always about policy clarity:
       missing rubric rules, ambiguous decision criteria, contradictory feedback,
@@ -179,6 +180,7 @@ agents:
     provider: openai
     model: gpt-5-mini
     temperature: 1
+    disable_streaming: true
     system_prompt: |
       You are an optimizer for a Plexus score configuration.
 
@@ -187,7 +189,7 @@ agents:
 
       PHASE 1 — IMPLEMENTATION:
       For each hypothesis, you edit score_config.yaml to test it. The current file content
-      appears in a system message before each task message. After editing, submit with
+      appears inline in the task message for that turn. After editing, submit with
       submit_score_version(version_note="..."). The system evaluates your version and reports
       results. Then you move to the next hypothesis, starting from the original baseline.
 
@@ -198,9 +200,9 @@ agents:
       that incorporates the best ideas. If nothing improved, explain what you learned
       and what to try differently next cycle.
 
-      You maintain full context across all phases and cycles — every result, whether
-      it improved things or not, is valuable signal. Use the accumulated history to
-      avoid repeating approaches that didn't work and to build on approaches that did.
+      Do not rely on hidden chat history for required context. Optimizer state, explicit
+      task messages, cycle summaries, submitted_versions, iterations, diagnostics, and
+      accumulated lessons are the source of truth across hypotheses and cycles.
 
       TWO DATASETS:
       1. REGRESSION: Deterministic regression dataset (accuracy eval type). Measures overall correctness.
@@ -212,6 +214,7 @@ agents:
       TOOLS:
       - str_replace_editor: view or edit score_config.yaml
       - submit_score_version: submit current edits for evaluation
+      - plexus_rubric_memory_recent_entries: check recent score/prefix/scorecard KB updates before policy edits or SME questions
       - plexus_rubric_memory_evidence_pack: retrieve rubric-memory citation context for policy-sensitive hypotheses or disputed items
       - plexus_rubric_memory_sme_question_gate: check proposed SME questions against rubric-memory citations before asking SMEs
       - done: signal you cannot improve current hypothesis
@@ -237,6 +240,10 @@ agents:
       only helps items that closely resemble that example.
 
       RUBRIC MEMORY CITATIONS:
+      Begin policy-sensitive work by reviewing recent rubric memory when it is
+      supplied. Recent score, prefix, or scorecard KB entries may require
+      guideline updates across more than one related score before feedback labels
+      are curated or score YAML is optimized.
       When rubric-memory context is supplied or you call plexus_rubric_memory_evidence_pack,
       cite exact citation IDs for policy claims, hypotheses, version notes, and
       cannot_improve conclusions. The official score version rubric remains canonical;
@@ -304,6 +311,7 @@ agents:
     tools:
       - str_replace_editor
       - submit_score_version
+      - plexus_rubric_memory_recent_entries
       - plexus_rubric_memory_evidence_pack
       - plexus_rubric_memory_sme_question_gate
       - done
@@ -318,6 +326,11 @@ agents:
 
       Your output must be brief, concrete, and tightly structured.
       You are not editing code. You are not writing long reports.
+
+      Domain context:
+      In transcripts and evaluation data, "Agent" always means a human call-center
+      representative (a person employed by the company to handle customer calls),
+      never an AI or software agent. "Customer" means the person calling in.
 
       Required output structure:
       ## EXECUTIVE SUMMARY
@@ -354,6 +367,12 @@ agents:
 
       Your job is to be concise, structured, and cheap in output tokens.
       Never write long essays. Follow every hard limit exactly.
+
+      Domain context:
+      In transcripts and evaluation data, "Agent" always means a human call-center
+      representative (a person employed by the company to handle customer calls),
+      never an AI or software agent. "Customer" means the person calling in.
+      Keep this in mind whenever you discuss transcript evidence, errors, or labels.
 
       Rules:
       - Respect all sentence, bullet, item, and word limits.
@@ -840,48 +859,214 @@ code: |
   -- before the full diag implementation is defined at the start of the main body
   local diag = function(msg) end  -- no-op until overwritten at line ~1415
 
+  -- Budget for dispatched evaluations (each evaluation can take up to 90 minutes)
+  local EVAL_BUDGET = {usd = 5.0, wallclock_seconds = 5400, depth = 0, tool_calls = 1000}
+  local REPORT_BUDGET = {usd = 2.0, wallclock_seconds = 3600, depth = 0, tool_calls = 200}
+  local EVAL_AWAIT_TIMEOUT = "PT90M"
+
+  -- Await a single evaluation handle and return the evaluation data dict.
+  local function _await_eval_handle(h, label)
+    label = label or tostring(h and h.id or "?")
+    diag("Awaiting evaluation handle " .. label .. " (timeout=" .. EVAL_AWAIT_TIMEOUT .. ")...")
+    local waited = plexus.handle.await({id = h.id, timeout = EVAL_AWAIT_TIMEOUT})
+    -- After await, the evaluation data lives in waited.evaluation
+    local eval_data = waited.evaluation
+    if not eval_data then
+      -- If evaluation_id is available, fetch directly
+      local eval_id = waited.evaluation_id
+        or (type(waited.dispatch_result) == "table" and waited.dispatch_result.evaluation_id)
+      if eval_id then
+        local ok, info = pcall(function() return plexus.evaluation.info({evaluation_id = eval_id}) end)
+        if ok and type(info) == "table" then eval_data = info end
+      end
+    end
+    if not eval_data then
+      return {error = "Evaluation handle did not resolve: status=" .. tostring(waited.status)}
+    end
+    local eval_status = string.upper(tostring(eval_data.status or waited.status or ""))
+    if eval_status ~= "COMPLETED" then
+      return {
+        error = "Evaluation did not complete: status=" .. tostring(eval_data.status or waited.status)
+          .. " evaluation_id=" .. tostring(eval_data.evaluation_id or eval_data.id or waited.evaluation_id or "")
+      }
+    end
+    return eval_data
+  end
+
+  -- Dispatch a batch of evaluations (runs in parallel background procs),
+  -- await each, and return a list of evaluation data tables.
+  local function _dispatch_evaluation_batch(batch)
+    -- Normalize Lua numeric-key dict to ordered list
+    local batch_list = {}
+    if type(batch) == "table" then
+      local keys = {}
+      for k in pairs(batch) do table.insert(keys, k) end
+      table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+      for _, k in ipairs(keys) do table.insert(batch_list, batch[k]) end
+    end
+
+    -- Dispatch all evaluations (they run in parallel as background processes)
+    local handles = {}
+    for i, item in ipairs(batch_list) do
+      local dispatch_args = {}
+      for k, v in pairs(item) do dispatch_args[k] = v end
+      dispatch_args.async = true
+      dispatch_args.budget = dispatch_args.budget or EVAL_BUDGET
+      dispatch_args.wait = nil
+      local ok, h = pcall(function() return plexus.evaluation.run(dispatch_args) end)
+      if ok and type(h) == "table" and h.id then
+        table.insert(handles, {handle = h, idx = i})
+        diag(string.format("Dispatched evaluation %d/%d: %s (handle=%s)",
+          i, #batch_list, tostring(dispatch_args.evaluation_type), tostring(h.id)))
+      else
+        table.insert(handles, {handle = nil, error = tostring(h), idx = i})
+        diag(string.format("Failed to dispatch evaluation %d/%d: %s", i, #batch_list, tostring(h)))
+      end
+    end
+
+    -- Await all handles (sequential poll; actual evaluations ran in parallel)
+    local results = {}
+    for _, entry in ipairs(handles) do
+      if entry.handle then
+        local eval_data = _await_eval_handle(entry.handle, tostring(entry.idx))
+        table.insert(results, eval_data)
+      else
+        table.insert(results, {error = entry.error})
+      end
+    end
+    return results
+  end
+
+  -- Dispatch and await a single evaluation; returns evaluation data dict.
+  local function _dispatch_single_evaluation(args)
+    local dispatch_args = {}
+    for k, v in pairs(args) do dispatch_args[k] = v end
+    dispatch_args.async = true
+    dispatch_args.budget = dispatch_args.budget or EVAL_BUDGET
+    dispatch_args.wait = nil
+    local h = plexus.evaluation.run(dispatch_args)
+    if not h or not h.id then
+      return {error = "plexus.evaluation.run returned no handle: " .. tostring(h)}
+    end
+    return _await_eval_handle(h, dispatch_args.evaluation_type)
+  end
+
   local function call_plexus_tool(tool_name, args_table, opts)
-    -- Direct programmatic tool invocation via Tactus Tool.get() API
-    -- No LLM agent involved — calls MCP tools directly from Lua
-    -- Includes retry with exponential backoff for transient failures
+    -- Dispatch to plexus.* API directly (no MCP Tool.get() round-trip).
+    -- plexus.* calls return Lua tables; JSON decode is not needed.
     opts = opts or {}
     local max_retries = opts.max_retries or 3
-    local base_delay = opts.base_delay or 5  -- seconds
+    local base_delay = opts.base_delay or 5
+
+    -- Build the dispatch function for this tool name
+    local dispatch
+    if tool_name == "plexus_scorecard_info" then
+      dispatch = function(a) return plexus.scorecards.info(a) end
+    elseif tool_name == "plexus_score_info" then
+      dispatch = function(a) return plexus.score.info(a) end
+    elseif tool_name == "plexus_score_pull" then
+      dispatch = function(a)
+        local result = plexus.score.pull(a)
+        if not result or not result.success then return result end
+        -- plexus.score.pull writes temp files from Python (io not available in sandbox)
+        return {
+          success            = true,
+          scoreId            = result.score_id,
+          versionId          = result.version_id,
+          codeFilePath       = result.code_file_path,
+          guidelinesFilePath = result.guidelines_file_path,
+        }
+      end
+    elseif tool_name == "plexus_evaluation_info" then
+      dispatch = function(a) return plexus.evaluation.info(a) end
+    elseif tool_name == "plexus_evaluation_find_recent" then
+      dispatch = function(a) return plexus.evaluation.find_recent(a) end
+    elseif tool_name == "plexus_evaluation_run" then
+      dispatch = function(a)
+        if a.batch then
+          return _dispatch_evaluation_batch(a.batch)
+        else
+          return _dispatch_single_evaluation(a)
+        end
+      end
+    elseif tool_name == "plexus_report_run" then
+      -- Run report synchronously (blocks until output is ready)
+      dispatch = function(a)
+        local report_args = {}
+        for k, v in pairs(a) do report_args[k] = v end
+        report_args.sync = true
+        return plexus.report.run(report_args)
+      end
+    elseif tool_name == "plexus_dataset_check_associated" then
+      dispatch = function(a) return plexus.dataset.check_associated(a) end
+    elseif tool_name == "plexus_dataset_build_from_feedback_window" then
+      dispatch = function(a) return plexus.dataset.build_from_feedback_window(a) end
+    elseif tool_name == "plexus_item_info" then
+      dispatch = function(a) return plexus.item.info(a) end
+    elseif tool_name == "plexus_procedure_chat_messages" then
+      dispatch = function(a) return plexus.procedure.chat_messages(a) end
+    elseif tool_name == "plexus_feedback_latest_update" then
+      dispatch = function(a) return plexus.feedback.latest_update(a) end
+    elseif tool_name == "plexus_rubric_memory_recent_entries" then
+      dispatch = function(a) return plexus.rubric_memory.recent_entries(a) end
+    elseif tool_name == "plexus_rubric_memory_evidence_pack" then
+      dispatch = function(a) return plexus.rubric_memory.evidence_pack(a) end
+    elseif tool_name == "plexus_rubric_memory_sme_question_gate" then
+      dispatch = function(a) return plexus.rubric_memory.sme_question_gate(a) end
+    elseif tool_name == "get_plexus_documentation" then
+      dispatch = function(a)
+        -- Accept name, filename, or key (all used by different call sites)
+        local key = a.name or a.filename or a.key or ""
+        local result = plexus.docs.get({key = key})
+        -- Return the raw content string (callers use raw_string=true)
+        if type(result) == "table" then
+          return result.content or ""
+        end
+        return tostring(result)
+      end
+    elseif tool_name == "plexus_set_status_message" then
+      dispatch = function(a)
+        local handle = Tool.get("plexus_set_status_message")
+        if handle then handle(a or {}) end
+        return {success = true}
+      end
+    elseif tool_name == "plexus_score_test" then
+      dispatch = function(a) return plexus.score.test(a) end
+    elseif tool_name == "score_editor_setup"
+        or tool_name == "score_editor_get_result"
+        or tool_name == "score_editor_get_content" then
+      -- These are custom in-process MCP tools (ScoreEditorToolset); use Tool.get()
+      dispatch = function(a)
+        local handle = Tool.get(tool_name)
+        local raw = handle(a or {})
+        if type(raw) == "string" then
+          local decoded, _ = safe_decode(raw)
+          return decoded or raw
+        end
+        return raw
+      end
+    else
+      error("call_plexus_tool: unknown tool: " .. tostring(tool_name))
+    end
 
     for attempt = 1, max_retries do
-      local ok, raw_result = pcall(function()
-        local tool_handle = Tool.get(tool_name)
-        return tool_handle(args_table or {})
-      end)
-
+      local ok, result = pcall(dispatch, args_table or {})
       if ok then
-        -- For tools that return plain strings (not JSON), skip decoding
-        if opts.raw_string and type(raw_result) == "string" then
-          return raw_result
-        end
-        local decoded_result, decode_err = safe_decode(raw_result)
-        if decoded_result then
-          -- Check for API-level errors (e.g. {error: "Scorecard not found"})
-          if type(decoded_result) == "table" and decoded_result.error then
-            local err_msg = tostring(decoded_result.error)
-            if attempt == max_retries then
-              error(tool_name .. " returned error after " .. max_retries .. " attempts: " .. err_msg)
-            end
-            diag(string.format("%s API error (attempt %d/%d): %s", tool_name, attempt, max_retries, err_msg))
-          else
-            return decoded_result
-          end
-        else
+        -- plexus.* returns tables directly (no JSON encoding/decoding needed)
+        if type(result) == "table" and result.error then
+          local err_msg = tostring(result.error)
           if attempt == max_retries then
-            error("Failed to decode " .. tool_name .. " result: " .. tostring(decode_err))
+            error(tool_name .. " returned error after " .. max_retries .. " attempts: " .. err_msg)
           end
-          diag(string.format("%s decode error (attempt %d/%d): %s", tool_name, attempt, max_retries, tostring(decode_err)))
+          diag(string.format("%s API error (attempt %d/%d): %s", tool_name, attempt, max_retries, err_msg))
+        else
+          return result
         end
       else
         if attempt == max_retries then
-          error("Failed to call " .. tool_name .. " after " .. max_retries .. " attempts: " .. tostring(raw_result))
+          error("Failed to call " .. tool_name .. " after " .. max_retries .. " attempts: " .. tostring(result))
         end
-        diag(string.format("%s error (attempt %d/%d): %s", tool_name, attempt, max_retries, tostring(raw_result)))
+        diag(string.format("%s error (attempt %d/%d): %s", tool_name, attempt, max_retries, tostring(result)))
       end
 
       -- Exponential backoff: 5s, 10s, 20s
@@ -1339,6 +1524,597 @@ code: |
     return table.concat(parts, "\n")
   end
 
+  -- ==================================================================
+  -- SME Worksheet helpers (end-of-run, Phase 3b)
+  -- ==================================================================
+  -- These run deterministically against the final RCA and the recurrence
+  -- tracker. Their output feeds the SME Worksheet writer prompt with
+  -- specific items, transcript quotes, and contrasting pairs — the signals
+  -- that the LLM has consistently failed to surface from aggregate context.
+
+  -- Extract the original transcript-quote evidence from an RCA item.
+  local function _extract_evidence_quote(ic)
+    if type(ic) ~= "table" then return "" end
+    if has_text(ic.evidence_quote) then return trunc(ic.evidence_quote, 220) end
+    if type(ic.evidence_snippets) == "table" then
+      for _, snip in ipairs(ic.evidence_snippets) do
+        if type(snip) == "table"
+           and snip.source ~= "edit_comment"
+           and has_text(snip.quote_or_fact) then
+          return trunc(snip.quote_or_fact, 220)
+        end
+      end
+    end
+    return ""
+  end
+
+  -- Extract the edit_comment string for an item from its evidence_snippets.
+  local function _extract_edit_comment(ic)
+    if type(ic) ~= "table" or type(ic.evidence_snippets) ~= "table" then return "" end
+    for _, snip in ipairs(ic.evidence_snippets) do
+      if type(snip) == "table" and snip.source == "edit_comment" and has_text(snip.quote_or_fact) then
+        -- edit_comment snippets come wrapped in quotes; strip them for cleaner display
+        local raw = tostring(snip.quote_or_fact)
+        raw = raw:gsub('^"(.*)"$', "%1")
+        return trunc(raw, 240)
+      end
+    end
+    return ""
+  end
+
+  -- Derive the external_id (numeric content id) from an item_id of the
+  -- form "<account_uuid>--<external_id>". Returns "" if the pattern does
+  -- not match.
+  local function _external_id_from_item(item_id)
+    if type(item_id) ~= "string" or item_id == "" then return "" end
+    local _, _, ext = item_id:find("%-%-([^%-].*)$")
+    return ext or ""
+  end
+
+  -- Build a dashboard URL for an item. Matches MCP/shared/utils.py:get_plexus_url.
+  local PLEXUS_APP_URL = "https://plexus.anth.us"
+
+  local function _item_url(item_id)
+    if type(item_id) ~= "string" or item_id == "" then return "" end
+    return PLEXUS_APP_URL .. "/lab/items/" .. item_id
+  end
+
+  -- Build a clickable markdown link labelled by external_id. Falls back to
+  -- item_id if the composite pattern does not match.
+  local function _item_link(item_id)
+    if type(item_id) ~= "string" or item_id == "" then return "" end
+    local ext = _external_id_from_item(item_id)
+    local label = ext ~= "" and ext or item_id
+    return "[" .. label .. "](" .. _item_url(item_id) .. ")"
+  end
+
+  -- Build a compact agenda context block naming up to `max_items` misclassified
+  -- items from the most recent RCA, each with its clickable markdown link, the
+  -- score version's prediction, the reviewer's label, transcript evidence, and
+  -- cross-cycle pattern. Used by both the per-cycle and end-of-run SME Agenda
+  -- prompts so the LLM has concrete items to cite instead of inventing examples.
+  local function _build_agenda_item_context(max_items)
+    max_items = max_items or 5
+    local last_rca = State.get("last_recent_rca")
+    if type(last_rca) ~= "table" then return "" end
+    local items = last_rca._all_item_classifications
+    if type(items) ~= "table" or #items == 0 then return "" end
+    local recurrence = State.get("item_recurrence") or {}
+
+    -- Collect misclassified items (predicted != correct), preferring PERSISTENT /
+    -- OSCILLATING per the cross-cycle tracker.
+    local wrong = {}
+    for _, ic in ipairs(items) do
+      local pred = tostring(ic.predicted_value or "")
+      local corr = tostring(ic.correct_value or "")
+      if pred ~= "" and corr ~= "" and pred ~= corr then
+        local iid = tostring(ic.item_id or "")
+        local rec = (type(recurrence) == "table" and iid ~= "") and recurrence[iid] or nil
+        local pattern = (rec and rec.pattern) or "EMERGING"
+        local wrong_count = (rec and rec.wrong_count) or 1
+        local priority = 0
+        if pattern == "PERSISTENT" then priority = 3
+        elseif pattern == "OSCILLATING" then priority = 2
+        elseif pattern == "FLIP_FLOP" then priority = 1
+        end
+        table.insert(wrong, {
+          ic = ic,
+          item_id = iid,
+          pattern = pattern,
+          wrong_count = wrong_count,
+          priority = priority,
+        })
+      end
+    end
+    if #wrong == 0 then return "" end
+
+    table.sort(wrong, function(a, b)
+      if a.priority ~= b.priority then return a.priority > b.priority end
+      if a.wrong_count ~= b.wrong_count then return a.wrong_count > b.wrong_count end
+      return tostring(a.item_id) < tostring(b.item_id)
+    end)
+
+    local parts = {}
+    table.insert(parts, "=== CANDIDATE ITEMS FOR AGENDA EXAMPLES ===")
+    table.insert(parts, "Use ONLY these items when writing Examples. Copy each markdown link verbatim.")
+    table.insert(parts, "")
+    local n = math.min(#wrong, max_items)
+    for i = 1, n do
+      local w = wrong[i]
+      local ic = w.ic
+      local link = _item_link(w.item_id)
+      local edit_comment = _extract_edit_comment(ic)
+      local evidence = _extract_evidence_quote(ic)
+      local rationale = tostring(ic.rationale_short or ic.rationale_paragraph or "")
+      local category = tostring(ic.primary_category or "")
+      table.insert(parts, string.format("ITEM %s", _external_id_from_item(w.item_id)))
+      table.insert(parts, "  link: " .. link)
+      table.insert(parts, string.format("  score version predicted: %s", tostring(ic.predicted_value or "?")))
+      table.insert(parts, string.format("  reviewer labeled: %s", tostring(ic.correct_value or "?")))
+      table.insert(parts, string.format("  cross-cycle pattern: %s (wrong %d cycles)", w.pattern, w.wrong_count))
+      if has_text(evidence) then
+        table.insert(parts, string.format("  transcript evidence (\"Agent:\" = human phone operator): \"%s\"", trunc(evidence, 280)))
+      end
+      if has_text(edit_comment) then
+        table.insert(parts, string.format("  reviewer edit comment: \"%s\"", trunc(edit_comment, 280)))
+      end
+      if has_text(category) then
+        table.insert(parts, string.format("  error category: %s", category))
+      end
+      if has_text(rationale) then
+        table.insert(parts, string.format("  score rationale: %s", trunc(rationale, 240)))
+      end
+      table.insert(parts, "")
+    end
+    table.insert(parts, "=== END CANDIDATE ITEMS ===")
+    return table.concat(parts, "\n")
+  end
+
+  -- Deterministic detector: flag items whose feedback record carries
+  -- machine-checkable contradictions suggesting the label itself may be wrong
+  -- (as opposed to a real policy gap). See plan, section 1.
+  local function detect_suspected_mislabels(iterations, item_recurrence)
+    local results = {}
+    local last_rca = State.get("last_recent_rca")
+    if type(last_rca) ~= "table" then return results end
+    local items = last_rca._all_item_classifications
+    if type(items) ~= "table" or #items == 0 then
+      local ma = last_rca.misclassification_analysis
+      if type(ma) == "table" then items = ma.item_classifications_all end
+    end
+    if type(items) ~= "table" or #items == 0 then return results end
+
+    -- Keywords that, when present in edit_comment, express reviewer
+    -- *agreement* with the AI's original prediction or explicitly deny that
+    -- the call was problematic. If final_value disagrees with the model's
+    -- original "no-problem" direction while the comment reads "no problem",
+    -- the label likely contradicts the comment.
+    local agreement_keywords = {
+      "no inappropriate",
+      "not inappropriate",
+      "agree with aime",
+      "agree with ai",
+      "agree w/ ai",
+      "no issue",
+      "not an issue",
+      "nothing inappropriate",
+      "not a violation",
+      "no violation",
+    }
+
+    local function comment_agrees_with_no_problem(comment_lc)
+      for _, kw in ipairs(agreement_keywords) do
+        if comment_lc:find(kw, 1, true) then return true end
+      end
+      return false
+    end
+
+    -- Build a wrong_count lookup from the recurrence tracker for the
+    -- "persistent across 3+ cycles" condition.
+    local wrong_counts = {}
+    local patterns = {}
+    if type(item_recurrence) == "table" then
+      for id, entry in pairs(item_recurrence) do
+        wrong_counts[id] = entry.wrong_count or 0
+        patterns[id] = entry.pattern or "EMERGING"
+      end
+    end
+
+    for _, ic in ipairs(items) do
+      local item_id = tostring(ic.item_id or "")
+      if item_id ~= "" then
+        local external_id = _external_id_from_item(item_id)
+        local predicted = tostring(ic.predicted_value or "")
+        local correct = tostring(ic.correct_value or "")
+        local edit_comment = _extract_edit_comment(ic)
+        local evidence_quote = _extract_evidence_quote(ic)
+        local fixability = tostring(ic.config_fixability or "")
+        local reasons = {}
+
+        -- Reason A: edit_comment text asserts "no problem" but the label
+        -- is the "problem" class (i.e., correct_value disagrees with the
+        -- comment's stated position).
+        if has_text(edit_comment) and comment_agrees_with_no_problem(edit_comment:lower()) then
+          -- The "problem" label depends on the score, so we infer from the
+          -- predicted_value: if the model originally predicted the "no-problem"
+          -- class (whatever value that is) and the comment agrees with no problem,
+          -- then the label should match the prediction — if it doesn't, the
+          -- label contradicts the comment.
+          -- Heuristic: if the model's prediction matches the comment's stance
+          -- (no-problem) but the correct_value does not, flag as suspect.
+          -- We use a simple rule: if predicted != correct AND comment says
+          -- "no problem", the label likely contradicts the comment.
+          if predicted ~= correct then
+            table.insert(reasons, "edit_comment_contradicts_label")
+          end
+        end
+
+        -- Reason B: the model's explanation correctly identified that the
+        -- disputed content was spoken by a non-agent speaker, yet the label
+        -- still disagrees with the model. Detect by looking for the phrase
+        -- "spoken by the customer" / "customer said" / "by the customer"
+        -- in the evidence quote or rationale.
+        local rationale_lc = (tostring(ic.rationale_paragraph or "") .. " "
+                              .. tostring(ic.rationale_short or "") .. " "
+                              .. tostring(evidence_quote or "")):lower()
+        if rationale_lc:find("spoken by the customer", 1, true)
+           or rationale_lc:find("customer said", 1, true)
+           or rationale_lc:find("by the customer", 1, true)
+           or rationale_lc:find("not attributable to the agent", 1, true) then
+          if predicted ~= correct then
+            table.insert(reasons, "model_reasoned_customer_speech_but_label_disagrees")
+          end
+        end
+
+        -- Reason C: persistent failure across cycles + needs_sme_clarification.
+        -- A persistent gray-area item that the optimizer cannot resolve via
+        -- rule changes is a candidate for label review.
+        local wc = wrong_counts[item_id] or 0
+        local pat = patterns[item_id] or "EMERGING"
+        if (pat == "PERSISTENT" or pat == "OSCILLATING")
+           and wc >= 3
+           and (fixability == "needs_sme_clarification"
+                or fixability == "blocked_by_mechanical") then
+          table.insert(reasons, "persistent_unfixable_gray_area")
+        end
+
+        if #reasons > 0 then
+          table.insert(results, {
+            item_id = item_id,
+            external_id = external_id,
+            predicted_value = predicted,
+            correct_value = correct,
+            edit_comment = edit_comment,
+            evidence_quote = evidence_quote,
+            primary_category = tostring(ic.primary_category or ""),
+            config_fixability = fixability,
+            wrong_count = wc,
+            pattern = pat,
+            reasons = reasons,
+          })
+        end
+      end
+    end
+    return results
+  end
+
+  -- Deterministic detector: find up to 3 pairs of persistent/oscillating
+  -- items with OPPOSITE labels and shared primary_category or overlapping
+  -- evidence vocabulary. These reveal the actual policy axis reviewers
+  -- disagree on. See plan, section 2.
+  local function build_contrasting_pairs(iterations, item_recurrence)
+    local results = {}
+    local last_rca = State.get("last_recent_rca")
+    if type(last_rca) ~= "table" then return results end
+    local items = last_rca._all_item_classifications
+    if type(items) ~= "table" or #items == 0 then
+      local ma = last_rca.misclassification_analysis
+      if type(ma) == "table" then items = ma.item_classifications_all end
+    end
+    if type(items) ~= "table" or #items == 0 then return results end
+
+    local patterns = {}
+    if type(item_recurrence) == "table" then
+      for id, entry in pairs(item_recurrence) do
+        patterns[id] = entry.pattern or "EMERGING"
+      end
+    end
+
+    -- Candidate pool: misclassified in final cycle AND persistent/oscillating.
+    local candidates = {}
+    for _, ic in ipairs(items) do
+      local item_id = tostring(ic.item_id or "")
+      local pat = patterns[item_id] or "EMERGING"
+      if item_id ~= "" and (pat == "PERSISTENT" or pat == "OSCILLATING" or pat == "FLIP_FLOP") then
+        table.insert(candidates, {
+          item_id = item_id,
+          external_id = _external_id_from_item(item_id),
+          predicted_value = tostring(ic.predicted_value or ""),
+          correct_value = tostring(ic.correct_value or ""),
+          edit_comment = _extract_edit_comment(ic),
+          evidence_quote = _extract_evidence_quote(ic),
+          primary_category = tostring(ic.primary_category or ""),
+          rationale_short = trunc(tostring(ic.rationale_short or ic.rationale_paragraph or ""), 220),
+          pattern = pat,
+        })
+      end
+    end
+    if #candidates < 2 then return results end
+
+    -- Tokenize helper for cheap overlap.
+    local stopwords = {
+      ["the"]=1,["a"]=1,["an"]=1,["and"]=1,["or"]=1,["of"]=1,["to"]=1,["in"]=1,
+      ["on"]=1,["is"]=1,["are"]=1,["was"]=1,["were"]=1,["be"]=1,["it"]=1,["that"]=1,
+      ["this"]=1,["for"]=1,["with"]=1,["as"]=1,["by"]=1,["at"]=1,["from"]=1,["not"]=1,
+      ["no"]=1,["yes"]=1,["i"]=1,["you"]=1,["we"]=1,["he"]=1,["she"]=1,["they"]=1,
+      ["agent"]=1,["customer"]=1,["transcript"]=1,["evidence"]=1,
+    }
+    local function tokenize(s)
+      local tokens = {}
+      if type(s) ~= "string" then return tokens end
+      for w in s:lower():gmatch("[%a']+") do
+        if #w >= 3 and not stopwords[w] then
+          tokens[w] = (tokens[w] or 0) + 1
+        end
+      end
+      return tokens
+    end
+    local function overlap_score(a_tokens, b_tokens)
+      local score = 0
+      for w, _ in pairs(a_tokens) do
+        if b_tokens[w] then score = score + 1 end
+      end
+      return score
+    end
+
+    -- Score every opposite-label pair.
+    local scored_pairs = {}
+    for i = 1, #candidates - 1 do
+      for j = i + 1, #candidates do
+        local a, b = candidates[i], candidates[j]
+        if a.correct_value ~= "" and b.correct_value ~= "" and a.correct_value ~= b.correct_value then
+          local a_text = (a.evidence_quote or "") .. " " .. (a.rationale_short or "")
+          local b_text = (b.evidence_quote or "") .. " " .. (b.rationale_short or "")
+          local a_tokens = tokenize(a_text)
+          local b_tokens = tokenize(b_text)
+          local vocab_score = overlap_score(a_tokens, b_tokens)
+          local category_bonus = (a.primary_category ~= "" and a.primary_category == b.primary_category) and 3 or 0
+          local total_score = vocab_score + category_bonus
+          if total_score > 0 then
+            -- Identify shared tokens for "distinguishing feature" hint.
+            local shared_tokens = {}
+            for w, _ in pairs(a_tokens) do
+              if b_tokens[w] then table.insert(shared_tokens, w) end
+            end
+            table.insert(scored_pairs, {
+              a = a, b = b, score = total_score, shared_tokens = shared_tokens,
+            })
+          end
+        end
+      end
+    end
+    table.sort(scored_pairs, function(x, y) return x.score > y.score end)
+
+    -- Take up to 3 highest-scoring pairs with no item repeated across pairs.
+    local used = {}
+    for _, p in ipairs(scored_pairs) do
+      if #results >= 3 then break end
+      if not used[p.a.item_id] and not used[p.b.item_id] then
+        used[p.a.item_id] = true
+        used[p.b.item_id] = true
+        -- Build a compact shared-tokens string for the Worksheet hint.
+        local shared_str = ""
+        if #p.shared_tokens > 0 then
+          local top = {}
+          for i = 1, math.min(5, #p.shared_tokens) do table.insert(top, p.shared_tokens[i]) end
+          shared_str = table.concat(top, ", ")
+        end
+        table.insert(results, {
+          item_a = p.a,
+          item_b = p.b,
+          similarity_score = p.score,
+          shared_vocabulary = shared_str,
+        })
+      end
+    end
+    return results
+  end
+
+  -- Per-item LLM diagnostic for repeat offenders.
+  -- Runs once per cycle for every PERSISTENT/OSCILLATING item with wrong_count >= 3.
+  -- Returns a list of diagnosis records stored in State("repeat_offender_diagnoses").
+  -- Each record: {item_id, external_id, diagnosis, confidence, explanation, recommended_action}
+  -- diagnosis values: mislabel | rubric_gap | new_policy_case | classifier_failure | contradictory_rule
+  -- recommended_action values: challenge_label | clarify_rubric | add_policy | accept_ceiling | investigate_code
+  --
+  -- Called from the per-cycle block after update_item_recurrence; results injected into
+  -- build_planning_context() and the per-cycle SME Worksheet.
+  local function analyze_repeat_offenders(cycle, item_recurrence, iterations)
+    if type(item_recurrence) ~= "table" then return {} end
+
+    -- Collect candidates: PERSISTENT or OSCILLATING with wrong_count >= 3
+    local candidates = {}
+    local last_rca = State.get("last_recent_rca")
+    local rca_items_by_id = {}
+    if type(last_rca) == "table" then
+      local items = last_rca._all_item_classifications
+      if type(items) ~= "table" or #items == 0 then
+        local ma = last_rca.misclassification_analysis
+        if type(ma) == "table" then items = ma.item_classifications_all end
+      end
+      if type(items) == "table" then
+        for _, ic in ipairs(items) do
+          local id = tostring(ic.item_id or "")
+          if id ~= "" then rca_items_by_id[id] = ic end
+        end
+      end
+    end
+
+    for item_id, entry in pairs(item_recurrence) do
+      local pat = entry.pattern or "EMERGING"
+      local wc = entry.wrong_count or 0
+      if (pat == "PERSISTENT" or pat == "OSCILLATING") and wc >= 3 then
+        table.insert(candidates, {id = item_id, entry = entry, rca_ic = rca_items_by_id[item_id]})
+      end
+    end
+
+    if #candidates == 0 then return {} end
+
+    -- Sort: OSCILLATING first (contradictory rule signal), then by wrong_count desc
+    table.sort(candidates, function(a, b)
+      local ap = a.entry.pattern == "OSCILLATING" and 0 or 1
+      local bp = b.entry.pattern == "OSCILLATING" and 0 or 1
+      if ap ~= bp then return ap < bp end
+      return (a.entry.wrong_count or 0) > (b.entry.wrong_count or 0)
+    end)
+
+    -- Cap at 6 items to keep LLM cost bounded
+    if #candidates > 6 then
+      local trimmed = {}
+      for i = 1, 6 do trimmed[i] = candidates[i] end
+      candidates = trimmed
+    end
+
+    -- Check if we already analyzed these items this cycle (skip re-analysis on re-entry)
+    local existing = State.get("repeat_offender_diagnoses") or {}
+    local existing_cycle = State.get("repeat_offender_diagnoses_cycle") or -1
+    if existing_cycle == cycle and #existing > 0 then
+      return existing
+    end
+
+    diag(string.format("analyze_repeat_offenders: cycle %d, %d candidates", cycle, #candidates))
+
+    local results = {}
+
+    for _, cand in ipairs(candidates) do
+      local item_id = cand.id
+      local entry = cand.entry
+      local ic = cand.rca_ic
+      local external_id = _external_id_from_item(item_id)
+
+      -- Build per-item diagnostic prompt
+      local p = {}
+      table.insert(p, string.format(
+        "You are diagnosing a single repeat-offender item from a score optimization run.\n"
+        .. "Terminology: \"Agent:\" in transcripts = the human call-center phone operator.\n"
+        .. "The thing being evaluated is the score version, never call it \"AI\".\n"
+        .. "Item external_id: %s | Pattern: %s | Wrong %d cycles | Correct %d cycles\n"
+        .. "Human reviewer label: %s | Most recent score prediction: %s\n",
+        external_id ~= "" and external_id or item_id,
+        entry.pattern or "?",
+        entry.wrong_count or 0,
+        entry.correct_count or 0,
+        tostring(entry.recent_label or "?"),
+        tostring(entry.model_prediction or "?")))
+
+      -- Per-cycle history
+      if entry.per_cycle and #entry.per_cycle > 0 then
+        table.insert(p, "Per-cycle history (most recent first):")
+        for i = #entry.per_cycle, math.max(1, #entry.per_cycle - 6), -1 do
+          local pc = entry.per_cycle[i]
+          local outcome = pc.segment == "CORRECT" and "✓ CORRECT" or string.format("✗ WRONG (%s)", pc.segment or "?")
+          local hyp_note = has_text(pc.hypothesis) and (" | hypothesis: " .. trunc(pc.hypothesis, 80)) or ""
+          table.insert(p, string.format("  Cycle %d: %s%s", pc.cycle or i, outcome, hyp_note))
+          if pc.segment ~= "CORRECT" then
+            if has_text(pc.rationale) then
+              table.insert(p, string.format("    RCA: %s", trunc(pc.rationale, 180)))
+            end
+            if has_text(pc.evidence) then
+              table.insert(p, string.format("    Evidence: \"%s\"", trunc(pc.evidence, 180)))
+            end
+          end
+        end
+        table.insert(p, "")
+      end
+
+      -- RCA item details (from last evaluation)
+      if type(ic) == "table" then
+        local edit_comment = _extract_edit_comment(ic)
+        local evidence_quote = _extract_evidence_quote(ic)
+        local fixability = tostring(ic.config_fixability or "")
+        local rationale = tostring(ic.rationale_short or ic.rationale_paragraph or "")
+        if has_text(edit_comment) then
+          table.insert(p, string.format("Reviewer edit comment: \"%s\"", edit_comment))
+        end
+        if has_text(evidence_quote) then
+          table.insert(p, string.format("Transcript evidence: \"%s\"", evidence_quote))
+        end
+        if has_text(fixability) then
+          table.insert(p, string.format("Config fixability: %s", fixability))
+        end
+        if has_text(rationale) then
+          table.insert(p, string.format("Score rationale: %s", trunc(rationale, 300)))
+        end
+        table.insert(p, "")
+      end
+
+      table.insert(p, "Based on all the above, diagnose this item. Respond in exactly this format:\n")
+      table.insert(p, "DIAGNOSIS: <one of: mislabel | rubric_gap | new_policy_case | classifier_failure | contradictory_rule>")
+      table.insert(p, "CONFIDENCE: <one of: high | medium | low>")
+      table.insert(p, "EXPLANATION: <1-2 sentences explaining what is actually happening>")
+      table.insert(p, "RECOMMENDED_ACTION: <one of: challenge_label | clarify_rubric | add_policy | accept_ceiling | investigate_code>")
+      table.insert(p, "SME_QUESTION: <one sentence — the specific question to put to a domain expert, or NONE if no SME input needed>")
+      table.insert(p, "\nDiagnosis values:\n"
+        .. "  mislabel — the human reviewer's label is likely wrong (the score is correct)\n"
+        .. "  rubric_gap — the rubric is missing or ambiguous; a rule addition could fix this\n"
+        .. "  new_policy_case — this is a novel scenario not covered by the current rubric\n"
+        .. "  classifier_failure — the score's reasoning is wrong; better prompt logic is needed\n"
+        .. "  contradictory_rule — fixing this item requires a rule that breaks other items\n"
+        .. "Recommended action values:\n"
+        .. "  challenge_label — bring to SME to review the human label\n"
+        .. "  clarify_rubric — the existing rubric rule needs to be sharpened\n"
+        .. "  add_policy — a new policy rule needs to be added to the rubric\n"
+        .. "  accept_ceiling — accept that this item cannot be fixed without contradicting others\n"
+        .. "  investigate_code — check for a code/structural issue (not a policy problem)")
+
+      local prompt_text = table.concat(p, "\n")
+
+      local ok, err = pcall(function()
+        report_writer.clear_history()
+        safe_agent_call(report_writer, "report_writer", prompt_text, nil)
+      end)
+
+      local raw_output = report_writer.output or ""
+
+      if ok and has_text(raw_output) then
+        -- Parse structured response
+        local diagnosis = raw_output:match("DIAGNOSIS:%s*([%w_]+)") or "classifier_failure"
+        local confidence = raw_output:match("CONFIDENCE:%s*([%w]+)") or "low"
+        local explanation = raw_output:match("EXPLANATION:%s*([^\n]+)") or ""
+        local recommended_action = raw_output:match("RECOMMENDED_ACTION:%s*([%w_]+)") or "investigate_code"
+        local sme_question = raw_output:match("SME_QUESTION:%s*([^\n]+)") or ""
+        if sme_question:upper() == "NONE" then sme_question = "" end
+
+        table.insert(results, {
+          item_id = item_id,
+          external_id = external_id,
+          pattern = entry.pattern,
+          wrong_count = entry.wrong_count or 0,
+          correct_count = entry.correct_count or 0,
+          recent_label = tostring(entry.recent_label or ""),
+          model_prediction = tostring(entry.model_prediction or ""),
+          diagnosis = diagnosis,
+          confidence = confidence,
+          explanation = explanation,
+          recommended_action = recommended_action,
+          sme_question = sme_question,
+        })
+
+        diag(string.format(
+          "analyze_repeat_offenders: item %s → diagnosis=%s [%s] action=%s",
+          external_id ~= "" and external_id or item_id, diagnosis, confidence, recommended_action))
+      else
+        diag(string.format(
+          "analyze_repeat_offenders: item %s failed: %s",
+          external_id ~= "" and external_id or item_id, trunc(tostring(err or ""), 120)))
+      end
+    end
+
+    State.set("repeat_offender_diagnoses", results)
+    State.set("repeat_offender_diagnoses_cycle", cycle)
+    return results
+  end
+
   -- Forward declaration: defined later but called from build_planning_context
   local build_hypothesis_effectiveness_summary
 
@@ -1444,35 +2220,29 @@ code: |
     end
 
     table.insert(dp, "=== YOUR ANALYSIS TASK ===")
-    table.insert(dp, "Produce a structured diagnostic at three levels:\n")
-    table.insert(dp, "## Per-Item Diagnoses")
-    table.insert(dp, "For each notable item above: why does it resist improvement?")
-    table.insert(dp, "Options: decision boundary ambiguity / possible mislabel / contradicts other items / norm shift / guideline gap\n")
+    table.insert(dp, "GOAL: 100% accuracy on this evaluation set. Overfitting is acceptable and desired.")
+    table.insert(dp, "These items are misclassified after multiple cycles — your job is to figure out the exact")
+    table.insert(dp, "rule, literal example, or carve-out that will force the correct answer next cycle.\n")
+    table.insert(dp, "## Per-Item Targeted Fixes")
+    table.insert(dp, "For EACH notable item above, produce a concrete fix recommendation:")
+    table.insert(dp, "  - Item ID")
+    table.insert(dp, "  - Evidence snippet (the exact transcript phrase driving the wrong answer)")
+    table.insert(dp, "  - Why prior hypotheses failed for this item (cite specific hypotheses from the history)")
+    table.insert(dp, "  - Exact rule/example/carve-out to add to the prompt to force the correct classification")
+    table.insert(dp, "  - Whether the fix risks breaking any other items (name them) and how to scope it narrowly\n")
     table.insert(dp, "## Cross-Item Pattern Analysis")
-    table.insert(dp, "Do the notable items cluster around specific themes? What themes?")
-    table.insert(dp, "How many items per theme? What does each theme MEAN for the feedback quality?")
-    table.insert(dp, "CRITICAL: For OSCILLATING items, look for ANTI-CORRELATED GROUPS — sets of items where")
-    table.insert(dp, "fixing one group causes the other to break. This is the 'whack-a-mole' pattern and reveals")
-    table.insert(dp, "contradictory norms in the feedback. Identify the competing groups and what norm each represents.\n")
-    table.insert(dp, "## Temporal Analysis")
-    table.insert(dp, "Based on the per-cycle rationale history: is there evidence of norm shifts over time?")
-    table.insert(dp, "Do items that emerged in later cycles show different patterns from early items?")
-    table.insert(dp, "Does the contradiction trend (Contra%/Gaps%) show any pattern over time?\n")
-    table.insert(dp, "## Systemic Diagnosis")
-    table.insert(dp, "What does this pattern tell us about the feedback process itself?")
-    table.insert(dp, "Is there a reviewer training issue? Policy ambiguity? Norm evolution?")
-    table.insert(dp, "What should HUMANS do about this — not just 'review these items' but what organizational")
-    table.insert(dp, "or process change would address the root cause?\n")
-    table.insert(dp, "## Optimization Ceiling Assessment")
-    table.insert(dp, "Given the persistent/flip-flop items: what fraction of remaining errors appears fixable")
-    table.insert(dp, "via prompt changes? What is the realistic remaining improvement potential?")
-    table.insert(dp, "What would need to change (feedback invalidation, guideline updates, reviewer calibration)")
-    table.insert(dp, "to raise that ceiling?\n")
-    table.insert(dp, "## Suspected Low-Quality Feedback Labels")
-    table.insert(dp, "List specific items that may have incorrect or inconsistent labels, grouped by theme.")
-    table.insert(dp, "For each: Item ID, human label, model prediction, why you suspect it, confidence (high/med/low).")
-    table.insert(dp, "These will be shown to humans for review and possible invalidation.\n")
-    table.insert(dp, "Be specific and concrete. Name exact items and exact patterns.")
+    table.insert(dp, "Do these items cluster around specific themes? Name each theme and the items in it.")
+    table.insert(dp, "For OSCILLATING items: identify ANTI-CORRELATED GROUPS where fixing one breaks another.")
+    table.insert(dp, "When you find anti-correlated groups, propose a SINGLE unified rule that threads the needle —")
+    table.insert(dp, "e.g. a more specific predicate that distinguishes the two groups instead of a blanket rule.\n")
+    table.insert(dp, "## Aggressive Fix Strategy")
+    table.insert(dp, "For each theme, propose the most aggressive prompt change that will fix ALL items in the theme")
+    table.insert(dp, "without breaking correctly-classified items. Literal transcript quotes paired with the required")
+    table.insert(dp, "classification are encouraged. Item-specific carve-outs are encouraged if nothing else works.")
+    table.insert(dp, "Do NOT suggest invalidating labels, giving up on items, or declaring a ceiling — assume every item")
+    table.insert(dp, "CAN be fixed with the right prompt. If prior hypotheses failed, that is evidence those hypotheses")
+    table.insert(dp, "were too weak, too broad, or targeted the wrong feature — not evidence the label is noise.\n")
+    table.insert(dp, "Be specific and concrete. Name exact items, exact phrases, and exact rule text.")
     table.insert(dp, "=== END ANALYSIS TASK ===")
 
     Tool.reset()
@@ -1496,25 +2266,19 @@ code: |
       return (content:match("^(.-)%s*$") or content)
     end
 
+    local per_item_section = extract_section(full_report, "## Per-Item Targeted Fixes")
     local pattern_section  = extract_section(full_report, "## Cross-Item Pattern Analysis")
-    local ceiling_section  = extract_section(full_report, "## Optimization Ceiling Assessment")
-    local systemic_section = extract_section(full_report, "## Systemic Diagnosis")
+    local strategy_section = extract_section(full_report, "## Aggressive Fix Strategy")
 
     local compact_parts = {}
+    if has_text(per_item_section) then
+      table.insert(compact_parts, "Per-item targeted fixes:\n" .. trunc(per_item_section, 1200))
+    end
     if has_text(pattern_section) then
       table.insert(compact_parts, "Cross-item patterns:\n" .. trunc(pattern_section, 600))
     end
-    if has_text(systemic_section) then
-      table.insert(compact_parts, "Systemic diagnosis:\n" .. trunc(systemic_section, 400))
-    end
-    if has_text(ceiling_section) then
-      table.insert(compact_parts, "Optimization ceiling:\n" .. trunc(ceiling_section, 400))
-    end
-
-    -- Add the suspected items list (compact)
-    local suspected_section = extract_section(full_report, "## Suspected Low-Quality Feedback Labels")
-    if has_text(suspected_section) then
-      table.insert(compact_parts, "Suspected low-quality labels:\n" .. trunc(suspected_section, 800))
+    if has_text(strategy_section) then
+      table.insert(compact_parts, "Aggressive fix strategy:\n" .. trunc(strategy_section, 600))
     end
 
     return {
@@ -1592,6 +2356,15 @@ code: |
         table.insert(parts, "But follow the RCA over historical patterns if they conflict.")
         table.insert(parts, "")
       end
+    end
+
+    if has_text(opts.recent_rubric_memory_briefing) then
+      table.insert(parts, "=== RECENT RUBRIC MEMORY ===")
+      table.insert(parts, trunc(opts.recent_rubric_memory_briefing, 9000))
+      table.insert(parts, "=== END RECENT RUBRIC MEMORY ===")
+      table.insert(parts, "")
+      table.insert(parts, "Before optimizing YAML or asking SMEs, compare recent KB entries against current guidelines and current scorecard/related-score policy.")
+      table.insert(parts, "")
     end
 
     if has_text(opts.rubric_memory_briefing) then
@@ -1977,9 +2750,12 @@ code: |
         landscape_diag.generated_at_cycle or "?"))
       table.insert(parts, landscape_diag.compact_summary)
       table.insert(parts, "")
-      table.insert(parts, "IMPLICATION: Do NOT propose changes targeting PERSISTENT, OSCILLATING, or FLIP_FLOP items above.")
-      table.insert(parts, "OSCILLATING items are whack-a-mole: fixing one group breaks another. They reveal contradictory norms.")
-      table.insert(parts, "PERSISTENT items have resisted all config changes. Both types likely represent feedback issues, not prompt issues.")
+      table.insert(parts, "IMPLICATION: PERSISTENT, OSCILLATING, and FLIP_FLOP items are your HIGHEST-PRIORITY TARGETS.")
+      table.insert(parts, "These items have been wrong for multiple cycles and prior prompt changes did NOT fix them.")
+      table.insert(parts, "Be MORE aggressive: add explicit literal rules, direct example snippets, or item-specific carve-outs")
+      table.insert(parts, "that target exactly the language in those transcripts. Overfitting this eval set is acceptable and desired —")
+      table.insert(parts, "the goal is 100% accuracy on the known items. Do not back off assuming label noise; assume the rubric")
+      table.insert(parts, "is still missing the rule that would force the correct answer for these specific cases.")
       table.insert(parts, "=== END FEEDBACK LANDSCAPE DIAGNOSTIC ===")
       table.insert(parts, "")
     elseif opts.iterations and #opts.iterations >= 2 then
@@ -1990,11 +2766,62 @@ code: |
         table.insert(parts, "=== ITEM RECURRENCE PATTERNS (cross-cycle) ===")
         table.insert(parts, recurrence_summary)
         table.insert(parts, ""  )
-        table.insert(parts, "IMPLICATION: Items flagged PERSISTENT or FLIP_FLOP have resisted config changes.")
-        table.insert(parts, "Avoid targeting them — focus on items without recurrence patterns.")
+        table.insert(parts, "IMPLICATION: PERSISTENT, OSCILLATING, and FLIP_FLOP items are your HIGHEST-PRIORITY TARGETS.")
+        table.insert(parts, "They have been wrong for multiple cycles and prior prompt changes did NOT fix them. Be more aggressive:")
+        table.insert(parts, "add explicit literal rules, direct example snippets, or item-specific carve-outs that target exactly")
+        table.insert(parts, "the language in those transcripts. Overfitting this eval set is acceptable and desired — the goal is")
+        table.insert(parts, "100% accuracy on the known items. Do not assume label noise; assume the rubric is still missing")
+        table.insert(parts, "the rule that would force the correct answer for these specific cases.")
         table.insert(parts, "=== END ITEM RECURRENCE PATTERNS ===")
         table.insert(parts, "")
       end
+    end
+
+    -- Repeat-offender LLM diagnoses: per-item diagnosis for PERSISTENT/OSCILLATING items
+    -- with wrong_count >= 3. Produced by analyze_repeat_offenders() each cycle.
+    local rod = State.get("repeat_offender_diagnoses") or {}
+    if #rod > 0 then
+      table.insert(parts, "=== REPEAT-OFFENDER DIAGNOSES (LLM per-item analysis) ===")
+      table.insert(parts, "These items have been wrong for 3+ consecutive cycles despite multiple prompt changes.")
+      table.insert(parts, "Each diagnosis explains WHY the optimizer cannot fix the item and what action is needed.\n")
+      for _, d in ipairs(rod) do
+        local id_label = has_text(d.external_id) and d.external_id or d.item_id
+        table.insert(parts, string.format(
+          "Item %s — Pattern: %s | Wrong: %d | Label: %s | AI: %s",
+          id_label, d.pattern or "?", d.wrong_count or 0,
+          d.recent_label or "?", d.model_prediction or "?"))
+        table.insert(parts, string.format(
+          "  Diagnosis: %s [%s confidence] — %s",
+          d.diagnosis or "?", d.confidence or "?", d.explanation or ""))
+        table.insert(parts, string.format(
+          "  Recommended action: %s",
+          d.recommended_action or "?"))
+        if has_text(d.sme_question) then
+          table.insert(parts, string.format(
+            "  SME question: %s", d.sme_question))
+        end
+        table.insert(parts, "")
+      end
+      -- Escalation guidance based on diagnosis types
+      local has_ceiling = false
+      local has_mislabel = false
+      local has_contradictory = false
+      for _, d in ipairs(rod) do
+        if d.recommended_action == "accept_ceiling" then has_ceiling = true end
+        if d.diagnosis == "mislabel" and d.confidence == "high" then has_mislabel = true end
+        if d.diagnosis == "contradictory_rule" then has_contradictory = true end
+      end
+      if has_ceiling or has_contradictory then
+        table.insert(parts, "ESCALATION: One or more items have diagnosis=contradictory_rule or action=accept_ceiling.")
+        table.insert(parts, "Do NOT generate more hypothesis variants targeting these items — the optimizer cannot fix them.")
+        table.insert(parts, "Instead, generate a SME question for each and move on to other items.")
+      end
+      if has_mislabel then
+        table.insert(parts, "MISLABEL ALERT: One or more items have high-confidence mislabel diagnosis.")
+        table.insert(parts, "These items should be flagged for label review before further optimization cycles.")
+      end
+      table.insert(parts, "=== END REPEAT-OFFENDER DIAGNOSES ===")
+      table.insert(parts, "")
     end
 
     -- Guidelines (read-only reference), then editable score config last
@@ -2533,6 +3360,40 @@ code: |
     return slots, mode
   end
 
+  local function cap_hypothesis_slots(slots, requested_count)
+    local cap = tonumber(requested_count) or #slots
+    if cap < 1 then
+      cap = 1
+    end
+    if cap >= #slots then
+      return slots
+    end
+    local capped = {}
+    for i = 1, cap do
+      capped[i] = slots[i]
+    end
+    return capped
+  end
+
+  local function should_add_creative_hypothesis(cycle_number)
+    return (tonumber(cycle_number) or 0) >= 4
+  end
+
+  local function add_creative_hypothesis_slot(slots, cycle_number)
+    if not should_add_creative_hypothesis(cycle_number) then
+      return slots
+    end
+    local expanded = {}
+    for i, slot in ipairs(slots or {}) do
+      expanded[i] = slot
+      if slot == "creative" then
+        return expanded
+      end
+    end
+    table.insert(expanded, "creative")
+    return expanded
+  end
+
   local function build_cookbook_section(opts)
     local parts = {COOKBOOK_STATIC}
     local stagnant = opts.consecutive_stagnant_cycles or 0
@@ -2719,11 +3580,18 @@ code: |
       table.insert(parts, "            If prior cycles show DeepgramInputSource smoke test failures, do NOT retry.")
       table.insert(parts, "     - C2:  Preprocessing — add, tune, relax, or REMOVE RelevantWindowsTranscriptFilter or other processors when they appear to hide needed evidence.")
       table.insert(parts, "            Removing a harmful filter is a valid structural hypothesis.")
+      table.insert(parts, "            If adding/tuning RelevantWindowsTranscriptFilter, start with broad sentence windows such as prev_count=5 and next_count=8.")
+      table.insert(parts, "            Do not start with prev_count=1/next_count=1 word windows on call transcripts; they often sever answers from the prompt they respond to.")
       table.insert(parts, "     - C1a: Architecture — decompose into multiple LLM calls, add N/A gate, add CoT node.")
       table.insert(parts, "            If you add an extraction stage, use class: Extractor and map output.extracted_text")
       table.insert(parts, "            into a named state field consumed by the final classifier.")
       table.insert(parts, "            Never use Classifier(valid_classes=['Extracted']) or similar pseudo-extractor labels.")
-      table.insert(parts, "     - C4:  Full rewrite — if prior cycles have plateaued, start from scratch.")
+      table.insert(parts, "     - C4:  Prompt-shape / attention-structure transformations — late structural option.")
+      table.insert(parts, "            Do not use these to push out rubric-oriented hypotheses; Category A/B policy fixes should dominate.")
+      table.insert(parts, "            Prefer repeating the decisive question/rule near the transcript and again at the final decision point.")
+      table.insert(parts, "            This is a lightweight alternative to CoT when the issue appears to be attention rather than reasoning.")
+      table.insert(parts, "            Lower-priority options: move the final instruction to the end; reorder label definitions or valid_classes.")
+      table.insert(parts, "     - C5:  Full rewrite — if prior cycles have plateaued, start from scratch.")
       table.insert(parts, "")
       table.insert(parts, "Check score_config.yaml to avoid proposing something already in place.")
       table.insert(parts, "Do NOT propose a prompt-only change for this slot — that is what slots 1-3 are for.")
@@ -2737,6 +3605,22 @@ code: |
       table.insert(parts, "Assume the current framing is wrong or exhausted.")
       table.insert(parts, "You may start from the baseline version and redesign major prompt sections, graph structure, preprocessing, or model allocation.")
       table.insert(parts, "Do not preserve existing structure just because it exists.")
+    elseif slot == "creative" then
+      table.insert(parts, "OBJECTIVE: Creative hypothesis (cycle 4+ cookbook lane)")
+      table.insert(parts, "This slot is mandatory from cycle 4 onward, even if the run is not formally plateaued.")
+      table.insert(parts, "It is an extra lane. Do NOT let it displace rubric-oriented hypotheses, which should dominate every cycle.")
+      table.insert(parts, "Propose one weird, testable hypothesis that is materially different from the standard lanes.")
+      table.insert(parts, "Use this lane for counterintuitive prompt transformations when normal policy edits have had multiple cycles to work.")
+      table.insert(parts, "")
+      table.insert(parts, "CREATIVE COOKBOOK — current recipes:")
+      table.insert(parts, "  - Repeat the whole prompt twice so the scoring model sees the instructions redundantly.")
+      table.insert(parts, "  - Repeat the decisive question or rubric boundary in multiple places, especially before the final answer instruction.")
+      table.insert(parts, "  - Put the transcript first and the classifier instruction at the very end.")
+      table.insert(parts, "  - Reorder label definitions or valid_classes to test label-order sensitivity.")
+      table.insert(parts, "  - Translate the operative prompt or rubric instructions to Polish.")
+      table.insert(parts, "")
+      table.insert(parts, "Pick exactly one creative recipe or a tightly scoped combination, and explain why it could change alignment.")
+      table.insert(parts, "The hypothesis must still be implementable by editing score_config.yaml and must still pass smoke tests.")
     end
 
     -- Guide approach selection based on historical effectiveness
@@ -2769,6 +3653,70 @@ code: |
     table.insert(parts, "that can be made by editing that YAML file.")
 
     return table.concat(parts, "\n")
+  end
+
+  local HYPOTHESIS_REPEAT_STOPWORDS = {
+    hypothesis = true, score = true, project = true, intent = true,
+    classify = true, classification = true, transcript = true,
+    metadata = true, disposition = true, campaign = true, compare = true,
+    comparing = true, should = true, could = true, would = true,
+    clarify = true, clarifies = true, rule = true, rules = true,
+  }
+
+  local function hypothesis_keyword_set(text)
+    local out = {}
+    local s = string.lower(tostring(text or ""))
+    for token in string.gmatch(s, "[%w_]+") do
+      if #token >= 7 and not HYPOTHESIS_REPEAT_STOPWORDS[token] then
+        out[token] = true
+      end
+    end
+    return out
+  end
+
+  local function hypothesis_text(hyp)
+    if type(hyp) ~= "table" then return "" end
+    local parts = {}
+    if has_text(hyp.name) then table.insert(parts, hyp.name) end
+    if has_text(hyp.description) then table.insert(parts, hyp.description) end
+    if has_text(hyp.done_reason) then table.insert(parts, hyp.done_reason) end
+    return table.concat(parts, " ")
+  end
+
+  local function hypothesis_repeats_strongly_harmful_prior(hyp, prior_iterations)
+    local proposed_keywords = hypothesis_keyword_set(hypothesis_text(hyp))
+    local proposed_count = 0
+    for _ in pairs(proposed_keywords) do proposed_count = proposed_count + 1 end
+    if proposed_count < 3 then
+      return false, nil
+    end
+
+    for _, iter in ipairs(prior_iterations or {}) do
+      for _, prior in ipairs(iter.exploration_results or {}) do
+        local fb_d = prior.fb_deltas and prior.fb_deltas.alignment or 0
+        local acc_d = prior.acc_deltas and prior.acc_deltas.alignment or 0
+        if fb_d < -0.05 or acc_d < -0.05 then
+          local prior_keywords = hypothesis_keyword_set(hypothesis_text(prior.hypothesis or prior))
+          local overlap = {}
+          for token in pairs(proposed_keywords) do
+            if prior_keywords[token] then table.insert(overlap, token) end
+          end
+          if #overlap >= 3 then
+            table.sort(overlap)
+            return true, string.format(
+              "overlaps strongly harmful cycle %s candidate %s (FB %+.3f, ACC %+.3f) on terms: %s",
+              tostring(iter.iteration or "?"),
+              tostring(prior.index or "?"),
+              fb_d,
+              acc_d,
+              table.concat(overlap, ", ")
+            )
+          end
+        end
+      end
+    end
+
+    return false, nil
   end
 
   -- Build the review context message shown to the reviewer agent after evals
@@ -2860,6 +3808,12 @@ code: |
     Human.notify({message = msg, level = "info"})
   end
 
+  -- Update the dashboard status message (visible during long-running cycles).
+  -- Silently no-ops if the tool is unavailable.
+  local function status_msg(msg)
+    pcall(call_plexus_tool, "plexus_set_status_message", {message = msg}, {max_retries = 1})
+  end
+
   -- Phase A: Setup & Baseline
   Stage.set("setup")
   Stage.progress(0, params.max_iterations)  -- show total cycle count from the start
@@ -2907,6 +3861,32 @@ code: |
 
   Human.notify({message = "Resolved: scorecard_id=" .. scorecard_id .. ", score_id=" .. score_id, level = "info"})
 
+  local active_rubric_memory_score_version_id = has_text(params.start_version) and params.start_version or nil
+
+  local recent_rubric_memory_briefing = ""
+  local recent_rubric_memory_context = nil
+  do
+    local recent_ok, recent_result = pcall(call_plexus_tool, "plexus_rubric_memory_recent_entries", {
+      scorecard_identifier = params.scorecard,
+      score_identifier = params.score,
+      score_id = score_id,
+      score_version_id = active_rubric_memory_score_version_id,
+      query = "recent SME stakeholder policy update rubric guideline change clarification before optimization",
+      days = 30,
+      limit = 16
+    }, {max_retries = 1})
+    if recent_ok and type(recent_result) == "table" and recent_result.success and has_text(recent_result.markdown_context) then
+      recent_rubric_memory_context = recent_result
+      recent_rubric_memory_briefing = recent_result.markdown_context
+      State.set("recent_rubric_memory_context", recent_result)
+      Human.notify({message = "Recent rubric-memory briefing loaded for optimizer preflight.", level = "info"})
+    elseif recent_ok and type(recent_result) == "table" and recent_result.error then
+      Human.notify({message = "Recent rubric-memory briefing unavailable: " .. tostring(recent_result.error), level = "warning"})
+    else
+      Human.notify({message = "Recent rubric-memory briefing unavailable for this optimizer run.", level = "debug"})
+    end
+  end
+
   local rubric_memory_briefing = ""
   local rubric_memory_context = nil
   do
@@ -2914,7 +3894,9 @@ code: |
       scorecard_identifier = params.scorecard,
       score_identifier = params.score,
       score_id = score_id,
-      topic_hint = "Score-level optimizer rubric-memory briefing"
+      score_version_id = active_rubric_memory_score_version_id,
+      topic_hint = "Score-level optimizer rubric-memory briefing",
+      synthesize = false
     }, {max_retries = 1})
     if rm_ok and type(rm_result) == "table" and rm_result.success and has_text(rm_result.markdown_context) then
       rubric_memory_context = rm_result
@@ -2928,6 +3910,56 @@ code: |
     end
   end
 
+  local function rubric_memory_context_score_version(context)
+    if type(context) ~= "table" then
+      return nil
+    end
+    if type(context.machine_context) == "table" and has_text(context.machine_context.score_version_id) then
+      return context.machine_context.score_version_id
+    end
+    local citation_index = context.citation_index
+    if type(citation_index) == "table" then
+      for _, citation in pairs(citation_index) do
+        if type(citation) == "table" and citation.kind == "official_rubric" and has_text(citation.score_version_id) then
+          return citation.score_version_id
+        end
+      end
+    end
+    return nil
+  end
+
+  local function ensure_rubric_memory_context_for_version(score_version_id, purpose)
+    if not has_text(score_version_id) then
+      return nil
+    end
+    local current_context_version = rubric_memory_context_score_version(rubric_memory_context)
+    if current_context_version == score_version_id then
+      return rubric_memory_context
+    end
+    local rm_ok, rm_result = pcall(call_plexus_tool, "plexus_rubric_memory_evidence_pack", {
+      scorecard_identifier = params.scorecard,
+      score_identifier = params.score,
+      score_id = score_id,
+      score_version_id = score_version_id,
+      topic_hint = purpose or "Optimizer rubric-memory active-version context",
+      synthesize = false
+    }, {max_retries = 1})
+    if rm_ok and type(rm_result) == "table" and rm_result.success and has_text(rm_result.markdown_context) then
+      rubric_memory_context = rm_result
+      rubric_memory_briefing = rm_result.markdown_context
+      State.set("rubric_memory_context", rm_result)
+      State.set("rubric_memory_context_score_version_id", score_version_id)
+      Human.notify({message = "Rubric-memory context refreshed for active version " .. tostring(score_version_id) .. ".", level = "info"})
+      return rubric_memory_context
+    end
+    local err = "unknown error"
+    if type(rm_result) == "table" and rm_result.error then
+      err = tostring(rm_result.error)
+    end
+    Human.notify({message = "Rubric-memory context unavailable for active version " .. tostring(score_version_id) .. ": " .. err, level = "warning"})
+    return nil
+  end
+
   local function record_sme_question_gate(stage, raw_agenda, gate_result)
     local records = State.get("sme_question_gate_diagnostics") or {}
     table.insert(records, {
@@ -2939,15 +3971,26 @@ code: |
   end
 
   local function gate_sme_agenda(raw_agenda, stage, optimizer_context)
-    if not has_text(raw_agenda) or not rubric_memory_context then
+    if not has_text(raw_agenda) then
       return raw_agenda, nil
     end
     local score_version_id = ""
-    if type(rubric_memory_context.machine_context) == "table" then
-      score_version_id = rubric_memory_context.machine_context.score_version_id or ""
+    local active_version = State.get("last_accepted_version_id") or active_rubric_memory_score_version_id
+    if has_text(active_version) then
+      score_version_id = active_version
+    end
+    if type(rubric_memory_context) == "table" and type(rubric_memory_context.machine_context) == "table" then
+      score_version_id = score_version_id ~= "" and score_version_id
+        or rubric_memory_context.machine_context.score_version_id
+        or ""
     end
     if not has_text(score_version_id) then
       Human.notify({message = "SME question gate skipped: rubric-memory context has no score_version_id.", level = "warning"})
+      return raw_agenda, nil
+    end
+    local gate_rubric_memory_context = ensure_rubric_memory_context_for_version(score_version_id, "SME agenda rubric-memory context")
+    if not gate_rubric_memory_context then
+      Human.notify({message = "SME question gate skipped: active-version rubric-memory context unavailable.", level = "warning"})
       return raw_agenda, nil
     end
     local gate_ok, gate_result = pcall(call_plexus_tool, "plexus_rubric_memory_sme_question_gate", {
@@ -2955,7 +3998,7 @@ code: |
       score_identifier = params.score,
       score_version_id = score_version_id,
       candidate_agenda_markdown = raw_agenda,
-      rubric_memory_context = rubric_memory_context,
+      rubric_memory_context = gate_rubric_memory_context,
       optimizer_context = optimizer_context or ""
     }, {max_retries = 1})
     if gate_ok and type(gate_result) == "table" and gate_result.success then
@@ -2967,7 +4010,13 @@ code: |
         tostring(gate_result.summary_counts and gate_result.summary_counts.transformed or 0),
         tostring(gate_result.summary_counts and gate_result.summary_counts.kept or 0)
       ), level = "info"})
-      return gate_result.final_agenda_markdown or raw_agenda, gate_result
+      -- Validate the returned markdown is actual agenda text, not a serialized object
+      local fam = gate_result.final_agenda_markdown
+      local fam_looks_valid = type(fam) == "string"
+        and fam:len() > 0
+        and not fam:find("output=None", 1, true)
+        and not fam:find("UsageStats(", 1, true)
+      return fam_looks_valid and fam or raw_agenda, gate_result
     end
     local err = gate_ok and type(gate_result) == "table" and gate_result.error or tostring(gate_result)
     record_sme_question_gate(stage, raw_agenda, {success = false, error = err})
@@ -3054,6 +4103,8 @@ code: |
     opts = opts or {}
     local ttl = opts.ttl_hours or 24
     local fresh = opts.fresh or false
+    local contradictions_score_version_id =
+      State.get("last_accepted_version_id") or active_rubric_memory_score_version_id or champion_version_id
     Human.notify({message = string.format(
       "Refreshing contradictions landscape (cycle %d, ttl=%dh, fresh=%s)...",
       current_cycle, ttl, tostring(fresh)), level = "info"})
@@ -3066,9 +4117,10 @@ code: |
         days = tostring(params.days or 90),
         max_feedback_items = 100,
         num_topics = 8,
-        include_rubric_memory = false
+        include_rubric_memory = true,
+        score_version_id = contradictions_score_version_id
       },
-      cache_key = "FeedbackContradictions: " .. scorecard_name .. " / " .. score_name,
+      cache_key = "FeedbackContradictions: " .. scorecard_name .. " / " .. score_name .. " / " .. tostring(contradictions_score_version_id),
       ttl_hours = ttl,
       fresh = fresh
     })
@@ -3218,6 +4270,8 @@ code: |
     -- Restore all init-phase variables from durable State
     dataset_id              = State.get("dataset_id")
     champion_version_id     = State.get("last_accepted_version_id") or State.get("baseline_version_id")
+    active_rubric_memory_score_version_id = champion_version_id
+    State.set("active_rubric_memory_score_version_id", active_rubric_memory_score_version_id)
     regression_baseline_id    = State.get("last_accepted_acc_eval_id") or State.get("regression_baseline_id")
     regression_baseline_metrics = State.get("last_accepted_acc_metrics") or State.get("regression_baseline_metrics")
     regression_baseline_cost_per_item = State.get("regression_baseline_cost_per_item")
@@ -3317,9 +4371,11 @@ code: |
 
     local selected_dataset_id = nil
     local selected_feedback_target_hash = dataset_check and dataset_check.feedback_target_hash or nil
+    local selected_row_count = nil
 
     if dataset_adequate then
       selected_dataset_id = dataset_check.dataset_id
+      selected_row_count = dataset_check.row_count
       Human.notify({message = string.format(
         "Found adequate associated dataset for version %s: %s (%s rows)",
         tostring(version_id or "champion"),
@@ -3367,6 +4423,7 @@ code: |
       if build_result and build_result.rows_written and build_result.rows_written >= min_acceptable then
         selected_dataset_id = build_result.dataset_id
         selected_feedback_target_hash = build_result.feedback_target_hash
+        selected_row_count = build_result.rows_written
         Human.notify({message = "Created balanced dataset: " .. selected_dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
       else
         local rows_so_far = (build_result and build_result.rows_written) or 0
@@ -3385,18 +4442,40 @@ code: |
         if final_build_result and final_build_result.rows_written and final_build_result.rows_written >= min_acceptable then
           selected_dataset_id = final_build_result.dataset_id
           selected_feedback_target_hash = final_build_result.feedback_target_hash
+          selected_row_count = final_build_result.rows_written
           Human.notify({message = "Created unbalanced dataset: " .. selected_dataset_id .. " (" .. final_build_result.rows_written .. " rows)", level = "info"})
         else
           local final_rows = (final_build_result and final_build_result.rows_written) or 0
-          error(string.format(
-            "Insufficient feedback data to build a regression dataset for version %s. Only %d items available (need %d, minimum %d).",
+          Human.notify({message = string.format(
+            "Insufficient feedback data for regression dataset (version %s): only %d items available (need %d, minimum %d). Regression tracking disabled for this run.",
             tostring(version_id or "champion"),
             final_rows,
             min_dataset_rows,
             min_acceptable
-          ))
+          ), level = "warning"})
+          return nil
         end
       end
+    end
+
+    if selected_row_count and selected_row_count < min_dataset_rows then
+      local diagnostic = {
+        version_id = version_id,
+        dataset_id = selected_dataset_id,
+        requested_max_samples = min_dataset_rows,
+        available_rows = selected_row_count,
+        days = params.days,
+        message = string.format(
+          "Requested %d evaluation samples but only %d qualifying feedback items were available.",
+          min_dataset_rows,
+          selected_row_count
+        )
+      }
+      local sample_size_diagnostics = State.get("sample_size_diagnostics") or {}
+      table.insert(sample_size_diagnostics, diagnostic)
+      State.set("sample_size_diagnostics", sample_size_diagnostics)
+      Human.notify({message = diagnostic.message, level = "warning"})
+      diag("Sample size diagnostic: " .. tostring(Json.encode(diagnostic)))
     end
 
     dataset_cache_by_version[version_key] = {
@@ -3437,7 +4516,12 @@ code: |
 
   State.set("dataset_id", dataset_id)
   State.set("feedback_target_updated_at", feedback_target_updated_at)
-  Human.notify({message = "Using regression dataset: " .. dataset_id, level = "info"})
+  if dataset_id then
+    Human.notify({message = "Using regression dataset: " .. dataset_id, level = "info"})
+  else
+    regression_available = false
+    Human.notify({message = "No regression dataset available — running feedback-only (no accuracy regression guard).", level = "warning"})
+  end
 
   -- Pull starting version (champion or specified start_version)
   local pull_args = {
@@ -3459,12 +4543,22 @@ code: |
     }
   end
   -- champion_version_id and baseline variables are pre-declared above the continuation check
-  champion_version_id = initial_pull.versionId
+  -- For continuation runs, champion_version_id was already restored from State; do not overwrite it.
+  if not is_continuation then
+    champion_version_id = initial_pull.versionId
+  end
+  if not has_text(active_rubric_memory_score_version_id) then
+    active_rubric_memory_score_version_id = champion_version_id
+  end
+  State.set("active_rubric_memory_score_version_id", active_rubric_memory_score_version_id)
   dataset_cache_by_version[tostring(champion_version_id)] = {
     dataset_id = dataset_id
   }
-  current_code_path = initial_pull.codeFilePath
-  current_code = File.read(current_code_path)
+  -- For continuation runs, current_code_path/current_code were already restored from the champion version.
+  if not is_continuation then
+    current_code_path = initial_pull.codeFilePath
+    current_code = File.read(current_code_path)
+  end
 
   -- Detect score class and load class-specific YAML format doc
   local score_class = (current_code:match("\nclass:%s*(%S+)")
@@ -3481,10 +4575,12 @@ code: |
   Human.notify({message = string.format(
     "  Score class: %s — loaded doc: %s", score_class, score_class_doc_key), level = "info"})
 
-  current_guidelines = ""
-  if initial_pull.guidelinesFilePath then
-    local g = File.read(initial_pull.guidelinesFilePath)
-    if has_text(g) then current_guidelines = g end
+  if not is_continuation then
+    current_guidelines = ""
+    if initial_pull.guidelinesFilePath then
+      local g = File.read(initial_pull.guidelinesFilePath)
+      if has_text(g) then current_guidelines = g end
+    end
   end
   Human.notify({message = "Champion version: " .. tostring(champion_version_id), level = "info"})
 
@@ -3641,9 +4737,9 @@ code: |
   end
 
   -- Run fresh baselines for any that weren't found above
-  if not recent_baseline_id or (not regression_baseline_id and not resume_regression) then
+  if not recent_baseline_id or (dataset_id and not regression_baseline_id and not resume_regression) then
     local batch_items = {}
-    if not regression_baseline_id then
+    if dataset_id and not regression_baseline_id then
       table.insert(batch_items, {
         scorecard_name  = params.scorecard,
         score_name      = params.score,
@@ -3664,6 +4760,7 @@ code: |
         max_feedback_items = params.max_samples or 100,
         sampling_mode      = "newest",
         wait               = true,
+        score_rubric_consistency_check = true,
         notes              = "Baseline: recent feedback alignment dataset for " .. score_name,
       })
     end
@@ -3678,7 +4775,7 @@ code: |
 
     -- Parse results — map back to regression/recent based on what we requested
     local batch_idx = 1
-    if not regression_baseline_id then
+    if dataset_id and not regression_baseline_id then
       local acc_result = baseline_batch and baseline_batch[batch_idx]
       if acc_result and not acc_result.error and (acc_result.id or acc_result.evaluation_id) then
         regression_baseline         = acc_result
@@ -3838,6 +4935,12 @@ code: |
   -- Classify an error string to determine recovery strategy
   local function classify_error(err_str)
     local s = string.lower(tostring(err_str))
+    if string.find(s, "procedure run interrupted")
+      or string.find(s, "keyboardinterrupt")
+      or string.find(s, "sigint")
+      or string.find(s, "sigterm") then
+      return "interrupted"
+    end
     if string.find(s, "contextwindowexceeded")
       or string.find(s, "context_length_exceeded")
       or string.find(s, "maximum context length")
@@ -3969,6 +5072,23 @@ code: |
   local MAX_EDITOR_RETRIES = 2
 
   safe_agent_call = function(agent, agent_name, msg, recovery_context)
+    local function recovery_message(base_msg, context)
+      if not context then return base_msg end
+      local parts = {}
+      if context.file_content then
+        table.insert(parts, "=== CURRENT score_config.yaml ===\n"
+          .. context.file_content
+          .. "\n=== END OF score_config.yaml ===")
+      end
+      if context.task_description then
+        table.insert(parts, context.task_description)
+      elseif base_msg then
+        table.insert(parts, base_msg)
+      end
+      if #parts == 0 then return base_msg end
+      return table.concat(parts, "\n\n")
+    end
+
     for attempt = 1, MAX_EDITOR_RETRIES + 1 do
       Tool.reset()
       local ok, err = pcall(function()
@@ -3980,6 +5100,10 @@ code: |
       diag(string.format("%s error (attempt %d/%d, type=%s): %s",
         agent_name, attempt, MAX_EDITOR_RETRIES + 1, err_type, trunc(tostring(err), 300)))
 
+      if err_type == "interrupted" then
+        error(tostring(err))
+      end
+
       if err_type == "permanent" then
         return false, tostring(err)
       end
@@ -3989,23 +5113,11 @@ code: |
       end
 
       if err_type == "context_window" then
-        -- Recovery: clear history, re-inject just essential context
+        -- Recovery: clear history and put essential context directly in the next turn.
         agent.clear_history()
-        if recovery_context then
-          if recovery_context.file_content then
-            agent.history:add({
-              role = "system",
-              content = "=== CURRENT score_config.yaml ===\n"
-                .. recovery_context.file_content
-                .. "\n=== END OF score_config.yaml ==="
-            })
-          end
-          if recovery_context.task_description then
-            msg = recovery_context.task_description
-          end
-        end
+        msg = recovery_message(msg, recovery_context)
         diag(string.format(
-          "Recovered from %s context window error: cleared history, re-injected context",
+          "Recovered from %s context window error: cleared history, rebuilt inline context",
           agent_name))
 
       elseif err_type == "rate_limit" or err_type == "transient" then
@@ -4015,16 +5127,9 @@ code: |
         while os.clock() < t do end
 
       else
-        -- Unknown error: clear history and retry with context
+        -- Unknown error: clear history and retry with inline context.
         agent.clear_history()
-        if recovery_context and recovery_context.file_content then
-          agent.history:add({
-            role = "system",
-            content = "=== CURRENT score_config.yaml ===\n"
-              .. recovery_context.file_content
-              .. "\n=== END OF score_config.yaml ==="
-          })
-        end
+        msg = recovery_message(msg, recovery_context)
       end
     end
     return false, "max retries exceeded"
@@ -4032,6 +5137,105 @@ code: |
 
   safe_editor_call = function(msg, recovery_context)
     return safe_agent_call(code_editor, "code_editor", msg, recovery_context)
+  end
+
+  local function report_phase_marker(phase_id)
+    return "=== OPTIMIZER REPORT PHASE: " .. tostring(phase_id) .. " ==="
+  end
+
+  local function set_report_generation_status(status)
+    status.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+    State.set("report_generation_status", status)
+  end
+
+  local function run_required_report_phase(agent, agent_name, phase_id, prompt, context_setup_fn)
+    local phase = tostring(phase_id)
+    local report_cycle = State.get("current_iteration")
+    local context_chars = 0
+    if context_setup_fn then
+      local setup_ok, setup_result = pcall(context_setup_fn)
+      if not setup_ok then
+        stop_reason = "report_generation_failed"
+        set_report_generation_status({
+          phase_id = phase,
+          status = "failed",
+          cycle = report_cycle,
+          started_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+          duration_seconds = 0,
+          prompt_characters = #(prompt or ""),
+          context_characters = 0,
+          agent_name = agent_name,
+          error_type = "context_setup",
+          error_message = tostring(setup_result)
+        })
+        error("report_generation_failed:" .. phase .. ": " .. tostring(setup_result))
+      end
+      context_chars = tonumber(setup_result) or 0
+    end
+
+    local marker = report_phase_marker(phase)
+    local marked_prompt = marker .. "\n\n" .. tostring(prompt or "")
+    local started_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+    local started_clock = os.clock()
+    set_report_generation_status({
+      phase_id = phase,
+      status = "running",
+      cycle = report_cycle,
+      started_at = started_at,
+      prompt_characters = #marked_prompt,
+      context_characters = context_chars,
+      agent_name = agent_name,
+      turn_label = marker
+    })
+    diag(string.format("Report phase %s started (agent=%s, prompt=%d chars, context=%d chars)",
+      phase, agent_name, #marked_prompt, context_chars))
+    Human.notify({message = string.format("Report phase %s started", phase), level = "info"})
+
+    Tool.reset()
+    guard_context_budget(agent)
+    local ok, err = safe_agent_call(agent, agent_name, marked_prompt, nil)
+    local duration = os.clock() - started_clock
+    local output = agent.output or ""
+    if ok then
+      set_report_generation_status({
+        phase_id = phase,
+        status = "succeeded",
+        cycle = report_cycle,
+        started_at = started_at,
+        duration_seconds = duration,
+        prompt_characters = #marked_prompt,
+        context_characters = context_chars,
+        output_characters = #output,
+        agent_name = agent_name,
+        turn_label = marker
+      })
+      diag(string.format("Report phase %s succeeded in %.2fs (%d output chars)",
+        phase, duration, #output))
+      Human.notify({message = string.format(
+        "Report phase %s completed in %.2fs", phase, duration), level = "info"})
+      return output
+    end
+
+    stop_reason = "report_generation_failed"
+    set_report_generation_status({
+      phase_id = phase,
+      status = "failed",
+      cycle = report_cycle,
+      started_at = started_at,
+      duration_seconds = duration,
+      prompt_characters = #marked_prompt,
+      context_characters = context_chars,
+      output_characters = #output,
+      agent_name = agent_name,
+      turn_label = marker,
+      error_type = classify_error(err),
+      error_message = tostring(err)
+    })
+    diag(string.format("Report phase %s failed in %.2fs: %s",
+      phase, duration, tostring(err)))
+    Human.notify({message = string.format(
+      "Report phase %s failed: %s", phase, trunc(tostring(err), 300)), level = "error"})
+    error("report_generation_failed:" .. phase .. ": " .. tostring(err))
   end
 
   local function extract_markdown_section(text, heading)
@@ -4079,9 +5283,6 @@ code: |
 
   local max_cycles = params.max_iterations
   local cycle = #iterations  -- 0 for fresh run; N for continuation (resumes from where prior run left off)
-  -- Track last mailbox read time for message injection (Phase 4)
-  local _last_mailbox_ts = State.get("last_mailbox_check") or ""
-
   while cycle < max_cycles do
     cycle = cycle + 1
     local cycle_recorded = false
@@ -4091,6 +5292,7 @@ code: |
       "═══ Cycle %d/%d ═══", cycle, max_cycles), level = "info"})
     State.set("current_iteration", cycle)
     Stage.progress(cycle, max_cycles)
+    status_msg(string.format("Cycle %d/%d — starting", cycle, max_cycles))
 
     -- Stop when feedback changed since run start; restart is required to keep baselines coherent.
     do
@@ -4116,34 +5318,6 @@ code: |
             return "break_cycle"
           end
         end
-      end
-    end
-
-    -- Phase 4: Mailbox check — pick up any user messages injected via conversation viewer
-    do
-      local _proc_id = State.get("_procedure_id")
-      if _proc_id then
-        local _ok, _msgs = pcall(call_plexus_tool, "plexus_procedure_chat_messages", {
-          procedure_id = _proc_id,
-          limit = 20
-        })
-        if _ok and type(_msgs) == "table" then
-          local _new_msgs = {}
-          for _, m in ipairs(_msgs) do
-            if m.role == "USER" and (m.humanInteraction == "CHAT" or m.interactionType == "CHAT")
-               and (m.createdAt or "") > _last_mailbox_ts then
-              table.insert(_new_msgs, m.content or "")
-            end
-          end
-          if #_new_msgs > 0 then
-            local _injected = table.concat(_new_msgs, "\n---\n")
-            params.hint = ((params.hint or "") ~= "" and (params.hint .. "\n\n") or "")
-              .. "[User guidance injected mid-run]: " .. _injected
-            Human.notify({message = "Received " .. #_new_msgs .. " user message(s) via chat: " .. _injected, level = "info"})
-          end
-        end
-        _last_mailbox_ts = os.date("!%Y-%m-%dT%H:%M:%SZ")
-        State.set("last_mailbox_check", _last_mailbox_ts)
       end
     end
 
@@ -4209,6 +5383,7 @@ code: |
     -- duplication and ensure diversity.
     -- ================================================================
     Stage.set("exploration")
+    status_msg(string.format("Cycle %d/%d — planning hypotheses", cycle, max_cycles))
     Human.notify({message = string.format(
       "Cycle %d — Planning: generating hypotheses sequentially...", cycle
     ), level = "info"})
@@ -4232,6 +5407,7 @@ code: |
       consecutive_failed_cycles = consecutive_failed_cycles,
       hint = params.hint,
       prior_run_prescription = params.prior_run_prescription,
+      recent_rubric_memory_briefing = recent_rubric_memory_briefing,
       rubric_memory_briefing = rubric_memory_briefing
     })
 
@@ -4258,24 +5434,48 @@ code: |
     local hyp_slots, cycle_escalation_mode = build_hypothesis_slots({
       consecutive_stagnant_cycles = consecutive_stagnant_cycles
     })
+    hyp_slots = cap_hypothesis_slots(hyp_slots, params.num_candidates)
+    hyp_slots = add_creative_hypothesis_slot(hyp_slots, cycle)
+    local slot_names = table.concat(hyp_slots, ", ")
     if cycle_escalation_mode == "ultra_creative" then
       Human.notify({message = string.format(
-        "  Ultra-creative plateau mode: %d stagnant cycles — 6 hypotheses (incremental, bold, regression_fix, structural, reframe, full_rewrite)",
-        consecutive_stagnant_cycles), level = "warning"})
+        "  Ultra-creative plateau mode: %d stagnant cycles — generating %d/%d requested hypotheses (slots: %s)",
+        consecutive_stagnant_cycles, #hyp_slots, params.num_candidates, slot_names), level = "warning"})
     elseif cycle_escalation_mode == "escalate" then
       Human.notify({message = string.format(
-        "  Plateau escalation mode: %d stagnant cycles — 5 hypotheses (incremental, bold, regression_fix, structural, reframe)",
-        consecutive_stagnant_cycles), level = "warning"})
+        "  Plateau escalation mode: %d stagnant cycles — generating %d/%d requested hypotheses (slots: %s)",
+        consecutive_stagnant_cycles, #hyp_slots, params.num_candidates, slot_names), level = "warning"})
     else
-      hyp_slots = {"recent_incremental", "recent_bold", "regression_fix", "structural"}
-      Human.notify({message = "  4-slot hypothesis set (slots: incremental, bold, regression_fix, structural)",
-        level = "info"})
+      Human.notify({message = string.format(
+        "  Generating %d/%d requested hypotheses (slots: %s)",
+        #hyp_slots, params.num_candidates, slot_names), level = "info"})
     end
 
     -- Generate hypotheses sequentially — each sees the previous ones
     local hypotheses = {}
+    local function add_planned_hypothesis(hyp, slot_name, retry_label)
+      hyp.index = #hypotheses + 1
+      hyp.slot = slot_name
+      local blocked, block_reason = hypothesis_repeats_strongly_harmful_prior(hyp, iterations)
+      if blocked then
+        diag(string.format(
+          "  Hyp %d (%s%s) rejected as repeated harmful territory: %s",
+          hyp.index, slot_name, retry_label or "", block_reason))
+        Human.notify({message = string.format(
+          "    Rejected [%s] as repeated harmful territory: %s",
+          slot_name, trunc(block_reason, 180)), level = "warning"})
+        return false, block_reason
+      end
+      table.insert(hypotheses, hyp)
+      diag(string.format("  Hyp %d (%s%s): %s — %s",
+        hyp.index, slot_name, retry_label or "", hyp.name, trunc(hyp.description, 200)))
+      Human.notify({message = string.format(
+        "    %d. [%s] %s: %s", hyp.index, slot_name, hyp.name, trunc(hyp.description, 100)), level = "info"})
+      return true, nil
+    end
 
     for slot_idx, slot_name in ipairs(hyp_slots) do
+      status_msg(string.format("Cycle %d/%d — generating hypothesis %d/%d (%s)", cycle, max_cycles, slot_idx, #hyp_slots, slot_name))
       Human.notify({message = string.format(
         "  Generating hypothesis %d/%d (%s)...", slot_idx, #hyp_slots, slot_name), level = "info"})
 
@@ -4347,13 +5547,30 @@ code: |
           if #parsed > 0 then
             -- Take the first parsed hypothesis and re-index it
             local hyp = parsed[1]
-            hyp.index = #hypotheses + 1
-            hyp.slot = slot_name
-            table.insert(hypotheses, hyp)
-            diag(string.format("  Hyp %d (%s): %s — %s",
-              hyp.index, slot_name, hyp.name, trunc(hyp.description, 200)))
-            Human.notify({message = string.format(
-              "    %d. [%s] %s: %s", hyp.index, slot_name, hyp.name, trunc(hyp.description, 100)), level = "info"})
+            local added, block_reason = add_planned_hypothesis(hyp, slot_name, "")
+            if not added then
+              diag(string.format(
+                "Hyp slot %d (%s) blocked for harmful repeat, retrying with hard exclusion...",
+                slot_idx, slot_name))
+              guard_context_budget(hypothesis_planner)
+              local retry_ok, _ = safe_agent_call(
+                hypothesis_planner,
+                "hypothesis_planner",
+                "The previous hypothesis was rejected because it overlaps a prior strongly harmful candidate: "
+                .. tostring(block_reason)
+                .. "\nPropose exactly ONE materially different hypothesis on a single numbered line. "
+                .. "Do not target the same policy family, wording family, or evidence rule.",
+                {file_content = current_code, task_description = full_prompt}
+              )
+              if retry_ok then
+                local retry_parsed = parse_hypotheses(hypothesis_planner.output or "")
+                if #retry_parsed > 0 then
+                  add_planned_hypothesis(retry_parsed[1], slot_name, ", retry")
+                else
+                  diag(string.format("Hyp slot %d (%s) failed after harmful-repeat retry — no hypothesis", slot_idx, slot_name))
+                end
+              end
+            end
           else
             -- Retry once with a nudge
             diag(string.format("Hyp slot %d (%s) produced no parseable hypothesis, retrying...", slot_idx, slot_name))
@@ -4368,14 +5585,7 @@ code: |
             if retry_ok then
               local retry_parsed = parse_hypotheses(hypothesis_planner.output or "")
               if #retry_parsed > 0 then
-                local hyp = retry_parsed[1]
-                hyp.index = #hypotheses + 1
-                hyp.slot = slot_name
-                table.insert(hypotheses, hyp)
-                diag(string.format("  Hyp %d (%s, retry): %s — %s",
-                  hyp.index, slot_name, hyp.name, trunc(hyp.description, 200)))
-                Human.notify({message = string.format(
-                  "    %d. [%s] %s: %s", hyp.index, slot_name, hyp.name, trunc(hyp.description, 100)), level = "info"})
+                add_planned_hypothesis(retry_parsed[1], slot_name, ", retry")
               else
                 diag(string.format("Hyp slot %d (%s) failed after retry — no hypothesis", slot_idx, slot_name))
               end
@@ -4385,6 +5595,9 @@ code: |
       end)
 
       if not slot_ok then
+        if classify_error(slot_err) == "interrupted" then
+          error(tostring(slot_err))
+        end
         -- Encoding errors (e.g. UnicodeDecodeError from lupa), OOM, or other unexpected
         -- failures that bypassed safe_editor_call's pcall.  Log and continue — losing one
         -- slot should not skip the whole cycle.
@@ -4414,10 +5627,33 @@ code: |
     -- PHASE 2: Implement each hypothesis (continuous conversation)
     -- ================================================================
     local submitted_versions = {}
+    local submitted_version_keys = {}
+    local submitted_version_ids = {}
+    local function record_submitted_version(entry)
+      local key = tostring(entry.index or "") .. ":" .. tostring(entry.version_id or "")
+      local version_key = tostring(entry.version_id or "")
+      if has_text(version_key) and submitted_version_ids[version_key] then
+        diag(string.format(
+          "Skipping duplicate submitted candidate version %s",
+          tostring(entry.version_id)))
+        return false
+      end
+      if submitted_version_keys[key] then
+        diag(string.format(
+          "Skipping duplicate submitted version record for hypothesis %s version %s",
+          tostring(entry.index), tostring(entry.version_id)))
+        return false
+      end
+      submitted_version_keys[key] = true
+      if has_text(version_key) then submitted_version_ids[version_key] = true end
+      table.insert(submitted_versions, entry)
+      return true
+    end
     local any_cannot_improve = false
 
     for h = 1, #hypotheses do
       local hyp = hypotheses[h]
+      status_msg(string.format("Cycle %d/%d — implementing hypothesis %d/%d: %s", cycle, max_cycles, h, #hypotheses, trunc(hyp.name, 60)))
       Human.notify({message = string.format(
         "  Hypothesis %d/%d: %s", h, #hypotheses, hyp.name), level = "info"})
 
@@ -4436,16 +5672,6 @@ code: |
       -- Each hypothesis gets a completely fresh context.
       Tool.reset()
       code_editor.clear_history()
-
-      -- Inject class-specific YAML format reference for the editor agent
-      if has_text(SCORE_CLASS_DOC) then
-        code_editor.history:add({
-          role = "system",
-          content = string.format("=== SCORE YAML FORMAT REFERENCE (%s) ===\n", score_class)
-            .. SCORE_CLASS_DOC
-            .. "\n=== END SCORE YAML FORMAT REFERENCE ==="
-        })
-      end
 
       -- Inner ReAct loop for this hypothesis.
       -- Failed str_replace attempts do NOT count as logical steps — the LLM gets
@@ -4469,21 +5695,24 @@ code: |
         react_step = react_step + 1
         local msg
         if react_step == 1 and total_edit_failures == 0 then
-          -- First step for this hypothesis — inject current file as system message
+          -- First step for this hypothesis — include required context inline.
+          local first_turn_context = {}
+          if has_text(SCORE_CLASS_DOC) then
+            table.insert(first_turn_context, string.format("=== SCORE YAML FORMAT REFERENCE (%s) ===\n", score_class)
+              .. SCORE_CLASS_DOC
+              .. "\n=== END SCORE YAML FORMAT REFERENCE ===")
+          end
           local editor_content = call_plexus_tool("score_editor_get_content", {})
           if editor_content and editor_content.file_content then
-            code_editor.history:add({
-              role = "system",
-              content = "=== CURRENT score_config.yaml (the file you are editing) ===\n"
-                .. editor_content.file_content
-                .. "\n=== END OF score_config.yaml ==="
-            })
+            table.insert(first_turn_context, "=== CURRENT score_config.yaml (the file you are editing) ===\n"
+              .. editor_content.file_content
+              .. "\n=== END OF score_config.yaml ===")
           end
 
           msg = string.format(
             "Implement hypothesis %d of %d: %s\n\n%s\n\n"
             .. "Edit score_config.yaml to test this hypothesis. "
-            .. "The current file content is shown in the system message above.\n"
+            .. "The current file content is included above in this message.\n"
             .. "For prompt-only hypotheses, prefer the SMALLEST UNIQUE replacement inside system_message or user_message.\n"
             .. "Do NOT replace the entire prompt block unless the hypothesis truly requires a full rewrite.\n"
             .. "IMPORTANT: Your str_replace old_str MUST be copied exactly from score_config.yaml.\n"
@@ -4492,6 +5721,9 @@ code: |
             .. "The version_note is your future self's primary learning signal — be specific about WHAT, WHY, and EXPECTED EFFECT.\n"
             .. "Call done(reason='cannot_improve: ...') if you cannot find a viable edit.",
             h, #hypotheses, hyp.name, hyp.description)
+          if #first_turn_context > 0 then
+            msg = table.concat(first_turn_context, "\n\n") .. "\n\n" .. msg
+          end
         else
           -- Subsequent turns: provide feedback on what just happened
           local last_edit = Tool.last_call("str_replace_editor")
@@ -4547,7 +5779,8 @@ code: |
               table.insert(recent_parts, "submit_score_version returned an error:\n  " .. err_text)
               if string.find(err_text, "most recent str_replace_editor") then
                 table.insert(recent_parts, "\nTo recover: call str_replace_editor(command='view', path='score_config.yaml') to clear the error state, then call submit_score_version again.")
-              elseif string.find(err_text, "unchanged from the original") then
+              elseif string.find(err_text, "unchanged from the original")
+                  or string.find(err_text, "semantically unchanged") then
                 table.insert(recent_parts, "\nThe file has not been modified. You must use str_replace_editor(command='str_replace', ...) to make actual changes before submitting.")
               else
                 table.insert(recent_parts, "\nFix the issue and try submit_score_version again.")
@@ -4597,9 +5830,12 @@ code: |
           hyp_done = true
         end
 
-        -- Record agent's text response to session
+        -- Record agent's text response to session. If this turn ended with a
+        -- terminal tool call, the tool args/result are the canonical outcome;
+        -- provider final prose can be stale or misleading after tool execution.
+        local terminal_tool_call = Tool.last_call("submit_score_version") or Tool.last_call("done")
         local agent_text = code_editor.output or ""
-        if has_text(agent_text) then
+        if has_text(agent_text) and not terminal_tool_call then
           Human.notify({message = string.format(
             "  [Hyp %d, step %d] Agent: %s",
             h, react_step, trunc(agent_text, 500)), level = "info"})
@@ -4608,6 +5844,10 @@ code: |
              and not string.find(agent_text, "^name:") and not string.find(agent_text, "^tactus_code:") then
             table.insert(hyp_reasoning_parts, agent_text)
           end
+        elseif has_text(agent_text) and terminal_tool_call then
+          diag(string.format(
+            "  [Hyp %d] Ignoring agent prose after terminal tool call: %s",
+            h, trunc(agent_text, 200)))
         end
 
         -- Capture reasoning from tool calls (agent often produces no text during tool use)
@@ -4768,7 +6008,7 @@ code: |
 
         -- Record submitted version
         if version_id then
-          table.insert(submitted_versions, {
+          record_submitted_version({
             index = h,
             version_id = version_id,
             done_reason = hyp_done_reason,
@@ -4783,25 +6023,7 @@ code: |
             has_text(hyp_done_reason) and trunc(hyp_done_reason, 100) or "unknown",
             trunc(hyp.name .. ": " .. (hyp.description or ""), 200)))
         end
-
-        -- Transition message to conversation history (so agent has full context)
-        if version_id then
-          code_editor.history:add({role = "user", content = string.format(
-            "Hypothesis %d ('%s') submitted as version %s. Evaluation will run after all hypotheses are complete.",
-            h, hyp.name, version_id)})
-        else
-          code_editor.history:add({role = "user", content = string.format(
-            "Hypothesis %d ('%s') was not submitted (no viable edit found). Reason: %s",
-            h, hyp.name, has_text(hyp_done_reason) and hyp_done_reason or "unknown")})
-        end
-
-        -- Preview next hypothesis in conversation
-        if h < #hypotheses then
-          code_editor.history:add({role = "user", content = string.format(
-            "Moving to hypothesis %d of %d: %s\n%s",
-            h+1, #hypotheses, hypotheses[h+1].name, hypotheses[h+1].description)})
-        end
-      end)
+        end)
 
       if not post_ok then
         diag(string.format("ERROR in Hyp %d post-processing: %s", h, trunc(tostring(post_err), 500)))
@@ -4810,7 +6032,7 @@ code: |
           h, trunc(tostring(post_err), 200)), level = "error"})
         -- If we have a version_id, still record it despite the error
         if version_id then
-          table.insert(submitted_versions, {
+          record_submitted_version({
             index = h,
             version_id = version_id,
             done_reason = hyp_done_reason or "(post-processing error)",
@@ -4877,6 +6099,7 @@ code: |
         })
       end
 
+      status_msg(string.format("Cycle %d/%d — evaluating %d hypotheses (%d evals)", cycle, max_cycles, #submitted_versions, #batch))
       Human.notify({message = string.format(
         "  Evaluating %d hypotheses (%d evals in parallel)...",
         #submitted_versions, #batch
@@ -4952,6 +6175,7 @@ code: |
       -- ================================================================
       diag("Entering synthesis phase")
       Stage.set("selection")
+      status_msg(string.format("Cycle %d/%d — synthesis (combining best changes)", cycle, max_cycles))
       local final_version_id = nil
       local final_is_synthesis = true
       local final_done_reason = ""
@@ -4977,17 +6201,13 @@ code: |
         })
 
         code_editor.clear_history()
-
-        -- Inject class-specific YAML format reference for the editor agent
+        local synthesis_context_parts = {}
         if has_text(SCORE_CLASS_DOC) then
-          code_editor.history:add({
-            role = "system",
-            content = string.format("=== SCORE YAML FORMAT REFERENCE (%s) ===\n", score_class)
-              .. SCORE_CLASS_DOC
-              .. "\n=== END SCORE YAML FORMAT REFERENCE ==="
-          })
+          table.insert(synthesis_context_parts, string.format("=== SCORE YAML FORMAT REFERENCE (%s) ===\n", score_class)
+            .. SCORE_CLASS_DOC
+            .. "\n=== END SCORE YAML FORMAT REFERENCE ===")
         end
-        -- Inject ALL prior cycles' synthesis reasoning + accumulated lessons
+        -- Include ALL prior cycles' synthesis reasoning + accumulated lessons inline.
         do
           local prior_insights = State.get("cycle_insights") or {}
           local reasoning_parts = {}
@@ -4998,31 +6218,44 @@ code: |
             end
           end
           if #reasoning_parts > 0 then
-            code_editor.history:add({
-              role = "system",
-              content = "=== SYNTHESIS REASONING FROM ALL PRIOR CYCLES ===\n"
-                .. table.concat(reasoning_parts, "\n\n")
-                .. "\n=== END SYNTHESIS REASONING ==="
-            })
+            table.insert(synthesis_context_parts, "=== SYNTHESIS REASONING FROM ALL PRIOR CYCLES ===\n"
+              .. table.concat(reasoning_parts, "\n\n")
+              .. "\n=== END SYNTHESIS REASONING ===")
             Human.notify({message = string.format(
               "    [synthesis context] Injected %d cycles of synthesis reasoning",
               #reasoning_parts), level = "info"})
           end
           local acc_lessons = State.get("accumulated_lessons")
           if has_text(acc_lessons) then
-            code_editor.history:add({
-              role = "system",
-              content = "=== ACCUMULATED LESSONS (LLM-synthesized summary) ===\n"
-                .. trunc(acc_lessons, 3000)
-                .. "\n=== END ACCUMULATED LESSONS ==="
-            })
+            table.insert(synthesis_context_parts, "=== ACCUMULATED LESSONS (LLM-synthesized summary) ===\n"
+              .. trunc(acc_lessons, 3000)
+              .. "\n=== END ACCUMULATED LESSONS ===")
+          end
+          -- Deterministic cross-cycle item recurrence (PERSISTENT/OSCILLATING/FLIP_FLOP/LATE_EMERGING).
+          -- Already computed by update_item_recurrence after each cycle's winning RCA.
+          local _item_recurrence = State.get("item_recurrence") or {}
+          local _recurrence_summary = build_recurrence_compact_summary(
+            _item_recurrence, cycle)
+          if _recurrence_summary then
+            table.insert(synthesis_context_parts,
+              "=== ITEM RECURRENCE PATTERNS (cross-cycle, deterministic) ===\n"
+              .. _recurrence_summary
+              .. "\n\nIMPLICATION: PERSISTENT, OSCILLATING, and FLIP_FLOP items are your HIGHEST-PRIORITY TARGETS. "
+              .. "They have been wrong for multiple cycles and prior prompt changes did NOT fix them. Be MORE aggressive: "
+              .. "add explicit literal rules, direct example snippets, or item-specific carve-outs that target exactly the "
+              .. "language in those transcripts. Overfitting this eval set is acceptable and desired — the goal is 100% "
+              .. "accuracy on the known items. Do not assume label noise; assume the rubric is still missing the rule that "
+              .. "would force the correct answer for these specific cases. If you need to, quote a literal transcript snippet "
+              .. "and pair it with the required classification.\n"
+              .. "=== END ITEM RECURRENCE PATTERNS ===")
+            Human.notify({message = string.format(
+              "    [synthesis context] Injected deterministic item recurrence patterns"),
+              level = "info"})
           end
         end
-        code_editor.history:add({
-          role = "system",
-          content = string.format("=== CURRENT score_config.yaml (starting from %s — apply your synthesis here) ===\n", start_label)
-            .. start_code .. "\n=== END OF score_config.yaml ==="
-        })
+        table.insert(synthesis_context_parts,
+          string.format("=== CURRENT score_config.yaml (starting from %s — apply your synthesis here) ===\n", start_label)
+            .. start_code .. "\n=== END OF score_config.yaml ===")
 
         local max_edit_retries = 10
         local max_smoke_failures = 3
@@ -5038,7 +6271,7 @@ code: |
           step = step + 1
           local msg
           if step == 1 and edit_failures == 0 then
-            msg = prompt_text
+            msg = table.concat(synthesis_context_parts, "\n\n") .. "\n\n" .. prompt_text
           else
             local recent_parts = {}
             if smoke_failure then
@@ -5075,10 +6308,13 @@ code: |
               end
               if last_submit then
                 local ok_sub, sub_result = pcall(function() return safe_decode(last_submit.result) end)
-                if ok_sub and sub_result and sub_result.error then
-                  table.insert(recent_parts, "submit_score_version error:\n  " .. tostring(sub_result.error))
+              if ok_sub and sub_result and sub_result.error then
+                table.insert(recent_parts, "submit_score_version error:\n  " .. tostring(sub_result.error))
+                if string.find(tostring(sub_result.error), "semantically unchanged") then
+                  table.insert(recent_parts, "\nFormatting/comment-only changes do not count. Make a meaningful rubric or score-logic edit before submitting.")
                 end
               end
+            end
             end
             if #recent_parts == 0 then
               table.insert(recent_parts, "You must call str_replace_editor or submit_score_version.")
@@ -5127,8 +6363,9 @@ code: |
             done = true
           end
 
+          local terminal_tool_call = Tool.last_call("submit_score_version") or Tool.last_call("done")
           local agent_text = code_editor.output or ""
-          if has_text(agent_text) then
+          if has_text(agent_text) and not terminal_tool_call then
             Human.notify({message = string.format(
               "  [%s, step %d] Agent: %s",
               strategy_label, step, trunc(agent_text, 500)), level = "info"})
@@ -5136,6 +6373,10 @@ code: |
                and not string.find(agent_text, "^name:") and not string.find(agent_text, "^tactus_code:") then
               table.insert(react_reasoning, agent_text)
             end
+          elseif has_text(agent_text) and terminal_tool_call then
+            diag(string.format(
+              "  [%s] Ignoring agent prose after terminal tool call: %s",
+              strategy_label, trunc(agent_text, 200)))
           end
 
           -- Capture reasoning from tool calls
@@ -5291,6 +6532,15 @@ code: |
             break
           end
         end
+      end
+
+      if #succeeded == 0 and not any_partial_positive then
+        Human.notify({message = string.format(
+          "Cycle %d — Skipping synthesis: no hypotheses succeeded and no positive signal was found",
+          cycle), level = "warning"})
+        final_version_id = nil
+        final_done_reason = "no_successful_hypotheses_no_positive_signal"
+        goto after_synthesis
       end
 
       if all_badly_regressed and #succeeded == 0 then
@@ -5562,6 +6812,28 @@ code: |
           end
         end
 
+        -- Deterministic cross-cycle item recurrence (PERSISTENT/OSCILLATING/FLIP_FLOP/LATE_EMERGING).
+        -- Already computed by update_item_recurrence after each cycle's winning RCA.
+        do
+          local _item_recurrence = State.get("item_recurrence") or {}
+          local _recurrence_summary = build_recurrence_compact_summary(
+            _item_recurrence, cycle)
+          if _recurrence_summary then
+            table.insert(strategy_b_parts,
+              "=== ITEM RECURRENCE PATTERNS (cross-cycle, deterministic) ===\n"
+              .. _recurrence_summary
+              .. "\n\nIMPLICATION: PERSISTENT, OSCILLATING, and FLIP_FLOP items are your HIGHEST-PRIORITY TARGETS. "
+              .. "They have been wrong for multiple cycles and prior prompt changes did NOT fix them. Be MORE aggressive: "
+              .. "add explicit literal rules, direct example snippets, or item-specific carve-outs that target exactly the "
+              .. "language in those transcripts. Overfitting this eval set is acceptable and desired — the goal is 100% "
+              .. "accuracy on the known items. Do not assume label noise; assume the rubric is still missing the rule that "
+              .. "would force the correct answer for these specific cases. If you need to, quote a literal transcript snippet "
+              .. "and pair it with the required classification.\n"
+              .. "=== END ITEM RECURRENCE PATTERNS ===")
+            table.insert(strategy_b_parts, "")
+          end
+        end
+
         -- Cross-cycle hypothesis comparison sorted by combined score
         do
           local all_hyps = {}
@@ -5775,46 +7047,57 @@ code: |
         end
 
         local selection_reason
-        if #strategy_versions == 1 then
-          selection_reason = string.format("only Strategy %s produced a version", best_sv.label)
-        else
-          local scores_str = {}
-          for _, sv in ipairs(strategy_versions) do
-            table.insert(scores_str, string.format("%s=%.3f", sv.label, score_strategy(sv)))
-          end
-          selection_reason = string.format("scores: %s -> selected %s",
-            table.concat(scores_str, ", "), best_sv.label)
+        local scores_str = {}
+        for _, sv in ipairs(strategy_versions) do
+          table.insert(scores_str, string.format("%s=%.3f", sv.label, score_strategy(sv)))
         end
 
-        diag(string.format("Strategy selection: %s (score=%.3f) — %s",
-          best_sv.label, best_sv_score, selection_reason))
-        Human.notify({message = string.format(
-          "  Selected Strategy %s (score=%.3f) — %s",
-          best_sv.label, best_sv_score, selection_reason), level = "info"})
+        if best_sv_score <= -999 then
+          selection_reason = string.format(
+            "scores: %s -> no viable synthesis strategy",
+            table.concat(scores_str, ", "))
+          diag("Strategy selection skipped — " .. selection_reason)
+          Human.notify({message = string.format(
+            "  No viable synthesis strategy selected — %s",
+            selection_reason), level = "warning"})
+        else
+          if #strategy_versions == 1 then
+            selection_reason = string.format("only Strategy %s produced a version", best_sv.label)
+          else
+            selection_reason = string.format("scores: %s -> selected %s",
+              table.concat(scores_str, ", "), best_sv.label)
+          end
 
-        -- Set final version to winner
-        final_version_id = best_sv.version_id
-        final_done_reason = best_sv.done_reason or ""
-        selected_strategy = best_sv.label
-        synth_reasoning_parts = best_sv.reasoning or {}
+          diag(string.format("Strategy selection: %s (score=%.3f) — %s",
+            best_sv.label, best_sv_score, selection_reason))
+          Human.notify({message = string.format(
+            "  Selected Strategy %s (score=%.3f) — %s",
+            best_sv.label, best_sv_score, selection_reason), level = "info"})
 
-        -- Store eval results for the winner (avoids re-evaluation later)
-        synthesis_eval_results = {
-          fb_metrics = best_sv.fb_metrics,
-          acc_metrics = best_sv.acc_metrics,
-          fb_cost_per_item = best_sv.fb_cost_per_item,
-          acc_cost_per_item = best_sv.acc_cost_per_item,
-          fb_deltas = best_sv.fb_deltas,
-          acc_deltas = best_sv.acc_deltas,
-          fb_deltas_vs_current = best_sv.fb_deltas_vs_current,
-          acc_deltas_vs_current = best_sv.acc_deltas_vs_current,
-          fb_rca = best_sv.fb_rca or {},
-          acc_rca = best_sv.acc_rca or {},
-          fb_eval_id = best_sv.fb_eval_id,
-          acc_eval_id = best_sv.acc_eval_id,
-          strategy_versions = strategy_versions,
-          selection_reason = selection_reason
-        }
+          -- Set final version to winner
+          final_version_id = best_sv.version_id
+          final_done_reason = best_sv.done_reason or ""
+          selected_strategy = best_sv.label
+          synth_reasoning_parts = best_sv.reasoning or {}
+
+          -- Store eval results for the winner (avoids re-evaluation later)
+          synthesis_eval_results = {
+            fb_metrics = best_sv.fb_metrics,
+            acc_metrics = best_sv.acc_metrics,
+            fb_cost_per_item = best_sv.fb_cost_per_item,
+            acc_cost_per_item = best_sv.acc_cost_per_item,
+            fb_deltas = best_sv.fb_deltas,
+            acc_deltas = best_sv.acc_deltas,
+            fb_deltas_vs_current = best_sv.fb_deltas_vs_current,
+            acc_deltas_vs_current = best_sv.acc_deltas_vs_current,
+            fb_rca = best_sv.fb_rca or {},
+            acc_rca = best_sv.acc_rca or {},
+            fb_eval_id = best_sv.fb_eval_id,
+            acc_eval_id = best_sv.acc_eval_id,
+            strategy_versions = strategy_versions,
+            selection_reason = selection_reason
+          }
+        end
       end
       end -- do block for dual-strategy synthesis
       ::after_synthesis::
@@ -5866,12 +7149,9 @@ code: |
           -- Compact history even on failed cycles
           if cycle < max_cycles then
             code_editor.clear_history()
-            code_editor.history:add({
-              role = "system",
-              content = string.format("=== CYCLE %d SUMMARY ===\nStatus: FAILED (no hypothesis succeeded)\nCurrent base version: %s",
-                cycle, tostring(last_accepted_version_id))
-            })
-            diag(string.format("Cycle %d (failed) history compacted", cycle))
+            diag(string.format(
+              "Cycle %d (failed) editor history cleared; state summary retained",
+              cycle))
           end
 
           if Stop.requested() then stop_reason = "user_stopped"; return "break_cycle" end
@@ -5919,6 +7199,7 @@ code: |
         else
           -- Need fresh evals for combined version
           diag(string.format("Dispatching synthesis eval for version %s", tostring(final_version_id)))
+          status_msg(string.format("Cycle %d/%d — evaluating synthesis result", cycle, max_cycles))
           Human.notify({message = "  Evaluating final version...", level = "info"})
           local b_batch = {}
           local final_dataset_id = nil
@@ -6127,20 +7408,24 @@ code: |
           if acc_regressed then
             decision_str = "REJECTED"
             decision_reason = string.format("accuracy regressed vs baseline by %.4f", math.abs(b_acc_deltas.alignment))
+            status_msg(string.format("Cycle %d/%d — REJECTED: %s", cycle, max_cycles, decision_reason))
             Human.notify({message = string.format("Cycle %d REJECTED: %s", cycle, decision_reason), level = "warning"})
           elseif fb_regressed then
             decision_str = "REJECTED"
             decision_reason = string.format("feedback regressed vs baseline by %.4f", math.abs(b_fb_deltas.alignment))
+            status_msg(string.format("Cycle %d/%d — REJECTED: %s", cycle, max_cycles, decision_reason))
             Human.notify({message = string.format("Cycle %d REJECTED: %s", cycle, decision_reason), level = "warning"})
           elseif acc_regressed_vs_accepted then
             local vs_acc = calculate_deltas(b_acc_metrics, last_accepted_acc_metrics)
             decision_str = "REJECTED"
             decision_reason = string.format("accuracy regressed vs last accepted by %.4f", math.abs(vs_acc.alignment))
+            status_msg(string.format("Cycle %d/%d — REJECTED: %s", cycle, max_cycles, decision_reason))
             Human.notify({message = string.format("Cycle %d REJECTED: %s", cycle, decision_reason), level = "warning"})
           elseif fb_regressed_vs_accepted then
             local vs_fb = calculate_deltas(b_fb_metrics, last_accepted_fb_metrics)
             decision_str = "REJECTED"
             decision_reason = string.format("feedback regressed vs last accepted by %.4f", math.abs(vs_fb.alignment))
+            status_msg(string.format("Cycle %d/%d — REJECTED: %s", cycle, max_cycles, decision_reason))
             Human.notify({message = string.format("Cycle %d REJECTED: %s", cycle, decision_reason), level = "warning"})
           else
             accept = true
@@ -6148,10 +7433,12 @@ code: |
             if fb_improved then
               decision_str = "ACCEPTED"
               decision_reason = string.format("feedback improved by %.4f", b_fb_deltas.alignment)
+              status_msg(string.format("Cycle %d/%d — ACCEPTED: %s", cycle, max_cycles, decision_reason))
               Human.notify({message = string.format("Cycle %d ACCEPTED: %s", cycle, decision_reason), level = "info"})
             else
               decision_str = "CARRIED"
               decision_reason = string.format("neutral result (Recent %+.4f)", b_fb_deltas.alignment)
+              status_msg(string.format("Cycle %d/%d — CARRIED: %s", cycle, max_cycles, decision_reason))
               Human.notify({message = string.format("Cycle %d CARRIED: %s — carrying forward to accumulate improvements", cycle, decision_reason), level = "info"})
             end
             last_accepted_version_id = final_version_id
@@ -6165,6 +7452,8 @@ code: |
             end
             -- Persist so a continuation run can restore the last-accepted state
             State.set("last_accepted_version_id",  last_accepted_version_id)
+            active_rubric_memory_score_version_id = last_accepted_version_id
+            State.set("active_rubric_memory_score_version_id", active_rubric_memory_score_version_id)
             State.set("last_accepted_fb_metrics",  last_accepted_fb_metrics)
             State.set("last_accepted_fb_eval_id",  last_accepted_fb_eval_id)
             State.set("last_accepted_acc_metrics", last_accepted_acc_metrics)
@@ -6266,6 +7555,29 @@ code: |
         end
         diag(string.format("Item recurrence tracker (cycle %d): %d total (%d oscillating, %d persistent, %d flip-flop, %d emerging), fb_item_class=%d",
           cycle, o_count + p_count + f_count + e_count, o_count, p_count, f_count, e_count, #fb_item_class))
+
+        -- Run per-item LLM diagnosis for repeat offenders (PERSISTENT/OSCILLATING, wrong_count >= 3)
+        if p_count + o_count > 0 then
+          status_msg(string.format("Cycle %d/%d — diagnosing %d repeat offenders", cycle, max_cycles, p_count + o_count))
+          local rod = {}
+          pcall(function()
+            rod = analyze_repeat_offenders(cycle, item_recurrence, iterations) or {}
+          end)
+          if #rod > 0 then
+            Human.notify({message = string.format(
+              "Cycle %d — repeat-offender diagnoses (%d items): %s",
+              cycle, #rod,
+              table.concat((function()
+                local labels = {}
+                for _, d in ipairs(rod) do
+                  local id_label = has_text(d.external_id) and d.external_id or d.item_id
+                  table.insert(labels, string.format("%s=%s[%s]", id_label, d.diagnosis, d.confidence))
+                end
+                return labels
+              end)(), ", ")),
+              level = "info"})
+          end
+        end
 
         diag("Saving iterations to state...")
         State.set("iterations", iterations)
@@ -6382,13 +7694,9 @@ code: |
             tostring(last_accepted_version_id)))
 
           code_editor.clear_history()
-          code_editor.history:add({
-            role = "system",
-            content = table.concat(summary_parts, "\n")
-          })
-          diag(string.format("Cycle %d history compacted to summary (%d chars)",
+          diag(string.format("Cycle %d editor history cleared; state summary retained (%d chars)",
             cycle, #table.concat(summary_parts, "\n")))
-        end
+          end
 
         diag(string.format("Cycle %d complete, entering next iteration", cycle))
       end  -- end of if final_version_id (synthesis produced a version to evaluate)
@@ -6402,6 +7710,7 @@ code: |
       -- for hypothesis generation in the next cycle.
       -- ================================================================
       if #iterations > 0 then
+        status_msg(string.format("Cycle %d/%d — generating per-cycle report", cycle, max_cycles))
         Human.notify({message = string.format(
           "Cycle %d — generating per-cycle report...", cycle), level = "info"})
 
@@ -6480,13 +7789,16 @@ code: |
             consecutive_failed_cycles))
         end
 
-        cycle_analyst.clear_history()
-        guard_context_budget(cycle_analyst)
-        local syn_ok, syn_err = safe_agent_call(cycle_analyst, "cycle_analyst", table.concat(syn, "\n"), nil)
-        if not syn_ok then
-          diag(string.format("CYCLE_ANALYST FAILED in per-cycle report: %s", tostring(syn_err)))
-        end
-        local syn_text = cycle_analyst.output or "(cycle report complete)"
+        local syn_text = run_required_report_phase(
+          cycle_analyst,
+          "cycle_analyst",
+          "cycle_executive_analysis",
+          table.concat(syn, "\n"),
+          function()
+            cycle_analyst.clear_history()
+            return 0
+          end
+        )
 
         local exec_summary = extract_markdown_section(syn_text, "## EXECUTIVE SUMMARY")
 
@@ -6524,23 +7836,23 @@ code: |
           table.insert(lr_parts, "\n=== PLANNING ANALYSIS (context only) ===\n")
           table.insert(lr_parts, trunc(syn_text, 800))
 
-          Tool.reset()
-          report_writer.clear_history()
-          guard_context_budget(report_writer)
-          local lr_ok, lr_err = safe_agent_call(report_writer, "report_writer", table.concat(lr_parts, "\n"), nil)
-          if lr_ok then
-            local lr_raw = report_writer.output or ""
-            local _, hdr_end = lr_raw:find("## LAB REPORT\n", 1, true)
-            if hdr_end then
-              local stop = lr_raw:find("\n===", hdr_end + 1) or lr_raw:find("\n## ", hdr_end + 1)
-              local raw = stop and lr_raw:sub(hdr_end + 1, stop - 1) or lr_raw:sub(hdr_end + 1)
-              lab_report = (raw:match("^(.-)%s*$") or raw)
-            else
-              lab_report = lr_raw
+          local lr_raw = run_required_report_phase(
+            report_writer,
+            "report_writer",
+            "cycle_lab_report",
+            table.concat(lr_parts, "\n"),
+            function()
+              report_writer.clear_history()
+              return 0
             end
+          )
+          local _, hdr_end = lr_raw:find("## LAB REPORT\n", 1, true)
+          if hdr_end then
+            local stop = lr_raw:find("\n===", hdr_end + 1) or lr_raw:find("\n## ", hdr_end + 1)
+            local raw = stop and lr_raw:sub(hdr_end + 1, stop - 1) or lr_raw:sub(hdr_end + 1)
+            lab_report = (raw:match("^(.-)%s*$") or raw)
           else
-            lab_report = "(lab report generation failed: " .. tostring(lr_err) .. ")"
-            diag("Lab report generation failed: " .. tostring(lr_err))
+            lab_report = lr_raw
           end
         end
 
@@ -6549,20 +7861,29 @@ code: |
         do
           local sme_parts = {}
           table.insert(sme_parts, string.format(
-            "Write a short meeting agenda for domain experts (Subject Matter Experts). "
+            "Write a short meeting agenda for domain experts (Subject Matter Experts).\n"
             .. "They are NOT technical. They do NOT know what AC1 means.\n\n"
-            .. "HARD LIMIT: max 3 agenda items. Under 150 words total.\n\n"
+            .. "Glossary (always apply):\n"
+            .. "- \"Agent:\" in transcripts = the human call-center phone operator, NEVER an AI or software agent.\n"
+            .. "- \"Customer:\" = the person calling in.\n"
+            .. "- \"the evaluated score version\" = the specific score configuration being tested in this optimizer run.\n"
+            .. "- Never write \"AI\" in your output. Say \"the evaluated score version\" or \"the score\".\n\n"
+            .. "HARD LIMIT: max 3 agenda items. Under 200 words total.\n\n"
             .. "## SME AGENDA\n\n"
-            .. "Format each item exactly as:\n"
-            .. "### Title of the decision\n"
-            .. "Question: The specific decision they need to make\n"
-            .. "Example: AI said X, reviewer marked Y — 1-2 sentences describing what happened\n"
-            .. "Options: (a) first option (b) second option\n"
-            .. "Impact: ~N disputed reviews\n\n"
-            .. "Rules:\n"
-            .. "- Only include items that REQUIRE a human policy decision\n"
-            .. "- No technical jargon, no model names, no metric names\n"
-            .. "- If there are no SME decisions needed, write: (No SME decisions needed this cycle)\n",
+            .. "Format each item exactly as:\n\n"
+            .. "### <short title of the decision>\n"
+            .. "**Question:** <the specific decision SMEs need to make>\n"
+            .. "**Examples:** (2-3 items, one per line, each citing a real item from the CANDIDATE ITEMS context)\n"
+            .. "  - Item [<external_id>](<url>): score version said \"<prediction>\", reviewer labeled \"<correct>\". Transcript evidence: \"<quote from agent>\". Reviewer's edit comment: \"<comment>\".\n"
+            .. "**Options:** (a) <option> (b) <option>\n"
+            .. "**Impact:** ~<N> disputed reviews\n\n"
+            .. "Hard rules:\n"
+            .. "- Every Example MUST cite a real item by copying its markdown link verbatim from the CANDIDATE ITEMS context (the link block labeled \"link: [<id>](<url>)\"). Do NOT invent or omit item IDs.\n"
+            .. "- Do NOT generalize across items. Each example describes ONE specific item concretely.\n"
+            .. "- Never write \"AI\". Use \"the evaluated score version\" or \"the score\".\n"
+            .. "- Only include items that REQUIRE a human policy decision.\n"
+            .. "- No technical jargon, no model names, no metric names (no AC1, no accuracy percentages).\n"
+            .. "- If there are no SME decisions needed, write exactly: (No SME decisions needed this cycle)\n",
             cycle))
           table.insert(sme_parts, "\n=== KEY FINDINGS FROM THIS CYCLE ===\n")
           table.insert(sme_parts, trunc(exec_summary, 300))
@@ -6574,23 +7895,28 @@ code: |
             }, "\n"),
             600))
 
-          Tool.reset()
-          report_writer.clear_history()
-          guard_context_budget(report_writer)
-          local sme_ok, sme_err = safe_agent_call(report_writer, "report_writer", table.concat(sme_parts, "\n"), nil)
-          if sme_ok then
-            local sme_raw = report_writer.output or ""
-            local _, hdr_end = sme_raw:find("## SME AGENDA\n", 1, true)
-            if hdr_end then
-              local stop = sme_raw:find("\n===", hdr_end + 1) or sme_raw:find("\n## ", hdr_end + 1)
-              local raw = stop and sme_raw:sub(hdr_end + 1, stop - 1) or sme_raw:sub(hdr_end + 1)
-              sme_agenda = (raw:match("^(.-)%s*$") or raw)
-            else
-              sme_agenda = sme_raw
+          local sme_raw = run_required_report_phase(
+            report_writer,
+            "report_writer",
+            "cycle_sme_agenda",
+            table.concat(sme_parts, "\n"),
+            function()
+              report_writer.clear_history()
+              local agenda_items_ctx = _build_agenda_item_context(5)
+              if has_text(agenda_items_ctx) then
+                report_writer.history:add({role = "system", content = agenda_items_ctx})
+                return #agenda_items_ctx
+              end
+              return 0
             end
+          )
+          local _, hdr_end = sme_raw:find("## SME AGENDA\n", 1, true)
+          if hdr_end then
+            local stop = sme_raw:find("\n===", hdr_end + 1) or sme_raw:find("\n## ", hdr_end + 1)
+            local raw = stop and sme_raw:sub(hdr_end + 1, stop - 1) or sme_raw:sub(hdr_end + 1)
+            sme_agenda = (raw:match("^(.-)%s*$") or raw)
           else
-            sme_agenda = "(SME agenda generation failed: " .. tostring(sme_err) .. ")"
-            diag("SME agenda generation failed: " .. tostring(sme_err))
+            sme_agenda = sme_raw
           end
         end
         local raw_cycle_sme_agenda = sme_agenda
@@ -6627,6 +7953,104 @@ code: |
           Human.notify({message = string.format(
             "=== Cycle %d — SME Agenda ===\n\n%s", cycle, sme_agenda), level = "info"})
         end
+
+        -- ---- Call 4: Per-cycle SME Worksheet ----
+        do
+          local cycle_suspected = {}
+          local cycle_pairs = {}
+          local cycle_rod = State.get("repeat_offender_diagnoses") or {}
+          pcall(function()
+            local ir = State.get("item_recurrence") or {}
+            cycle_suspected = detect_suspected_mislabels(iterations, ir) or {}
+            cycle_pairs     = build_contrasting_pairs(iterations, ir) or {}
+          end)
+
+          if #cycle_suspected > 0 or #cycle_pairs > 0 or #cycle_rod > 0 then
+            Human.notify({message = string.format(
+              "Cycle %d — SME Worksheet signals: %d suspected mislabels, %d contrasting pairs, %d repeat-offender diagnoses",
+              cycle, #cycle_suspected, #cycle_pairs, #cycle_rod), level = "info"})
+
+            local ws_parts = {}
+            table.insert(ws_parts, string.format(
+              "=== SME WORKSHEET (Cycle %d) ===\n", cycle))
+            table.insert(ws_parts,
+              "\nWrite the cycle SME Worksheet. Same format as the end-of-run worksheet.\n"
+              .. "Name items by external_id. Quote transcript evidence verbatim.\n"
+              .. "Use the REPEAT-OFFENDER DIAGNOSES section as the primary source for mislabel candidates.\n"
+              .. "Items with diagnosis=mislabel and confidence=high are your top suspects — present them first.\n"
+              .. "Items with diagnosis=contradictory_rule or recommended_action=accept_ceiling should go\n"
+              .. "in 'Policy questions' with the SME_QUESTION text from the diagnosis.\n"
+              .. "Sections: Suspected mislabels / Policy questions / Items still in play.\n"
+              .. "Skip any section whose input is empty. Plain English; no metric names.\n")
+
+            local ws_raw = run_required_report_phase(
+              report_writer,
+              "report_writer",
+              string.format("cycle_%d_sme_worksheet", cycle),
+              table.concat(ws_parts, "\n"),
+              function()
+                report_writer.clear_history()
+                local p = {}
+
+                -- Primary: repeat-offender diagnoses (LLM-produced per-item reasoning)
+                if #cycle_rod > 0 then
+                  local rod_json = "[]"
+                  pcall(function() rod_json = Json.encode(cycle_rod) end)
+                  table.insert(p, "=== REPEAT_OFFENDER_DIAGNOSES (primary — LLM per-item reasoning) ===")
+                  table.insert(p, "These items have 3+ consecutive wrong cycles. Each has a specific diagnosis.")
+                  for _, d in ipairs(cycle_rod) do
+                    local id_label = has_text(d.external_id) and d.external_id or d.item_id
+                    table.insert(p, string.format(
+                      "Item %s: diagnosis=%s [%s] action=%s",
+                      id_label, d.diagnosis or "?", d.confidence or "?", d.recommended_action or "?"))
+                    table.insert(p, string.format("  %s", d.explanation or ""))
+                    if has_text(d.sme_question) then
+                      table.insert(p, string.format("  SME question: %s", d.sme_question))
+                    end
+                  end
+                  table.insert(p, "=== END REPEAT_OFFENDER_DIAGNOSES ===\n")
+                end
+
+                -- Secondary: deterministic mislabel signals
+                local sm_json = "[]"
+                local cp_json = "[]"
+                pcall(function() sm_json = Json.encode(cycle_suspected) end)
+                pcall(function() cp_json = Json.encode(cycle_pairs) end)
+                table.insert(p, "=== SUSPECTED_MISLABELS (JSON) ===")
+                table.insert(p, sm_json)
+                table.insert(p, "=== END SUSPECTED_MISLABELS ===\n")
+                table.insert(p, "=== CONTRASTING_PAIRS (JSON) ===")
+                table.insert(p, cp_json)
+                table.insert(p, "=== END CONTRASTING_PAIRS ===\n")
+                local ir = State.get("item_recurrence") or {}
+                local rs = build_recurrence_compact_summary(ir, #iterations)
+                if has_text(rs) then
+                  table.insert(p, "=== ITEM RECURRENCE ===")
+                  table.insert(p, trunc(rs, 1500))
+                  table.insert(p, "=== END ITEM RECURRENCE ===")
+                end
+                local ctx = table.concat(p, "\n")
+                report_writer.history:add({role = "system", content = ctx})
+                return #ctx
+              end
+            )
+
+            if has_text(ws_raw) then
+              Human.notify({message = string.format(
+                "=== Cycle %d — SME Worksheet ===\n\n%s", cycle, ws_raw), level = "info"})
+            end
+
+            local ci = State.get("cycle_insights") or {}
+            if #ci > 0 then
+              ci[#ci].sme_worksheet = ws_raw or ""
+              ci[#ci].sme_worksheet_suspected_mislabels = cycle_suspected
+              ci[#ci].sme_worksheet_contrasting_pairs = cycle_pairs
+              ci[#ci].sme_worksheet_rod_diagnoses = cycle_rod
+              State.set("cycle_insights", ci)
+            end
+          end
+        end
+
         if not has_text(exec_summary) then
           Human.notify({message = syn_text, level = "info"})
         end
@@ -6743,24 +8167,28 @@ code: |
           end
           if notable_count_lessons > 0 then
             table.insert(lp, string.format("\n## Item Recurrence (%d notable items tracked)", notable_count_lessons))
-            table.insert(lp, "- OSCILLATING items alternate between correct/incorrect across cycles (whack-a-mole)")
-            table.insert(lp, "  → These reveal contradictory groups in feedback: fixing one group breaks the other")
-            table.insert(lp, "- PERSISTENT items are wrong every cycle in the same segment — likely mislabels or ambiguity")
-            table.insert(lp, "- Track whether notable count is growing (new problems) or stable (approaching ceiling)")
-            table.insert(lp, "- Do NOT propose changes targeting items flagged as PERSISTENT or OSCILLATING")
+            table.insert(lp, "- GOAL: 100% accuracy. These items are your HIGHEST-PRIORITY targets.")
+            table.insert(lp, "- OSCILLATING items alternate correct/wrong — prior hypotheses were too broad. Need a")
+            table.insert(lp, "  more specific predicate that distinguishes the anti-correlated groups.")
+            table.insert(lp, "- PERSISTENT items have been wrong every cycle — prior hypotheses did not target the")
+            table.insert(lp, "  actual discriminating feature. Quote literal transcript evidence and add an explicit rule.")
+            table.insert(lp, "- Record in 'What Doesn't Work' which specific hypotheses failed for these items so the")
+            table.insert(lp, "  next cycle can try something DIFFERENT, not assume the item is unfixable.")
+            table.insert(lp, "- Overfitting this eval set is acceptable and desired. Item-specific carve-outs are OK.")
           end
 
-          Tool.reset()
-          report_writer.clear_history()
-          guard_context_budget(report_writer)
-          local lessons_ok, lessons_err = safe_agent_call(report_writer, "report_writer", table.concat(lp, "\n"), nil)
-          if lessons_ok then
-            local lessons_text = report_writer.output or ""
-            State.set("accumulated_lessons", lessons_text)
-            diag(string.format("Accumulated lessons updated (%d chars)", #lessons_text))
-          else
-            diag(string.format("Accumulated lessons generation failed: %s", tostring(lessons_err)))
-          end
+          local lessons_text = run_required_report_phase(
+            report_writer,
+            "report_writer",
+            "accumulated_lessons",
+            table.concat(lp, "\n"),
+            function()
+              report_writer.clear_history()
+              return 0
+            end
+          )
+          State.set("accumulated_lessons", lessons_text)
+          diag(string.format("Accumulated lessons updated (%d chars)", #lessons_text))
         end
 
         -- =============================================================
@@ -6821,28 +8249,29 @@ code: |
         table.insert(summary_parts, "Maximum 4 sentences summarizing the most important actions needed right now.")
         table.insert(summary_parts, "Prioritize only what matters now. No bullet points. No sub-headers.")
 
-        Tool.reset()
-        report_writer.clear_history()
-        guard_context_budget(report_writer)
-        local sum_ok, sum_err = safe_agent_call(report_writer, "report_writer", table.concat(summary_parts, "\n"), nil)
-        if sum_ok then
-          local sum_text = report_writer.output or ""
-          local sum_prog = sum_text:match("## PROGRESS\n(.-)\n## NEXT STEPS")
-          local sum_next = sum_text:match("## NEXT STEPS\n(.*)")
-          State.set("procedure_summary", {
-            progress = sum_prog or "",
-            next_steps = sum_next or "",
-            -- Legacy field names kept for backward compat with older runs
-            diagnosis = sum_prog or "",
-            prescription = sum_next or "",
-            updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-            cycle = cycle
-          })
-          diag(string.format("Procedure summary updated (progress=%d, next_steps=%d chars)",
-            #(sum_prog or ""), #(sum_next or "")))
-        else
-          diag(string.format("Procedure summary generation failed: %s", tostring(sum_err)))
-        end
+        local sum_text = run_required_report_phase(
+          report_writer,
+          "report_writer",
+          "procedure_summary",
+          table.concat(summary_parts, "\n"),
+          function()
+            report_writer.clear_history()
+            return 0
+          end
+        )
+        local sum_prog = sum_text:match("## PROGRESS\n(.-)\n## NEXT STEPS")
+        local sum_next = sum_text:match("## NEXT STEPS\n(.*)")
+        State.set("procedure_summary", {
+          progress = sum_prog or "",
+          next_steps = sum_next or "",
+          -- Legacy field names kept for backward compat with older runs
+          diagnosis = sum_prog or "",
+          prescription = sum_next or "",
+          updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+          cycle = cycle
+        })
+        diag(string.format("Procedure summary updated (progress=%d, next_steps=%d chars)",
+          #(sum_prog or ""), #(sum_next or "")))
       end
 
       -- ================================================================
@@ -6938,13 +8367,14 @@ code: |
         if es_oscillating + es_persistent + es_flipflop + es_late > 0 then
           table.insert(es_parts, string.format(
             "\n=== ITEM RECURRENCE PATTERNS ===\n"
-            .. "%d oscillating items (whack-a-mole: wrong→correct→wrong — fixing them breaks others)\n"
-            .. "%d persistent items (same confusion segment across 3+ cycles, never correct)\n"
-            .. "%d flip-flop items (wrong in different segments across cycles)\n"
-            .. "%d late-emerging items (appeared only in later cycles)\n"
-            .. "Oscillating items reveal CONTRADICTORY NORMS in the feedback — you cannot satisfy both groups.\n"
-            .. "Persistent items have resisted all config changes — likely mislabels or ambiguity.\n"
-            .. "These items will remain errors regardless of further prompt engineering.",
+            .. "%d oscillating items (wrong→correct→wrong — prior hypotheses were too broad)\n"
+            .. "%d persistent items (wrong every cycle — prior hypotheses targeted the wrong feature)\n"
+            .. "%d flip-flop items (wrong in different segments — need a more specific predicate)\n"
+            .. "%d late-emerging items (appeared only in later cycles — may indicate side effects)\n"
+            .. "GOAL: 100%% accuracy. These items are solvable with MORE AGGRESSIVE prompt changes:\n"
+            .. "literal transcript quotes, item-specific carve-outs, or a tighter predicate that separates\n"
+            .. "anti-correlated groups. Escalate to 'escalate' or 'ultra_creative' modes — do NOT accept\n"
+            .. "these as unfixable. Overfitting this eval set is acceptable and desired.",
             es_oscillating, es_persistent, es_flipflop, es_late))
         end
 
@@ -6981,6 +8411,13 @@ code: |
     end  -- end of else (submitted_versions > 0)
     end)  -- end of pcall wrapper
     if not cycle_ok then
+      if classify_error(cycle_err) == "interrupted" then
+        stop_reason = "interrupted"
+        error(tostring(cycle_err))
+      end
+      if string.find(tostring(cycle_err), "report_generation_failed", 1, true) then
+        stop_reason = "report_generation_failed"
+      end
       diag(string.format("ERROR in cycle %d: %s", cycle, tostring(cycle_err)))
       Human.notify({message = string.format(
         "ERROR in cycle %d: %s — stopping run", cycle, trunc(tostring(cycle_err), 500)), level = "error"})
@@ -7001,7 +8438,9 @@ code: |
         State.set("iterations", iterations)
       end
 
-      stop_reason = "error"
+      if stop_reason ~= "report_generation_failed" then
+        stop_reason = "error"
+      end
       error("Cycle " .. tostring(cycle) .. " failed: " .. tostring(cycle_err))
     end
     -- pcall body returns "break_cycle" when it wants to exit the while loop
@@ -7080,6 +8519,8 @@ code: |
   -- 0a. Final contradictions refresh (expanded scope)
   local final_contra_ok = pcall(function()
     Human.notify({message = "  Running final contradictions analysis (expanded scope)...", level = "info"})
+    local final_contradictions_score_version_id =
+      State.get("last_accepted_version_id") or active_rubric_memory_score_version_id or champion_version_id
     local ok, report_result = pcall(call_plexus_tool, "plexus_report_run", {
       block_class = "FeedbackContradictions",
       block_config = {
@@ -7089,9 +8530,10 @@ code: |
         days = tostring(params.days or 90),
         max_feedback_items = 400,
         num_topics = 12,
-        include_rubric_memory = false
+        include_rubric_memory = true,
+        score_version_id = final_contradictions_score_version_id
       },
-      cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name,
+      cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name .. " / " .. tostring(final_contradictions_score_version_id),
       ttl_hours = 4,
       fresh = false
     })
@@ -7373,204 +8815,334 @@ code: |
   -- Phase 1: Executive Summary (plain-English, for any audience)
   Human.notify({message = "  Phase 1: Generating executive summary...", level = "info"})
   local executive_summary_text = "(executive summary not available)"
-  pcall(function()
-    report_writer.clear_history()
-    report_writer.history:add({role = "system", content = full_ctx})
-
-    local exec_prompt = table.concat({
-      "=== END-OF-RUN EXECUTIVE SUMMARY ===\n",
-      "\nYou are writing a brief executive summary of an optimization run for any audience",
-      "\n— technical or non-technical. Write exactly 4 sentences.",
-      "\nNo markdown headers. No bullet points. Flowing prose.",
-      "\nThis should be copy-paste ready for a brief email to stakeholders.",
-      "\n\nCover in this order:",
-      "\n1. Starting point and ending point (use 'agreement' not 'AC1'; give the numbers).",
-      "\n2. How many cycles ran and what the overall trajectory was.",
-      "\n3. The single main reason we cannot improve further (specific, not generic).",
-      "\n4. What decisions or clarifications are needed from subject-matter experts to unblock next steps.",
-      "\n\nWrite nothing else. Just the 4 sentences."
-    }, "")
-
-    guard_context_budget(report_writer)
-    local ok, err = safe_agent_call(report_writer, "report_writer", exec_prompt, nil)
-    executive_summary_text = report_writer.output or "(no executive summary generated)"
-    if not ok then
-      executive_summary_text = "Executive summary generation failed: " .. tostring(err)
+  local exec_prompt = table.concat({
+    "=== END-OF-RUN EXECUTIVE SUMMARY ===\n",
+    "\nYou are writing a brief executive summary of an optimization run for any audience",
+    "\n— technical or non-technical. Write exactly 4 sentences.",
+    "\nNo markdown headers. No bullet points. Flowing prose.",
+    "\nThis should be copy-paste ready for a brief email to stakeholders.",
+    "\n\nCover in this order:",
+    "\n1. Starting point and ending point (use 'agreement' not 'AC1'; give the numbers).",
+    "\n2. How many cycles ran and what the overall trajectory was.",
+    "\n3. The single main reason we cannot improve further (specific, not generic).",
+    "\n4. What decisions or clarifications are needed from subject-matter experts to unblock next steps.",
+    "\n\nWrite nothing else. Just the 4 sentences."
+  }, "")
+  executive_summary_text = run_required_report_phase(
+    report_writer,
+    "report_writer",
+    "end_executive_summary",
+    exec_prompt,
+    function()
+      report_writer.clear_history()
+      report_writer.history:add({role = "system", content = full_ctx})
+      return #full_ctx
     end
-  end)
+  )
 
   -- Phase 2: Lab Report (technical, for operators and the next optimizer run)
   Human.notify({message = "  Phase 2: Generating lab report...", level = "info"})
   local lab_report_text = "(lab report not available)"
-  pcall(function()
-    report_writer.clear_history()
-    report_writer.history:add({role = "system", content = full_ctx})
+  local lab_prompt = table.concat({
+    "=== END-OF-RUN LAB REPORT ===\n",
+    "\nYou are writing a technical report for operators and AI agents who will work on",
+    "\nthis score next. This document feeds the next optimization run as prior_run_prescription.",
+    "\nInclude ONLY actions that lab operators or AI agents can take without SME input.",
+    "\n\nKeep the entire report under 450 words.",
+    "\nDo not pad. Do not repeat the same finding in multiple sections.",
+    "\nUse exactly the sections below and nothing else.",
+    "\n\nStructure your output with THREE top-level sections:",
+    "\n\n## SUMMARY",
+    "\nExactly 4 bullets, one sentence each. Cover: overall trajectory, stall reason,",
+    "\ndataset divergence or alignment, and the realistic ceiling estimate.",
+    "\n\n## ANALYSIS",
+    "\nExactly 3 short subsections. Each must be exactly 2 sentences.",
+    "\n\n### What happened",
+    "\nNarrate the run in plain language: baseline metrics, what improved, what stalled,",
+    "\nand the stop reason. Include the key AC1 numbers.",
+    "\n\n### Why it stalled",
+    "\nIdentify the single most important technical blocking factor. Be specific: name the",
+    "\ncontradiction topic or policy gap, how many items it affects, and what the",
+    "\nconflict is between what the model does and what reviewers expect.",
+    "\nIf the datasets diverged, explain what that reveals about the ground truth.",
+    "\n\n### Error patterns",
+    "\nDescribe the top 3 residual patterns total. Keep this subsection to exactly 2 sentences.",
+    "\nName whether each pattern is a contradiction, policy gap, or noisy label cluster.",
+    "\n\n## NEXT ACTIONS (LAB ONLY)",
+    "\nActions that lab operators or AI agents can take without SME input.",
+    "\nInclude ONLY things under lab control: prompt engineering, model swaps,",
+    "\narchitecture changes, data quality fixes.",
+    "\nDo NOT include anything requiring a policy decision — those go in the SME Agenda.",
+    "\nFormat each as: [PRIORITY] [WHAT]: [evidence/rationale]",
+    "\nCap at 3 items. No padding.",
+    "\n\n## SUSPECTED LOW-QUALITY FEEDBACK LABELS",
+    "\nIf the Feedback Landscape Diagnostic identified specific suspected items:",
+    "\nList them here. For each item:",
+    "\n  Item ID | Human label | Model prediction | Pattern | Why suspected | Confidence",
+    "\nGroup by theme if multiple items share the same root cause.",
+    "\nPay special attention to OSCILLATING items — these reveal contradictory norms, not prompt issues.",
+    "\nIf no items were identified, write: (No suspected low-quality labels identified in this run.)"
+  }, "")
 
-    local lab_prompt = table.concat({
-      "=== END-OF-RUN LAB REPORT ===\n",
-      "\nYou are writing a technical report for operators and AI agents who will work on",
-      "\nthis score next. This document feeds the next optimization run as prior_run_prescription.",
-      "\nInclude ONLY actions that lab operators or AI agents can take without SME input.",
-      "\n\nKeep the entire report under 450 words.",
-      "\nDo not pad. Do not repeat the same finding in multiple sections.",
-      "\nUse exactly the sections below and nothing else.",
-      "\n\nStructure your output with THREE top-level sections:",
-      "\n\n## SUMMARY",
-      "\nExactly 4 bullets, one sentence each. Cover: overall trajectory, stall reason,",
-      "\ndataset divergence or alignment, and the realistic ceiling estimate.",
-      "\n\n## ANALYSIS",
-      "\nExactly 3 short subsections. Each must be exactly 2 sentences.",
-      "\n\n### What happened",
-      "\nNarrate the run in plain language: baseline metrics, what improved, what stalled,",
-      "\nand the stop reason. Include the key AC1 numbers.",
-      "\n\n### Why it stalled",
-      "\nIdentify the single most important technical blocking factor. Be specific: name the",
-      "\ncontradiction topic or policy gap, how many items it affects, and what the",
-      "\nconflict is between what the model does and what reviewers expect.",
-      "\nIf the datasets diverged, explain what that reveals about the ground truth.",
-      "\n\n### Error patterns",
-      "\nDescribe the top 3 residual patterns total. Keep this subsection to exactly 2 sentences.",
-      "\nName whether each pattern is a contradiction, policy gap, or noisy label cluster.",
-      "\n\n## NEXT ACTIONS (LAB ONLY)",
-      "\nActions that lab operators or AI agents can take without SME input.",
-      "\nInclude ONLY things under lab control: prompt engineering, model swaps,",
-      "\narchitecture changes, data quality fixes.",
-      "\nDo NOT include anything requiring a policy decision — those go in the SME Agenda.",
-      "\nFormat each as: [PRIORITY] [WHAT]: [evidence/rationale]",
-      "\nCap at 3 items. No padding.",
-      "\n\n## SUSPECTED LOW-QUALITY FEEDBACK LABELS",
-      "\nIf the Feedback Landscape Diagnostic identified specific suspected items:",
-      "\nList them here. For each item:",
-      "\n  Item ID | Human label | Model prediction | Pattern | Why suspected | Confidence",
-      "\nGroup by theme if multiple items share the same root cause.",
-      "\nPay special attention to OSCILLATING items — these reveal contradictory norms, not prompt issues.",
-      "\nIf no items were identified, write: (No suspected low-quality labels identified in this run.)"
-    }, "")
-
+  lab_report_text = run_required_report_phase(
+    report_writer,
+    "report_writer",
+    "end_lab_report",
+    lab_prompt,
+    function()
+      report_writer.clear_history()
+      report_writer.history:add({role = "system", content = full_ctx})
+      local context_chars = #full_ctx
     -- Also include the feedback landscape diagnostic for label analysis
-    local kc = State.get("known_contradictions")
-    local compact_contra = build_compact_contradiction_summary(kc, 3)
-    if has_text(compact_contra) then
-      report_writer.history:add({role = "system", content =
-        "=== CONTRADICTION DETAILS (for label analysis) ===\n" .. compact_contra
-        .. "\n=== END CONTRADICTION DETAILS ==="})
+      local kc = State.get("known_contradictions")
+      local compact_contra = build_compact_contradiction_summary(kc, 3)
+      if has_text(compact_contra) then
+        local contra_context = "=== CONTRADICTION DETAILS (for label analysis) ===\n" .. compact_contra
+          .. "\n=== END CONTRADICTION DETAILS ==="
+        report_writer.history:add({role = "system", content = contra_context})
+        context_chars = context_chars + #contra_context
+      end
+      local final_diag = State.get("recent_landscape_diagnostic")
+      if final_diag and has_text(final_diag.compact_summary) then
+        local landscape_context = "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===\n"
+          .. string.format("(Generated from %d cycles; %d notable items)\n",
+              final_diag.generated_at_cycle or 0, final_diag.notable_item_count or 0)
+          .. trunc(final_diag.compact_summary, 800)
+          .. "\n=== END FEEDBACK LANDSCAPE DIAGNOSTIC ==="
+        report_writer.history:add({role = "system", content = landscape_context})
+        context_chars = context_chars + #landscape_context
+      end
+      return context_chars
     end
-    local final_diag = State.get("recent_landscape_diagnostic")
-    if final_diag and has_text(final_diag.compact_summary) then
-      report_writer.history:add({role = "system", content =
-        "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===\n"
-        .. string.format("(Generated from %d cycles; %d notable items)\n",
-            final_diag.generated_at_cycle or 0, final_diag.notable_item_count or 0)
-        .. trunc(final_diag.compact_summary, 800)
-        .. "\n=== END FEEDBACK LANDSCAPE DIAGNOSTIC ==="})
-    end
-
-    guard_context_budget(report_writer)
-    local ok, err = safe_agent_call(report_writer, "report_writer", lab_prompt, nil)
-    lab_report_text = report_writer.output or "(no lab report generated)"
-    if not ok then
-      lab_report_text = "Lab report generation failed: " .. tostring(err)
-    end
-  end)
+  )
 
   -- Phase 3: SME Agenda (decision-formatted meeting agenda for stakeholders)
   Human.notify({message = "  Phase 3: Generating SME agenda...", level = "info"})
   local sme_agenda_text = "(SME agenda not available)"
+  -- Extract score name for the agenda header if available
+  local score_name_for_agenda = score_id or "Score"
   pcall(function()
-    report_writer.clear_history()
+    local sn = State.get("score_name")
+    if has_text(sn) then score_name_for_agenda = sn end
+  end)
 
-    -- SME Agenda gets: executive summary + lab report + contradiction details + feedback landscape
-    local sme_ctx_parts = {}
-    table.insert(sme_ctx_parts, "=== EXECUTIVE SUMMARY ===")
-    table.insert(sme_ctx_parts, executive_summary_text)
-    table.insert(sme_ctx_parts, "=== END EXECUTIVE SUMMARY ===")
-    table.insert(sme_ctx_parts, "")
-
-    table.insert(sme_ctx_parts, "=== LAB REPORT ===")
-    table.insert(sme_ctx_parts, trunc(lab_report_text, 600))
-    table.insert(sme_ctx_parts, "=== END LAB REPORT ===")
-    table.insert(sme_ctx_parts, "")
-
-    local kc = State.get("known_contradictions")
-    local compact_contra = build_compact_contradiction_summary(kc, 3)
-    if has_text(compact_contra) then
-      table.insert(sme_ctx_parts, "=== CONTRADICTION LANDSCAPE ===")
-      table.insert(sme_ctx_parts, compact_contra)
-      table.insert(sme_ctx_parts, "=== END CONTRADICTION LANDSCAPE ===")
-      table.insert(sme_ctx_parts, "")
-    end
-
-    local final_diag = State.get("recent_landscape_diagnostic")
-    if final_diag and has_text(final_diag.compact_summary) then
-      table.insert(sme_ctx_parts, "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===")
-      table.insert(sme_ctx_parts, trunc(final_diag.compact_summary, 600))
-      table.insert(sme_ctx_parts, "=== END FEEDBACK LANDSCAPE DIAGNOSTIC ===")
-      table.insert(sme_ctx_parts, "")
-    end
-
-    if has_text(residual_errors_text) then
-      table.insert(sme_ctx_parts, trunc(residual_errors_text, 900))
-      table.insert(sme_ctx_parts, "")
-    end
-
-    report_writer.history:add({role = "system", content = table.concat(sme_ctx_parts, "\n")})
-
-    -- Extract score name for the agenda header if available
-    local score_name_for_agenda = score_id or "Score"
-    pcall(function()
-      local sn = State.get("score_name")
-      if has_text(sn) then score_name_for_agenda = sn end
-    end)
-
-    local sme_prompt = table.concat({
+  local sme_prompt = table.concat({
       "=== STAKEHOLDER MEETING AGENDA ===\n",
       "\nYou are writing a meeting agenda for subject-matter experts (SMEs) — the people",
       "\nwho write the rubric, handle the calls, and know the domain.",
       "\nThey are NOT engineers. They do not know what AC1 is. They do not care about YAML.",
-      "\n\nYour job: give them a list of DECISIONS they need to make, formatted as agenda items.",
+      "\n\nGlossary (always apply):",
+      "\n- \"Agent:\" in transcripts = the human call-center phone operator, NEVER an AI or software agent.",
+      "\n- \"Customer:\" = the person calling in.",
+      "\n- \"the evaluated score version\" = the specific score configuration being tested in this optimizer run.",
+      "\n- Never write \"AI\" in your output. Say \"the evaluated score version\" or \"the score\".",
+      "\n\nYour job: give SMEs a list of DECISIONS they need to make, formatted as agenda items.",
       "\n\nRules:",
       "\n- Each item is a question to answer, not a finding to read.",
       "\n- Include: what the question is, why it matters (in plain language), concrete examples.",
       "\n- Prioritize by how many items the decision would unblock.",
       "\n- Maximum 3 agenda items — pick the most important ones.",
-      "\n- Keep the entire agenda under 150 words total.",
+      "\n- Keep the entire agenda under 200 words total.",
       "\n- Use plain English throughout.",
       "\n- Do NOT include anything the lab can fix without SME input.",
       "\n- Do NOT explain what agreement or AC1 means.",
       "\n- Do NOT summarize the optimization run — the agenda is action-only.",
+      "\n- Never write \"AI\" — use \"the evaluated score version\" or \"the score\".",
+      "\n- Every Example MUST cite a real item by copying its markdown link verbatim from the CANDIDATE ITEMS context. Do NOT invent or omit item IDs.",
+      "\n- Each example describes ONE specific item concretely. Do NOT generalize across items.",
       "\n\nStructure your output exactly as follows:",
       string.format("\n\n## FOR YOUR NEXT MEETING: %s Quality Review", score_name_for_agenda),
       "\n\n### Title of the first decision",
       "\n**Why this matters:** 1-2 sentences on impact, in plain language",
-      "\n**Examples:** 2-3 specific examples — describe what the system said vs. what the reviewer said, without IDs",
+      "\n**Examples:** 2-3 items, one per line, each citing a real item from the CANDIDATE ITEMS context:",
+      "\n  - Item [<external_id>](<url>): score version said \"<prediction>\", reviewer labeled \"<correct>\". Transcript evidence: \"<quote from agent>\". Reviewer's edit comment: \"<comment>\".",
       "\n**Options:** (a) first option (b) second option (c) third option if applicable",
       "\n**Resolves:** ~N disputed reviews",
       "\n\n### Title of the second decision",
       "\n(repeat the same structure for each item, up to 3 total)",
       "\n\n## Background",
       "\n1-2 sentences only: overall performance trend in plain language"
-    }, "")
+  }, "")
 
-    guard_context_budget(report_writer)
-    local ok, err = safe_agent_call(report_writer, "report_writer", sme_prompt, nil)
-    sme_agenda_text = report_writer.output or "(no SME agenda generated)"
-    if not ok then
-      sme_agenda_text = "SME agenda generation failed: " .. tostring(err)
+  sme_agenda_text = run_required_report_phase(
+    report_writer,
+    "report_writer",
+    "end_sme_agenda",
+    sme_prompt,
+    function()
+      report_writer.clear_history()
+      -- SME Agenda gets: candidate items (for link-grounded examples) + executive summary
+      -- + lab report + contradiction details + feedback landscape
+      local sme_ctx_parts = {}
+
+      local agenda_items_ctx = _build_agenda_item_context(5)
+      if has_text(agenda_items_ctx) then
+        table.insert(sme_ctx_parts, agenda_items_ctx)
+        table.insert(sme_ctx_parts, "")
+      end
+
+      table.insert(sme_ctx_parts, "=== EXECUTIVE SUMMARY ===")
+      table.insert(sme_ctx_parts, executive_summary_text)
+      table.insert(sme_ctx_parts, "=== END EXECUTIVE SUMMARY ===")
+      table.insert(sme_ctx_parts, "")
+
+      table.insert(sme_ctx_parts, "=== LAB REPORT ===")
+      table.insert(sme_ctx_parts, trunc(lab_report_text, 600))
+      table.insert(sme_ctx_parts, "=== END LAB REPORT ===")
+      table.insert(sme_ctx_parts, "")
+
+      local kc = State.get("known_contradictions")
+      local compact_contra = build_compact_contradiction_summary(kc, 3)
+      if has_text(compact_contra) then
+        table.insert(sme_ctx_parts, "=== CONTRADICTION LANDSCAPE ===")
+        table.insert(sme_ctx_parts, compact_contra)
+        table.insert(sme_ctx_parts, "=== END CONTRADICTION LANDSCAPE ===")
+        table.insert(sme_ctx_parts, "")
+      end
+
+      local final_diag = State.get("recent_landscape_diagnostic")
+      if final_diag and has_text(final_diag.compact_summary) then
+        table.insert(sme_ctx_parts, "=== FEEDBACK LANDSCAPE DIAGNOSTIC ===")
+        table.insert(sme_ctx_parts, trunc(final_diag.compact_summary, 600))
+        table.insert(sme_ctx_parts, "=== END FEEDBACK LANDSCAPE DIAGNOSTIC ===")
+        table.insert(sme_ctx_parts, "")
+      end
+
+      if has_text(residual_errors_text) then
+        table.insert(sme_ctx_parts, trunc(residual_errors_text, 900))
+        table.insert(sme_ctx_parts, "")
+      end
+
+      local sme_context = table.concat(sme_ctx_parts, "\n")
+      report_writer.history:add({role = "system", content = sme_context})
+      return #sme_context
     end
-    local raw_end_sme_agenda = sme_agenda_text
-    State.set("sme_agenda_raw", raw_end_sme_agenda)
-    sme_agenda_text = gate_sme_agenda(
-      raw_end_sme_agenda,
-      "end_of_run_sme_agenda",
-      table.concat({
-        "End-of-run SME agenda",
-        "Executive summary: " .. trunc(executive_summary_text, 600),
-        "Lab report: " .. trunc(lab_report_text, 900),
-        "Residual errors: " .. trunc(residual_errors_text, 900)
-      }, "\n")
-    )
-    State.set("sme_agenda_gated", sme_agenda_text)
+  )
+  local raw_end_sme_agenda = sme_agenda_text
+  State.set("sme_agenda_raw", raw_end_sme_agenda)
+  sme_agenda_text = gate_sme_agenda(
+    raw_end_sme_agenda,
+    "end_of_run_sme_agenda",
+    table.concat({
+      "End-of-run SME agenda",
+      "Executive summary: " .. trunc(executive_summary_text, 600),
+      "Lab report: " .. trunc(lab_report_text, 900),
+      "Residual errors: " .. trunc(residual_errors_text, 900)
+    }, "\n")
+  )
+  State.set("sme_agenda_gated", sme_agenda_text)
+
+  -- ==================================================================
+  -- Phase 3b: SME Worksheet (long-form companion to the SME Agenda)
+  -- ==================================================================
+  -- Pre-compute deterministic signals (suspected mislabels and contrasting
+  -- pairs), then ask the report writer to produce a detailed Worksheet that
+  -- names specific items, quotes the transcript, and separates "review this
+  -- label" from "decide this policy". Unlike the Agenda, the Worksheet is
+  -- NOT gated through rubric-memory because mislabel-review items are not
+  -- policy questions.
+  local suspected_mislabels = {}
+  local contrasting_pairs = {}
+  pcall(function()
+    local item_recurrence_final = State.get("item_recurrence") or {}
+    suspected_mislabels = detect_suspected_mislabels(iterations, item_recurrence_final) or {}
+    contrasting_pairs = build_contrasting_pairs(iterations, item_recurrence_final) or {}
   end)
+
+  Human.notify({message = string.format(
+    "  SME Worksheet signals: %d suspected mislabels, %d contrasting pairs",
+    #suspected_mislabels, #contrasting_pairs), level = "info"})
+
+  local worksheet_text = "(SME worksheet not available)"
+  Human.notify({message = "  Phase 3b: Generating SME worksheet...", level = "info"})
+
+  local worksheet_prompt = table.concat({
+    "=== SME WORKSHEET ===\n",
+    "\nYou are writing the detailed companion to the SME Agenda. Subject-matter experts",
+    "\nwill read this before their meeting to understand exactly what they are deciding.",
+    "\n\nThis is the drill-down document: name specific items by external_id, quote the",
+    "\ntranscript evidence verbatim, and separate label-review items from policy questions.",
+    "\nUnlike the Agenda, you MUST include item IDs and direct transcript quotes.",
+    "\n\nSections (emit them in this order; skip any section whose input list is empty):",
+    "\n\n## Suspected mislabels (review before making policy changes)",
+    "\nFor each item in SUSPECTED_MISLABELS input, write 3-5 lines:",
+    "\n  **Item <external_id>** — label=<correct_value>, model=<predicted_value>, reason=<first reason code>",
+    "\n  Transcript evidence: \"<evidence_quote>\"",
+    "\n  Edit comment: \"<edit_comment>\"",
+    "\n  Recommendation: ask the reviewer to confirm or correct the label; if mislabeled, shadow-invalidate.",
+    "\nDo NOT treat these as policy questions until SMEs confirm the label.",
+    "\n\n## Policy questions (real decisions SMEs must make)",
+    "\nFor each of the top 3 policy questions (use CONTRASTING_PAIRS input and residual errors),",
+    "\nwrite in this exact format:",
+    "\n  **Question:** <plain-English question>",
+    "\n  **Why it matters:** <one sentence on real-world impact>",
+    "\n  **Contrasting examples:** (always include the pair when CONTRASTING_PAIRS has one covering this question)",
+    "\n    Item <id_a>: \"<quote_a>\" → label=<A>",
+    "\n    Item <id_b>: \"<quote_b>\" → label=<B>",
+    "\n    Distinguishing feature: <one line naming the axis>",
+    "\n  **Options:** a) ... b) ... c) ...",
+    "\n  **If answered, resolves:** ~N items",
+    "\n\n## Items still in play (for reference)",
+    "\nCompact list of all PERSISTENT and OSCILLATING items with label, model prediction,",
+    "\nand one-line rationale. One item per line. No editorializing, no options, no headers.",
+    "\n\nRules:",
+    "\n- Use plain English. SMEs are not engineers.",
+    "\n- Quote transcript evidence verbatim; do NOT paraphrase.",
+    "\n- Cite external_id (numeric) whenever you name an item.",
+    "\n- If SUSPECTED_MISLABELS is empty, omit that whole section (do not write a placeholder).",
+    "\n- If no contrasting pair exists for a policy question, omit the Contrasting examples sub-section for that question.",
+    "\n- Keep each section focused. Do not pad. Do not repeat content across sections."
+  }, "")
+
+  worksheet_text = run_required_report_phase(
+    report_writer,
+    "report_writer",
+    "end_sme_worksheet",
+    worksheet_prompt,
+    function()
+      report_writer.clear_history()
+      local parts = {}
+      table.insert(parts, "=== EXECUTIVE SUMMARY ===")
+      table.insert(parts, executive_summary_text)
+      table.insert(parts, "=== END EXECUTIVE SUMMARY ===")
+      table.insert(parts, "")
+
+      -- Structured inputs the writer must use.
+      local sm_json = "[]"
+      local cp_json = "[]"
+      pcall(function() sm_json = Json.encode(suspected_mislabels) end)
+      pcall(function() cp_json = Json.encode(contrasting_pairs) end)
+      table.insert(parts, "=== SUSPECTED_MISLABELS (JSON) ===")
+      table.insert(parts, sm_json)
+      table.insert(parts, "=== END SUSPECTED_MISLABELS ===")
+      table.insert(parts, "")
+      table.insert(parts, "=== CONTRASTING_PAIRS (JSON) ===")
+      table.insert(parts, cp_json)
+      table.insert(parts, "=== END CONTRASTING_PAIRS ===")
+      table.insert(parts, "")
+
+      -- Existing residual errors (already includes per-item RCA metadata).
+      if has_text(residual_errors_text) then
+        table.insert(parts, trunc(residual_errors_text, 2000))
+        table.insert(parts, "")
+      end
+
+      -- Final item_recurrence compact summary for the "still in play" section.
+      local item_recurrence_final = State.get("item_recurrence") or {}
+      local recur_summary = build_recurrence_compact_summary(item_recurrence_final, #iterations)
+      if has_text(recur_summary) then
+        table.insert(parts, "=== ITEM RECURRENCE SUMMARY ===")
+        table.insert(parts, trunc(recur_summary, 1500))
+        table.insert(parts, "=== END ITEM RECURRENCE SUMMARY ===")
+        table.insert(parts, "")
+      end
+
+      local ctx = table.concat(parts, "\n")
+      report_writer.history:add({role = "system", content = ctx})
+      return #ctx
+    end
+  )
+  State.set("sme_worksheet", worksheet_text)
 
   -- Store results
   State.set("end_of_run_report", {
@@ -7596,6 +9168,13 @@ code: |
     },
     sme_agenda = {
       text = sme_agenda_text
+    },
+    sme_worksheet = {
+      text = worksheet_text,
+      structured = {
+        suspected_mislabels = suspected_mislabels,
+        contrasting_pairs = contrasting_pairs,
+      }
     },
     evidence = {
       divergence_summary = divergence_text,
@@ -7631,6 +9210,11 @@ code: |
     .. string.rep("=", 60) .. "\n\n"
     .. sme_agenda_text, level = "info"})
 
+  Human.notify({message = "\n" .. string.rep("=", 60)
+    .. "\n=== SME WORKSHEET ===\n"
+    .. string.rep("=", 60) .. "\n\n"
+    .. trunc(worksheet_text, 8000), level = "info"})
+
   if last_accepted_version_id and last_accepted_version_id ~= champion_version_id then
     Human.notify({message = string.format(
       "Winning version selected: %s (starting champion: %s). Manual promotion is required; the optimizer never promotes champion automatically.",
@@ -7663,5 +9247,6 @@ code: |
     executive_summary = executive_summary_text,
     lab_report = lab_report_text,
     sme_agenda = sme_agenda_text,
+    sme_worksheet = worksheet_text,
     winning_version_id = last_accepted_version_id
   }

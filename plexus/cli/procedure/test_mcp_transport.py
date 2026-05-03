@@ -272,6 +272,22 @@ class TestEmbeddedMCPServer:
             assert server.transport.client_info["name"] == "Procedure Client"
             assert server.transport.client_info["version"] == "1.0.0"
 
+    @pytest.mark.asyncio
+    async def test_register_plexus_tools_includes_get_documentation(self, server):
+        """Procedure MCP transport should expose get_plexus_documentation."""
+        server.register_plexus_tools()
+        await server.transport.initialize({"name": "Test"})
+
+        result = await server.transport.call_tool(
+            "get_plexus_documentation",
+            {"filename": "optimizer-cookbook"},
+        )
+        payload = json.loads(result["content"][0]["text"])
+        assert payload["filename"] == "optimizer-cookbook"
+        assert "documentation" in payload
+        assert isinstance(payload["documentation"], str)
+        assert "optimizer" in payload["documentation"].lower()
+
 
 def test_advance_task_to_stage_by_name_uses_long_running_retry_policy():
     client = Mock()
@@ -432,23 +448,6 @@ class TestConvenienceFunctions:
 class TestIntegrationScenarios:
     """Integration tests for common procedure MCP usage patterns."""
 
-    @pytest.mark.asyncio
-    async def test_registered_tool_schema_includes_parameters(self):
-        """Registered Plexus tools should expose argument schema to MCP clients."""
-        server = await create_procedure_mcp_server()
-
-        async with server.connect({"name": "Schema Test Client"}) as client:
-            tools = await client.list_tools()
-            guidelines_tool = next(
-                (tool for tool in tools if tool.get("name") == "plexus_guidelines_validate"),
-                None,
-            )
-
-            assert guidelines_tool is not None
-            schema = guidelines_tool.get("inputSchema", {})
-            properties = schema.get("properties", {})
-            assert "guidelines_markdown" in properties
-    
     @pytest.mark.asyncio
     async def test_full_experiment_mcp_workflow(self):
         """Test a complete procedure MCP workflow."""

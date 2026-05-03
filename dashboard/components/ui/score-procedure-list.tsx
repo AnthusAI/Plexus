@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { generateClient } from 'aws-amplify/api'
-import { Copy, ExternalLink, MoreHorizontal } from 'lucide-react'
+import { Copy, Link as LinkIcon, MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -34,10 +34,10 @@ import {
   hydrateProcedureRunFeedbackEvaluation,
   hydrateProcedureRunsFeedbackEvaluations,
   loadOptimizerRuns,
+  loadScoreVersionOptimizerRuns,
   mergeFeedbackEvaluationIntoProcedureRun,
   mergeTaskIntoProcedureRun,
   mergeTaskStageIntoProcedureRun,
-  manifestTouchesVersion,
   OPTIMIZER_DATASETS,
   OPTIMIZER_METRICS,
   optimizerDatasetLabel,
@@ -144,6 +144,8 @@ function toProcedureTaskData(
       command: run.task?.command || '',
       description: operationalSummary.join(' · '),
       dispatchStatus: run.task?.dispatchStatus || undefined,
+      celeryTaskId: run.task?.celeryTaskId || undefined,
+      workerNodeId: run.task?.workerNodeId || undefined,
       metadata: run.task?.metadata,
       createdAt: run.task?.createdAt || run.updatedAt || new Date().toISOString(),
       startedAt: run.task?.startedAt || undefined,
@@ -258,7 +260,10 @@ export function ScoreProcedureList({
       setRuns([])
       setIsLoading(true)
       try {
-        const loadedRuns = await loadOptimizerRuns(scoreId)
+        const loadedRuns =
+          scope === 'version' && versionId
+            ? await loadScoreVersionOptimizerRuns(versionId)
+            : await loadOptimizerRuns(scoreId)
         const hydratedRuns = await hydrateProcedureRunsFeedbackEvaluations(loadedRuns)
         if (!cancelled) {
           setRuns(hydratedRuns)
@@ -279,7 +284,7 @@ export function ScoreProcedureList({
     return () => {
       cancelled = true
     }
-  }, [scoreId])
+  }, [scoreId, scope, versionId])
 
   const scheduleManifestRefresh = React.useCallback((procedureId: string) => {
     const existingTimer = manifestRefreshTimersRef.current.get(procedureId)
@@ -323,7 +328,11 @@ export function ScoreProcedureList({
 
     const upsertProcedure = (rawProcedure: any) => {
       if (!rawProcedure?.id) return
-      if (rawProcedure.scoreId && rawProcedure.scoreId !== scoreId) return
+      if (scope === 'version') {
+        if (rawProcedure.scoreVersionId !== versionId) return
+      } else if (rawProcedure.scoreId !== scoreId) {
+        return
+      }
       void procedureToOptimizerRunView(rawProcedure, null).then((nextRun) => {
         setRuns((previous) => {
           const existingIndex = previous.findIndex((run) => run.procedureId === nextRun.procedureId)
@@ -356,7 +365,11 @@ export function ScoreProcedureList({
       (data) => {
         const deleted = data?.onDeleteProcedure
         if (!deleted?.id) return
-        if (deleted.scoreId && deleted.scoreId !== scoreId) return
+        if (scope === 'version') {
+          if (deleted.scoreVersionId !== versionId) return
+        } else if (deleted.scoreId !== scoreId) {
+          return
+        }
         setRuns((previous) => previous.filter((run) => run.procedureId !== deleted.id))
       },
       'delete procedure'
@@ -366,7 +379,11 @@ export function ScoreProcedureList({
       (data) => {
         const rawEvaluation = data?.onCreateEvaluation
         if (!rawEvaluation?.id) return
-        if (rawEvaluation.scoreId && rawEvaluation.scoreId !== scoreId) return
+        if (scope === 'version') {
+          if (rawEvaluation.scoreVersionId !== versionId) return
+        } else if (rawEvaluation.scoreId !== scoreId) {
+          return
+        }
         const evaluation = evaluationToScoreEvaluationView(rawEvaluation)
         setRuns((previous) => previous.map((run) => mergeFeedbackEvaluationIntoProcedureRun(run, evaluation)))
       },
@@ -377,7 +394,11 @@ export function ScoreProcedureList({
       (data) => {
         const rawEvaluation = data?.onUpdateEvaluation
         if (!rawEvaluation?.id) return
-        if (rawEvaluation.scoreId && rawEvaluation.scoreId !== scoreId) return
+        if (scope === 'version') {
+          if (rawEvaluation.scoreVersionId !== versionId) return
+        } else if (rawEvaluation.scoreId !== scoreId) {
+          return
+        }
         const evaluation = evaluationToScoreEvaluationView(rawEvaluation)
         setRuns((previous) => previous.map((run) => mergeFeedbackEvaluationIntoProcedureRun(run, evaluation)))
       },
@@ -388,7 +409,11 @@ export function ScoreProcedureList({
       (data) => {
         const deleted = data?.onDeleteEvaluation
         if (!deleted?.id) return
-        if (deleted.scoreId && deleted.scoreId !== scoreId) return
+        if (scope === 'version') {
+          if (deleted.scoreVersionId !== versionId) return
+        } else if (deleted.scoreId !== scoreId) {
+          return
+        }
         setRuns((previous) =>
           previous.map((run) =>
             currentProcedureFeedbackEvaluationId(run.manifest) === deleted.id
@@ -473,7 +498,7 @@ export function ScoreProcedureList({
         }
       })
     }
-  }, [scheduleManifestRefresh, scoreId])
+  }, [scheduleManifestRefresh, scope, scoreId, versionId])
 
   const applySort = React.useCallback((nextSort: ProcedureSort) => {
     setIsApplyingControls(true)
@@ -484,22 +509,14 @@ export function ScoreProcedureList({
   }, [])
 
   const visibleRuns = React.useMemo(() => {
-    const filtered = scope === 'version' && versionId
-      ? runs.filter((run) => {
-          if (manifestTouchesVersion(run.manifest, versionId)) return true
-          if (run.scoreVersionId === versionId) return true
-          if (run.metadataText?.includes(versionId)) return true
-          return false
-        })
-      : runs
-    return sortProcedureRuns(filtered, sortBy)
-  }, [runs, scope, sortBy, versionId])
+    return sortProcedureRuns(runs, sortBy)
+  }, [runs, sortBy])
 
   const title = scope === 'score' ? 'Procedures' : 'Version Procedures'
   const description =
     scope === 'score'
       ? 'All procedures for this score, newest first by default.'
-      : 'Procedures that touched the selected version.'
+      : 'Procedures associated with the selected version.'
   const usesSlotSurface = surface === 'slot'
   const shouldShowListSkeleton = isLoading || isApplyingControls
 
@@ -602,7 +619,7 @@ export function ScoreProcedureList({
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
                           <a href={`/lab/procedures/${run.procedureId}`} target="_blank" rel="noreferrer">
-                            <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                            <LinkIcon className="mr-2 h-3.5 w-3.5" />
                             Open procedure
                           </a>
                         </DropdownMenuItem>
@@ -664,7 +681,7 @@ export function ScoreProcedureList({
                               setBestEvaluationDialog({ run })
                             }}
                           >
-                            <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                            <LinkIcon className="mr-2 h-3.5 w-3.5" />
                             Find best evaluation…
                           </DropdownMenuItem>
                         )}

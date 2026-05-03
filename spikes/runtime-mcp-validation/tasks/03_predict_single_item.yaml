@@ -1,0 +1,28 @@
+id: predict_single_item
+name: "Run a single-item prediction"
+prompt: |
+  Run the current champion version of Compliance Tone against item item_1007.
+  First inspect the score with plexus.score.info{ id = "score_compliance_tone" }.
+  Inspect the item with plexus.item.info{ id = "item_1007" } before predicting.
+  Then run plexus.score.predict for score_id score_compliance_tone and item_id item_1007.
+  Return exactly these fields: item_id, score_id, score_version_id, predicted_value, explanation, and cost.
+expected_outcome:
+  kind: exact_fields
+  fields:
+    item_id: item_1007
+    score_id: score_compliance_tone
+    score_version_id: sv_compliance_tone_champion
+    predicted_value: "No"
+    cost_present: true
+coverage_tags:
+  - prediction
+  - score_polymorphism
+  - cost_reporting
+required_apis:
+  - plexus.score.info
+  - plexus.item.info
+  - plexus.score.predict
+max_attempts_for_first_try_pass: 1
+fixture_notes: |
+  The stub predict path should be polymorphic in the same shape as production:
+  the agent should not care whether the score is regex, ML, or LLM backed.
