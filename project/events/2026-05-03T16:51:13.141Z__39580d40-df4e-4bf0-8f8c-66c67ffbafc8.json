@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "39580d40-df4e-4bf0-8f8c-66c67ffbafc8",
+  "issue_id": "plx-003e2b86-aa03-4ca2-be06-ae91a1f5ec17",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T16:51:13.141Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Run the local feedback alignment optimizer YAML as a real procedure test against a previously attempted Suco Home Improvement score. Use Project Intent AI as the test case, max_iterations=8, max_samples=200, days=90, and monitor process-level CLI output for failures and behavior coverage.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Run 8-cycle optimizer test for Project Intent AI"
+  }
+}
