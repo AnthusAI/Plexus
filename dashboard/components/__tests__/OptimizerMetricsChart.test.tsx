@@ -9,7 +9,12 @@ jest.mock('@/components/ui/chart', () => ({
 
 jest.mock('recharts', () => ({
   CartesianGrid: () => null,
-  Line: () => null,
+  Line: ({ type }: any) => (
+    <div
+      data-testid="optimizer-metric-line"
+      data-curve-type={typeof type === 'function' ? 'function' : String(type)}
+    />
+  ),
   LineChart: ({ children }: any) => <div>{children}</div>,
   ReferenceLine: () => null,
   Tooltip: () => null,
@@ -60,5 +65,13 @@ describe('OptimizerMetricsChart dataset toggle', () => {
     expect(onDatasetViewChange).toHaveBeenNthCalledWith(1, 'recent')
     expect(onDatasetViewChange).toHaveBeenNthCalledWith(2, 'regression')
     expect(onDatasetViewChange).toHaveBeenNthCalledWith(3, 'overall')
+  })
+
+  it('uses a tuned curve factory for metric lines', () => {
+    render(<OptimizerMetricsChart iterations={iterations} />)
+
+    for (const line of screen.getAllByTestId('optimizer-metric-line')) {
+      expect(line).toHaveAttribute('data-curve-type', 'function')
+    }
   })
 })
