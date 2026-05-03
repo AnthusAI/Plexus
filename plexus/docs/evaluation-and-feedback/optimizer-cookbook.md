@@ -517,7 +517,44 @@ CATEGORY C — Structural / non-prompt change (higher risk, highest upside):
     AVOID unless nothing else works (expensive):
     * Claude 3.5 Haiku: model_provider: BedrockChat, model_name: us.anthropic.claude-3-5-haiku-20241022-v1:0
 
-  C4. Full rewrite — nuclear option (only when iterations have plateaued):
+  C4. Prompt-shape / attention-structure transformations (late structural option):
+    These keep the same classifier, same class set, and same single-call classification
+    shape. They are structural because they change how the prompt presents the task to
+    the model, not what the rubric says.
+
+    DO NOT use these to push out rubric-oriented Category A/B hypotheses. Policy/rubric
+    fixes should dominate every cycle. Use prompt-shape transformations later, when:
+      - the run has already tried the obvious rubric/policy changes, AND
+      - long transcripts or long prompts may be burying the decisive instruction, OR
+      - the same evidence pattern keeps being missed despite correct rubric language.
+
+    Higher-priority prompt-shape transformations:
+      - Repeat the decisive question or scoring instruction near the transcript and again
+        at the final decision point. This is a lightweight alternative to adding a full
+        chain-of-thought/extraction step when the issue appears to be attention, not
+        reasoning.
+      - Repeat only the important rule, label boundary, or final classification question.
+        Do not duplicate the entire prompt unless the creative lane explicitly calls for it.
+      - Put the instruction at the end when long input may bury the task:
+          {{text}}
+
+          Classify the text above.
+          Use only the allowed labels.
+          Return only the label.
+      - Alternate compact rubric reminders with the decision point when the model keeps
+        losing one critical constraint: state the key constraint before the transcript,
+        then restate the same constraint immediately before the final answer instruction.
+
+    Lower-priority prompt-shape transformations:
+      - Reorder the label definitions or valid_classes list so the most confused label
+        boundary is easier to compare. This can work, but is less likely than repetition
+        or final-instruction placement, so try it late.
+      - Move examples after the rules or remove examples that appear to anchor the model
+        on the wrong label. Only do this when RCA evidence points to example anchoring.
+
+    Use held-out evals. Keep only variants that win.
+
+  C5. Full rewrite — nuclear option (only when iterations have plateaued):
     ⚠ DO NOT use this in the first 2–3 cycles. It is a last resort.
 
     WHEN TO USE: You have run 3 or more cycles, tried structural and prompt changes,
