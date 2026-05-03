@@ -1,11 +1,7 @@
 import json
 from types import SimpleNamespace
 
-from plexus.cli.shared.CommandDispatch import (
-    _build_local_run_args,
-    _claim_task_for_dispatch,
-    _list_pending_tasks_for_account,
-)
+from plexus.cli.shared.CommandDispatch import _build_local_run_args, _list_pending_tasks_for_account
 
 
 class _StubClient:
@@ -21,7 +17,7 @@ class _StubClient:
         }
 
 
-def test_list_pending_tasks_skips_self_managed_dispatch_modes():
+def test_list_pending_tasks_skips_console_async_worker_tasks():
     client = _StubClient([
         {
             "id": "task-console",
@@ -31,38 +27,16 @@ def test_list_pending_tasks_skips_self_managed_dispatch_modes():
             "metadata": json.dumps({"dispatch_mode": "console_async_worker"}),
         },
         {
-            "id": "task-local",
+            "id": "task-normal",
             "dispatchStatus": "PENDING",
             "status": "PENDING",
             "createdAt": "2026-03-30T10:00:02Z",
             "metadata": json.dumps({"dispatch_mode": "local"}),
         },
-        {
-            "id": "task-normal",
-            "dispatchStatus": "PENDING",
-            "status": "PENDING",
-            "createdAt": "2026-03-30T10:00:03Z",
-            "metadata": "{}",
-        },
     ])
 
     pending = _list_pending_tasks_for_account(client, "acct-1")
     assert [task["id"] for task in pending] == ["task-normal"]
-
-
-def test_claim_task_for_dispatch_refuses_self_managed_task():
-    task = SimpleNamespace(
-        dispatchStatus="PENDING",
-        metadata=json.dumps({"dispatch_mode": "local"}),
-        accountId="acct-1",
-        type="Procedure",
-        status="PENDING",
-        target="procedure/proc-1",
-        command="procedure run proc-1",
-        update=lambda **_kwargs: (_ for _ in ()).throw(AssertionError("local task should not be claimed")),
-    )
-
-    assert _claim_task_for_dispatch(task, "dispatcher-1", "celery") is False
 
 
 def test_list_pending_tasks_only_returns_pending_and_sorts_newest_first():

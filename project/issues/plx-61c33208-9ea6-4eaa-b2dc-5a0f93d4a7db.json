@@ -22,16 +22,10 @@
       "author": "ryan",
       "text": "Implemented fixes + tests. MCP plexus_procedure_chat_messages now selects toolResponse in list query and surfaces tool_response on TOOL_CALL rows, with tool_calls/tool_responses/missing_responses counted from inline toolResponse + legacy child responses. ScoreEditorToolset.submit_score_version now unwraps plexus_score_update MCP envelope and returns actionable validation errors. Tests: pytest -q MCP/tools/procedure/procedures_test.py -k chat_messages; pytest -q plexus/cli/procedure/test_score_editor_toolset.py",
       "created_at": "2026-04-21T12:44:07.751144Z"
-    },
-    {
-      "id": "bdb8df84-e1c4-4802-9008-b654e66aad72",
-      "author": "ryan",
-      "text": "Fixed chat_agent.tac toolResponse extraction: extract_text now handles Lupa userdata (Python objects returned by Tactus agent calls) via pcall attribute access, not just Lua tables. Also added TactusResult.output path and filters garbage Python model reprs (strings containing 'UsageStats' or 'output=None'). Independently verified chat sessions can now: query scorecards/scores, trigger evaluations, start optimization procedures. Outstanding: full unit-test coverage of the fixed extract_text path.",
-      "created_at": "2026-04-30T11:35:38.508466Z"
     }
   ],
   "created_at": "2026-04-21T12:40:06.736755Z",
-  "updated_at": "2026-04-30T11:35:38.508466Z",
+  "updated_at": "2026-04-21T12:44:07.751144Z",
   "closed_at": null,
   "custom": {}
 }

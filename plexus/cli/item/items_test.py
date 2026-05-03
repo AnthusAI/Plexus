@@ -1,26 +1,5 @@
-"""
-Comprehensive tests for ItemCommands CLI functionality.
-
-This test suite validates all CRUD operations for Items in the CLI:
-1. Create - Creating new items with/without identifiers
-2. Info (Read) - Finding items by any identifier type
-3. Update - Updating existing items
-4. Delete - Deleting items
-5. List - Listing items with filtering
-6. Last - Getting the most recent item
-"""
-
-import json
-from unittest.mock import AsyncMock, Mock, mock_open, patch
-
 import pytest
-from click.testing import CliRunner
-
-# Import the CLI commands we're testing
-from plexus.cli.item.items import create, delete, info, item, items, update, upsert
-from plexus.dashboard.api.models.item import Item
-from plexus.dashboard.api.models.feedback_item import FeedbackItem
-from plexus.dashboard.api.models.identifier import Identifier
+from unittest.mock import patch, Mock
 
 
 def build_score_result(cost=None):
@@ -41,7 +20,25 @@ def build_score_result(cost=None):
 
 @pytest.mark.asyncio
 async def test_mcp_item_last_includes_cost_in_score_results(monkeypatch):
-    from MCP.tools.tactus_runtime.execute import _default_item_last
+    # Import the item tools from the new location
+    from MCP.tools.item.items import register_item_tools
+    from unittest.mock import Mock as MockTool
+    
+    # Create a mock FastMCP instance to register the tool
+    mock_mcp = MockTool()
+    tool_functions = {}
+    
+    def mock_tool_decorator():
+        def decorator(func):
+            tool_functions[func.__name__] = func
+            return func
+        return decorator
+    
+    mock_mcp.tool = mock_tool_decorator
+    
+    # Register the item tools to capture the function
+    register_item_tools(mock_mcp)
+    plexus_item_last = tool_functions['plexus_item_last']
 
     mock_client = Mock()
     monkeypatch.setenv('PLEXUS_API_URL', 'https://x')
@@ -65,16 +62,38 @@ async def test_mcp_item_last_includes_cost_in_score_results(monkeypatch):
         ]
 
         # Patch helpers to use our mock client data
-        with patch(
-            'MCP.tools.tactus_runtime._item_helpers._get_feedback_items_for_item',
-            new=AsyncMock(return_value=[]),
-        ):
-            result = _default_item_last({"minimal": False})
+        with patch('MCP.tools.item.items._get_feedback_items_for_item', return_value=[]):
+            result = await plexus_item_last(minimal=False)
 
         assert isinstance(result, dict)
         assert result.get('scoreResults')
         sr = result['scoreResults'][0]
         assert 'cost' in sr and isinstance(sr['cost'], dict)
+
+"""
+Comprehensive tests for ItemCommands CLI functionality.
+
+This test suite validates all CRUD operations for Items in the CLI:
+1. Create - Creating new items with/without identifiers
+2. Info (Read) - Finding items by any identifier type
+3. Update - Updating existing items
+4. Delete - Deleting items
+5. List - Listing items with filtering
+6. Last - Getting the most recent item
+"""
+
+import pytest
+import json
+from unittest.mock import Mock, patch, MagicMock, mock_open
+from datetime import datetime, timezone
+from click.testing import CliRunner
+
+# Import the CLI commands we're testing
+from plexus.cli.item.items import items, item, create, info, update, delete, upsert, list, last
+from plexus.dashboard.api.models.item import Item
+from plexus.dashboard.api.models.score_result import ScoreResult
+from plexus.dashboard.api.models.feedback_item import FeedbackItem
+from plexus.dashboard.api.models.identifier import Identifier
 
 
 class TestItemCommandsCRUD:

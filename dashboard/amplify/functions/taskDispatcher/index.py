@@ -63,28 +63,10 @@ celery_app.conf.update(
 
 # Initialize DynamoDB deserializer
 deserializer = TypeDeserializer()
-SELF_MANAGED_DISPATCH_MODES = {"console_async_worker", "local"}
 
 def deserialize_dynamo_item(item):
     """Convert a DynamoDB item to a regular dict."""
     return {key: deserializer.deserialize(value) for key, value in item.items()}
-
-
-def metadata_dict(raw_metadata):
-    if isinstance(raw_metadata, dict):
-        return raw_metadata
-    if isinstance(raw_metadata, str) and raw_metadata.strip():
-        try:
-            parsed = json.loads(raw_metadata)
-            return parsed if isinstance(parsed, dict) else {}
-        except Exception:
-            return {}
-    return {}
-
-
-def is_self_managed_task(task):
-    metadata = metadata_dict(task.get("metadata"))
-    return metadata.get("dispatch_mode") in SELF_MANAGED_DISPATCH_MODES
 
 
 def handler(event, context):
@@ -123,11 +105,6 @@ def handler(event, context):
         try:
             task = deserialize_dynamo_item(new_image)
             logger.info(f"Deserialized task: {json.dumps(task)}")
-
-            if is_self_managed_task(task):
-                logger.info("Skipping self-managed task with dispatch_mode: %s", metadata_dict(task.get("metadata")).get("dispatch_mode"))
-                skipped_count += 1
-                continue
             
             # For MODIFY events, check if dispatchStatus changed to PENDING
             if event_name == 'MODIFY':
@@ -177,4 +154,4 @@ def handler(event, context):
         "errors": error_count
     }
     logger.info(f"Lambda execution complete. Summary: {json.dumps(summary)}")
-    return summary
+    return summary 

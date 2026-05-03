@@ -43,33 +43,6 @@ def test_run_programmatic_block_executes_hidden_dispatcher_entrypoint(
     mock_run_and_persist.assert_called_once()
 
 
-@patch("plexus.cli.feedback.feedback_report.run_programmatic_block_and_persist")
-@patch("plexus.cli.feedback.feedback_report.create_client")
-def test_run_programmatic_block_rejects_invalid_child_budget(
-    mock_create_client,
-    mock_run_and_persist,
-):
-    runner = CliRunner()
-    mock_create_client.return_value = MagicMock()
-    payload = encode_programmatic_run_payload(
-        {
-            "cache_key": "cache-1",
-            "block_class": "AcceptanceRate",
-            "block_config": {"scorecard": "sc-1"},
-            "account_id": "acct-1",
-            "ttl_hours": 24,
-            "fresh": False,
-            "child_budget": {"usd": 0.1, "depth": 1, "tool_calls": 2},
-        }
-    )
-
-    result = runner.invoke(report, ["run-programmatic-block", "--payload-base64", payload])
-
-    assert result.exit_code != 0
-    assert "wallclock_seconds" in result.output
-    mock_run_and_persist.assert_not_called()
-
-
 @patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
 def test_acceptance_rate_passes_parallel_fetch_options(mock_run_feedback_report_block):
     runner = CliRunner()
@@ -98,33 +71,6 @@ def test_acceptance_rate_passes_parallel_fetch_options(mock_run_feedback_report_
     assert kwargs["extra_config"]["fetch_shard_days"] == 14
     assert kwargs["extra_config"]["fetch_shard_concurrency"] == 3
     assert kwargs["extra_config"]["fetch_max_inflight_process"] == 5
-
-
-@patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
-def test_contradictions_passes_include_rubric_memory_flag(mock_run_feedback_report_block):
-    runner = CliRunner()
-    mock_run_feedback_report_block.return_value = {
-        "status": "success",
-        "output": {"contradictions_found": 0},
-    }
-
-    result = runner.invoke(
-        report,
-        [
-            "contradictions",
-            "--scorecard",
-            "1438",
-            "--score",
-            "48059",
-            "--days",
-            "30",
-            "--include-rubric-memory",
-        ],
-    )
-
-    assert result.exit_code == 0
-    _, kwargs = mock_run_feedback_report_block.call_args
-    assert kwargs["extra_config"]["include_rubric_memory"] is True
 
 
 @patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
@@ -215,63 +161,6 @@ def test_feedback_volume_uses_dedicated_block_and_show_bucket_details(mock_run_f
     _, kwargs = mock_run_feedback_report_block.call_args
     assert kwargs["block_class"] == "FeedbackVolumeTimeline"
     assert kwargs["extra_config"]["show_bucket_details"] is True
-
-
-@patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
-def test_score_champion_version_timeline_uses_dedicated_block(mock_run_feedback_report_block):
-    runner = CliRunner()
-    mock_run_feedback_report_block.return_value = {"status": "success", "output": {"scores": []}}
-
-    result = runner.invoke(
-        report,
-        [
-            "score-champion-version-timeline",
-            "--scorecard",
-            "1438",
-            "--days",
-            "21",
-        ],
-    )
-
-    assert result.exit_code == 0
-    _, kwargs = mock_run_feedback_report_block.call_args
-    assert kwargs["block_class"] == "ScoreChampionVersionTimeline"
-    assert kwargs["scorecard"] == "1438"
-    assert kwargs["score"] is None
-    assert kwargs["days"] == 21
-    assert kwargs["extra_config"] == {"include_unchanged": False}
-
-
-@patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
-def test_score_champion_version_timeline_supports_single_score_explicit_window(mock_run_feedback_report_block):
-    runner = CliRunner()
-    mock_run_feedback_report_block.return_value = {"status": "success", "output": {"scores": []}}
-
-    result = runner.invoke(
-        report,
-        [
-            "score-champion-version-timeline",
-            "--scorecard",
-            "1438",
-            "--score",
-            "48059",
-            "--start-date",
-            "2026-04-01",
-            "--end-date",
-            "2026-05-01",
-            "--include-unchanged",
-            "--fresh",
-        ],
-    )
-
-    assert result.exit_code == 0
-    _, kwargs = mock_run_feedback_report_block.call_args
-    assert kwargs["block_class"] == "ScoreChampionVersionTimeline"
-    assert kwargs["score"] == "48059"
-    assert kwargs["start_date"] == "2026-04-01"
-    assert kwargs["end_date"] == "2026-05-01"
-    assert kwargs["extra_config"] == {"include_unchanged": True}
-    assert kwargs["fresh"] is True
 
 
 @patch("plexus.cli.feedback.feedback_report.resolve_account_id_for_command")

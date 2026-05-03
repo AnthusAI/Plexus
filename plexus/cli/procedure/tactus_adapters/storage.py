@@ -430,24 +430,19 @@ class PlexusStorageAdapter:
             metadata_json['checkpoints'] = {'_s3_key': f"procedures/{pid}/checkpoints.json"}
 
             if _looks_like_optimizer_state(metadata.state):
-                try:
-                    from plexus.cli.shared.optimizer_results import (
-                        OPTIMIZER_ARTIFACTS_METADATA_KEY,
-                        OptimizerResultsService,
-                    )
+                from plexus.cli.shared.optimizer_results import (
+                    OPTIMIZER_ARTIFACTS_METADATA_KEY,
+                    OptimizerResultsService,
+                )
 
-                    optimizer_service = OptimizerResultsService(self.client)
-                    optimizer_index = optimizer_service.index_optimizer_run(
-                        metadata.procedure_id,
-                        state_override=metadata.state,
-                        existing_metadata=metadata_json,
-                        persist_metadata_pointer=False,
-                    )
-                    metadata_json[OPTIMIZER_ARTIFACTS_METADATA_KEY] = optimizer_index["pointer"]
-                except RuntimeError as _ors_err:
-                    # Optimizer artifact storage may be unavailable (e.g. missing S3 bucket config).
-                    # Degrade gracefully — metadata still saves without the artifact pointer.
-                    logger.warning("Optimizer artifact indexing skipped: %s", _ors_err)
+                optimizer_service = OptimizerResultsService(self.client)
+                optimizer_index = optimizer_service.index_optimizer_run(
+                    metadata.procedure_id,
+                    state_override=metadata.state,
+                    existing_metadata=metadata_json,
+                    persist_metadata_pointer=False,
+                )
+                metadata_json[OPTIMIZER_ARTIFACTS_METADATA_KEY] = optimizer_index["pointer"]
 
             serialized = json.dumps(metadata_json)
 

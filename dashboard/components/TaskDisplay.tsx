@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import type { AmplifyTask, ProcessedTask } from '@/utils/data-operations'
-import { getTaskProcedureId, transformAmplifyTask, processTask } from '@/utils/data-operations'
+import { transformAmplifyTask, processTask } from '@/utils/data-operations'
 import type { EvaluationTaskProps } from '@/types/tasks/evaluation'
 import type { TaskStatus } from '@/types/shared'
 import EvaluationTask from '@/components/EvaluationTask'
@@ -274,7 +274,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     command: processedTask?.command,
     description: processedTask?.description,
     dispatchStatus: processedTask?.dispatchStatus,
-    metadata: processedTask?.metadata || task?.metadata,
+    metadata: processedTask?.metadata,
     errorMessage: processedTask?.errorMessage || (task ? (task.errorMessage || evaluationData?.errorMessage) : evaluationData?.errorMessage) || undefined,
     errorDetails: processedTask?.errorDetails || (task ? (task.errorDetails || evaluationData?.errorDetails) : evaluationData?.errorDetails) || undefined,
     celeryTaskId: (processedTask?.celeryTaskId || task?.celeryTaskId) ?? undefined,
@@ -287,18 +287,13 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
 
   // Conditionally render EvaluationTask or ReportTask
   if (evaluationData) {
-    const derivedProcedureId = getTaskProcedureId({
-      metadata: commonTaskProps.metadata,
-      target: (processedTask?.target || task?.target || '') as string,
-    } as AmplifyTask)
-
     // Construct props specific to EvaluationTask
     const evaluationTaskProps = {
       task: {
         ...commonTaskProps,
         scorecard: evaluationData.scorecard?.name || evaluationData.scorecardId || '-',
         score: evaluationData.score?.name || evaluationData.scoreId || '-',
-        procedureId: evaluationData.procedureId ?? derivedProcedureId ?? undefined,
+        procedureId: evaluationData.procedureId ?? undefined,
         scorecardId: evaluationData.scorecardId,
         scoreId: evaluationData.scoreId,
         scoreVersionId: evaluationData.scoreVersionId,

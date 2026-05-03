@@ -107,7 +107,7 @@ def resume_procedure(client, procedure_id: str) -> Dict[str, Any]:
     try:
         # Run procedure (will replay checkpoints and continue from HITL point)
         import asyncio
-        run_result = asyncio.run(service.run_procedure(
+        run_result = asyncio.run(service.run_experiment(
             procedure_id=procedure_id
         ))
 

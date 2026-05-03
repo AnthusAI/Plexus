@@ -28,8 +28,7 @@ jest.mock('@/components/evaluations-dashboard', () => ({
 
 // Mock the utils/data-operations module
 jest.mock('@/utils/data-operations', () => ({
-  getValueFromLazyLoader: jest.fn(() => ({ data: { items: [] } })),
-  getTaskProcedureId: jest.fn(() => null),
+  getValueFromLazyLoader: jest.fn(() => ({ data: { items: [] } }))
 }));
 
 // Mock AWS Amplify

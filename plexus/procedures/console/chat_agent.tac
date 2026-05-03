@@ -12,14 +12,30 @@ if type(input) == "table" then
   end
 end
 
--- History comes exclusively from the caller via console_session_history.
--- Never auto-load from MessageHistory: tool-result payloads stored there can
--- be extremely large and blow up the context window on the very next turn.
 local history = {}
 if type(input) == "table" then
   local provided_history = input.console_session_history
   if type(provided_history) == "table" and #provided_history > 0 then
     history = provided_history
+  end
+end
+
+if #history == 0 and MessageHistory ~= nil and MessageHistory.get ~= nil then
+  local history_raw = MessageHistory.get()
+  if type(history_raw) == "table" then
+    history = history_raw
+  else
+    local ok_encoded, encoded = pcall(function()
+      return Json.encode(history_raw)
+    end)
+    if ok_encoded and type(encoded) == "string" then
+      local ok_decoded, decoded = pcall(function()
+        return Json.decode(encoded)
+      end)
+      if ok_decoded and type(decoded) == "table" then
+        history = decoded
+      end
+    end
   end
 end
 
@@ -195,35 +211,6 @@ local assistant_prompt = "You are the Plexus Console assistant in an ongoing eng
                          "Recent conversation context (oldest to newest):\n" .. history_context .. "\n\n" ..
                          "Respond to the latest user message now."
 
-local function extract_text(value)
-  if type(value) == "string" and value ~= "" then
-    return value
-  end
-  -- Handle both Lua tables AND Lupa-wrapped Python objects (type == "userdata")
-  if type(value) == "table" or type(value) == "userdata" then
-    for _, key in ipairs({"response", "content", "message", "text"}) do
-      local ok, attr = pcall(function() return value[key] end)
-      if ok and type(attr) == "string" and attr ~= "" then
-        return attr
-      end
-    end
-    -- Indexed first element
-    local ok_first, first = pcall(function() return value[1] end)
-    if ok_first and type(first) == "string" and first ~= "" then
-      return first
-    end
-    if ok_first and (type(first) == "table" or type(first) == "userdata") then
-      for _, key in ipairs({"text", "content"}) do
-        local ok2, attr2 = pcall(function() return first[key] end)
-        if ok2 and type(attr2) == "string" and attr2 ~= "" then
-          return attr2
-        end
-      end
-    end
-  end
-  return ""
-end
-
 local assistant_result = nil
 if deterministic_response ~= nil and deterministic_response ~= "" then
   assistant_result = { response = deterministic_response }
@@ -233,28 +220,44 @@ end
 
 local final_response = ""
 
+local function extract_text(value)
+  if type(value) == "string" and value ~= "" then
+    return value
+  end
+  if type(value) == "table" then
+    if type(value.response) == "string" and value.response ~= "" then
+      return value.response
+    end
+    if type(value.content) == "string" and value.content ~= "" then
+      return value.content
+    end
+    if type(value.message) == "string" and value.message ~= "" then
+      return value.message
+    end
+    if type(value.text) == "string" and value.text ~= "" then
+      return value.text
+    end
+    local part = value[1]
+    if type(part) == "string" and part ~= "" then
+      return part
+    end
+    if type(part) == "table" then
+      if type(part.text) == "string" and part.text ~= "" then
+        return part.text
+      end
+      if type(part.content) == "string" and part.content ~= "" then
+        return part.content
+      end
+    end
+  end
+  return ""
+end
+
 final_response = extract_text(assistant_result)
 
--- Fallback: read TactusResult.output (may be string or structured table/userdata)
-if final_response == "" then
-  local ok_res, res_output = pcall(function() return assistant_result.output end)
-  if ok_res and res_output ~= nil then
-    final_response = extract_text(res_output)
-  end
-end
-
--- Fallback: assistant.output set by Tactus after the call — filter out Python repr garbage
-if final_response == "" then
-  local ok_out, out_val = pcall(function() return assistant.output end)
-  if ok_out and type(out_val) == "string" and out_val ~= ""
-    and not string.find(out_val, "UsageStats", 1, true)
-    and not string.find(out_val, "output=None", 1, true) then
-    final_response = out_val
-  end
-end
-
-if final_response == "" then
-  for _, key in ipairs({ "response", "content", "message", "text", "output", "result" }) do
+if final_response == "" and type(assistant_result) == "table" then
+  local attr_keys = { "response", "content", "message", "text", "output", "result" }
+  for _, key in ipairs(attr_keys) do
     local ok_attr, attr_value = pcall(function()
       return assistant_result[key]
     end)

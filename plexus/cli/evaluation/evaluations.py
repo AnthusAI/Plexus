@@ -6,10 +6,7 @@ import re
 import sys
 import json
 import click
-from contextlib import nullcontext
-from contextvars import ContextVar
 from click.core import ParameterSource
-from functools import wraps
 import yaml
 import asyncio
 import pandas as pd
@@ -27,7 +24,6 @@ from plexus.CustomLogging import logging, set_log_group
 from plexus.Scorecard import Scorecard
 from plexus.Evaluation import AccuracyEvaluation, FeedbackEvaluation
 from plexus.cli.shared.console import console
-from plexus.runtime_budget import RuntimeBudgetLimitExceeded, RuntimeBudgetMeter
 
 # Import dashboard-specific modules
 from plexus.dashboard.api.client import PlexusDashboardClient
@@ -47,49 +43,6 @@ import types  # Add this at the top with other imports
 import uuid
 import inspect
 import subprocess
-
-
-_ACTIVE_CHILD_BUDGET: ContextVar[RuntimeBudgetMeter | None] = ContextVar(
-    "active_child_budget",
-    default=None,
-)
-
-
-def _enforce_child_budget_from_env(operation: str):
-    def decorator(fn):
-        @wraps(fn)
-        def wrapper(*args, **kwargs):
-            try:
-                meter = RuntimeBudgetMeter.from_env()
-            except ValueError as exc:
-                raise click.ClickException(str(exc)) from exc
-            token = _ACTIVE_CHILD_BUDGET.set(meter)
-            try:
-                context = meter.enforce_wallclock(operation) if meter else nullcontext()
-                with context:
-                    return fn(*args, **kwargs)
-            except RuntimeBudgetLimitExceeded as exc:
-                raise click.ClickException(str(exc)) from exc
-            finally:
-                _ACTIVE_CHILD_BUDGET.reset(token)
-
-        return wrapper
-
-    return decorator
-
-
-def _record_scorecard_cost_against_child_budget(scorecard: Any, operation: str) -> None:
-    meter = _ACTIVE_CHILD_BUDGET.get()
-    if meter is None or scorecard is None:
-        return
-    try:
-        expenses = scorecard.get_accumulated_costs()
-    except Exception as exc:  # noqa: BLE001
-        logging.debug("Could not read scorecard costs for child budget: %s", exc)
-        return
-    if not isinstance(expenses, dict):
-        return
-    meter.record_usd(operation, expenses.get("total_cost") or 0.0)
 from concurrent.futures import ThreadPoolExecutor
 
 def truncate_dict_strings(d, max_length=100):
@@ -116,10 +69,6 @@ from plexus.cli.shared.feedback_evaluation_runner import (
     run_feedback_evaluation_orchestrated,
 )
 from plexus.utils.feedback_selection import select_feedback_items
-from plexus.score_rubric_consistency import (
-    ScoreRubricConsistencyService,
-    merge_consistency_result_into_parameters,
-)
 
 from plexus.utils import truncate_dict_strings_inner
 
@@ -136,7 +85,7 @@ def log_scorecard_configurations(scorecard_instance, context=""):
         version = score_config.get('version', 'Not specified')
         champion_version = score_config.get('championVersionId', 'Not specified')
         
-        logging.info(f"Score #{i + 1}: {score_name}")
+        logging.info(f"Score #{i+1}: {score_name}")
         logging.info(f"  ID: {score_id}")
         logging.info(f"  Version field: {version}")
         logging.info(f"  Champion version: {champion_version}")
@@ -2032,25 +1981,6 @@ def get_latest_score_version(client, score_id: str) -> Optional[str]:
         logging.error(f"Error fetching latest ScoreVersion for score {score_id}: {str(e)}")
         return None
 
-
-def _build_evaluation_task_metadata(
-    *,
-    task_type: str,
-    scorecard: str,
-    score: Optional[str] = None,
-    procedure_id: Optional[str] = None,
-) -> Dict[str, str]:
-    metadata: Dict[str, str] = {
-        "type": task_type,
-        "scorecard": scorecard,
-        "task_type": task_type,
-    }
-    if score:
-        metadata["score"] = score
-    if procedure_id:
-        metadata["procedure_id"] = procedure_id
-    return metadata
-
 @evaluate.command()
 @click.option('--scorecard', 'scorecard', default=None, help='Scorecard identifier (ID, name, key, or external ID)')
 @click.option('--yaml', is_flag=True, help='Load scorecard from individual YAML files (from fetch_score_configurations) instead of the API')
@@ -2079,9 +2009,6 @@ def _build_evaluation_task_metadata(
 @click.option('--current-baseline', default=None, type=str, help='Current baseline evaluation ID (latest accepted version) for dual baseline dashboard display.')
 @click.option('--json-only', is_flag=True, default=False, help='Emit JSON summary payload instead of rich console output.')
 @click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
-@click.option('--procedure-id', default=None, type=str, help='Procedure ID to associate with the evaluation task metadata.')
-@click.option('--emit-id-file', default=None, type=str, help='Write the evaluation ID to this file as soon as the record is created (used by programmatic dispatch).')
-@_enforce_child_budget_from_env("evaluation.accuracy")
 def accuracy(
     scorecard: str,
     yaml: bool,
@@ -2110,8 +2037,6 @@ def accuracy(
     current_baseline: Optional[str],
     json_only: bool,
     notes: Optional[str] = None,
-    procedure_id: Optional[str] = None,
-    emit_id_file: Optional[str] = None,
     ):
     """
     Evaluate the accuracy of the scorecard using the current configuration against labeled samples.
@@ -2420,11 +2345,11 @@ def accuracy(
                             description=f"Accuracy evaluation for {scorecard}",
                             dispatch_status="DISPATCHED",
                             prevent_new_task=False,
-                            metadata=_build_evaluation_task_metadata(
-                                task_type="Accuracy Evaluation",
-                                scorecard=scorecard,
-                                procedure_id=procedure_id,
-                            ),
+                            metadata={
+                                "type": "Accuracy Evaluation",
+                                "scorecard": scorecard,
+                                "task_type": "Accuracy Evaluation"
+                            },
                             account_id=account.id
                         )
 
@@ -2490,12 +2415,6 @@ def accuracy(
                             **experiment_params
                         )
                         logging.info(f"Created initial Evaluation record with ID: {evaluation_record.id}")
-                        if emit_id_file:
-                            try:
-                                with open(emit_id_file, "w") as _f:
-                                    _f.write(evaluation_record.id)
-                            except Exception as _e:
-                                logging.warning(f"Failed to write evaluation ID to file {emit_id_file}: {_e}")
 
                     except Exception as e:
                         logging.error(f"Error creating task or evaluation: {str(e)}")
@@ -2518,11 +2437,11 @@ def accuracy(
                     description=f"Accuracy evaluation for {scorecard}",
                     dispatch_status="DISPATCHED",
                     prevent_new_task=True,  # Prevent new task creation since we have one
-                    metadata=_build_evaluation_task_metadata(
-                        task_type="Accuracy Evaluation",
-                        scorecard=scorecard,
-                        procedure_id=procedure_id,
-                    ),
+                    metadata={
+                        "type": "Accuracy Evaluation",
+                        "scorecard": scorecard,
+                        "task_type": "Accuracy Evaluation"
+                    },
                     account_id=account.id
                 )
                 
@@ -2837,9 +2756,9 @@ def accuracy(
                 scorecard_id_resolved = getattr(scorecard_instance, 'id', None)
                 logging.info(f"Resolved from attributes: name='{scorecard_name_resolved}', key='{scorecard_key_resolved}', id='{scorecard_id_resolved}' (type: {type(scorecard_id_resolved)})")
             else:
-                scorecard_name_resolved = scorecard  # Fallback to initial identifier
-                scorecard_key_resolved = scorecard  # Fallback to initial identifier
-                scorecard_id_resolved = scorecard  # Fallback to initial identifier
+                scorecard_name_resolved = scorecard # Fallback to initial identifier
+                scorecard_key_resolved = scorecard # Fallback to initial identifier
+                scorecard_id_resolved = scorecard # Fallback to initial identifier
                 logging.info(f"Using fallback: name='{scorecard_name_resolved}', key='{scorecard_key_resolved}', id='{scorecard_id_resolved}' (type: {type(scorecard_id_resolved)})")
             
             # Check if any cloud dataset options are provided
@@ -3114,10 +3033,6 @@ def accuracy(
             try:
                 # Pass tracker when available; method tolerates None
                 result_metrics = await accuracy_eval.run(tracker=tracker)
-                _record_scorecard_cost_against_child_budget(
-                    getattr(accuracy_eval, "scorecard", None),
-                    "evaluation.accuracy",
-                )
                 # Ensure we have valid metrics (run() should return dict, not None)
                 if result_metrics is not None:
                     final_metrics = result_metrics
@@ -3256,17 +3171,14 @@ def accuracy(
                     if existing_parameters:
                         update_fields["parameters"] = json.dumps(existing_parameters)
 
-                    # Always write confusion matrix/distributions so this final write wins
-                    # over any intermediate write from the background metrics task.
-                    update_fields['confusionMatrix'] = json.dumps(
-                        final_metrics.get("confusionMatrix") or None
-                    )
-                    update_fields['predictedClassDistribution'] = json.dumps(
-                        final_metrics.get("predictedClassDistribution") or []
-                    )
-                    update_fields['datasetClassDistribution'] = json.dumps(
-                        final_metrics.get("datasetClassDistribution") or []
-                    )
+                    if final_metrics.get("confusionMatrix"):
+                        update_fields['confusionMatrix'] = json.dumps(final_metrics.get("confusionMatrix"))
+                    
+                    if final_metrics.get("predictedClassDistribution"):
+                        update_fields['predictedClassDistribution'] = json.dumps(final_metrics.get("predictedClassDistribution"))
+                    
+                    if final_metrics.get("datasetClassDistribution"):
+                        update_fields['datasetClassDistribution'] = json.dumps(final_metrics.get("datasetClassDistribution"))
                     
                     # Remove None values from update_fields
                     update_fields = {k: v for k, v in update_fields.items() if v is not None}
@@ -3293,9 +3205,9 @@ def accuracy(
                     raise
             
             # Display final results summary
-            logging.info(f"\n{'=' * 60}")
+            logging.info(f"\n{'='*60}")
             logging.info("EVALUATION RESULTS")
-            logging.info('=' * 60)
+            logging.info('='*60)
             logging.info(f"Sample Size:        {len(labeled_samples_data)}")
 
             # Safely extract metrics (handle None case)
@@ -3324,7 +3236,7 @@ def accuracy(
             if detailed_summary:
                 logging.info(detailed_summary)
             
-            logging.info('=' * 60)
+            logging.info('='*60)
             
             # Complete task lifecycle in tracker/API task record.
             if tracker:
@@ -3626,8 +3538,8 @@ def check_dict_serializability(d, path=""):
                 if isinstance(item, dict):
                     non_serializable_paths.extend(check_dict_serializability(item, item_path))
                 elif isinstance(item, list):
-                    # Handle nested lists if necessary, though less common in typical results
-                    pass  # Or add recursive list check if needed
+                     # Handle nested lists if necessary, though less common in typical results
+                     pass # Or add recursive list check if needed
                 elif not is_json_serializable(item):
                     logging.warning(f"Non-serializable list item found at path '{item_path}': type={type(item)}")
                     non_serializable_paths.append(item_path)
@@ -3688,8 +3600,8 @@ def score_text_wrapper(scorecard_instance, text, score_name, scorecard_name=None
                 score_result_name = None
                 if hasattr(score_result_obj, 'parameters') and hasattr(score_result_obj.parameters, 'name'):
                     score_result_name = score_result_obj.parameters.name
-                elif hasattr(score_result_obj, 'name'):  # Fallback if name is directly on the object
-                    score_result_name = score_result_obj.name
+                elif hasattr(score_result_obj, 'name'): # Fallback if name is directly on the object
+                     score_result_name = score_result_obj.name
 
                 if score_result_name == score_name:
                     # Ensure the returned object is a Score.Result instance or similar
@@ -3711,8 +3623,8 @@ def score_text_wrapper(scorecard_instance, text, score_name, scorecard_name=None
             #     return result[first_key]
             # else:
             #     return {"error": "Empty result dictionary", "value": "ERROR"}
-        elif hasattr(result, 'value'):  # Handle case where a single Result object is returned directly
-            return result
+        elif hasattr(result, 'value'): # Handle case where a single Result object is returned directly
+             return result
         else:
             # Handle unexpected result types
             logging.warning(f"Unexpected result type from score_entire_text: {type(result)}")
@@ -4224,14 +4136,6 @@ def last(account_key: str, type: Optional[str]):
 @click.option('--yaml', 'use_yaml', is_flag=True, help='Load scorecard from local YAML files instead of the API')
 @click.option('--task-id', default=None, type=str, help='Task ID for progress tracking')
 @click.option('--notes', default=None, type=str, help='Freeform notes explaining why this evaluation is being run. Stored in evaluation parameters.')
-@click.option('--procedure-id', default=None, type=str, help='Procedure ID to associate with the evaluation task metadata.')
-@click.option(
-    '--score-rubric-consistency-check',
-    is_flag=True,
-    default=False,
-    help='Before feedback-backed predictions, compare the evaluated ScoreVersion code against its rubric and store the result.',
-)
-@click.option('--emit-id-file', default=None, type=str, help='Write the evaluation ID to this file as soon as the record is created (used by programmatic dispatch).')
 def feedback(
     scorecard: str,
     score: str,
@@ -4246,9 +4150,6 @@ def feedback(
     use_yaml: bool,
     task_id: Optional[str],
     notes: Optional[str] = None,
-    procedure_id: Optional[str] = None,
-    score_rubric_consistency_check: bool = False,
-    emit_id_file: Optional[str] = None,
 ):
     """
     Evaluate feedback alignment by analyzing feedback items over a time period for a specific score.
@@ -4546,12 +4447,11 @@ def feedback(
                         description=f"Feedback accuracy evaluation for {scorecard} > {score}",
                         dispatch_status="DISPATCHED",
                         prevent_new_task=False,
-                        metadata=_build_evaluation_task_metadata(
-                            task_type="Feedback Accuracy Evaluation",
-                            scorecard=scorecard,
-                            score=score,
-                            procedure_id=procedure_id,
-                        ),
+                        metadata={
+                            "type": "Feedback Accuracy Evaluation",
+                            "scorecard": scorecard,
+                            "task_type": "Feedback Accuracy Evaluation"
+                        },
                         account_id=account_id,
                         client=client
                     )
@@ -4582,7 +4482,6 @@ def feedback(
                         "sample_seed": sample_seed,
                         "max_category_summary_items": max_category_summary_items,
                         "mode": "accuracy_with_feedback_dataset",
-                        "score_rubric_consistency_check_requested": bool(score_rubric_consistency_check),
                         **({"notes": notes} if notes else {}),
                         "metadata": {
                             **({"baseline": baseline} if baseline else {}),
@@ -4597,60 +4496,6 @@ def feedback(
                 
                 console.print(f"\nCreated evaluation record: {evaluation_id}")
                 console.print(f"Dashboard URL: https://app.plexusanalytics.com/evaluations/{evaluation_id}")
-                if emit_id_file:
-                    try:
-                        with open(emit_id_file, "w") as _f:
-                            _f.write(evaluation_id)
-                    except Exception as _e:
-                        logging.warning(f"Failed to write evaluation ID to file {emit_id_file}: {_e}")
-
-                if score_rubric_consistency_check:
-                    console.print("\n[bold]Checking score code against rubric...[/bold]")
-                    try:
-                        consistency_result = ScoreRubricConsistencyService().generate_from_api(
-                            client=client,
-                            scorecard_identifier=scorecard,
-                            score_identifier=score_name_for_dataset,
-                            score_id=score_id,
-                            score_version_id=version,
-                        )
-                        merged_parameters = merge_consistency_result_into_parameters(
-                            evaluation_record.parameters,
-                            consistency_result,
-                        )
-                        evaluation_record.update(parameters=json.dumps(merged_parameters))
-                        console.print(
-                            f"[dim]Score/rubric consistency: {consistency_result.status}[/dim]"
-                        )
-                    except Exception as consistency_error:
-                        logging.warning(
-                            "Score/rubric consistency check failed for evaluation %s: %s",
-                            evaluation_id,
-                            consistency_error,
-                            exc_info=True,
-                        )
-                        merged_parameters = {}
-                        try:
-                            merged_parameters = (
-                                json.loads(evaluation_record.parameters)
-                                if isinstance(evaluation_record.parameters, str)
-                                and evaluation_record.parameters
-                                else (evaluation_record.parameters or {})
-                            )
-                        except Exception:
-                            merged_parameters = {}
-                        merged_parameters["score_rubric_consistency_check"] = {
-                            "scorecard_identifier": scorecard,
-                            "score_identifier": score_name_for_dataset,
-                            "score_version_id": version,
-                            "status": "unavailable",
-                            "paragraph": (
-                                "The score/rubric consistency check failed before predictions ran."
-                            ),
-                            "error": str(consistency_error),
-                            "checked_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                        }
-                        evaluation_record.update(parameters=json.dumps(merged_parameters))
                 
                 # Run accuracy evaluation with the modified scorecard
                 console.print("\n[bold]Running accuracy evaluation with FeedbackItems dataset...[/bold]")
@@ -4680,10 +4525,6 @@ def feedback(
                 # Run the evaluation
                 try:
                     asyncio.run(accuracy_eval.run(tracker=tracker))
-                    _record_scorecard_cost_against_child_budget(
-                        getattr(accuracy_eval, "scorecard", None),
-                        "evaluation.feedback",
-                    )
                 except Exception as e:
                     raw_error_msg = str(e)
                     error_msg = raw_error_msg if raw_error_msg.startswith("Initial evaluation failed:") else f"Initial evaluation failed: {raw_error_msg}"

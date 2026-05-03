@@ -491,56 +491,6 @@ async def test_build_rubric_memory_contexts_uses_retrieval_only_provider(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_build_rubric_memory_contexts_gracefully_skips_missing_corpus(monkeypatch):
-    block = FeedbackContradictions(
-        config={'scorecard': 'CMG EDU', 'score': 'Branding and Matching'},
-        params={},
-        api_client=_DummyClient(),
-    )
-
-    class _Provider:
-        def __init__(self, api_client):
-            assert api_client is block.api_client
-
-        def local_corpus_status(self, **_kwargs):
-            return {
-                'available': False,
-                'roots': [
-                    {
-                        'path': 's3://rubric-bucket/CMG EDU/scorecard.knowledge-base/',
-                        'exists': False,
-                    }
-                ],
-            }
-
-        async def retrieve_for_score_items(self, **_kwargs):
-            raise AssertionError('missing corpus should skip retrieval')
-
-    monkeypatch.setattr(
-        'plexus.reports.blocks.feedback_contradictions.RubricMemoryContextProvider',
-        _Provider,
-    )
-
-    contexts = await block._build_rubric_memory_contexts(
-        valid_items=[
-            SimpleNamespace(
-                id='fi-1',
-                itemId='item-1',
-                initialAnswerValue='No',
-                finalAnswerValue='Yes',
-                editCommentValue='Reviewer comment',
-            )
-        ],
-        score_results_by_item={},
-        scorecard_name='CMG EDU',
-        score_name='Branding and Matching',
-        score_id='score-1',
-    )
-
-    assert contexts == {}
-
-
-@pytest.mark.asyncio
 async def test_resolve_score_accepts_uuid_via_section_scorecard_lookup(monkeypatch):
     client = MagicMock()
     client.context = SimpleNamespace(account_id="account-1")

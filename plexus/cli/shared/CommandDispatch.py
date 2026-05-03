@@ -45,7 +45,6 @@ load_dotenv()
 console = Console()
 DEFAULT_CELERY_QUEUE_NAME = "plexus-celery-development"
 VALID_DISPATCH_MODES = {"celery", "local"}
-SELF_MANAGED_DISPATCH_MODES = {"console_async_worker", "local"}
 DEFAULT_LOCAL_DISPATCH_TIMEOUT_SECONDS = 900
 PROCEDURE_WAITING_STATUSES = {"WAITING_FOR_HUMAN"}
 PROCEDURE_SUCCESS_STATUSES = {"COMPLETED", "COMPLETE"}
@@ -188,8 +187,8 @@ def _list_pending_tasks_for_account(
             continue
 
         metadata = _normalize_metadata(task.get("metadata"))
-        if metadata.get("dispatch_mode") in SELF_MANAGED_DISPATCH_MODES:
-            # These modes are handled by their own launch paths.
+        if metadata.get("dispatch_mode") == "console_async_worker":
+            # Console chat responses are dispatched from ChatMessage stream handling.
             # Skip them in the generic dispatcher to avoid duplicate execution.
             continue
 
@@ -219,9 +218,6 @@ def _claim_task_for_dispatch(task: Task, dispatcher_id: str, mode: str) -> bool:
         return False
 
     metadata = _normalize_metadata(task.metadata)
-    if metadata.get("dispatch_mode") in SELF_MANAGED_DISPATCH_MODES:
-        return False
-
     metadata["dispatch_mode"] = mode
     metadata["dispatch_claimed_at"] = datetime.datetime.now(timezone.utc).isoformat()
 

@@ -6,7 +6,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { CheckCircle2, XCircle, AlertTriangle, Link as LinkIcon } from 'lucide-react'
+import { CheckCircle2, XCircle, AlertTriangle, ExternalLink } from 'lucide-react'
 
 // --- Types ---
 
@@ -133,7 +133,7 @@ function ProblemItemRow({ itemId, item }: { itemId: string; item: ProblemItem })
               title={`Open item ${itemId}`}
             >
               {itemId.slice(0, 8)}…
-              <LinkIcon className="h-2.5 w-2.5 opacity-50" />
+              <ExternalLink className="h-2.5 w-2.5 opacity-50" />
             </a>
 
             <PatternBadge pattern={item.pattern} />

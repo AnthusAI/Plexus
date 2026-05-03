@@ -2,11 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import {
-  ITEM_IDENTIFIER_SEARCH_QUERY,
-  buildItemIdentifierSearchVariables,
-  firstItemIdFromIdentifierSearchResponse,
-} from '../components/items-dashboard';
+import ItemsDashboard from '../components/items-dashboard';
 
 // Mock the required modules
 jest.mock('next/navigation', () => ({
@@ -103,44 +99,4 @@ describe('ItemsDashboard Score Result Selection Logic', () => {
     
     expect(shouldShowDivider).toBe(false);
   });
-});
-
-describe('ItemsDashboard Identifier Search', () => {
-  it('uses the account-scoped identifier value index', () => {
-    expect(ITEM_IDENTIFIER_SEARCH_QUERY).toContain('listIdentifierByAccountIdAndValue');
-    expect(ITEM_IDENTIFIER_SEARCH_QUERY).not.toContain('listIdentifierByValue');
-  });
-
-  it('builds exact identifier search variables for the selected account', () => {
-    expect(buildItemIdentifierSearchVariables('account-1', '  report-123  ')).toEqual({
-      accountId: 'account-1',
-      value: { eq: 'report-123' },
-      limit: 25,
-    });
-  });
-
-  it('returns the first item id from identifier search results', () => {
-    const itemId = firstItemIdFromIdentifierSearchResponse({
-      data: {
-        listIdentifierByAccountIdAndValue: {
-          items: [
-            { itemId: null, name: 'Report Id', value: '123', accountId: 'account-1' },
-            { itemId: 'item-123', name: 'ID', value: 'item-123', accountId: 'account-1' },
-          ],
-        },
-      },
-    });
-
-    expect(itemId).toBe('item-123');
-  });
-
-  it('returns null when identifier search has no item ids', () => {
-    expect(firstItemIdFromIdentifierSearchResponse({
-      data: {
-        listIdentifierByAccountIdAndValue: {
-          items: [],
-        },
-      },
-    })).toBeNull();
-  });
-});
+}); 

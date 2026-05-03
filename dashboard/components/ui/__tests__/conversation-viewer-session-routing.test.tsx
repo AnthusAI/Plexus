@@ -1,5 +1,5 @@
 import * as React from "react"
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import ConversationViewer, { type ChatMessage, type ChatSession } from "../conversation-viewer"
 import { getClient } from "@/utils/data-operations"
@@ -128,42 +128,6 @@ jest.mock("@/components/ai-elements/tool", () => ({
   }) => <div>{errorText || output}</div>,
 }))
 
-jest.mock("@/components/ui/dropdown-menu", () => ({
-  DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DropdownMenuItem: ({
-    children,
-    onSelect,
-  }: {
-    children: React.ReactNode
-    onSelect?: (event: { preventDefault: () => void }) => void
-  }) => (
-    <button
-      type="button"
-      onClick={() => onSelect?.({ preventDefault: () => undefined })}
-    >
-      {children}
-    </button>
-  ),
-}))
-
-jest.mock("@/components/ui/timestamp", () => ({
-  Timestamp: ({
-    time,
-    variant,
-    className,
-  }: {
-    time: string | Date
-    variant: string
-    className?: string
-  }) => (
-    <span data-testid="timestamp" data-variant={variant} className={className}>
-      {typeof time === "string" ? time : time.toISOString()}
-    </span>
-  ),
-}))
-
 if (typeof window !== "undefined" && !("ResizeObserver" in window)) {
   ;(window as any).ResizeObserver = class {
     observe() {}
@@ -184,7 +148,6 @@ describe("ConversationViewer session-routing states", () => {
       id: "session-1",
       accountId: "acct-1",
       procedureId: "builtin:console/chat",
-      name: "Console Chat",
       category: "Console Chat",
       createdAt: "2026-03-27T00:00:00.000Z",
       updatedAt: "2026-03-27T00:00:00.000Z",
@@ -320,177 +283,5 @@ describe("ConversationViewer session-routing states", () => {
 
     expect(sidebarHeader.className).toContain("h-12")
     expect(mainHeader.className).toContain("h-12")
-  })
-
-  it("does not use category as visible session title fallback", () => {
-    render(
-      <ConversationViewer
-        sessions={[
-          {
-            id: "sess-optimize-1234",
-            accountId: "acct-1",
-            procedureId: "builtin:console/chat",
-            category: "Optimize",
-            createdAt: "2026-03-27T00:00:00.000Z",
-            updatedAt: "2026-03-27T00:00:00.000Z",
-            messageCount: 0,
-          },
-        ]}
-        messages={[
-          {
-            id: "msg-unnamed-1",
-            sessionId: "sess-optimize-1234",
-            accountId: "acct-1",
-            procedureId: "builtin:console/chat",
-            role: "USER",
-            messageType: "MESSAGE",
-            humanInteraction: "CHAT",
-            content: "hello",
-            createdAt: "2026-03-27T00:05:00.000Z",
-          },
-          {
-            id: "msg-unnamed-2",
-            sessionId: "sess-optimize-1234",
-            accountId: "acct-1",
-            procedureId: "builtin:console/chat",
-            role: "ASSISTANT",
-            messageType: "MESSAGE",
-            humanInteraction: "CHAT_ASSISTANT",
-            content: "reply",
-            createdAt: "2026-03-27T00:08:00.000Z",
-          },
-        ]}
-        selectedSessionId="sess-optimize-1234"
-        defaultSidebarCollapsed={false}
-      />
-    )
-
-    expect(screen.queryByText("Optimize")).not.toBeInTheDocument()
-    expect(screen.queryByText("Session sess-opt")).not.toBeInTheDocument()
-    expect(screen.getAllByTestId("timestamp")).toHaveLength(2)
-    expect(screen.getAllByText("2026-03-27T00:08:00.000Z")).toHaveLength(2)
-  })
-
-  it("hides unnamed sessions that are marked hidden-until-named", () => {
-    render(
-      <ConversationViewer
-        sessions={[
-          {
-            id: "hidden-sess-1",
-            accountId: "acct-1",
-            procedureId: "builtin:console/chat",
-            category: "Optimize",
-            metadata: {
-              console: {
-                hidden_until_named: true,
-              },
-            },
-            createdAt: "2026-03-27T00:00:00.000Z",
-            updatedAt: "2026-03-27T00:00:00.000Z",
-            messageCount: 0,
-          },
-        ]}
-        messages={[]}
-        selectedSessionId="hidden-sess-1"
-        defaultSidebarCollapsed={false}
-      />
-    )
-
-    expect(screen.getByText("Chat Sessions (0)")).toBeInTheDocument()
-    const sidebar = screen.getByTestId("conversation-sidebar-header").parentElement as HTMLElement
-    expect(within(sidebar).queryByText("Session hidden-s")).not.toBeInTheDocument()
-    expect(screen.getByTestId("conversation-main-header")).toHaveTextContent("New Chat")
-  })
-
-  it("keeps unnamed sessions visible when hidden flag is absent", () => {
-    render(
-      <ConversationViewer
-        sessions={[
-          {
-            id: "legacy-unnamed-1",
-            accountId: "acct-1",
-            procedureId: "builtin:console/chat",
-            category: "Optimize",
-            createdAt: "2026-03-27T00:00:00.000Z",
-            updatedAt: "2026-03-27T00:00:00.000Z",
-            messageCount: 0,
-          },
-        ]}
-        messages={[
-          {
-            id: "msg-legacy-unnamed",
-            sessionId: "legacy-unnamed-1",
-            accountId: "acct-1",
-            procedureId: "builtin:console/chat",
-            role: "USER",
-            messageType: "MESSAGE",
-            humanInteraction: "CHAT",
-            content: "hello",
-            createdAt: "2026-03-27T00:09:00.000Z",
-          },
-        ]}
-        selectedSessionId="legacy-unnamed-1"
-        defaultSidebarCollapsed={false}
-      />
-    )
-
-    expect(screen.getByText("Chat Sessions (1)")).toBeInTheDocument()
-    expect(screen.queryByText("Session legacy-u")).not.toBeInTheDocument()
-    expect(screen.getAllByText("2026-03-27T00:09:00.000Z")).toHaveLength(2)
-  })
-
-  it("renames a session from the action menu and marks title source manual", async () => {
-    const updateMock = jest.fn().mockResolvedValue({
-      data: {
-        id: "session-1",
-        name: "My Renamed Session",
-      },
-    })
-
-    mockedGetClient.mockReturnValue({
-      models: {
-        ChatSession: {
-          update: updateMock,
-        },
-      },
-    } as any)
-
-    render(
-      <ConversationViewer
-        sessions={sessions}
-        messages={messages}
-        selectedSessionId="session-1"
-        defaultSidebarCollapsed={false}
-      />
-    )
-
-    fireEvent.click(screen.getByRole("button", { name: "More options" }))
-    fireEvent.click(await screen.findByText("Rename session"))
-
-    const input = await screen.findByPlaceholderText("Session title")
-    fireEvent.change(input, { target: { value: "My Renamed Session" } })
-    fireEvent.click(screen.getByRole("button", { name: "Save" }))
-
-    await waitFor(() => {
-      const updateArg = updateMock.mock.calls[0]?.[0] || {}
-      const metadataArg = updateArg.metadata
-      const parsedMetadata = typeof metadataArg === "string" ? JSON.parse(metadataArg) : metadataArg
-      expect(updateMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: "session-1",
-          name: "My Renamed Session",
-        })
-      )
-      expect(parsedMetadata).toEqual(
-        expect.objectContaining({
-          title_source: "manual",
-          console: expect.objectContaining({
-            hidden_until_named: false,
-          }),
-        })
-      )
-    })
-
-    expect(screen.getAllByText("My Renamed Session")).not.toHaveLength(0)
   })
 })

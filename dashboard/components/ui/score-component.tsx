@@ -3124,11 +3124,6 @@ export function ScoreComponent({
         metadata: Record<string, any>,
         options?: { isFeatured?: string | null }
       ) => {
-        const targetVersion = versions.find((item) => item.id === targetVersionId);
-        if (!targetVersion) {
-          throw new Error(`Unable to update score version ${targetVersionId}: version not found in local state`);
-        }
-
         const updateMetadataResponse = await getAmplifyClient().graphql({
           query: `
             mutation UpdateScoreVersionMetadata($input: UpdateScoreVersionInput!) {
@@ -3144,7 +3139,6 @@ export function ScoreComponent({
               id: String(targetVersionId),
               metadata: JSON.stringify(metadata),
               ...(options?.isFeatured !== undefined ? { isFeatured: options.isFeatured } : {}),
-              ...(options?.isFeatured !== undefined ? { createdAt: targetVersion.createdAt } : {}),
             }
           }
         });

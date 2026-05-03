@@ -18,7 +18,7 @@ interface SegmentedProgressBarProps {
   isSelected?: boolean
 }
 
-export function SegmentedProgressBar({
+export function SegmentedProgressBar({ 
   segments,
   currentSegment,
   error = false,

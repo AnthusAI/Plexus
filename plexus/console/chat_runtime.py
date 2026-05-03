@@ -4,13 +4,10 @@ import asyncio
 import json
 import logging
 import os
-import re
 import socket
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
-
-from openai import OpenAI
 
 from plexus.cli.procedure.builtin_procedures import CONSOLE_CHAT_BUILTIN_ID
 from plexus.cli.procedure.service import ProcedureService
@@ -25,8 +22,6 @@ COMPLETED = "COMPLETED"
 FAILED = "FAILED"
 HANDLED_HUMAN_INTERACTIONS = {"CHAT"}
 CONSOLE_HISTORY_LIMIT = 16
-DEFAULT_SESSION_TITLE_MODEL = "gpt-5.4-mini"
-SESSION_TITLE_MAX_WORDS = 8
 _PROCEDURE_SERVICE_CACHE: Dict[int, ProcedureService] = {}
 
 
@@ -88,310 +83,6 @@ def _extract_selected_model(raw_metadata: Any) -> Optional[str]:
         return None
     normalized = model_id.strip()
     return normalized or None
-
-
-def _normalize_session_title(raw_title: str) -> Optional[str]:
-    text = str(raw_title or "").strip()
-    if not text:
-        return None
-    text = text.replace("\n", " ").strip()
-    text = re.sub(r"^title\s*:\s*", "", text, flags=re.IGNORECASE)
-    text = text.strip(" \"'`")
-    text = re.sub(r"\s+", " ", text).strip()
-    if not text:
-        return None
-    words = text.split(" ")
-    if len(words) > SESSION_TITLE_MAX_WORDS:
-        text = " ".join(words[:SESSION_TITLE_MAX_WORDS]).strip()
-    return text or None
-
-
-def _resolve_session_title_model(selected_model: Optional[str]) -> str:
-    normalized_selected = str(selected_model or "").strip()
-    if normalized_selected:
-        return normalized_selected
-    configured_default = str(os.getenv("CONSOLE_SESSION_TITLE_MODEL") or "").strip()
-    if configured_default:
-        return configured_default
-    return DEFAULT_SESSION_TITLE_MODEL
-
-
-def _generate_session_title_with_llm(
-    *,
-    conversation_messages: List[Dict[str, str]],
-    selected_model: Optional[str],
-) -> Optional[str]:
-    prompt_lines = [
-        "Generate a concise chat session title.",
-        "Return only the title text.",
-        "Rules: 3-8 words, plain text, no quotes, no punctuation suffix, no prefixes.",
-    ]
-    for index, message in enumerate(conversation_messages, start=1):
-        role = str(message.get("role") or "USER").strip().upper()
-        content = str(message.get("content") or "").strip()
-        if not content:
-            continue
-        if role == "ASSISTANT":
-            prompt_lines.append(f"Assistant message {index}: {content}")
-        else:
-            prompt_lines.append(f"User message {index}: {content}")
-    prompt = "\n".join(prompt_lines)
-
-    api_key = str(os.getenv("OPENAI_API_KEY") or "").strip()
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is required for session title generation")
-    client = OpenAI(api_key=api_key)
-    response = client.responses.create(
-        model=_resolve_session_title_model(selected_model),
-        input=[{"role": "user", "content": prompt}],
-        max_output_tokens=32,
-    )
-    return _normalize_session_title(response.output_text)
-
-
-def fetch_chat_session(client: PlexusDashboardClient, session_id: str) -> Optional[Dict[str, Any]]:
-    query = """
-    query GetConsoleChatSession($id: ID!) {
-      getChatSession(id: $id) {
-        id
-        name
-        metadata
-      }
-    }
-    """
-    result = client.execute(query, {"id": session_id})
-    payload = _graphql_field(result, "getChatSession")
-    return payload if isinstance(payload, dict) else None
-
-
-def fetch_recent_user_chat_turns(
-    client: PlexusDashboardClient,
-    session_id: str,
-    *,
-    max_turns: int = 3,
-) -> List[Dict[str, str]]:
-    query = """
-    query ListRecentUserChatTurns($sessionId: String!, $limit: Int, $nextToken: String) {
-      listChatMessageBySessionIdAndCreatedAt(
-        sessionId: $sessionId
-        sortDirection: DESC
-        limit: $limit
-        nextToken: $nextToken
-      ) {
-        items {
-          id
-          role
-          humanInteraction
-          messageType
-          content
-          createdAt
-        }
-        nextToken
-      }
-    }
-    """
-    turns: List[Dict[str, str]] = []
-    next_token: Optional[str] = None
-    while len(turns) < max_turns:
-        result = client.execute(
-            query,
-            {"sessionId": session_id, "limit": 100, "nextToken": next_token},
-        )
-        page = _graphql_field(result, "listChatMessageBySessionIdAndCreatedAt")
-        items = page.get("items") if isinstance(page, dict) else []
-        if not isinstance(items, list):
-            break
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            role = str(item.get("role") or "").upper()
-            human_interaction = str(item.get("humanInteraction") or "").upper()
-            message_type = str(item.get("messageType") or "").upper()
-            content = str(item.get("content") or "").strip()
-            if (
-                role == "USER"
-                and human_interaction == "CHAT"
-                and message_type == "MESSAGE"
-                and content
-            ):
-                turns.append(
-                    {
-                        "id": str(item.get("id") or "").strip(),
-                        "content": content,
-                        "createdAt": str(item.get("createdAt") or "").strip(),
-                    }
-                )
-                if len(turns) >= max_turns:
-                    break
-        next_token = page.get("nextToken") if isinstance(page, dict) else None
-        if not next_token:
-            break
-    return turns
-
-
-def fetch_assistant_chat_messages_between(
-    client: PlexusDashboardClient,
-    *,
-    session_id: str,
-    start_created_at: str,
-    end_created_at: str,
-    limit: int = 3,
-) -> List[str]:
-    query = """
-    query ListAssistantMessagesForTitle($sessionId: String!, $limit: Int, $nextToken: String) {
-      listChatMessageBySessionIdAndCreatedAt(
-        sessionId: $sessionId
-        sortDirection: ASC
-        limit: $limit
-        nextToken: $nextToken
-      ) {
-        items {
-          id
-          role
-          humanInteraction
-          messageType
-          content
-          createdAt
-        }
-        nextToken
-      }
-    }
-    """
-    assistant_messages: List[str] = []
-    next_token: Optional[str] = None
-    while len(assistant_messages) < limit:
-        result = client.execute(
-            query,
-            {"sessionId": session_id, "limit": 100, "nextToken": next_token},
-        )
-        page = _graphql_field(result, "listChatMessageBySessionIdAndCreatedAt")
-        items = page.get("items") if isinstance(page, dict) else []
-        if not isinstance(items, list):
-            break
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            role = str(item.get("role") or "").upper()
-            human_interaction = str(item.get("humanInteraction") or "").upper()
-            message_type = str(item.get("messageType") or "").upper()
-            created_at = str(item.get("createdAt") or "").strip()
-            content = str(item.get("content") or "").strip()
-            if not created_at or not content:
-                continue
-            if created_at <= start_created_at or created_at >= end_created_at:
-                continue
-            if (
-                role == "ASSISTANT"
-                and human_interaction in {"CHAT_ASSISTANT", "CHAT"}
-                and message_type == "MESSAGE"
-            ):
-                assistant_messages.append(content)
-                if len(assistant_messages) >= limit:
-                    break
-        next_token = page.get("nextToken") if isinstance(page, dict) else None
-        if not next_token:
-            break
-    return assistant_messages
-
-
-def update_chat_session_title(
-    client: PlexusDashboardClient,
-    *,
-    session_id: str,
-    title: str,
-    turn: int,
-    trigger_message_id: Optional[str],
-    existing_metadata: Optional[Dict[str, Any]],
-) -> None:
-    if not title:
-        return
-    metadata = dict(existing_metadata or {})
-    metadata["title_source"] = "auto"
-    metadata["auto_title_turn"] = turn
-    if trigger_message_id:
-        metadata["auto_title_message_id"] = trigger_message_id
-    console_metadata = metadata.get("console")
-    if not isinstance(console_metadata, dict):
-        console_metadata = {}
-    console_metadata["hidden_until_named"] = False
-    metadata["console"] = console_metadata
-
-    mutation = """
-    mutation UpdateConsoleChatSessionTitle($input: UpdateChatSessionInput!) {
-      updateChatSession(input: $input) {
-        id
-        name
-        updatedAt
-      }
-    }
-    """
-    client.execute(
-        mutation,
-        {
-            "input": {
-                "id": session_id,
-                "name": title,
-                "metadata": json.dumps(metadata),
-                "updatedAt": utc_now(),
-            }
-        },
-    )
-
-
-def maybe_auto_title_session(
-    client: PlexusDashboardClient,
-    *,
-    message: ConsoleMessage,
-) -> None:
-    session = fetch_chat_session(client, message.session_id)
-    if not session:
-        return
-    session_metadata = _parse_metadata_object(session.get("metadata"))
-    if str(session_metadata.get("title_source") or "").strip().lower() == "manual":
-        return
-
-    recent_turns = fetch_recent_user_chat_turns(client, message.session_id, max_turns=3)
-    if not recent_turns:
-        return
-    if len(recent_turns) > 2:
-        return
-
-    chronological_turns = list(reversed(recent_turns))
-    user_messages = [turn["content"] for turn in chronological_turns if turn.get("content")]
-    if not user_messages:
-        return
-
-    conversation_messages: List[Dict[str, str]] = [{"role": "USER", "content": user_messages[0]}]
-    if len(user_messages) == 2:
-        first_created_at = str(chronological_turns[0].get("createdAt") or "")
-        second_created_at = str(chronological_turns[1].get("createdAt") or "")
-        if first_created_at and second_created_at:
-            assistant_messages = fetch_assistant_chat_messages_between(
-                client,
-                session_id=message.session_id,
-                start_created_at=first_created_at,
-                end_created_at=second_created_at,
-                limit=3,
-            )
-            for assistant_content in assistant_messages:
-                conversation_messages.append({"role": "ASSISTANT", "content": assistant_content})
-        conversation_messages.append({"role": "USER", "content": user_messages[1]})
-
-    title = _generate_session_title_with_llm(
-        conversation_messages=conversation_messages,
-        selected_model=message.selected_model,
-    )
-    if not title:
-        return
-
-    update_chat_session_title(
-        client,
-        session_id=message.session_id,
-        title=title,
-        turn=len(chronological_turns),
-        trigger_message_id=message.id,
-        existing_metadata=session_metadata,
-    )
 
 
 def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
@@ -819,12 +510,12 @@ async def run_console_chat_response_async(
     if message.selected_model:
         context["agent_models"] = {"assistant": message.selected_model}
 
-    result = await service.run_procedure(
+    result = await service.run_experiment(
         CONSOLE_CHAT_BUILTIN_ID,
         account_id=message.account_id,
         console_user_message=message.content,
         console_session_history=history,
-        enable_mcp=True,
+        enable_mcp=False,
         context=context,
     )
     if latency_trace is not None:
@@ -874,10 +565,6 @@ def process_console_message(
         latest_message = fetch_message(client, message.id) or message
         created_at = latest_message.created_at or message.created_at or None
         run_console_chat_response(client, latest_message, owner=owner, latency_trace=latency_trace)
-        try:
-            maybe_auto_title_session(client, message=latest_message)
-        except Exception:
-            logger.exception("Auto-title generation failed for session %s", latest_message.session_id)
         mark_message_completed(client, message.id, created_at=created_at)
         latency_trace["t_completed"] = utc_now()
         logger.info("%s", json.dumps(_build_latency_summary(latency_trace, status="COMPLETED"), sort_keys=True))

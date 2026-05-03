@@ -10,22 +10,8 @@ from plexus.cli.shared.optimizer_results import (
 class _FakeClient:
     def __init__(self):
         self.update_calls = []
-        self.link_creates = []
-        self.link_updates = []
-        self.link_deletes = []
 
     def execute(self, query, variables):
-        if "listProcedureScoreVersionByProcedureIdAndUpdatedAt" in query:
-            return {"listProcedureScoreVersionByProcedureIdAndUpdatedAt": {"items": [], "nextToken": None}}
-        if "createProcedureScoreVersion" in query:
-            self.link_creates.append({"query": query, "variables": variables})
-            return {"createProcedureScoreVersion": {"id": variables["input"]["id"]}}
-        if "updateProcedureScoreVersion" in query:
-            self.link_updates.append({"query": query, "variables": variables})
-            return {"updateProcedureScoreVersion": {"id": variables["input"]["id"]}}
-        if "deleteProcedureScoreVersion" in query:
-            self.link_deletes.append({"query": query, "variables": variables})
-            return {"deleteProcedureScoreVersion": {"id": variables["input"]["id"]}}
         if "updateProcedure(input:" in query:
             self.update_calls.append({"query": query, "variables": variables})
             return {"updateProcedure": {"id": variables["input"]["id"], "metadata": variables["input"]["metadata"]}}
@@ -172,14 +158,6 @@ def test_index_optimizer_run_persists_manifest_and_pointer(monkeypatch):
     pointer = saved_metadata[OPTIMIZER_ARTIFACTS_METADATA_KEY]
     assert pointer["task_id"] == "task-123"
     assert pointer["manifest"] == "tasks/task-123/optimizer/manifest.json"
-    linked_versions = {
-        call["variables"]["input"]["scoreVersionId"]: call["variables"]["input"]["relationshipTypes"]
-        for call in client.link_creates
-    }
-    assert linked_versions["version-baseline"] == ["baseline"]
-    assert linked_versions["version-accepted"] == ["winning", "accepted", "cycle"]
-    assert linked_versions["version-1"] == ["cycle"]
-    assert linked_versions["version-candidate"] == ["candidate"]
 
 
 def test_list_optimizer_candidates_for_score_aggregates_best_visible_metrics(monkeypatch):

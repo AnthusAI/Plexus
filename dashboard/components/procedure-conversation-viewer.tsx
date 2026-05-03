@@ -24,7 +24,6 @@ export default function ProcedureConversationViewer({
     <div className="bg-background rounded-lg overflow-hidden h-full">
       <ConversationViewer
         procedureId={procedureId}
-        enableProcedureSteering={true}
         enableHitlActions={true}
         onSessionDelete={handleSessionDelete}
         onSessionCountChange={onSessionCountChange}

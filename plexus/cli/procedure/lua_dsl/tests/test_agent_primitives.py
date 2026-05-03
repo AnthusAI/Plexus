@@ -163,74 +163,6 @@ class TestAgentTurn:
         # System + Initial + AI Response 1 + Injected + AI Response 2
         assert len(agent_primitive._conversation) == 5
 
-    def test_turn_injects_procedure_steering_once_before_next_llm_call(
-        self,
-        mock_llm,
-        mock_tool_primitive,
-        mock_stop_primitive,
-        mock_iterations_primitive,
-        mock_chat_recorder,
-    ):
-        """Each agent receives new procedure steering once before its next LLM call."""
-        state = {}
-        state_primitive = Mock()
-        state_primitive.get.side_effect = lambda key, default=None: state.get(key, default)
-        state_primitive.set.side_effect = lambda key, value: state.__setitem__(key, value)
-        mock_chat_recorder.get_steering_messages.return_value = {
-            "messages": [
-                {
-                    "id": "msg-steer-1",
-                    "created_at": "2026-04-01T00:00:02.000Z",
-                    "content": "Focus summary on reviewer contradictions.",
-                    "metadata": {"source": "procedure-steering-input", "scope": "all_agents"},
-                }
-            ],
-            "watermark": "2026-04-01T00:00:02.000Z",
-        }
-        captured_conversations = []
-
-        def invoke(messages):
-            captured_conversations.append([getattr(message, "content", "") for message in messages])
-            response = Mock()
-            response.content = "Response"
-            response.tool_calls = []
-            return response
-
-        mock_llm.invoke.side_effect = invoke
-
-        planner = AgentPrimitive(
-            name="hypothesis_planner",
-            system_prompt="Planner system",
-            initial_message="Plan",
-            llm=mock_llm,
-            available_tools=[],
-            tool_primitive=mock_tool_primitive,
-            stop_primitive=mock_stop_primitive,
-            iterations_primitive=mock_iterations_primitive,
-            chat_recorder=mock_chat_recorder,
-            state_primitive=state_primitive,
-        )
-        reporter = AgentPrimitive(
-            name="report_writer",
-            system_prompt="Reporter system",
-            initial_message="Report",
-            llm=mock_llm,
-            available_tools=[],
-            tool_primitive=mock_tool_primitive,
-            stop_primitive=mock_stop_primitive,
-            iterations_primitive=mock_iterations_primitive,
-            chat_recorder=mock_chat_recorder,
-            state_primitive=state_primitive,
-        )
-
-        planner.turn()
-        reporter.turn()
-
-        assert "USER STEERING RECEIVED MID-RUN" in "\n".join(captured_conversations[0])
-        assert "Focus summary on reviewer contradictions." in "\n".join(captured_conversations[1])
-        assert state["procedure_steering_watermark:hypothesis_planner"] == "2026-04-01T00:00:02.000Z"
-        assert state["procedure_steering_watermark:report_writer"] == "2026-04-01T00:00:02.000Z"
-
     def test_turn_executes_tool_calls(
         self, agent_primitive, mock_llm, mock_tool_primitive
     ):
@@ -265,32 +197,6 @@ class TestAgentTurn:
         assert len(result['tool_calls']) == 1
         assert result['tool_calls'][0]['name'] == 'test_tool'
         assert result['tool_calls'][0]['result'] == 'Tool result'
-
-    def test_turn_appends_tool_result_when_tool_call_has_no_id(
-        self, agent_primitive, mock_llm, mock_tool_primitive
-    ):
-        """Tool results must still enter conversation history even without tool_call_id."""
-        mock_tool = Mock()
-        type(mock_tool).name = 'test_tool'
-        mock_tool.func = Mock(return_value='Tool result')
-        agent_primitive.available_tools = [mock_tool]
-
-        mock_response = Mock()
-        mock_response.content = 'Using tool'
-        tool_call = Mock()
-        tool_call.name = 'test_tool'
-        tool_call.args = {'param': 'value'}
-        tool_call.id = None
-        mock_response.tool_calls = [tool_call]
-        mock_llm.invoke.return_value = mock_response
-
-        agent_primitive.turn()
-
-        mock_tool_primitive.record_call.assert_called_once_with('test_tool', {'param': 'value'}, 'Tool result')
-        # system + initial + ai response + synthetic tool result message
-        assert len(agent_primitive._conversation) == 4
-        synthetic_tool_result = agent_primitive._conversation[-1]
-        assert getattr(synthetic_tool_result, 'content', '') == "Tool 'test_tool' result: Tool result"
 
     def test_turn_handles_multiple_tool_calls(
         self, agent_primitive, mock_llm, mock_tool_primitive
@@ -541,75 +447,6 @@ class TestAgentTurn:
 
         # Queue should be cleared
         assert len(agent_primitive._recording_queue) == 0
-
-    def test_turn_injects_procedure_steering_once_per_agent(
-        self,
-        mock_llm,
-        mock_tool_primitive,
-        mock_stop_primitive,
-        mock_iterations_primitive,
-        mock_chat_recorder,
-    ):
-        """Every agent should receive new steering once before its next LLM call."""
-        state = {}
-        state_primitive = Mock()
-        state_primitive.get.side_effect = lambda key, default=None: state.get(key, default)
-        state_primitive.set.side_effect = lambda key, value: state.__setitem__(key, value)
-        mock_chat_recorder.get_steering_messages.return_value = {
-            "messages": [
-                {
-                    "id": "steer-1",
-                    "created_at": "2026-05-02T15:00:00.000Z",
-                    "content": "Make sure the report emphasizes reviewer contradictions.",
-                }
-            ],
-            "watermark": "2026-05-02T15:00:00.000Z",
-        }
-        mock_response = Mock()
-        mock_response.content = "Done"
-        mock_response.tool_calls = []
-        mock_llm.invoke.return_value = mock_response
-
-        planner = AgentPrimitive(
-            name="hypothesis_planner",
-            system_prompt="Planner system",
-            initial_message="Plan",
-            llm=mock_llm,
-            available_tools=[],
-            tool_primitive=mock_tool_primitive,
-            stop_primitive=mock_stop_primitive,
-            iterations_primitive=mock_iterations_primitive,
-            chat_recorder=mock_chat_recorder,
-            state_primitive=state_primitive,
-        )
-        reporter = AgentPrimitive(
-            name="report_writer",
-            system_prompt="Reporter system",
-            initial_message="Report",
-            llm=mock_llm,
-            available_tools=[],
-            tool_primitive=mock_tool_primitive,
-            stop_primitive=mock_stop_primitive,
-            iterations_primitive=mock_iterations_primitive,
-            chat_recorder=mock_chat_recorder,
-            state_primitive=state_primitive,
-        )
-
-        planner.turn()
-        reporter.turn()
-
-        planner_messages = mock_llm.invoke.call_args_list[0].args[0]
-        reporter_messages = mock_llm.invoke.call_args_list[1].args[0]
-        assert any(
-            "USER STEERING RECEIVED MID-RUN" in getattr(message, "content", "")
-            for message in planner_messages
-        )
-        assert any(
-            "Make sure the report emphasizes reviewer contradictions." in getattr(message, "content", "")
-            for message in reporter_messages
-        )
-        assert state["procedure_steering_watermark:hypothesis_planner"] == "2026-05-02T15:00:00.000Z"
-        assert state["procedure_steering_watermark:report_writer"] == "2026-05-02T15:00:00.000Z"
 
 
 class TestAgentReset:

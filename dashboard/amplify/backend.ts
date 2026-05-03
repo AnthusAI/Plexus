@@ -108,22 +108,6 @@ if (chatMessageCfnTable) {
     };
 }
 
-// Allow authenticated users to read procedure CloudWatch log streams from the dashboard.
-backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
-    new PolicyStatement({
-        effect: Effect.ALLOW,
-        actions: [
-            'logs:GetLogEvents',
-            'logs:FilterLogEvents',
-            'logs:DescribeLogStreams',
-        ],
-        resources: [
-            'arn:aws:logs:*:*:log-group:/plexus/procedures/*',
-            'arn:aws:logs:*:*:log-group:/plexus/procedures/*:*',
-        ],
-    })
-);
-
 // Create the TaskDispatcher stack with the table reference
 const taskDispatcherStack = new TaskDispatcherStack(
     backend.createStack('TaskDispatcherStack'),

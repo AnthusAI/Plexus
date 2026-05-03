@@ -5,7 +5,6 @@ Direct feedback report commands (no report template required).
 from __future__ import annotations
 
 import json
-from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
@@ -29,7 +28,6 @@ from plexus.reports.service import (
     run_programmatic_block_and_persist,
     run_programmatic_report_and_persist,
 )
-from plexus.runtime_budget import RuntimeBudgetLimitExceeded, RuntimeBudgetMeter, RuntimeBudgetSpec
 
 
 def _print_result(
@@ -151,36 +149,18 @@ def report() -> None:
 def run_programmatic_block(payload_base64: str) -> None:
     """Internal dispatcher entrypoint for durable programmatic report blocks."""
     payload = decode_programmatic_run_payload(payload_base64)
-    child_budget = payload.get("child_budget")
-    try:
-        budget_meter = (
-            RuntimeBudgetMeter(RuntimeBudgetSpec.from_dict(child_budget))
-            if isinstance(child_budget, dict)
-            else None
-        )
-    except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
     client = create_client()
     if not client:
         raise click.ClickException("Could not create dashboard client.")
 
-    try:
-        context = (
-            budget_meter.enforce_wallclock("report.run_programmatic_block")
-            if budget_meter
-            else nullcontext()
-        )
-        with context:
-            output_data, log_output = run_programmatic_block_and_persist(
-                cache_key=str(payload.get("cache_key") or "").strip(),
-                block_class=str(payload.get("block_class") or "").strip(),
-                block_config=payload.get("block_config") or {},
-                account_id=str(payload.get("account_id") or "").strip(),
-                client=client,
-                persist_required=True,
-            )
-    except RuntimeBudgetLimitExceeded as exc:
-        raise click.ClickException(str(exc)) from exc
+    output_data, log_output = run_programmatic_block_and_persist(
+        cache_key=str(payload.get("cache_key") or "").strip(),
+        block_class=str(payload.get("block_class") or "").strip(),
+        block_config=payload.get("block_config") or {},
+        account_id=str(payload.get("account_id") or "").strip(),
+        client=client,
+        persist_required=True,
+    )
     if output_data is None:
         raise click.ClickException(log_output or "Programmatic report block execution failed.")
 
@@ -436,12 +416,6 @@ def alignment(
 @click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, or key).")
 @click.option("--score", required=True, help="Score identifier (id or external id).")
 @click.option(
-    "--score-version",
-    "score_version_id",
-    required=False,
-    help="Optional ScoreVersion ID to use as rubric authority instead of the champion.",
-)
-@click.option(
     "--mode",
     type=click.Choice(["contradictions", "aligned"]),
     default="contradictions",
@@ -451,11 +425,6 @@ def alignment(
 @click.option("--max-feedback-items", type=int, default=400, show_default=True)
 @click.option("--num-topics", type=int, default=8, show_default=True)
 @click.option("--max-concurrent", type=int, default=20, show_default=True)
-@click.option(
-    "--include-rubric-memory",
-    is_flag=True,
-    help="Inject retrieval-only rubric-memory citation context into contradiction voters.",
-)
 @click.option("--days", type=int, required=False, help="Trailing window in days.")
 @click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
 @click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
@@ -469,12 +438,10 @@ def alignment(
 def contradictions(
     scorecard: str,
     score: str,
-    score_version_id: Optional[str],
     mode: str,
     max_feedback_items: int,
     num_topics: int,
     max_concurrent: int,
-    include_rubric_memory: bool,
     days: Optional[int],
     start_date: Optional[str],
     end_date: Optional[str],
@@ -504,8 +471,6 @@ def contradictions(
             "max_feedback_items": max_feedback_items,
             "num_topics": num_topics,
             "max_concurrent": max_concurrent,
-            "include_rubric_memory": include_rubric_memory,
-            "score_version_id": score_version_id,
         },
     )
     _print_result(title="FeedbackContradictions", result=result, output_format=output_format, include_log=include_log)
@@ -642,62 +607,6 @@ def volume(
     )
 
     _print_result(title="FeedbackVolumeTimeline", result=result, output_format=output_format, include_log=include_log)
-
-
-@report.command(name="score-champion-version-timeline")
-@click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, key, or name).")
-@click.option("--score", required=False, help="Optional score identifier (id, external id, key, or name).")
-@click.option("--days", type=int, required=False, help="Trailing window in days.")
-@click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
-@click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
-@click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
-@click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
-@click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
-@click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
-@click.option(
-    "--include-unchanged",
-    is_flag=True,
-    help="Include initial champion entries with no previous champion. Hidden by default because they are not changes.",
-)
-@click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
-@click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
-@click.option("--include-log", is_flag=True, help="Include report block log output.")
-def score_champion_version_timeline(
-    scorecard: str,
-    score: Optional[str],
-    days: Optional[int],
-    start_date: Optional[str],
-    end_date: Optional[str],
-    cache_key: Optional[str],
-    ttl_hours: float,
-    fresh: bool,
-    background: bool,
-    include_unchanged: bool,
-    account_identifier: Optional[str],
-    output_format: str,
-    include_log: bool,
-) -> None:
-    """Run the ScoreChampionVersionTimeline report block."""
-    result = run_feedback_report_block(
-        block_class="ScoreChampionVersionTimeline",
-        scorecard=scorecard,
-        score=score,
-        days=_coerce_optional_int(days, "days"),
-        start_date=start_date,
-        end_date=end_date,
-        account_identifier=account_identifier,
-        cache_key=cache_key,
-        ttl_hours=ttl_hours,
-        fresh=fresh,
-        background=background,
-        extra_config={"include_unchanged": include_unchanged},
-    )
-    _print_result(
-        title="ScoreChampionVersionTimeline",
-        result=result,
-        output_format=output_format,
-        include_log=include_log,
-    )
 
 
 @report.command(name="acceptance-rate-timeline")

@@ -8,8 +8,6 @@ to get all records in a time window for counting.
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from bucket_counter import dedupe_feedback_records
-
 
 def query_items_in_window(graphql_client, 
                           account_id: str, 
@@ -220,39 +218,9 @@ def query_feedback_items_in_window(graphql_client,
                                    account_id: str,
                                    start_time: datetime,
                                    end_time: datetime) -> List[Dict[str, Any]]:
-    """Query FeedbackItems in a time window via editedAt and updatedAt, then dedupe."""
-    edited_query = """
-    query ListFeedbackItemsByEditedTime(
-        $accountId: String!,
-        $startTime: String!,
-        $endTime: String!,
-        $nextToken: String
-    ) {
-        listFeedbackItemByAccountIdAndEditedAt(
-            accountId: $accountId,
-            editedAt: { between: [$startTime, $endTime] },
-            limit: 1000,
-            nextToken: $nextToken
-        ) {
-            items {
-                id
-                scorecardId
-                scoreId
-                itemId
-                initialAnswerValue
-                finalAnswerValue
-                isInvalid
-                editedAt
-                updatedAt
-                createdAt
-            }
-            nextToken
-        }
-    }
-    """
-
-    updated_query = """
-    query ListFeedbackItemsByUpdatedTime(
+    """Query all FeedbackItems in a time window with pagination."""
+    query = """
+    query ListFeedbackItemsByTime(
         $accountId: String!,
         $startTime: String!,
         $endTime: String!,
@@ -266,45 +234,23 @@ def query_feedback_items_in_window(graphql_client,
         ) {
             items {
                 id
-                scorecardId
-                scoreId
-                itemId
-                initialAnswerValue
-                finalAnswerValue
-                isInvalid
-                editedAt
                 updatedAt
-                createdAt
             }
             nextToken
         }
     }
     """
     
-    variables = {
-        'accountId': account_id,
-        'startTime': start_time.isoformat().replace('+00:00', 'Z'),
-        'endTime': end_time.isoformat().replace('+00:00', 'Z')
-    }
-
-    edited_items = _paginated_query(
+    return _paginated_query(
         graphql_client,
-        edited_query,
-        dict(variables),
-        'listFeedbackItemByAccountIdAndEditedAt'
-    )
-    updated_items = _paginated_query(
-        graphql_client,
-        updated_query,
-        dict(variables),
+        query,
+        {
+            'accountId': account_id,
+            'startTime': start_time.isoformat().replace('+00:00', 'Z'),
+            'endTime': end_time.isoformat().replace('+00:00', 'Z')
+        },
         'listFeedbackItemByAccountIdAndUpdatedAt'
     )
-    deduped_items = dedupe_feedback_records(edited_items + updated_items)
-    print(
-        f"  Deduped feedback items: {len(deduped_items)} unique "
-        f"from {len(edited_items)} editedAt + {len(updated_items)} updatedAt records"
-    )
-    return deduped_items
 
 
 def query_procedures_in_window(graphql_client,

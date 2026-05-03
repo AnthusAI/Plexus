@@ -44,19 +44,12 @@ agents:
       Respond directly to the user's latest message in the active chat session.
       Keep responses concise, specific, and actionable.
 
-      When the user explicitly asks you to call a Plexus tool (or names a tool),
-      you must call the `plexus` tool before answering. Pass the exact MCP tool
-      name as `tool_name` and pass that tool's JSON inputs as `arguments`. Use
-      the tool result directly in your answer. Do not ask a clarifying question
-      when the tool request is specific and executable.
-
       If user intent is unclear, ask one clarifying question.
       Avoid filler and avoid inventing data.
 
     initial_message: Ready.
 
-    tools:
-      - plexus
+    tools: []
 
 stages:
   - preparing

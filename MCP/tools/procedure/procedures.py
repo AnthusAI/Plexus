@@ -1,0 +1,912 @@
+"""
+Procedure MCP Tools - Model Context Protocol tools for procedure management.
+
+Provides MCP tools that reuse the same ProcedureService as the CLI commands,
+ensuring consistent behavior and DRY principles.
+
+Available tools:
+- plexus_procedure_create: Create a new procedure
+- plexus_procedure_list: List procedures
+- plexus_procedure_info: Get detailed procedure information
+- plexus_procedure_update: Update procedure configuration
+- plexus_procedure_delete: Delete a procedure
+- plexus_procedure_run: Run an procedure
+- plexus_procedure_test_specs: Run embedded Tactus specifications
+- plexus_procedure_yaml: Get procedure YAML configuration
+- stop_conversation: Stop the current conversation with a reason
+"""
+
+import logging
+from typing import Optional, Any, Dict
+from pydantic import BaseModel, Field
+from typing_extensions import Annotated
+
+logger = logging.getLogger(__name__)
+
+def register_procedure_tools(mcp):
+    """Register procedure management tools with the MCP server."""
+    
+    # Import here to avoid circular imports
+    try:
+        import sys
+        import os
+        
+        # Add the project root to Python path
+        mcp_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        project_root = os.path.dirname(mcp_dir)
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+        
+        from plexus.cli.shared.client_utils import create_client
+        from plexus.cli.procedure.service import ProcedureService
+        
+        def get_procedure_service():
+            """Get an ProcedureService instance."""
+            client = create_client()
+            if not client:
+                raise ValueError("Could not create API client")
+            return ProcedureService(client)
+            
+    except ImportError as e:
+        logger.error(f"Failed to import procedure dependencies: {e}")
+        return
+    
+    # Tool models
+    class CreateProcedureRequest(BaseModel):
+        account_identifier: Annotated[str, Field(description="Account identifier (key, name, or ID)")]
+        scorecard_identifier: Annotated[str, Field(description="Scorecard identifier (key, name, or ID)")]
+        score_identifier: Annotated[str, Field(description="Score identifier (key, name, or ID)")]
+        yaml_config: Annotated[Optional[str], Field(description="YAML configuration (uses default if not provided)")] = None
+        featured: Annotated[bool, Field(description="Whether to mark as featured")] = False
+        template_id: Annotated[Optional[str], Field(description="Optional template ID to use for the procedure")] = None
+        score_version_id: Annotated[Optional[str], Field(description="Optional score version ID to use for the procedure")] = None
+    
+    class ListProceduresRequest(BaseModel):
+        account_identifier: Annotated[str, Field(description="Account identifier (key, name, or ID)")]
+        scorecard_identifier: Annotated[Optional[str], Field(description="Optional scorecard identifier to filter by")] = None
+        limit: Annotated[int, Field(description="Maximum number of procedures to return")] = 20
+    
+    class ProcedureInfoRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID")]
+        include_yaml: Annotated[bool, Field(description="Whether to include YAML configuration")] = False
+    
+    class UpdateProcedureRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID")]
+        yaml_config: Annotated[str, Field(description="New YAML configuration")]
+        note: Annotated[Optional[str], Field(description="Optional note for this version")] = None
+    
+    class DeleteProcedureRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID")]
+    
+    class ProcedureYamlRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID")]
+    
+    class ProcedureRunRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID")]
+        max_iterations: Annotated[Optional[int], Field(description="Maximum number of iterations")] = None
+        timeout: Annotated[Optional[int], Field(description="Timeout in seconds")] = None
+        async_mode: Annotated[bool, Field(description="Whether to run asynchronously")] = False
+        dry_run: Annotated[bool, Field(description="Whether to perform a dry run")] = False
+
+    class ProcedureTestSpecsRequest(BaseModel):
+        procedure_id: Annotated[Optional[str], Field(description="Procedure ID")] = None
+        yaml_config: Annotated[Optional[str], Field(description="Inline procedure YAML text")] = None
+        mode: Annotated[str, Field(description="Execution mode: mock or integration")] = "mock"
+        scenario: Annotated[Optional[str], Field(description="Optional scenario name filter")] = None
+        parallel: Annotated[bool, Field(description="Run scenarios in parallel")] = True
+        workers: Annotated[Optional[int], Field(description="Worker count override when parallel=true")] = None
+    
+    class ProcedureChatSessionsRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID")]
+        limit: Annotated[int, Field(description="Maximum number of sessions to return")] = 10
+    
+    class ProcedureChatMessagesRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID")]
+        session_id: Annotated[Optional[str], Field(description="Specific session ID (optional - if not provided, shows all sessions)")] = None
+        limit: Annotated[int, Field(description="Maximum number of messages to return per session")] = 50
+        show_tool_calls: Annotated[bool, Field(description="Whether to include tool call details")] = True
+        show_tool_responses: Annotated[bool, Field(description="Whether to include tool response details")] = True
+    
+    @mcp.tool()
+    def plexus_procedure_create(request: CreateProcedureRequest) -> Dict[str, Any]:
+        """Create a new procedure.
+        
+        Creates an procedure associated with a specific scorecard and score.
+        If no YAML configuration is provided, uses a default BeamSearch template.
+        Returns the created procedure details including IDs for further operations.
+        """
+        try:
+            service = get_procedure_service()
+            
+            result = service.create_procedure(
+                account_identifier=request.account_identifier,
+                scorecard_identifier=request.scorecard_identifier,
+                score_identifier=request.score_identifier,
+                yaml_config=request.yaml_config,
+                featured=request.featured,
+                template_id=request.template_id,
+                score_version_id=request.score_version_id
+            )
+            
+            if not result.success:
+                return {
+                    "success": False,
+                    "error": result.message
+                }
+            
+            return {
+                "success": True,
+                "message": result.message,
+                "procedure": {
+                    "id": result.procedure.id,
+                    "featured": result.procedure.featured,
+                    "created_at": result.procedure.createdAt.isoformat(),
+                    "scorecard_id": result.procedure.scorecardId,
+                    "score_id": result.procedure.scoreId,
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error creating procedure: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to create procedure: {str(e)}"
+            }
+    
+    @mcp.tool()
+    def plexus_procedure_list(request: ListProceduresRequest) -> Dict[str, Any]:
+        """List procedures for an account.
+        
+        Returns procedures ordered by most recent first. Can be filtered by scorecard.
+        Useful for finding existing procedures or monitoring procedure activity.
+        """
+        try:
+            service = get_procedure_service()
+            
+            procedures = service.list_procedures(
+                account_identifier=request.account_identifier,
+                scorecard_identifier=request.scorecard_identifier,
+                limit=request.limit
+            )
+            
+            return {
+                "success": True,
+                "count": len(procedures),
+                "procedures": [
+                    {
+                        "id": exp.id,
+                        "name": getattr(exp, 'name', None),
+                        "status": getattr(exp, 'status', None),
+                        "featured": exp.featured,
+                        "created_at": exp.createdAt.isoformat(),
+                        "updated_at": exp.updatedAt.isoformat(),
+                        "scorecard_id": exp.scorecardId,
+                        "score_id": exp.scoreId,
+                    }
+                    for exp in procedures
+                ]
+            }
+            
+        except Exception as e:
+            logger.error(f"Error listing procedures: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to list procedures: {str(e)}"
+            }
+    
+    @mcp.tool()
+    def plexus_procedure_info(request: ProcedureInfoRequest) -> Dict[str, Any]:
+        """Get detailed information about an procedure.
+        
+        Returns comprehensive procedure details including node and version counts,
+        associated scorecard/score information, and optionally the YAML configuration.
+        """
+        try:
+            service = get_procedure_service()
+            
+            info = service.get_procedure_info(request.procedure_id)
+            if not info:
+                return {
+                    "success": False,
+                    "error": f"Procedure {request.procedure_id} not found"
+                }
+            
+            result = {
+                "success": True,
+                "procedure": {
+                    "id": info.procedure.id,
+                    "status": getattr(info.procedure, 'status', None),
+                    "featured": info.procedure.featured,
+                    "created_at": info.procedure.createdAt.isoformat(),
+                    "updated_at": info.procedure.updatedAt.isoformat(),
+                    "account_id": info.procedure.accountId,
+                    "scorecard_id": info.procedure.scorecardId,
+                    "score_id": info.procedure.scoreId,
+                },
+                "summary": {
+                    "scorecard_name": info.scorecard_name,
+                    "score_name": info.score_name
+                }
+            }
+            
+            if request.include_yaml:
+                yaml_config = service.get_procedure_yaml(request.procedure_id)
+                if yaml_config:
+                    result["yaml_config"] = yaml_config
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error getting procedure info: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to get procedure info: {str(e)}"
+            }
+    
+    @mcp.tool()
+    def plexus_procedure_update(request: UpdateProcedureRequest) -> Dict[str, Any]:
+        """Update a procedure's configuration.
+        
+        Creates a new version with the provided YAML configuration.
+        The procedure will maintain its history of configurations through versions.
+        """
+        try:
+            service = get_procedure_service()
+            
+            success, message = service.update_procedure_config(
+                request.procedure_id,
+                request.yaml_config,
+                request.note
+            )
+            
+            return {
+                "success": success,
+                "message": message
+            }
+            
+        except Exception as e:
+            logger.error(f"Error updating procedure: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to update procedure: {str(e)}"
+            }
+    
+    @mcp.tool()
+    def plexus_procedure_delete(request: DeleteProcedureRequest) -> Dict[str, Any]:
+        """Delete a procedure and all its data.
+        
+        WARNING: This permanently deletes the procedure, all its nodes, and all versions.
+        This action cannot be undone. Use with caution.
+        """
+        try:
+            service = get_procedure_service()
+            
+            success, message = service.delete_procedure(request.procedure_id)
+            
+            return {
+                "success": success,
+                "message": message
+            }
+            
+        except Exception as e:
+            logger.error(f"Error deleting procedure: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to delete procedure: {str(e)}"
+            }
+    
+    @mcp.tool()
+    def plexus_procedure_yaml(request: ProcedureYamlRequest) -> Dict[str, Any]:
+        """Get the latest YAML configuration for an procedure.
+        
+        Returns the current YAML configuration from the procedure's latest version.
+        Useful for reviewing configurations or as a starting point for updates.
+        """
+        try:
+            service = get_procedure_service()
+            
+            yaml_config = service.get_procedure_yaml(request.procedure_id)
+            if not yaml_config:
+                return {
+                    "success": False,
+                    "error": f"Could not get YAML configuration for procedure {request.procedure_id}"
+                }
+            
+            return {
+                "success": True,
+                "yaml_config": yaml_config
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting procedure YAML: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to get procedure YAML: {str(e)}"
+            }
+    
+    @mcp.tool()
+    async def plexus_procedure_run(request: ProcedureRunRequest) -> Dict[str, Any]:
+        """Run an procedure with the given ID.
+        
+        Executes the procedure using its configured YAML settings. The procedure
+        will process its nodes according to the defined workflow and return results.
+        
+        This function provides the same functionality as the CLI 'plexus procedure run'
+        command, ensuring consistent behavior between CLI and MCP interfaces.
+        """
+        try:
+            service = get_procedure_service()
+            
+            # Build options dictionary from request
+            options = {}
+            if request.max_iterations is not None:
+                options['max_iterations'] = request.max_iterations
+            if request.timeout is not None:
+                options['timeout'] = request.timeout
+            # Include boolean flags regardless of their value for consistency with CLI
+            options['async_mode'] = request.async_mode
+            options['dry_run'] = request.dry_run
+            
+            # Run the procedure using the same service method as CLI (now async)
+            result = await service.run_procedure(request.procedure_id, **options)
+            
+            # Return the same structured result as the service method
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error running procedure: {e}")
+            return {
+                "procedure_id": request.procedure_id,
+                "status": "error",
+                "error": f"Failed to run procedure: {str(e)}"
+            }
+
+    @mcp.tool()
+    def plexus_procedure_test_specs(request: ProcedureTestSpecsRequest) -> Dict[str, Any]:
+        """Run embedded Tactus Specification blocks from a procedure record or YAML text."""
+        try:
+            if bool(request.procedure_id) == bool(request.yaml_config):
+                return {
+                    "success": False,
+                    "error": "Provide exactly one of procedure_id or yaml_config."
+                }
+
+            if request.mode not in {"mock", "integration"}:
+                return {
+                    "success": False,
+                    "error": "Invalid mode. Expected one of: mock, integration."
+                }
+
+            service = get_procedure_service()
+            return service.test_procedure_specs(
+                procedure_id=request.procedure_id,
+                yaml_config=request.yaml_config,
+                mode=request.mode,
+                scenario=request.scenario,
+                parallel=request.parallel,
+                workers=request.workers,
+            )
+
+        except Exception as e:
+            logger.error(f"Error running procedure specs: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to test procedure specs: {str(e)}"
+            }
+
+    @mcp.tool()
+    def plexus_procedure_template() -> Dict[str, Any]:
+        """Get the default procedure YAML template.
+
+        Note: Procedures now use ProcedureTemplates stored in the database.
+        Use plexus_procedure_create with a template_id parameter instead.
+        """
+        try:
+            return {
+                "success": False,
+                "error": "Default template no longer available. Use plexus_procedure_create with a template_id parameter to create procedures from stored templates.",
+                "suggestion": "Query for available templates using the dashboard or use an existing template ID"
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting procedure template: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to get procedure template: {str(e)}"
+            }
+    
+    @mcp.tool()
+    def plexus_procedure_chat_sessions(request: ProcedureChatSessionsRequest) -> Dict[str, Any]:
+        """Get chat sessions for an procedure.
+        
+        Returns all chat sessions associated with the procedure's nodes, including
+        session status, creation time, and message counts. Useful for understanding
+        conversation activity within an procedure.
+        """
+        try:
+            # Import GraphQL client locally to avoid circular imports
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            
+            client = PlexusDashboardClient()
+            
+            # Query for chat sessions associated with this procedure using GSI
+            query = '''
+            query ListChatSessionByProcedureId($procedureId: String!, $limit: Int!) {
+                listChatSessionByProcedureIdAndCreatedAt(
+                    procedureId: $procedureId
+                    sortDirection: DESC
+                    limit: $limit
+                ) {
+                    items {
+                        id
+                        status
+                        procedureId
+                        createdAt
+                        updatedAt
+                        messages {
+                            items {
+                                id
+                                messageType
+                            }
+                        }
+                    }
+                }
+            }
+            '''
+
+            result = client.execute(query, {
+                'procedureId': request.procedure_id,
+                'limit': request.limit
+            })
+
+            if 'errors' in result:
+                return {
+                    "success": False,
+                    "error": f"GraphQL errors: {result['errors']}"
+                }
+
+            # Handle both wrapped and unwrapped GraphQL responses
+            sessions = []
+            if 'data' in result:
+                sessions = result['data'].get('listChatSessionByProcedureIdAndCreatedAt', {}).get('items', [])
+            elif 'listChatSessionByProcedureIdAndCreatedAt' in result:
+                sessions = result['listChatSessionByProcedureIdAndCreatedAt'].get('items', [])
+            
+            # Process sessions to include message counts and types
+            processed_sessions = []
+            for session in sessions:
+                messages = session.get('messages', {}).get('items', [])
+                message_types = {}
+                for msg in messages:
+                    msg_type = msg.get('messageType', 'MESSAGE')
+                    message_types[msg_type] = message_types.get(msg_type, 0) + 1
+                
+                processed_sessions.append({
+                    "id": session["id"],
+                    "status": session["status"],
+                    "created_at": session["createdAt"],
+                    "updated_at": session.get("updatedAt"),
+                    "message_count": len(messages),
+                    "message_types": message_types
+                })
+            
+            return {
+                "success": True,
+                "procedure_id": request.procedure_id,
+                "session_count": len(processed_sessions),
+                "sessions": processed_sessions
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting procedure chat sessions: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to get chat sessions: {str(e)}"
+            }
+    
+    @mcp.tool()
+    def plexus_procedure_chat_messages(request: ProcedureChatMessagesRequest) -> Dict[str, Any]:
+        """Get chat messages for an procedure.
+        
+        Returns detailed chat conversation including system messages, user messages,
+        assistant responses, tool calls, and tool responses. Useful for debugging
+        conversation flow and understanding AI reasoning process.
+        """
+        try:
+            # Import GraphQL client locally to avoid circular imports
+            from plexus.dashboard.api.client import PlexusDashboardClient
+            import json
+            
+            client = PlexusDashboardClient()
+            
+            if request.session_id:
+                # Query for a specific session
+                query = '''
+                query GetChatSession($id: ID!) {
+                    getChatSession(id: $id) {
+                        id
+                        status
+                        procedureId
+                        createdAt
+                        messages {
+                            items {
+                                id
+                                role
+                                messageType
+                                toolName
+                                content
+                                toolResponse
+                                sequenceNumber
+                                parentMessageId
+                                createdAt
+                            }
+                        }
+                    }
+                }
+                '''
+                
+                result = client.execute(query, {'id': request.session_id})
+                
+                if 'errors' in result:
+                    return {
+                        "success": False,
+                        "error": f"GraphQL errors: {result['errors']}"
+                    }
+                
+                # Handle both wrapped and unwrapped GraphQL responses
+                session = None
+                if 'data' in result:
+                    session = result['data'].get('getChatSession')
+                elif 'getChatSession' in result:
+                    session = result['getChatSession']
+                if not session:
+                    return {
+                        "success": False,
+                        "error": f"Session {request.session_id} not found"
+                    }
+                
+                sessions = [session]
+            else:
+                # Query for all sessions in the procedure using GSI (not filter scan)
+                query = '''
+                query ListChatSessionByProcedureId($procedureId: String!, $limit: Int!) {
+                    listChatSessionByProcedureIdAndCreatedAt(
+                        procedureId: $procedureId
+                        sortDirection: DESC
+                        limit: $limit
+                    ) {
+                        items {
+                            id
+                            status
+                            procedureId
+                            createdAt
+                            messages {
+                                items {
+                                    id
+                                    role
+                                    messageType
+                                    toolName
+                                    content
+                                    toolResponse
+                                    sequenceNumber
+                                    parentMessageId
+                                    createdAt
+                                }
+                            }
+                        }
+                    }
+                }
+                '''
+
+                result = client.execute(query, {
+                    'procedureId': request.procedure_id,
+                    'limit': request.limit
+                })
+
+                if 'errors' in result:
+                    return {
+                        "success": False,
+                        "error": f"GraphQL errors: {result['errors']}"
+                    }
+
+                # Handle both wrapped and unwrapped GraphQL responses
+                sessions = []
+                if 'data' in result:
+                    sessions = result['data'].get('listChatSessionByProcedureIdAndCreatedAt', {}).get('items', [])
+                elif 'listChatSessionByProcedureIdAndCreatedAt' in result:
+                    sessions = result['listChatSessionByProcedureIdAndCreatedAt'].get('items', [])
+            
+            # Process sessions and messages
+            processed_sessions = []
+            total_messages = 0
+            tool_calls = 0
+            tool_responses = 0
+            missing_responses = 0
+            
+            for session in sessions:
+                messages = session.get('messages', {}).get('items', [])
+                # Sort messages by sequence number
+                messages.sort(key=lambda m: m.get('sequenceNumber', 0))
+                
+                # Track messages within this session
+                session_tool_calls = []
+                session_tool_responses = []
+                processed_messages = []
+
+                for msg in messages[:request.limit]:
+                    msg_type = msg.get('messageType', 'MESSAGE')
+                    role = msg.get('role', '')
+
+                    raw_content = msg.get('content', '') or ''
+                    parsed_content = raw_content
+                    try:
+                        if raw_content.startswith('{') and raw_content.endswith('}'):
+                            parsed_content = json.loads(raw_content)
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        pass  # Keep as string if not valid JSON
+
+                    processed_msg = {
+                        "id": msg["id"],
+                        "sequence_number": msg.get("sequenceNumber", 0),
+                        "role": role,
+                        "message_type": msg_type,
+                        "content": parsed_content,
+                        "created_at": msg["createdAt"],
+                        "parent_message_id": msg.get("parentMessageId")
+                    }
+
+                    # Tool responses: SYSTEM role messages are tool responses in this schema
+                    is_tool_response = (role == 'SYSTEM' and msg.get('parentMessageId'))
+
+                    # Tool calls: toolResponse is stored on the TOOL_CALL row in this schema
+                    if msg_type == 'TOOL_CALL':
+                        processed_msg["tool_name"] = msg.get("toolName")
+                        session_tool_calls.append(msg["id"])
+                        tool_calls += 1
+
+                        tool_response_raw = msg.get('toolResponse') or ''
+                        if request.show_tool_responses and tool_response_raw:
+                            tool_response_parsed = tool_response_raw
+                            try:
+                                if tool_response_raw.startswith('{') and tool_response_raw.endswith('}'):
+                                    tool_response_parsed = json.loads(tool_response_raw)
+                            except (json.JSONDecodeError, TypeError, ValueError):
+                                pass
+                            processed_msg["tool_response"] = tool_response_parsed
+                            session_tool_responses.append(msg["id"])
+                            tool_responses += 1
+
+                    elif (msg_type == 'TOOL_RESPONSE' or is_tool_response) and request.show_tool_responses:
+                        processed_msg["tool_name"] = msg.get("toolName", "Unknown")
+                        session_tool_responses.append(msg["id"])
+                        tool_responses += 1
+                    
+                    processed_messages.append(processed_msg)
+                    total_messages += 1
+                
+                # Check for missing tool responses
+                session_missing = 0
+                for call_id in session_tool_calls:
+                    # Tool response is either stored on the TOOL_CALL row (toolResponse)
+                    # or as a separate TOOL_RESPONSE / SYSTEM message referencing the call.
+                    call_msg = next((m for m in messages if m.get("id") == call_id), None)
+                    has_inline_response = bool(call_msg and (call_msg.get("toolResponse") or ""))
+                    has_child_response = any(
+                        resp_msg.get('parentMessageId') == call_id
+                        for resp_msg in messages
+                        if resp_msg.get('messageType') == 'TOOL_RESPONSE'
+                        or (resp_msg.get('role') == 'SYSTEM' and resp_msg.get('parentMessageId'))
+                    )
+                    has_response = has_inline_response or has_child_response
+                    if not has_response:
+                        session_missing += 1
+                
+                missing_responses += session_missing
+                
+                processed_sessions.append({
+                    "session_id": session["id"],
+                    "status": session["status"],
+                    "created_at": session["createdAt"],
+                    "message_count": len(processed_messages),
+                    "tool_calls": len(session_tool_calls),
+                    "tool_responses": len(session_tool_responses),
+                    "missing_responses": session_missing,
+                    "messages": processed_messages
+                })
+            
+            return {
+                "success": True,
+                "procedure_id": request.procedure_id,
+                "session_count": len(processed_sessions),
+                "total_messages": total_messages,
+                "summary": {
+                    "tool_calls": tool_calls,
+                    "tool_responses": tool_responses,
+                    "missing_responses": missing_responses,
+                    "response_rate": f"{((tool_responses / tool_calls) * 100):.1f}%" if tool_calls > 0 else "N/A"
+                },
+                "sessions": processed_sessions
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting procedure chat messages: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to get chat messages: {str(e)}"
+            }
+    
+    # ------------------------------------------------------------------ #
+    # Continue / Branch tools                                             #
+    # ------------------------------------------------------------------ #
+
+    class ProcedureContinueRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="ID of the completed procedure to continue")]
+        additional_cycles: Annotated[int, Field(description="Number of additional optimizer cycles to run", ge=1)] = 3
+        hint: Annotated[Optional[str], Field(description="Optional instructions to guide the continuation run")] = None
+
+    @mcp.tool()
+    async def plexus_procedure_continue(request: ProcedureContinueRequest) -> Dict[str, Any]:
+        """Continue a completed optimizer procedure for additional cycles.
+
+        Updates the procedure's max_iterations param, clears Tactus replay
+        checkpoints (preserving accumulated State such as iterations, baselines,
+        and dataset), then re-dispatches the procedure.  The optimizer detects
+        prior iterations and skips expensive dataset/baseline initialization,
+        resuming from cycle N+1.
+
+        Use this after a procedure reaches its max_iterations limit and you want
+        to run more cycles, optionally with a new hint.
+        """
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.procedure.continuation_service import prepare_continuation
+            from plexus.cli.procedure.service import ProcedureService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            info = prepare_continuation(
+                client,
+                request.procedure_id,
+                request.additional_cycles,
+                request.hint,
+            )
+
+            service = ProcedureService(client)
+            run_result = await service.run_experiment(request.procedure_id)
+
+            return {
+                "success": True,
+                "status": run_result.get('status', 'dispatched'),
+                "procedure_id": request.procedure_id,
+                "task_id": run_result.get('task_id'),
+                "completed_cycles": info['completed_cycles'],
+                "additional_cycles": info['additional_cycles'],
+                "new_max_iterations": info['new_max_iterations'],
+                "hint_applied": info['hint_applied'],
+            }
+        except Exception as e:
+            logger.error(f"Error continuing procedure: {e}")
+            return {"success": False, "error": str(e)}
+
+    class ProcedureBranchRequest(BaseModel):
+        source_procedure_id: Annotated[str, Field(description="ID of the source procedure to branch from")]
+        cycle: Annotated[int, Field(description="Branch from after this cycle number (1-based)", ge=1)]
+        additional_cycles: Annotated[int, Field(description="Number of cycles to run in the branch", ge=1)] = 3
+        hint: Annotated[Optional[str], Field(description="Optional instructions for the branch run")] = None
+        name: Annotated[Optional[str], Field(description="Name for the new branch procedure")] = None
+
+    @mcp.tool()
+    async def plexus_procedure_branch(request: ProcedureBranchRequest) -> Dict[str, Any]:
+        """Branch a procedure from cycle N into a new procedure.
+
+        Creates a new procedure whose State is a copy of the source procedure
+        truncated to cycle N, then dispatches it.  The optimizer detects the N
+        prior cycles and runs additional cycles from cycle N+1 with a fresh
+        exploration — no dataset rebuild or baseline re-evaluation.
+
+        Use this to explore a different optimization direction starting from an
+        earlier point in the source run, without modifying the source procedure.
+        """
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.procedure.continuation_service import prepare_branch
+            from plexus.cli.procedure.service import ProcedureService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            info = prepare_branch(
+                client,
+                request.source_procedure_id,
+                request.cycle,
+                request.additional_cycles,
+                request.hint,
+                request.name,
+            )
+
+            target_id = info['target_id']
+            service = ProcedureService(client)
+            run_result = await service.run_experiment(target_id)
+
+            return {
+                "success": True,
+                "status": run_result.get('status', 'dispatched'),
+                "source_procedure_id": request.source_procedure_id,
+                "target_procedure_id": target_id,
+                "target_name": info['target_name'],
+                "task_id": run_result.get('task_id'),
+                "branched_from_cycle": request.cycle,
+                "additional_cycles": info['additional_cycles'],
+                "new_max_iterations": info['new_max_iterations'],
+                "hint_applied": info['hint_applied'],
+            }
+        except Exception as e:
+            logger.error(f"Error branching procedure: {e}")
+            return {"success": False, "error": str(e)}
+
+    class ProcedureIndexOptimizerRunRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID to backfill into canonical optimizer artifacts")]
+        force: Annotated[bool, Field(description="Rewrite optimizer artifacts even if they already exist")] = False
+
+    @mcp.tool()
+    def plexus_procedure_index_optimizer_run(request: ProcedureIndexOptimizerRunRequest) -> Dict[str, Any]:
+        """Index or backfill one optimizer procedure into canonical task attachments."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            service = OptimizerResultsService(client)
+            result = service.index_optimizer_run(request.procedure_id, force=request.force)
+            return {
+                "success": True,
+                "procedure_id": request.procedure_id,
+                "task_id": result["task_id"],
+                "pointer": result["pointer"],
+                "summary": result["manifest"].get("summary"),
+                "best": result["manifest"].get("best"),
+            }
+        except Exception as e:
+            logger.error(f"Error indexing optimizer procedure: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    class ProcedureOptimizerSummaryRequest(BaseModel):
+        procedure_id: Annotated[str, Field(description="Procedure ID to summarize from indexed optimizer artifacts")]
+        include_runtime_log: Annotated[bool, Field(description="Include a trailing runtime.log excerpt")] = False
+        include_events: Annotated[bool, Field(description="Include a trailing events.jsonl excerpt")] = False
+        log_lines: Annotated[int, Field(description="Number of trailing lines to include for excerpts", ge=1)] = 80
+
+    @mcp.tool()
+    def plexus_procedure_optimizer_summary(request: ProcedureOptimizerSummaryRequest) -> Dict[str, Any]:
+        """Summarize one indexed optimizer procedure with cycles, candidates, evals, and artifact pointers."""
+        try:
+            from plexus.cli.shared.client_utils import create_client as _cc
+            from plexus.cli.shared.optimizer_results import OptimizerResultsService
+
+            client = _cc()
+            if not client:
+                return {"success": False, "error": "Could not create API client"}
+
+            service = OptimizerResultsService(client)
+            payload = service.summarize_optimizer_procedure(
+                request.procedure_id,
+                include_runtime_log=request.include_runtime_log,
+                include_events=request.include_events,
+                log_lines=request.log_lines,
+            )
+            return {"success": True, **payload}
+        except Exception as e:
+            logger.error(f"Error summarizing optimizer procedure: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    # Register the stop tool
+    from .stop import register_stop_tool
+    register_stop_tool(mcp)
+
+    logger.info("Registered procedure management tools")

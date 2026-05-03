@@ -29,28 +29,10 @@ celery_app.conf.task_default_queue = CELERY_QUEUE_NAME
 
 # Initialize DynamoDB deserializer
 deserializer = TypeDeserializer()
-SELF_MANAGED_DISPATCH_MODES = {"console_async_worker", "local"}
 
 def deserialize_dynamo_item(item):
     """Convert a DynamoDB item to a regular dict."""
     return {key: deserializer.deserialize(value) for key, value in item.items()}
-
-
-def metadata_dict(raw_metadata):
-    if isinstance(raw_metadata, dict):
-        return raw_metadata
-    if isinstance(raw_metadata, str) and raw_metadata.strip():
-        try:
-            parsed = json.loads(raw_metadata)
-            return parsed if isinstance(parsed, dict) else {}
-        except Exception:
-            return {}
-    return {}
-
-
-def is_self_managed_task(task):
-    metadata = metadata_dict(task.get("metadata"))
-    return metadata.get("dispatch_mode") in SELF_MANAGED_DISPATCH_MODES
 
 
 def lambda_handler(event, context):
@@ -72,9 +54,6 @@ def lambda_handler(event, context):
 
         try:
             task = deserialize_dynamo_item(new_image)
-            if is_self_managed_task(task):
-                continue
-
             # Only process tasks with dispatchStatus 'PENDING'
             if task.get('dispatchStatus') != 'PENDING':
                 continue

@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { generateClient } from 'aws-amplify/api'
-import { Copy, Link as LinkIcon, MoreHorizontal } from 'lucide-react'
+import { Copy, ExternalLink, MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,6 @@ import {
   EVALUATION_UPDATE_SUBSCRIPTION_FOR_CARDS,
   evaluationToScoreEvaluationView,
   loadScoreEvaluations,
-  loadScoreVersionEvaluations,
   mergeTaskIntoEvaluation,
   mergeTaskStageIntoEvaluation,
   taskMatchesEvaluation,
@@ -227,10 +226,7 @@ export function ScoreEvaluationList({
       setEvaluations([])
       setIsLoading(true)
       try {
-        const loadedEvaluations =
-          scope === 'version' && versionId
-            ? await loadScoreVersionEvaluations(versionId)
-            : await loadScoreEvaluations(scoreId)
+        const loadedEvaluations = await loadScoreEvaluations(scoreId)
         if (!cancelled) {
           setEvaluations(loadedEvaluations)
         }
@@ -250,7 +246,7 @@ export function ScoreEvaluationList({
     return () => {
       cancelled = true
     }
-  }, [scoreId, scope, versionId])
+  }, [scoreId])
 
   React.useEffect(() => {
     if (!scoreId) return
@@ -274,11 +270,7 @@ export function ScoreEvaluationList({
 
     const upsertEvaluation = (rawEvaluation: any) => {
       if (!rawEvaluation?.id) return
-      if (scope === 'version') {
-        if (rawEvaluation.scoreVersionId !== versionId) return
-      } else if (rawEvaluation.scoreId !== scoreId) {
-        return
-      }
+      if (rawEvaluation.scoreId && rawEvaluation.scoreId !== scoreId) return
       const nextEvaluation = evaluationToScoreEvaluationView(rawEvaluation)
       setEvaluations((previous) => {
         const existingIndex = previous.findIndex((evaluation) => evaluation.id === nextEvaluation.id)
@@ -308,11 +300,7 @@ export function ScoreEvaluationList({
       (data) => {
         const deleted = data?.onDeleteEvaluation
         if (!deleted?.id) return
-        if (scope === 'version') {
-          if (deleted.scoreVersionId !== versionId) return
-        } else if (deleted.scoreId !== scoreId) {
-          return
-        }
+        if (deleted.scoreId && deleted.scoreId !== scoreId) return
         setEvaluations((previous) => previous.filter((evaluation) => evaluation.id !== deleted.id))
       },
       'delete evaluation'
@@ -375,7 +363,7 @@ export function ScoreEvaluationList({
         }
       })
     }
-  }, [scope, scoreId, versionId])
+  }, [scoreId])
 
   const applyControlChange = React.useCallback((apply: () => void) => {
     if (controlLoadingTimeoutRef.current) {
@@ -390,14 +378,19 @@ export function ScoreEvaluationList({
   }, [])
 
   const visibleEvaluations = React.useMemo(() => {
-    const filtered = evaluations.filter((evaluation) => {
+    const filteredByScope =
+      scope === 'version' && versionId
+        ? evaluations.filter((evaluation) => evaluation.scoreVersionId === versionId)
+        : evaluations
+
+    const filtered = filteredByScope.filter((evaluation) => {
       if (statusFilter !== 'all' && (evaluation.status ?? 'unknown') !== statusFilter) return false
       if (typeFilter !== 'all' && (evaluation.type ?? 'unknown') !== typeFilter) return false
       return true
     })
 
     return sortEvaluations(filtered, sortBy)
-  }, [evaluations, sortBy, statusFilter, typeFilter])
+  }, [evaluations, scope, sortBy, statusFilter, typeFilter, versionId])
 
   const statuses = React.useMemo(
     () => ['all', ...new Set(evaluations.map((evaluation) => evaluation.status ?? 'unknown'))],
@@ -540,7 +533,7 @@ export function ScoreEvaluationList({
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem asChild>
                         <a href={`/lab/evaluations/${evaluation.id}`} target="_blank" rel="noreferrer">
-                          <LinkIcon className="mr-2 h-3.5 w-3.5" />
+                          <ExternalLink className="mr-2 h-3.5 w-3.5" />
                           Open evaluation
                         </a>
                       </DropdownMenuItem>

@@ -15,7 +15,7 @@ from typing import Dict, Any, Set
 
 from graphql_client import get_client_from_env
 from graphql_queries import query_records_for_counting
-from bucket_counter import count_records_efficiently, count_feedback_records_efficiently, get_time_window
+from bucket_counter import count_records_efficiently, get_time_window
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -134,10 +134,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     
                     # Combine all bucket counts
                     all_bucket_counts = bucket_counts + prediction_bucket_counts + evaluation_bucket_counts
-                elif record_type == 'feedbackItems':
-                    print(f"[2/3] Counting feedbackItems into scoped buckets...")
-                    all_bucket_counts = count_feedback_records_efficiently(records, account_id)
-                    print(f"[2/3] Generated {len(all_bucket_counts)} bucket updates")
                 else:
                     # Count records into all buckets efficiently (O(n))
                     print(f"[2/3] Counting into buckets...")
@@ -278,10 +274,7 @@ def update_buckets(graphql_client, bucket_counts: list) -> tuple:
                 time_range_end=bucket['time_range_end'],
                 number_of_minutes=bucket['number_of_minutes'],
                 count=bucket['count'],
-                complete=bucket['complete'],
-                scorecard_id=bucket.get('scorecard_id'),
-                score_id=bucket.get('score_id'),
-                metadata=bucket.get('metadata')
+                complete=bucket['complete']
             )
             updates += 1
             
@@ -291,3 +284,4 @@ def update_buckets(graphql_client, bucket_counts: list) -> tuple:
                   f"({bucket['number_of_minutes']}min): {e}")
     
     return updates, errors
+

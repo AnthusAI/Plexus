@@ -41,36 +41,16 @@ export function EvaluationTaskScoreResults({
   navigationControls,
   isLoading = false
 }: EvaluationTaskScoreResultsProps) {
-  const toNormalized = (value: unknown): string | null => {
-    if (value === null || value === undefined) return null
-    const normalized = String(value).trim()
-    return normalized.length > 0 ? normalized : null
-  }
-
-  const getResultFilterKeys = (result: ScoreResultData): string[] => {
-    const keys = new Set<string>()
-    const resultId = toNormalized(result.id)
-    if (resultId) keys.add(resultId)
-    const itemId = toNormalized(result.itemId)
-    if (itemId) keys.add(itemId)
-
-    const metadataItemId = toNormalized((result as any)?.metadata?.item_id)
-    if (metadataItemId) keys.add(metadataItemId)
-
-    const feedbackItemId = toNormalized((result as any)?.feedbackItem?.id)
-    if (feedbackItemId) keys.add(feedbackItemId)
-    const metadataFeedbackItemId = toNormalized((result as any)?.metadata?.feedback_item_id)
-    if (metadataFeedbackItemId) keys.add(metadataFeedbackItemId)
-
-    if (Array.isArray(result.itemIdentifiers)) {
-      result.itemIdentifiers.forEach((identifier: any) => {
-        const value = toNormalized(identifier?.value)
-        if (value) keys.add(value)
-      })
-    }
-
-    return Array.from(keys)
-  }
+  console.log('EvaluationTaskScoreResults render:', {
+    resultCount: results.length,
+    firstResult: results[0],
+    lastResult: results[results.length - 1],
+    accuracy,
+    selectedPredictedValue,
+    selectedActualValue,
+    hasSelectedResult: !!selectedScoreResult,
+    selectedScoreResultId: selectedScoreResult?.id
+  });
 
   const [filters, setFilters] = useState<FilterState>({
     showCorrect: null,
@@ -115,9 +95,14 @@ export function EvaluationTaskScoreResults({
   }, [results])
 
   const filteredResults = useMemo(() => {
-    const normalizedSelectedItemIds = selectedItemIds
-      ? new Set(selectedItemIds.map(toNormalized).filter((id): id is string => id !== null))
-      : null
+    console.log('Filtering score results:', {
+      totalResults: results.length,
+      filters: {
+        showCorrect: filters.showCorrect,
+        predictedValue: filters.predictedValue,
+        actualValue: filters.actualValue
+      }
+    });
 
     const filtered = results.filter(result => {
       if (filters.showCorrect !== null && result.metadata.correct !== filters.showCorrect) {
@@ -132,13 +117,19 @@ export function EvaluationTaskScoreResults({
         return false
       }
 
-      if (normalizedSelectedItemIds) {
-        const resultKeys = getResultFilterKeys(result)
-        const hasMatch = resultKeys.some(key => normalizedSelectedItemIds.has(key))
-        if (!hasMatch) return false
+      if (selectedItemIds && selectedItemIds.length > 0 &&
+          !selectedItemIds.includes(result.itemId ?? '')) {
+        return false
       }
 
       return true
+    });
+
+    console.log('Filtered results:', {
+      inputCount: results.length,
+      filteredCount: filtered.length,
+      firstFiltered: filtered[0],
+      lastFiltered: filtered[filtered.length - 1]
     });
 
     return filtered;
@@ -273,4 +264,4 @@ export function EvaluationTaskScoreResults({
       </div>
     </div>
   )
-}
+} 

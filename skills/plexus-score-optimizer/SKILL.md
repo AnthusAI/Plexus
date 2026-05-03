@@ -33,62 +33,7 @@ Do not treat every contradiction as a score bug. A contradiction can mean:
 - the feedback should be invalidated
 - the item is mechanical noise and should not drive optimization
 
-## Three-Phase Rubric-Memory SOP
-
-Run optimizer work in this order. Do not skip directly to prompt/code optimization
-when the knowledge base may have changed recently.
-
-### Phase 1 — Recent knowledge-base review and rubric cultivation
-
-Before curation or optimization, proactively check recent rubric memory for the
-score, matching score prefix, and scorecard:
-
-```bash
-python -m plexus.cli rubric-memory recent \
-  --scorecard "<scorecard>" \
-  --score "<score>" \
-  --days 30 \
-  --query "recent SME stakeholder policy update rubric guideline change clarification" \
-  --format markdown
-```
-
-Use the results to compare recent score/prefix/scorecard KB entries against the
-current score guidelines and scorecard-level policy. Recent SME/client decisions
-often require updating guidelines for more than one related score. If the KB
-shows a rubric shift, handle the rubric/guidelines update first. Do not treat
-older feedback as optimizer truth until the current rubric is explicit.
-
-### Phase 2 — Feedback curation under the updated rubric
-
-After the guidelines reflect the current rubric, run feedback contradictions
-with rubric-memory context enabled:
-
-```bash
-python -m plexus.cli feedback report contradictions \
-  --scorecard "<scorecard>" \
-  --score "<score>" \
-  --days <days> \
-  --include-rubric-memory \
-  --fresh \
-  --format json
-```
-
-The contradictions report evaluates feedback against the current guidelines.
-When `--include-rubric-memory` is enabled, the existing per-item contradiction
-voters also receive retrieval-only KB citations. Use this phase to identify
-feedback labels that contradict the current rubric, including labels created
-under a superseded rubric during agile score development with SMEs and clients.
-Triangulate with a fresh feedback evaluation before proposing invalidation.
-Never invalidate without explicit user approval of exact feedback IDs.
-
-### Phase 3 — Optimization
-
-Only run the optimizer after recent rubric shifts are reviewed and the feedback
-pool is clean enough to be a useful target. The optimizer should use recent
-rubric-memory citations for policy claims, hypotheses, version notes, SME
-questions, and "cannot improve" conclusions.
-
-## Operating Rules
+## Hard Guardrails
 
 - Use the direct CLI for optimizer execution and debugging. Do not treat dashboard or dispatcher state alone as proof that a run is healthy.
 - Prefer `python -m plexus.cli` from the repo root over a possibly stale installed `plexus` binary.
@@ -100,7 +45,6 @@ questions, and "cannot improve" conclusions.
 - Only invalidate items after the user explicitly approves the exact group.
 - Start invalidation triage from contradiction report output, not ad hoc individual item inspection.
 - The optimizer never promotes champion automatically. Champion promotion is always a separate manual operator step.
-- Promoting an untested ScoreVersion to champion is a policy violation. Before any champion promotion, confirm the exact version has at least one associated feedback or accuracy evaluation. The `plexus_score_set_champion` tool enforces this by default; use `force=true` only when the user explicitly authorizes an emergency override.
 - Use MCP for inspection around the optimizer when helpful, but not as the primary execution path during debugging.
 - When you prepare a score for optimizer work with `python -m plexus.cli score push`, remember that CLI-published guidelines come from `scorecards/<scorecard>/guidelines/<score>.md`. A sidecar markdown file next to the YAML is not the canonical guidelines path for CLI push.
 
@@ -461,32 +405,12 @@ Rules:
 
 Use this conservative loop when a score has likely rubric-drift labels and you need to clean the feedback pool before trusting optimizer output.
 
-Important: the contradictions report excludes `isInvalid=true` rows before analysis. If a rubric changed materially and prior invalidations may reflect the old rubric, first ask the user whether to reset curation for the affected score family. Only after explicit approval, list and reinstate the invalidated rows:
-
-```bash
-python -m plexus.cli feedback invalidated \
-  --scorecard "<scorecard>" \
-  --score "<score>" \
-  --format json
-
-python -m plexus.cli feedback uninvalidate \
-  --all-for-score \
-  --scorecard "<scorecard>" \
-  --score "<score>" \
-  --execute \
-  --yes \
-  --format json
-```
-
-After reset, rerun contradictions against the updated rubric authority. If the updated rubric is a tested candidate version that is not champion yet, pass `--score-version "<scoreVersionId>"` so curation uses the intended rubric without promoting it prematurely.
-
 1. Run a fresh contradictions report for the score and window:
 
 ```bash
 python -m plexus.cli feedback report contradictions \
   --scorecard "<scorecard>" \
   --score "<score>" \
-  --score-version "<optional-tested-candidate-score-version-id>" \
   --days <days> \
   --fresh \
   --format json

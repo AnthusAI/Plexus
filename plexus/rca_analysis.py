@@ -18,8 +18,6 @@ import yaml
 logger = logging.getLogger(__name__)
 
 RCA_OPENAI_MODEL = "gpt-5-mini"
-RCA_OPENAI_REASONING_EFFORT = "low"
-RCA_MIN_OUTPUT_TOKENS = 1000
 
 
 def _invoke_rca_openai_text(
@@ -48,11 +46,7 @@ def _invoke_rca_openai_text(
             model=RCA_OPENAI_MODEL,
             instructions=system,
             input=current_messages,
-            reasoning={"effort": RCA_OPENAI_REASONING_EFFORT},
-            # GPT-5 output tokens include reasoning tokens. RCA prompts need a
-            # small visible schema, but too-small budgets can be exhausted by
-            # reasoning before any output_text is emitted.
-            max_output_tokens=max(max_output_tokens, RCA_MIN_OUTPUT_TOKENS),
+            max_output_tokens=max_output_tokens,
         )
         text = (getattr(response, "output_text", "") or "").strip()
         if text:
@@ -153,50 +147,6 @@ def _excerpt(text: str, max_chars: int = 50000) -> str:
 
 def _normalize_label(value: Any) -> str:
     return str(value or "").strip()
-
-
-_RCA_EXPLAINER_HEADING_RE = re.compile(
-    r"^(?:#{1,6}\s*)?(?:"
-    r"executive summary(?:\s*:\s*.*)?|"
-    r"root causes?(?:\s*:\s*.*)?|"
-    r"configuration recommendation(?:\s*:\s*.*)?|"
-    r"analysis(?:\s*:\s*.*)?|"
-    r"recommendation(?:\s*:\s*.*)?"
-    r")$",
-    re.IGNORECASE,
-)
-
-
-def _compact_rca_paragraph(text: str, *, max_sentences: int = 2, max_chars: int = 320) -> str:
-    """Normalize generated RCA explanation text into short body prose."""
-    if not text:
-        return ""
-    lines = []
-    for raw_line in str(text).splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        line = re.sub(r"^[-*]\s+", "", line)
-        line = re.sub(
-            r"^(?:Executive Summary|Root Cause|Configuration Recommendation|"
-            r"Analysis|Recommendation)\s*:\s*",
-            "",
-            line,
-            flags=re.IGNORECASE,
-        ).strip()
-        if _RCA_EXPLAINER_HEADING_RE.match(line):
-            continue
-        if line:
-            lines.append(line)
-    prose = re.sub(r"\s+", " ", " ".join(lines)).strip()
-    if not prose:
-        return ""
-    sentences = re.split(r"(?<=[.!?])\s+", prose)
-    if max_sentences > 0 and len(sentences) > max_sentences:
-        prose = " ".join(sentences[:max_sentences]).strip()
-    if len(prose) > max_chars:
-        prose = prose[:max_chars].rsplit(" ", 1)[0].rstrip(" ,;:") + "."
-    return prose
 
 
 def _parse_iso_timestamp(value: str) -> float:
@@ -1292,9 +1242,7 @@ def explain_misclassification_item_classification(
     """
     system = (
         "You explain misclassification triage decisions for AI evaluations. "
-        "Use neutral, modality-agnostic language. Call transcripts are only one possible example. "
-        "Write short, plain language for operators. Do not write headings, bullets, or long "
-        "technical explanations."
+        "Use neutral, modality-agnostic language. Call transcripts are only one possible example."
     )
     rca_cookbook = (
         "Common root causes to reference when writing your explanation:\n"
@@ -1315,16 +1263,13 @@ def explain_misclassification_item_classification(
     prompt = (
         "You are given normalized item context and an assigned category decision.\n"
         "Return exactly four lines in this exact format:\n"
-        "RATIONALE_PARAGRAPH: <short paragraph, 1-2 sentences, no heading>\n"
+        "RATIONALE_PARAGRAPH: <short paragraph, 2-4 sentences>\n"
         "EVIDENCE_QUOTE: <one concrete quote/fact>\n"
         "CONFIG_FIXABILITY: <one of "
         f"{', '.join(CONFIG_FIXABILITY_OPTIONS)}>\n"
         "CITATION_IDS: <comma-separated rubric-memory citation IDs used, or empty>\n\n"
         "Rules:\n"
         "- Do not change the assigned category decision.\n"
-        "- Keep RATIONALE_PARAGRAPH terse and readable. Prefer user-facing policy words over "
-        "implementation details.\n"
-        "- Do not include Markdown headings, bullets, or labels inside RATIONALE_PARAGRAPH.\n"
         "- If failure is execution/system/context contract related, use blocked_by_mechanical.\n"
         "- If source evidence is genuinely insufficient/degraded, use blocked_by_input.\n"
         "- If policy ambiguity dominates, use needs_sme_clarification.\n"
@@ -1346,7 +1291,7 @@ def explain_misclassification_item_classification(
             key, value = line.split(":", 1)
             line_map[_normalize_label(key).upper()] = _normalize_label(value)
 
-        rationale_paragraph = _compact_rca_paragraph(line_map.get("RATIONALE_PARAGRAPH", ""))
+        rationale_paragraph = line_map.get("RATIONALE_PARAGRAPH", "")
         evidence_quote = line_map.get("EVIDENCE_QUOTE", "")
         config_fixability = line_map.get("CONFIG_FIXABILITY", "")
         citation_ids = [

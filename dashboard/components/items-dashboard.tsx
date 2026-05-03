@@ -604,59 +604,6 @@ const transformItem = (item: any, options: { isNew?: boolean } = {}): Item => {
   };
 };
 
-type ItemIdentifierSearchResponse = {
-  data?: {
-    listIdentifierByAccountIdAndValue?: {
-      items?: Array<{
-        itemId?: string | null;
-        name?: string | null;
-        value?: string | null;
-        accountId?: string | null;
-      } | null> | null;
-    } | null;
-  } | null;
-};
-
-export const ITEM_IDENTIFIER_SEARCH_LIMIT = 25;
-
-export const ITEM_IDENTIFIER_SEARCH_QUERY = `
-  query ListIdentifierByAccountIdAndValue(
-    $accountId: String!
-    $value: ModelStringKeyConditionInput
-    $limit: Int
-  ) {
-    listIdentifierByAccountIdAndValue(
-      accountId: $accountId
-      value: $value
-      limit: $limit
-    ) {
-      items {
-        itemId
-        name
-        value
-        accountId
-      }
-    }
-  }
-`;
-
-export const buildItemIdentifierSearchVariables = (
-  accountId: string,
-  identifier: string,
-  limit = ITEM_IDENTIFIER_SEARCH_LIMIT
-) => ({
-  accountId,
-  value: { eq: identifier.trim() },
-  limit
-});
-
-export const firstItemIdFromIdentifierSearchResponse = (
-  response: ItemIdentifierSearchResponse
-) => {
-  const identifiers = response.data?.listIdentifierByAccountIdAndValue?.items ?? [];
-  return identifiers.find((identifier) => Boolean(identifier?.itemId))?.itemId ?? null;
-};
-
 function ItemsDashboardInner() {
   const searchParams = useSearchParams()
   const params = useParams()
@@ -805,27 +752,45 @@ function ItemsDashboardInner() {
   // Search for item by identifier
   const handleSearch = useCallback(async (identifier: string) => {
     if (!identifier.trim()) return;
-    if (!selectedAccount?.id) {
-      setSearchError('Select an account before searching');
-      return;
-    }
     
     setIsSearching(true);
     setSearchError(null);
     
     try {
-      const response = await graphqlRequest<ItemIdentifierSearchResponse['data']>(
-        ITEM_IDENTIFIER_SEARCH_QUERY,
-        buildItemIdentifierSearchVariables(selectedAccount.id, identifier)
-      );
+      const response = await graphqlRequest<{
+        listIdentifierByValue: {
+          items: Array<{
+            itemId: string;
+            name: string;
+          }>;
+        };
+      }>(`
+        query ListIdentifierByValue($value: String!) {
+          listIdentifierByValue(value: $value) {
+            items {
+              itemId
+              name
+            }
+          }
+        }
+      `, {
+        value: identifier.trim()
+      });
       
-      const itemId = firstItemIdFromIdentifierSearchResponse(response);
+      const identifiers = response.data?.listIdentifierByValue?.items;
       
-      if (itemId) {
-        // Navigate to the item without remount
-        window.history.pushState({}, '', `/lab/items/${itemId}`)
-        setSelectedItem(itemId)
-        setSearchValue(''); // Clear search on success
+      if (identifiers && identifiers.length > 0) {
+        // Use the first item found
+        const identifier = identifiers[0];
+        const itemId = identifier.itemId;
+        if (itemId) {
+          // Navigate to the item without remount
+          window.history.pushState({}, '', `/lab/items/${itemId}`)
+          setSelectedItem(itemId)
+          setSearchValue(''); // Clear search on success
+        } else {
+          setSearchError('Item not found for this identifier');
+        }
       } else {
         setSearchError('No item found with this identifier');
         // Set timeout to clear error after 5 seconds
@@ -849,7 +814,7 @@ function ItemsDashboardInner() {
     } finally {
       setIsSearching(false);
     }
-  }, [selectedAccount?.id]);
+  }, []);
 
   // Handle search form submission
   const handleSearchSubmit = useCallback((e: React.FormEvent) => {
@@ -3532,7 +3497,7 @@ function ItemsDashboardInner() {
                 </div>
                 <Input
                   type="text"
-                  placeholder="Search by identifier"
+                  placeholder="Search by ID"
                   value={searchValue}
                   onChange={(e) => {
                     setSearchValue(e.target.value);
@@ -3630,7 +3595,7 @@ function ItemsDashboardInner() {
                       </div>
                       <Input
                         type="text"
-                        placeholder="Search by identifier"
+                        placeholder="Search by ID"
                         value={searchValue}
                         onChange={(e) => {
                           setSearchValue(e.target.value);
@@ -3816,3 +3781,4 @@ export default function ItemsDashboard() {
     </Suspense>
   );
 }
+

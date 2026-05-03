@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils"
 interface EvaluationListAccuracyBarProps {
   progress: number
   accuracy: number
-  variant?: 'default' | 'blank'
   isFocused?: boolean
   isSelected?: boolean
   baselineAccuracy?: number
@@ -14,7 +13,6 @@ interface EvaluationListAccuracyBarProps {
 export function EvaluationListAccuracyBar({
   progress,
   accuracy,
-  variant = 'default',
   isFocused = false,
   isSelected = false,
   baselineAccuracy,
@@ -43,10 +41,8 @@ export function EvaluationListAccuracyBar({
     <div className={cn(
       "relative w-full h-8 rounded-md",
       isSelected ? "bg-progress-background-selected" : "bg-progress-background"
-    )}
-      data-testid="evaluation-list-accuracy-bar"
-    >
-      {variant !== 'blank' && clampedProgress > 0 && (
+    )}>
+      {clampedProgress > 0 && (
         <>
           <div
             className={cn(

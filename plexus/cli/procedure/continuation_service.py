@@ -12,7 +12,7 @@ Provides high-level helpers used by both the CLI commands and MCP tools:
       ready to run from cycle N+1.
 
 Neither function dispatches the procedure run — callers are responsible for
-invoking ProcedureService.run_procedure or run_procedure_with_task_tracking
+invoking ProcedureService.run_experiment or run_experiment_with_task_tracking
 after calling these functions.
 """
 
@@ -28,7 +28,6 @@ _LOAD_PROCEDURE_QUERY = """
         getProcedure(id: $id) {
             id
             code
-            metadata
             accountId
             name
             scorecardId
@@ -123,12 +122,7 @@ def _parse_json_object(value: Any) -> Dict[str, Any]:
     return {}
 
 
-def _update_yaml_params(
-    code: str,
-    max_iterations: int,
-    hint: Optional[str],
-    target_accuracy: Optional[float] = None,
-) -> str:
+def _update_yaml_params(code: str, max_iterations: int, hint: Optional[str]) -> str:
     """Parse YAML, update params, return serialised YAML string."""
     try:
         parsed = yaml.safe_load(code) or {}
@@ -152,13 +146,6 @@ def _update_yaml_params(
     elif 'hint' in params:
         # Clear any previous hint so it doesn't bleed across runs
         params['hint'].pop('value', None)
-
-    # Update target_accuracy when explicitly provided
-    if target_accuracy is not None:
-        if 'target_accuracy' in params:
-            params['target_accuracy']['value'] = float(target_accuracy)
-        else:
-            params['target_accuracy'] = {'type': 'float', 'required': False, 'value': float(target_accuracy)}
 
     parsed['params'] = params
     return yaml.dump(parsed, default_flow_style=False, allow_unicode=True, width=10000)
@@ -251,16 +238,15 @@ def prepare_continuation(
     procedure_id: str,
     additional_cycles: int = 3,
     hint: Optional[str] = None,
-    target_accuracy: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Prepare a completed procedure for continuation.
 
     Steps:
-    1. Load current YAML (from DynamoDB code field or S3 via ProcedureService)
+    1. Load current YAML from procedure.code
     2. Count completed cycles from S3 State
     3. Update params.max_iterations.value = completed + additional_cycles
-    4. Optionally update params.hint.value and params.target_accuracy.value
+    4. Optionally update params.hint.value
     5. Save updated YAML back to procedure.code via GraphQL
     6. Clear checkpoints only (preserve State) via reset_checkpoints_only
 
@@ -268,30 +254,10 @@ def prepare_continuation(
         procedure_id, completed_cycles, additional_cycles, new_max_iterations,
         hint_applied (bool)
     """
-    import os as _os
     from plexus.cli.procedure.reset_service import reset_checkpoints_only
-    from plexus.cli.procedure.service import ProcedureService
 
     procedure = _load_procedure(client, procedure_id)
-
-    # Always use the current installed optimizer YAML as the base for continuations.
-    # The stored procedure code is a snapshot with params injected; using the fresh
-    # local YAML ensures any bug-fixes land in the continuation run.
-    _optimizer_yaml_path = _os.path.normpath(_os.path.join(
-        _os.path.dirname(_os.path.abspath(__file__)),
-        "..", "..", "..", "procedures", "feedback_alignment_optimizer.yaml",
-    ))
-    code = ''
-    if _os.path.exists(_optimizer_yaml_path):
-        with open(_optimizer_yaml_path) as _fh:
-            code = _fh.read()
-        logger.info("Loaded fresh optimizer YAML from %s", _optimizer_yaml_path)
-    if not code:
-        # Fallback: load from procedure record (DynamoDB or S3)
-        code = procedure.get('code') or ''
-        if not code:
-            service = ProcedureService(client)
-            code = service.get_procedure_yaml(procedure_id) or ''
+    code = procedure.get('code') or ''
     if not code:
         raise ValueError(f"Procedure {procedure_id} has no YAML code to update")
 
@@ -303,43 +269,13 @@ def prepare_continuation(
         procedure_id, completed_cycles, additional_cycles, new_max_iterations,
     )
 
-    updated_code = _update_yaml_params(code, new_max_iterations, hint, target_accuracy)
+    updated_code = _update_yaml_params(code, new_max_iterations, hint)
 
-    # Save updated YAML: always write to S3 (procedure YAML may exceed DynamoDB 400 KB),
-    # also persist in DynamoDB code field when small enough (handled by Procedure.update).
-    try:
-        import json as _json
-        from plexus.reports.s3_utils import upload_procedure_file
-        s3_key = upload_procedure_file(procedure_id, "code.tac", updated_code, content_type="text/plain")
-
-        # Fetch current metadata so we can update the code_s3_key pointer
-        raw_meta = procedure.get('metadata') or '{}'
-        try:
-            current_meta = _json.loads(raw_meta) if isinstance(raw_meta, str) else (raw_meta or {})
-        except Exception:
-            current_meta = {}
-        current_meta['code_s3_key'] = s3_key
-
-        # Update DynamoDB: small YAML goes in code field; large YAML goes S3-only.
-        input_data: dict = {'id': procedure_id, 'metadata': _json.dumps(current_meta)}
-        if len(updated_code.encode('utf-8')) < 350_000:
-            input_data['code'] = updated_code
-        client.execute(
-            """
-            mutation UpdateProcedureContinuation($input: UpdateProcedureInput!) {
-                updateProcedure(input: $input) { id }
-            }
-            """,
-            {'input': input_data},
-        )
-        logger.info("Saved updated YAML to S3 (%s) and DynamoDB for procedure %s", s3_key, procedure_id)
-    except Exception as exc:
-        logger.warning("S3 upload failed for procedure %s: %s — falling back to DynamoDB-only", procedure_id, exc)
-        client.execute(_UPDATE_PROCEDURE_CODE_MUTATION, {
-            'id': procedure_id,
-            'code': updated_code,
-        })
-        logger.info("Saved updated YAML to DynamoDB for procedure %s", procedure_id)
+    client.execute(_UPDATE_PROCEDURE_CODE_MUTATION, {
+        'id': procedure_id,
+        'code': updated_code,
+    })
+    logger.info("Saved updated YAML to procedure %s", procedure_id)
 
     reset_checkpoints_only(client, procedure_id)
     logger.info("Checkpoints cleared for procedure %s (State preserved)", procedure_id)
@@ -360,7 +296,6 @@ def prepare_branch(
     additional_cycles: int = 3,
     hint: Optional[str] = None,
     name: Optional[str] = None,
-    target_accuracy: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Create a new procedure branched from source_id after cycle N.
@@ -377,19 +312,15 @@ def prepare_branch(
         target_name, hint_applied (bool)
     """
     from plexus.cli.procedure.reset_service import clone_state_for_branch
-    from plexus.cli.procedure.service import ProcedureService
 
     source = _load_procedure(client, source_id)
     code = source.get('code') or ''
-    if not code:
-        service = ProcedureService(client)
-        code = service.get_procedure_yaml(source_id) or ''
     account_id = source.get('accountId')
     if not account_id:
         raise ValueError(f"Source procedure {source_id} has no accountId")
 
     new_max_iterations = cycle + additional_cycles
-    updated_code = _update_yaml_params(code, new_max_iterations, hint, target_accuracy)
+    updated_code = _update_yaml_params(code, new_max_iterations, hint)
 
     branch_name = name or (
         f"{source.get('name') or 'Procedure'} (branch from cycle {cycle})"

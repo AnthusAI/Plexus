@@ -32,8 +32,7 @@ export interface BaseTaskProps<TData extends BaseTaskData = BaseTaskData> {
     startedAt?: string
     estimatedCompletionAt?: string
     status?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED'
-    dispatchStatus?: string
-    dispatchMode?: string
+    dispatchStatus?: 'DISPATCHED'
     celeryTaskId?: string
     workerNodeId?: string
     completedAt?: string
@@ -367,7 +366,6 @@ const TaskContent = <TData extends BaseTaskData = BaseTaskData>({
             statusMessage={statusMessage}
             errorMessage={task.errorMessage}
             dispatchStatus={task.dispatchStatus}
-            dispatchMode={task.dispatchMode}
             celeryTaskId={task.celeryTaskId}
             workerNodeId={task.workerNodeId}
             showPreExecutionStages={showPreExecutionStages}
