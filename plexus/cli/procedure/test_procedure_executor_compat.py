@@ -394,7 +394,7 @@ async def test_execute_tactus_initializes_embedded_mcp_transport(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_console_tactus_registers_one_plexus_dispatch_tool(monkeypatch):
+async def test_console_tactus_bridges_mcp_tools_into_toolset_registry(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     monkeypatch.setattr("tactus.core.TactusRuntime", _FakeRuntime)
@@ -434,13 +434,10 @@ async def test_console_tactus_registers_one_plexus_dispatch_tool(monkeypatch):
 
     assert result["success"] is True
     toolset = _FakeRuntime.last_instance.toolset_registry["plexus"]
-    assert list(toolset.tools.keys()) == ["plexus"]
+    assert set(toolset.tools.keys()) == {"plexus_scorecards_list", "plexus_scorecard_info"}
 
-    plexus_tool = toolset.tools["plexus"]
-    output = await plexus_tool.function(
-        tool_name="plexus_scorecards_list",
-        arguments='{"limit": "1"}',
-    )
+    scorecards_tool = toolset.tools["plexus_scorecards_list"]
+    output = await scorecards_tool.function(limit="1")
     assert output == "called plexus_scorecards_list with {'limit': '1'}"
     assert mcp_client.calls == [("plexus_scorecards_list", {"limit": "1"})]
 

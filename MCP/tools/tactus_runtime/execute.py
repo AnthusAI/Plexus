@@ -258,12 +258,11 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("score_info", "score", "info"),
     ("score_evaluations", "score", "evaluations"),
     ("score_predict", "score", "predict"),
-    ("score_set_champion", "score", "set_champion"),
     ("score_contradictions", "score", "contradictions"),
     ("score_pull", "score", "pull"),
     ("score_update", "score", "update"),
     ("score_test", "score", "test"),
-    ("set_champion", "score", "set_champion"),
+    ("score_set_champion", "score", "set_champion"),
     ("item_info", "item", "info"),
     ("item_last", "item", "last"),
     ("feedback_find", "feedback", "find"),
@@ -271,6 +270,8 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("feedback_latest_update", "feedback", "latest_update"),
     ("acceptance_rate", "report", "acceptance_rate"),
     ("report_acceptance_rate", "report", "acceptance_rate"),
+    ("score_champion_version_timeline", "report", "score_champion_version_timeline"),
+    ("report_score_champion_version_timeline", "report", "score_champion_version_timeline"),
     ("rubric_memory_recent_entries", "rubric_memory", "recent_entries"),
     ("rubric_memory_evidence_pack", "rubric_memory", "evidence_pack"),
     ("rubric_memory_sme_question_gate", "rubric_memory", "sme_question_gate"),
@@ -286,6 +287,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("procedure_list", "procedure", "list"),
     ("procedure_chat_sessions", "procedure", "chat_sessions"),
     ("procedure_chat_messages", "procedure", "chat_messages"),
+    ("procedure_steering_messages", "procedure", "steering_messages"),
     ("procedure_run", "procedure", "run"),
     ("procedure_optimize", "procedure", "optimize"),
     ("procedure_continue", "procedure", "continue"),
@@ -316,6 +318,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("procedures", "procedure", "list"),
     ("procedure_sessions", "procedure", "chat_sessions"),
     ("procedure_messages", "procedure", "chat_messages"),
+    ("procedure_steering", "procedure", "steering_messages"),
 )
 
 # Long-running operations require handle/streaming semantics that the v0 prototype
@@ -351,11 +354,11 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("score", "info"): "_call_score",
     ("score", "evaluations"): "_call_score",
     ("score", "predict"): "_call_score",
-    ("score", "set_champion"): "_call_score",
     ("score", "contradictions"): "_call_score",
     ("score", "pull"): "_call_score",
     ("score", "update"): "_call_score",
     ("score", "test"): "_call_score",
+    ("score", "set_champion"): "_call_score",
     ("item", "info"): "_call_item",
     ("item", "last"): "_call_item",
     ("feedback", "find"): "_call_feedback",
@@ -367,6 +370,7 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("evaluation", "run"): "_call_evaluation_run",
     ("report", "run"): "_call_report_run",
     ("report", "acceptance_rate"): "_call_report_run",
+    ("report", "score_champion_version_timeline"): "_call_report_run",
     ("report", "configurations_list"): "_call_report_read",
     ("dataset", "build_from_feedback_window"): "_call_dataset",
     ("dataset", "check_associated"): "_call_dataset",
@@ -374,6 +378,7 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("procedure", "info"): "_call_procedure_read",
     ("procedure", "chat_sessions"): "_call_procedure_read",
     ("procedure", "chat_messages"): "_call_procedure_read",
+    ("procedure", "steering_messages"): "_call_procedure_read",
     ("procedure", "run"): "_call_procedure_run",
     ("procedure", "optimize"): "_call_procedure_run",
     ("procedure", "continue"): "_call_procedure_run",
@@ -906,6 +911,25 @@ def _default_procedure_chat_messages(args: dict[str, Any]) -> dict[str, Any]:
         },
         "sessions": processed_sessions,
     }
+
+
+def _default_procedure_steering_messages(args: dict[str, Any]) -> dict[str, Any]:
+    """Return flat procedure steering messages for runtime agent injection."""
+
+    from plexus.cli.procedure.chat_recorder import ProcedureChatRecorder
+    from plexus.dashboard.api.client import PlexusDashboardClient
+
+    procedure_id = args.get("procedure_id") or args.get("id")
+    if not procedure_id:
+        raise ValueError("plexus.procedure.steering_messages requires id or procedure_id")
+
+    recorder = ProcedureChatRecorder(PlexusDashboardClient(), str(procedure_id))
+    result = recorder.get_steering_messages(
+        after=args.get("after"),
+        agent_name=args.get("agent_name"),
+        limit=int(args.get("limit") or 50),
+    )
+    return {"success": True, "procedure_id": str(procedure_id), **result}
 
 
 def _default_feedback_alignment(args: dict[str, Any]) -> dict[str, Any]:
@@ -1658,7 +1682,7 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
         """
         query GetScoreVersionForChampionGuard($scoreId: ID!, $versionId: ID!) {
             getScore(id: $scoreId) { id championVersionId }
-            getScoreVersion(id: $versionId) { id scoreId configuration metadata }
+            getScoreVersion(id: $versionId) { id scoreId configuration metadata createdAt }
         }
         """,
         {"scoreId": str(score_id), "versionId": str(version_id)},
@@ -1722,6 +1746,14 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
     promoted_at = datetime.now(timezone.utc).isoformat()
     transition_id = str(_uuid.uuid4())
 
+    def _metadata_dict(metadata: Any) -> dict:
+        if not metadata:
+            return {}
+        if isinstance(metadata, str):
+            parsed = json.loads(metadata)
+            return dict(parsed or {})
+        return dict(metadata or {})
+
     def _build_meta(
         metadata: Any,
         *,
@@ -1734,15 +1766,21 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
         previous_champion_version_id: str | None = None,
         next_champion_version_id: str | None = None,
     ) -> dict:
-        next_meta: dict = dict(metadata or {})
+        next_meta: dict = _metadata_dict(metadata)
         history: list = list(next_meta.get("championHistory") or [])
         if incoming:
-            history.append({
-                "scoreId": score_id, "versionId": version_id,
-                "enteredAt": entered_at, "exitedAt": None,
-                "previousChampionVersionId": previous_champion_version_id,
-                "nextChampionVersionId": None, "transitionId": transition_id,
-            })
+            open_idx = next((
+                i for i in range(len(history) - 1, -1, -1)
+                if history[i].get("versionId") == version_id
+                and not history[i].get("exitedAt")
+            ), None)
+            if open_idx is None:
+                history.append({
+                    "scoreId": score_id, "versionId": version_id,
+                    "enteredAt": entered_at, "exitedAt": None,
+                    "previousChampionVersionId": previous_champion_version_id,
+                    "nextChampionVersionId": None, "transitionId": transition_id,
+                })
         else:
             open_idx = next((i for i in range(len(history) - 1, -1, -1)
                              if not history[i].get("exitedAt")), None)
@@ -1778,7 +1816,11 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
         ),
     )
     client.execute(update_version_mutation, {"input": {
-        "id": str(version_id), "metadata": incoming_meta, "isFeatured": "true"
+        "id": str(version_id),
+        "scoreId": str(score_id),
+        "createdAt": version_data.get("createdAt"),
+        "metadata": json.dumps(incoming_meta),
+        "isFeatured": "true",
     }})
     if previous_champion_version_id and previous_champion_version_id != str(version_id):
         outgoing_meta = _build_meta(
@@ -1788,7 +1830,8 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
             next_champion_version_id=str(version_id),
         )
         client.execute(update_version_mutation, {"input": {
-            "id": previous_champion_version_id, "metadata": outgoing_meta
+            "id": previous_champion_version_id,
+            "metadata": json.dumps(outgoing_meta),
         }})
 
     return {
@@ -2772,16 +2815,17 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
         if process.poll() is not None:
             break
 
-    # Clean up temp file
-    try:
-        os.unlink(id_file_path)
-    except OSError:
-        pass
+    if evaluation_id:
+        try:
+            os.unlink(id_file_path)
+        except OSError:
+            pass
 
     return {
         "status": "dispatched",
         "process_id": process.pid,
         "evaluation_id": evaluation_id,
+        "evaluation_id_file": None if evaluation_id else id_file_path,
         "command": cmd,
         "evaluation_type": evaluation_type,
         "scorecard": scorecard_name,
@@ -2904,6 +2948,7 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
             "contradictions" if block_class == "FeedbackContradictions" else
             "acceptance-rate" if block_class == "AcceptanceRate" else
             "correction-rate" if block_class == "CorrectionRate" else
+            "score-champion-version-timeline" if block_class == "ScoreChampionVersionTimeline" else
             "recent",
             "--scorecard", str(block_config.get("scorecard", "")),
         ]
@@ -2920,6 +2965,9 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
                 cmd.append("--include-item-acceptance-rate")
             if block_config.get("max_items") is not None:
                 cmd += ["--max-items", str(block_config["max_items"])]
+        if block_class == "ScoreChampionVersionTimeline":
+            if block_config.get("include_unchanged"):
+                cmd.append("--include-unchanged")
         if fresh:
             cmd.append("--fresh")
 
@@ -3340,6 +3388,40 @@ def _public_handle(record: dict[str, Any]) -> dict[str, Any]:
 TERMINAL_HANDLE_STATUSES = frozenset(
     {"completed", "completed_unknown", "failed", "cancelled"}
 )
+
+
+def _exited_process_status(process_id: Any) -> dict[str, Any] | None:
+    try:
+        pid = int(process_id)
+    except (TypeError, ValueError):
+        return None
+
+    try:
+        waited_pid, status = os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return {"process_status": "not_running"}
+        except PermissionError:
+            return {"process_status": "running_unknown"}
+        return None
+    except ProcessLookupError:
+        return {"process_status": "not_running"}
+
+    if waited_pid == 0:
+        return None
+
+    try:
+        exit_code = os.waitstatus_to_exitcode(status)
+    except ValueError:
+        exit_code = None
+
+    return {
+        "process_status": "exited",
+        "process_exit_status": status,
+        "process_exit_code": exit_code,
+    }
 
 
 def _normalize_handle_status(status: Any) -> str:
@@ -4318,7 +4400,7 @@ def _default_rubric_memory_recent_entries(args: dict[str, Any]) -> dict[str, Any
             limit=limit,
         )
 
-    context = _run_async_from_sync(_run)
+    context = _run_async_from_sync(_run())
     return {
         "success": True,
         "score_id": resolved_score_id,
@@ -4360,7 +4442,7 @@ def _default_rubric_memory_evidence_pack(args: dict[str, Any]) -> dict[str, Any]
     method = provider.generate_for_score_item if synthesize else provider.retrieve_for_score_item
 
     context = _run_async_from_sync(
-        lambda: method(
+        method(
             scorecard_identifier=scorecard_identifier,
             score_identifier=score_identifier,
             score_id=resolved_score_id,
@@ -4424,7 +4506,7 @@ def _default_rubric_memory_sme_question_gate(args: dict[str, Any]) -> dict[str, 
         candidate_agenda_items=candidate_items,
         optimizer_context=optimizer_context,
     )
-    result = _run_async_from_sync(lambda: RubricMemorySMEQuestionGateService().gate(request))
+    result = _run_async_from_sync(RubricMemorySMEQuestionGateService().gate(request))
     return {"success": True, **result.model_dump(mode="json")}
 
 
@@ -4465,11 +4547,11 @@ class PlexusRuntimeModule:
         score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_evaluations: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_predict: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
-        score_set_champion: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_contradictions: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_pull: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_update: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_test: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_set_champion: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         feedback_latest_update: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         rubric_memory_recent_entries: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         rubric_memory_evidence_pack: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
@@ -4512,15 +4594,17 @@ class PlexusRuntimeModule:
             score_evaluations if score_evaluations is not None else _default_score_evaluations
         )
         self._score_predict = score_predict if score_predict is not None else _default_score_predict
-        self._score_set_champion = (
-            score_set_champion if score_set_champion is not None else _default_score_set_champion
-        )
         self._score_contradictions = (
             score_contradictions if score_contradictions is not None else _default_score_contradictions
         )
         self._score_pull = score_pull if score_pull is not None else _default_score_pull
         self._score_update = score_update if score_update is not None else _default_score_update
         self._score_test = score_test if score_test is not None else _default_score_test
+        self._score_set_champion = (
+            score_set_champion
+            if score_set_champion is not None
+            else _default_score_set_champion
+        )
         self._feedback_latest_update = (
             feedback_latest_update
             if feedback_latest_update is not None
@@ -4552,6 +4636,7 @@ class PlexusRuntimeModule:
             "info": _default_procedure_info,
             "chat_sessions": _default_procedure_chat_sessions,
             "chat_messages": _default_procedure_chat_messages,
+            "steering_messages": _default_procedure_steering_messages,
         }
         if procedure_listers:
             default_procedure_readers.update(procedure_listers)
@@ -4666,8 +4751,8 @@ class PlexusRuntimeModule:
 
     def _call_score(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "score" or method not in {
-            "info", "evaluations", "predict", "set_champion", "contradictions",
-            "pull", "update", "test",
+            "info", "evaluations", "predict", "contradictions", "pull", "update",
+            "test", "set_champion",
         }:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
@@ -4690,7 +4775,11 @@ class PlexusRuntimeModule:
                 return self._score_update(parsed)
             if method == "test":
                 return self._score_test(parsed)
-            return self._score_set_champion(parsed)
+            if method == "set_champion":
+                return self._score_set_champion(parsed)
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
         finally:
             self._budget.record_after("score", method)
 
@@ -4891,7 +4980,7 @@ class PlexusRuntimeModule:
         return {"status": "success", "cached": raw.get("cached") if isinstance(raw, dict) else None, **data}
 
     def _call_report_run(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "report" or method not in {"run", "acceptance_rate"}:
+        if namespace != "report" or method not in {"run", "acceptance_rate", "score_champion_version_timeline"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -4904,6 +4993,14 @@ class PlexusRuntimeModule:
                           k: parsed[k] for k in (
                               "scorecard", "score", "days", "start_date", "end_date",
                               "include_item_acceptance_rate", "max_items",
+                          ) if k in parsed
+                      }}}
+        if method == "score_champion_version_timeline":
+            parsed = {**parsed, "block_class": "ScoreChampionVersionTimeline",
+                      "block_config": {**parsed.get("block_config", {}), **{
+                          k: parsed[k] for k in (
+                              "scorecard", "score", "days", "start_date", "end_date",
+                              "include_unchanged",
                           ) if k in parsed
                       }}}
 
@@ -5125,8 +5222,51 @@ class PlexusRuntimeModule:
             "id"
         )
         if record.get("kind") == "evaluation" and not evaluation_id:
+            id_file_path = dispatch_result.get("evaluation_id_file")
+            if id_file_path:
+                try:
+                    with open(str(id_file_path), "r", encoding="utf-8") as id_file:
+                        late_evaluation_id = id_file.read().strip()
+                except FileNotFoundError:
+                    late_evaluation_id = ""
+                if late_evaluation_id:
+                    try:
+                        os.unlink(str(id_file_path))
+                    except OSError:
+                        pass
+                    dispatch_result = {
+                        **dispatch_result,
+                        "evaluation_id": late_evaluation_id,
+                        "evaluation_id_file": None,
+                        "dashboard_url": f"https://lab.callcriteria.com/lab/evaluations/{late_evaluation_id}",
+                    }
+                    record = self._handle_store.update(
+                        handle_id,
+                        {
+                            "dispatch_result": dispatch_result,
+                            "status_url": dispatch_result["dashboard_url"],
+                        },
+                    )
+                    evaluation_id = late_evaluation_id
+        if record.get("kind") == "evaluation" and not evaluation_id:
             process_id = dispatch_result.get("process_id")
             if process_id:
+                process_status = _exited_process_status(process_id)
+                if process_status:
+                    next_status = (
+                        "failed"
+                        if process_status.get("process_exit_code") not in (0, None)
+                        else "completed_unknown"
+                    )
+                    update = {
+                        "status": next_status,
+                        **process_status,
+                    }
+                    if next_status == "failed":
+                        update["error"] = (
+                            "Evaluation subprocess exited before emitting an evaluation ID."
+                        )
+                    return self._handle_store.update(handle_id, update)
                 try:
                     os.kill(int(process_id), 0)
                 except ProcessLookupError:
@@ -5147,6 +5287,18 @@ class PlexusRuntimeModule:
             return self._handle_store.update(handle_id, {"last_status_error": str(exc)})
 
         status = _normalize_handle_status(evaluation.get("status"))
+        if dispatch_result.get("process_id"):
+            process_status = _exited_process_status(dispatch_result.get("process_id"))
+            if process_status:
+                evaluation = {**evaluation, **process_status}
+            if process_status and status not in TERMINAL_HANDLE_STATUSES:
+                status = "failed"
+                evaluation = {
+                    **evaluation,
+                    "error": (
+                        "Evaluation subprocess exited before the evaluation reached a terminal status."
+                    ),
+                }
         return self._handle_store.update(
             handle_id,
             {
@@ -5620,9 +5772,9 @@ Runtime ground rules:
 Helper aliases injected before your snippet runs:
 - High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,
   `item`, `last_item`, `feedback`, `feedback_alignment`, `acceptance_rate`,
-  `dataset`, `report`, `report_configs`, `procedure`, `procedures`,
-  `procedure_sessions`, `procedure_messages`, `procedure_continue`,
-  `procedure_branch`.
+  `score_champion_version_timeline`, `dataset`, `report`, `report_configs`,
+  `procedure`, `procedures`, `procedure_sessions`, `procedure_messages`,
+  `procedure_continue`, `procedure_branch`.
 - Canonical `namespace_method`: `scorecards_list`, `score_info`,
   `evaluation_info`, `evaluation_run`, `handle_status`, `handle_await`,
   `handle_cancel`, `docs_list`, `docs_get`, `api_list`, plus one helper

@@ -1,5 +1,5 @@
 import React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import EvaluationTask from '@/components/EvaluationTask'
 
 jest.mock('@/components/EvaluationTaskScoreResults', () => ({
@@ -10,8 +10,37 @@ jest.mock('@/components/EvaluationTaskScoreResults', () => ({
 
 jest.mock('@/utils/amplify-client', () => ({
   getClient: () => ({
-    graphql: jest.fn(({ query }: { query: string }) => {
+    graphql: jest.fn(({ query, variables }: { query: string, variables?: { id?: string } }) => {
+      if (query.includes('getEvaluation')) {
+        return Promise.resolve({
+          data: {
+            getEvaluation: {
+              id: variables?.id || 'baseline-1',
+              accuracy: 0.8,
+              createdAt: variables?.id === 'current-baseline-1'
+                ? '2024-01-04T00:00:00Z'
+                : '2024-01-03T00:00:00Z',
+              metrics: [],
+            },
+          },
+        })
+      }
+
       if (query.includes('getProcedure')) {
+        if (variables?.id === 'procedure-123456789abcdef') {
+          return Promise.resolve({
+            data: {
+              getProcedure: {
+                id: variables.id,
+                name: null,
+                description: null,
+                status: 'COMPLETED',
+                updatedAt: '2024-01-02T00:00:00Z',
+              },
+            },
+          })
+        }
+
         return Promise.resolve({
           data: {
             getProcedure: {
@@ -264,6 +293,9 @@ const makeTaskWithFeedbackItemLinkedCategories = () => {
 
 describe('EvaluationTask category summary drill-down', () => {
   const readSelectedItemIds = () => JSON.parse(screen.getByTestId('selected-item-ids').textContent || 'null')
+  const expectBefore = (before: Element, after: Element) => {
+    expect(before.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  }
 
   test('applies category filter and auto-selects first matching score result', async () => {
     const onSelectScoreResult = jest.fn()
@@ -332,8 +364,92 @@ describe('EvaluationTask category summary drill-down', () => {
     expect(screen.getByText('Procedure')).toBeInTheDocument()
     expect(await screen.findByText('Optimizer run')).toBeInTheDocument()
     expect(container.querySelector('a[href="/lab/scorecards/scorecard-1"]')).toBeTruthy()
-    expect(container.querySelector('a[href="/lab/scorecards/scorecard-1/scores/score-1/versions/version-1"]')).toBeTruthy()
-    expect(container.querySelector('a[href="/lab/procedures/procedure-1"]')).toBeTruthy()
+    const scoreVersionLink = container.querySelector('a[href="/lab/scorecards/scorecard-1/scores/score-1/versions/version-1"]')
+    const procedureLink = container.querySelector('a[href="/lab/procedures/procedure-1"]')
+    expect(scoreVersionLink).toBeTruthy()
+    expect(procedureLink).toBeTruthy()
+    expect(scoreVersionLink?.closest('.ml-auto')).toBeNull()
+    expect(procedureLink?.closest('.ml-auto')).toBeNull()
+    await waitFor(() => {
+      expect(container.querySelectorAll('.ml-auto [role="button"]')).toHaveLength(2)
+    })
+  })
+
+  test('shortens procedure related-resource id when the procedure name is unavailable', async () => {
+    const task = makeTask()
+    task.procedureId = 'procedure-123456789abcdef'
+
+    render(<EvaluationTask variant="detail" task={task} />)
+
+    expect(await screen.findByText('procedur…')).toBeInTheDocument()
+    expect(screen.queryByText('procedure-123456789abcdef')).not.toBeInTheDocument()
+  })
+
+  test('renders baseline related-resource links inline with right-side timestamps', async () => {
+    const task = makeTask()
+    task.data.baseline_evaluation_id = 'baseline-1'
+    task.data.current_baseline_evaluation_id = 'current-baseline-1'
+
+    const { container } = render(<EvaluationTask variant="detail" task={task} />)
+
+    expect(screen.getByText('Original baseline')).toBeInTheDocument()
+    expect(screen.getByText('Current best baseline')).toBeInTheDocument()
+
+    const originalBaselineLink = container.querySelector('a[href="/lab/evaluations/baseline-1"]')
+    const currentBaselineLink = container.querySelector('a[href="/lab/evaluations/current-baseline-1"]')
+    expect(originalBaselineLink).toBeTruthy()
+    expect(currentBaselineLink).toBeTruthy()
+    expect(originalBaselineLink?.closest('.ml-auto')).toBeNull()
+    expect(currentBaselineLink?.closest('.ml-auto')).toBeNull()
+
+    const originalBaselineCard = originalBaselineLink?.closest('.bg-card-selected')
+    const currentBaselineCard = currentBaselineLink?.closest('.bg-card-selected')
+    await waitFor(() => {
+      expect(originalBaselineCard?.querySelectorAll('.ml-auto [role="button"]')).toHaveLength(1)
+      expect(currentBaselineCard?.querySelectorAll('.ml-auto [role="button"]')).toHaveLength(1)
+    })
+  })
+
+  test('renders evaluation cost with the money icon instead of a text label', () => {
+    const task = makeTask()
+    task.data.cost = 0.25
+
+    render(<EvaluationTask variant="detail" task={task} />)
+
+    expect(screen.getByLabelText('Cost')).toBeInTheDocument()
+    expect(screen.queryByText('Cost:')).not.toBeInTheDocument()
+    expect(screen.getByText(/\$0\.2500 total/)).toBeInTheDocument()
+  })
+
+  test('orders timing, cost, baselines, then procedure and score version rows', async () => {
+    const task = makeTask()
+    task.data.cost = 0.25
+    task.data.baseline_evaluation_id = 'baseline-1'
+    task.data.current_baseline_evaluation_id = 'current-baseline-1'
+
+    const { container } = render(<EvaluationTask variant="detail" task={task} />)
+
+    expect(screen.getByLabelText('Cost')).toBeInTheDocument()
+    expect(screen.queryByText('Cost:')).not.toBeInTheDocument()
+    const cost = screen.getByText(/\$0\.2500 total/)
+    const elapsed = screen.getByText(/Elapsed:/)
+    const originalBaseline = screen.getByText('Original baseline')
+    const currentBaseline = screen.getByText('Current best baseline')
+    const procedure = screen.getByText('Procedure')
+    const scoreVersion = screen.getByText('Score Version')
+
+    const taskTimestamp = await waitFor(() => {
+      const timestamp = container.querySelector('[role="button"]')
+      expect(timestamp).toBeTruthy()
+      return timestamp as Element
+    })
+
+    expectBefore(taskTimestamp, elapsed)
+    expectBefore(elapsed, cost)
+    expectBefore(cost, originalBaseline)
+    expectBefore(originalBaseline, currentBaseline)
+    expectBefore(currentBaseline, procedure)
+    expectBefore(procedure, scoreVersion)
   })
 
   test('omits procedure related-resource card when no procedure is associated', async () => {

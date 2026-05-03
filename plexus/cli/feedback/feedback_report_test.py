@@ -217,6 +217,63 @@ def test_feedback_volume_uses_dedicated_block_and_show_bucket_details(mock_run_f
     assert kwargs["extra_config"]["show_bucket_details"] is True
 
 
+@patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
+def test_score_champion_version_timeline_uses_dedicated_block(mock_run_feedback_report_block):
+    runner = CliRunner()
+    mock_run_feedback_report_block.return_value = {"status": "success", "output": {"scores": []}}
+
+    result = runner.invoke(
+        report,
+        [
+            "score-champion-version-timeline",
+            "--scorecard",
+            "1438",
+            "--days",
+            "21",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, kwargs = mock_run_feedback_report_block.call_args
+    assert kwargs["block_class"] == "ScoreChampionVersionTimeline"
+    assert kwargs["scorecard"] == "1438"
+    assert kwargs["score"] is None
+    assert kwargs["days"] == 21
+    assert kwargs["extra_config"] == {"include_unchanged": False}
+
+
+@patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
+def test_score_champion_version_timeline_supports_single_score_explicit_window(mock_run_feedback_report_block):
+    runner = CliRunner()
+    mock_run_feedback_report_block.return_value = {"status": "success", "output": {"scores": []}}
+
+    result = runner.invoke(
+        report,
+        [
+            "score-champion-version-timeline",
+            "--scorecard",
+            "1438",
+            "--score",
+            "48059",
+            "--start-date",
+            "2026-04-01",
+            "--end-date",
+            "2026-05-01",
+            "--include-unchanged",
+            "--fresh",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, kwargs = mock_run_feedback_report_block.call_args
+    assert kwargs["block_class"] == "ScoreChampionVersionTimeline"
+    assert kwargs["score"] == "48059"
+    assert kwargs["start_date"] == "2026-04-01"
+    assert kwargs["end_date"] == "2026-05-01"
+    assert kwargs["extra_config"] == {"include_unchanged": True}
+    assert kwargs["fresh"] is True
+
+
 @patch("plexus.cli.feedback.feedback_report.resolve_account_id_for_command")
 @patch("plexus.cli.feedback.feedback_report.enrich_parameters_with_names")
 @patch("plexus.cli.feedback.feedback_report.memoized_resolve_score_identifier")

@@ -82,11 +82,14 @@ if check.status == "potential_conflict" then
   }
 end
 
--- 4. Promote if clean.
-return plexus.score.set_champion({
-  score_id   = score.id,
+-- 4. Return a manual-promotion recommendation if clean.
+-- execute_tactus procedure runtimes do not expose champion promotion.
+return {
+  blocked = false,
+  manual_promotion_required = true,
+  score_id = score.id,
   version_id = candidate_version_id,
-})
+}
 ```
 
 ## Common pattern: include in a feedback evaluation

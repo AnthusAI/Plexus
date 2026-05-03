@@ -67,10 +67,32 @@ class RubricMemoryRecentBriefingProvider:
             if score_version_id
             else await authority_resolver.resolve(score_id)
         )
-        paths = S3RubricMemoryCorpusResolver(s3_client=self.s3_client).resolve(
-            scorecard_name=scorecard_identifier,
-            score_name=score_identifier,
-        )
+        try:
+            paths = S3RubricMemoryCorpusResolver(s3_client=self.s3_client).resolve(
+                scorecard_name=scorecard_identifier,
+                score_name=score_identifier,
+            )
+        except FileNotFoundError as exc:
+            diagnostics = [
+                {
+                    "kind": "rubric_memory_unavailable",
+                    "reason": str(exc),
+                    "score_version_id": authority.score_version_id,
+                    "scorecard": scorecard_identifier,
+                    "score": score_identifier,
+                }
+            ]
+            self.last_diagnostics = diagnostics
+            return RubricMemoryCitationContext(
+                markdown_context="",
+                citation_index=[],
+                machine_context={
+                    "context_kind": "recent_briefing",
+                    "available": False,
+                    "reason": str(exc),
+                },
+                diagnostics=diagnostics,
+            )
         since_date = self._resolve_since_date(days=days, since=since)
         filtered_sources, source_stats = self._filter_recent_sources(
             paths=paths,
