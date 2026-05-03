@@ -6,6 +6,9 @@ import yaml
 OPTIMIZER_YAML_PATH = (
     Path(__file__).resolve().parents[2] / "procedures" / "feedback_alignment_optimizer.yaml"
 )
+OPTIMIZER_DOCS_DIR = (
+    Path(__file__).resolve().parents[2] / "docs" / "evaluation-and-feedback"
+)
 OPTIMIZER_SKILL_PATH = (
     Path(__file__).resolve().parents[3] / "skills" / "plexus-score-optimizer" / "SKILL.md"
 )
@@ -14,6 +17,10 @@ OPTIMIZER_SKILL_PATH = (
 def _load_optimizer_config():
     with OPTIMIZER_YAML_PATH.open() as f:
         return yaml.safe_load(f)
+
+
+def _read_optimizer_doc(filename):
+    return (OPTIMIZER_DOCS_DIR / filename).read_text(encoding="utf-8")
 
 
 def test_optimizer_skill_documents_three_phase_rubric_memory_sop():
@@ -94,6 +101,7 @@ def test_optimizer_yaml_caps_hypothesis_slots_by_requested_num_candidates():
 def test_optimizer_yaml_adds_creative_hypothesis_after_third_cycle():
     config = _load_optimizer_config()
     code = config["code"]
+    creative_doc = _read_optimizer_doc("optimizer-cookbook-creative.md")
 
     assert "local function should_add_creative_hypothesis(cycle_number)" in code
     assert ">= 4" in code
@@ -102,20 +110,67 @@ def test_optimizer_yaml_adds_creative_hypothesis_after_third_cycle():
     assert 'table.insert(expanded, "creative")' in code
     assert "OBJECTIVE: Creative hypothesis (cycle 4+ cookbook lane)" in code
     assert "Do NOT let it displace rubric-oriented hypotheses" in code
-    assert "Repeat the whole prompt twice" in code
-    assert "Put the transcript first and the classifier instruction at the very end" in code
-    assert "Translate the operative prompt or rubric instructions to Polish" in code
+    assert "Use the creative cookbook injected above" in code
+    assert "Repeat the operative prompt instructions 3x" in creative_doc
+    assert "Polish" in creative_doc
 
 
-def test_optimizer_yaml_includes_late_structural_prompt_shape_lane():
+def test_optimizer_yaml_uses_lane_specific_cookbooks():
     config = _load_optimizer_config()
     code = config["code"]
 
-    assert "C4:  Prompt-shape / attention-structure transformations" in code
-    assert "lightweight alternative to CoT" in code
-    assert "repeating the decisive question/rule" in code
-    assert "reorder label definitions or valid_classes" in code
-    assert "C5:  Full rewrite" in code
+    assert 'load_optimizer_cookbook("optimizer-cookbook-normal")' in code
+    assert 'load_optimizer_cookbook("optimizer-cookbook-structural")' in code
+    assert 'load_optimizer_cookbook("optimizer-cookbook-creative")' in code
+    assert "local function cookbook_key_for_slot(slot)" in code
+    assert 'if slot == "creative" then' in code
+    assert 'if slot == "structural" or slot == "reframe" or slot == "full_rewrite" then' in code
+    assert "slot = slot_name" in code
+    assert "Lane-specific cookbooks are injected per hypothesis slot" in code
+
+
+def test_optimizer_normal_cookbook_emphasizes_rubric_policy_before_mechanics():
+    normal_doc = _read_optimizer_doc("optimizer-cookbook-normal.md")
+
+    assert "Missing Policy" in normal_doc
+    assert "Ambiguous Criterion" in normal_doc
+    assert "Feedback-Direction Targeting" in normal_doc
+    assert "Guidelines -> Prompt Alignment" in normal_doc
+    assert "Do not spend a normal slot on mechanics alone" in normal_doc
+    assert "Repeat the operative prompt instructions 3x" not in normal_doc
+    assert "Repeat the whole prompt" not in normal_doc
+    assert "Polish" not in normal_doc
+
+
+def test_optimizer_structural_cookbook_includes_late_prompt_shape_lane():
+    structural_doc = _read_optimizer_doc("optimizer-cookbook-structural.md")
+
+    assert "C4. Prompt-Shape / Attention-Structure Transformations" in structural_doc
+    assert "lightweight alternative to CoT" in structural_doc
+    assert "Repeat the decisive question/rule" in structural_doc
+    assert "reorder label definitions or valid_classes" in structural_doc
+    assert "C5. Full Rewrite" in structural_doc
+    assert "Model Swap" in structural_doc
+    assert "Input Source" in structural_doc
+    assert "Extractor Node" in structural_doc
+    assert "Repeat the operative prompt instructions 3x" not in structural_doc
+    assert "Polish" not in structural_doc
+
+
+def test_optimizer_creative_cookbook_is_isolated_to_creative_lane():
+    config = _load_optimizer_config()
+    code = config["code"]
+    normal_doc = _read_optimizer_doc("optimizer-cookbook-normal.md")
+    structural_doc = _read_optimizer_doc("optimizer-cookbook-structural.md")
+    creative_doc = _read_optimizer_doc("optimizer-cookbook-creative.md")
+
+    assert "Repeat the operative prompt instructions 3x" in creative_doc
+    assert "Polish" in creative_doc
+    assert "Transcript First, Instruction Last" in creative_doc
+    assert "Repeat the operative prompt instructions 3x" not in normal_doc
+    assert "Repeat the operative prompt instructions 3x" not in structural_doc
+    assert "Translate the operative prompt or rubric instructions to Polish" not in code
+    assert "Repeat the whole prompt twice" not in code
 
 
 def test_optimizer_yaml_passes_code_editor_context_inline_without_history_injection():
@@ -273,13 +328,13 @@ def test_optimizer_yaml_uses_required_report_phase_helper_for_all_report_llm_cal
 
 
 def test_optimizer_yaml_preprocessing_guidance_starts_with_broad_relevant_windows():
-    config = _load_optimizer_config()
-    code = config["code"]
+    structural_doc = _read_optimizer_doc("optimizer-cookbook-structural.md")
 
-    assert "RelevantWindowsTranscriptFilter" in code
-    assert "start with broad sentence windows" in code
-    assert "prev_count=5 and next_count=8" in code
-    assert "Do not start with prev_count=1/next_count=1 word windows" in code
+    assert "RelevantWindowsTranscriptFilter" in structural_doc
+    assert "Start with broad sentence windows" in structural_doc
+    assert "prev_count=5" in structural_doc
+    assert "next_count=8" in structural_doc
+    assert "Avoid first attempts with one-word windows" in structural_doc
 
 
 def test_optimizer_yaml_marks_report_failures_as_terminal_without_losing_cycle_state():
@@ -493,10 +548,11 @@ def test_optimizer_yaml_rejects_repeated_strongly_harmful_hypothesis_territory()
 def test_optimizer_yaml_keeps_bold_lane_and_uses_escalation_advisor():
     config = _load_optimizer_config()
     code = config["code"]
+    structural_doc = _read_optimizer_doc("optimizer-cookbook-structural.md")
 
     assert 'done(escalation_mode=\\"escalate\\", reason=...)' in code
     assert 'done(escalation_mode=\\"ultra_creative\\", reason=...)' in code
     assert 'Plateau escalation advisor' in code
     assert 'OBJECTIVE: Reframe the problem (cross-cycle reinterpretation)' in code
     assert 'OBJECTIVE: Full rewrite from a new framing' in code
-    assert 'Removing a harmful filter is a valid structural hypothesis.' in code
+    assert 'Remove or relax a processor that is suppressing reviewer-relevant evidence.' in structural_doc
