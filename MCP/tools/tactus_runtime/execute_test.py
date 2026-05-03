@@ -1661,6 +1661,39 @@ def test_handle_peek_refreshes_evaluation_status() -> None:
     assert module.api_calls == ["plexus.handle.peek"]
 
 
+def test_handle_peek_captures_late_evaluation_id_file(tmp_path) -> None:
+    id_file = tmp_path / "evaluation_id.txt"
+    id_file.write_text("eval-late", encoding="utf-8")
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={
+            "process_id": 4242,
+            "evaluation_id_file": str(id_file),
+        },
+    )
+
+    def fake_evaluation_info(args: dict) -> dict:
+        return {"id": args["evaluation_id"], "status": "COMPLETED"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "completed"
+    assert snapshot["evaluation_id"] == "eval-late"
+    assert snapshot["evaluation"]["id"] == "eval-late"
+    assert snapshot["evaluation"]["status"] == "COMPLETED"
+    assert not id_file.exists()
+
+
 def test_handle_peek_marks_no_id_exited_process_failed(monkeypatch) -> None:
     handles = _MemoryHandleStore()
     handle = handles.create(
