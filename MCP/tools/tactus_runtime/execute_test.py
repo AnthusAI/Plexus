@@ -1752,6 +1752,42 @@ def test_handle_peek_marks_running_evaluation_exited_process_failed(monkeypatch)
     )
 
 
+def test_handle_peek_marks_successfully_exited_nonterminal_evaluation_failed(monkeypatch) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"evaluation_id": "eval-1", "process_id": 4242},
+    )
+
+    monkeypatch.setattr(execute.os, "waitpid", lambda pid, options: (pid, 0))
+
+    def fake_evaluation_info(args: dict) -> dict:
+        return {
+            "id": args["evaluation_id"],
+            "status": "RUNNING",
+            "processed_items": 10,
+            "total_items": 10,
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "failed"
+    assert snapshot["evaluation"]["process_status"] == "exited"
+    assert snapshot["evaluation"]["process_exit_code"] == 0
+    assert snapshot["evaluation"]["error"] == (
+        "Evaluation subprocess exited before the evaluation reached a terminal status."
+    )
+
+
 def test_handle_peek_reaps_completed_evaluation_process(monkeypatch) -> None:
     handles = _MemoryHandleStore()
     handle = handles.create(
