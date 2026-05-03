@@ -101,8 +101,21 @@ def test_optimizer_yaml_adds_creative_hypothesis_after_third_cycle():
     assert "hyp_slots = add_creative_hypothesis_slot(hyp_slots, cycle)" in code
     assert 'table.insert(expanded, "creative")' in code
     assert "OBJECTIVE: Creative hypothesis (cycle 4+ cookbook lane)" in code
+    assert "Do NOT let it displace rubric-oriented hypotheses" in code
     assert "Repeat the whole prompt twice" in code
+    assert "Put the transcript first and the classifier instruction at the very end" in code
     assert "Translate the operative prompt or rubric instructions to Polish" in code
+
+
+def test_optimizer_yaml_includes_late_structural_prompt_shape_lane():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "C4:  Prompt-shape / attention-structure transformations" in code
+    assert "lightweight alternative to CoT" in code
+    assert "repeating the decisive question/rule" in code
+    assert "reorder label definitions or valid_classes" in code
+    assert "C5:  Full rewrite" in code
 
 
 def test_optimizer_yaml_passes_code_editor_context_inline_without_history_injection():
