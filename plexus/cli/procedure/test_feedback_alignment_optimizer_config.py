@@ -388,6 +388,16 @@ def test_optimizer_yaml_never_promotes_champion_and_reports_manual_follow_up():
     assert "winning_version_id = last_accepted_version_id" in code
 
 
+def test_optimizer_yaml_rejects_non_completed_evaluation_handles():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local eval_status = string.upper(tostring(eval_data.status or waited.status or \"\"))" in code
+    assert 'if eval_status ~= "COMPLETED" then' in code
+    assert '"Evaluation did not complete: status=" .. tostring(eval_data.status or waited.status)' in code
+    assert "score_version_id = eval_result.score_version_id or eval_result.scoreVersionId" in code
+
+
 def test_optimizer_yaml_marks_one_cycle_runs_as_verification_only():
     config = _load_optimizer_config()
     code = config["code"]

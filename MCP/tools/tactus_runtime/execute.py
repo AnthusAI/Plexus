@@ -5285,17 +5285,11 @@ class PlexusRuntimeModule:
             if process_status:
                 evaluation = {**evaluation, **process_status}
             if process_status and status not in TERMINAL_HANDLE_STATUSES:
-                status = (
-                    "failed"
-                    if process_status.get("process_exit_code") not in (0, None)
-                    else "completed_unknown"
-                )
+                status = "failed"
                 evaluation = {
                     **evaluation,
                     "error": (
                         "Evaluation subprocess exited before the evaluation reached a terminal status."
-                        if status == "failed"
-                        else evaluation.get("error")
                     ),
                 }
         return self._handle_store.update(
