@@ -281,6 +281,50 @@ describe('ProcedureTask optimizer auth flow', () => {
     expect(screen.getByText(/^Optimization Procedure$/)).toBeInTheDocument()
   })
 
+  it('reserves a blank accuracy bar slot in grid mode before feedback summary is loaded', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          feedbackEvaluationSummary: null,
+        } as any}
+      />
+    )
+
+    const bar = screen.getByTestId('evaluation-list-accuracy-bar')
+    expect(bar).toHaveClass('w-full', 'h-8', 'rounded-md')
+    expect(screen.queryByText('0%')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Original baseline marker')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Current best baseline marker')).not.toBeInTheDocument()
+  })
+
+  it('renders feedback accuracy with baseline markers in grid mode', () => {
+    render(
+      <ProcedureTask
+        variant="grid"
+        procedure={{
+          ...baseProcedure,
+          feedbackEvaluationSummary: {
+            id: 'eval-feedback-1',
+            status: 'COMPLETED',
+            accuracy: 87,
+            processedItems: 87,
+            totalItems: 100,
+            baselineEvaluationId: 'baseline-eval-1',
+            currentBaselineEvaluationId: 'current-baseline-eval-1',
+            baselineAccuracy: 72,
+            currentBaselineAccuracy: 81,
+          },
+        } as any}
+      />
+    )
+
+    expect(screen.getAllByText('87%').length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('Original baseline marker')).toBeInTheDocument()
+    expect(screen.getByLabelText('Current best baseline marker')).toBeInTheDocument()
+  })
+
   it('keeps local procedure runs labeled Local even when a worker node id is present', () => {
     render(
       <ProcedureTask
