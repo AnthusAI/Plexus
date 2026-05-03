@@ -148,6 +148,22 @@ jest.mock("@/components/ui/dropdown-menu", () => ({
   ),
 }))
 
+jest.mock("@/components/ui/timestamp", () => ({
+  Timestamp: ({
+    time,
+    variant,
+    className,
+  }: {
+    time: string | Date
+    variant: string
+    className?: string
+  }) => (
+    <span data-testid="timestamp" data-variant={variant} className={className}>
+      {typeof time === "string" ? time : time.toISOString()}
+    </span>
+  ),
+}))
+
 if (typeof window !== "undefined" && !("ResizeObserver" in window)) {
   ;(window as any).ResizeObserver = class {
     observe() {}
@@ -320,14 +336,39 @@ describe("ConversationViewer session-routing states", () => {
             messageCount: 0,
           },
         ]}
-        messages={[]}
+        messages={[
+          {
+            id: "msg-unnamed-1",
+            sessionId: "sess-optimize-1234",
+            accountId: "acct-1",
+            procedureId: "builtin:console/chat",
+            role: "USER",
+            messageType: "MESSAGE",
+            humanInteraction: "CHAT",
+            content: "hello",
+            createdAt: "2026-03-27T00:05:00.000Z",
+          },
+          {
+            id: "msg-unnamed-2",
+            sessionId: "sess-optimize-1234",
+            accountId: "acct-1",
+            procedureId: "builtin:console/chat",
+            role: "ASSISTANT",
+            messageType: "MESSAGE",
+            humanInteraction: "CHAT_ASSISTANT",
+            content: "reply",
+            createdAt: "2026-03-27T00:08:00.000Z",
+          },
+        ]}
         selectedSessionId="sess-optimize-1234"
         defaultSidebarCollapsed={false}
       />
     )
 
     expect(screen.queryByText("Optimize")).not.toBeInTheDocument()
-    expect(screen.getAllByText("Session sess-opt")).not.toHaveLength(0)
+    expect(screen.queryByText("Session sess-opt")).not.toBeInTheDocument()
+    expect(screen.getAllByTestId("timestamp")).toHaveLength(2)
+    expect(screen.getAllByText("2026-03-27T00:08:00.000Z")).toHaveLength(2)
   })
 
   it("hides unnamed sessions that are marked hidden-until-named", () => {
@@ -375,14 +416,27 @@ describe("ConversationViewer session-routing states", () => {
             messageCount: 0,
           },
         ]}
-        messages={[]}
+        messages={[
+          {
+            id: "msg-legacy-unnamed",
+            sessionId: "legacy-unnamed-1",
+            accountId: "acct-1",
+            procedureId: "builtin:console/chat",
+            role: "USER",
+            messageType: "MESSAGE",
+            humanInteraction: "CHAT",
+            content: "hello",
+            createdAt: "2026-03-27T00:09:00.000Z",
+          },
+        ]}
         selectedSessionId="legacy-unnamed-1"
         defaultSidebarCollapsed={false}
       />
     )
 
     expect(screen.getByText("Chat Sessions (1)")).toBeInTheDocument()
-    expect(screen.getAllByText("Session legacy-u").length).toBeGreaterThan(0)
+    expect(screen.queryByText("Session legacy-u")).not.toBeInTheDocument()
+    expect(screen.getAllByText("2026-03-27T00:09:00.000Z")).toHaveLength(2)
   })
 
   it("renames a session from the action menu and marks title source manual", async () => {
