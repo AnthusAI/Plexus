@@ -883,6 +883,13 @@ code: |
     if not eval_data then
       return {error = "Evaluation handle did not resolve: status=" .. tostring(waited.status)}
     end
+    local eval_status = string.upper(tostring(eval_data.status or waited.status or ""))
+    if eval_status ~= "COMPLETED" then
+      return {
+        error = "Evaluation did not complete: status=" .. tostring(eval_data.status or waited.status)
+          .. " evaluation_id=" .. tostring(eval_data.evaluation_id or eval_data.id or waited.evaluation_id or "")
+      }
+    end
     return eval_data
   end
 
@@ -3368,6 +3375,25 @@ code: |
     return capped
   end
 
+  local function should_add_creative_hypothesis(cycle_number)
+    return (tonumber(cycle_number) or 0) >= 4
+  end
+
+  local function add_creative_hypothesis_slot(slots, cycle_number)
+    if not should_add_creative_hypothesis(cycle_number) then
+      return slots
+    end
+    local expanded = {}
+    for i, slot in ipairs(slots or {}) do
+      expanded[i] = slot
+      if slot == "creative" then
+        return expanded
+      end
+    end
+    table.insert(expanded, "creative")
+    return expanded
+  end
+
   local function build_cookbook_section(opts)
     local parts = {COOKBOOK_STATIC}
     local stagnant = opts.consecutive_stagnant_cycles or 0
@@ -3560,7 +3586,12 @@ code: |
       table.insert(parts, "            If you add an extraction stage, use class: Extractor and map output.extracted_text")
       table.insert(parts, "            into a named state field consumed by the final classifier.")
       table.insert(parts, "            Never use Classifier(valid_classes=['Extracted']) or similar pseudo-extractor labels.")
-      table.insert(parts, "     - C4:  Full rewrite — if prior cycles have plateaued, start from scratch.")
+      table.insert(parts, "     - C4:  Prompt-shape / attention-structure transformations — late structural option.")
+      table.insert(parts, "            Do not use these to push out rubric-oriented hypotheses; Category A/B policy fixes should dominate.")
+      table.insert(parts, "            Prefer repeating the decisive question/rule near the transcript and again at the final decision point.")
+      table.insert(parts, "            This is a lightweight alternative to CoT when the issue appears to be attention rather than reasoning.")
+      table.insert(parts, "            Lower-priority options: move the final instruction to the end; reorder label definitions or valid_classes.")
+      table.insert(parts, "     - C5:  Full rewrite — if prior cycles have plateaued, start from scratch.")
       table.insert(parts, "")
       table.insert(parts, "Check score_config.yaml to avoid proposing something already in place.")
       table.insert(parts, "Do NOT propose a prompt-only change for this slot — that is what slots 1-3 are for.")
@@ -3574,6 +3605,22 @@ code: |
       table.insert(parts, "Assume the current framing is wrong or exhausted.")
       table.insert(parts, "You may start from the baseline version and redesign major prompt sections, graph structure, preprocessing, or model allocation.")
       table.insert(parts, "Do not preserve existing structure just because it exists.")
+    elseif slot == "creative" then
+      table.insert(parts, "OBJECTIVE: Creative hypothesis (cycle 4+ cookbook lane)")
+      table.insert(parts, "This slot is mandatory from cycle 4 onward, even if the run is not formally plateaued.")
+      table.insert(parts, "It is an extra lane. Do NOT let it displace rubric-oriented hypotheses, which should dominate every cycle.")
+      table.insert(parts, "Propose one weird, testable hypothesis that is materially different from the standard lanes.")
+      table.insert(parts, "Use this lane for counterintuitive prompt transformations when normal policy edits have had multiple cycles to work.")
+      table.insert(parts, "")
+      table.insert(parts, "CREATIVE COOKBOOK — current recipes:")
+      table.insert(parts, "  - Repeat the whole prompt twice so the scoring model sees the instructions redundantly.")
+      table.insert(parts, "  - Repeat the decisive question or rubric boundary in multiple places, especially before the final answer instruction.")
+      table.insert(parts, "  - Put the transcript first and the classifier instruction at the very end.")
+      table.insert(parts, "  - Reorder label definitions or valid_classes to test label-order sensitivity.")
+      table.insert(parts, "  - Translate the operative prompt or rubric instructions to Polish.")
+      table.insert(parts, "")
+      table.insert(parts, "Pick exactly one creative recipe or a tightly scoped combination, and explain why it could change alignment.")
+      table.insert(parts, "The hypothesis must still be implementable by editing score_config.yaml and must still pass smoke tests.")
     end
 
     -- Guide approach selection based on historical effectiveness
@@ -3606,6 +3653,70 @@ code: |
     table.insert(parts, "that can be made by editing that YAML file.")
 
     return table.concat(parts, "\n")
+  end
+
+  local HYPOTHESIS_REPEAT_STOPWORDS = {
+    hypothesis = true, score = true, project = true, intent = true,
+    classify = true, classification = true, transcript = true,
+    metadata = true, disposition = true, campaign = true, compare = true,
+    comparing = true, should = true, could = true, would = true,
+    clarify = true, clarifies = true, rule = true, rules = true,
+  }
+
+  local function hypothesis_keyword_set(text)
+    local out = {}
+    local s = string.lower(tostring(text or ""))
+    for token in string.gmatch(s, "[%w_]+") do
+      if #token >= 7 and not HYPOTHESIS_REPEAT_STOPWORDS[token] then
+        out[token] = true
+      end
+    end
+    return out
+  end
+
+  local function hypothesis_text(hyp)
+    if type(hyp) ~= "table" then return "" end
+    local parts = {}
+    if has_text(hyp.name) then table.insert(parts, hyp.name) end
+    if has_text(hyp.description) then table.insert(parts, hyp.description) end
+    if has_text(hyp.done_reason) then table.insert(parts, hyp.done_reason) end
+    return table.concat(parts, " ")
+  end
+
+  local function hypothesis_repeats_strongly_harmful_prior(hyp, prior_iterations)
+    local proposed_keywords = hypothesis_keyword_set(hypothesis_text(hyp))
+    local proposed_count = 0
+    for _ in pairs(proposed_keywords) do proposed_count = proposed_count + 1 end
+    if proposed_count < 3 then
+      return false, nil
+    end
+
+    for _, iter in ipairs(prior_iterations or {}) do
+      for _, prior in ipairs(iter.exploration_results or {}) do
+        local fb_d = prior.fb_deltas and prior.fb_deltas.alignment or 0
+        local acc_d = prior.acc_deltas and prior.acc_deltas.alignment or 0
+        if fb_d < -0.05 or acc_d < -0.05 then
+          local prior_keywords = hypothesis_keyword_set(hypothesis_text(prior.hypothesis or prior))
+          local overlap = {}
+          for token in pairs(proposed_keywords) do
+            if prior_keywords[token] then table.insert(overlap, token) end
+          end
+          if #overlap >= 3 then
+            table.sort(overlap)
+            return true, string.format(
+              "overlaps strongly harmful cycle %s candidate %s (FB %+.3f, ACC %+.3f) on terms: %s",
+              tostring(iter.iteration or "?"),
+              tostring(prior.index or "?"),
+              fb_d,
+              acc_d,
+              table.concat(overlap, ", ")
+            )
+          end
+        end
+      end
+    end
+
+    return false, nil
   end
 
   -- Build the review context message shown to the reviewer agent after evals
@@ -5324,6 +5435,7 @@ code: |
       consecutive_stagnant_cycles = consecutive_stagnant_cycles
     })
     hyp_slots = cap_hypothesis_slots(hyp_slots, params.num_candidates)
+    hyp_slots = add_creative_hypothesis_slot(hyp_slots, cycle)
     local slot_names = table.concat(hyp_slots, ", ")
     if cycle_escalation_mode == "ultra_creative" then
       Human.notify({message = string.format(
@@ -5341,6 +5453,26 @@ code: |
 
     -- Generate hypotheses sequentially — each sees the previous ones
     local hypotheses = {}
+    local function add_planned_hypothesis(hyp, slot_name, retry_label)
+      hyp.index = #hypotheses + 1
+      hyp.slot = slot_name
+      local blocked, block_reason = hypothesis_repeats_strongly_harmful_prior(hyp, iterations)
+      if blocked then
+        diag(string.format(
+          "  Hyp %d (%s%s) rejected as repeated harmful territory: %s",
+          hyp.index, slot_name, retry_label or "", block_reason))
+        Human.notify({message = string.format(
+          "    Rejected [%s] as repeated harmful territory: %s",
+          slot_name, trunc(block_reason, 180)), level = "warning"})
+        return false, block_reason
+      end
+      table.insert(hypotheses, hyp)
+      diag(string.format("  Hyp %d (%s%s): %s — %s",
+        hyp.index, slot_name, retry_label or "", hyp.name, trunc(hyp.description, 200)))
+      Human.notify({message = string.format(
+        "    %d. [%s] %s: %s", hyp.index, slot_name, hyp.name, trunc(hyp.description, 100)), level = "info"})
+      return true, nil
+    end
 
     for slot_idx, slot_name in ipairs(hyp_slots) do
       status_msg(string.format("Cycle %d/%d — generating hypothesis %d/%d (%s)", cycle, max_cycles, slot_idx, #hyp_slots, slot_name))
@@ -5415,13 +5547,30 @@ code: |
           if #parsed > 0 then
             -- Take the first parsed hypothesis and re-index it
             local hyp = parsed[1]
-            hyp.index = #hypotheses + 1
-            hyp.slot = slot_name
-            table.insert(hypotheses, hyp)
-            diag(string.format("  Hyp %d (%s): %s — %s",
-              hyp.index, slot_name, hyp.name, trunc(hyp.description, 200)))
-            Human.notify({message = string.format(
-              "    %d. [%s] %s: %s", hyp.index, slot_name, hyp.name, trunc(hyp.description, 100)), level = "info"})
+            local added, block_reason = add_planned_hypothesis(hyp, slot_name, "")
+            if not added then
+              diag(string.format(
+                "Hyp slot %d (%s) blocked for harmful repeat, retrying with hard exclusion...",
+                slot_idx, slot_name))
+              guard_context_budget(hypothesis_planner)
+              local retry_ok, _ = safe_agent_call(
+                hypothesis_planner,
+                "hypothesis_planner",
+                "The previous hypothesis was rejected because it overlaps a prior strongly harmful candidate: "
+                .. tostring(block_reason)
+                .. "\nPropose exactly ONE materially different hypothesis on a single numbered line. "
+                .. "Do not target the same policy family, wording family, or evidence rule.",
+                {file_content = current_code, task_description = full_prompt}
+              )
+              if retry_ok then
+                local retry_parsed = parse_hypotheses(hypothesis_planner.output or "")
+                if #retry_parsed > 0 then
+                  add_planned_hypothesis(retry_parsed[1], slot_name, ", retry")
+                else
+                  diag(string.format("Hyp slot %d (%s) failed after harmful-repeat retry — no hypothesis", slot_idx, slot_name))
+                end
+              end
+            end
           else
             -- Retry once with a nudge
             diag(string.format("Hyp slot %d (%s) produced no parseable hypothesis, retrying...", slot_idx, slot_name))
@@ -5436,14 +5585,7 @@ code: |
             if retry_ok then
               local retry_parsed = parse_hypotheses(hypothesis_planner.output or "")
               if #retry_parsed > 0 then
-                local hyp = retry_parsed[1]
-                hyp.index = #hypotheses + 1
-                hyp.slot = slot_name
-                table.insert(hypotheses, hyp)
-                diag(string.format("  Hyp %d (%s, retry): %s — %s",
-                  hyp.index, slot_name, hyp.name, trunc(hyp.description, 200)))
-                Human.notify({message = string.format(
-                  "    %d. [%s] %s: %s", hyp.index, slot_name, hyp.name, trunc(hyp.description, 100)), level = "info"})
+                add_planned_hypothesis(retry_parsed[1], slot_name, ", retry")
               else
                 diag(string.format("Hyp slot %d (%s) failed after retry — no hypothesis", slot_idx, slot_name))
               end
@@ -6390,6 +6532,15 @@ code: |
             break
           end
         end
+      end
+
+      if #succeeded == 0 and not any_partial_positive then
+        Human.notify({message = string.format(
+          "Cycle %d — Skipping synthesis: no hypotheses succeeded and no positive signal was found",
+          cycle), level = "warning"})
+        final_version_id = nil
+        final_done_reason = "no_successful_hypotheses_no_positive_signal"
+        goto after_synthesis
       end
 
       if all_badly_regressed and #succeeded == 0 then

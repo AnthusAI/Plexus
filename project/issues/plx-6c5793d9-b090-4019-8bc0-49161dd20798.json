@@ -1,0 +1,133 @@
+{
+  "id": "plx-6c5793d9-b090-4019-8bc0-49161dd20798",
+  "title": "Run next Suco optimizer candidate batch",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "85638634-4ea2-4fa3-b076-9eb6c0d2eb04",
+      "author": "ryan",
+      "text": "Selected five no-prior-optimizer Suco candidates by 90-day feedback volume: Address, Project Timeline, and Credit Rating Metadata AI (200 capped), Home Value AI (200 capped), Proper Questioning- AI (200 capped), DNC SA - AI v2.0 (129), and Early Transfer AI (91). Dispatching each for 4 cycles, 200 max samples, 90-day feedback window.",
+      "created_at": "2026-05-02T18:07:43.821556Z"
+    },
+    {
+      "id": "89d69366-4555-46de-9358-7891a81f3348",
+      "author": "ryan",
+      "text": "Dispatched five optimizer procedures via CLI MCP harness with max_iterations=4, max_samples=200, days=90. Procedures: Address/Project Timeline/Credit Rating Metadata AI -> 709a016a-d223-4040-bf70-92bdf3e53ce2 (pid 71343); Home Value AI -> b3b15ea9-ffd8-4c9b-8170-016d1dcf9576 (pid 71375); Proper Questioning- AI -> b74b64a6-3a95-48c2-9fa2-d38e1e5508cc (pid 71450); DNC SA - AI v2.0 -> d9d4b83c-b75f-4bc1-bd4a-894e68cfe0c8 (pid 71477); Early Transfer AI -> d281a5e0-8001-40cf-845d-8539bf4764f5 (pid 71566). Verified all five subprocesses are live and routed into the Tactus runtime from direct CLI logs.",
+      "created_at": "2026-05-02T18:09:41.167168Z"
+    },
+    {
+      "id": "54c0f403-885a-4020-8088-b1dd2836d0d0",
+      "author": "ryan",
+      "text": "Diagnosed five stalled Suco optimizer procedure parents. Each parent was alive, but both baseline evaluation child processes were zombies, so handle polling treated dead children as running because os.kill(pid, 0) succeeds for zombies. Added runtime fix to reap exited children and fail/complete handles promptly; focused execute_tactus tests pass.",
+      "created_at": "2026-05-02T18:49:40.965214Z"
+    },
+    {
+      "id": "76d0edf8-e83d-44a8-8a2d-fcd58b62a062",
+      "author": "ryan",
+      "text": "Retried the five Suco optimizer candidates after the zombie-process handle fix. New procedure IDs: Address metadata 07120bf4, Home Value 9870b4ce, Proper Questioning d0a2e58a, DNC SA 52d418f1, Early Transfer 6d1ecea3. All launched with 4 cycles, 200 samples, 90 days through the CLI MCP harness against the current working tree.",
+      "created_at": "2026-05-02T18:51:01.101666Z"
+    },
+    {
+      "id": "e25f716f-0e42-4de1-b99d-1695089ea14d",
+      "author": "ryan",
+      "text": "Checking optimizer promotion safety: verifying the feedback optimizer YAML and execute_tactus runtime/tool surface do not allow autonomous champion promotion.",
+      "created_at": "2026-05-02T19:04:45.885104Z"
+    },
+    {
+      "id": "4e8c0b3b-8ef0-41c8-bbcd-561850a04ad2",
+      "author": "ryan",
+      "text": "Promotion safety hardening: verified optimizer YAML does not call champion promotion, removed plexus.score.set_champion from execute_tactus helper bindings and direct runtime handlers, verified api.list no longer exposes it and direct plexus.score.set_champion calls fail as nil. Stopped the five optimizer runs launched before the hardening and restarted them from the patched runtime: 12a2d4ae, 18305dad, fc6cd08e, db83e85a, 5f44ee55.",
+      "created_at": "2026-05-02T19:07:19.200619Z"
+    },
+    {
+      "id": "84c7d32e-df4d-4c4d-91d6-2fb83f71c940",
+      "author": "ryan",
+      "text": "Completed promotion safety check and hardening. execute_tactus api.list verified plexus.score no longer includes set_champion; a direct plexus.score.set_champion call returns nil-field failure. Removed stale docs that advertised promotion from execute_tactus. Regression tests pass: MCP/tools/tactus_runtime/execute_test.py plus optimizer config tests.",
+      "created_at": "2026-05-02T19:08:48.553247Z"
+    },
+    {
+      "id": "27e1a8de-61a1-4246-957e-ae2ece876dc3",
+      "author": "ryan",
+      "text": "Starting next optimizer candidate batch selection: choose five additional Suco Home Improvement scores with recent feedback and no existing optimizer procedure runs, then dispatch each for 4 cycles, 200 max samples, 90-day feedback window.",
+      "created_at": "2026-05-02T20:10:15.861876Z"
+    },
+    {
+      "id": "2dd880ad-481a-4af0-b257-3bd437822e3c",
+      "author": "ryan",
+      "text": "Next-five candidate selection complete. Strict no-procedure pool has 25 scores; only three have 90-day feedback via feedback.find: Roof Type AI (4), Credit Score AI (2), Reason Call - Siding AI (1). To satisfy the requested five-score batch, adding the next two no-procedure scores by ranking/alphabetical order: Aggresive - AI and Appropriate Rebuttal- AI (both currently 0 returned 90-day feedback items). Dispatching all five for 4 cycles, 200 max samples, 90-day feedback window.",
+      "created_at": "2026-05-02T20:14:38.795480Z"
+    },
+    {
+      "id": "b48bdd32-5630-4d0e-a8a0-f161618d484b",
+      "author": "ryan",
+      "text": "Dispatched next five optimizer procedures via CLI MCP harness with max_iterations=4, max_samples=200, days=90. Procedures: Roof Type AI -> 382d11a3-f942-486a-b5f8-155f08e38c2f (pid 99365); Credit Score AI -> 7e5f2aad-aa1c-4e90-b1e6-a5acc938a375 (pid 99392); Reason Call - Siding AI -> f128b53d-65d7-49a1-babe-61d19d0ca87c (pid 99397); Aggresive - AI -> 272c62d1-3b41-457d-b365-f0d7a662a84e (pid 99412); Appropriate Rebuttal- AI -> afa90394-cb31-49db-ab6e-238cbc235696 (pid 99435).",
+      "created_at": "2026-05-02T20:15:41.040583Z"
+    },
+    {
+      "id": "c95a0625-6b34-4131-930f-133cfd2b14c5",
+      "author": "ryan",
+      "text": "Candidate scan for next ten Suco optimizer runs: used 90-day feedback alignment summaries and current procedure coverage. Highest-feedback scores not in the two just-run fixed-runtime batches include Project Timeline AI (923), Customer Questions AI (923), Income and Name Alignment Metadata AI (920), Property Type and Home Value Metadata AI (897), Project Type AI (322; has prior optimizer history), Misleading AI (173; failed/stale optimizer history), Contact Info AI (131), Branding Hand-Off AI (82), Reason Call - Roofing AI (78), Zillow AI (68), Reason Call - Windows AI (65), Invalid Transfer - AI (55).",
+      "created_at": "2026-05-02T23:38:03.756898Z"
+    },
+    {
+      "id": "96dc791e-dba2-4d4a-a73e-7f388c33093e",
+      "author": "ryan",
+      "text": "Starting next-ten optimizer dispatch: select the ten highest-volume 90-day-feedback Suco scores that do not already have optimizer procedure coverage, then launch each for 4 cycles, 200 max samples, 90-day feedback window via the CLI MCP harness against the current working tree.",
+      "created_at": "2026-05-02T23:38:25.587594Z"
+    },
+    {
+      "id": "98409496-9be8-46d9-82b4-3fc10b72ed7c",
+      "author": "ryan",
+      "text": "Dispatched next ten not-yet-optimized Suco scores with 90-day feedback using CLI MCP harness/current working tree. Parameters: max_iterations=4, max_samples=200, days=90, target_accuracy=1.0. Procedures: Project Timeline AI -> 6e887ba7 (pid 15450); Customer Questions AI -> 20884e10 (pid 15492); Income and Name Alignment Metadata AI -> bb61e1ef (pid 15571); Property Type and Home Value Metadata AI -> e9a91aa2 (pid 15633); Contact Info AI -> 0314e427 (pid 15682); Branding Hand-Off AI -> 1ccb63ab (pid 15698); Reason Call - Roofing AI -> 7813d55b (pid 15740); Zillow AI -> 4ffe4a03 (pid 15768); Reason Call - Windows AI -> b17c411e (pid 15819); Invalid Transfer - AI -> 97b7590a (pid 15881).",
+      "created_at": "2026-05-02T23:47:22.789286Z"
+    },
+    {
+      "id": "53332a6e-43f7-4ec8-be0e-381af97da874",
+      "author": "ryan",
+      "text": "Reviewing optimizer procedure outcomes to identify scores with candidate versions worth promoting to champion. Will distinguish material AC1 improvements from no-gain, sparse-feedback, failed, or runtime-error runs.",
+      "created_at": "2026-05-03T00:37:14.511381Z"
+    },
+    {
+      "id": "9196f96e-2a5f-48c6-abbd-f11c488b6c74",
+      "author": "ryan",
+      "text": "Promotion review: strong not-yet-champion promotion candidates from optimizer packets are DNC SA - AI v2.0 -> 211faa76-2215-4756-ba8b-52e9a822db27 (feedback/accuracy AC1 0.748/0.748), Address/Project Timeline/Credit Rating Metadata -> d5b06334-8d5c-41a8-9e63-9d70d17b2247 (0.940/0.871), Home Value AI -> fdf2ba86-a139-4855-b47e-98e7dd56d1ea (0.985/0.938), and Inappropriate Conversations- AI -> 15891f18-a81c-4ffa-bac5-dd3076d0442f (0.961/0.961). Borderline/not recommended yet: Proper Questioning improved but absolute AC1 remains low and procedure is stuck in post-completion; Roof Type has tiny feedback/no accuracy eval; Project Intent lacks accuracy eval and low feedback AC1. Already champion from prior optimizer packets: Annual Income, Blind Transfer, Customer Questions, Misleading, Project Type.",
+      "created_at": "2026-05-03T00:45:24.660587Z"
+    },
+    {
+      "id": "8c142afb-030a-4fb7-b31c-c9e749697886",
+      "author": "ryan",
+      "text": "User approved promoting best-so-far optimizer candidates to champion. Promoting: Home Value AI fdf2ba86-a139-4855-b47e-98e7dd56d1ea; Address/Project Timeline/Credit Rating Metadata AI d5b06334-8d5c-41a8-9e63-9d70d17b2247; DNC SA - AI v2.0 211faa76-2215-4756-ba8b-52e9a822db27; Inappropriate Conversations- AI 15891f18-a81c-4ffa-bac5-dd3076d0442f; Proper Questioning- AI 6caaf44a-ee82-4f4e-976d-b3b163d6df93.",
+      "created_at": "2026-05-03T00:54:14.075565Z"
+    },
+    {
+      "id": "81e4e741-c60d-4cb8-90d6-4301ea238a14",
+      "author": "ryan",
+      "text": "Promotion attempt failed for all five candidates due a shared GraphQL mutation error in set_champion: updating a key participating in index byScoreIdAndIsFeaturedAndCreatedAt without providing isFeatured. Investigating local mutation path before retrying.",
+      "created_at": "2026-05-03T00:55:11.560351Z"
+    },
+    {
+      "id": "32dd9147-4025-4d00-8456-27b9bd3f521a",
+      "author": "ryan",
+      "text": "Promotion retry after local mutation fix succeeded for all five candidates; verifying championVersionId values now. Also terminating stuck old procedure parent processes from failed/completed runs before relaunching the ten failed optimizers.",
+      "created_at": "2026-05-03T01:10:17.180415Z"
+    },
+    {
+      "id": "ab5bd444-fb5b-46b8-802f-afb33d11129b",
+      "author": "ryan",
+      "text": "Fixed two runtime issues: set_champion now includes complete ScoreVersion composite-index fields when updating outgoing champion metadata; async evaluation handles now retain and re-check late evaluation-id files instead of deleting them after the initial 60s wait. Relaunched the ten failed optimizer procedures from the patched runtime: Project Timeline af008263; Customer Questions bc3588cc; Income/Name 4baca5ef; Property Type/Home Value Metadata 07400753; Contact Info eb72c774; Branding Hand-Off 130ac3a5; Reason Call Roofing 86e42831; Zillow 7341e0e7; Reason Call Windows 1ebec429; Invalid Transfer 88ebbf89.",
+      "created_at": "2026-05-03T01:12:44.916901Z"
+    }
+  ],
+  "created_at": "2026-05-02T18:05:03.281286Z",
+  "updated_at": "2026-05-03T01:12:44.916901Z",
+  "closed_at": null,
+  "custom": {}
+}

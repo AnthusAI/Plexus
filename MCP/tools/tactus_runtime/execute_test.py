@@ -224,6 +224,315 @@ def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> 
     assert facade.api_calls == ["plexus.scorecards.list", "plexus.scorecards.info"]
 
 
+def test_default_rubric_memory_recent_entries_runs_provider_awaitable(monkeypatch) -> None:
+    class FakeCitation:
+        def model_dump(self, mode: str = "json") -> dict:
+            return {"id": "citation-1", "mode": mode}
+
+    class FakeContext:
+        markdown_context = "Recent rubric context"
+        citation_index = [FakeCitation()]
+        machine_context = {"topic": "project-intent"}
+        diagnostics = []
+
+    class FakeProvider:
+        def __init__(self, api_client) -> None:
+            self.api_client = api_client
+
+        async def retrieve_recent(self, **kwargs):
+            assert kwargs["score_id"] == "score-1"
+            return FakeContext()
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_rubric_memory_score_id",
+        lambda client, scorecard_identifier, score_identifier, score_id: "score-1",
+    )
+    monkeypatch.setattr(
+        "plexus.rubric_memory.RubricMemoryRecentBriefingProvider",
+        FakeProvider,
+    )
+
+    result = execute._default_rubric_memory_recent_entries(
+        {"scorecard_identifier": "card", "score_identifier": "score"}
+    )
+
+    assert result["success"] is True
+    assert result["score_id"] == "score-1"
+    assert result["markdown_context"] == "Recent rubric context"
+    assert result["citation_index"] == [{"id": "citation-1", "mode": "json"}]
+
+
+def test_default_rubric_memory_evidence_pack_runs_provider_awaitable(monkeypatch) -> None:
+    class FakeCitation:
+        def model_dump(self, mode: str = "json") -> dict:
+            return {"id": "citation-2", "mode": mode}
+
+    class FakeContext:
+        markdown_context = "Evidence context"
+        citation_index = [FakeCitation()]
+        machine_context = {"item": "item-1"}
+        diagnostics = []
+
+    class FakeProvider:
+        def __init__(self, api_client) -> None:
+            self.api_client = api_client
+
+        async def retrieve_for_score_item(self, **kwargs):
+            assert kwargs["score_id"] == "score-1"
+            return FakeContext()
+
+        async def generate_for_score_item(self, **kwargs):
+            raise AssertionError("synthesize=false should use retrieval-only context")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_rubric_memory_score_id",
+        lambda client, scorecard_identifier, score_identifier, score_id: "score-1",
+    )
+    monkeypatch.setattr(
+        "plexus.rubric_memory.RubricMemoryContextProvider",
+        FakeProvider,
+    )
+
+    result = execute._default_rubric_memory_evidence_pack(
+        {"scorecard_identifier": "card", "score_identifier": "score"}
+    )
+
+    assert result["success"] is True
+    assert result["synthesized"] is False
+    assert result["score_id"] == "score-1"
+    assert result["markdown_context"] == "Evidence context"
+    assert result["citation_index"] == [{"id": "citation-2", "mode": "json"}]
+
+
+def test_default_score_set_champion_serializes_champion_history_metadata(
+    monkeypatch,
+) -> None:
+    captured_version_inputs: list[dict] = []
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "GetScoreVersionForChampionGuard" in query:
+                return {
+                    "getScore": {"id": "score-1", "championVersionId": "version-1"},
+                    "getScoreVersion": {
+                        "id": "version-1",
+                        "scoreId": "score-1",
+                        "configuration": "name: test",
+                        "metadata": None,
+                        "createdAt": "2026-05-01T00:00:00.000Z",
+                    },
+                }
+            if "mutation UpdateScore(" in query:
+                return {
+                    "updateScore": {
+                        "id": variables["input"]["id"],
+                        "championVersionId": variables["input"]["championVersionId"],
+                    }
+                }
+            if "UpdateScoreVersionMetadata" in query:
+                captured_version_inputs.append(variables["input"])
+                return {
+                    "updateScoreVersion": {
+                        "id": variables["input"]["id"],
+                        "isFeatured": variables["input"].get("isFeatured"),
+                        "metadata": variables["input"].get("metadata"),
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    result = execute._default_score_set_champion(
+        {"score_id": "score-1", "version_id": "version-1"}
+    )
+
+    assert result["success"] is True
+    assert len(captured_version_inputs) == 1
+    update_input = captured_version_inputs[0]
+    assert update_input["scoreId"] == "score-1"
+    assert update_input["createdAt"] == "2026-05-01T00:00:00.000Z"
+    assert update_input["isFeatured"] == "true"
+    assert isinstance(update_input["metadata"], str)
+    metadata = json.loads(update_input["metadata"])
+    assert metadata["championHistory"][0]["scoreId"] == "score-1"
+    assert metadata["championHistory"][0]["versionId"] == "version-1"
+    assert metadata["championHistory"][0]["exitedAt"] is None
+
+
+def test_default_score_set_champion_does_not_duplicate_open_history_entry(
+    monkeypatch,
+) -> None:
+    captured_version_inputs: list[dict] = []
+    existing_metadata = {
+        "championHistory": [
+            {
+                "scoreId": "score-1",
+                "versionId": "version-1",
+                "enteredAt": "2026-05-01T00:00:00+00:00",
+                "exitedAt": None,
+                "previousChampionVersionId": None,
+                "nextChampionVersionId": None,
+                "transitionId": "transition-existing",
+            }
+        ]
+    }
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "GetScoreVersionForChampionGuard" in query:
+                return {
+                    "getScore": {"id": "score-1", "championVersionId": "version-1"},
+                    "getScoreVersion": {
+                        "id": "version-1",
+                        "scoreId": "score-1",
+                        "configuration": "name: test",
+                        "metadata": json.dumps(existing_metadata),
+                        "createdAt": "2026-05-01T00:00:00.000Z",
+                    },
+                }
+            if "mutation UpdateScore(" in query:
+                return {
+                    "updateScore": {
+                        "id": variables["input"]["id"],
+                        "championVersionId": variables["input"]["championVersionId"],
+                    }
+                }
+            if "UpdateScoreVersionMetadata" in query:
+                captured_version_inputs.append(variables["input"])
+                return {
+                    "updateScoreVersion": {
+                        "id": variables["input"]["id"],
+                        "isFeatured": variables["input"].get("isFeatured"),
+                        "metadata": variables["input"].get("metadata"),
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    result = execute._default_score_set_champion(
+        {"score_id": "score-1", "version_id": "version-1"}
+    )
+
+    assert result["success"] is True
+    metadata = json.loads(captured_version_inputs[0]["metadata"])
+    assert metadata["championHistory"] == existing_metadata["championHistory"]
+
+
+def test_default_score_set_champion_updates_previous_champion_metadata_only(
+    monkeypatch,
+) -> None:
+    captured_version_inputs: list[dict] = []
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "GetScoreVersionForChampionGuard" in query:
+                return {
+                    "getScore": {"id": "score-1", "championVersionId": "version-old"},
+                    "getScoreVersion": {
+                        "id": "version-new",
+                        "scoreId": "score-1",
+                        "configuration": "name: test",
+                        "metadata": None,
+                        "createdAt": "2026-05-02T00:00:00.000Z",
+                    },
+                }
+            if "GetScoreVersionForManagement" in query:
+                return {
+                    "getScoreVersion": {
+                        "id": "version-old",
+                        "scoreId": "score-1",
+                        "configuration": "name: old",
+                        "guidelines": None,
+                        "isFeatured": None,
+                        "note": "old",
+                        "branch": None,
+                        "parentVersionId": None,
+                        "metadata": None,
+                        "createdAt": "2026-05-01T00:00:00.000Z",
+                        "updatedAt": "2026-05-01T00:00:00.000Z",
+                    },
+                }
+            if "mutation UpdateScore(" in query:
+                return {
+                    "updateScore": {
+                        "id": variables["input"]["id"],
+                        "championVersionId": variables["input"]["championVersionId"],
+                    }
+                }
+            if "UpdateScoreVersionMetadata" in query:
+                captured_version_inputs.append(variables["input"])
+                return {
+                    "updateScoreVersion": {
+                        "id": variables["input"]["id"],
+                        "isFeatured": variables["input"].get("isFeatured"),
+                        "metadata": variables["input"].get("metadata"),
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    result = execute._default_score_set_champion(
+        {"score_id": "score-1", "version_id": "version-new"}
+    )
+
+    assert result["success"] is True
+    assert len(captured_version_inputs) == 2
+
+    incoming_input = captured_version_inputs[0]
+    assert incoming_input["id"] == "version-new"
+    assert incoming_input["scoreId"] == "score-1"
+    assert incoming_input["createdAt"] == "2026-05-02T00:00:00.000Z"
+    assert incoming_input["isFeatured"] == "true"
+
+    outgoing_input = captured_version_inputs[1]
+    assert outgoing_input["id"] == "version-old"
+    assert set(outgoing_input) == {"id", "metadata"}
+    outgoing_metadata = json.loads(outgoing_input["metadata"])
+    assert outgoing_metadata["championHistory"][0]["versionId"] == "version-old"
+    assert outgoing_metadata["championHistory"][0]["nextChampionVersionId"] == "version-new"
+    assert outgoing_metadata["championHistory"][0]["exitedAt"] is not None
+
+
+def test_plexus_facade_delegates_score_set_champion_to_direct_handler() -> None:
+    champion_args: list[dict] = []
+
+    def fake_set_champion(args):
+        champion_args.append(args)
+        return {"success": True, "championVersionId": args["version_id"]}
+
+    facade = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        score_set_champion=fake_set_champion,
+    )
+
+    value = facade.score.set_champion({
+        "score_id": "score-1",
+        "version_id": "version-new",
+    })
+
+    assert value == {"success": True, "championVersionId": "version-new"}
+    assert champion_args == [{"score_id": "score-1", "version_id": "version-new"}]
+    assert facade.api_calls == ["plexus.score.set_champion"]
+
+
 def test_dispatch_routes_scorecards_to_direct_handlers() -> None:
     assert execute.DIRECT_HANDLERS[("scorecards", "list")] == "_call_scorecards"
     assert execute.DIRECT_HANDLERS[("scorecards", "info")] == "_call_scorecards"
@@ -1448,6 +1757,161 @@ def test_handle_peek_refreshes_evaluation_status() -> None:
     assert snapshot["status"] == "completed"
     assert snapshot["evaluation"] == {"id": "eval-1", "status": "COMPLETED"}
     assert module.api_calls == ["plexus.handle.peek"]
+
+
+def test_handle_peek_captures_late_evaluation_id_file(tmp_path) -> None:
+    id_file = tmp_path / "evaluation_id.txt"
+    id_file.write_text("eval-late", encoding="utf-8")
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={
+            "process_id": 4242,
+            "evaluation_id_file": str(id_file),
+        },
+    )
+
+    def fake_evaluation_info(args: dict) -> dict:
+        return {"id": args["evaluation_id"], "status": "COMPLETED"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "completed"
+    assert snapshot["evaluation_id"] == "eval-late"
+    assert snapshot["evaluation"]["id"] == "eval-late"
+    assert snapshot["evaluation"]["status"] == "COMPLETED"
+    assert not id_file.exists()
+
+
+def test_handle_peek_marks_no_id_exited_process_failed(monkeypatch) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"process_id": 4242},
+    )
+
+    monkeypatch.setattr(execute.os, "waitpid", lambda pid, options: (pid, 256))
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "failed"
+    assert snapshot["process_status"] == "exited"
+    assert snapshot["process_exit_code"] == 1
+    assert snapshot["error"] == (
+        "Evaluation subprocess exited before emitting an evaluation ID."
+    )
+
+
+def test_handle_peek_marks_running_evaluation_exited_process_failed(monkeypatch) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"evaluation_id": "eval-1", "process_id": 4242},
+    )
+
+    monkeypatch.setattr(execute.os, "waitpid", lambda pid, options: (pid, 256))
+
+    def fake_evaluation_info(args: dict) -> dict:
+        return {"id": args["evaluation_id"], "status": "RUNNING"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "failed"
+    assert snapshot["evaluation"]["process_status"] == "exited"
+    assert snapshot["evaluation"]["process_exit_code"] == 1
+    assert snapshot["evaluation"]["error"] == (
+        "Evaluation subprocess exited before the evaluation reached a terminal status."
+    )
+
+
+def test_handle_peek_marks_successfully_exited_nonterminal_evaluation_failed(monkeypatch) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"evaluation_id": "eval-1", "process_id": 4242},
+    )
+
+    monkeypatch.setattr(execute.os, "waitpid", lambda pid, options: (pid, 0))
+
+    def fake_evaluation_info(args: dict) -> dict:
+        return {
+            "id": args["evaluation_id"],
+            "status": "RUNNING",
+            "processed_items": 10,
+            "total_items": 10,
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "failed"
+    assert snapshot["evaluation"]["process_status"] == "exited"
+    assert snapshot["evaluation"]["process_exit_code"] == 0
+    assert snapshot["evaluation"]["error"] == (
+        "Evaluation subprocess exited before the evaluation reached a terminal status."
+    )
+
+
+def test_handle_peek_reaps_completed_evaluation_process(monkeypatch) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"evaluation_id": "eval-1", "process_id": 4242},
+    )
+
+    monkeypatch.setattr(execute.os, "waitpid", lambda pid, options: (pid, 0))
+
+    def fake_evaluation_info(args: dict) -> dict:
+        return {"id": args["evaluation_id"], "status": "COMPLETED"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "completed"
+    assert snapshot["evaluation"]["process_status"] == "exited"
+    assert snapshot["evaluation"]["process_exit_code"] == 0
 
 
 def test_handle_cancel_terminates_process() -> None:

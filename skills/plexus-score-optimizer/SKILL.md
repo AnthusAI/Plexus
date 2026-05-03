@@ -88,7 +88,7 @@ pool is clean enough to be a useful target. The optimizer should use recent
 rubric-memory citations for policy claims, hypotheses, version notes, SME
 questions, and "cannot improve" conclusions.
 
-## Hard Guardrails
+## Operating Rules
 
 - Use the direct CLI for optimizer execution and debugging. Do not treat dashboard or dispatcher state alone as proof that a run is healthy.
 - Prefer `python -m plexus.cli` from the repo root over a possibly stale installed `plexus` binary.

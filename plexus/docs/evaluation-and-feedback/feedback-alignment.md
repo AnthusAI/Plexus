@@ -10,29 +10,31 @@ Systematic process for improving score configurations using human feedback data 
 4. **Prediction Testing (LOCAL ONLY)**: Test current configuration on problematic items
 5. **Configuration Optimization**: Iterate based on analysis results, re-evaluating after each change
 
-## MCP Tools (Start Here)
+## Plexus Runtime APIs (Start Here)
 
-Use MCP tools for token-efficient structured output:
-- `get_plexus_documentation`: Always open this doc before starting alignment
-- `think`: Required planning step; enforces baseline-first workflow
-- `plexus_feedback_alignment`: Performance metrics and error patterns
-- `plexus_feedback_find`: Specific feedback items with human corrections
-- `plexus_predict`: Test predictions against known ground-truth (LOCAL YAML mode)
-- `run_plexus_evaluation`: Run evaluations (LOCAL mode) for baseline and post-change comparisons
+Use the single MCP tool `execute_tactus` for token-efficient structured output.
+Inside the snippet, call the host-injected `plexus` module:
 
-**CRITICAL**: Always use sub-agents (Task tool) for `plexus_feedback_find` and `plexus_item_info` calls that return full transcripts! These tools return large amounts of text that will consume your context window if run in the main conversation. Use specialized agents like `plexus-alignment-analyzer` to process this data efficiently.
+- `plexus.docs.get`: Always open this doc before starting alignment
+- `plexus.api.list`: Discover the available runtime API surface
+- `plexus.feedback.alignment`: Performance metrics and error patterns
+- `plexus.feedback.find`: Specific feedback items with human corrections
+- `plexus.score.predict`: Test predictions against known ground truth in LOCAL YAML mode
+- `plexus.evaluation.run`: Run LOCAL baseline and post-change evaluations
+
+**CRITICAL**: Always use sub-agents for `plexus.feedback.find` calls that return full transcripts. These responses can consume the main conversation context window. Use specialized agents like `plexus-alignment-analyzer` to process this data efficiently.
 
 ## Phase 1: Performance Analysis
 
 Get comprehensive performance summary:
 
-```
-plexus_feedback_alignment(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    days=14,
-    output_format="json"
-)
+```lua
+return plexus.feedback.alignment{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  days = 14,
+  output_format = "json",
+}
 ```
 
  Prioritize Gwet's AC1 (agreement) over raw accuracy for alignment decisions. Focus on confusion matrix to identify:
@@ -44,15 +46,13 @@ Establish a quantitative baseline before changing any YAML so improvements are m
 
 2) Run a baseline evaluation in LOCAL mode. IMPORTANT: Always set an absolute override folder to your local scorecards directory.
 
-```
-run_plexus_evaluation(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",      # optional; evaluate a single score if desired
-    n_samples=200,                       # or omit to use dataset size
-    remote=False,                        # LOCAL ONLY
-    yaml=True,                           # load from local YAML
-    ctx={"override_folder":"/home/<user>/projects/Plexus/scorecards"}
-)
+```lua
+return plexus.evaluation.run{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check", -- optional; evaluate a single score if desired
+  n_samples = 200,                 -- or omit to use dataset size
+  yaml = true,                     -- load from local YAML
+}
 ```
 
 Record AC1, accuracy, and confusion matrix as your baseline.
@@ -67,12 +67,10 @@ Note: Do not push or promote versions during this phase; iterate strictly on loc
 Examine primary error pattern from Phase 1:
 
 ```
-# For false negatives (AI missed violations) - paginated results
-# ALWAYS use sub-agents for this - it returns full transcripts!
 Task(
     subagent_type="plexus-alignment-analyzer",
     description="Analyze false negative feedback",
-    prompt="Find and analyze false negative feedback items where AI missed violations. Use plexus_feedback_find with scorecard_name='Quality Assurance v1.0', score_name='Compliance Check', initial_value='No', final_value='Yes', limit=5, days=14. Focus on edit comments and transcript patterns."
+    prompt="Find and analyze false negative feedback items where AI missed violations. Use execute_tactus with plexus.feedback.find{ scorecard_name='Quality Assurance v1.0', score_name='Compliance Check', initial_value='No', final_value='Yes', limit=5, days=14 }. Focus on edit comments and transcript patterns."
 )
 ```
 
@@ -83,24 +81,20 @@ Analyze `edit_comment` fields and `item_details.text` for configuration gaps. Lo
 
 Use pagination for larger datasets:
 ```
-# Get next page using next_page_start_id from previous response
-# ALWAYS use sub-agents for this - it returns full transcripts!
 Task(
     subagent_type="plexus-alignment-analyzer",
     description="Get next page of false negative feedback",
-    prompt="Continue analyzing false negative feedback using plexus_feedback_find pagination with next_page_start_id='feedback_item_123'. Same parameters as before."
+    prompt="Continue analyzing false negative feedback using execute_tactus and plexus.feedback.find pagination with next_page_start_id='feedback_item_123'. Same parameters as before."
 )
 ```
 
 Examine secondary error pattern:
 
 ```
-# For false positives (AI over-detected)
-# ALWAYS use sub-agents for this - it returns full transcripts!
 Task(
     subagent_type="plexus-alignment-analyzer",
     description="Analyze false positive feedback",
-    prompt="Find and analyze false positive feedback items where AI over-detected violations. Use plexus_feedback_find with scorecard_name='Quality Assurance v1.0', score_name='Compliance Check', initial_value='Yes', final_value='No', limit=5, days=14. Focus on edit comments and transcript patterns."
+    prompt="Find and analyze false positive feedback items where AI over-detected violations. Use execute_tactus with plexus.feedback.find{ scorecard_name='Quality Assurance v1.0', score_name='Compliance Check', initial_value='Yes', final_value='No', limit=5, days=14 }. Focus on edit comments and transcript patterns."
 )
 ```
 
@@ -108,27 +102,27 @@ Task(
 
 Test current configuration on items with known ground-truth:
 
-```
-plexus_predict(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check", 
-    item_id="88ed6e27-b5ae-4641-b024-d47f4c6ba631",
-    output_format="yaml",
-    include_input=true,
-    yaml_only=true                # LOCAL YAML ONLY
-)
+```lua
+return plexus.score.predict{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  item_id = "88ed6e27-b5ae-4641-b024-d47f4c6ba631",
+  output_format = "yaml",
+  include_input = true,
+  yaml = true, -- LOCAL YAML ONLY
+}
 ```
 
 Test multiple related items:
 
-```
-plexus_predict(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    item_ids="item1,item2,item3,item4,item5",
-    output_format="yaml",
-    yaml_only=true                # LOCAL YAML ONLY
-)
+```lua
+return plexus.score.predict{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  item_ids = "item1,item2,item3,item4,item5",
+  output_format = "yaml",
+  yaml = true, -- LOCAL YAML ONLY
+}
 ```
 
 Compare predictions against feedback ground-truth labels.
@@ -140,13 +134,14 @@ Compare predictions against feedback ground-truth labels.
 
 Test configuration changes:
 
-```
-plexus_predict(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    item_ids="known_problematic_items", 
-    output_format="yaml"
-)
+```lua
+return plexus.score.predict{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  item_ids = "known_problematic_items",
+  output_format = "yaml",
+  yaml = true,
+}
 ```
 
 ## Dataset Setup (Align to Feedback)
@@ -179,57 +174,58 @@ limit_per_cell: 50
 balance: false
 ```
 
-Load or refresh dataset as needed with the dataset loader (LOCAL context):
+Build or check an associated dataset as needed through the runtime:
 
-```
-plexus_dataset_load(
-    source_identifier="Feedback-Aligned Dataset",
-    fresh=true
-)
+```lua
+return plexus.dataset.build_from_feedback_window{
+  scorecard = "Quality Assurance v1.0",
+  score = "Compliance Check",
+  days = 30,
+  max_items = 200,
+  balance = true,
+}
 ```
 
 ## Complete Workflow
 
 ### 1. Baseline Summary
-```
-plexus_feedback_alignment(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check", 
-    days=30,
-    output_format="json"
-)
+```lua
+return plexus.feedback.alignment{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  days = 30,
+  output_format = "json",
+}
 ```
 
 ### 2. Investigation
 ```
-# ALWAYS use sub-agents for feedback investigation - it returns full transcripts!
 Task(
     subagent_type="plexus-alignment-analyzer",
     description="Investigate feedback patterns",
-    prompt="Analyze feedback patterns using plexus_feedback_find with scorecard_name='Quality Assurance v1.0', score_name='Compliance Check', initial_value='No', final_value='Yes', limit=5, days=30. Focus on edit comments and transcript patterns to identify configuration gaps."
+    prompt="Analyze feedback patterns using execute_tactus with plexus.feedback.find{ scorecard_name='Quality Assurance v1.0', score_name='Compliance Check', initial_value='No', final_value='Yes', limit=5, days=30 }. Focus on edit comments and transcript patterns to identify configuration gaps."
 )
 ```
 
 ### 3. Baseline Evaluation (LOCAL ONLY) — With override_folder
-```
-run_plexus_evaluation(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    remote=False,
-    yaml=True,
-    ctx={"override_folder":"/home/<user>/projects/Plexus/scorecards"}
-)
+```lua
+return plexus.evaluation.run{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  yaml = true,
+}
 ```
 
 ### 4. Testing (LOCAL ONLY)
-```
-plexus_predict(
-    scorecard_name="Quality Assurance v1.0", 
-    score_name="Compliance Check",
-    item_ids="problematic_item_ids_from_feedback",
-    output_format="yaml",
-    include_input=true
-)
+```lua
+return plexus.score.predict{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  item_ids = "problematic_item_ids_from_feedback",
+  output_format = "yaml",
+  include_input = true,
+  yaml = true,
+}
 ```
 
 ### 5. Optimization
@@ -238,34 +234,34 @@ plexus_predict(
 - Test on same items
 
 ### 6. Validation (LOCAL ONLY)
-```
-plexus_predict(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check", 
-    item_ids="same_test_items",
-    output_format="yaml"
-)
+```lua
+return plexus.score.predict{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  item_ids = "same_test_items",
+  output_format = "yaml",
+  yaml = true,
+}
 ```
 
 ### 7. Impact Measurement
-```
-plexus_feedback_alignment(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    days=7,
-    output_format="json"
-)
+```lua
+return plexus.feedback.alignment{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  days = 7,
+  output_format = "json",
+}
 ```
 
 ## Advanced Techniques
 
 **Pattern Discovery**: Larger samples for systemic analysis
 ```
-# ALWAYS use sub-agents for pattern discovery - it returns full transcripts!
 Task(
     subagent_type="plexus-alignment-analyzer",
     description="Discover systemic patterns",
-    prompt="Perform systemic pattern analysis using plexus_feedback_find with scorecard_name='Quality Assurance v1.0', score_name='Compliance Check', limit=10, days=30, prioritize_edit_comments=true. Look for common themes in edit comments and transcript patterns."
+    prompt="Perform systemic pattern analysis using execute_tactus with plexus.feedback.find{ scorecard_name='Quality Assurance v1.0', score_name='Compliance Check', limit=10, days=30, prioritize_edit_comments=true }. Look for common themes in edit comments and transcript patterns."
 )
 ```
 
@@ -277,7 +273,7 @@ Task(
 Task(
     subagent_type="plexus-alignment-analyzer",
     description="Paginated feedback alignment",
-    prompt="Analyze feedback across multiple pages using plexus_feedback_find pagination. Start with first page, then continue pagination as needed to build comprehensive analysis."
+    prompt="Analyze feedback across multiple pages using execute_tactus and plexus.feedback.find pagination. Start with first page, then continue pagination as needed to build comprehensive analysis."
 )
 ```
 
@@ -285,16 +281,16 @@ Task(
 - `item_details.text`: Original call transcript or document text
 - `item_details.external_id`: External system identifier  
 - `item_details.identifiers`: Additional identifying information
-- Eliminates need for separate `plexus_item_info` calls
+- Eliminates need for separate item detail calls
 
 **Continuous Monitoring**: Weekly performance tracking
-```
-plexus_feedback_alignment(
-    scorecard_name="Quality Assurance v1.0",
-    score_name="Compliance Check",
-    days=7, 
-    output_format="json"
-)
+```lua
+return plexus.feedback.alignment{
+  scorecard_name = "Quality Assurance v1.0",
+  score_name = "Compliance Check",
+  days = 7,
+  output_format = "json",
+}
 ```
 
 ## Implementation Notes
@@ -303,9 +299,9 @@ plexus_feedback_alignment(
 - Run a LOCAL baseline evaluation before any edits; use the same dataset for post-change comparison
 - Prioritize improving Gwet's AC1 (agreement) while monitoring accuracy and class balance
 - Use feedback items as ground-truth labels for validation
-- Test before/after configuration changes in LOCAL YAML mode (yaml_only / yaml=True)
+- Test before/after configuration changes in LOCAL YAML mode (`yaml = true`)
 - Focus on edit comments for root cause analysis
 - Maintain test sets for regression testing
 - Measure improvement with AC1, confusion matrix shifts, and stability across segments
-- **ALWAYS use sub-agents** for `plexus_feedback_find` and `plexus_item_info` to avoid context overflow
+- **ALWAYS use sub-agents** for large `plexus.feedback.find` investigations to avoid context overflow
 - **Version Mismatch**: Production feedback was generated by different score versions than your local config - learn from edit patterns and comments, not from attempting to debug the original score logic

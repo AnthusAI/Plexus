@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "fe114d91-b7e2-4d40-aa56-40f602f5c346",
+  "issue_id": "plx-6c5793d9-b090-4019-8bc0-49161dd20798",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-02T18:05:03.282Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Run next Suco optimizer candidate batch"
+  }
+}
