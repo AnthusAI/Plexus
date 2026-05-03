@@ -883,6 +883,13 @@ code: |
     if not eval_data then
       return {error = "Evaluation handle did not resolve: status=" .. tostring(waited.status)}
     end
+    local eval_status = string.upper(tostring(eval_data.status or waited.status or ""))
+    if eval_status ~= "COMPLETED" then
+      return {
+        error = "Evaluation did not complete: status=" .. tostring(eval_data.status or waited.status)
+          .. " evaluation_id=" .. tostring(eval_data.evaluation_id or eval_data.id or waited.evaluation_id or "")
+      }
+    end
     return eval_data
   end
 
