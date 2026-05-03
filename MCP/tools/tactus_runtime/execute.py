@@ -262,6 +262,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("score_pull", "score", "pull"),
     ("score_update", "score", "update"),
     ("score_test", "score", "test"),
+    ("score_set_champion", "score", "set_champion"),
     ("item_info", "item", "info"),
     ("item_last", "item", "last"),
     ("feedback_find", "feedback", "find"),
@@ -357,6 +358,7 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("score", "pull"): "_call_score",
     ("score", "update"): "_call_score",
     ("score", "test"): "_call_score",
+    ("score", "set_champion"): "_call_score",
     ("item", "info"): "_call_item",
     ("item", "last"): "_call_item",
     ("feedback", "find"): "_call_feedback",
@@ -1829,9 +1831,6 @@ def _default_score_set_champion(args: dict[str, Any]) -> dict[str, Any]:
         )
         client.execute(update_version_mutation, {"input": {
             "id": previous_champion_version_id,
-            "scoreId": previous_version_meta.get("scoreId") or str(score_id),
-            "createdAt": previous_version_meta.get("createdAt"),
-            "isFeatured": previous_version_meta.get("isFeatured"),
             "metadata": json.dumps(outgoing_meta),
         }})
 
@@ -4552,6 +4551,7 @@ class PlexusRuntimeModule:
         score_pull: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_update: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_test: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_set_champion: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         feedback_latest_update: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         rubric_memory_recent_entries: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         rubric_memory_evidence_pack: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
@@ -4600,6 +4600,11 @@ class PlexusRuntimeModule:
         self._score_pull = score_pull if score_pull is not None else _default_score_pull
         self._score_update = score_update if score_update is not None else _default_score_update
         self._score_test = score_test if score_test is not None else _default_score_test
+        self._score_set_champion = (
+            score_set_champion
+            if score_set_champion is not None
+            else _default_score_set_champion
+        )
         self._feedback_latest_update = (
             feedback_latest_update
             if feedback_latest_update is not None
@@ -4747,7 +4752,7 @@ class PlexusRuntimeModule:
     def _call_score(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "score" or method not in {
             "info", "evaluations", "predict", "contradictions", "pull", "update",
-            "test",
+            "test", "set_champion",
         }:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
@@ -4770,6 +4775,8 @@ class PlexusRuntimeModule:
                 return self._score_update(parsed)
             if method == "test":
                 return self._score_test(parsed)
+            if method == "set_champion":
+                return self._score_set_champion(parsed)
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )

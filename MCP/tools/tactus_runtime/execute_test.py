@@ -433,6 +433,106 @@ def test_default_score_set_champion_does_not_duplicate_open_history_entry(
     assert metadata["championHistory"] == existing_metadata["championHistory"]
 
 
+def test_default_score_set_champion_updates_previous_champion_metadata_only(
+    monkeypatch,
+) -> None:
+    captured_version_inputs: list[dict] = []
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "GetScoreVersionForChampionGuard" in query:
+                return {
+                    "getScore": {"id": "score-1", "championVersionId": "version-old"},
+                    "getScoreVersion": {
+                        "id": "version-new",
+                        "scoreId": "score-1",
+                        "configuration": "name: test",
+                        "metadata": None,
+                        "createdAt": "2026-05-02T00:00:00.000Z",
+                    },
+                }
+            if "GetScoreVersionForManagement" in query:
+                return {
+                    "getScoreVersion": {
+                        "id": "version-old",
+                        "scoreId": "score-1",
+                        "configuration": "name: old",
+                        "guidelines": None,
+                        "isFeatured": None,
+                        "note": "old",
+                        "branch": None,
+                        "parentVersionId": None,
+                        "metadata": None,
+                        "createdAt": "2026-05-01T00:00:00.000Z",
+                        "updatedAt": "2026-05-01T00:00:00.000Z",
+                    },
+                }
+            if "mutation UpdateScore(" in query:
+                return {
+                    "updateScore": {
+                        "id": variables["input"]["id"],
+                        "championVersionId": variables["input"]["championVersionId"],
+                    }
+                }
+            if "UpdateScoreVersionMetadata" in query:
+                captured_version_inputs.append(variables["input"])
+                return {
+                    "updateScoreVersion": {
+                        "id": variables["input"]["id"],
+                        "isFeatured": variables["input"].get("isFeatured"),
+                        "metadata": variables["input"].get("metadata"),
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    result = execute._default_score_set_champion(
+        {"score_id": "score-1", "version_id": "version-new"}
+    )
+
+    assert result["success"] is True
+    assert len(captured_version_inputs) == 2
+
+    incoming_input = captured_version_inputs[0]
+    assert incoming_input["id"] == "version-new"
+    assert incoming_input["scoreId"] == "score-1"
+    assert incoming_input["createdAt"] == "2026-05-02T00:00:00.000Z"
+    assert incoming_input["isFeatured"] == "true"
+
+    outgoing_input = captured_version_inputs[1]
+    assert outgoing_input["id"] == "version-old"
+    assert set(outgoing_input) == {"id", "metadata"}
+    outgoing_metadata = json.loads(outgoing_input["metadata"])
+    assert outgoing_metadata["championHistory"][0]["versionId"] == "version-old"
+    assert outgoing_metadata["championHistory"][0]["nextChampionVersionId"] == "version-new"
+    assert outgoing_metadata["championHistory"][0]["exitedAt"] is not None
+
+
+def test_plexus_facade_delegates_score_set_champion_to_direct_handler() -> None:
+    champion_args: list[dict] = []
+
+    def fake_set_champion(args):
+        champion_args.append(args)
+        return {"success": True, "championVersionId": args["version_id"]}
+
+    facade = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        score_set_champion=fake_set_champion,
+    )
+
+    value = facade.score.set_champion({
+        "score_id": "score-1",
+        "version_id": "version-new",
+    })
+
+    assert value == {"success": True, "championVersionId": "version-new"}
+    assert champion_args == [{"score_id": "score-1", "version_id": "version-new"}]
+    assert facade.api_calls == ["plexus.score.set_champion"]
+
+
 def test_dispatch_routes_scorecards_to_direct_handlers() -> None:
     assert execute.DIRECT_HANDLERS[("scorecards", "list")] == "_call_scorecards"
     assert execute.DIRECT_HANDLERS[("scorecards", "info")] == "_call_scorecards"
@@ -441,11 +541,9 @@ def test_dispatch_routes_scorecards_to_direct_handlers() -> None:
 
 
 def test_dispatch_routes_score_to_direct_handlers() -> None:
-    for method in ("info", "evaluations", "predict"):
+    for method in ("info", "evaluations", "predict", "set_champion"):
         assert execute.DIRECT_HANDLERS[("score", method)] == "_call_score"
         assert ("score", method) not in execute.MCP_TOOL_MAP
-    assert ("score", "set_champion") not in execute.DIRECT_HANDLERS
-    assert ("score", "set_champion") not in execute.MCP_TOOL_MAP
 
 
 def test_dispatch_routes_procedure_reads_to_direct_handlers() -> None:
