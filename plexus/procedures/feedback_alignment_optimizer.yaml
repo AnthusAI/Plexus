@@ -3158,18 +3158,20 @@ code: |
     return table.concat(parts, "\n")
   end
 
-  -- Load the optimization cookbook from the documentation system.
-  -- This allows the cookbook to be updated without editing this YAML file.
-  -- See plexus/docs/optimizer-cookbook.md
-  local COOKBOOK_STATIC
-  do
+  -- Load lane-specific optimization cookbooks from the documentation system.
+  -- This allows cookbook content to be updated without editing this YAML file.
+  local COOKBOOKS = {}
+  local function load_optimizer_cookbook(filename)
     local ok, result = pcall(call_plexus_tool, "get_plexus_documentation",
-      {filename = "optimizer-cookbook"}, {raw_string = true, max_retries = 1})
+      {filename = filename}, {raw_string = true, max_retries = 1})
     if not ok or not result or result == "" then
-      error("Failed to load optimizer cookbook from get_plexus_documentation: " .. tostring(result))
+      error("Failed to load optimizer cookbook " .. tostring(filename) .. " from get_plexus_documentation: " .. tostring(result))
     end
-    COOKBOOK_STATIC = result
+    return result
   end
+  COOKBOOKS.normal = load_optimizer_cookbook("optimizer-cookbook-normal")
+  COOKBOOKS.structural = load_optimizer_cookbook("optimizer-cookbook-structural")
+  COOKBOOKS.creative = load_optimizer_cookbook("optimizer-cookbook-creative")
 
   -- Load high-level score concepts doc (injected into planning context)
   local SCORE_CONCEPTS_DOC = ""
@@ -3394,8 +3396,32 @@ code: |
     return expanded
   end
 
+  local function cookbook_key_for_slot(slot)
+    if slot == "creative" then
+      return "creative"
+    end
+    if slot == "structural" or slot == "reframe" or slot == "full_rewrite" then
+      return "structural"
+    end
+    return "normal"
+  end
+
   local function build_cookbook_section(opts)
-    local parts = {COOKBOOK_STATIC}
+    opts = opts or {}
+    local cookbook_key = cookbook_key_for_slot(opts.slot or "recent_incremental")
+    local parts = {
+      "=== GLOBAL OPTIMIZER CONSTRAINTS ===",
+      "- Do not edit classification guidelines. Change only score_config.yaml.",
+      "- Do not modify parser, output-normalization, framework, or optimizer runtime code.",
+      "- Target one confusion direction per hypothesis unless the slot explicitly asks for synthesis or reframing.",
+      "- Avoid repeating harmful prior ideas; if a prior idea failed, change the mechanism materially or choose another lane.",
+      "- Use held-out evaluations. Keep only variants that improve the requested objective without unacceptable regression.",
+      "=== END GLOBAL OPTIMIZER CONSTRAINTS ===",
+      "",
+      string.format("=== %s HYPOTHESIS COOKBOOK ===", string.upper(cookbook_key)),
+      COOKBOOKS[cookbook_key],
+      string.format("=== END %s HYPOTHESIS COOKBOOK ===", string.upper(cookbook_key))
+    }
     local stagnant = opts.consecutive_stagnant_cycles or 0
     local escalation_mode = plateau_escalation_mode(opts)
     if escalation_mode == "ultra_creative" then
@@ -3560,7 +3586,7 @@ code: |
       table.insert(parts, "Focus on what the accuracy RCA says the model is getting wrong.")
       table.insert(parts, "If the accuracy RCA shows distinct confusion matrix segments, focus on the larger one.")
     elseif slot == "structural" then
-      table.insert(parts, "OBJECTIVE: Structural / non-prompt change (Category C — see cookbook)")
+      table.insert(parts, "OBJECTIVE: Structural / non-prompt change (Category C - see structural cookbook)")
       table.insert(parts, "This slot is ALWAYS the 4th hypothesis. It must be a structural change,")
       table.insert(parts, "not a prompt rewrite. Pick the most promising option from the cookbook's")
       table.insert(parts, "Category C section.")
@@ -3569,32 +3595,12 @@ code: |
       table.insert(parts, "  1. Check accumulated_lessons (in your planning context) for any structural")
       table.insert(parts, "     approaches already tried in this run and their outcomes.")
       table.insert(parts, "  2. Do NOT re-propose any structural approach that has already FAILED in this run.")
-      table.insert(parts, "  3. Pick from approaches not yet tried, in this approximate priority order:")
-      table.insert(parts, "     - C3:  Model swap — follow the upgrade path from the cookbook.")
-      table.insert(parts, "            FIRST: if not already on gpt-5.4-nano, swap to gpt-5.4-nano. Always.")
-      table.insert(parts, "            ONLY after plateau (3+ cycles stuck): consider gpt-5.4-mini, then gpt-5-mini.")
-      table.insert(parts, "            Mini models cost ~10× more than nano. Never propose mini for cost_efficiency runs.")
-      table.insert(parts, "            Check accumulated_lessons — never retry a model that already failed.")
-      table.insert(parts, "     - C1e: Input source — DeepgramInputSource (sentence format preferred).")
-      table.insert(parts, "            ⚠ PREREQUISITE: Only propose if items have Deepgram JSON attachments.")
-      table.insert(parts, "            If prior cycles show DeepgramInputSource smoke test failures, do NOT retry.")
-      table.insert(parts, "     - C2:  Preprocessing — add, tune, relax, or REMOVE RelevantWindowsTranscriptFilter or other processors when they appear to hide needed evidence.")
-      table.insert(parts, "            Removing a harmful filter is a valid structural hypothesis.")
-      table.insert(parts, "            If adding/tuning RelevantWindowsTranscriptFilter, start with broad sentence windows such as prev_count=5 and next_count=8.")
-      table.insert(parts, "            Do not start with prev_count=1/next_count=1 word windows on call transcripts; they often sever answers from the prompt they respond to.")
-      table.insert(parts, "     - C1a: Architecture — decompose into multiple LLM calls, add N/A gate, add CoT node.")
-      table.insert(parts, "            If you add an extraction stage, use class: Extractor and map output.extracted_text")
-      table.insert(parts, "            into a named state field consumed by the final classifier.")
-      table.insert(parts, "            Never use Classifier(valid_classes=['Extracted']) or similar pseudo-extractor labels.")
-      table.insert(parts, "     - C4:  Prompt-shape / attention-structure transformations — late structural option.")
-      table.insert(parts, "            Do not use these to push out rubric-oriented hypotheses; Category A/B policy fixes should dominate.")
-      table.insert(parts, "            Prefer repeating the decisive question/rule near the transcript and again at the final decision point.")
-      table.insert(parts, "            This is a lightweight alternative to CoT when the issue appears to be attention rather than reasoning.")
-      table.insert(parts, "            Lower-priority options: move the final instruction to the end; reorder label definitions or valid_classes.")
-      table.insert(parts, "     - C5:  Full rewrite — if prior cycles have plateaued, start from scratch.")
+      table.insert(parts, "  3. Pick from approaches not yet tried, using the structural cookbook priorities:")
+      table.insert(parts, "     model/input/preprocessing/architecture first, then late prompt-shape transformations,")
+      table.insert(parts, "     then full rewrite when prior cycles have plateaued.")
       table.insert(parts, "")
       table.insert(parts, "Check score_config.yaml to avoid proposing something already in place.")
-      table.insert(parts, "Do NOT propose a prompt-only change for this slot — that is what slots 1-3 are for.")
+      table.insert(parts, "Do NOT propose a prompt-only rubric wording change for this slot - that is what slots 1-3 are for.")
     elseif slot == "reframe" then
       table.insert(parts, "OBJECTIVE: Reframe the problem (cross-cycle reinterpretation)")
       table.insert(parts, "Assume the optimizer has been framing the blocker too narrowly.")
@@ -3612,13 +3618,7 @@ code: |
       table.insert(parts, "Propose one weird, testable hypothesis that is materially different from the standard lanes.")
       table.insert(parts, "Use this lane for counterintuitive prompt transformations when normal policy edits have had multiple cycles to work.")
       table.insert(parts, "")
-      table.insert(parts, "CREATIVE COOKBOOK — current recipes:")
-      table.insert(parts, "  - Repeat the whole prompt twice so the scoring model sees the instructions redundantly.")
-      table.insert(parts, "  - Repeat the decisive question or rubric boundary in multiple places, especially before the final answer instruction.")
-      table.insert(parts, "  - Put the transcript first and the classifier instruction at the very end.")
-      table.insert(parts, "  - Reorder label definitions or valid_classes to test label-order sensitivity.")
-      table.insert(parts, "  - Translate the operative prompt or rubric instructions to Polish.")
-      table.insert(parts, "")
+      table.insert(parts, "Use the creative cookbook injected above. Do not use normal or structural recipes for this slot unless they are part of the chosen creative recipe.")
       table.insert(parts, "Pick exactly one creative recipe or a tightly scoped combination, and explain why it could change alignment.")
       table.insert(parts, "The hypothesis must still be implementable by editing score_config.yaml and must still pass smoke tests.")
     end
@@ -5411,17 +5411,11 @@ code: |
       rubric_memory_briefing = rubric_memory_briefing
     })
 
-    -- Build shared cookbook section
-    local cookbook = build_cookbook_section({
-      consecutive_failed_cycles = consecutive_failed_cycles,
-      consecutive_stagnant_cycles = consecutive_stagnant_cycles,
-      consecutive_acc_rejections = consecutive_acc_rejections,
-      iterations = iterations
-    })
-
     -- Log planning context for debugging
     local context_log_path = string.format("optimizer_cycle%d_planning_context.txt", cycle)
-    pcall(function() File.write(context_log_path, planning_inject .. "\n\n" .. cookbook) end)
+    pcall(function()
+      File.write(context_log_path, planning_inject .. "\n\nLane-specific cookbooks are injected per hypothesis slot.")
+    end)
 
     -- Define the hypothesis generation slots for this cycle.
     -- Plateau expands the slot set instead of shrinking it.
@@ -5486,7 +5480,14 @@ code: |
           consecutive_stagnant_cycles = consecutive_stagnant_cycles
         })
 
-        -- Full prompt = base context + cookbook + objective doc + score concepts doc + focused task
+        -- Full prompt = base context + lane cookbook + objective doc + score concepts doc + focused task
+        local cookbook = build_cookbook_section({
+          slot = slot_name,
+          consecutive_failed_cycles = consecutive_failed_cycles,
+          consecutive_stagnant_cycles = consecutive_stagnant_cycles,
+          consecutive_acc_rejections = consecutive_acc_rejections,
+          iterations = iterations
+        })
         local concepts_inject = has_text(SCORE_CONCEPTS_DOC)
           and ("\n\n=== SCORE FORMAT CONCEPTS ===\n" .. SCORE_CONCEPTS_DOC .. "\n=== END SCORE FORMAT CONCEPTS ===")
           or ""
