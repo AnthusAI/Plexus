@@ -40,6 +40,9 @@ plexus/docs/
     feedback-alignment.md
     evaluation-alignment.md
     optimizer-cookbook.md
+    optimizer-cookbook-normal.md
+    optimizer-cookbook-structural.md
+    optimizer-cookbook-creative.md
     optimizer-procedures.md
     optimizer-objective-alignment.md
     optimizer-objective-precision.md
