@@ -10,6 +10,7 @@ import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
 import { CartesianGrid, Customized, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
+import { curveCardinal } from "victory-vendor/d3-shape";
 
 import { parseOutputString } from "@/lib/utils";
 import { ChartContainer } from "@/components/ui/chart";
@@ -193,6 +194,7 @@ const metricKeys = [
 type MetricKey = (typeof metricKeys)[number];
 
 const chartMargin = { top: 8, right: 52, left: 20, bottom: 36 };
+const timelineCurveType = curveCardinal.tension(0.55);
 
 type ChartPoint = ChampionPoint & {
   entered_at_timestamp: number;
@@ -201,6 +203,9 @@ type ChartPoint = ChampionPoint & {
   feedback_accuracy: number | null;
   regression_accuracy: number | null;
 };
+
+type DatasetKey = "feedback" | "regression";
+type ScalarMetricKey = "alignment" | "accuracy";
 
 const formatNumber = (value: number | null | undefined, decimals = 3): string => {
   if (value === null || value === undefined || Number.isNaN(value)) return "N/A";
@@ -246,6 +251,12 @@ const formatAxisDate = (value: number): string => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "";
   return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+};
+
+const dateBucketKey = (value: number): string => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return `${parsed.getFullYear()}-${parsed.getMonth()}-${parsed.getDate()}`;
 };
 
 const shortId = (value?: string | null): string => {
@@ -402,7 +413,9 @@ const ChampionTransitionMarkers: React.FC<{
   chartData: ChartPoint[];
   xAxisMap?: Record<string, any>;
   offset?: { top?: number; height?: number };
-}> = ({ chartData, xAxisMap, offset }) => {
+  showNativeTitle?: boolean;
+  disablePointerEvents?: boolean;
+}> = ({ chartData, xAxisMap, offset, showNativeTitle = true, disablePointerEvents = false }) => {
   if (!chartData.length) return null;
 
   const xAxis = Object.values(xAxisMap || {})[0] as any;
@@ -412,7 +425,11 @@ const ChampionTransitionMarkers: React.FC<{
   const y = (offset?.top || 0) + (offset?.height || 0) + 30;
 
   return (
-    <g data-testid="champion-transition-marker-layer" aria-label="Champion changes">
+    <g
+      data-testid="champion-transition-marker-layer"
+      aria-label="Champion changes"
+      pointerEvents={disablePointerEvents ? "none" : undefined}
+    >
       {chartData.map((point) => {
         const x = scale(point.entered_at_timestamp);
         if (typeof x !== "number" || Number.isNaN(x)) return null;
@@ -429,7 +446,7 @@ const ChampionTransitionMarkers: React.FC<{
             className="fill-card"
             aria-label={`Champion changed to ${shortId(point.version_id)} on ${formatDateTime(point.entered_at)}`}
           >
-            <title>{`${formatDateTime(point.entered_at)}: ${shortId(point.version_id)}`}</title>
+            {showNativeTitle ? <title>{`${formatDateTime(point.entered_at)}: ${shortId(point.version_id)}`}</title> : null}
           </rect>
         );
       })}
@@ -458,6 +475,62 @@ const TimelineTooltip: React.FC<any> = ({ active, payload }) => {
   );
 };
 
+const metricValueFor = (
+  point: ChartPoint,
+  dataset: DatasetKey,
+  metric: ScalarMetricKey
+): number | null => {
+  if (dataset === "feedback" && metric === "alignment") return point.feedback_alignment;
+  if (dataset === "feedback" && metric === "accuracy") return point.feedback_accuracy;
+  if (dataset === "regression" && metric === "alignment") return point.regression_alignment;
+  return point.regression_accuracy;
+};
+
+const formatMetricValue = (
+  value: number | null | undefined,
+  metric: ScalarMetricKey
+): string => (metric === "accuracy" ? formatAccuracy(value) : formatNumber(value));
+
+const formatMetricDelta = (
+  value: number | null | undefined,
+  metric: ScalarMetricKey
+): string => (metric === "accuracy" ? formatSignedAccuracyDelta(value) : formatSignedNumber(value));
+
+const formatCompactMetricChange = (
+  before: number | null,
+  after: number | null,
+  metric: ScalarMetricKey
+): string | null => {
+  if (after === null || after === undefined || Number.isNaN(after)) return null;
+  const delta =
+    before !== null && before !== undefined && Number.isFinite(before)
+      ? after - before
+      : null;
+
+  return `${formatMetricValue(before, metric)} ${delta !== null ? formatMetricDelta(delta, metric) : ""} -> ${formatMetricValue(after, metric)}`;
+};
+
+const CompactDatasetMetrics: React.FC<{
+  dataset: DatasetKey;
+  alignmentBefore: number | null;
+  alignmentAfter: number | null;
+  accuracyBefore: number | null;
+  accuracyAfter: number | null;
+}> = ({ dataset, alignmentBefore, alignmentAfter, accuracyBefore, accuracyAfter }) => {
+  const alignment = formatCompactMetricChange(alignmentBefore, alignmentAfter, "alignment");
+  const accuracy = formatCompactMetricChange(accuracyBefore, accuracyAfter, "accuracy");
+  if (!alignment && !accuracy) return null;
+
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1 rounded bg-card px-1.5 py-0.5">
+      <span className="font-medium capitalize text-muted-foreground">{dataset[0]}</span>
+      {alignment ? <span>A {alignment}</span> : null}
+      {alignment && accuracy ? <span className="text-muted-foreground">/</span> : null}
+      {accuracy ? <span>Acc {accuracy}</span> : null}
+    </span>
+  );
+};
+
 const buildChartData = (score: ChampionScoreSeries): ChartPoint[] => {
   return (score.points || [])
     .map((point) => {
@@ -475,12 +548,225 @@ const buildChartData = (score: ChampionScoreSeries): ChartPoint[] => {
     .sort((left, right) => left.entered_at_timestamp - right.entered_at_timestamp);
 };
 
+const buildCombinedChartData = (scores: ChampionScoreSeries[]): ChartPoint[] => {
+  return scores
+    .flatMap((score) => buildChartData(score))
+    .sort((left, right) => left.entered_at_timestamp - right.entered_at_timestamp);
+};
+
+const CombinedTimelineTooltip: React.FC<{
+  active?: boolean;
+  label?: number;
+  payload?: Array<{ payload?: ChartPoint }>;
+  scores: ChampionScoreSeries[];
+}> = ({ active, label, payload, scores }) => {
+  if (!active) return null;
+  const activeTimestamp =
+    typeof label === "number" && Number.isFinite(label)
+      ? label
+      : payload?.find((item) => Number.isFinite(item.payload?.entered_at_timestamp))?.payload?.entered_at_timestamp;
+  if (!activeTimestamp) return null;
+
+  const activeBucket = dateBucketKey(activeTimestamp);
+  const changedScores = scores
+    .map((score) => {
+      const data = buildChartData(score);
+      const points = data.filter((point) => dateBucketKey(point.entered_at_timestamp) === activeBucket);
+      if (!points.length) return null;
+
+      return {
+        score,
+        data,
+        points,
+      };
+    })
+    .filter((entry): entry is { score: ChampionScoreSeries; data: ChartPoint[]; points: ChartPoint[] } => Boolean(entry));
+
+  if (!changedScores.length) return null;
+
+  const changeCount = changedScores.reduce((count, entry) => count + entry.points.length, 0);
+
+  return (
+    <div className="max-w-[560px] rounded-lg bg-popover p-2 text-[11px] leading-tight text-popover-foreground" data-testid="combined-timeline-tooltip">
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-medium">{formatAxisDate(activeTimestamp)}</div>
+        <div className="text-muted-foreground">
+          {formatInteger(changeCount)} champion change{changeCount === 1 ? "" : "s"}
+        </div>
+      </div>
+      <div className="mt-1.5 space-y-1">
+        {changedScores.map(({ score, data, points }) =>
+          points.map((point) => {
+            const previousPoints = data.filter((candidate) => candidate.entered_at_timestamp < point.entered_at_timestamp);
+            const latestBefore = [...previousPoints].reverse();
+            const beforeFor = (dataset: DatasetKey, metric: ScalarMetricKey): number | null => {
+              const previous = latestBefore.find((candidate) => {
+                const value = metricValueFor(candidate, dataset, metric);
+                return typeof value === "number" && Number.isFinite(value);
+              });
+              return previous ? metricValueFor(previous, dataset, metric) : null;
+            };
+
+            const datasetCandidates: DatasetKey[] = ["feedback", "regression"];
+            const datasets = datasetCandidates.filter((dataset) => {
+              const alignment = metricValueFor(point, dataset, "alignment");
+              const accuracy = metricValueFor(point, dataset, "accuracy");
+              return (
+                (typeof alignment === "number" && Number.isFinite(alignment)) ||
+                (typeof accuracy === "number" && Number.isFinite(accuracy))
+              );
+            });
+
+            return (
+              <div
+                key={`${score.score_id}-${point.version_id}-${point.entered_at}`}
+                className="grid grid-cols-[minmax(9rem,1fr)_minmax(0,2fr)] items-center gap-2"
+              >
+                <div className="truncate font-medium">{score.score_name}</div>
+                <div className="flex min-w-0 flex-wrap justify-end gap-1 font-mono text-[10px]">
+                  {datasets.map((dataset) => (
+                    <CompactDatasetMetrics
+                      key={dataset}
+                      dataset={dataset}
+                      alignmentBefore={beforeFor(dataset, "alignment")}
+                      alignmentAfter={metricValueFor(point, dataset, "alignment")}
+                      accuracyBefore={beforeFor(dataset, "accuracy")}
+                      accuracyAfter={metricValueFor(point, dataset, "accuracy")}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+};
+CombinedTimelineTooltip.displayName = "CombinedTimelineTooltip";
+
 const availableMetricsFor = (chartData: ChartPoint[]): MetricKey[] => {
   return metricKeys.filter((key) =>
     chartData.some((point) => {
       const value = point[key];
       return typeof value === "number" && Number.isFinite(value);
     })
+  );
+};
+
+const CombinedTimelineSection: React.FC<{
+  scores: ChampionScoreSeries[];
+  xDomain: [number, number] | undefined;
+}> = ({ scores, xDomain }) => {
+  const chartData = React.useMemo(() => buildCombinedChartData(scores), [scores]);
+  const scoreSeries = React.useMemo(
+    () =>
+      scores
+        .map((score) => {
+          const data = buildChartData(score);
+          return {
+            score,
+            data,
+            metrics: availableMetricsFor(data),
+          };
+        })
+        .filter((series) => series.data.length > 0 && series.metrics.length > 0),
+    [scores]
+  );
+  const availableMetricKeys = React.useMemo(() => availableMetricsFor(chartData), [chartData]);
+
+  if (scores.length <= 1 || chartData.length === 0) return null;
+
+  return (
+    <section className="rounded-lg bg-muted p-3" data-testid="combined-champion-timeline">
+      <div className="mb-3">
+        <div className="text-lg font-semibold leading-none">Combined Champion Timeline</div>
+        <div className="mt-1 text-xs text-muted-foreground">
+          {formatInteger(chartData.length)} champion change{chartData.length === 1 ? "" : "s"} across{" "}
+          {formatInteger(scores.length)} score{scores.length === 1 ? "" : "s"}
+        </div>
+      </div>
+      <div className="rounded-lg bg-background p-2">
+        <ChartContainer config={chartConfig} className="h-[260px] w-full">
+          <LineChart data={chartData} margin={chartMargin}>
+            <CartesianGrid stroke="hsl(var(--foreground) / 0.12)" strokeDasharray="3 3" />
+            <XAxis
+              dataKey="entered_at_timestamp"
+              type="number"
+              domain={xDomain || ["dataMin", "dataMax"]}
+              tickFormatter={formatAxisDate}
+              tick={{ fill: "hsl(var(--foreground) / 0.7)", fontSize: 10 }}
+              axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
+              tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
+              tickMargin={4}
+              padding={{ left: 28, right: 28 }}
+            />
+            <YAxis
+              yAxisId="alignment"
+              domain={[-1, 1]}
+              ticks={[-1, -0.5, 0, 0.5, 1]}
+              axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
+              tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
+              tick={<LeftAxisTick />}
+              width={52}
+            />
+            <YAxis
+              yAxisId="accuracy"
+              orientation="right"
+              domain={[0, 100]}
+              ticks={[0, 25, 50, 75, 100]}
+              axisLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
+              tickLine={{ stroke: "hsl(var(--foreground) / 0.25)" }}
+              tick={<RightAxisTick />}
+              width={56}
+            />
+            <Tooltip
+              content={<CombinedTimelineTooltip scores={scores} />}
+              cursor={{ stroke: "hsl(var(--foreground) / 0.25)", strokeWidth: 1 }}
+            />
+            <Customized
+              component={
+                <ChampionTransitionMarkers
+                  chartData={chartData}
+                  showNativeTitle={false}
+                  disablePointerEvents
+                />
+              }
+            />
+            {scoreSeries.flatMap(({ score, data, metrics }) =>
+              metrics.map((key) => {
+                const isAccuracy = key.endsWith("_accuracy");
+                return (
+                  <Line
+                    key={`${score.score_id}-${key}`}
+                    data={data}
+                    yAxisId={isAccuracy ? "accuracy" : "alignment"}
+                    type={timelineCurveType}
+                    dataKey={key}
+                    name={`${score.score_name} ${chartConfig[key].label}`}
+                    stroke={chartConfig[key].color}
+                    strokeWidth={1.5}
+                    strokeOpacity={0.62}
+                    strokeDasharray={isAccuracy ? "5 5" : undefined}
+                    dot={
+                      isAccuracy ? (
+                        <SquareDot fill={chartConfig[key].color} />
+                      ) : (
+                        <CircleDot fill={chartConfig[key].color} />
+                      )
+                    }
+                    activeDot={false}
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                );
+              })
+            )}
+          </LineChart>
+        </ChartContainer>
+        <MetricLegend metrics={availableMetricKeys} />
+      </div>
+    </section>
   );
 };
 
@@ -890,7 +1176,7 @@ const ScoreTimelineSection: React.FC<{
                 {availableMetricKeys.includes("feedback_alignment") ? (
                   <Line
                     yAxisId="alignment"
-                    type="monotone"
+                    type={timelineCurveType}
                     dataKey="feedback_alignment"
                     name="Feedback AC1"
                     stroke={chartConfig.feedback_alignment.color}
@@ -904,7 +1190,7 @@ const ScoreTimelineSection: React.FC<{
                 {availableMetricKeys.includes("regression_alignment") ? (
                   <Line
                     yAxisId="alignment"
-                    type="monotone"
+                    type={timelineCurveType}
                     dataKey="regression_alignment"
                     name="Regression AC1"
                     stroke={chartConfig.regression_alignment.color}
@@ -918,7 +1204,7 @@ const ScoreTimelineSection: React.FC<{
                 {availableMetricKeys.includes("feedback_accuracy") ? (
                   <Line
                     yAxisId="accuracy"
-                    type="monotone"
+                    type={timelineCurveType}
                     dataKey="feedback_accuracy"
                     name="Feedback Accuracy"
                     stroke={chartConfig.feedback_accuracy.color}
@@ -933,7 +1219,7 @@ const ScoreTimelineSection: React.FC<{
                 {availableMetricKeys.includes("regression_accuracy") ? (
                   <Line
                     yAxisId="accuracy"
-                    type="monotone"
+                    type={timelineCurveType}
                     dataKey="regression_accuracy"
                     name="Regression Accuracy"
                     stroke={chartConfig.regression_accuracy.color}
@@ -1077,18 +1363,22 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
   const subtitle = output.scorecard_name || output.block_description;
 
   const sharedXDomain = React.useMemo<[number, number] | undefined>(() => {
-    const start = output.date_range?.start ? new Date(output.date_range.start).getTime() : NaN;
+    const rangeStart = output.date_range?.start ? new Date(output.date_range.start).getTime() : NaN;
     const end = output.date_range?.end ? new Date(output.date_range.end).getTime() : NaN;
-    if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
-      return [start, end];
-    }
     const timestamps = scores.flatMap((score) =>
       (score.points || [])
         .map((point) => new Date(point.entered_at).getTime())
         .filter((value) => Number.isFinite(value))
     );
-    if (!timestamps.length) return undefined;
-    return [Math.min(...timestamps), Math.max(...timestamps)];
+    if (timestamps.length) {
+      const activityStart = Math.min(...timestamps);
+      const activityEnd = Math.max(...timestamps);
+      return [activityStart, Number.isFinite(end) && end > activityStart ? end : activityEnd];
+    }
+    if (Number.isFinite(rangeStart) && Number.isFinite(end) && end > rangeStart) {
+      return [rangeStart, end];
+    }
+    return undefined;
   }, [output.date_range?.end, output.date_range?.start, scores]);
 
   if ((isProcessing || isLoadingCompactedOutput) && !hasResolvedData) {
@@ -1150,6 +1440,8 @@ const ScoreChampionVersionTimeline: React.FC<ReportBlockProps> = (props) => {
             <div className="text-xl font-semibold">{formatInteger(output.summary?.score_result_count)}</div>
           </div>
         </div>
+
+        <CombinedTimelineSection scores={scores} xDomain={sharedXDomain} />
 
         {scores.length > 0 ? (
           <div className="space-y-4">

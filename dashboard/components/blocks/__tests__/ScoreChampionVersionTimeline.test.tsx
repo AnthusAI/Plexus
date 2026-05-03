@@ -48,11 +48,33 @@ jest.mock("recharts", () => ({
           offset: { top: 0, height: 100 },
         } as any)
       : null,
-  Line: ({ dataKey, yAxisId, strokeDasharray }: any) => (
-    <g data-testid={`line-${dataKey}`} data-y-axis-id={yAxisId} data-stroke-dasharray={strokeDasharray || ""} />
+  Line: ({ data, dataKey, yAxisId, name, activeDot, strokeDasharray, strokeOpacity }: any) => (
+    <g
+      data-testid={`line-${dataKey}`}
+      data-line-name={name || ""}
+      data-y-axis-id={yAxisId}
+      data-point-count={Array.isArray(data) ? data.length : ""}
+      data-active-dot={activeDot === false ? "false" : "true"}
+      data-stroke-dasharray={strokeDasharray || ""}
+      data-stroke-opacity={strokeOpacity || ""}
+    />
   ),
   LineChart: ({ children }: any) => <svg data-testid="line-chart">{children}</svg>,
-  Tooltip: () => null,
+  Tooltip: ({ content }: any) => {
+    const isCombined =
+      React.isValidElement(content) && (content.type as any).displayName === "CombinedTimelineTooltip";
+    return (
+      <div data-testid="chart-tooltip">
+        {React.isValidElement(content)
+          ? React.cloneElement(content, {
+              active: isCombined,
+              label: new Date("2026-04-12T12:00:00+00:00").getTime(),
+              payload: [],
+            } as any)
+          : null}
+      </div>
+    );
+  },
   XAxis: ({ domain }: any) => <g data-testid="x-axis" data-domain={Array.isArray(domain) ? domain.join(",") : ""} />,
   YAxis: () => null,
 }));
@@ -90,7 +112,7 @@ describe("ScoreChampionVersionTimeline", () => {
       scores_analyzed: 2,
       scores_with_champion_changes: 2,
       scores_with_new_champions: 0,
-      champion_change_count: 2,
+      champion_change_count: 3,
       new_champion_count: 0,
       procedure_count: 3,
       evaluation_count: 4,
@@ -145,8 +167,23 @@ describe("ScoreChampionVersionTimeline", () => {
             regression_evaluation_id: null,
             regression_metrics: null,
           },
+          {
+            point_index: 1,
+            label: "2026-04-12",
+            entered_at: "2026-04-12T12:00:00+00:00",
+            version_id: "version-1b",
+            previous_champion_version_id: "version-1",
+            feedback_evaluation_id: "eval-feedback-1b",
+            feedback_metrics: {
+              alignment: 0.86,
+              accuracy: 88,
+              evaluation_id: "eval-feedback-1b",
+            },
+            regression_evaluation_id: null,
+            regression_metrics: null,
+          },
         ],
-        champion_change_count: 1,
+        champion_change_count: 2,
         new_champion_count: 0,
         diff: {
           left_version_id: "version-0",
@@ -172,14 +209,18 @@ describe("ScoreChampionVersionTimeline", () => {
         points: [
           {
             point_index: 0,
-            label: "2026-04-20",
-            entered_at: "2026-04-20T12:00:00+00:00",
+            label: "2026-04-12",
+            entered_at: "2026-04-12T18:00:00+00:00",
             version_id: "version-2",
             previous_champion_version_id: "version-1",
             feedback_evaluation_id: null,
             feedback_metrics: null,
-            regression_evaluation_id: null,
-            regression_metrics: null,
+            regression_evaluation_id: "eval-regression",
+            regression_metrics: {
+              alignment: 0.45,
+              accuracy: 70,
+              evaluation_id: "eval-regression",
+            },
           },
         ],
         champion_change_count: 1,
@@ -213,15 +254,18 @@ describe("ScoreChampionVersionTimeline", () => {
     expect(screen.getByTestId("report-subtitle")).toHaveClass("text-lg");
     expect(screen.getByTestId("report-subtitle")).toHaveClass("font-semibold");
     expect(screen.queryByText("Scorecard: Scorecard A")).not.toBeInTheDocument();
-    expect(screen.getByText("Score 1")).toBeInTheDocument();
-    expect(screen.getByText("Score 2")).toBeInTheDocument();
+    expect(screen.getAllByText("Score 1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Score 2").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("combined-champion-timeline")).toBeInTheDocument();
+    expect(screen.getByText("Combined Champion Timeline")).toBeInTheDocument();
+    expect(screen.getByText("3 champion changes across 2 scores")).toBeInTheDocument();
     expect(screen.getByText("$2.50")).toBeInTheDocument();
     expect(screen.getByText("120")).toBeInTheDocument();
     expect(screen.getByText("$1.50")).toBeInTheDocument();
     expect(screen.getByText("$1.00")).toBeInTheDocument();
     expect(screen.queryByText("Evaluation Record Cost")).not.toBeInTheDocument();
     expect(screen.queryByText(/Eval records:/)).not.toBeInTheDocument();
-    expect(screen.getAllByTestId("chart-container")).toHaveLength(2);
+    expect(screen.getAllByTestId("chart-container")).toHaveLength(3);
     expect(screen.getByText("Performance Improvement")).toBeInTheDocument();
     expect(screen.getByText("Feedback dataset")).toBeInTheDocument();
     expect(screen.getAllByText("+0.270").length).toBeGreaterThan(0);
@@ -236,20 +280,59 @@ describe("ScoreChampionVersionTimeline", () => {
     expect(screen.getByTestId("gauge-accuracy")).toHaveAttribute("data-min", "0");
     expect(screen.getByTestId("gauge-accuracy")).toHaveAttribute("data-max", "100");
     expect(screen.queryByTestId("line-timeline_marker")).not.toBeInTheDocument();
-    expect(screen.getAllByTestId("champion-transition-marker-layer")).toHaveLength(2);
-    expect(screen.getAllByTestId("champion-transition-marker")).toHaveLength(2);
+    expect(screen.getAllByTestId("champion-transition-marker-layer")).toHaveLength(3);
+    expect(screen.getAllByTestId("champion-transition-marker")).toHaveLength(6);
+    expect(screen.getAllByTestId("chart-tooltip")).toHaveLength(3);
+    const combinedTooltip = screen.getByTestId("combined-timeline-tooltip");
+    expect(combinedTooltip).toHaveTextContent("2 champion changes");
+    expect(combinedTooltip).toHaveTextContent("Score 1");
+    expect(combinedTooltip).toHaveTextContent("Score 2");
+    expect(combinedTooltip).toHaveTextContent("A 0.820 +0.040 -> 0.860");
+    expect(combinedTooltip).toHaveTextContent("Acc 84.0% +4.0 pts -> 88.0%");
+    expect(combinedTooltip).toHaveTextContent("A N/A -> 0.450");
+    expect(combinedTooltip).toHaveTextContent("Acc N/A -> 70.0%");
+    expect(screen.getAllByTestId("champion-transition-marker-layer")[0].getAttribute("pointer-events")).toBe("none");
+    expect(screen.getAllByTestId("champion-transition-marker-layer")[0].querySelector("title")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("width", "20");
     expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("height", "8");
     expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveAttribute("y", "130");
     expect(screen.getAllByTestId("champion-transition-marker")[0]).toHaveClass("fill-card");
     expect(screen.getAllByTestId("champion-transition-marker")[0]).not.toHaveClass("opacity-70");
     expect(screen.getAllByTestId("champion-transition-marker")[0]).not.toHaveAttribute("fill", "hsl(var(--foreground))");
-    expect(screen.getByTestId("line-feedback_alignment")).toHaveAttribute("data-y-axis-id", "alignment");
-    expect(screen.getByTestId("line-feedback_accuracy")).toHaveAttribute("data-y-axis-id", "accuracy");
-    expect(screen.getByTestId("line-feedback_accuracy")).toHaveAttribute("data-stroke-dasharray", "5 5");
-    expect(screen.queryByTestId("line-regression_alignment")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("line-regression_accuracy")).not.toBeInTheDocument();
+    const feedbackAlignmentLines = screen.getAllByTestId("line-feedback_alignment");
+    const feedbackAccuracyLines = screen.getAllByTestId("line-feedback_accuracy");
+    const regressionAlignmentLines = screen.getAllByTestId("line-regression_alignment");
+    const regressionAccuracyLines = screen.getAllByTestId("line-regression_accuracy");
+    expect(feedbackAlignmentLines.length).toBeGreaterThanOrEqual(2);
+    expect(feedbackAccuracyLines.length).toBeGreaterThanOrEqual(2);
+    expect(regressionAlignmentLines.length).toBeGreaterThanOrEqual(1);
+    expect(regressionAccuracyLines.length).toBeGreaterThanOrEqual(1);
+    expect(feedbackAlignmentLines[0]).toHaveAttribute("data-line-name", "Score 1 Feedback AC1");
+    expect(feedbackAlignmentLines[0]).toHaveAttribute("data-y-axis-id", "alignment");
+    expect(feedbackAlignmentLines[0]).toHaveAttribute("data-point-count", "2");
+    expect(feedbackAlignmentLines[0]).toHaveAttribute("data-active-dot", "false");
+    expect(feedbackAccuracyLines[0]).toHaveAttribute("data-line-name", "Score 1 Feedback Accuracy");
+    expect(feedbackAccuracyLines[0]).toHaveAttribute("data-y-axis-id", "accuracy");
+    expect(feedbackAccuracyLines[0]).toHaveAttribute("data-stroke-dasharray", "5 5");
+    expect(feedbackAccuracyLines[0]).toHaveAttribute("data-active-dot", "false");
+    expect(regressionAlignmentLines[0]).toHaveAttribute("data-line-name", "Score 2 Regression AC1");
+    expect(regressionAccuracyLines[0]).toHaveAttribute("data-line-name", "Score 2 Regression Accuracy");
     expect(screen.queryByText("Select score")).not.toBeInTheDocument();
+  });
+
+  it("does not render the combined timeline for a single score", () => {
+    render(
+      <ScoreChampionVersionTimeline
+        {...baseProps}
+        output={{
+          ...output,
+          scores: [output.scores[0]],
+        }}
+      />
+    );
+
+    expect(screen.queryByTestId("combined-champion-timeline")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("chart-container")).toHaveLength(1);
   });
 
   it("keeps version tables sized to their row content", () => {
@@ -294,10 +377,11 @@ describe("ScoreChampionVersionTimeline", () => {
     render(<ScoreChampionVersionTimeline {...baseProps} />);
 
     const expectedDomain = [
-      new Date(output.date_range.start).getTime(),
+      new Date("2026-04-10T12:00:00+00:00").getTime(),
       new Date(output.date_range.end).getTime(),
     ].join(",");
     expect(screen.getAllByTestId("x-axis").map((axis) => axis.getAttribute("data-domain"))).toEqual([
+      expectedDomain,
       expectedDomain,
       expectedDomain,
     ]);
@@ -430,11 +514,11 @@ describe("ScoreChampionVersionTimeline", () => {
       />
     );
 
-    await waitFor(() => expect(screen.getByText("Score 1")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Score 1").length).toBeGreaterThan(0));
     expect(screen.getByText("Scorecard A")).toBeInTheDocument();
     expect(screen.queryByText("Scorecard: Scorecard A")).not.toBeInTheDocument();
-    expect(screen.getByText("Score 1")).toBeInTheDocument();
-    expect(screen.getByText("Score 2")).toBeInTheDocument();
+    expect(screen.getAllByText("Score 1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Score 2").length).toBeGreaterThan(0);
     expect(mockDownloadData).toHaveBeenCalledWith({
       path: "reportblocks/block-1/output-block-1.json",
       options: { bucket: "reportBlockDetails" },
