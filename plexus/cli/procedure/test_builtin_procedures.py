@@ -50,13 +50,15 @@ def test_builtin_console_procedure_prompt_teaches_docs_primitives():
     # namespace so future prompt edits cannot silently drop them.
     assert "mcp.execute-tactus-overview" in system_prompt
     assert "score-authoring" in system_prompt
+    assert "plexus.scorecards.search" in system_prompt
+    assert "plexus.score.search" in system_prompt
 
 
 def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
     # Bumped when the prompt added the docs.* discovery guidance.
-    assert parsed["version"] == "1.5.0"
+    assert parsed["version"] == "1.6.0"
 
 
 def test_is_builtin_procedure_id():

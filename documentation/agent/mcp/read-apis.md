@@ -22,6 +22,13 @@ to use freely.
 - `scorecards{ ... }` (alias for `plexus.scorecards.list`) — list all
   scorecards visible to the active account. Returns rows with `id`,
   `key`, `name`, `externalId`, `description`, `createdAt`, `updatedAt`.
+- `scorecards_search{ query = "..." }` (alias for `plexus.scorecards.search`)
+  — fuzzy rank scorecards by `name`, `key`, `externalId`, and
+  `description` using RapidFuzz `WRatio`. Args: `query` (or `q` / `name`),
+  `limit` (default 20), `min_score` 0–100 (default 55),
+  `scorecard_limit` / `fetch_limit` for how many rows to pull from
+  GraphQL before ranking (default 1000). Returns `matches` with
+  `match_score`, `matched_choice`, and a nested `scorecard` object.
 - `scorecard{ id = "..." }` (alias for `plexus.scorecards.info`) — fetch
   a single scorecard with its sections and scores. Accepts `id`, `name`,
   `key`, or `external_id`.
@@ -35,12 +42,26 @@ for _, card in ipairs(cards) do
 end
 ```
 
+```tactus
+return scorecards_search{ query = "HCS medium", limit = 5, min_score = 55 }
+```
+
 ## Scores
 
 - `score{ id = "..." }` (alias for `plexus.score.info`) — fetch score
   details, champion version, and version history. Accepts `id`, `name`,
   `key`, `external_id`, or `score_id` (with optional `scorecard_id`,
   `scorecard_name`, `scorecard_key` to disambiguate).
+- `score_search{ query = "..." }` (alias for `plexus.score.search`) —
+  fuzzy rank **scores across scorecards** (or within one scorecard when
+  `scorecard` / `scorecard_identifier` is set). Each candidate string
+  combines score name, key, external id, scorecard name, and section
+  name so similarly named scores in different scorecards stay
+  distinguishable. Args: `query` (or `q` / `name`), `limit` (default 30),
+  `min_score` (default 55), `scorecard_limit` for account-wide search
+  (default 100 — number of scorecards loaded from GraphQL before
+  flattening). Returns `matches` with `match_score`, `matched_choice`,
+  `score_id`, `scorecard_id`, `section_name`, etc.
 - `score_evaluations{ id = "..." }` — list recent evaluations for a
   score.
 
@@ -50,6 +71,10 @@ return {
   champion_version_id = detail.championVersionId,
   recent_evaluations = score_evaluations{ id = detail.id, limit = 5 },
 }
+```
+
+```tactus
+return score_search{ query = "refund", limit = 15, min_score = 55 }
 ```
 
 ## Items
