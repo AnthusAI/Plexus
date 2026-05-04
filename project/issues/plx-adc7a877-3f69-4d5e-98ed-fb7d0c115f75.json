@@ -1,0 +1,27 @@
+{
+  "id": "plx-adc7a877-3f69-4d5e-98ed-fb7d0c115f75",
+  "title": "Add RapidFuzz scorecard and score search to execute_tactus",
+  "description": "Implement plexus.scorecards.search and plexus.score.search in MCP/tools/tactus_runtime/execute.py using rapidfuzz.process.extract + WRatio. Score search ranks scores across scorecards (configurable scorecard_limit). Wire DIRECT_HANDLERS, HELPER_BINDINGS, optional ctor injectors. Unit tests with monkeypatched GraphQL. Update documentation/agent/mcp/read-apis.md and console builtin prompt (v1.6.0).",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [
+    "feature"
+  ],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a71faeb1-9db8-48f0-9b1d-9d8c9de34337",
+      "author": "ryan",
+      "text": "Shipped: plexus.scorecards.search + plexus.score.search in execute.py (RapidFuzz WRatio). DIRECT_HANDLERS, HELPER_BINDINGS, ctor injectors scorecards_searcher/score_searcher. Unit tests for ranking, cross-scorecard filter, facade loopback, wrap snippet. Console builtin 1.6.0 prompt + read-apis.md + EXECUTE_TACTUS_DESCRIPTION. 114 pytest green (execute_test + test_builtin_procedures).",
+      "created_at": "2026-05-04T13:57:29.426587Z"
+    }
+  ],
+  "created_at": "2026-05-04T13:53:33.441404Z",
+  "updated_at": "2026-05-04T13:57:33.355780Z",
+  "closed_at": "2026-05-04T13:57:33.355780Z",
+  "custom": {}
+}
