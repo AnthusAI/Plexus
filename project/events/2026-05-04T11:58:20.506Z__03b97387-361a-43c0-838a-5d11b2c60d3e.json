@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "03b97387-361a-43c0-838a-5d11b2c60d3e",
+  "issue_id": "plx-4fb5d106-964b-4b5f-9536-d0120a8ac463",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-04T11:58:20.506Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Move/rewrite content currently in plexus/docs/, AGENTS.md, CLAUDE.md, .cursor/rules, MCP/plexus-mcp.md, and skills under documentation/agent/<namespace>/<topic>.md with YAML frontmatter (id, title, summary, namespace, status, tags, related, disclosure).",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-db0bd97a-4034-49d6-a5f9-ac13a34e8dfd",
+    "priority": 2,
+    "status": "open",
+    "title": "Migrate canonical agent docs into documentation/agent namespaced layout"
+  }
+}

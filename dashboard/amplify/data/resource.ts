@@ -23,7 +23,7 @@ type ScoreIndexFields = "name" | "order" | "sectionId" | "type" | "accuracy" |
 type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" | 
     "scoreId" | "status" | "updatedAt" | "createdAt" | "startedAt" | "elapsedSeconds" | 
     "estimatedRemainingSeconds" | "totalItems" | "processedItems" | "errorMessage" | 
-    "scoreGoal" | "metricsExplanation" | "inferences" | "cost";
+    "scoreGoal" | "metricsExplanation" | "inferences" | "cost" | "createdByUserId";
 type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
     "status" | "modelProvider" | "modelName";
 type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation" | "createdByType";
@@ -36,9 +36,9 @@ type TaskIndexFields = "accountId" | "type" | "status" | "target" |
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
 type TaskStageIndexFields = "taskId" | "name" | "order" | "status";
 type ShareLinkIndexFields = "token" | "resourceId" | "accountId";
-type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured";
+type ScoreVersionIndexFields = "scoreId" | "versionNumber" | "isFeatured" | "createdByUserId";
 type ReportConfigurationIndexFields = "accountId" | "name";
-type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId";
+type ReportIndexFields = "accountId" | "reportConfigurationId" | "createdAt" | "updatedAt" | "taskId" | "createdByUserId";
 type ReportBlockIndexFields = "reportId" | "name" | "position" | "dataSetId";
 type FeedbackItemIndexFields = "accountId" | "scorecardId" | "scoreId" | "cacheKey" | "updatedAt" | "itemId" | "editedAt";
 type ScorecardExampleItemIndexFields = "scorecardId" | "itemId" | "addedAt";
@@ -47,7 +47,7 @@ type AggregatedMetricsIndexFields = "accountId" | "compositeKey" | "scorecardId"
 type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | "key" | "createdAt" | "updatedAt";
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
-type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "updatedAt" | "createdAt" | "category" | "version" | "status";
+type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "updatedAt" | "createdAt" | "category" | "version" | "status" | "createdByUserId";
 type ProcedureScoreVersionIndexFields = "procedureId" | "scoreVersionId" | "updatedAt";
 
 // New index types for Feedback Alignment
@@ -89,6 +89,21 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: AccountIndexFields) => any) => [
             idx("key")
+        ]),
+
+    User: a
+        .model({
+            email: a.string().required(),
+            displayName: a.string(),
+            createdAt: a.datetime().required(),
+            updatedAt: a.datetime().required(),
+            evaluations: a.hasMany('Evaluation', 'createdByUserId'),
+            procedures: a.hasMany('Procedure', 'createdByUserId'),
+            reports: a.hasMany('Report', 'createdByUserId'),
+            scoreVersions: a.hasMany('ScoreVersion', 'createdByUserId')
+        })
+        .authorization((allow) => [
+            allow.authenticated()
         ]),
 
     Scorecard: a
@@ -201,6 +216,8 @@ const schema = a.schema({
             note: a.string(),
             branch: a.string(),
             metadata: a.json(),
+            createdByUserId: a.string(),
+            createdByUser: a.belongsTo('User', 'createdByUserId'),
             scoreResults: a.hasMany('ScoreResult', 'scoreVersionId'),
             scoresAsChampion: a.hasMany('Score', 'championVersionId'),
             parentVersionId: a.string(),
@@ -217,7 +234,8 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx) => [
             idx("scoreId").sortKeys(["createdAt"]),
-            idx("scoreId").sortKeys(["isFeatured", "createdAt"]).name("byScoreIdAndIsFeaturedAndCreatedAt")
+            idx("scoreId").sortKeys(["isFeatured", "createdAt"]).name("byScoreIdAndIsFeaturedAndCreatedAt"),
+            idx("createdByUserId")
         ]),
 
     Evaluation: a
@@ -259,7 +277,9 @@ const schema = a.schema({
             isPredictedClassDistributionBalanced: a.boolean(),
             taskId: a.string(),
             task: a.belongsTo('Task', 'taskId'),
-            universalCode: a.string()
+            universalCode: a.string(),
+            createdByUserId: a.string(),
+            createdByUser: a.belongsTo('User', 'createdByUserId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -270,7 +290,8 @@ const schema = a.schema({
             idx("accountId").sortKeys(["updatedAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
-            idx("scoreVersionId").sortKeys(["createdAt"])
+            idx("scoreVersionId").sortKeys(["createdAt"]),
+            idx("createdByUserId" as EvaluationIndexFields)
         ]),
 
     BatchJob: a
@@ -622,6 +643,8 @@ const schema = a.schema({
             updatedAt: a.datetime().required(),
             taskId: a.string(),
             task: a.belongsTo('Task', 'taskId'),
+            createdByUserId: a.string(),
+            createdByUser: a.belongsTo('User', 'createdByUserId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -630,7 +653,8 @@ const schema = a.schema({
         .secondaryIndexes((idx: (field: ReportIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
             idx("reportConfigurationId").sortKeys(["createdAt"]),
-            idx("taskId")
+            idx("taskId"),
+            idx("createdByUserId")
         ]),
 
     ReportBlock: a
@@ -885,6 +909,8 @@ const schema = a.schema({
             scoreVersionLinks: a.hasMany('ProcedureScoreVersion', 'procedureId'),
             chatSessions: a.hasMany('ChatSession', 'procedureId'),
             chatMessages: a.hasMany('ChatMessage', 'procedureId'),
+            createdByUserId: a.string(),
+            createdByUser: a.belongsTo('User', 'createdByUserId'),
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -897,7 +923,8 @@ const schema = a.schema({
             idx("scoreVersionId").sortKeys(["updatedAt"]),
             idx("parentProcedureId").sortKeys(["updatedAt"]),
             idx("category").sortKeys(["version"]).name("byCategory"),
-            idx("status").sortKeys(["updatedAt"]).name("byStatus")
+            idx("status").sortKeys(["updatedAt"]).name("byStatus"),
+            idx("createdByUserId")
         ]),
 
     ProcedureScoreVersion: a
@@ -953,6 +980,7 @@ const schema = a.schema({
         .model({
             accountId: a.string(),
             account: a.belongsTo('Account', 'accountId'),
+            createdByUserId: a.string(),
             sessionId: a.string().required(),
             session: a.belongsTo('ChatSession', 'sessionId'),
             procedureId: a.string(),

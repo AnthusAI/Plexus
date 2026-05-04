@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "db9b4185-29b6-4618-a3d4-ff2fd378fde6",
+  "issue_id": "plx-6da013ed-9839-4f76-b0bb-a8d0c128e817",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-04T20:22:46.075Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Update ScoreChampionVersionTimeline chart styling so regression dataset series use the same colors as feedback series and lower opacity instead of dashed lines. Update focused tests and run the ScoreChampionVersionTimeline test.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Use opacity for regression series in champion timeline charts"
+  }
+}

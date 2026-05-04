@@ -23,7 +23,14 @@ logger = logging.getLogger(__name__)
 
 
 PLEXUS_DOCS_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "plexus", "docs")
+    os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "..",
+        "documentation",
+        "agent",
+    )
 )
 
 PLEXUS_TACTUS_TRACE_DIR_DEFAULT = os.path.normpath(
@@ -255,7 +262,9 @@ def _safe_write_trace(store: TactusTraceStore, record: dict[str, Any]) -> None:
 HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("scorecards_list", "scorecards", "list"),
     ("scorecards_info", "scorecards", "info"),
+    ("scorecards_search", "scorecards", "search"),
     ("score_info", "score", "info"),
+    ("score_search", "score", "search"),
     ("score_evaluations", "score", "evaluations"),
     ("score_predict", "score", "predict"),
     ("score_contradictions", "score", "contradictions"),
@@ -351,7 +360,9 @@ MCP_TOOL_MAP: dict[tuple[str, str], str] = {}
 DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("scorecards", "list"): "_call_scorecards",
     ("scorecards", "info"): "_call_scorecards",
+    ("scorecards", "search"): "_call_scorecards",
     ("score", "info"): "_call_score",
+    ("score", "search"): "_call_score",
     ("score", "evaluations"): "_call_score",
     ("score", "predict"): "_call_score",
     ("score", "contradictions"): "_call_score",
@@ -555,6 +566,319 @@ def _default_scorecards_info(args: dict[str, Any]) -> dict[str, Any]:
             "updatedAt": data.get("updatedAt"),
         },
         "sections": data.get("sections"),
+    }
+
+
+def _search_query_string(args: dict[str, Any]) -> str:
+    raw = args.get("query") or args.get("q") or args.get("name")
+    if raw is None:
+        return ""
+    text = str(raw).strip()
+    return text
+
+
+def _default_scorecards_search(args: dict[str, Any]) -> dict[str, Any]:
+    """Fuzzy-search scorecards by name, key, and externalId (RapidFuzz WRatio)."""
+
+    import json as _json
+
+    from rapidfuzz import fuzz, process
+
+    from plexus.cli.shared.client_utils import create_client
+    from shared.utils import get_default_account_id
+
+    query = _search_query_string(args)
+    if not query:
+        raise ValueError(
+            "plexus.scorecards.search requires query (or q / name)"
+        )
+
+    try:
+        result_limit = int(args.get("limit") or 20)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"plexus.scorecards.search limit must be an integer, got {args.get('limit')!r}"
+        ) from exc
+    if result_limit < 1:
+        raise ValueError("plexus.scorecards.search limit must be a positive integer")
+
+    try:
+        min_score = float(args.get("min_score") if args.get("min_score") is not None else 55.0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"plexus.scorecards.search min_score must be a number, got {args.get('min_score')!r}"
+        ) from exc
+
+    try:
+        fetch_limit = int(args.get("scorecard_limit") or args.get("fetch_limit") or 1000)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "plexus.scorecards.search scorecard_limit must be an integer"
+        ) from exc
+    if fetch_limit < 1:
+        raise ValueError(
+            "plexus.scorecards.search scorecard_limit must be a positive integer"
+        )
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.scorecards.search: could not create dashboard client")
+
+    filter_parts: list[str] = []
+    default_account_id = get_default_account_id()
+    if default_account_id:
+        filter_parts.append(f'accountId: {{ eq: "{default_account_id}" }}')
+    filter_str = ", ".join(filter_parts)
+    gql = (
+        "query ListScorecardsForSearch { "
+        f"listScorecards(filter: {{ {filter_str} }}, limit: {fetch_limit}) {{ "
+        "items { id name key description externalId createdAt updatedAt } "
+        "nextToken } }"
+    )
+    response = client.execute(gql)
+    if "errors" in response:
+        raise RuntimeError(
+            "plexus.scorecards.search dashboard error: "
+            + _json.dumps(response["errors"])
+        )
+    items = (response.get("listScorecards") or {}).get("items") or []
+
+    choices: list[str] = []
+    metas: list[dict[str, Any]] = []
+    for row in items:
+        name = str(row.get("name") or "")
+        key = str(row.get("key") or "")
+        ext = str(row.get("externalId") or "")
+        desc = str(row.get("description") or "")
+        choice = " ".join(part for part in (name, key, ext, desc) if part).strip()
+        if not choice:
+            choice = str(row.get("id") or "")
+        choices.append(choice)
+        metas.append(row)
+
+    if not choices:
+        return {
+            "success": True,
+            "query": query,
+            "count": 0,
+            "matches": [],
+            "message": "No scorecards available to search",
+        }
+
+    extracted = process.extract(
+        query,
+        choices,
+        scorer=fuzz.WRatio,
+        limit=len(choices),
+    )
+    hits: list[dict[str, Any]] = []
+    for _choice_text, score, idx in extracted:
+        if float(score) < min_score:
+            continue
+        row = metas[idx]
+        hits.append(
+            {
+                "match_score": float(score),
+                "matched_choice": choices[idx],
+                "scorecard": {
+                    "id": row.get("id"),
+                    "name": row.get("name"),
+                    "key": row.get("key"),
+                    "externalId": row.get("externalId"),
+                    "description": row.get("description"),
+                    "createdAt": row.get("createdAt"),
+                    "updatedAt": row.get("updatedAt"),
+                },
+            }
+        )
+        if len(hits) >= result_limit:
+            break
+
+    return {
+        "success": True,
+        "query": query,
+        "count": len(hits),
+        "matches": hits,
+    }
+
+
+def _default_score_search(args: dict[str, Any]) -> dict[str, Any]:
+    """Fuzzy-search scores by name (and key / externalId) across scorecards."""
+
+    import json as _json
+
+    from rapidfuzz import fuzz, process
+
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    from plexus.cli.scorecard.scorecards import resolve_scorecard_identifier
+    from plexus.cli.shared.client_utils import create_client
+
+    query = _search_query_string(args)
+    if not query:
+        raise ValueError("plexus.score.search requires query (or q / name)")
+
+    try:
+        result_limit = int(args.get("limit") or 30)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"plexus.score.search limit must be an integer, got {args.get('limit')!r}"
+        ) from exc
+    if result_limit < 1:
+        raise ValueError("plexus.score.search limit must be a positive integer")
+
+    try:
+        min_score = float(args.get("min_score") if args.get("min_score") is not None else 55.0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"plexus.score.search min_score must be a number, got {args.get('min_score')!r}"
+        ) from exc
+
+    try:
+        scorecard_fetch_limit = int(
+            args.get("scorecard_limit") or args.get("fetch_limit") or 100
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "plexus.score.search scorecard_limit must be an integer"
+        ) from exc
+    if scorecard_fetch_limit < 1:
+        raise ValueError(
+            "plexus.score.search scorecard_limit must be a positive integer"
+        )
+
+    scorecard_identifier = (
+        args.get("scorecard_identifier")
+        or args.get("scorecard")
+        or args.get("scorecard_id")
+        or args.get("scorecard_name")
+    )
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.score.search: could not create dashboard client")
+
+    scorecards: list[dict[str, Any]] = []
+    if scorecard_identifier:
+        scorecard_id = resolve_scorecard_identifier(client, str(scorecard_identifier))
+        if not scorecard_id:
+            raise ValueError(
+                f"plexus.score.search: scorecard {scorecard_identifier!r} not found"
+            )
+        result = client.execute(
+            f"""query GetScorecardWithScores {{
+                getScorecard(id: "{scorecard_id}") {{
+                    id name key
+                    sections {{ items {{ id name scores {{ items {{
+                        id name key externalId description type
+                        championVersionId isDisabled
+                    }} }} }} }}
+                }}
+            }}"""
+        )
+        if "errors" in result:
+            raise RuntimeError(
+                "plexus.score.search dashboard error: "
+                + _json.dumps(result["errors"])
+            )
+        one = result.get("getScorecard")
+        if one:
+            scorecards = [one]
+    else:
+        account_id = resolve_account_id_for_command(client, None)
+        if not account_id:
+            raise RuntimeError(
+                "plexus.score.search: no default account — is PLEXUS_ACCOUNT_KEY set?"
+            )
+        result = client.execute(
+            f"""query ListScorecardsForScoreSearch {{
+                listScorecards(filter: {{ accountId: {{ eq: "{account_id}" }} }}, limit: {scorecard_fetch_limit}) {{
+                    items {{
+                        id name key
+                        sections {{ items {{ id name scores {{ items {{
+                            id name key externalId description type
+                            championVersionId isDisabled
+                        }} }} }} }}
+                    }}
+                }}
+            }}"""
+        )
+        if "errors" in result:
+            raise RuntimeError(
+                "plexus.score.search dashboard error: "
+                + _json.dumps(result["errors"])
+            )
+        scorecards = result.get("listScorecards", {}).get("items") or []
+
+    choices: list[str] = []
+    metas: list[dict[str, Any]] = []
+    for scorecard in scorecards:
+        sc_name = str(scorecard.get("name") or "")
+        sc_id = str(scorecard.get("id") or "")
+        for section in scorecard.get("sections", {}).get("items", []) or []:
+            sec_name = str(section.get("name") or "")
+            for score in section.get("scores", {}).get("items", []) or []:
+                s_name = str(score.get("name") or "")
+                s_key = str(score.get("key") or "")
+                ext = str(score.get("externalId") or "")
+                choice = (
+                    f"{s_name} | key:{s_key} | ext:{ext} | card:{sc_name} | "
+                    f"section:{sec_name}"
+                )
+                choices.append(choice)
+                metas.append(
+                    {
+                        "score": score,
+                        "section_name": sec_name,
+                        "scorecard_id": sc_id,
+                        "scorecard_name": sc_name,
+                    }
+                )
+
+    if not choices:
+        return {
+            "success": True,
+            "query": query,
+            "scorecard_filter": scorecard_identifier,
+            "count": 0,
+            "matches": [],
+            "message": "No scores available to search",
+        }
+
+    extracted = process.extract(
+        query,
+        choices,
+        scorer=fuzz.WRatio,
+        limit=len(choices),
+    )
+    hits: list[dict[str, Any]] = []
+    for _choice_text, score, idx in extracted:
+        if float(score) < min_score:
+            continue
+        meta = metas[idx]
+        sc_row = meta["score"]
+        hits.append(
+            {
+                "match_score": float(score),
+                "matched_choice": choices[idx],
+                "score_id": sc_row.get("id"),
+                "score_name": sc_row.get("name"),
+                "score_key": sc_row.get("key"),
+                "external_id": sc_row.get("externalId"),
+                "section_name": meta["section_name"],
+                "scorecard_id": meta["scorecard_id"],
+                "scorecard_name": meta["scorecard_name"],
+                "is_disabled": sc_row.get("isDisabled", False),
+            }
+        )
+        if len(hits) >= result_limit:
+            break
+
+    return {
+        "success": True,
+        "query": query,
+        "scorecard_filter": scorecard_identifier,
+        "count": len(hits),
+        "matches": hits,
     }
 
 
@@ -806,9 +1130,15 @@ def _default_procedure_chat_messages(args: dict[str, Any]) -> dict[str, Any]:
     tool_responses = 0
     missing_responses = 0
 
+    def _sequence_key(message: dict[str, Any]) -> int:
+        # GraphQL ChatMessage.sequenceNumber may be null, so dict.get(..., 0)
+        # is not enough; coerce explicitly to keep `sorted` total-orderable.
+        seq = message.get("sequenceNumber")
+        return seq if isinstance(seq, int) else 0
+
     for session in sessions:
         messages = session.get("messages", {}).get("items", []) or []
-        messages.sort(key=lambda m: m.get("sequenceNumber", 0))
+        messages.sort(key=_sequence_key)
         session_tool_calls: list[str] = []
         session_tool_responses: list[str] = []
         processed_messages: list[dict[str, Any]] = []
@@ -827,7 +1157,7 @@ def _default_procedure_chat_messages(args: dict[str, Any]) -> dict[str, Any]:
 
             processed_msg: dict[str, Any] = {
                 "id": msg["id"],
-                "sequence_number": msg.get("sequenceNumber", 0),
+                "sequence_number": _sequence_key(msg),
                 "role": role,
                 "message_type": msg_type,
                 "content": parsed_content,
@@ -4544,7 +4874,9 @@ class PlexusRuntimeModule:
         handle_store: TactusHandleStore | None = None,
         scorecards_lister: Callable[[dict[str, Any]], Any] | None = None,
         scorecards_infoer: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        scorecards_searcher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_searcher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_evaluations: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_predict: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_contradictions: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
@@ -4589,7 +4921,15 @@ class PlexusRuntimeModule:
             if scorecards_infoer is not None
             else _default_scorecards_info
         )
+        self._scorecards_searcher = (
+            scorecards_searcher
+            if scorecards_searcher is not None
+            else _default_scorecards_search
+        )
         self._score_info = score_info if score_info is not None else _default_score_info
+        self._score_searcher = (
+            score_searcher if score_searcher is not None else _default_score_search
+        )
         self._score_evaluations = (
             score_evaluations if score_evaluations is not None else _default_score_evaluations
         )
@@ -4751,8 +5091,15 @@ class PlexusRuntimeModule:
 
     def _call_score(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "score" or method not in {
-            "info", "evaluations", "predict", "contradictions", "pull", "update",
-            "test", "set_champion",
+            "info",
+            "search",
+            "evaluations",
+            "predict",
+            "contradictions",
+            "pull",
+            "update",
+            "test",
+            "set_champion",
         }:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
@@ -4763,6 +5110,8 @@ class PlexusRuntimeModule:
             parsed = _args(args)
             if method == "info":
                 return self._score_info(parsed)
+            if method == "search":
+                return self._score_searcher(parsed)
             if method == "evaluations":
                 return self._score_evaluations(parsed)
             if method == "predict":
@@ -4813,7 +5162,7 @@ class PlexusRuntimeModule:
             self._budget.record_after("procedure", method)
 
     def _call_scorecards(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "scorecards" or method not in {"list", "info"}:
+        if namespace != "scorecards" or method not in {"list", "info", "search"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -4823,6 +5172,8 @@ class PlexusRuntimeModule:
             parsed = _args(args)
             if method == "list":
                 return self._scorecards_lister(parsed)
+            if method == "search":
+                return self._scorecards_searcher(parsed)
             return self._scorecards_infoer(parsed)
         finally:
             self._budget.record_after("scorecards", method)
@@ -5313,23 +5664,31 @@ class PlexusRuntimeModule:
 
     def _call_docs(self, namespace: str, method: str, args: Any = None) -> Any:
         if method == "list":
+            parsed = _args(args) if args else {}
+            ns_filter = parsed.get("namespace") if isinstance(parsed, dict) else None
             self._budget.check_before("docs", "list")
             self._record_api_call("docs", "list")
             try:
-                return self._docs_list()
+                return self._docs_list(namespace=ns_filter)
             finally:
                 self._budget.record_after("docs", "list")
         if method == "get":
             parsed = _args(args)
-            key = parsed.get("key") or parsed.get("name") or parsed.get("filename")
+            key = parsed.get("key") or parsed.get("id") or parsed.get("name") or parsed.get("filename")
             if not key:
-                raise ValueError("plexus.docs.get requires key, name, or filename")
+                raise ValueError("plexus.docs.get requires key, id, name, or filename")
             self._budget.check_before("docs", "get")
             self._record_api_call("docs", "get")
             try:
-                return {"key": key, "content": self._docs_read(key)}
+                metadata, body = self._docs_read(key)
             finally:
                 self._budget.record_after("docs", "get")
+            return {
+                "key": key,
+                "id": metadata.get("id", key),
+                "metadata": metadata,
+                "content": body,
+            }
         raise ValueError(f"Unsupported Plexus runtime API: plexus.docs.{method}")
 
     def _call_api(self, namespace: str, method: str, args: Any = None) -> Any:
@@ -5349,54 +5708,32 @@ class PlexusRuntimeModule:
         finally:
             self._budget.record_after("api", "list")
 
-    def _docs_list(self) -> list[str]:
+    def _docs_list(self, namespace: str | None = None) -> list[dict[str, Any]]:
+        from plexus.documentation.repository import DocumentationRepository
+
         if not os.path.isdir(self._docs_dir):
             raise FileNotFoundError(
                 f"Plexus docs directory not found: {self._docs_dir}"
             )
-        entries: list[str] = []
-        for dirpath, _dirnames, filenames in os.walk(self._docs_dir):
-            for name in filenames:
-                stem, ext = os.path.splitext(name)
-                if ext.lower() != ".md" or stem.lower() == "readme":
-                    continue
-                full = os.path.join(dirpath, name)
-                rel = os.path.relpath(full, self._docs_dir)
-                rel_no_ext, _ = os.path.splitext(rel)
-                key = rel_no_ext.replace(os.sep, "/")
-                entries.append(key)
-        return sorted(entries)
+        repo = DocumentationRepository(self._docs_dir)
+        result = repo.list_docs(namespace=namespace)
+        return list(result.entries)
 
-    def _docs_read(self, key: str) -> str:
-        if (
-            key == ""
-            or "\\" in key
-            or key.startswith(".")
-            or key.startswith("/")
-            or ".." in key.split("/")
-        ):
-            raise ValueError(f"Invalid plexus.docs key: {key!r}")
+    def _docs_read(self, key: str) -> tuple[dict[str, Any], str]:
+        from plexus.documentation.repository import (
+            DocumentationRepository,
+            InvalidDocumentationKeyError,
+        )
 
-        nested_path = os.path.normpath(os.path.join(self._docs_dir, f"{key}.md"))
-        docs_root = os.path.normpath(self._docs_dir) + os.sep
-        if not nested_path.startswith(docs_root):
-            raise ValueError(f"Invalid plexus.docs key: {key!r}")
-        if os.path.isfile(nested_path):
-            with open(nested_path, "r", encoding="utf-8") as handle:
-                return handle.read()
-
-        if "/" not in key:
-            for dirpath, _dirnames, filenames in os.walk(self._docs_dir):
-                for name in filenames:
-                    stem, ext = os.path.splitext(name)
-                    if ext.lower() != ".md" or stem.lower() == "readme":
-                        continue
-                    if stem == key:
-                        full = os.path.join(dirpath, name)
-                        with open(full, "r", encoding="utf-8") as handle:
-                            return handle.read()
-
-        raise FileNotFoundError(f"Unknown plexus docs key: {key}")
+        repo = DocumentationRepository(self._docs_dir)
+        try:
+            doc = repo.get_doc(key)
+        except InvalidDocumentationKeyError as exc:
+            message = str(exc)
+            if "Unknown" in message:
+                raise FileNotFoundError(message) from exc
+            raise ValueError(f"Invalid plexus.docs key: {key!r}") from exc
+        return doc.metadata, doc.body
 
 
 def _wrap_tactus_snippet(tactus: str) -> str:
@@ -5775,10 +6112,10 @@ Helper aliases injected before your snippet runs:
   `score_champion_version_timeline`, `dataset`, `report`, `report_configs`,
   `procedure`, `procedures`, `procedure_sessions`, `procedure_messages`,
   `procedure_continue`, `procedure_branch`.
-- Canonical `namespace_method`: `scorecards_list`, `score_info`,
-  `evaluation_info`, `evaluation_run`, `handle_status`, `handle_await`,
-  `handle_cancel`, `docs_list`, `docs_get`, `api_list`, plus one helper
-  per advertised API.
+- Canonical `namespace_method`: `scorecards_list`, `scorecards_search`,
+  `score_info`, `score_search`, `evaluation_info`, `evaluation_run`,
+  `handle_status`, `handle_await`, `handle_cancel`, `docs_list`, `docs_get`,
+  `api_list`, plus one helper per advertised API.
 - Fall back to `plexus.<namespace>.<method>{...}` for anything else.
 
 Examples:
@@ -5792,6 +6129,14 @@ for _, card in ipairs(cards) do
   end
 end
 return { error = { code = "SCORECARD_NOT_FOUND", retryable = false } }
+```
+
+Fuzzy discovery (RapidFuzz `WRatio` — use when names are partial, typo-prone,
+or you need scores ranked across every scorecard):
+```tactus
+return scorecards_search{ query = "HCS medium", limit = 10, min_score = 55 }
+return score_search{ query = "refund", limit = 20, min_score = 55 }
+return score_search{ query = "tone", scorecard = "My Scorecard", limit = 10 }
 ```
 
 2) Inspect a score:
@@ -5814,12 +6159,24 @@ return predict{ score_id = "score_compliance_tone", item_id = "item_1007" }
 evaluate{ score_id = "score_compliance_tone", item_count = 200 }
 ```
 
-6) Discover what's available (always do this when unsure):
+6) Documentation research (progressive disclosure - always do this when
+unsure how a feature works):
+The docs knowledge base is split into two cheap calls.
+`docs_list()` returns only METADATA for every topic (`id`, `title`,
+`summary`, `namespace`, `status`, `disclosure`, `tags`, `related`) - it
+does NOT return markdown bodies, so it is safe to call freely. Pick the
+right `id` from those summaries, then call `docs_get{ id = "..." }` to
+load that one topic's full body. Filter by namespace once you know the
+area. Pair with `api_list()` to see which `plexus.<namespace>.<method>`
+calls exist. Always start a new investigation at the canonical overview:
 ```tactus
-local apis = api_list()
-local topics = docs_list()
-local overview = docs_get{ key = "overview" }
-return { apis = apis, topics = topics, overview = overview.content }
+local apis     = api_list()
+local overview = docs_get{ id = "mcp.execute-tactus-overview" }
+local index    = docs_list{ namespace = "score-authoring" }
+-- pick the entry whose summary matches the question, then:
+local topic    = docs_get{ id = "score-authoring.score-yaml-format" }
+return { apis = apis, overview = overview.content,
+         index = index, topic = topic.content }
 ```
 
 7) Dispatch a long-running report (fire-and-forget, returns a handle immediately):
@@ -5838,11 +6195,19 @@ Then poll, await, or cancel from a later `execute_tactus` call:
 `handle_await{ id = "<id>", timeout = "PT10M" }`,
 `handle_cancel{ id = "<id>" }`.
 
-Read the canonical long form at any time with
-`plexus.docs.get{ key = "overview" }`. Themed docs include `discovery`,
-`read-apis`, `long-running-apis`, `handles-and-budgets`,
-`score-and-dataset-authoring/`, `evaluation-and-feedback/`, `procedures/`,
-`reports/`. Use `plexus.docs.list()` to see every available key.
+Documentation research uses PROGRESSIVE DISCLOSURE in two steps:
+1. `plexus.docs.list{}` (or `docs_list{}`) is cheap and returns only
+   metadata summaries (`id`, `title`, `summary`, `namespace`, `status`,
+   `disclosure`, `tags`, `related`). Browse this first to find the
+   right topic by reading the summaries.
+2. `plexus.docs.get{ id = "<canonical-id>" }` (or
+   `docs_get{ id = "..." }`) then loads the full markdown body for one
+   topic. Use the `id` from step 1 - never invent ids.
+Start every investigation at `mcp.execute-tactus-overview`. Filter the
+index with `plexus.docs.list{ namespace = "<name>" }`. Available
+namespaces: `mcp`, `score-authoring`, `evaluation-feedback`,
+`procedures`, `reports`, `optimizer`, `repo-workflows`. Cite the topic
+ids you used in your reply so the user can re-fetch them.
 
 The response envelope always has `ok`, `value`, `error`, `cost`, `trace_id`,
 `partial`, and `api_calls`.
@@ -5865,7 +6230,7 @@ def register_tactus_tools(mcp: FastMCP) -> None:
                     "(`evaluation.run`, `report.run`, `procedure.run` with "
                     "`async = true`) require an explicit child `budget = { usd, "
                     "wallclock_seconds, depth, tool_calls }`. Read "
-                    "`plexus.docs.get{ key = \"overview\" }` for the full guide."
+                    "`plexus.docs.get{ key = \"mcp.execute-tactus-overview\" }` for the full guide."
                 )
             ),
         ],

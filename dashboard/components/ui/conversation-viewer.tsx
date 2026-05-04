@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { getClient } from '@/utils/data-operations'
 import { formatAmplifyError } from '@/utils/amplify-client'
+import { getCurrentUserAttribution } from '@/utils/user-profile'
 import {
   Conversation,
   ConversationEmptyState,
@@ -682,6 +683,33 @@ const isAssistantChatMessage = (message: ChatMessage): boolean => (
     || message.humanInteraction === 'CHAT'
   )
 )
+
+const getStreamingState = (metadata: unknown): string | null => {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null
+  }
+  const streaming = (metadata as Record<string, unknown>).streaming
+  if (!streaming || typeof streaming !== 'object' || Array.isArray(streaming)) {
+    return null
+  }
+  const state = (streaming as Record<string, unknown>).state
+  return typeof state === 'string' ? state.toLowerCase() : null
+}
+
+const shouldIgnoreRegressiveAssistantUpdate = (previous: ChatMessage, incoming: ChatMessage): boolean => {
+  if (!isAssistantChatMessage(previous) || !isAssistantChatMessage(incoming)) {
+    return false
+  }
+
+  const previousState = getStreamingState(previous.metadata)
+  if (previousState === 'complete') {
+    return false
+  }
+
+  const previousContentLength = (previous.content || '').length
+  const incomingContentLength = (incoming.content || '').length
+  return incomingContentLength < previousContentLength
+}
 
 const CLIENT_HISTORY_SNAPSHOT_LIMIT = 24
 const CLIENT_HISTORY_SNAPSHOT_MAX_CHARS = 600
@@ -1751,6 +1779,7 @@ function ConversationViewer({
       })
       const respondedAt = new Date().toISOString()
       const responseTarget = getConsoleResponseTarget()
+      const attribution = await getCurrentUserAttribution()
       const responseMetadata = {
         control: {
           request_id: control.request_id,
@@ -1777,6 +1806,7 @@ function ConversationViewer({
         responseTarget,
         responseStatus: 'PENDING',
         createdAt: respondedAt,
+        ...attribution,
       })
       const responseMessageId = created?.data?.id
       if (!responseMessageId) {
@@ -2178,6 +2208,9 @@ function ConversationViewer({
 
       const previous = prevMessages[existingIndex]
       if (areMessagesEquivalent(previous, parsed)) {
+        return prevMessages
+      }
+      if (shouldIgnoreRegressiveAssistantUpdate(previous, parsed)) {
         return prevMessages
       }
 
@@ -2606,6 +2639,28 @@ function ConversationViewer({
   }, [latestConversationRenderSignature, selectedSessionId, shouldForceFollow])
 
   const previousThinkingStateRef = React.useRef(false)
+  const pendingInitialTailJumpSessionRef = React.useRef<string | null>(null)
+
+  useEffect(() => {
+    pendingInitialTailJumpSessionRef.current = selectedSessionId || null
+  }, [selectedSessionId])
+
+  useEffect(() => {
+    const pendingSessionId = pendingInitialTailJumpSessionRef.current
+    if (!pendingSessionId || pendingSessionId !== selectedSessionId || renderRows.length === 0) {
+      return
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" })
+      pendingInitialTailJumpSessionRef.current = null
+    })
+
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [renderRows.length, selectedSessionId])
+
   useEffect(() => {
     const transitionedFromThinkingToMessage = previousThinkingStateRef.current && !showThinkingPlaceholder
     previousThinkingStateRef.current = showThinkingPlaceholder
@@ -2799,6 +2854,7 @@ function ConversationViewer({
         let messagePersisted = false
         try {
           const client = getClient()
+          const attribution = await getCurrentUserAttribution()
           const metadata = enableProcedureSteering
             ? {
                 source: 'procedure-steering-input',
@@ -2836,6 +2892,7 @@ function ConversationViewer({
             metadata: JSON.stringify(metadata),
             responseTarget,
             responseStatus: enableProcedureSteering ? 'COMPLETED' : 'PENDING',
+            ...attribution,
           })
 
           const createdMessageId = created?.data?.id

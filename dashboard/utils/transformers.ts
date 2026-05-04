@@ -237,6 +237,8 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
         items: evaluationData.data?.items || (() => Promise.resolve({ data: [] })),
         scoringJobs: evaluationData.data?.scoringJobs || (() => Promise.resolve({ data: [] })),
         account: evaluationData.data?.account || (() => Promise.resolve({ data: null })),
+        createdByUserId: evaluationData.data?.createdByUserId ?? null,
+        createdByUser: evaluationData.data?.createdByUser || (() => Promise.resolve({ data: null })),
         createdAt: evaluationData.data?.createdAt || new Date().toISOString(),
         updatedAt: evaluationData.data?.updatedAt || new Date().toISOString(),
         task: null,

@@ -175,9 +175,9 @@ interface ScoreChampionVersionTimelineData {
 
 const chartConfig = {
   feedback_alignment: { label: "Feedback AC1", color: "var(--chart-1)" },
-  regression_alignment: { label: "Regression AC1", color: "var(--chart-2)" },
+  regression_alignment: { label: "Regression AC1", color: "var(--chart-1)" },
   feedback_accuracy: { label: "Feedback Accuracy", color: "var(--chart-1)" },
-  regression_accuracy: { label: "Regression Accuracy", color: "var(--chart-2)" },
+  regression_accuracy: { label: "Regression Accuracy", color: "var(--chart-1)" },
 };
 
 const accuracyGaugeSegments = GaugeThresholdComputer.createSegments(
@@ -195,6 +195,7 @@ type MetricKey = (typeof metricKeys)[number];
 
 const chartMargin = { top: 8, right: 52, left: 20, bottom: 36 };
 const timelineCurveType = curveCardinal.tension(0.55);
+const regressionSeriesOpacity = 0.35;
 
 type ChartPoint = ChampionPoint & {
   entered_at_timestamp: number;
@@ -341,15 +342,15 @@ const chartAccuracy = (value: number | null | undefined): number | null => {
 };
 
 const CircleDot = (props: any) => {
-  const { cx, cy, fill } = props;
+  const { cx, cy, fill, opacity } = props;
   if (cx == null || cy == null) return null;
-  return <circle cx={cx} cy={cy} r={4} fill={fill} stroke="none" />;
+  return <circle cx={cx} cy={cy} r={4} fill={fill} opacity={opacity} stroke="none" />;
 };
 
 const SquareDot = (props: any) => {
-  const { cx, cy, fill } = props;
+  const { cx, cy, fill, opacity } = props;
   if (cx == null || cy == null) return null;
-  return <rect x={cx - 4} y={cy - 4} width={8} height={8} fill={fill} stroke="none" />;
+  return <rect x={cx - 4} y={cy - 4} width={8} height={8} fill={fill} opacity={opacity} stroke="none" />;
 };
 
 const LeftAxisTick: React.FC<any> = ({ x = 0, y = 0, payload }) => {
@@ -394,12 +395,13 @@ const MetricLegend: React.FC<{ metrics: MetricKey[] }> = ({ metrics }) => {
       {metrics.map((key) => {
         const isAccuracy = key.endsWith("_accuracy");
         const color = chartConfig[key].color;
+        const opacity = key.startsWith("regression_") ? regressionSeriesOpacity : 1;
         return (
           <div key={key} className="flex items-center gap-1.5">
             {isAccuracy ? (
-              <svg width={10} height={10}><rect x={1} y={1} width={8} height={8} fill={color} /></svg>
+              <svg width={10} height={10}><rect x={1} y={1} width={8} height={8} fill={color} opacity={opacity} /></svg>
             ) : (
-              <svg width={10} height={10}><circle cx={5} cy={5} r={4} fill={color} /></svg>
+              <svg width={10} height={10}><circle cx={5} cy={5} r={4} fill={color} opacity={opacity} /></svg>
             )}
             <span>{chartConfig[key].label}</span>
           </div>
@@ -736,6 +738,8 @@ const CombinedTimelineSection: React.FC<{
             {scoreSeries.flatMap(({ score, data, metrics }) =>
               metrics.map((key) => {
                 const isAccuracy = key.endsWith("_accuracy");
+                const isRegression = key.startsWith("regression_");
+                const opacity = isRegression ? regressionSeriesOpacity : 1;
                 return (
                   <Line
                     key={`${score.score_id}-${key}`}
@@ -746,13 +750,12 @@ const CombinedTimelineSection: React.FC<{
                     name={`${score.score_name} ${chartConfig[key].label}`}
                     stroke={chartConfig[key].color}
                     strokeWidth={1.5}
-                    strokeOpacity={0.62}
-                    strokeDasharray={isAccuracy ? "5 5" : undefined}
+                    strokeOpacity={opacity}
                     dot={
                       isAccuracy ? (
-                        <SquareDot fill={chartConfig[key].color} />
+                        <SquareDot fill={chartConfig[key].color} opacity={opacity} />
                       ) : (
-                        <CircleDot fill={chartConfig[key].color} />
+                        <CircleDot fill={chartConfig[key].color} opacity={opacity} />
                       )
                     }
                     activeDot={false}
@@ -1181,6 +1184,7 @@ const ScoreTimelineSection: React.FC<{
                     name="Feedback AC1"
                     stroke={chartConfig.feedback_alignment.color}
                     strokeWidth={2}
+                    strokeOpacity={1}
                     dot={<CircleDot fill={chartConfig.feedback_alignment.color} />}
                     activeDot={{ r: 6 }}
                     connectNulls
@@ -1195,7 +1199,8 @@ const ScoreTimelineSection: React.FC<{
                     name="Regression AC1"
                     stroke={chartConfig.regression_alignment.color}
                     strokeWidth={2}
-                    dot={<CircleDot fill={chartConfig.regression_alignment.color} />}
+                    strokeOpacity={regressionSeriesOpacity}
+                    dot={<CircleDot fill={chartConfig.regression_alignment.color} opacity={regressionSeriesOpacity} />}
                     activeDot={{ r: 6 }}
                     connectNulls
                     isAnimationActive={false}
@@ -1209,7 +1214,7 @@ const ScoreTimelineSection: React.FC<{
                     name="Feedback Accuracy"
                     stroke={chartConfig.feedback_accuracy.color}
                     strokeWidth={2}
-                    strokeDasharray="5 5"
+                    strokeOpacity={1}
                     dot={<SquareDot fill={chartConfig.feedback_accuracy.color} />}
                     activeDot={{ r: 6 }}
                     connectNulls
@@ -1224,8 +1229,8 @@ const ScoreTimelineSection: React.FC<{
                     name="Regression Accuracy"
                     stroke={chartConfig.regression_accuracy.color}
                     strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={<SquareDot fill={chartConfig.regression_accuracy.color} />}
+                    strokeOpacity={regressionSeriesOpacity}
+                    dot={<SquareDot fill={chartConfig.regression_accuracy.color} opacity={regressionSeriesOpacity} />}
                     activeDot={{ r: 6 }}
                     connectNulls
                     isAnimationActive={false}

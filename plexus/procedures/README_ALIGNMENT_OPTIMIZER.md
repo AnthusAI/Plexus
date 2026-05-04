@@ -4,7 +4,7 @@ A Tactus-based procedure for iteratively optimizing Plexus score alignment using
 
 ## Overview
 
-This procedure packages the core optimization loop from the `plexus-scorecard-improver` skill into a standalone, repeatable Tactus procedure that can be:
+This procedure packages the core optimization loop from the `score-optimizer` skill into a standalone, repeatable Tactus procedure that can be:
 - Executed programmatically from any environment
 - Integrated into software as an agentic feature
 - Resumed from checkpoints after interruption
@@ -351,6 +351,6 @@ Potential improvements for future versions:
 ## Related Documentation
 
 - [Plexus Procedures DSL Specification](DSL_SPECIFICATION.md)
-- [Plexus Scorecard Improver Skill](../skills/plexus-scorecard-improver/SKILL.md)
+- [Score Optimizer Skill](../../skills/score-optimizer/SKILL.md)
 - [Feedback Alignment Guide](https://docs.plexus.ai/feedback-alignment)
 - [Score YAML Format](https://docs.plexus.ai/score-yaml-format)

@@ -1,0 +1,20 @@
+{
+  "id": "plx-67e6a641-3ddc-4859-9b8f-9a1f300253be",
+  "title": "Fix plexus.procedure.chat_messages crash on null sequenceNumber",
+  "description": "When GraphQL returns a ChatMessage with sequenceNumber=null, _default_procedure_chat_messages in MCP/tools/tactus_runtime/execute.py raises TypeError ('<' not supported between instances of 'NoneType' and 'int'). The sort lambda uses dict.get with default 0 but that default only fires when the key is absent, not when the value is None. Fix: coerce None to 0 when sorting and reading sequenceNumber. Surfaced via /lab/console session 9fb23c04-cd3f-4c42-ae7b-58a962a9cc5e during local console chat docs lookup.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [
+    "bug"
+  ],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-04T13:45:49.402436Z",
+  "updated_at": "2026-05-04T13:45:52.663419Z",
+  "closed_at": null,
+  "custom": {}
+}

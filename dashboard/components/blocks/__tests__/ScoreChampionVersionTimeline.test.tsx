@@ -48,13 +48,14 @@ jest.mock("recharts", () => ({
           offset: { top: 0, height: 100 },
         } as any)
       : null,
-  Line: ({ data, dataKey, yAxisId, name, activeDot, strokeDasharray, strokeOpacity }: any) => (
+  Line: ({ data, dataKey, yAxisId, name, activeDot, stroke, strokeDasharray, strokeOpacity }: any) => (
     <g
       data-testid={`line-${dataKey}`}
       data-line-name={name || ""}
       data-y-axis-id={yAxisId}
       data-point-count={Array.isArray(data) ? data.length : ""}
       data-active-dot={activeDot === false ? "false" : "true"}
+      data-stroke={stroke || ""}
       data-stroke-dasharray={strokeDasharray || ""}
       data-stroke-opacity={strokeOpacity || ""}
     />
@@ -313,10 +314,33 @@ describe("ScoreChampionVersionTimeline", () => {
     expect(feedbackAlignmentLines[0]).toHaveAttribute("data-active-dot", "false");
     expect(feedbackAccuracyLines[0]).toHaveAttribute("data-line-name", "Score 1 Feedback Accuracy");
     expect(feedbackAccuracyLines[0]).toHaveAttribute("data-y-axis-id", "accuracy");
-    expect(feedbackAccuracyLines[0]).toHaveAttribute("data-stroke-dasharray", "5 5");
+    expect(feedbackAccuracyLines[0]).toHaveAttribute("data-stroke-dasharray", "");
     expect(feedbackAccuracyLines[0]).toHaveAttribute("data-active-dot", "false");
     expect(regressionAlignmentLines[0]).toHaveAttribute("data-line-name", "Score 2 Regression AC1");
     expect(regressionAccuracyLines[0]).toHaveAttribute("data-line-name", "Score 2 Regression Accuracy");
+    expect(regressionAlignmentLines[0]).toHaveAttribute("data-stroke", feedbackAlignmentLines[0].getAttribute("data-stroke") || "");
+    expect(regressionAccuracyLines[0]).toHaveAttribute("data-stroke", feedbackAccuracyLines[0].getAttribute("data-stroke") || "");
+    expect(regressionAlignmentLines[0]).toHaveAttribute("data-stroke-opacity", "0.35");
+    expect(regressionAccuracyLines[0]).toHaveAttribute("data-stroke-opacity", "0.35");
+    expect(regressionAlignmentLines[0]).toHaveAttribute("data-stroke-dasharray", "");
+    expect(regressionAccuracyLines[0]).toHaveAttribute("data-stroke-dasharray", "");
+    expect(feedbackAlignmentLines[0]).toHaveAttribute("data-stroke-opacity", "1");
+    expect(feedbackAccuracyLines[0]).toHaveAttribute("data-stroke-opacity", "1");
+
+    const perScoreFeedbackAlignment = feedbackAlignmentLines.find((line) => line.getAttribute("data-line-name") === "Feedback AC1");
+    const perScoreFeedbackAccuracy = feedbackAccuracyLines.find((line) => line.getAttribute("data-line-name") === "Feedback Accuracy");
+    const perScoreRegressionAlignment = regressionAlignmentLines.find((line) => line.getAttribute("data-line-name") === "Regression AC1");
+    const perScoreRegressionAccuracy = regressionAccuracyLines.find((line) => line.getAttribute("data-line-name") === "Regression Accuracy");
+    expect(perScoreRegressionAlignment).toHaveAttribute("data-stroke", perScoreFeedbackAlignment?.getAttribute("data-stroke") || "");
+    expect(perScoreRegressionAccuracy).toHaveAttribute("data-stroke", perScoreFeedbackAccuracy?.getAttribute("data-stroke") || "");
+    expect(perScoreRegressionAlignment).toHaveAttribute("data-stroke-opacity", "0.35");
+    expect(perScoreRegressionAccuracy).toHaveAttribute("data-stroke-opacity", "0.35");
+    expect(perScoreRegressionAlignment).toHaveAttribute("data-stroke-dasharray", "");
+    expect(perScoreRegressionAccuracy).toHaveAttribute("data-stroke-dasharray", "");
+    expect(perScoreFeedbackAlignment).toHaveAttribute("data-stroke-opacity", "1");
+    expect(perScoreFeedbackAccuracy).toHaveAttribute("data-stroke-opacity", "1");
+    expect(perScoreFeedbackAlignment).toHaveAttribute("data-stroke-dasharray", "");
+    expect(perScoreFeedbackAccuracy).toHaveAttribute("data-stroke-dasharray", "");
     expect(screen.queryByText("Select score")).not.toBeInTheDocument();
   });
 

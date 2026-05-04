@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2c5cc397-9aa6-4fd2-852c-e4ad0fbe47fd",
+  "issue_id": "plx-9655d721-0442-4266-b654-307dbba6ba73",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-04T11:58:10.368Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "## Behavior\n\nAs a Plexus runtime agent, I want a documentation knowledge base that exposes structured metadata so I can discover and load relevant docs incrementally without paying full content cost upfront.\n\n```gherkin\nFeature: Frontmatter-aware documentation knowledge base\n\n  Scenario: Listing docs returns metadata summaries instead of raw paths\n    Given a documentation tree at documentation/agent containing markdown files with YAML frontmatter\n    When an agent calls plexus.docs.list\n    Then the response is a list of entries\n    And each entry has id, title, summary, namespace, and tags fields populated from frontmatter\n\n  Scenario: Getting a doc by namespaced id returns metadata and content\n    Given a doc with id mcp.execute-tactus.overview exists in the knowledge base\n    When an agent calls plexus.docs.get with key mcp.execute-tactus.overview\n    Then the response contains the full markdown body\n    And the response contains the parsed frontmatter metadata\n\n  Scenario: Unsafe keys are rejected\n    Given a documentation tree at documentation/agent\n    When an agent calls plexus.docs.get with a key containing path traversal\n    Then the call fails with a structured error\n    And no file outside the documentation root is read\n\n  Scenario: README files are excluded from the agent index\n    Given a documentation tree where each namespace folder contains a human-readable README.md\n    When an agent calls plexus.docs.list\n    Then no README entries appear in the listing\n\n  Scenario: Related docs enable progressive disclosure\n    Given a doc whose frontmatter lists related ids\n    When an agent calls plexus.docs.get for that doc\n    Then the response includes the related ids\n    And those ids resolve via plexus.docs.get without additional discovery\n```",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-db0bd97a-4034-49d6-a5f9-ac13a34e8dfd",
+    "priority": 2,
+    "status": "open",
+    "title": "Documentation knowledge base behaves with frontmatter-aware progressive disclosure"
+  }
+}
