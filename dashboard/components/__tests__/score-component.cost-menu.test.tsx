@@ -5,6 +5,9 @@ import { ScoreComponent } from '../ui/score-component'
 jest.mock('../../app/contexts/AccountContext', () => ({
   useAccount: () => ({ selectedAccount: { id: 'A1' } })
 }))
+jest.mock('@/utils/user-profile', () => ({
+  getCurrentUserAttribution: jest.fn().mockResolvedValue({ createdByUserId: 'user-1' }),
+}))
 jest.mock('../ui/score-procedure-list', () => ({
   ScoreProcedureList: () => null,
 }))
