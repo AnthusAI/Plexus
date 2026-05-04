@@ -47,3 +47,4 @@ nltk
 
 # Cost tracking
 git+https://github.com/AnthusAI/openai_cost_calculator.git@main
+litellm>=1.83.7 # not directly required, pinned by Snyk to avoid a vulnerability
