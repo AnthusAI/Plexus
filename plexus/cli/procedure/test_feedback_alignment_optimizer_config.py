@@ -266,6 +266,8 @@ def test_optimizer_contradictions_reports_use_active_score_version_cache_key():
     assert "score_version_id = final_contradictions_score_version_id" in code
     assert '" / " .. tostring(contradictions_score_version_id)' in code
     assert '" / " .. tostring(final_contradictions_score_version_id)' in code
+    assert "scorecard = scorecard_name" in code
+    assert "score = score_name" in code
 
 
 def test_optimizer_yaml_treats_interruption_as_terminal_not_retryable():
@@ -408,7 +410,10 @@ def test_optimizer_yaml_runs_contradictions_directly_without_background_dispatch
     assert "consume results later" not in code
     assert "include_rubric_memory = false" not in code
     assert "include_rubric_memory = true" in code
-    assert 'pcall(refresh_known_contradictions, 0, {ttl_hours = 48})' in code
+    assert "local ttl = tonumber(opts.ttl_hours or params.contradictions_report_ttl_hours or 24) or 24" in code
+    assert 'pcall(refresh_known_contradictions, 0, {})' in code
+    assert 'ttl_hours = 4' not in code
+    assert 'ttl_hours = 48' not in code
     assert 'cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name' in code
 
 

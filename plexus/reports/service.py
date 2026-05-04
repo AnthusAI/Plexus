@@ -5,7 +5,7 @@ import json
 import hashlib
 import shlex
 import time
-from datetime import datetime, timezone # Added datetime
+from datetime import datetime, timedelta, timezone # Added datetime
 import traceback # Added for error details
 import re
 import asyncio # Add asyncio import
@@ -699,6 +699,11 @@ def _derive_programmatic_display_strings(
         if not scorecard_name and isinstance(parsed_output.get("scorecard_summary"), dict):
             scorecard_name = parsed_output["scorecard_summary"].get("scorecard_name") or None
 
+    if not scorecard_name:
+        scorecard_name = block_config.get("scorecard") or block_config.get("scorecard_name") or None
+    if not score_name:
+        score_name = block_config.get("score") or block_config.get("score_name") or None
+
     title_parts: List[str] = []
     if scorecard_name:
         title_parts.append(str(scorecard_name).strip())
@@ -948,11 +953,54 @@ def _find_report_by_cache_key(
     cache_key: str,
     account_id: str,
     client: PlexusDashboardClient,
+    ttl_hours: float,
 ) -> Optional[Report]:
-    for report in Report.list_by_account_id(account_id, client, limit=200, max_items=200):
-        parameters = report.parameters if isinstance(report.parameters, dict) else {}
-        if parameters.get("_cache_key") == cache_key:
-            return report
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=ttl_hours)
+    query = f"""
+    query ListReportByAccountIdAndUpdatedAt(
+        $accountId: String!,
+        $limit: Int,
+        $sortDirection: ModelSortDirection,
+        $nextToken: String
+    ) {{
+        listReportByAccountIdAndUpdatedAt(
+            accountId: $accountId,
+            limit: $limit,
+            sortDirection: $sortDirection,
+            nextToken: $nextToken
+        ) {{
+            items {{
+                {Report.fields()}
+            }}
+            nextToken
+        }}
+    }}
+    """
+    next_token: Optional[str] = None
+
+    while True:
+        result = client.execute(query, {
+            "accountId": account_id,
+            "limit": 200,
+            "sortDirection": "DESC",
+            "nextToken": next_token,
+        })
+        list_result = result.get("listReportByAccountIdAndUpdatedAt", {}) if isinstance(result, dict) else {}
+        items_data = list_result.get("items", []) or []
+        for item_data in items_data:
+            report = Report.from_dict(item_data, client)
+            if report.updatedAt and report.updatedAt < cutoff:
+                return None
+            if report.createdAt and report.createdAt < cutoff:
+                continue
+            parameters = report.parameters if isinstance(report.parameters, dict) else {}
+            if parameters.get("_cache_key") == cache_key:
+                return report
+
+        next_token = list_result.get("nextToken")
+        if not next_token:
+            break
+
     return None
 
 
@@ -1519,12 +1567,11 @@ def _check_db_cache(
     Reads from Report.output, which stores the raw block data (not the compact
     S3-attachment envelope stored in ReportBlock.output for dashboard rendering).
     """
-    from datetime import timedelta
-
     existing = _find_report_by_cache_key(
         cache_key=cache_key,
         account_id=account_id,
         client=client,
+        ttl_hours=ttl_hours,
     )
     if not existing or not existing.createdAt:
         return None
