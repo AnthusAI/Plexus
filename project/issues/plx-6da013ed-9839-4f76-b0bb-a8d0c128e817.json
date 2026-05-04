@@ -1,0 +1,37 @@
+{
+  "id": "plx-6da013ed-9839-4f76-b0bb-a8d0c128e817",
+  "title": "Use opacity for regression series in champion timeline charts",
+  "description": "Update ScoreChampionVersionTimeline chart styling so regression dataset series use the same colors as feedback series and lower opacity instead of dashed lines. Update focused tests and run the ScoreChampionVersionTimeline test.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9b5aaa87-c482-4751-abf7-bf16585eaa96",
+      "author": "ryan",
+      "text": "Implemented frontend-only chart styling update. Regression timeline series now share feedback colors and use 0.45 opacity instead of dash styling in both combined and per-score ScoreChampionVersionTimeline charts. Updated focused tests. Validation passed: npm test -- ScoreChampionVersionTimeline.test.tsx --runInBand from dashboard. Task left in progress because changes are not committed/landed by request.",
+      "created_at": "2026-05-04T20:24:09.068562Z"
+    },
+    {
+      "id": "09ca103b-ccd2-4b02-ad38-de801c052659",
+      "author": "ryan",
+      "text": "Follow-up after visual check: removed remaining accuracy-series dash styling too, so ScoreChampionVersionTimeline data lines no longer set strokeDasharray at all. Only CartesianGrid still uses dashed grid lines. Focused validation passed again: npm test -- ScoreChampionVersionTimeline.test.tsx --runInBand.",
+      "created_at": "2026-05-04T20:33:52.353232Z"
+    },
+    {
+      "id": "15fa4726-4690-4174-b4ed-9d7134cd889b",
+      "author": "ryan",
+      "text": "Tuned regression timeline opacity from 0.45 to 0.35 so regression dataset series are a little more transparent while keeping shared feedback colors and solid lines. Focused validation passed: npm test -- ScoreChampionVersionTimeline.test.tsx --runInBand.",
+      "created_at": "2026-05-04T20:35:25.227316Z"
+    }
+  ],
+  "created_at": "2026-05-04T20:22:46.075045Z",
+  "updated_at": "2026-05-04T20:40:33.715666Z",
+  "closed_at": "2026-05-04T20:40:33.715666Z",
+  "custom": {}
+}
