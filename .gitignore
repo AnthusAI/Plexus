@@ -48,4 +48,17 @@ project/.cache/
 optimizer_*.log
 optimizer_*.txt
 prescriber_policy_email.md
+
+# Generated reports and ad hoc scratch dumps at the repo root.
+# Permanent docs belong under documentation/agent/ or
+# documentation/supplemental/, not at the root.
+/dosage_optimizer.log
+/test_*.log
+/tmp_*.md
+/feedback_report_*.md
+/feedback_and_*_report.md
+/score_result_*_report.md
+/vector_topic_memory_report.md
+/HCS-*.md
+/MULTI_MODAL_INPUT_REFACTORING.md
 project-local/
