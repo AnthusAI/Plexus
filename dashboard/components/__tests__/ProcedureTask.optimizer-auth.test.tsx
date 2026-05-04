@@ -18,6 +18,10 @@ jest.mock('aws-amplify/storage', () => ({
   downloadData: (...args: any[]) => mockDownloadData(...args),
 }))
 
+jest.mock('@/utils/user-profile', () => ({
+  getCurrentUserAttribution: jest.fn().mockResolvedValue({ createdByUserId: 'user-1' }),
+}))
+
 jest.mock('@monaco-editor/react', () => () => null)
 jest.mock('@/components/procedure-conversation-viewer', () => () => null)
 jest.mock('@/components/ui/ParametersDisplay', () => ({ ParametersDisplay: () => null }))

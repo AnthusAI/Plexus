@@ -46,6 +46,7 @@ import Editor from "@monaco-editor/react"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
 import { formatAmplifyError } from "@/utils/amplify-client"
+import { getCurrentUserAttribution } from "@/utils/user-profile"
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, getCommonMonacoOptions, configureYamlLanguage } from "@/lib/monaco-theme"
 
 import ProcedureConversationViewer from "./procedure-conversation-viewer"
@@ -838,6 +839,7 @@ export default function ProcedureTask({
       // Create new procedure record
       const accountId = (procedure as any).accountId
       if (!accountId) throw new Error('No accountId on procedure')
+      const attribution = await getCurrentUserAttribution()
       const createResult = await getAmplifyClient().graphql({
         query: `
           mutation CreateProcedure($input: CreateProcedureInput!) {
@@ -852,6 +854,7 @@ export default function ProcedureTask({
             name: (procedure as any).name ? `${(procedure as any).name} (branch from cycle ${branchFromCycle})` : `Branch from cycle ${branchFromCycle}`,
             code: branchYaml,
             featured: false,
+            ...attribution,
           }
         }
       })
