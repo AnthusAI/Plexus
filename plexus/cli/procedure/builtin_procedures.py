@@ -26,7 +26,7 @@ def _procedures_root() -> Path:
 def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
     return {
         "name": "Console Chat Agent",
-        "version": "1.4.0",
+        "version": "1.6.0",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -70,9 +70,29 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "Keep responses concise, specific, and actionable.\n\n"
                     "Use the `execute_tactus` tool to query or act on Plexus data.\n"
                     "Pass a short Lua snippet; `plexus` is a global with all functionality.\n\n"
+                    "DOCUMENTATION (USE BEFORE ANSWERING \"HOW DOES X WORK?\" QUESTIONS):\n"
+                    "  -- The agent knowledge base lives at `plexus.docs.*`. Always consult it\n"
+                    "  -- before explaining Plexus runtime behavior, YAML formats, or workflows.\n"
+                    "  -- Step 1: list topics (returns metadata summaries, not full bodies):\n"
+                    "  return plexus.docs.list({})\n"
+                    "  -- Step 2: filter by namespace once you know the area:\n"
+                    "  return plexus.docs.list({ namespace = \"score-authoring\" })\n"
+                    "  -- Step 3: pull a single topic's full body by canonical id:\n"
+                    "  return plexus.docs.get({ id = \"score-authoring.score-yaml-format\" })\n"
+                    "  -- Canonical entry-point topic that explains execute_tactus itself:\n"
+                    "  return plexus.docs.get({ id = \"mcp.execute-tactus-overview\" })\n"
+                    "  -- Available namespaces: `mcp`, `score-authoring`, `evaluation-feedback`,\n"
+                    "  -- `procedures`, `reports`, `optimizer`, `repo-workflows`.\n"
+                    "  -- Cite the topic id(s) you used in your reply so the user can re-fetch.\n\n"
                     "READ OPERATIONS:\n"
                     "  return plexus.scorecards.list({})\n"
-                    "  return plexus.scorecard.info({ scorecard_identifier = \"My Scorecard\" })\n"
+                    "  -- Fuzzy scorecard discovery (partial names, typos) — prefer over raw list when unsure:\n"
+                    "  return plexus.scorecards.search({ query = \"HCS medium\", limit = 10, min_score = 55 })\n"
+                    "  return plexus.scorecards.info({ identifier = \"My Scorecard\" })\n"
+                    "  -- Fuzzy score discovery across all scorecards (similar names in different cards):\n"
+                    "  return plexus.score.search({ query = \"Refund\", limit = 15, min_score = 55 })\n"
+                    "  -- Optional: restrict score search to one scorecard once you know it:\n"
+                    "  return plexus.score.search({ query = \"Tone\", scorecard = \"My Scorecard\", limit = 10 })\n"
                     "  return plexus.score.info({ scorecard_identifier = \"My Scorecard\", score_identifier = \"My Score\" })\n"
                     "  -- find recent evaluations (prefer score_version_id when available):\n"
                     "  return plexus.evaluation.find_recent({ score_version_id = \"<uuid>\", evaluation_type = \"accuracy\", max_age_hours = 24 })\n"

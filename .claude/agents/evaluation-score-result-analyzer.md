@@ -20,9 +20,11 @@ The evaluation-analyzer will provide:
 
 ## Your Workflow
 
-1. **Fetch Score Result**: Use `plexus_evaluation_score_result_find` with the provided parameters
-   - If item_ids provided, fetch those specific items
-   - Otherwise use offset/limit to get a sample (default: limit=1, offset=0)
+1. **Fetch Score Result**: Use `plexus.evaluation.score_results`
+   (through the single `execute_tactus` MCP tool) with the provided
+   parameters.
+   - If item_ids provided, fetch those specific items.
+   - Otherwise use offset/limit to get a sample (default: limit=1, offset=0).
 
 2. **For Each Score Result, Extract**:
    - **Predicted**: Found in `value` field (e.g., "yes", "no")

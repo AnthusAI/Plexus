@@ -27,6 +27,7 @@ import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
 import { CardButton } from "@/components/CardButton"
 import { X } from "lucide-react"
 import { PROCEDURE_CARD_FIELDS } from "@/components/ui/optimizer-results-utils"
+import { getCurrentUserAttribution } from "@/utils/user-profile"
 
 type ParameterValues = ParameterValue
 import * as yaml from 'js-yaml'
@@ -242,6 +243,7 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
       } else {
         // Create new procedure
         // Note: scoreVersionId is stored in the YAML code, not as a separate field
+        const attribution = await getCurrentUserAttribution()
         const result = await getAmplifyClient().graphql({
           query: `
             mutation CreateProcedure($input: CreateProcedureInput!) {
@@ -257,6 +259,7 @@ export default function ProcedureTaskEdit({ procedureId, onSave, onCancel, initi
               scorecardId: parameterValues.scorecard_id || selectedScorecard || null,
               scoreId: parameterValues.score_id || selectedScore || null,
               accountId: selectedAccount.id,
+              ...attribution,
             }
           }
         })

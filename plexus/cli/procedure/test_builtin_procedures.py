@@ -31,6 +31,36 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     assert "Use prior turns for continuity and respond concisely with concrete help." in parsed["code"]
 
 
+def test_builtin_console_procedure_prompt_teaches_docs_primitives():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+
+    # The Console assistant must know how to discover and load topics
+    # from the agent documentation knowledge base.
+    assert "plexus.docs.list" in system_prompt, (
+        "Console assistant prompt should teach plexus.docs.list for "
+        "topic discovery"
+    )
+    assert "plexus.docs.get" in system_prompt, (
+        "Console assistant prompt should teach plexus.docs.get for "
+        "loading individual topic bodies"
+    )
+    # Anchor on the canonical entry-point topic and at least one
+    # namespace so future prompt edits cannot silently drop them.
+    assert "mcp.execute-tactus-overview" in system_prompt
+    assert "score-authoring" in system_prompt
+    assert "plexus.scorecards.search" in system_prompt
+    assert "plexus.score.search" in system_prompt
+
+
+def test_builtin_console_procedure_version_is_current():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    # Bumped when the prompt added the docs.* discovery guidance.
+    assert parsed["version"] == "1.6.0"
+
+
 def test_is_builtin_procedure_id():
     assert is_builtin_procedure_id(CONSOLE_CHAT_BUILTIN_ID) is True
     assert is_builtin_procedure_id("builtin:unknown/path") is False
