@@ -10,6 +10,7 @@ import TemplateTask, { TemplateTaskData } from "@/components/TemplateTask"
 import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAccount } from '@/app/contexts/AccountContext'
+import { getCurrentUserAttribution } from "@/utils/user-profile"
 
 // NOTE: ProcedureTemplate table was removed. Templates are now Procedures with isTemplate=true
 type ProcedureTemplate = Schema['Procedure']['type']
@@ -152,7 +153,8 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         category: template.category,
         isDefault: false,
         isTemplate: true, // Mark as template
-        accountId: selectedAccount.id
+        accountId: selectedAccount.id,
+        ...await getCurrentUserAttribution(),
       }
 
       const { data: newTemplate } = await (getAmplifyClient().models.Procedure.create as any)(input as any)
@@ -183,7 +185,8 @@ export default function TemplatesDashboard({ initialSelectedTemplateId }: Templa
         category: 'hypothesis_generation',
         isDefault: false,
         isTemplate: true, // Mark as template
-        accountId: selectedAccount.id
+        accountId: selectedAccount.id,
+        ...await getCurrentUserAttribution(),
       }
 
       const { data: newTemplate } = await (getAmplifyClient().models.Procedure.create as any)(input as any)

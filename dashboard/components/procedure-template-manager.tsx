@@ -16,6 +16,7 @@ import { Trash2, Edit, Plus, Copy, Download, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Editor } from '@monaco-editor/react'
 import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher } from '@/lib/monaco-theme'
+import { getCurrentUserAttribution } from '@/utils/user-profile'
 
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
@@ -292,7 +293,8 @@ export default function ProcedureTemplateManager({ accountId, onTemplateSelect }
         category: formData.category || undefined,
         isDefault: formData.isDefault || undefined,
         isTemplate: true, // Mark as template
-        accountId: accountId
+        accountId: accountId,
+        ...await getCurrentUserAttribution(),
       }
 
       const result = await (getAmplifyClient().models.Procedure.create as any)(input as any)
