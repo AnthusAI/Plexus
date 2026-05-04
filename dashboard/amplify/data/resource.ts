@@ -99,8 +99,7 @@ const schema = a.schema({
             evaluations: a.hasMany('Evaluation', 'createdByUserId'),
             procedures: a.hasMany('Procedure', 'createdByUserId'),
             reports: a.hasMany('Report', 'createdByUserId'),
-            scoreVersions: a.hasMany('ScoreVersion', 'createdByUserId'),
-            chatMessages: a.hasMany('ChatMessage', 'createdByUserId')
+            scoreVersions: a.hasMany('ScoreVersion', 'createdByUserId')
         })
         .authorization((allow) => [
             allow.authenticated()
@@ -956,7 +955,6 @@ const schema = a.schema({
             accountId: a.string(),
             account: a.belongsTo('Account', 'accountId'),
             createdByUserId: a.string(),
-            createdByUser: a.belongsTo('User', 'createdByUserId'),
             sessionId: a.string().required(),
             session: a.belongsTo('ChatSession', 'sessionId'),
             procedureId: a.string(),
@@ -1008,8 +1006,7 @@ const schema = a.schema({
             idx("parentMessageId"),
             idx("humanInteraction").sortKeys(["createdAt"]),
             idx("accountId").sortKeys(["createdAt"]),
-            idx("responseTarget").sortKeys(["responseStatus", "createdAt"]),
-            idx("createdByUserId")
+            idx("responseTarget").sortKeys(["responseStatus", "createdAt"])
         ]),
 });
 
