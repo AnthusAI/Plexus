@@ -20,7 +20,7 @@ const clientConfig = `{
 const discoverSnippet = `return {
   apis = plexus.api.list(),
   docs = plexus.docs.list(),
-  overview = plexus.docs.get{ key = "overview" },
+  overview = plexus.docs.get{ id = "mcp.execute-tactus-overview" },
 }`;
 
 const scoreSnippet = `return plexus.score.info{
@@ -253,7 +253,7 @@ export default function McpServerPage() {
             <li>
               If a snippet needs a capability you cannot find, call{" "}
               <code>plexus.api.list()</code> and then read the relevant docs
-              with <code>plexus.docs.get{"{ key = \"...\" }"}</code>.
+              with <code>plexus.docs.get{"{ id = \"...\" }"}</code>.
             </li>
           </ul>
         </section>

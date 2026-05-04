@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "30e61eb8-cf76-4a54-ac69-a07df709764c",
+  "issue_id": "plx-05bca7cb-cbbf-4341-af42-71ef92c445b5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-04T11:58:17.868Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Add a documentation repository module with frontmatter parsing, point execute_tactus plexus.docs.list/get at documentation/agent/. Tests must cover list returns metadata entries, get returns metadata+content, unsafe keys rejected, README excluded.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-db0bd97a-4034-49d6-a5f9-ac13a34e8dfd",
+    "priority": 2,
+    "status": "open",
+    "title": "Implement frontmatter-aware documentation repository for plexus.docs"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9da95d6d-3bcb-4291-b721-04fd51832e89",
+  "issue_id": "plx-1450c4c6-441a-47f3-b24c-1f48081b03c0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-04T11:58:23.182Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Replace duplicated content with concise repo rules + pointers to documentation/agent/ keys. Remove stale references to deprecated MCP tools (mcp__Plexus__*, get_plexus_documentation).",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-db0bd97a-4034-49d6-a5f9-ac13a34e8dfd",
+    "priority": 2,
+    "status": "open",
+    "title": "Collapse AGENTS.md, CLAUDE.md, skills, .claude agents, and Cursor rules to thin pointers"
+  }
+}

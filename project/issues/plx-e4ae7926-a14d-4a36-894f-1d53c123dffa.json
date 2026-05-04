@@ -1,0 +1,21 @@
+{
+  "id": "plx-e4ae7926-a14d-4a36-894f-1d53c123dffa",
+  "title": "Wire plexus.docs into Console chat agent",
+  "description": "The Console chat agent (built-in procedure `builtin:console/chat`) is the\nLLM-facing surface that users interact with through the web app's\n`/lab/console`. After the documentation KB cleanup, the assistant's\nsystem prompt still doesn't mention the new progressive-disclosure\ndocs primitives.\n\n## Behavior\n\nGiven the Console chat agent receives a question about how something in\nPlexus works (for example \"how do I author a score YAML?\", \"how do I\nrun a feedback evaluation?\", \"what does plexus.evaluation.run accept?\"),\nthe assistant should consult `plexus.docs.list()` to find the right\ntopic id and `plexus.docs.get({ id = \"...\" })` to read the body before\nanswering, rather than relying on its own training data.\n\n## Acceptance\n\n- The built-in console chat agent's system prompt teaches the assistant\n  about `plexus.docs.list()` and `plexus.docs.get({ id = \"...\" })`,\n  including the available namespaces and the canonical\n  `mcp.execute-tactus-overview` topic.\n- The procedure version is bumped so the new prompt rolls out.\n- A regression test confirms the prompt mentions the docs primitives.",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-9ffd490c-ff25-4277-8008-15037f01f992",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-04T12:33:06.443407Z",
+  "updated_at": "2026-05-04T12:37:28.112916Z",
+  "closed_at": "2026-05-04T12:37:28.112916Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}
