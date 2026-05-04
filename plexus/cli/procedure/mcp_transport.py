@@ -672,44 +672,44 @@ class EmbeddedMCPServer:
                             input_schema["required"] = required
                         
                         # Create a wrapper that handles both sync and async functions
-                        async def async_handler(args):
+                        async def async_handler(args, _func=func, _tool_name=tool_name):
                             try:
                                 import asyncio
                                 import inspect
                                 
-                                logger.debug(f"🔧 WRAPPER: async_handler called for {tool_name} with args: {args}")
-                                logger.debug(f"🔧 WRAPPER: func is coroutine function: {inspect.iscoroutinefunction(func)}")
+                                logger.debug(f"🔧 WRAPPER: async_handler called for {_tool_name} with args: {args}")
+                                logger.debug(f"🔧 WRAPPER: func is coroutine function: {inspect.iscoroutinefunction(_func)}")
                                 
                                 # Handle different argument patterns and function types
                                 if args:
-                                    if inspect.iscoroutinefunction(func):
+                                    if inspect.iscoroutinefunction(_func):
                                         # Async function - need to run it
                                         try:
                                             loop = asyncio.get_running_loop()
-                                            logger.debug(f"🔧 WRAPPER: Calling await func(**args) for {tool_name}")
+                                            logger.debug(f"🔧 WRAPPER: Calling await func(**args) for {_tool_name}")
                                             # We're in an event loop, create a task and await it
-                                            result = await func(**args)
+                                            result = await _func(**args)
                                             logger.debug(f"🔧 WRAPPER: func returned: {type(result)} - {str(result)[:200]}...")
                                             return result
                                         except RuntimeError:
-                                            logger.debug(f"🔧 WRAPPER: No running loop, using asyncio.run for {tool_name}")
+                                            logger.debug(f"🔧 WRAPPER: No running loop, using asyncio.run for {_tool_name}")
                                             # No running loop, use asyncio.run
-                                            return asyncio.run(func(**args))
+                                            return asyncio.run(_func(**args))
                                     else:
                                         # Sync function
-                                        return func(**args)
+                                        return _func(**args)
                                 else:
-                                    if inspect.iscoroutinefunction(func):
+                                    if inspect.iscoroutinefunction(_func):
                                         try:
                                             loop = asyncio.get_running_loop()
-                                            return await func()
+                                            return await _func()
                                         except RuntimeError:
-                                            return asyncio.run(func())
+                                            return asyncio.run(_func())
                                     else:
-                                        return func()
+                                        return _func()
                                 
                             except Exception as e:
-                                logger.error(f"🔧 WRAPPER: Exception in MCP tool {tool_name}: {e}")
+                                logger.error(f"🔧 WRAPPER: Exception in MCP tool {_tool_name}: {e}")
                                 import traceback
                                 logger.error(f"🔧 WRAPPER: Traceback: {traceback.format_exc()}")
                                 return {"error": str(e)}
@@ -767,7 +767,7 @@ class EmbeddedMCPServer:
                     return {"error": "filename is required"}
 
                 docs_root = os.path.normpath(
-                    os.path.join(os.path.dirname(__file__), "..", "..", "docs")
+                    os.path.join(os.path.dirname(__file__), "..", "..", "..", "documentation")
                 )
                 candidate_name = f"{slug}.md"
                 matches: List[str] = []
