@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import signal
 import threading
 import time
@@ -3175,16 +3176,32 @@ def _append_optional_cli_arg(cmd: list[str], flag: str, value: Any) -> None:
         cmd.extend([flag, str(value)])
 
 
+def _resolve_report_dispatch_mode() -> str:
+    mode = os.environ.get("PLEXUS_DISPATCH_MODE", "celery").strip().lower()
+    if mode not in {"celery", "local"}:
+        raise ValueError(
+            f"Invalid PLEXUS_DISPATCH_MODE={mode!r}. Valid values: celery, local."
+        )
+    return mode
+
+
+def _build_report_config_command(configuration_id: str, parameters: dict[str, Any]) -> str:
+    parts = ["report", "run", "--config", str(configuration_id)]
+    for key, value in (parameters or {}).items():
+        parts.append(f"{key}={value}")
+    return " ".join(shlex.quote(str(part)) for part in parts)
+
+
 def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
     """Dispatch report.run async.
 
-    PLEXUS_REPORT_DISPATCH=local  (default) — run directly in a local thread.
-    PLEXUS_REPORT_DISPATCH=remote           — enqueue via the remote task dispatcher.
+    PLEXUS_DISPATCH_MODE=celery (default) — enqueue via the remote task dispatcher.
+    PLEXUS_DISPATCH_MODE=local            — run directly in a local subprocess.
     """
     import os
     import threading
 
-    remote = os.environ.get("PLEXUS_REPORT_DISPATCH", "local") == "remote"
+    remote = _resolve_report_dispatch_mode() == "celery"
 
     from plexus.cli.report.utils import resolve_account_id_for_command
     from plexus.cli.shared.client_utils import create_client as create_dashboard_client
@@ -3198,30 +3215,44 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
 
     configuration_id = args.get("configuration_id") or args.get("config_id")
     if configuration_id:
-        from plexus.reports.service import generate_report_with_parameters
-
         parameters = args.get("parameters") or {}
 
         if remote:
-            # Remote: generate_report_with_parameters creates a Task with
-            # dispatchStatus=SYNC; the cloud dispatcher picks it up.
-            generate_report_with_parameters(
-                config_id=configuration_id,
-                parameters=parameters,
-                account_id=account_id,
+            from plexus.dashboard.api.models.task import Task
+
+            command = _build_report_config_command(str(configuration_id), parameters)
+            task = Task.create(
                 client=client,
-                trigger="mcp_remote",
+                accountId=account_id,
+                type="Report",
+                target="report/configuration",
+                command=command,
+                description=f"Run report configuration {configuration_id}",
+                metadata=json.dumps({
+                    "report_configuration_id": str(configuration_id),
+                    "report_parameters": parameters,
+                    "account_id": account_id,
+                    "trigger": "mcp_remote",
+                }),
+                dispatchStatus="PENDING",
+                status="PENDING",
             )
+            return {
+                "status": "dispatched",
+                "configuration_id": configuration_id,
+                "parameters": parameters,
+                "task_id": task.id,
+            }
         else:
             import subprocess
             import sys
 
             cmd = [
                 sys.executable, "-m", "plexus", "report", "run",
-                "--configuration-id", configuration_id,
+                "--config", configuration_id,
             ]
-            for k, v in (parameters or {}).items():
-                cmd += ["--parameter", f"{k}={v}"]
+            for k, v in parameters.items():
+                cmd.append(f"{k}={v}")
 
             env = {**__import__("os").environ, "PYTHONUNBUFFERED": "1"}
             proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -3231,12 +3262,6 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
                 "parameters": parameters,
                 "pid": proc.pid,
             }
-
-        return {
-            "status": "dispatched",
-            "configuration_id": configuration_id,
-            "parameters": parameters,
-        }
 
     block_class = args.get("block_class")
     if not block_class:
@@ -3259,6 +3284,7 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
             ttl_hours=ttl_hours,
             fresh=fresh,
             background=True,
+            child_budget=_jsonable(args.get("budget")),
         )
         if not isinstance(output_data, dict):
             raise ValueError(log_output or "Report block remote dispatch failed")

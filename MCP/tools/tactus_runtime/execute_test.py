@@ -2608,6 +2608,159 @@ def test_score_champion_version_timeline_convenience_maps_report_block() -> None
     assert module.api_calls == ["plexus.report.run"]
 
 
+def test_default_report_runner_uses_remote_dispatch_by_default(monkeypatch) -> None:
+    captured: dict = {}
+    client = object()
+
+    def fake_run_block_cached(**kwargs):
+        captured.update(kwargs)
+        return ({"status": "dispatched", "cache_key": "report-cache", "task_id": "task-1"}, None, False)
+
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr("plexus.reports.service.run_block_cached", fake_run_block_cached)
+    monkeypatch.delenv("PLEXUS_DISPATCH_MODE", raising=False)
+    monkeypatch.setattr(
+        "subprocess.Popen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("local subprocess should not run")),
+    )
+
+    budget = {"usd": 1.0, "wallclock_seconds": 900, "depth": 1, "tool_calls": 3}
+    result = execute._default_report_runner(
+        {
+            "block_class": "FeedbackContradictions",
+            "cache_key": "report-cache",
+            "ttl_hours": 24,
+            "budget": budget,
+            "block_config": {
+                "scorecard": "Card",
+                "score": "Score",
+                "days": 30,
+                "mode": "contradictions",
+                "max_feedback_items": 200,
+                "num_topics": 8,
+                "include_rubric_memory": True,
+                "score_version_id": "version-1",
+            },
+        }
+    )
+
+    assert result == {
+        "status": "dispatched",
+        "cache_key": "report-cache",
+        "task_id": "task-1",
+        "block_class": "FeedbackContradictions",
+        "child_budget": budget,
+    }
+    assert captured == {
+        "block_class": "FeedbackContradictions",
+        "block_config": {
+            "scorecard": "Card",
+            "score": "Score",
+            "days": 30,
+            "mode": "contradictions",
+            "max_feedback_items": 200,
+            "num_topics": 8,
+            "include_rubric_memory": True,
+            "score_version_id": "version-1",
+        },
+        "account_id": "acct-1",
+        "client": client,
+        "cache_key": "report-cache",
+        "ttl_hours": 24,
+        "fresh": False,
+        "background": True,
+        "child_budget": budget,
+    }
+
+
+def test_default_report_runner_uses_remote_dispatch_for_celery_mode(monkeypatch) -> None:
+    calls: list[dict] = []
+    client = object()
+
+    def fake_run_block_cached(**kwargs):
+        calls.append(kwargs)
+        return ({"status": "dispatched", "cache_key": "report-cache", "task_id": "task-1"}, None, False)
+
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "celery")
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr("plexus.reports.service.run_block_cached", fake_run_block_cached)
+
+    result = execute._default_report_runner(
+        {
+            "block_class": "AcceptanceRate",
+            "cache_key": "report-cache",
+            "block_config": {"scorecard": "Card", "score": "Score", "days": 7},
+        }
+    )
+
+    assert result["status"] == "dispatched"
+    assert result["block_class"] == "AcceptanceRate"
+    assert calls[0]["background"] is True
+
+
+def test_default_report_runner_dispatches_report_config_remotely(monkeypatch) -> None:
+    created: dict = {}
+    client = object()
+
+    def fake_create(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace(id="task-1")
+
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr("plexus.dashboard.api.models.task.Task.create", fake_create)
+    monkeypatch.delenv("PLEXUS_DISPATCH_MODE", raising=False)
+    monkeypatch.setattr(
+        "subprocess.Popen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("local subprocess should not run")),
+    )
+
+    result = execute._default_report_runner(
+        {
+            "configuration_id": "config-1",
+            "parameters": {"days": 7, "score": "Project Intent AI"},
+        }
+    )
+
+    assert result == {
+        "status": "dispatched",
+        "configuration_id": "config-1",
+        "parameters": {"days": 7, "score": "Project Intent AI"},
+        "task_id": "task-1",
+    }
+    assert created["client"] is client
+    assert created["accountId"] == "acct-1"
+    assert created["type"] == "Report"
+    assert created["target"] == "report/configuration"
+    assert created["command"] == "report run --config config-1 days=7 'score=Project Intent AI'"
+    assert created["dispatchStatus"] == "PENDING"
+    assert created["status"] == "PENDING"
+    assert json.loads(created["metadata"]) == {
+        "report_configuration_id": "config-1",
+        "report_parameters": {"days": 7, "score": "Project Intent AI"},
+        "account_id": "acct-1",
+        "trigger": "mcp_remote",
+    }
+
+
+def test_default_report_runner_rejects_invalid_dispatch_mode(monkeypatch) -> None:
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "invalid")
+
+    with pytest.raises(ValueError, match="Invalid PLEXUS_DISPATCH_MODE"):
+        execute._default_report_runner({"block_class": "AcceptanceRate"})
+
+
 def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -> None:
     captured: dict = {}
 
@@ -2645,6 +2798,7 @@ def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -
         "plexus.cli.report.utils.resolve_account_id_for_command",
         lambda _client, _account: "acct-1",
     )
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "local")
     monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
     monkeypatch.setattr("subprocess.Popen", fake_popen)
 
@@ -2715,6 +2869,7 @@ def test_default_report_runner_launches_score_champion_timeline_command(monkeypa
         "plexus.cli.report.utils.resolve_account_id_for_command",
         lambda _client, _account: "acct-1",
     )
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "local")
     monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
     monkeypatch.setattr("subprocess.Popen", fake_popen)
 
