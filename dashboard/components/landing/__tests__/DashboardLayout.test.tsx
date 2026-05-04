@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react"
 import { useAuthenticator } from "@aws-amplify/ui-react"
 import { generateClient } from "aws-amplify/api"
 import { listFromModel } from "@/utils/amplify-helpers"
+import { useCurrentUserProfile } from "@/hooks/use-current-user-profile"
 import DashboardLayout from "@/components/dashboard-layout"
 import { SidebarProvider } from "@/app/contexts/SidebarContext"
 import { ThemeProvider } from "next-themes"
@@ -18,9 +19,11 @@ jest.mock("@/utils/amplify-helpers")
 jest.mock("@/components/DashboardDrawer", () => ({
   DashboardDrawer: () => null,
 }))
+jest.mock("@/hooks/use-current-user-profile")
 
 const mockListFromModel = listFromModel as jest.MockedFunction<typeof listFromModel>
 const mockUseAuthenticator = useAuthenticator as jest.MockedFunction<typeof useAuthenticator>
+const mockUseCurrentUserProfile = useCurrentUserProfile as jest.MockedFunction<typeof useCurrentUserProfile>
 const mockGenerateClient = generateClient as unknown as jest.Mock
 
 type Account = Schema["Account"]["type"]
@@ -37,6 +40,18 @@ describe("DashboardLayout", () => {
 
   beforeEach(() => {
     mockUseAuthenticator.mockReturnValue({ authStatus: "authenticated" } as any)
+    mockUseCurrentUserProfile.mockReturnValue({
+      profile: {
+        id: "user-1",
+        email: "ada@example.com",
+        displayName: "Ada Lovelace",
+        initials: "AL",
+        gravatarUrl: "https://www.gravatar.com/avatar/hash?s=96&d=404&r=g",
+      },
+      isLoading: false,
+      error: null,
+      refresh: jest.fn(),
+    })
     mockListFromModel.mockResolvedValue({ 
       data: [{
         id: "1",
@@ -91,6 +106,14 @@ describe("DashboardLayout", () => {
       expect(screen.queryByText("Analysis")).not.toBeInTheDocument()
       expect(screen.queryByText("Activity")).not.toBeInTheDocument()
       expect(screen.getByText("Scorecards")).toBeInTheDocument()
+    })
+  })
+
+  it("shows the authenticated user profile in the sidebar", async () => {
+    renderDashboardLayout()
+
+    await waitFor(() => {
+      expect(screen.getByText("Ada Lovelace")).toBeInTheDocument()
     })
   })
 

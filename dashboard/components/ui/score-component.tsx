@@ -39,6 +39,7 @@ import { TestScoreDialog } from '@/components/scorecards/test-score-dialog'
 import { EvaluationDialog, FeedbackEvaluationDialog } from '@/components/task-dispatch'
 import { createTask } from '@/utils/data-operations'
 import { formatAmplifyError } from '@/utils/amplify-client'
+import { getCurrentUserAttribution } from '@/utils/user-profile'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
 import { ScoreProcedureList } from '@/components/ui/score-procedure-list'
@@ -2989,6 +2990,7 @@ export function ScoreComponent({
 
       
       const now = new Date().toISOString();
+      const attribution = await getCurrentUserAttribution();
       const versionPayload = {
         scoreId: String(score.id),
         configuration: configurationYaml,
@@ -2997,7 +2999,8 @@ export function ScoreComponent({
         note: versionNote || 'Updated score configuration',
         parentVersionId: selectedVersionId || score.championVersionId || undefined,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        ...attribution
       };
 
       const createVersionResponse = await getAmplifyClient().graphql({

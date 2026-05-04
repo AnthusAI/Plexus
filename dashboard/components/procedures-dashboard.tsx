@@ -34,6 +34,7 @@ import {
   TASK_CARD_FIELDS,
   type ProcedureFeedbackEvaluationSummary,
 } from "@/components/ui/optimizer-results-utils"
+import { getCurrentUserAttribution } from "@/utils/user-profile"
 
 type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
@@ -689,12 +690,14 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       }
       
       // Create a duplicate
+      const attribution = await getCurrentUserAttribution()
       const { data: newProcedure } = await (getAmplifyClient().models.Procedure.create as any)({
         featured: procedure.featured || false,
         code: procedure.code || null, // Copy the code if it exists
         scorecardId: procedure.scorecardId,
         scoreId: procedure.scoreId,
         accountId: selectedAccount.id,
+        ...attribution,
       })
 
       console.log('New procedure created:', newProcedure)
@@ -874,6 +877,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       
       const resolvedScorecardId = parameters?.scorecard_id || selectedScorecard || null
       const resolvedScoreId = parameters?.score_id || selectedScore || null
+      const attribution = await getCurrentUserAttribution()
 
       // Create procedure run from template. Name is required by schema.
       const createInput: Record<string, any> = {
@@ -891,6 +895,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           templateName: template.name || 'Procedure Template'
         }),
         accountId: selectedAccount.id,
+        ...attribution,
       }
 
       if (resolvedScorecardId) {
