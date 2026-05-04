@@ -73,6 +73,10 @@ jest.mock("@/utils/data-operations", () => ({
   getClient: () => mockClient,
 }))
 
+jest.mock("@/utils/user-profile", () => ({
+  getCurrentUserAttribution: jest.fn().mockResolvedValue({ createdByUserId: "user-1" }),
+}))
+
 jest.mock("@/components/ai-elements/conversation", () => ({
   Conversation: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ConversationContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -516,6 +520,7 @@ describe("ConversationViewer streaming updates", () => {
     })
 
     const createdMessage = mockChatMessageCreate.mock.calls[0]?.[0]
+    expect(createdMessage.createdByUserId).toBe("user-1")
     expect(createdMessage.responseTarget).toBe("local:ryan")
     expect(createdMessage.responseStatus).toBe("PENDING")
     const metadata = JSON.parse(createdMessage.metadata)
@@ -735,6 +740,53 @@ describe("ConversationViewer streaming updates", () => {
       expect(screen.getByText("plexus_search input-available")).toBeInTheDocument()
       expect(screen.getByText("plexus_search output-available")).toBeInTheDocument()
       expect(screen.getAllByTestId("tool")).toHaveLength(2)
+    })
+  })
+
+  it("jumps to latest message when opening a deep-linked session", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-older",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "USER",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT",
+          content: "older",
+          createdAt: "2026-03-27T00:00:01.000Z",
+          sequenceNumber: 1,
+        },
+        {
+          id: "msg-latest",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "latest",
+          createdAt: "2026-03-27T00:00:02.000Z",
+          sequenceNumber: 2,
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+        selectedSessionId="sess-1"
+      />
+    )
+
+    await screen.findByText("latest")
+    await waitFor(() => {
+      expect(mockScrollToIndex).toHaveBeenCalledWith(
+        expect.objectContaining({ index: "LAST", align: "end", behavior: "auto" })
+      )
     })
   })
 
