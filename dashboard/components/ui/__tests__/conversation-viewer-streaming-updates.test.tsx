@@ -350,6 +350,68 @@ describe("ConversationViewer streaming updates", () => {
     expect(container.querySelectorAll('[data-message-id="msg-assistant-1"]')).toHaveLength(1)
   })
 
+  it("ignores regressive assistant streaming updates that arrive out of order", async () => {
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByText("Hel")
+
+    await act(async () => {
+      subscriptions.messageUpdate?.next({
+        data: {
+          id: "msg-assistant-1",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "Hello streaming world",
+          createdAt: "2026-03-27T00:00:01.000Z",
+          sequenceNumber: 1,
+          metadata: JSON.stringify({
+            streaming: {
+              state: "streaming",
+            },
+          }),
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText("Hello streaming world")).toBeInTheDocument()
+    })
+
+    await act(async () => {
+      subscriptions.messageUpdate?.next({
+        data: {
+          id: "msg-assistant-1",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "Hello",
+          createdAt: "2026-03-27T00:00:01.000Z",
+          sequenceNumber: 1,
+          metadata: JSON.stringify({
+            streaming: {
+              state: "streaming",
+            },
+          }),
+        },
+      })
+    })
+
+    expect(screen.getByText("Hello streaming world")).toBeInTheDocument()
+    expect(screen.queryByText("Hello")).not.toBeInTheDocument()
+  })
+
   it("auto-follows conversation when streaming updates arrive", async () => {
     render(
       <ConversationViewer
