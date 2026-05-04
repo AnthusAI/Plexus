@@ -23,7 +23,14 @@ logger = logging.getLogger(__name__)
 
 
 PLEXUS_DOCS_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "plexus", "docs")
+    os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "..",
+        "documentation",
+        "agent",
+    )
 )
 
 PLEXUS_TACTUS_TRACE_DIR_DEFAULT = os.path.normpath(
@@ -5313,23 +5320,31 @@ class PlexusRuntimeModule:
 
     def _call_docs(self, namespace: str, method: str, args: Any = None) -> Any:
         if method == "list":
+            parsed = _args(args) if args else {}
+            ns_filter = parsed.get("namespace") if isinstance(parsed, dict) else None
             self._budget.check_before("docs", "list")
             self._record_api_call("docs", "list")
             try:
-                return self._docs_list()
+                return self._docs_list(namespace=ns_filter)
             finally:
                 self._budget.record_after("docs", "list")
         if method == "get":
             parsed = _args(args)
-            key = parsed.get("key") or parsed.get("name") or parsed.get("filename")
+            key = parsed.get("key") or parsed.get("id") or parsed.get("name") or parsed.get("filename")
             if not key:
-                raise ValueError("plexus.docs.get requires key, name, or filename")
+                raise ValueError("plexus.docs.get requires key, id, name, or filename")
             self._budget.check_before("docs", "get")
             self._record_api_call("docs", "get")
             try:
-                return {"key": key, "content": self._docs_read(key)}
+                metadata, body = self._docs_read(key)
             finally:
                 self._budget.record_after("docs", "get")
+            return {
+                "key": key,
+                "id": metadata.get("id", key),
+                "metadata": metadata,
+                "content": body,
+            }
         raise ValueError(f"Unsupported Plexus runtime API: plexus.docs.{method}")
 
     def _call_api(self, namespace: str, method: str, args: Any = None) -> Any:
@@ -5349,54 +5364,32 @@ class PlexusRuntimeModule:
         finally:
             self._budget.record_after("api", "list")
 
-    def _docs_list(self) -> list[str]:
+    def _docs_list(self, namespace: str | None = None) -> list[dict[str, Any]]:
+        from plexus.documentation.repository import DocumentationRepository
+
         if not os.path.isdir(self._docs_dir):
             raise FileNotFoundError(
                 f"Plexus docs directory not found: {self._docs_dir}"
             )
-        entries: list[str] = []
-        for dirpath, _dirnames, filenames in os.walk(self._docs_dir):
-            for name in filenames:
-                stem, ext = os.path.splitext(name)
-                if ext.lower() != ".md" or stem.lower() == "readme":
-                    continue
-                full = os.path.join(dirpath, name)
-                rel = os.path.relpath(full, self._docs_dir)
-                rel_no_ext, _ = os.path.splitext(rel)
-                key = rel_no_ext.replace(os.sep, "/")
-                entries.append(key)
-        return sorted(entries)
+        repo = DocumentationRepository(self._docs_dir)
+        result = repo.list_docs(namespace=namespace)
+        return list(result.entries)
 
-    def _docs_read(self, key: str) -> str:
-        if (
-            key == ""
-            or "\\" in key
-            or key.startswith(".")
-            or key.startswith("/")
-            or ".." in key.split("/")
-        ):
-            raise ValueError(f"Invalid plexus.docs key: {key!r}")
+    def _docs_read(self, key: str) -> tuple[dict[str, Any], str]:
+        from plexus.documentation.repository import (
+            DocumentationRepository,
+            InvalidDocumentationKeyError,
+        )
 
-        nested_path = os.path.normpath(os.path.join(self._docs_dir, f"{key}.md"))
-        docs_root = os.path.normpath(self._docs_dir) + os.sep
-        if not nested_path.startswith(docs_root):
-            raise ValueError(f"Invalid plexus.docs key: {key!r}")
-        if os.path.isfile(nested_path):
-            with open(nested_path, "r", encoding="utf-8") as handle:
-                return handle.read()
-
-        if "/" not in key:
-            for dirpath, _dirnames, filenames in os.walk(self._docs_dir):
-                for name in filenames:
-                    stem, ext = os.path.splitext(name)
-                    if ext.lower() != ".md" or stem.lower() == "readme":
-                        continue
-                    if stem == key:
-                        full = os.path.join(dirpath, name)
-                        with open(full, "r", encoding="utf-8") as handle:
-                            return handle.read()
-
-        raise FileNotFoundError(f"Unknown plexus docs key: {key}")
+        repo = DocumentationRepository(self._docs_dir)
+        try:
+            doc = repo.get_doc(key)
+        except InvalidDocumentationKeyError as exc:
+            message = str(exc)
+            if "Unknown" in message:
+                raise FileNotFoundError(message) from exc
+            raise ValueError(f"Invalid plexus.docs key: {key!r}") from exc
+        return doc.metadata, doc.body
 
 
 def _wrap_tactus_snippet(tactus: str) -> str:
@@ -5814,12 +5807,24 @@ return predict{ score_id = "score_compliance_tone", item_id = "item_1007" }
 evaluate{ score_id = "score_compliance_tone", item_count = 200 }
 ```
 
-6) Discover what's available (always do this when unsure):
+6) Documentation research (progressive disclosure - always do this when
+unsure how a feature works):
+The docs knowledge base is split into two cheap calls.
+`docs_list()` returns only METADATA for every topic (`id`, `title`,
+`summary`, `namespace`, `status`, `disclosure`, `tags`, `related`) - it
+does NOT return markdown bodies, so it is safe to call freely. Pick the
+right `id` from those summaries, then call `docs_get{ id = "..." }` to
+load that one topic's full body. Filter by namespace once you know the
+area. Pair with `api_list()` to see which `plexus.<namespace>.<method>`
+calls exist. Always start a new investigation at the canonical overview:
 ```tactus
-local apis = api_list()
-local topics = docs_list()
-local overview = docs_get{ key = "overview" }
-return { apis = apis, topics = topics, overview = overview.content }
+local apis     = api_list()
+local overview = docs_get{ id = "mcp.execute-tactus-overview" }
+local index    = docs_list{ namespace = "score-authoring" }
+-- pick the entry whose summary matches the question, then:
+local topic    = docs_get{ id = "score-authoring.score-yaml-format" }
+return { apis = apis, overview = overview.content,
+         index = index, topic = topic.content }
 ```
 
 7) Dispatch a long-running report (fire-and-forget, returns a handle immediately):
@@ -5838,11 +5843,19 @@ Then poll, await, or cancel from a later `execute_tactus` call:
 `handle_await{ id = "<id>", timeout = "PT10M" }`,
 `handle_cancel{ id = "<id>" }`.
 
-Read the canonical long form at any time with
-`plexus.docs.get{ key = "overview" }`. Themed docs include `discovery`,
-`read-apis`, `long-running-apis`, `handles-and-budgets`,
-`score-and-dataset-authoring/`, `evaluation-and-feedback/`, `procedures/`,
-`reports/`. Use `plexus.docs.list()` to see every available key.
+Documentation research uses PROGRESSIVE DISCLOSURE in two steps:
+1. `plexus.docs.list{}` (or `docs_list{}`) is cheap and returns only
+   metadata summaries (`id`, `title`, `summary`, `namespace`, `status`,
+   `disclosure`, `tags`, `related`). Browse this first to find the
+   right topic by reading the summaries.
+2. `plexus.docs.get{ id = "<canonical-id>" }` (or
+   `docs_get{ id = "..." }`) then loads the full markdown body for one
+   topic. Use the `id` from step 1 - never invent ids.
+Start every investigation at `mcp.execute-tactus-overview`. Filter the
+index with `plexus.docs.list{ namespace = "<name>" }`. Available
+namespaces: `mcp`, `score-authoring`, `evaluation-feedback`,
+`procedures`, `reports`, `optimizer`, `repo-workflows`. Cite the topic
+ids you used in your reply so the user can re-fetch them.
 
 The response envelope always has `ok`, `value`, `error`, `cost`, `trace_id`,
 `partial`, and `api_calls`.
@@ -5865,7 +5878,7 @@ def register_tactus_tools(mcp: FastMCP) -> None:
                     "(`evaluation.run`, `report.run`, `procedure.run` with "
                     "`async = true`) require an explicit child `budget = { usd, "
                     "wallclock_seconds, depth, tool_calls }`. Read "
-                    "`plexus.docs.get{ key = \"overview\" }` for the full guide."
+                    "`plexus.docs.get{ key = \"mcp.execute-tactus-overview\" }` for the full guide."
                 )
             ),
         ],
