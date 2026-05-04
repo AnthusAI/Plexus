@@ -39,6 +39,10 @@ jest.mock('aws-amplify/data', () => ({
   })),
 }))
 
+jest.mock('@/utils/user-profile', () => ({
+  getCurrentUserAttribution: jest.fn().mockResolvedValue({ createdByUserId: 'user-1' }),
+}))
+
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: jest.fn(),

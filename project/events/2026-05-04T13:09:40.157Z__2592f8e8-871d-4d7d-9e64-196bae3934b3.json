@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2592f8e8-871d-4d7d-9e64-196bae3934b3",
+  "issue_id": "plx-7cbe069a-8667-4712-b749-51f112e041f4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-04T13:09:40.157Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Root CLAUDE.md should not duplicate repository guidance. It should exist only to force Claude Code to read AGENTS.md as the canonical agent instruction entry point, because Claude may not reliably consult AGENTS.md on its own. Also update any stale docs_get examples in AGENTS.md while touching the entry point.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Make Claude root instructions a strict AGENTS pointer"
+  }
+}

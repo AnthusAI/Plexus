@@ -1,0 +1,25 @@
+{
+  "id": "plx-db0bd97a-4034-49d6-a5f9-ac13a34e8dfd",
+  "title": "Documentation knowledge base cleanup and DRY agent instructions",
+  "description": "Audit and redesign repository markdown and agent-instruction surfaces so the repo looks cleaner, agent guidance is DRY, and token-efficient documentation is discoverable through metadata-driven progressive disclosure.\n\nThe dashboard HTML/TSX documentation under dashboard/app/documentation/ remains separate human-facing content. The agent KB lives under documentation/agent/ as token-efficient markdown with YAML frontmatter, served through the existing plexus.docs.* APIs in the execute_tactus runtime.\n\nDefinition of Done:\n- Inventory of all markdown/agent-instruction surfaces classified as canonical, pointer, supplemental, generated, or obsolete.\n- Documentation KB behavior covered by BDD specs (frontmatter-aware list and get).\n- plexus.docs.* backed by a frontmatter-aware repository module rooted at documentation/agent/.\n- Canonical agent docs migrated and namespaced under documentation/agent/.\n- AGENTS.md, CLAUDE.md, .claude/agents/, skills/, .cursor/rules/ collapsed to thin pointers + current rules.\n- Generated root artifacts cleaned/archived; .gitignore updated.\n- Focused tests pass (BDD KB feature + execute.py docs unit tests).",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "324fd872-7b9b-4c51-82bf-f44f736ceec5",
+      "author": "ryan",
+      "text": "All planned cleanup todos complete on feature/docs-kb-cleanup branch. Audit + behavior story + frontmatter-aware repository + content migration + thin pointers + root cleanup + tests done. 7 BDD scenarios pass, 9 repository unit tests pass, 101 execute_test.py tests pass. Awaiting human review and PR.",
+      "created_at": "2026-05-04T12:20:44.700713Z"
+    }
+  ],
+  "created_at": "2026-05-04T11:57:56.521660Z",
+  "updated_at": "2026-05-04T12:20:44.700713Z",
+  "closed_at": null,
+  "custom": {}
+}

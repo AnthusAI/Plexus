@@ -7,10 +7,10 @@ OPTIMIZER_YAML_PATH = (
     Path(__file__).resolve().parents[2] / "procedures" / "feedback_alignment_optimizer.yaml"
 )
 OPTIMIZER_DOCS_DIR = (
-    Path(__file__).resolve().parents[2] / "docs" / "evaluation-and-feedback"
+    Path(__file__).resolve().parents[3] / "documentation" / "agent" / "evaluation-feedback"
 )
 OPTIMIZER_SKILL_PATH = (
-    Path(__file__).resolve().parents[3] / "skills" / "plexus-score-optimizer" / "SKILL.md"
+    Path(__file__).resolve().parents[3] / "skills" / "score-optimizer" / "SKILL.md"
 )
 
 

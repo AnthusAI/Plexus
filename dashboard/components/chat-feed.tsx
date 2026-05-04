@@ -10,6 +10,7 @@ import { Timestamp } from "@/components/ui/timestamp"
 import { getMessageIcon, getMessageTypeColor, getMessageTypeLabel } from "@/components/ui/message-utils"
 import { InteractiveMessage, type InteractiveMessageMetadata } from "@/components/ui/interactive-message"
 import { RichMessageContent } from "@/components/ui/rich-message-content"
+import { getCurrentUserAttribution } from "@/utils/user-profile"
 
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
@@ -312,6 +313,7 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
 
     // Create RESPONSE message
     console.log('[ChatFeed] Creating RESPONSE message...')
+    const attribution = await getCurrentUserAttribution()
     const messageData = {
       accountId: pendingMessage.accountId,
       sessionId: pendingMessage.sessionId,
@@ -326,7 +328,8 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
         response_type: pendingMessage.humanInteraction?.replace('PENDING_', '').toLowerCase(),
         original_request: pendingMessage.id,
         submitted_at: new Date().toISOString()
-      })
+      }),
+      ...attribution,
     }
     // @ts-ignore - Amplify generates complex union types that TypeScript can't fully infer
     const result: any = await getAmplifyClient().models.ChatMessage.create(messageData as any)

@@ -8,6 +8,10 @@ jest.mock("@/utils/data-operations", () => ({
   getClient: jest.fn(),
 }))
 
+jest.mock("@/utils/user-profile", () => ({
+  getCurrentUserAttribution: jest.fn().mockResolvedValue({ createdByUserId: "user-1" }),
+}))
+
 jest.mock("@/components/ai-elements/conversation", () => ({
   Conversation: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   ConversationContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,

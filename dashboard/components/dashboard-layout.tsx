@@ -7,7 +7,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button, type ButtonProps } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -28,6 +28,7 @@ import { useSidebar } from "@/app/contexts/SidebarContext"
 import { useAccount } from "@/app/contexts/AccountContext"
 import { DashboardDrawer } from "@/components/DashboardDrawer"
 import { Spinner } from "@/components/ui/spinner"
+import { useCurrentUserProfile } from "@/hooks/use-current-user-profile"
 
 const useMediaQuery = (query: string): boolean => {
   const [matches, setMatches] = useState(false)
@@ -108,7 +109,10 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const isDesktop = useMediaQuery("(min-width: 768px)")
   const isMobile = useMediaQuery("(max-width: 767px)")
   const { accounts, selectedAccount, isLoadingAccounts, visibleMenuItems, setSelectedAccount, refetchAccounts } = useAccount()
+  const { profile: currentUserProfile, isLoading: isLoadingUserProfile } = useCurrentUserProfile()
   const pathname = usePathname()
+  const currentUserDisplayName = currentUserProfile?.displayName || currentUserProfile?.email || "User"
+  const currentUserInitials = currentUserProfile?.initials || "U"
 
   // Handle navigation loading states
   useEffect(() => {
@@ -364,13 +368,35 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
                 className={`w-full justify-start px-2 pr-2 cursor-pointer`}
               >
                 <Avatar className={`h-8 w-8 ${isLeftSidebarOpen ? 'mr-2' : ''}`}>
-                  <AvatarFallback className="bg-background dark:bg-border">RP</AvatarFallback>
+                  {currentUserProfile?.gravatarUrl && (
+                    <AvatarImage src={currentUserProfile.gravatarUrl} alt={`${currentUserDisplayName} avatar`} />
+                  )}
+                  <AvatarFallback className="bg-background dark:bg-border">
+                    {isLoadingUserProfile ? (
+                      <Spinner className="h-4 w-4" />
+                    ) : (
+                      currentUserInitials
+                    )}
+                  </AvatarFallback>
                 </Avatar>
-                {isLeftSidebarOpen && <span className="text-muted-foreground">Ryan Porter</span>}
+                {isLeftSidebarOpen && (
+                  <span className="text-muted-foreground truncate">
+                    {isLoadingUserProfile ? "Loading user..." : currentUserDisplayName}
+                  </span>
+                )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[200px] z-[9999]">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuLabel>
+                <div className="flex flex-col">
+                  <span>My Account</span>
+                  {currentUserProfile?.email && (
+                    <span className="text-xs font-normal text-muted-foreground truncate">
+                      {currentUserProfile.email}
+                    </span>
+                  )}
+                </div>
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <Link href="/lab/settings">
                 <DropdownMenuItem className="cursor-pointer">
