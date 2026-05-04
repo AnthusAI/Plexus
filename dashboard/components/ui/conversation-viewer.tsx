@@ -684,6 +684,33 @@ const isAssistantChatMessage = (message: ChatMessage): boolean => (
   )
 )
 
+const getStreamingState = (metadata: unknown): string | null => {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null
+  }
+  const streaming = (metadata as Record<string, unknown>).streaming
+  if (!streaming || typeof streaming !== 'object' || Array.isArray(streaming)) {
+    return null
+  }
+  const state = (streaming as Record<string, unknown>).state
+  return typeof state === 'string' ? state.toLowerCase() : null
+}
+
+const shouldIgnoreRegressiveAssistantUpdate = (previous: ChatMessage, incoming: ChatMessage): boolean => {
+  if (!isAssistantChatMessage(previous) || !isAssistantChatMessage(incoming)) {
+    return false
+  }
+
+  const previousState = getStreamingState(previous.metadata)
+  if (previousState === 'complete') {
+    return false
+  }
+
+  const previousContentLength = (previous.content || '').length
+  const incomingContentLength = (incoming.content || '').length
+  return incomingContentLength < previousContentLength
+}
+
 const CLIENT_HISTORY_SNAPSHOT_LIMIT = 24
 const CLIENT_HISTORY_SNAPSHOT_MAX_CHARS = 600
 
@@ -2181,6 +2208,9 @@ function ConversationViewer({
 
       const previous = prevMessages[existingIndex]
       if (areMessagesEquivalent(previous, parsed)) {
+        return prevMessages
+      }
+      if (shouldIgnoreRegressiveAssistantUpdate(previous, parsed)) {
         return prevMessages
       }
 
