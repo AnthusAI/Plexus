@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { getClient } from '@/utils/data-operations'
 import { formatAmplifyError } from '@/utils/amplify-client'
+import { getCurrentUserAttribution } from '@/utils/user-profile'
 import {
   Conversation,
   ConversationEmptyState,
@@ -1751,6 +1752,7 @@ function ConversationViewer({
       })
       const respondedAt = new Date().toISOString()
       const responseTarget = getConsoleResponseTarget()
+      const attribution = await getCurrentUserAttribution()
       const responseMetadata = {
         control: {
           request_id: control.request_id,
@@ -1777,6 +1779,7 @@ function ConversationViewer({
         responseTarget,
         responseStatus: 'PENDING',
         createdAt: respondedAt,
+        ...attribution,
       })
       const responseMessageId = created?.data?.id
       if (!responseMessageId) {
@@ -2606,6 +2609,28 @@ function ConversationViewer({
   }, [latestConversationRenderSignature, selectedSessionId, shouldForceFollow])
 
   const previousThinkingStateRef = React.useRef(false)
+  const pendingInitialTailJumpSessionRef = React.useRef<string | null>(null)
+
+  useEffect(() => {
+    pendingInitialTailJumpSessionRef.current = selectedSessionId || null
+  }, [selectedSessionId])
+
+  useEffect(() => {
+    const pendingSessionId = pendingInitialTailJumpSessionRef.current
+    if (!pendingSessionId || pendingSessionId !== selectedSessionId || renderRows.length === 0) {
+      return
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" })
+      pendingInitialTailJumpSessionRef.current = null
+    })
+
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [renderRows.length, selectedSessionId])
+
   useEffect(() => {
     const transitionedFromThinkingToMessage = previousThinkingStateRef.current && !showThinkingPlaceholder
     previousThinkingStateRef.current = showThinkingPlaceholder
@@ -2799,6 +2824,7 @@ function ConversationViewer({
         let messagePersisted = false
         try {
           const client = getClient()
+          const attribution = await getCurrentUserAttribution()
           const metadata = enableProcedureSteering
             ? {
                 source: 'procedure-steering-input',
@@ -2836,6 +2862,7 @@ function ConversationViewer({
             metadata: JSON.stringify(metadata),
             responseTarget,
             responseStatus: enableProcedureSteering ? 'COMPLETED' : 'PENDING',
+            ...attribution,
           })
 
           const createdMessageId = created?.data?.id
