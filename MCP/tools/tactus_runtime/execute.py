@@ -3290,11 +3290,21 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
             cmd += ["--start-date", str(block_config["start_date"])]
         if block_config.get("end_date"):
             cmd += ["--end-date", str(block_config["end_date"])]
+        _append_optional_cli_arg(cmd, "--cache-key", cache_key)
+        _append_optional_cli_arg(cmd, "--ttl-hours", args.get("ttl_hours"))
         if block_class == "AcceptanceRate":
             if block_config.get("include_item_acceptance_rate"):
                 cmd.append("--include-item-acceptance-rate")
             if block_config.get("max_items") is not None:
                 cmd += ["--max-items", str(block_config["max_items"])]
+        if block_class == "FeedbackContradictions":
+            _append_optional_cli_arg(cmd, "--score-version-id", block_config.get("score_version_id"))
+            _append_optional_cli_arg(cmd, "--mode", block_config.get("mode"))
+            _append_optional_cli_arg(cmd, "--max-feedback-items", block_config.get("max_feedback_items"))
+            _append_optional_cli_arg(cmd, "--num-topics", block_config.get("num_topics"))
+            _append_optional_cli_arg(cmd, "--max-concurrent", block_config.get("max_concurrent"))
+            if block_config.get("include_rubric_memory"):
+                cmd.append("--include-rubric-memory")
         if block_class == "ScoreChampionVersionTimeline":
             if block_config.get("include_unchanged"):
                 cmd.append("--include-unchanged")

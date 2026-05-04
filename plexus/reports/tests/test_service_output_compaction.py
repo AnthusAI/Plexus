@@ -143,47 +143,133 @@ def test_fetch_first_block_result_surfaces_failed_compacted_payload(monkeypatch)
 
 
 def test_check_db_cache_ignores_failed_compacted_report(monkeypatch):
-    report = Mock()
-    report.id = "report-err"
-    report.createdAt = service.datetime.now(service.timezone.utc)
-    report.output = "```block\nclass: FeedbackContradictions\n```"
-    report.parameters = {"_cache_key": "cache-key"}
-
-    monkeypatch.setattr(service.Report, "list_by_account_id", Mock(return_value=[report]))
+    now = service.datetime.now(service.timezone.utc).isoformat()
+    client = Mock()
+    client.execute.return_value = {
+        "listReportByAccountIdAndUpdatedAt": {
+            "items": [
+                {
+                    "id": "report-err",
+                    "accountId": "acct-1",
+                    "name": "Feedback Contradictions",
+                    "taskId": "task-1",
+                    "createdAt": now,
+                    "updatedAt": now,
+                    "parameters": {"_cache_key": "cache-key"},
+                    "output": "```block\nclass: FeedbackContradictions\n```",
+                }
+            ],
+            "nextToken": None,
+        }
+    }
     monkeypatch.setattr(service, "_fetch_first_block_result", Mock(return_value=(None, "Score not found")))
 
-    cached = service._check_db_cache("cache-key", "acct-1", Mock(), ttl_hours=24)
+    cached = service._check_db_cache("cache-key", "acct-1", client, ttl_hours=24)
 
     assert cached is None
 
 
 def test_check_db_cache_uses_report_parameters_cache_key(monkeypatch):
-    matching_report = Mock()
-    matching_report.id = "report-match"
-    matching_report.createdAt = service.datetime.now(service.timezone.utc)
-    matching_report.output = "```block\nclass: FeedbackContradictions\n```"
-    matching_report.parameters = {"_cache_key": "cache-key"}
-
-    non_matching_report = Mock()
-    non_matching_report.id = "report-other"
-    non_matching_report.createdAt = service.datetime.now(service.timezone.utc)
-    non_matching_report.output = "```block\nclass: FeedbackContradictions\n```"
-    non_matching_report.parameters = {"_cache_key": "other-cache-key"}
-
-    monkeypatch.setattr(
-        service.Report,
-        "list_by_account_id",
-        Mock(return_value=[non_matching_report, matching_report]),
-    )
+    now = service.datetime.now(service.timezone.utc).isoformat()
+    client = Mock()
+    client.execute.return_value = {
+        "listReportByAccountIdAndUpdatedAt": {
+            "items": [
+                {
+                    "id": "report-other",
+                    "accountId": "acct-1",
+                    "name": "Other Report",
+                    "taskId": "task-1",
+                    "createdAt": now,
+                    "updatedAt": now,
+                    "parameters": {"_cache_key": "other-cache-key"},
+                    "output": "```block\nclass: FeedbackContradictions\n```",
+                },
+                {
+                    "id": "report-match",
+                    "accountId": "acct-1",
+                    "name": "Feedback Contradictions",
+                    "taskId": "task-2",
+                    "createdAt": now,
+                    "updatedAt": now,
+                    "parameters": {"_cache_key": "cache-key"},
+                    "output": "```block\nclass: FeedbackContradictions\n```",
+                },
+            ],
+            "nextToken": None,
+        }
+    }
     monkeypatch.setattr(
         service,
         "_fetch_first_block_result",
         Mock(return_value=({"status": "ok", "topics": [1, 2]}, None)),
     )
 
-    cached = service._check_db_cache("cache-key", "acct-1", Mock(), ttl_hours=24)
+    cached = service._check_db_cache("cache-key", "acct-1", client, ttl_hours=24)
 
     assert cached == {"status": "ok", "topics": [1, 2]}
+
+
+def test_check_db_cache_pages_until_ttl_window(monkeypatch):
+    now = service.datetime.now(service.timezone.utc).isoformat()
+    client = Mock()
+    client.execute.side_effect = [
+        {
+            "listReportByAccountIdAndUpdatedAt": {
+                "items": [
+                    {
+                        "id": "report-other",
+                        "accountId": "acct-1",
+                        "name": "Other Report",
+                        "taskId": "task-1",
+                        "createdAt": now,
+                        "updatedAt": now,
+                        "parameters": {"_cache_key": "other-cache-key"},
+                        "output": "{}",
+                    }
+                ],
+                "nextToken": "page-2",
+            }
+        },
+        {
+            "listReportByAccountIdAndUpdatedAt": {
+                "items": [
+                    {
+                        "id": "report-match",
+                        "accountId": "acct-1",
+                        "name": "Feedback Contradictions",
+                        "taskId": "task-2",
+                        "createdAt": now,
+                        "updatedAt": now,
+                        "parameters": {"_cache_key": "cache-key"},
+                        "output": json.dumps({"status": "ok", "topics": [1]}),
+                    }
+                ],
+                "nextToken": None,
+            }
+        },
+    ]
+
+    cached = service._check_db_cache("cache-key", "acct-1", client, ttl_hours=24)
+
+    assert cached == {"status": "ok", "topics": [1]}
+    assert client.execute.call_count == 2
+
+
+def test_programmatic_report_display_uses_block_config_when_output_omits_names():
+    title, subtitle = service._derive_programmatic_display_strings(
+        cache_key="FeedbackContradictions: Suco / Project Intent AI / v1",
+        block_class="FeedbackContradictions",
+        block_config={
+            "scorecard": "Suco - Home Improvement",
+            "score": "Project Intent AI",
+            "days": "90",
+        },
+        output_data={"status": "ok", "topics": []},
+    )
+
+    assert title == "Suco - Home Improvement - Project Intent AI - Feedback Contradictions"
+    assert subtitle == "Last 90 days"
 
 
 def test_persist_output_artifact_raises_when_s3_unavailable(monkeypatch):

@@ -4101,7 +4101,7 @@ code: |
   -- fresh-run and continuation paths.
   local function refresh_known_contradictions(current_cycle, opts)
     opts = opts or {}
-    local ttl = opts.ttl_hours or 24
+    local ttl = tonumber(opts.ttl_hours or params.contradictions_report_ttl_hours or 24) or 24
     local fresh = opts.fresh or false
     local contradictions_score_version_id =
       State.get("last_accepted_version_id") or active_rubric_memory_score_version_id or champion_version_id
@@ -4111,8 +4111,8 @@ code: |
     local ok, report_result = pcall(call_plexus_tool, "plexus_report_run", {
       block_class = "FeedbackContradictions",
       block_config = {
-        scorecard = params.scorecard,
-        score = params.score,
+        scorecard = scorecard_name,
+        score = score_name,
         mode = "contradictions",
         days = tostring(params.days or 90),
         max_feedback_items = 100,
@@ -4863,7 +4863,7 @@ code: |
   State.set("last_recent_rca", recent_baseline_rca)
 
   -- Refresh feedback contradictions results now that the procedure needs them.
-  pcall(refresh_known_contradictions, 0, {ttl_hours = 48})
+  pcall(refresh_known_contradictions, 0, {})
 
   -- Early exit: if feedback alignment is already perfect or no RCA data
   local fb_rca_topics = (type(recent_baseline_rca) == "table" and recent_baseline_rca.topics) or {}
@@ -8525,8 +8525,8 @@ code: |
     local ok, report_result = pcall(call_plexus_tool, "plexus_report_run", {
       block_class = "FeedbackContradictions",
       block_config = {
-        scorecard = params.scorecard,
-        score = params.score,
+        scorecard = scorecard_name,
+        score = score_name,
         mode = "contradictions",
         days = tostring(params.days or 90),
         max_feedback_items = 400,
@@ -8535,7 +8535,7 @@ code: |
         score_version_id = final_contradictions_score_version_id
       },
       cache_key = "FeedbackContradictions (expanded): " .. scorecard_name .. " / " .. score_name .. " / " .. tostring(final_contradictions_score_version_id),
-      ttl_hours = 4,
+      ttl_hours = tonumber(params.contradictions_report_ttl_hours or 24) or 24,
       fresh = false
     })
     if ok and report_result then

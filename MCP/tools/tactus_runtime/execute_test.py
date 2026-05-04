@@ -2652,13 +2652,28 @@ def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -
         {
             "block_class": "FeedbackContradictions",
             "cache_key": "report-cache",
-            "block_config": {"scorecard": "Card", "score": "Score", "days": 30},
+            "ttl_hours": 24,
+            "block_config": {
+                "scorecard": "Card",
+                "score": "Score",
+                "days": 30,
+                "mode": "contradictions",
+                "max_feedback_items": 200,
+                "num_topics": 8,
+                "include_rubric_memory": True,
+                "score_version_id": "version-1",
+            },
             "fresh": True,
         }
     )
 
     assert result == {"status": "running", "block_class": "FeedbackContradictions", "pid": 12345}
-    assert captured["cmd"][-7:] == [
+    assert captured["cmd"] == [
+        captured["cmd"][0],
+        "-m",
+        "plexus",
+        "feedback",
+        "report",
         "contradictions",
         "--scorecard",
         "Card",
@@ -2666,8 +2681,21 @@ def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -
         "Score",
         "--days",
         "30",
+        "--cache-key",
+        "report-cache",
+        "--ttl-hours",
+        "24",
+        "--score-version-id",
+        "version-1",
+        "--mode",
+        "contradictions",
+        "--max-feedback-items",
+        "200",
+        "--num-topics",
+        "8",
+        "--include-rubric-memory",
         "--fresh",
-    ][-7:]
+    ]
     assert captured["kwargs"]["stdout"] is not None
     assert captured["kwargs"]["stderr"] is not None
 
