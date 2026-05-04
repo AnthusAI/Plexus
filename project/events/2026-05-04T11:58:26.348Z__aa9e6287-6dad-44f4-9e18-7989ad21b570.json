@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "aa9e6287-6dad-44f4-9e18-7989ad21b570",
+  "issue_id": "plx-f042d920-598a-4be2-b17f-1a5c655208fd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-04T11:58:26.348Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Remove or move root-level generated artifacts (optimizer cycle planning context dumps, *.log, ad hoc *_report.md/feedback_report*.md, dosage_optimizer.log, test_*.log) into tmp/ or delete; add patterns to .gitignore so they do not recur.",
+    "issue_type": "chore",
+    "labels": [],
+    "parent": "plx-db0bd97a-4034-49d6-a5f9-ac13a34e8dfd",
+    "priority": 2,
+    "status": "open",
+    "title": "Clean root-level generated artifacts and update .gitignore"
+  }
+}

@@ -624,7 +624,20 @@ def test_extract_tool_value_parses_result_json_string() -> None:
 def test_plexus_docs_get_reads_filesystem_directly(tmp_path) -> None:
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
-    (docs_dir / "score-yaml-format.md").write_text("# Score docs", encoding="utf-8")
+    (docs_dir / "score-yaml-format.md").write_text(
+        "---\n"
+        "id: score-authoring.score-yaml-format\n"
+        "title: Score YAML Format\n"
+        "summary: Test\n"
+        "namespace: score-authoring\n"
+        "status: canonical\n"
+        "disclosure: reference\n"
+        "audience: agent\n"
+        "tags: [test]\n"
+        "---\n"
+        "# Score docs",
+        encoding="utf-8",
+    )
 
     class FakeMCP:
         def __init__(self) -> None:
@@ -637,9 +650,12 @@ def test_plexus_docs_get_reads_filesystem_directly(tmp_path) -> None:
     fake_mcp = FakeMCP()
     facade = execute.PlexusRuntimeModule(fake_mcp, docs_dir=str(docs_dir))
 
-    value = facade.docs.get({"key": "score-yaml-format"})
+    value = facade.docs.get({"key": "score-authoring.score-yaml-format"})
 
-    assert value == {"key": "score-yaml-format", "content": "# Score docs"}
+    assert value["key"] == "score-authoring.score-yaml-format"
+    assert value["id"] == "score-authoring.score-yaml-format"
+    assert value["content"] == "# Score docs"
+    assert value["metadata"]["title"] == "Score YAML Format"
     assert fake_mcp.calls == []
     assert facade.api_calls == ["plexus.docs.get"]
 
@@ -706,20 +722,61 @@ async def test_execute_tactus_tool_description_contains_curated_examples() -> No
 def test_execute_tactus_description_constant_includes_themed_doc_pointers() -> None:
     description = execute.EXECUTE_TACTUS_DESCRIPTION
 
-    for theme in (
-        "overview",
-        "discovery",
-        "read-apis",
-        "long-running-apis",
-        "handles-and-budgets",
-        "score-and-dataset-authoring/",
-        "evaluation-and-feedback/",
-        "procedures/",
-        "reports/",
+    assert "mcp.execute-tactus-overview" in description, (
+        "tool description should point at the canonical overview topic id"
+    )
+    assert "plexus.docs.list" in description, (
+        "tool description should tell agents how to discover topics"
+    )
+    for namespace in (
+        "mcp",
+        "score-authoring",
+        "evaluation-feedback",
+        "procedures",
+        "reports",
+        "optimizer",
+        "repo-workflows",
     ):
-        assert theme in description, (
-            f"tool description should reference theme {theme!r}"
+        assert namespace in description, (
+            f"tool description should reference namespace {namespace!r}"
         )
+
+
+def test_execute_tactus_description_teaches_progressive_disclosure() -> None:
+    """The boot prompt must explicitly teach the docs_list -> docs_get pattern.
+
+    Progressive disclosure is the whole reason agent docs carry YAML
+    frontmatter: callers browse cheap metadata summaries first, then
+    pay to load only the topic bodies they actually need. This test
+    locks in the language so future edits can't silently regress to a
+    "dump everything" model that would blow the token budget.
+    """
+
+    description = execute.EXECUTE_TACTUS_DESCRIPTION
+
+    assert "progressive disclosure" in description.lower(), (
+        "tool description should name the progressive-disclosure pattern"
+    )
+    # The two-step language: metadata summaries first, then full body.
+    assert "metadata" in description.lower(), (
+        "tool description should explain that docs_list returns metadata "
+        "(not full bodies)"
+    )
+    for marker in ("summary", "id", "namespace", "tags", "related"):
+        assert marker in description, (
+            f"tool description should list metadata field {marker!r} so "
+            "agents know what to filter on"
+        )
+    # Canonical accessor for docs_get.
+    assert 'docs.get{ id = "' in description or 'docs_get{ id = "' in description, (
+        "tool description should show the canonical "
+        "`docs_get{ id = \"...\" }` form"
+    )
+    # The example block exists.
+    assert 'docs_list{ namespace = "score-authoring" }' in description, (
+        "tool description should include a concrete docs_list example "
+        "filtered by namespace"
+    )
 
 
 @pytest.mark.asyncio
@@ -1024,16 +1081,64 @@ def test_plexus_api_list_advertises_known_namespaces() -> None:
     assert facade.api_calls == ["plexus.api.list"]
 
 
-@pytest.mark.asyncio
-async def test_execute_tactus_docs_list_and_get_use_filesystem_directly(
-    tmp_path,
+_FRONTMATTER_TEMPLATE = (
+    "---\n"
+    "id: {doc_id}\n"
+    "title: {title}\n"
+    "summary: {summary}\n"
+    "namespace: {namespace}\n"
+    "status: canonical\n"
+    "disclosure: reference\n"
+    "audience: agent\n"
+    "tags: {tags}\n"
+    "---\n"
+    "{body}"
+)
+
+
+def _write_doc(
+    path,
+    doc_id: str,
+    title: str,
+    namespace: str,
+    body: str,
+    *,
+    summary: str = "Test document.",
+    tags: str = "[test]",
 ) -> None:
+    path.write_text(
+        _FRONTMATTER_TEMPLATE.format(
+            doc_id=doc_id,
+            title=title,
+            summary=summary,
+            namespace=namespace,
+            tags=tags,
+            body=body,
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_docs_list_and_get_use_repository(tmp_path) -> None:
     mcp = FastMCP("test-execute-tactus-docs")
 
     docs_dir = tmp_path / "docs"
-    docs_dir.mkdir()
-    (docs_dir / "score-yaml-format.md").write_text("# Score YAML\n")
-    (docs_dir / "feedback-alignment.md").write_text("# Feedback Alignment\n")
+    (docs_dir / "score-authoring").mkdir(parents=True)
+    (docs_dir / "evaluation-feedback").mkdir(parents=True)
+    _write_doc(
+        docs_dir / "score-authoring" / "score-yaml-format.md",
+        doc_id="score-authoring.score-yaml-format",
+        title="Score YAML",
+        namespace="score-authoring",
+        body="# Score YAML\n",
+    )
+    _write_doc(
+        docs_dir / "evaluation-feedback" / "feedback-alignment.md",
+        doc_id="evaluation-feedback.feedback-alignment",
+        title="Feedback Alignment",
+        namespace="evaluation-feedback",
+        body="# Feedback Alignment\n",
+    )
     (docs_dir / "README.md").write_text("# index\n")
 
     original_docs_dir = execute.PLEXUS_DOCS_DIR
@@ -1045,19 +1150,28 @@ async def test_execute_tactus_docs_list_and_get_use_filesystem_directly(
         )
 
         assert list_result["ok"] is True
-        assert list_result["value"] == ["feedback-alignment", "score-yaml-format"]
+        ids = [entry["id"] for entry in list_result["value"]]
+        assert ids == [
+            "evaluation-feedback.feedback-alignment",
+            "score-authoring.score-yaml-format",
+        ]
+        for entry in list_result["value"]:
+            assert "title" in entry and "summary" in entry and "namespace" in entry
+            assert "content" not in entry and "body" not in entry
         assert list_result["api_calls"] == ["plexus.docs.list"]
 
         get_result = await execute._execute_tactus_tool(
-            'return plexus.docs.get{ key = "score-yaml-format" }',
+            'return plexus.docs.get{ key = "score-authoring.score-yaml-format" }',
             mcp,
         )
 
         assert get_result["ok"] is True
-        assert get_result["value"] == {
-            "key": "score-yaml-format",
-            "content": "# Score YAML\n",
-        }
+        value = get_result["value"]
+        assert value["key"] == "score-authoring.score-yaml-format"
+        assert value["id"] == "score-authoring.score-yaml-format"
+        assert value["content"] == "# Score YAML\n"
+        assert value["metadata"]["title"] == "Score YAML"
+        assert value["metadata"]["namespace"] == "score-authoring"
         assert get_result["api_calls"] == ["plexus.docs.get"]
         assert get_result["cost"]["tool_calls"] == 1
     finally:
@@ -1067,7 +1181,13 @@ async def test_execute_tactus_docs_list_and_get_use_filesystem_directly(
 def test_plexus_runtime_module_docs_get_rejects_unsafe_keys(tmp_path) -> None:
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
-    (docs_dir / "ok.md").write_text("ok")
+    _write_doc(
+        docs_dir / "ok.md",
+        doc_id="mcp.ok",
+        title="OK",
+        namespace="mcp",
+        body="ok",
+    )
 
     module = execute.PlexusRuntimeModule(FastMCP("test"), docs_dir=str(docs_dir))
 
@@ -1080,114 +1200,168 @@ def test_plexus_runtime_module_docs_get_rejects_unsafe_keys(tmp_path) -> None:
     with pytest.raises(ValueError, match="Invalid plexus.docs key"):
         module._docs_read("evaluation/../../etc/passwd")
     with pytest.raises(FileNotFoundError):
-        module._docs_read("missing")
+        module._docs_read("missing.id")
 
 
-def test_plexus_runtime_module_docs_list_excludes_readme(tmp_path) -> None:
+def test_plexus_runtime_module_docs_list_excludes_readme_and_index(tmp_path) -> None:
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
-    (docs_dir / "alpha.md").write_text("a")
-    (docs_dir / "beta.md").write_text("b")
+    _write_doc(
+        docs_dir / "alpha.md",
+        doc_id="ns.alpha",
+        title="Alpha",
+        namespace="ns",
+        body="a",
+    )
+    _write_doc(
+        docs_dir / "beta.md",
+        doc_id="ns.beta",
+        title="Beta",
+        namespace="ns",
+        body="b",
+    )
     (docs_dir / "README.md").write_text("readme")
+    _write_doc(
+        docs_dir / "_index.md",
+        doc_id="ns._index",
+        title="Index",
+        namespace="ns",
+        body="index",
+    )
     (docs_dir / "notes.txt").write_text("ignored")
 
     module = execute.PlexusRuntimeModule(FastMCP("test"), docs_dir=str(docs_dir))
 
-    assert module._docs_list() == ["alpha", "beta"]
+    ids = [entry["id"] for entry in module._docs_list()]
+    assert ids == ["ns.alpha", "ns.beta"]
 
 
-def test_plexus_runtime_module_docs_list_returns_nested_keys(tmp_path) -> None:
+def test_plexus_runtime_module_docs_list_returns_namespaced_metadata(tmp_path) -> None:
     docs_dir = tmp_path / "docs"
-    (docs_dir / "evaluation-and-feedback").mkdir(parents=True)
-    (docs_dir / "score-and-dataset-authoring").mkdir(parents=True)
-    (docs_dir / "overview.md").write_text("overview")
-    (docs_dir / "evaluation-and-feedback" / "feedback-alignment.md").write_text(
-        "feedback"
+    (docs_dir / "evaluation-feedback").mkdir(parents=True)
+    (docs_dir / "score-authoring").mkdir(parents=True)
+    _write_doc(
+        docs_dir / "evaluation-feedback" / "feedback-alignment.md",
+        doc_id="evaluation-feedback.feedback-alignment",
+        title="Feedback Alignment",
+        namespace="evaluation-feedback",
+        body="feedback",
     )
-    (docs_dir / "evaluation-and-feedback" / "README.md").write_text("theme readme")
-    (docs_dir / "score-and-dataset-authoring" / "score-yaml-format.md").write_text(
-        "score"
+    _write_doc(
+        docs_dir / "evaluation-feedback" / "_index.md",
+        doc_id="evaluation-feedback._index",
+        title="Evaluation Feedback",
+        namespace="evaluation-feedback",
+        body="index",
+    )
+    _write_doc(
+        docs_dir / "score-authoring" / "score-yaml-format.md",
+        doc_id="score-authoring.score-yaml-format",
+        title="Score YAML",
+        namespace="score-authoring",
+        body="score",
     )
     (docs_dir / "README.md").write_text("top readme")
 
     module = execute.PlexusRuntimeModule(FastMCP("test"), docs_dir=str(docs_dir))
 
-    assert module._docs_list() == [
-        "evaluation-and-feedback/feedback-alignment",
-        "overview",
-        "score-and-dataset-authoring/score-yaml-format",
+    entries = module._docs_list()
+    ids = [entry["id"] for entry in entries]
+    assert ids == [
+        "evaluation-feedback.feedback-alignment",
+        "score-authoring.score-yaml-format",
     ]
+    namespaces = {entry["namespace"] for entry in entries}
+    assert namespaces == {"evaluation-feedback", "score-authoring"}
 
 
-def test_plexus_runtime_module_docs_read_resolves_nested_key(tmp_path) -> None:
+def test_plexus_runtime_module_docs_list_supports_namespace_filter(tmp_path) -> None:
     docs_dir = tmp_path / "docs"
-    (docs_dir / "evaluation-and-feedback").mkdir(parents=True)
-    (docs_dir / "evaluation-and-feedback" / "feedback-alignment.md").write_text(
-        "nested-content"
+    (docs_dir / "mcp").mkdir(parents=True)
+    (docs_dir / "score-authoring").mkdir(parents=True)
+    _write_doc(
+        docs_dir / "mcp" / "discovery.md",
+        doc_id="mcp.discovery",
+        title="Discovery",
+        namespace="mcp",
+        body="d",
+    )
+    _write_doc(
+        docs_dir / "score-authoring" / "score-yaml-format.md",
+        doc_id="score-authoring.score-yaml-format",
+        title="Score YAML",
+        namespace="score-authoring",
+        body="s",
     )
 
     module = execute.PlexusRuntimeModule(FastMCP("test"), docs_dir=str(docs_dir))
 
-    assert (
-        module._docs_read("evaluation-and-feedback/feedback-alignment")
-        == "nested-content"
-    )
+    mcp_entries = module._docs_list(namespace="mcp")
+    assert [e["id"] for e in mcp_entries] == ["mcp.discovery"]
 
 
-def test_plexus_runtime_module_docs_read_legacy_stem_fallback(tmp_path) -> None:
+def test_plexus_runtime_module_docs_read_returns_metadata_and_body(tmp_path) -> None:
     docs_dir = tmp_path / "docs"
-    (docs_dir / "evaluation-and-feedback").mkdir(parents=True)
-    (docs_dir / "evaluation-and-feedback" / "feedback-alignment.md").write_text(
-        "legacy-stem-resolves"
+    (docs_dir / "evaluation-feedback").mkdir(parents=True)
+    _write_doc(
+        docs_dir / "evaluation-feedback" / "feedback-alignment.md",
+        doc_id="evaluation-feedback.feedback-alignment",
+        title="Feedback Alignment",
+        namespace="evaluation-feedback",
+        body="nested-content",
     )
 
     module = execute.PlexusRuntimeModule(FastMCP("test"), docs_dir=str(docs_dir))
 
-    assert module._docs_read("feedback-alignment") == "legacy-stem-resolves"
+    metadata, body = module._docs_read("evaluation-feedback.feedback-alignment")
+    assert body == "nested-content"
+    assert metadata["title"] == "Feedback Alignment"
+    assert metadata["namespace"] == "evaluation-feedback"
 
 
-def test_plexus_runtime_module_docs_read_legacy_fallback_skips_readme(
-    tmp_path,
-) -> None:
+def test_plexus_runtime_module_docs_read_unknown_id_raises(tmp_path) -> None:
     docs_dir = tmp_path / "docs"
     (docs_dir / "procedures").mkdir(parents=True)
-    (docs_dir / "procedures" / "README.md").write_text("theme readme")
+    _write_doc(
+        docs_dir / "procedures" / "_index.md",
+        doc_id="procedures._index",
+        title="Procedures",
+        namespace="procedures",
+        body="index",
+    )
 
     module = execute.PlexusRuntimeModule(FastMCP("test"), docs_dir=str(docs_dir))
 
     with pytest.raises(FileNotFoundError):
-        module._docs_read("README")
-    with pytest.raises(FileNotFoundError):
-        module._docs_read("readme")
+        module._docs_read("procedures.no-such-doc")
 
 
 def test_plexus_docs_repository_layout_exposes_themed_keys() -> None:
     docs_dir = execute.PLEXUS_DOCS_DIR
     module = execute.PlexusRuntimeModule(FastMCP("test"), docs_dir=docs_dir)
 
-    keys = module._docs_list()
+    entries = module._docs_list()
+    ids = {entry["id"] for entry in entries}
 
-    assert "overview" in keys
-    assert "discovery" in keys
-    assert "read-apis" in keys
-    assert "long-running-apis" in keys
-    assert "handles-and-budgets" in keys
-    assert "evaluation-and-feedback/feedback-alignment" in keys
-    assert "score-and-dataset-authoring/score-yaml-format" in keys
-    assert all(not key.endswith("/README") for key in keys)
-    assert all(not key.endswith("readme") for key in keys)
+    assert "mcp.execute-tactus-overview" in ids
+    assert "mcp.discovery" in ids
+    assert "mcp.read-apis" in ids
+    assert "mcp.long-running-apis" in ids
+    assert "mcp.handles-and-budgets" in ids
+    assert "evaluation-feedback.feedback-alignment" in ids
+    assert "score-authoring.score-yaml-format" in ids
+    for entry in entries:
+        assert not entry["id"].endswith("._index")
+        assert "readme" not in entry["id"].lower()
 
-    legacy = module._docs_read("feedback-alignment")
-    assert "Feedback Alignment" in legacy or "feedback-alignment" in legacy.lower()
+    metadata, body = module._docs_read("evaluation-feedback.feedback-alignment")
+    assert "feedback" in body.lower()
+    assert metadata["namespace"] == "evaluation-feedback"
 
-    nested = module._docs_read(
-        "evaluation-and-feedback/feedback-alignment"
-    )
-    assert nested == legacy
-
-    overview = module._docs_read("overview")
-    assert "execute_tactus" in overview
-    assert "docs.list" in overview or "docs_list" in overview
+    overview_meta, overview_body = module._docs_read("mcp.execute-tactus-overview")
+    assert "execute_tactus" in overview_body
+    assert "docs.list" in overview_body or "docs_list" in overview_body
+    assert overview_meta["namespace"] == "mcp"
 
 
 @pytest.mark.asyncio
@@ -1393,7 +1567,13 @@ def test_budget_gate_trips_on_wallclock() -> None:
 def test_plexus_runtime_module_records_tool_call_against_budget(tmp_path) -> None:
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
-    (docs_dir / "alpha.md").write_text("a", encoding="utf-8")
+    _write_doc(
+        docs_dir / "alpha.md",
+        doc_id="ns.alpha",
+        title="Alpha",
+        namespace="ns",
+        body="a",
+    )
 
     gate = execute.BudgetGate()
     module = execute.PlexusRuntimeModule(
@@ -1401,7 +1581,7 @@ def test_plexus_runtime_module_records_tool_call_against_budget(tmp_path) -> Non
     )
 
     module.docs.list({})
-    module.docs.get({"key": "alpha"})
+    module.docs.get({"key": "ns.alpha"})
 
     assert gate.tool_calls == 2
     assert gate.exceeded is False
@@ -1412,7 +1592,13 @@ def test_plexus_runtime_module_blocks_call_when_budget_already_exceeded(
 ) -> None:
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
-    (docs_dir / "alpha.md").write_text("a", encoding="utf-8")
+    _write_doc(
+        docs_dir / "alpha.md",
+        doc_id="ns.alpha",
+        title="Alpha",
+        namespace="ns",
+        body="a",
+    )
 
     gate = execute.BudgetGate(execute.BudgetSpec(tool_calls=1))
     module = execute.PlexusRuntimeModule(

@@ -25,19 +25,21 @@ Start every session by discovering the available runtime API and docs from
 inside `execute_tactus`:
 
 ```lua
-return plexus.api.list()
+return plexus.api.list({})
 ```
 
 ```lua
-return plexus.docs.list()
+return plexus.docs.list({})
 ```
 
 ```lua
-return plexus.docs.get{ key = "overview" }
+return plexus.docs.get({ key = "mcp.execute-tactus-overview" })
 ```
 
-Docs live under `plexus/docs/` and are exposed through `plexus.docs.*`. The
-runtime rejects path traversal and unknown documentation keys.
+Docs live under `documentation/agent/` and are exposed through
+`plexus.docs.*`. Each topic carries YAML frontmatter with `id`, `title`,
+`summary`, `namespace`, `status`, `disclosure`, `tags`, and `related`.
+The runtime rejects path traversal and unknown documentation ids.
 
 ## Common Calls
 
@@ -126,8 +128,9 @@ Tactus runtime instead:
 1. Implement or wire the Plexus SDK/service function.
 2. Expose it through `MCP/tools/tactus_runtime/execute.py`, preferably as a
    direct handler.
-3. Make it discoverable through `plexus.api.list()`.
-4. Document the workflow under `plexus/docs/`.
+3. Make it discoverable through `plexus.api.list({})`.
+4. Document the workflow under `documentation/agent/<namespace>/<topic>.md`
+   with YAML frontmatter following the schema in `AGENTS.md`.
 5. Add tests in `MCP/tools/tactus_runtime/execute_test.py`.
 
 This keeps the external MCP schema stable while giving agents a richer,
@@ -135,7 +138,9 @@ composable programming surface.
 
 ## Related Runtime Docs
 
-- `MCP/tools/tactus_runtime/HANDLE_PROTOCOL.md`
-- `plexus/docs/overview.md`
-- `plexus/docs/discovery.md`
-- `plexus/docs/evaluation-and-feedback/`
+Discoverable through `plexus.docs.*`:
+
+- `mcp.execute-tactus-overview`
+- `mcp.discovery`
+- `mcp.handle-protocol`
+- The `evaluation-feedback`, `score-authoring`, and `reports` namespaces.

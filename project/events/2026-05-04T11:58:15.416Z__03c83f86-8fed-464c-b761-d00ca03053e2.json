@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "03c83f86-8fed-464c-b761-d00ca03053e2",
+  "issue_id": "plx-ae85ea71-2374-4ab3-8caf-546487547db9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-04T11:58:15.416Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Inventory every markdown, agent-instruction, and rule surface and produce documentation/agent-doc-audit.md classifying each as canonical KB, pointer, supplemental, generated artifact, or obsolete.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-db0bd97a-4034-49d6-a5f9-ac13a34e8dfd",
+    "priority": 2,
+    "status": "open",
+    "title": "Audit and classify all repo documentation surfaces"
+  }
+}

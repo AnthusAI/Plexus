@@ -1,0 +1,18 @@
+{
+  "id": "plx-a0ed2f2d-ff4e-479a-9f36-fc69aaebdbce",
+  "title": "Remove redundant plexus prefix from skill names",
+  "description": "Rename repo-local skill directories that start with plexus- to shorter names and update references in agent/docs entry points. Verify focused tests/searches after the rename.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-04T13:07:01.799908Z",
+  "updated_at": "2026-05-04T13:09:03.965825Z",
+  "closed_at": "2026-05-04T13:09:03.965825Z",
+  "custom": {}
+}
