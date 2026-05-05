@@ -69,13 +69,18 @@ def deserialize_dynamo_item(item):
     return {key: deserializer.deserialize(value) for key, value in item.items()}
 
 
+def _json_for_log(payload):
+    """Serialize log payloads defensively (DynamoDB numbers may be Decimal)."""
+    return json.dumps(payload, default=str)
+
+
 def handler(event, context):
     """
     AWS Lambda handler that processes DynamoDB stream events.
     For each new or modified task record with dispatchStatus 'PENDING', dispatch the task using Celery.
     """
     logger.info(f"Lambda function started with RequestId: {context.aws_request_id}")
-    logger.info(f"Received event: {json.dumps(event)}")
+    logger.info(f"Received event: {_json_for_log(event)}")
     
     if not event.get('Records'):
         logger.warning("No records found in event")
@@ -86,7 +91,7 @@ def handler(event, context):
     error_count = 0
 
     for record in event.get('Records', []):
-        logger.info(f"Processing record: {json.dumps(record.get('eventID'))}")
+        logger.info(f"Processing record: {_json_for_log(record.get('eventID'))}")
         
         event_name = record.get('eventName')
         logger.info(f"Event type: {event_name}")
@@ -104,7 +109,7 @@ def handler(event, context):
 
         try:
             task = deserialize_dynamo_item(new_image)
-            logger.info(f"Deserialized task: {json.dumps(task)}")
+            logger.info(f"Deserialized task: {_json_for_log(task)}")
             
             # For MODIFY events, check if dispatchStatus changed to PENDING
             if event_name == 'MODIFY':
@@ -153,5 +158,5 @@ def handler(event, context):
         "skipped": skipped_count,
         "errors": error_count
     }
-    logger.info(f"Lambda execution complete. Summary: {json.dumps(summary)}")
-    return summary 
+    logger.info(f"Lambda execution complete. Summary: {_json_for_log(summary)}")
+    return summary
