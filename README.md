@@ -109,9 +109,14 @@ The dashboard is a standard Next.js application located in the `dashboard/` dire
 
 For local procedure execution from the UI:
 - `npm run dev` runs only the Next.js dev server
-- `npm run dev:dispatch` runs the local procedure task dispatcher (`PLEXUS_DISPATCH_MODE=local`)
+- `npm run dev:chat` runs a local Console chat worker (`plexus chat worker`)
+- `npm run dev:dispatch` runs the local command task dispatcher (`PLEXUS_DISPATCH_MODE=local`)
+- `npm run dev:workers` runs both local workers
 
 Set `PLEXUS_ACCOUNT_KEY` in your environment or `.env` for local auto-dispatch.
+Set `NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET` in `dashboard/.env.local` to the same
+value as `CONSOLE_RESPONSE_TARGET` (for example `local:ryan`) when testing chat
+responses locally.
 
 ```bash
 cd dashboard
