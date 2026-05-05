@@ -54,3 +54,27 @@ def test_chat_send_response_mode_requires_parent():
     )
     assert result.exit_code != 0
     assert "--parent-message-id is required" in result.output
+
+
+def test_chat_worker_invokes_local_worker(monkeypatch):
+    runner = CliRunner()
+    calls = []
+    monkeypatch.setattr(
+        "plexus.cli.chat.chats.run_chat_worker",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    result = runner.invoke(
+        chat,
+        ["worker", "--target", "local:ryan", "--poll-interval", "0.5", "--limit", "2", "--once"],
+    )
+
+    assert result.exit_code == 0
+    assert calls == [
+        {
+            "target": "local:ryan",
+            "poll_interval": 0.5,
+            "limit": 2,
+            "once": True,
+        }
+    ]

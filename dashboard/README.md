@@ -35,10 +35,20 @@ PLEXUS_ACCOUNT_KEY=...
 
 For local procedure runs from the dashboard UI:
 - `npm run dev` starts only the Next.js dev server
-- `npm run dev:dispatch` starts the local task dispatcher (`PLEXUS_DISPATCH_MODE=local`)
+- `npm run dev:chat` starts the local Console chat worker (`plexus chat worker`)
+- `npm run dev:dispatch` starts the local command task dispatcher (`PLEXUS_DISPATCH_MODE=local`)
+- `npm run dev:workers` starts both local workers
 
 `PLEXUS_ACCOUNT_KEY` is required for this local auto-dispatch flow.
+Set `NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET=local:<developer>` for the web app and
+run the chat worker with the matching `CONSOLE_RESPONSE_TARGET` or
+`plexus chat worker --target local:<developer>`.
 Console chat now targets the built-in procedure key `builtin:console/chat` backed by source-controlled Tactus code under `plexus/procedures/console/`.
+
+Dispatch modes are intentionally separate:
+- `plexus chat worker` handles pending Console `ChatMessage` rows for one local response target.
+- `plexus command dispatcher` handles pending `Task` rows and either sends them to Celery or runs them locally.
+- `PLEXUS_DISPATCH_MODE=local` inside `execute_tactus` means an async report/procedure request uses the direct local development path instead of remote Celery dispatch.
 
 ## Usage
 

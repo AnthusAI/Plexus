@@ -11,6 +11,7 @@ from plexus.chat.session_ops import (
     resolve_account_id,
     send_chat_message,
 )
+from plexus.cli.chat.worker import run_chat_worker
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.shared.console import console
 
@@ -188,3 +189,31 @@ def chat_send(
         return
     _render(result, output)
 
+
+@chat.command("worker")
+@click.option(
+    "--target",
+    default=None,
+    help="Local response target to claim, for example local:ryan. Defaults to CONSOLE_RESPONSE_TARGET.",
+)
+@click.option("--poll-interval", default=0.2, type=float, show_default=True)
+@click.option("--limit", default=5, type=int, show_default=True, help="Maximum messages to process per poll.")
+@click.option("--once", is_flag=True, help="Run one poll cycle and exit.")
+@click.option("--loglevel", default="INFO", show_default=True)
+def chat_worker(
+    target: Optional[str],
+    poll_interval: float,
+    limit: int,
+    once: bool,
+    loglevel: str,
+):
+    """Run a local Console chat response worker."""
+    import logging
+
+    logging.getLogger().setLevel(loglevel.upper())
+    run_chat_worker(
+        target=target,
+        poll_interval=poll_interval,
+        limit=limit,
+        once=once,
+    )
