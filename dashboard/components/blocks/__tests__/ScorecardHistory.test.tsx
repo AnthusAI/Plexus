@@ -15,6 +15,24 @@ jest.mock("@monaco-editor/react", () => ({
   ),
 }));
 
+jest.mock("@/components/gauge", () => ({
+  Gauge: ({ title, value, beforeValue, showComparisonLabel }: any) => (
+    <div
+      data-testid={`gauge-${String(title).toLowerCase()}`}
+      data-value={value}
+      data-before-value={beforeValue}
+      data-show-comparison={String(Boolean(showComparisonLabel))}
+    />
+  ),
+}));
+
+jest.mock("@/components/ui/tabs", () => ({
+  Tabs: ({ children }: any) => <div>{children}</div>,
+  TabsContent: ({ children }: any) => <div>{children}</div>,
+  TabsList: ({ children }: any) => <div>{children}</div>,
+  TabsTrigger: ({ children, ...props }: any) => <button type="button" {...props}>{children}</button>,
+}));
+
 jest.mock("@/components/blocks/ReportBlock", () => {
   const MockReportBlock = ({ title, subtitle, subtitleClassName, children }: any) => (
     <div>
@@ -59,6 +77,32 @@ describe("ScorecardHistory", () => {
         summary: "The score tightened its routing criteria.",
         featured_version_count: 1,
         champion_version_count: 1,
+        window_diff: {
+          baseline_version_id: "version-0",
+          latest_version_id: "version-1",
+          baseline_created_at: "2026-04-24T12:00:00+00:00",
+          latest_created_at: "2026-05-01T12:00:00+00:00",
+          code: {
+            original_version_id: "version-0",
+            modified_version_id: "version-1",
+            original_label: "Pre-window Code",
+            modified_label: "Latest Code",
+            original: "name: old\n",
+            modified: "name: new\n",
+            unified_diff: "--- version-0/configuration\n+++ version-1/configuration\n-name: old\n+name: new",
+            has_changes: true,
+          },
+          guidelines: {
+            original_version_id: "version-0",
+            modified_version_id: "version-1",
+            original_label: "Pre-window Guidelines",
+            modified_label: "Latest Guidelines",
+            original: "# Old\n",
+            modified: "# New\n",
+            unified_diff: "--- version-0/guidelines\n+++ version-1/guidelines\n-# Old\n+# New",
+            has_changes: true,
+          },
+        },
         versions: [
           {
             version_id: "version-1",
@@ -118,6 +162,12 @@ describe("ScorecardHistory", () => {
     attachedFiles: [],
   };
 
+  const withPerformance = (performance: any) => {
+    const cloned = JSON.parse(JSON.stringify(output));
+    cloned.scores[0].performance = performance;
+    return cloned;
+  };
+
   it("shows top and score summaries while keeping versions and diffs collapsed by default", () => {
     render(<ScorecardHistory {...baseProps} />);
 
@@ -125,10 +175,17 @@ describe("ScorecardHistory", () => {
     expect(screen.getByTestId("report-subtitle")).toHaveTextContent("Select Quote HCS Medium Risk");
     expect(screen.getByTestId("scorecard-history-summary")).toHaveTextContent("Overall history summary");
     expect(screen.getByTestId("score-summary-score-1")).toHaveTextContent("tightened its routing criteria");
+    expect(screen.getByTestId("intervention-summary-score-1")).toHaveTextContent("Guidelines");
+    expect(screen.getByTestId("intervention-summary-score-1")).toHaveTextContent("Code");
+    expect(screen.getByTestId("intervention-summary-score-1")).toHaveTextContent("Champion");
+    expect(screen.getByTestId("intervention-summary-score-1")).toHaveTextContent("Evaluations");
+    expect(screen.getByTestId("change-notes-brief")).toHaveTextContent("Tightened routing criteria for transfer cases.");
     expect(screen.queryByTestId("version-list-score-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("window-diff-content")).not.toBeInTheDocument();
     expect(screen.queryByTestId("version-details-version-1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("diff-editor-yaml")).not.toBeInTheDocument();
     expect(screen.queryByTestId("diff-editor-markdown")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("score-performance-panel")).not.toBeInTheDocument();
   });
 
   it("renders Monaco diffs only after expanding the score, version, and diff", () => {
@@ -147,6 +204,19 @@ describe("ScorecardHistory", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Code Diff/i }));
     expect(screen.getByTestId("code-diff-version-1")).toBeInTheDocument();
+    expect(screen.getByTestId("diff-editor-yaml")).toHaveAttribute("data-original", "name: old\n");
+    expect(screen.getByTestId("diff-editor-yaml")).toHaveAttribute("data-modified", "name: new\n");
+  });
+
+  it("renders full window diffs only after expanding the window diff and diff panel", () => {
+    render(<ScorecardHistory {...baseProps} />);
+
+    fireEvent.click(screen.getByTestId("window-diff-trigger"));
+    expect(screen.getByTestId("window-diff-content")).toBeInTheDocument();
+    expect(screen.queryByTestId("diff-editor-yaml")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Full Code Diff/i }));
+    expect(screen.getByTestId("window-code-diff")).toBeInTheDocument();
     expect(screen.getByTestId("diff-editor-yaml")).toHaveAttribute("data-original", "name: old\n");
     expect(screen.getByTestId("diff-editor-yaml")).toHaveAttribute("data-modified", "name: new\n");
   });
@@ -177,5 +247,107 @@ describe("ScorecardHistory", () => {
       path: "reportblocks/block-1/output-block-1.json",
       options: { bucket: "reportBlockDetails" },
     });
+  });
+
+  it("renders one evaluation kind as gauges without tabs", () => {
+    render(
+      <ScorecardHistory
+        {...baseProps}
+        output={withPerformance({
+          current_version_id: "version-1",
+          baseline_version_id: "version-0",
+          recent_feedback: {
+            current: {
+              evaluation_id: "eval-current",
+              metrics: {
+                alignment: 0.74,
+                accuracy: 88.2,
+                precision: 91.1,
+                recall: 84.4,
+              },
+            },
+            baseline: {
+              evaluation_id: "eval-baseline",
+              metrics: {
+                alignment: 0.61,
+                accuracy: 80.1,
+                precision: 86.3,
+                recall: 70.5,
+              },
+            },
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByTestId("score-performance-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("performance-gauges-recent-feedback")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Recent Feedback" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("gauge-alignment")).toHaveAttribute("data-value", "0.74");
+    expect(screen.getByTestId("gauge-alignment")).toHaveAttribute("data-before-value", "0.61");
+    expect(screen.getByTestId("gauge-alignment")).toHaveAttribute("data-show-comparison", "true");
+    expect(screen.getByTestId("gauge-accuracy")).toHaveAttribute("data-value", "88.2");
+    expect(screen.getByTestId("gauge-precision")).toHaveAttribute("data-value", "91.1");
+    expect(screen.getByTestId("gauge-recall")).toHaveAttribute("data-value", "84.4");
+  });
+
+  it("renders tabs when recent feedback and regression metrics both exist", () => {
+    render(
+      <ScorecardHistory
+        {...baseProps}
+        output={withPerformance({
+          current_version_id: "version-1",
+          baseline_version_id: "version-0",
+          recent_feedback: {
+            current: {
+              evaluation_id: "eval-feedback-current",
+              metrics: { alignment: 0.74, accuracy: 88.2, precision: 91.1, recall: 84.4 },
+            },
+          },
+          regression: {
+            current: {
+              evaluation_id: "eval-regression-current",
+              dataset_id: "dataset-1",
+              metrics: { alignment: 0.7, accuracy: 85.4, precision: 90.2, recall: 79.1 },
+            },
+            baseline: {
+              evaluation_id: "eval-regression-baseline",
+              dataset_id: "dataset-1",
+              metrics: { alignment: 0.6, accuracy: 81.4, precision: 88.2, recall: 71.1 },
+            },
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Recent Feedback" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Regression" })).toBeInTheDocument();
+    expect(screen.getByTestId("performance-gauges-recent-feedback")).toBeInTheDocument();
+    expect(screen.getByTestId("performance-gauges-regression")).toBeInTheDocument();
+    expect(screen.getAllByTestId("gauge-alignment")[1]).toHaveAttribute("data-before-value", "0.6");
+  });
+
+  it("does not show baseline needles when baseline metrics are absent", () => {
+    render(
+      <ScorecardHistory
+        {...baseProps}
+        output={withPerformance({
+          current_version_id: "version-1",
+          baseline_version_id: "version-0",
+          regression: {
+            current: {
+              evaluation_id: "eval-regression-current",
+              dataset_id: "dataset-1",
+              metrics: { alignment: 0.7, accuracy: 85.4, precision: 90.2, recall: 79.1 },
+            },
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByTestId("performance-gauges-regression")).toBeInTheDocument();
+    expect(screen.getByTestId("gauge-alignment")).not.toHaveAttribute("data-before-value");
+    expect(screen.getByTestId("gauge-alignment")).toHaveAttribute("data-show-comparison", "false");
+    expect(screen.queryByTestId("history-baseline-alignment")).not.toBeInTheDocument();
   });
 });

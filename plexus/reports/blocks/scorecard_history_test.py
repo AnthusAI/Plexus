@@ -42,6 +42,43 @@ def _version(
     }
 
 
+def _evaluation(
+    evaluation_id,
+    *,
+    evaluation_type,
+    status="COMPLETED",
+    created_at="2026-04-12T12:00:00+00:00",
+    score_version_id="v1",
+    accuracy=80,
+    alignment=0.7,
+    precision=0.6,
+    recall=0.5,
+    dataset_id=None,
+):
+    parameters = {"dataset_id": dataset_id} if dataset_id else {}
+    return {
+        "id": evaluation_id,
+        "type": evaluation_type,
+        "status": status,
+        "createdAt": created_at,
+        "updatedAt": created_at,
+        "parameters": parameters,
+        "scoreId": "score-1",
+        "scoreVersionId": score_version_id,
+        "accuracy": accuracy,
+        "processedItems": 90,
+        "totalItems": 100,
+        "metrics": {
+            "alignment": alignment,
+            "accuracy": accuracy,
+            "precision": precision,
+            "recall": recall,
+        },
+        "cost": 1.25,
+        "taskId": "task-1",
+    }
+
+
 def _summary_response(*score_ids):
     return json.dumps({
         "overall_summary": "Some included changes were promoted to champion.",
@@ -134,6 +171,7 @@ async def test_single_score_mode_filters_scope(mock_api_client):
             "_fetch_versions_for_score",
             new=AsyncMock(return_value=[_version("v1", note="Tightened routing criteria.")]),
         ),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
         patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
     ):
         output, _ = await block.generate()
@@ -175,6 +213,7 @@ async def test_filters_featured_versions_created_in_window_and_omits_unchanged_s
             "_fetch_versions_for_score",
             new=AsyncMock(side_effect=lambda score_id: versions_by_score[score_id]),
         ),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
         patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
     ):
         output, _ = await block.generate()
@@ -211,6 +250,7 @@ async def test_builds_parent_diff_payloads(mock_api_client):
         patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
         patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=[scope])),
         patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=[parent, featured])),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
         patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
     ):
         output, _ = await block.generate()
@@ -224,6 +264,13 @@ async def test_builds_parent_diff_payloads(mock_api_client):
     assert version["diffs"]["guidelines"]["original"] == "# Old\n"
     assert version["diffs"]["guidelines"]["modified"] == "# New\n"
     assert version["diffs"]["code"]["has_changes"] is True
+    window_diff = output["scores"][0]["window_diff"]
+    assert window_diff["baseline_version_id"] == "v0"
+    assert window_diff["latest_version_id"] == "v1"
+    assert window_diff["code"]["original"] == "name: old\n"
+    assert window_diff["code"]["modified"] == "name: new\n"
+    assert "-name: old" in window_diff["code"]["unified_diff"]
+    assert "+name: new" in window_diff["code"]["unified_diff"]
 
 
 @pytest.mark.asyncio
@@ -242,6 +289,7 @@ async def test_fetches_missing_parent_version_for_diff(mock_api_client):
         patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=[scope])),
         patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=[featured])),
         patch.object(block, "_fetch_score_version_by_id", new=AsyncMock(return_value=parent)) as fetch_parent,
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
         patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
     ):
         output, _ = await block.generate()
@@ -287,6 +335,7 @@ async def test_champion_coverage_all_none_some(
         patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
         patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=[scope])),
         patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=versions)),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
         patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
     ):
         output, _ = await block.generate()
@@ -307,6 +356,7 @@ async def test_uses_llm_summary_and_score_summaries(mock_api_client):
         patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
         patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=[scope])),
         patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=[_version("v1")])),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
         patch.object(
             block,
             "_run_tac_inference",
@@ -337,12 +387,178 @@ async def test_llm_summary_failure_returns_report_error(mock_api_client):
         patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
         patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=[scope])),
         patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=[_version("v1")])),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
         patch.object(block, "_run_tac_inference", new=AsyncMock(side_effect=RuntimeError("LLM unavailable"))),
     ):
         output, _ = await block.generate()
 
     assert "LLM unavailable" in output["error"]
     assert output["scores"] == []
+
+
+@pytest.mark.asyncio
+async def test_performance_uses_latest_in_window_version_and_created_at_predecessor(mock_api_client):
+    block = _block(
+        {"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
+        mock_api_client,
+    )
+    scorecard = SimpleNamespace(id="sc-1", name="Scorecard")
+    scope = SimpleNamespace(score_id="score-1", score_name="Score 1", champion_version_id=None)
+    versions = [
+        _version("v0", created_at="2026-03-31T12:00:00+00:00", is_featured="true"),
+        _version("v1", created_at="2026-04-10T12:00:00+00:00", is_featured="true"),
+        _version("v2", created_at="2026-04-20T12:00:00+00:00", is_featured="true"),
+    ]
+    evaluations_by_version = {
+        "v0": [_evaluation("eval-v0-feedback", evaluation_type="feedback", score_version_id="v0", alignment=0.42)],
+        "v2": [_evaluation("eval-v2-feedback", evaluation_type="feedback", score_version_id="v2", alignment=0.84)],
+    }
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=[scope])),
+        patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=versions)),
+        patch.object(
+            block,
+            "_fetch_evaluations_for_version",
+            new=AsyncMock(side_effect=lambda version_id: evaluations_by_version.get(version_id, [])),
+        ),
+        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
+    ):
+        output, _ = await block.generate()
+
+    performance = output["scores"][0]["performance"]
+    assert performance["current_version_id"] == "v2"
+    assert performance["baseline_version_id"] == "v0"
+    assert performance["recent_feedback"]["current"]["evaluation_id"] == "eval-v2-feedback"
+    assert performance["recent_feedback"]["current"]["metrics"] == {
+        "alignment": 0.84,
+        "accuracy": 80.0,
+        "precision": 0.6,
+        "recall": 0.5,
+    }
+    assert performance["recent_feedback"]["baseline"]["evaluation_id"] == "eval-v0-feedback"
+    assert performance["recent_feedback"]["baseline"]["metrics"]["alignment"] == 0.42
+
+
+@pytest.mark.asyncio
+async def test_regression_baseline_requires_same_dataset(mock_api_client):
+    block = _block(
+        {"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
+        mock_api_client,
+    )
+    scorecard = SimpleNamespace(id="sc-1", name="Scorecard")
+    scope = SimpleNamespace(score_id="score-1", score_name="Score 1", champion_version_id=None)
+    versions = [
+        _version("v0", created_at="2026-03-31T12:00:00+00:00"),
+        _version("v1", created_at="2026-04-10T12:00:00+00:00"),
+    ]
+    evaluations_by_version = {
+        "v0": [
+            _evaluation(
+                "eval-v0-regression-other",
+                evaluation_type="accuracy",
+                score_version_id="v0",
+                alignment=0.91,
+                dataset_id="dataset-other",
+            ),
+            _evaluation(
+                "eval-v0-regression-same",
+                evaluation_type="accuracy",
+                score_version_id="v0",
+                alignment=0.72,
+                dataset_id="dataset-1",
+            ),
+        ],
+        "v1": [
+            _evaluation(
+                "eval-v1-regression",
+                evaluation_type="accuracy",
+                score_version_id="v1",
+                alignment=0.81,
+                dataset_id="dataset-1",
+            )
+        ],
+    }
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=[scope])),
+        patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=versions)),
+        patch.object(
+            block,
+            "_fetch_evaluations_for_version",
+            new=AsyncMock(side_effect=lambda version_id: evaluations_by_version.get(version_id, [])),
+        ),
+        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
+    ):
+        output, _ = await block.generate()
+
+    regression = output["scores"][0]["performance"]["regression"]
+    assert regression["current"]["evaluation_id"] == "eval-v1-regression"
+    assert regression["current"]["dataset_id"] == "dataset-1"
+    assert regression["baseline"]["evaluation_id"] == "eval-v0-regression-same"
+    assert regression["baseline"]["dataset_id"] == "dataset-1"
+
+
+@pytest.mark.asyncio
+async def test_omits_regression_without_dataset_and_omits_empty_performance(mock_api_client):
+    block = _block(
+        {"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
+        mock_api_client,
+    )
+    scorecard = SimpleNamespace(id="sc-1", name="Scorecard")
+    scope = SimpleNamespace(score_id="score-1", score_name="Score 1", champion_version_id=None)
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=[scope])),
+        patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=[_version("v1")])),
+        patch.object(
+            block,
+            "_fetch_evaluations_for_version",
+            new=AsyncMock(return_value=[_evaluation("eval-v1-accuracy", evaluation_type="accuracy")]),
+        ),
+        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
+    ):
+        output, _ = await block.generate()
+
+    assert "performance" not in output["scores"][0]
+
+
+def test_selects_best_completed_evaluation_by_alignment_then_created_at(mock_api_client):
+    block = _block({"scorecard": "sc-1"}, mock_api_client)
+    evaluations = [
+        _evaluation("failed", evaluation_type="feedback", status="FAILED", alignment=0.99),
+        _evaluation("older-best", evaluation_type="feedback", alignment=0.80, created_at="2026-04-10T12:00:00+00:00"),
+        _evaluation("latest-tie", evaluation_type="feedback", alignment=0.80, created_at="2026-04-11T12:00:00+00:00"),
+        _evaluation("lower-latest", evaluation_type="feedback", alignment=0.70, created_at="2026-04-12T12:00:00+00:00"),
+    ]
+
+    selected = block._select_best_evaluation(evaluations, "feedback")
+
+    assert selected["id"] == "latest-tie"
+
+
+def test_metrics_payload_extracts_list_metrics_and_omits_missing_values(mock_api_client):
+    block = _block({"scorecard": "sc-1"}, mock_api_client)
+    evaluation = _evaluation(
+        "eval-list",
+        evaluation_type="feedback",
+        accuracy=None,
+        alignment=None,
+        precision=None,
+        recall=None,
+    )
+    evaluation["metrics"] = [
+        {"name": "Alignment", "value": 0.63},
+        {"name": "Precision", "value": 0.52},
+    ]
+
+    payload = block._metrics_payload(evaluation)
+
+    assert payload["metrics"] == {"alignment": 0.63, "precision": 0.52}
+    assert "dataset_id" not in payload
 
 
 def test_extracts_structured_tactus_summary_as_json(mock_api_client):

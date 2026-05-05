@@ -13,6 +13,10 @@ import type { PluggableList } from "unified";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Gauge } from "@/components/gauge";
+import { ac1GaugeSegments } from "@/components/ui/scorecard-evaluation";
+import { GaugeThresholdComputer } from "@/utils/gauge-thresholds";
 import { parseOutputString } from "@/lib/utils";
 import {
   applyMonacoTheme,
@@ -25,6 +29,12 @@ import {
 import ReportBlock, { ReportBlockProps, type BlockComponent } from "./ReportBlock";
 
 const markdownPlugins: PluggableList = [remarkGfm, remarkBreaks];
+
+const accuracyGaugeSegments = GaugeThresholdComputer.createSegments(
+  GaugeThresholdComputer.computeThresholds({})
+);
+
+type MetricName = "alignment" | "accuracy" | "precision" | "recall";
 
 interface ScorecardHistoryDiff {
   original_version_id?: string | null;
@@ -71,6 +81,47 @@ interface ScorecardHistoryScore {
   featured_version_count?: number;
   champion_version_count?: number;
   versions?: ScorecardHistoryVersion[];
+  performance?: ScorecardHistoryPerformance | null;
+  window_diff?: ScorecardHistoryWindowDiff | null;
+}
+
+interface ScorecardHistoryWindowDiff {
+  baseline_version_id?: string | null;
+  latest_version_id?: string | null;
+  baseline_created_at?: string | null;
+  latest_created_at?: string | null;
+  code?: ScorecardHistoryDiff | null;
+  guidelines?: ScorecardHistoryDiff | null;
+}
+
+interface EvaluationMetricValues {
+  alignment?: number | null;
+  accuracy?: number | null;
+  precision?: number | null;
+  recall?: number | null;
+}
+
+interface EvaluationMetricPayload {
+  evaluation_id?: string | null;
+  evaluation_type?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  processed_items?: number | null;
+  total_items?: number | null;
+  dataset_id?: string | null;
+  metrics?: EvaluationMetricValues | null;
+}
+
+interface PerformanceDatasetPayload {
+  current?: EvaluationMetricPayload | null;
+  baseline?: EvaluationMetricPayload | null;
+}
+
+interface ScorecardHistoryPerformance {
+  current_version_id?: string | null;
+  baseline_version_id?: string | null;
+  recent_feedback?: PerformanceDatasetPayload | null;
+  regression?: PerformanceDatasetPayload | null;
 }
 
 interface ScorecardHistoryData {
@@ -116,6 +167,16 @@ const formatDateTime = (value?: string | null): string => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString();
+};
+
+const finiteNumber = (value?: number | null): number | undefined => {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+};
+
+const formatMetricValue = (value: number | undefined, metric: MetricName): string => {
+  if (value === undefined) return "N/A";
+  if (metric === "alignment") return value.toFixed(2);
+  return `${value.toFixed(1)}%`;
 };
 
 const scoreHref = (scorecardId?: string | null, scoreId?: string | null): string | null => {
@@ -180,6 +241,23 @@ const coverageLabel = (value?: string | null): string => {
   if (value === "some") return "Some promoted";
   if (value === "none") return "None promoted";
   return value || "N/A";
+};
+
+const diffChanged = (version: ScorecardHistoryVersion, kind: "code" | "guidelines"): boolean => {
+  return Boolean(version.diffs?.[kind]?.has_changes);
+};
+
+const notePreview = (note?: string | null): string => {
+  const cleaned = (note || "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "No version note provided.";
+  return cleaned.length > 260 ? `${cleaned.slice(0, 257).trim()}...` : cleaned;
+};
+
+const scorePerformanceKinds = (performance?: ScorecardHistoryPerformance | null): string[] => {
+  const kinds = [];
+  if (performance?.recent_feedback?.current) kinds.push("recent feedback");
+  if (performance?.regression?.current) kinds.push("regression");
+  return kinds;
 };
 
 const ChampionBadges: React.FC<{ version: ScorecardHistoryVersion }> = ({ version }) => {
@@ -380,34 +458,328 @@ const VersionDetails: React.FC<{
   );
 };
 
+const metricConfigs: Array<{
+  key: MetricName;
+  title: string;
+  min: number;
+  max: number;
+  unit: string;
+  decimalPlaces: number;
+}> = [
+  { key: "alignment", title: "Alignment", min: -1, max: 1, unit: "", decimalPlaces: 2 },
+  { key: "accuracy", title: "Accuracy", min: 0, max: 100, unit: "%", decimalPlaces: 1 },
+  { key: "precision", title: "Precision", min: 0, max: 100, unit: "%", decimalPlaces: 1 },
+  { key: "recall", title: "Recall", min: 0, max: 100, unit: "%", decimalPlaces: 1 },
+];
+
+const PerformanceGaugeCard: React.FC<{
+  metric: MetricName;
+  title: string;
+  current?: number;
+  baseline?: number;
+  min: number;
+  max: number;
+  unit: string;
+  decimalPlaces: number;
+}> = ({ metric, title, current, baseline, min, max, unit, decimalPlaces }) => {
+  if (current === undefined) return null;
+  const hasBaseline = baseline !== undefined;
+  const segments = metric === "alignment" ? ac1GaugeSegments : accuracyGaugeSegments;
+
+  return (
+    <div className="rounded-lg bg-background p-2" data-testid={`history-gauge-${metric}`}>
+      <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+        <div className="font-medium text-foreground">{title}</div>
+        <div className="text-muted-foreground">{formatMetricValue(current, metric)}</div>
+      </div>
+      <div className="mx-auto w-[145px]">
+        <Gauge
+          value={current}
+          beforeValue={baseline}
+          showComparisonLabel={hasBaseline}
+          title={title}
+          min={min}
+          max={max}
+          valueUnit={unit}
+          decimalPlaces={decimalPlaces}
+          segments={segments}
+          showOnlyEssentialTicks
+        />
+      </div>
+      {hasBaseline ? (
+        <div className="mt-1 text-center text-[11px] text-muted-foreground" data-testid={`history-baseline-${metric}`}>
+          Baseline {formatMetricValue(baseline, metric)}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const PerformanceGaugeGrid: React.FC<{
+  payload: PerformanceDatasetPayload;
+  label: string;
+}> = ({ payload, label }) => {
+  const currentMetrics = payload.current?.metrics || {};
+  const baselineMetrics = payload.baseline?.metrics || {};
+
+  return (
+    <div className="space-y-2" data-testid={`performance-gauges-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+      <div className="grid grid-cols-2 gap-2">
+        {metricConfigs.map((config) => (
+          <PerformanceGaugeCard
+            key={config.key}
+            metric={config.key}
+            title={config.title}
+            current={finiteNumber(currentMetrics[config.key])}
+            baseline={finiteNumber(baselineMetrics[config.key])}
+            min={config.min}
+            max={config.max}
+            unit={config.unit}
+            decimalPlaces={config.decimalPlaces}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const PerformancePanel: React.FC<{ performance?: ScorecardHistoryPerformance | null }> = ({ performance }) => {
+  const datasets = [
+    performance?.recent_feedback?.current ? {
+      key: "recent-feedback",
+      label: "Recent Feedback",
+      payload: performance.recent_feedback,
+    } : null,
+    performance?.regression?.current ? {
+      key: "regression",
+      label: "Regression",
+      payload: performance.regression,
+    } : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; payload: PerformanceDatasetPayload }>;
+
+  if (datasets.length === 0) return null;
+
+  return (
+    <aside className="rounded-lg bg-card p-3" data-testid="score-performance-panel">
+      <div className="mb-2 text-sm font-semibold">Evaluation Metrics</div>
+      {datasets.length === 1 ? (
+        <PerformanceGaugeGrid payload={datasets[0].payload} label={datasets[0].label} />
+      ) : (
+        <Tabs defaultValue={datasets[0].key}>
+          <TabsList className="mb-3 h-auto justify-start bg-transparent p-0">
+            {datasets.map((dataset) => (
+              <TabsTrigger
+                key={dataset.key}
+                value={dataset.key}
+                className="rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 text-xs data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              >
+                {dataset.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {datasets.map((dataset) => (
+            <TabsContent key={dataset.key} value={dataset.key} className="mt-0">
+              <PerformanceGaugeGrid payload={dataset.payload} label={dataset.label} />
+            </TabsContent>
+          ))}
+        </Tabs>
+      )}
+    </aside>
+  );
+};
+
+const InterventionSummary: React.FC<{
+  score: ScorecardHistoryScore;
+  versions: ScorecardHistoryVersion[];
+}> = ({ score, versions }) => {
+  const codeChangeCount = versions.filter((version) => diffChanged(version, "code")).length;
+  const guidelineChangeCount = versions.filter((version) => diffChanged(version, "guidelines")).length;
+  const championRelatedCount = versions.filter((version) => version.champion_status?.is_champion_related).length;
+  const currentChampion = versions.find((version) => version.champion_status?.is_current_champion);
+  const performanceKinds = scorePerformanceKinds(score.performance);
+
+  const items = [
+    {
+      label: "Guidelines",
+      value: guidelineChangeCount,
+      detail: guidelineChangeCount > 0
+        ? `${guidelineChangeCount} starred version${guidelineChangeCount === 1 ? "" : "s"} changed rubric guidance.`
+        : "No guideline diff was detected in the included versions.",
+    },
+    {
+      label: "Code",
+      value: codeChangeCount,
+      detail: codeChangeCount > 0
+        ? `${codeChangeCount} starred version${codeChangeCount === 1 ? "" : "s"} changed score configuration.`
+        : "No code/config diff was detected in the included versions.",
+    },
+    {
+      label: "Champion",
+      value: championRelatedCount,
+      detail: currentChampion
+        ? `${championRelatedCount} champion-related; latest current champion is ${shortId(currentChampion.version_id)}.`
+        : `${championRelatedCount} champion-related version${championRelatedCount === 1 ? "" : "s"} in this window.`,
+    },
+    {
+      label: "Evaluations",
+      value: performanceKinds.length,
+      detail: performanceKinds.length > 0
+        ? `Gauge data available for ${performanceKinds.join(" and ")}.`
+        : "No completed evaluation gauges were found for the latest included version.",
+    },
+  ];
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4" data-testid={`intervention-summary-${score.score_id}`}>
+      {items.map((item) => (
+        <div key={item.label} className="rounded-lg bg-card p-3">
+          <div className="mb-1 flex items-baseline justify-between gap-2">
+            <div className="text-xs font-medium text-muted-foreground">{item.label}</div>
+            <div className="text-lg font-semibold text-foreground">{formatInteger(item.value)}</div>
+          </div>
+          <div className="text-xs leading-snug text-foreground">{item.detail}</div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const ChangeNotesBrief: React.FC<{ versions: ScorecardHistoryVersion[] }> = ({ versions }) => {
+  const notes = versions
+    .filter((version) => (version.note || "").trim())
+    .slice(0, 6);
+  const remainingCount = Math.max(0, versions.filter((version) => (version.note || "").trim()).length - notes.length);
+
+  if (notes.length === 0) return null;
+
+  return (
+    <div className="rounded-lg bg-card p-3" data-testid="change-notes-brief">
+      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Change Notes</div>
+      <ul className="space-y-2">
+        {notes.map((version) => (
+          <li key={version.version_id} className="grid gap-1 text-sm leading-snug sm:grid-cols-[7.5rem_minmax(0,1fr)]">
+            <span className="font-mono text-xs text-muted-foreground">{formatDateTime(version.created_at)}</span>
+            <span className="text-foreground">{notePreview(version.note)}</span>
+          </li>
+        ))}
+      </ul>
+      {remainingCount > 0 ? (
+        <div className="mt-2 text-xs text-muted-foreground">
+          {remainingCount} more note{remainingCount === 1 ? "" : "s"} available in Score Versions.
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const WindowDiffSection: React.FC<{
+  windowDiff?: ScorecardHistoryWindowDiff | null;
+}> = ({ windowDiff }) => {
+  const [isOpen, setIsOpen] = React.useState(false);
+  if (!windowDiff) return null;
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className="mt-3 h-auto w-full justify-between rounded-lg bg-card px-3 py-2 text-left"
+          aria-expanded={isOpen}
+          data-testid="window-diff-trigger"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            <span className="truncate text-sm font-medium">Full Window Diff</span>
+          </span>
+          <span className="ml-3 shrink-0 text-xs text-muted-foreground">
+            {shortId(windowDiff.baseline_version_id)} to {shortId(windowDiff.latest_version_id)}
+          </span>
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-2 space-y-2 rounded-lg bg-background p-3" data-testid="window-diff-content">
+          <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+            <div>
+              <div className="font-medium text-foreground">Pre-window version</div>
+              <div className="font-mono">{shortId(windowDiff.baseline_version_id)}</div>
+              <div>{formatDateTime(windowDiff.baseline_created_at)}</div>
+            </div>
+            <div>
+              <div className="font-medium text-foreground">Latest included version</div>
+              <div className="font-mono">{shortId(windowDiff.latest_version_id)}</div>
+              <div>{formatDateTime(windowDiff.latest_created_at)}</div>
+            </div>
+          </div>
+          <DiffViewer
+            diff={windowDiff.code}
+            language="yaml"
+            label="Full Code Diff"
+            testId="window-code-diff"
+          />
+          <DiffViewer
+            diff={windowDiff.guidelines}
+            language="markdown"
+            label="Full Guidelines Diff"
+            testId="window-guidelines-diff"
+          />
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
+
 const ScoreHistorySection: React.FC<{
   score: ScorecardHistoryScore;
   scorecardId?: string | null;
 }> = ({ score, scorecardId }) => {
   const [versionsOpen, setVersionsOpen] = React.useState(false);
   const versions = Array.isArray(score.versions) ? score.versions : [];
+  const hasPerformance =
+    Boolean(score.performance?.recent_feedback?.current) ||
+    Boolean(score.performance?.regression?.current);
 
   return (
     <section className="rounded-lg bg-muted px-3 py-4" data-testid={`score-history-${score.score_id}`}>
-      <div className="space-y-2">
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div role="heading" aria-level={3} className="text-lg font-semibold leading-none">
-              {score.score_name}
+      <div className="flex flex-wrap gap-4">
+        <div className="min-w-[min(100%,30rem)] flex-[999_1_30rem] space-y-3">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div role="heading" aria-level={3} className="text-lg font-semibold leading-none">
+                {score.score_name}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {formatInteger(score.featured_version_count)} starred version
+                {score.featured_version_count === 1 ? "" : "s"}
+                {" | "}
+                {formatInteger(score.champion_version_count)} champion-related
+              </div>
             </div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              {formatInteger(score.featured_version_count)} starred version
-              {score.featured_version_count === 1 ? "" : "s"}
-              {" | "}
-              {formatInteger(score.champion_version_count)} champion-related
-            </div>
+            <LinkedShortId id={score.score_id} href={scoreHref(scorecardId, score.score_id)} label="Open score" />
           </div>
-          <LinkedShortId id={score.score_id} href={scoreHref(scorecardId, score.score_id)} label="Open score" />
+          <div className="rounded-lg bg-card p-3">
+            <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Overview</div>
+            <MarkdownText testId={`score-summary-${score.score_id}`}>
+              {score.summary || "No summary returned for this score."}
+            </MarkdownText>
+          </div>
+          <InterventionSummary score={score} versions={versions} />
         </div>
-        <MarkdownText testId={`score-summary-${score.score_id}`}>
-          {score.summary || "No summary returned for this score."}
-        </MarkdownText>
+        {hasPerformance ? (
+          <div className="min-w-[min(100%,20rem)] flex-[1_1_20rem]">
+            <PerformancePanel performance={score.performance} />
+          </div>
+        ) : null}
+        <div className="min-w-0 basis-full">
+          <ChangeNotesBrief versions={versions} />
+        </div>
       </div>
+
+      <WindowDiffSection windowDiff={score.window_diff} />
 
       <Collapsible open={versionsOpen} onOpenChange={setVersionsOpen}>
         <CollapsibleTrigger asChild>
