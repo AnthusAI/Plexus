@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from types import SimpleNamespace
 from typing import Any
 
@@ -2761,6 +2763,31 @@ def test_default_report_runner_rejects_invalid_dispatch_mode(monkeypatch) -> Non
         execute._default_report_runner({"block_class": "AcceptanceRate"})
 
 
+def test_runtime_env_dispatch_mode_overrides_dotenv_default() -> None:
+    # Reproduce the historical regression: importing execute used to let .env
+    # overwrite an explicitly set PLEXUS_DISPATCH_MODE.
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    script = (
+        "import os\n"
+        "os.environ['PLEXUS_DISPATCH_MODE'] = 'celery'\n"
+        "from MCP.tools.tactus_runtime import execute\n"
+        "print(execute._resolve_report_dispatch_mode())\n"
+    )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{repo_root}{os.pathsep}{env.get('PYTHONPATH', '')}"
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=repo_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "celery"
+
+
 def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -> None:
     captured: dict = {}
 
@@ -3027,6 +3054,127 @@ async def test_execute_tactus_report_run_async_returns_handle() -> None:
     assert result["value"]["id"] == "handle-1"
     assert result["api_calls"] == ["plexus.report.run"]
     assert result["cost"]["tool_calls"] == 3
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_report_run_async_remote_dispatch_when_mode_celery(monkeypatch) -> None:
+    monkeypatch.setattr(execute, "_resolve_report_dispatch_mode", lambda: "celery")
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+
+    captured: dict[str, Any] = {}
+
+    def fake_run_block_cached(**kwargs):
+        captured.update(kwargs)
+        return (
+            {"status": "dispatched", "cache_key": "report-cache", "task_id": "task-1"},
+            None,
+            False,
+        )
+
+    monkeypatch.setattr("plexus.reports.service.run_block_cached", fake_run_block_cached)
+
+    handles = _MemoryHandleStore()
+    mcp = FastMCP("test-execute-tactus-report-run-celery-dispatch")
+    result = await execute._execute_tactus_tool(
+        (
+            'report{ block_class = "FeedbackContradictions", cache_key = "report-cache", '
+            'ttl_hours = 24, async = true, '
+            'budget = { usd = 0.01, wallclock_seconds = 10, depth = 1, tool_calls = 2 }, '
+            'block_config = { scorecard = "Card", score = "Score", days = 90, '
+            'mode = "contradictions", max_feedback_items = 200, num_topics = 8, '
+            'include_rubric_memory = true, score_version_id = "version-1" } }'
+        ),
+        mcp,
+        handle_store=handles,
+    )
+
+    assert result["ok"] is True
+    assert result["value"]["kind"] == "report"
+    assert handles.created[0]["dispatch_result"]["task_id"] == "task-1"
+    assert captured["background"] is True
+    assert captured["cache_key"] == "report-cache"
+    assert captured["ttl_hours"] == 24
+    assert captured["block_config"]["mode"] == "contradictions"
+    assert captured["child_budget"] == {
+        "usd": 0.01,
+        "wallclock_seconds": 10,
+        "depth": 1,
+        "tool_calls": 2,
+    }
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_report_run_async_local_dispatch_when_mode_local(monkeypatch) -> None:
+    monkeypatch.setattr(execute, "_resolve_report_dispatch_mode", lambda: "local")
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr(
+        "plexus.reports.service.run_block_cached",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("remote dispatcher should not run in local mode")
+        ),
+    )
+
+    class FakeProcess:
+        pid = 9999
+
+    captured_cmd: dict[str, Any] = {}
+
+    def fake_popen(cmd, **kwargs):
+        captured_cmd["cmd"] = cmd
+        captured_cmd["kwargs"] = kwargs
+        return FakeProcess()
+
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+
+    handles = _MemoryHandleStore()
+    mcp = FastMCP("test-execute-tactus-report-run-local-dispatch")
+    result = await execute._execute_tactus_tool(
+        (
+            'report{ block_class = "FeedbackContradictions", async = true, '
+            'budget = { usd = 0.01, wallclock_seconds = 10, depth = 1, tool_calls = 2 }, '
+            'block_config = { scorecard = "Card", score = "Score", days = 90, mode = "contradictions" } }'
+        ),
+        mcp,
+        handle_store=handles,
+    )
+
+    assert result["ok"] is True
+    assert result["value"]["kind"] == "report"
+    assert handles.created[0]["dispatch_result"]["status"] == "running"
+    assert handles.created[0]["dispatch_result"]["pid"] == 9999
+    assert "feedback" in captured_cmd["cmd"]
+    assert "contradictions" in captured_cmd["cmd"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_report_run_async_invalid_dispatch_mode_returns_error(monkeypatch) -> None:
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "invalid-mode")
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+
+    mcp = FastMCP("test-execute-tactus-report-run-invalid-dispatch")
+    result = await execute._execute_tactus_tool(
+        (
+            'report{ block_class = "AcceptanceRate", async = true, '
+            'budget = { usd = 0.01, wallclock_seconds = 10, depth = 1, tool_calls = 2 }, '
+            'block_config = { scorecard = "Card", score = "Score", days = 30 } }'
+        ),
+        mcp,
+    )
+
+    assert result["ok"] is False
+    assert "Invalid PLEXUS_DISPATCH_MODE" in result["error"]["message"]
 
 
 @pytest.mark.asyncio

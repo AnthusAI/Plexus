@@ -109,12 +109,74 @@ jobs:
         echo "Disk space after Python installation:"
         df -h
 
+    - name: Run Dispatch Regression Net (Hard Fail)
+      run: |
+        poetry run python -m pytest -q \
+          MCP/tools/tactus_runtime/execute_test.py::test_default_report_runner_uses_remote_dispatch_by_default \
+          MCP/tools/tactus_runtime/execute_test.py::test_default_report_runner_uses_remote_dispatch_for_celery_mode \
+          MCP/tools/tactus_runtime/execute_test.py::test_default_report_runner_launches_detached_local_subprocess \
+          MCP/tools/tactus_runtime/execute_test.py::test_default_report_runner_rejects_invalid_dispatch_mode \
+          MCP/tools/tactus_runtime/execute_test.py::test_runtime_env_dispatch_mode_overrides_dotenv_default \
+          MCP/tools/tactus_runtime/execute_test.py::test_execute_tactus_report_run_async_remote_dispatch_when_mode_celery \
+          MCP/tools/tactus_runtime/execute_test.py::test_execute_tactus_report_run_async_local_dispatch_when_mode_local \
+          MCP/tools/tactus_runtime/execute_test.py::test_execute_tactus_report_run_async_invalid_dispatch_mode_returns_error \
+          plexus/cli/report/utils_test.py
+
     - name: Run Python Tests
       run: |
         echo "Current directory: $(pwd)"
         echo "Python version: $(python --version)"
         echo "Conda environment: $CONDA_DEFAULT_ENV"
         poetry run invoke ci
+
+  staging-report-dispatch-canary:
+    name: Staging Report Dispatch Canary (Hard Fail)
+    needs:
+      - python-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    defaults:
+      run:
+        shell: bash -el {0}
+    env:
+      PLEXUS_API_URL: ${{ secrets.PLEXUS_STAGING_API_URL }}
+      PLEXUS_API_KEY: ${{ secrets.PLEXUS_STAGING_API_KEY }}
+      PLEXUS_ACCOUNT_KEY: ${{ secrets.PLEXUS_STAGING_ACCOUNT_KEY }}
+      PLEXUS_DISPATCH_MODE: celery
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Conda with Python 3.12
+      uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3
+      with:
+        python-version: "3.12"
+        miniforge-version: latest
+        activate-environment: plexus-ci
+        auto-activate-base: false
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential python3-dev
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip --no-cache-dir
+        pip install "poetry>=1.8,<2.0" --no-cache-dir
+        poetry config virtualenvs.create false
+        poetry install --with dev --no-interaction --no-ansi
+
+    - name: Run Staging Dispatch Canary
+      run: |
+        poetry run python scripts/report_dispatch_canary.py \
+          --scorecard selectquote_hcs_medium_risk \
+          --days 365 \
+          --dispatch-mode celery \
+          --timeout-seconds 600 \
+          --poll-interval-seconds 5
 
   dashboard-unit-tests:
     name: Dashboard Unit Tests
