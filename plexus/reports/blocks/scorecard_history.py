@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import difflib
 import json
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -103,6 +104,18 @@ class ScorecardHistory(BaseReportBlock):
                     "champion_version_count": champion_version_count,
                     "versions": version_entries,
                 }
+                window_diff = self._build_score_window_diff(
+                    versions=versions,
+                    included_versions=included_versions,
+                )
+                if window_diff:
+                    score_output["window_diff"] = window_diff
+                performance = await self._build_score_performance(
+                    versions=versions,
+                    included_versions=included_versions,
+                )
+                if performance:
+                    score_output["performance"] = performance
                 score_output["summary"] = self._build_score_summary_text(score_output)
                 score_outputs.append(score_output)
                 summary_inputs.append(self._build_score_summary_input(score_output))
@@ -328,6 +341,60 @@ class ScorecardHistory(BaseReportBlock):
         version = (result or {}).get("getScoreVersion")
         return version if isinstance(version, dict) else None
 
+    async def _fetch_evaluations_for_version(self, score_version_id: str) -> List[Dict[str, Any]]:
+        query = """
+        query ListEvaluationsForScorecardHistory(
+            $scoreVersionId: String!
+            $sortDirection: ModelSortDirection
+            $limit: Int
+            $nextToken: String
+        ) {
+            listEvaluationByScoreVersionIdAndCreatedAt(
+                scoreVersionId: $scoreVersionId
+                sortDirection: $sortDirection
+                limit: $limit
+                nextToken: $nextToken
+            ) {
+                items {
+                    id
+                    type
+                    status
+                    createdAt
+                    updatedAt
+                    parameters
+                    scoreId
+                    scoreVersionId
+                    accuracy
+                    processedItems
+                    totalItems
+                    metrics
+                    cost
+                    taskId
+                }
+                nextToken
+            }
+        }
+        """
+        evaluations: List[Dict[str, Any]] = []
+        next_token: Optional[str] = None
+        while True:
+            result = await asyncio.to_thread(
+                self.api_client.execute,
+                query,
+                {
+                    "scoreVersionId": score_version_id,
+                    "sortDirection": "DESC",
+                    "limit": 100,
+                    "nextToken": next_token,
+                },
+            )
+            payload = (result or {}).get("listEvaluationByScoreVersionIdAndCreatedAt") or {}
+            evaluations.extend(item for item in payload.get("items") or [] if isinstance(item, dict))
+            next_token = payload.get("nextToken")
+            if not next_token:
+                break
+        return evaluations
+
     def _select_featured_versions(
         self,
         *,
@@ -341,6 +408,23 @@ class ScorecardHistory(BaseReportBlock):
         ]
         selected.sort(key=lambda version: self._to_dt(version.get("createdAt")).timestamp())
         return selected
+
+    def _select_predecessor_version(
+        self,
+        *,
+        versions: List[Dict[str, Any]],
+        first_included_version: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        first_created_at = self._to_dt(first_included_version.get("createdAt"))
+        predecessors = [
+            version
+            for version in versions
+            if version.get("id") != first_included_version.get("id")
+            and self._to_dt(version.get("createdAt")) < first_created_at
+        ]
+        if not predecessors:
+            return None
+        return max(predecessors, key=lambda version: self._to_dt(version.get("createdAt")).timestamp())
 
     def _is_featured(self, version: Dict[str, Any]) -> bool:
         return str(version.get("isFeatured") or "").strip().lower() == "true"
@@ -480,6 +564,247 @@ class ScorecardHistory(BaseReportBlock):
             )
         )
 
+    def _build_score_window_diff(
+        self,
+        *,
+        versions: List[Dict[str, Any]],
+        included_versions: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not included_versions:
+            return None
+
+        baseline_version = self._select_predecessor_version(
+            versions=versions,
+            first_included_version=included_versions[0],
+        )
+        latest_version = included_versions[-1]
+        if not baseline_version:
+            return None
+
+        return {
+            "baseline_version_id": baseline_version.get("id"),
+            "latest_version_id": latest_version.get("id"),
+            "baseline_created_at": baseline_version.get("createdAt"),
+            "latest_created_at": latest_version.get("createdAt"),
+            "code": self._build_diff_payload(
+                parent_version=baseline_version,
+                version=latest_version,
+                field="configuration",
+                original_label="Pre-window Code",
+                modified_label="Latest Code",
+            ),
+            "guidelines": self._build_diff_payload(
+                parent_version=baseline_version,
+                version=latest_version,
+                field="guidelines",
+                original_label="Pre-window Guidelines",
+                modified_label="Latest Guidelines",
+            ),
+        }
+
+    async def _build_score_performance(
+        self,
+        *,
+        versions: List[Dict[str, Any]],
+        included_versions: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not included_versions:
+            return None
+
+        current_version = included_versions[-1]
+        current_version_id = str(current_version.get("id") or "").strip()
+        if not current_version_id:
+            return None
+
+        baseline_version = self._select_predecessor_version(
+            versions=versions,
+            first_included_version=included_versions[0],
+        )
+        baseline_version_id = str((baseline_version or {}).get("id") or "").strip() or None
+
+        current_evaluations = await self._fetch_evaluations_for_version(current_version_id)
+        baseline_evaluations = (
+            await self._fetch_evaluations_for_version(baseline_version_id)
+            if baseline_version_id
+            else []
+        )
+
+        feedback_eval = self._select_best_evaluation(current_evaluations, "feedback")
+        feedback_baseline_eval = self._select_best_evaluation(baseline_evaluations, "feedback")
+        regression_eval = self._select_best_evaluation(
+            current_evaluations,
+            "accuracy",
+            require_dataset=True,
+        )
+        regression_dataset_id = self._evaluation_dataset_id(regression_eval)
+        regression_baseline_eval = (
+            self._select_best_evaluation(
+                baseline_evaluations,
+                "accuracy",
+                require_dataset=True,
+                dataset_id=regression_dataset_id,
+            )
+            if regression_dataset_id
+            else None
+        )
+
+        performance: Dict[str, Any] = {
+            "current_version_id": current_version_id,
+            "baseline_version_id": baseline_version_id,
+        }
+        feedback_payload = self._performance_kind_payload(
+            current_eval=feedback_eval,
+            baseline_eval=feedback_baseline_eval,
+        )
+        if feedback_payload:
+            performance["recent_feedback"] = feedback_payload
+
+        regression_payload = self._performance_kind_payload(
+            current_eval=regression_eval,
+            baseline_eval=regression_baseline_eval,
+        )
+        if regression_payload:
+            performance["regression"] = regression_payload
+
+        return performance if any(key in performance for key in ("recent_feedback", "regression")) else None
+
+    def _performance_kind_payload(
+        self,
+        *,
+        current_eval: Optional[Dict[str, Any]],
+        baseline_eval: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        current = self._metrics_payload(current_eval)
+        if not current:
+            return None
+        payload = {"current": current}
+        baseline = self._metrics_payload(baseline_eval)
+        if baseline:
+            payload["baseline"] = baseline
+        return payload
+
+    def _select_best_evaluation(
+        self,
+        evaluations: List[Dict[str, Any]],
+        evaluation_type: str,
+        *,
+        require_dataset: bool = False,
+        dataset_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        candidates: List[Dict[str, Any]] = []
+        for evaluation in evaluations:
+            if str(evaluation.get("type") or "").lower() != evaluation_type:
+                continue
+            if str(evaluation.get("status") or "").upper() != "COMPLETED":
+                continue
+            evaluation_dataset_id = self._evaluation_dataset_id(evaluation)
+            if require_dataset and not evaluation_dataset_id:
+                continue
+            if dataset_id and evaluation_dataset_id != dataset_id:
+                continue
+            candidates.append(evaluation)
+
+        if not candidates:
+            return None
+
+        def sort_key(evaluation: Dict[str, Any]) -> Tuple[float, datetime]:
+            metrics = self._parse_metrics(evaluation)
+            alignment = metrics.get("alignment")
+            return (
+                float(alignment) if isinstance(alignment, (int, float)) else float("-inf"),
+                self._parse_datetime(evaluation.get("createdAt")) or datetime.min.replace(tzinfo=timezone.utc),
+            )
+
+        return max(candidates, key=sort_key)
+
+    def _metrics_payload(self, evaluation: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if not evaluation:
+            return None
+
+        metrics = {
+            key: value
+            for key, value in self._parse_metrics(evaluation).items()
+            if key in ("alignment", "accuracy", "precision", "recall") and value is not None
+        }
+        if not metrics:
+            return None
+
+        payload: Dict[str, Any] = {
+            "evaluation_id": evaluation.get("id"),
+            "evaluation_type": evaluation.get("type"),
+            "created_at": evaluation.get("createdAt"),
+            "updated_at": evaluation.get("updatedAt"),
+            "processed_items": evaluation.get("processedItems"),
+            "total_items": evaluation.get("totalItems"),
+            "metrics": metrics,
+        }
+        dataset_id = self._evaluation_dataset_id(evaluation)
+        if dataset_id:
+            payload["dataset_id"] = dataset_id
+        return payload
+
+    def _evaluation_dataset_id(self, evaluation: Optional[Dict[str, Any]]) -> Optional[str]:
+        if not evaluation:
+            return None
+
+        for value in (evaluation.get("dataSetId"), evaluation.get("datasetId")):
+            if value:
+                return str(value).strip()
+
+        parameters = self._parse_json_object(evaluation.get("parameters"))
+        for key in ("dataset_id", "dataSetId", "datasetId"):
+            value = parameters.get(key)
+            if value:
+                return str(value).strip()
+        return None
+
+    def _parse_metrics(self, evaluation: Dict[str, Any]) -> Dict[str, Optional[float]]:
+        parsed = self._parse_json_value(evaluation.get("metrics"))
+        accuracy_value = self._finite_number(evaluation.get("accuracy"))
+
+        if isinstance(parsed, list):
+            values: Dict[str, Optional[float]] = {
+                "accuracy": accuracy_value,
+                "alignment": None,
+                "precision": None,
+                "recall": None,
+            }
+            for metric in parsed:
+                if not isinstance(metric, dict):
+                    continue
+                name = str(metric.get("name") or metric.get("label") or "").lower()
+                number = self._finite_number(metric.get("value"))
+                if number is None:
+                    continue
+                if values["accuracy"] is None and "accuracy" in name:
+                    values["accuracy"] = number
+                if values["alignment"] is None and ("alignment" in name or "ac1" in name):
+                    values["alignment"] = number
+                if values["precision"] is None and "precision" in name:
+                    values["precision"] = number
+                if values["recall"] is None and "recall" in name:
+                    values["recall"] = number
+            return values
+
+        if isinstance(parsed, dict):
+            return {
+                "accuracy": accuracy_value if accuracy_value is not None else self._finite_number(parsed.get("accuracy")),
+                "alignment": self._first_finite(
+                    parsed.get("alignment"),
+                    parsed.get("ac1"),
+                    parsed.get("agreement"),
+                ),
+                "precision": self._finite_number(parsed.get("precision")),
+                "recall": self._finite_number(parsed.get("recall")),
+            }
+
+        return {
+            "accuracy": accuracy_value,
+            "alignment": None,
+            "precision": None,
+            "recall": None,
+        }
+
     def _build_score_summary_input(self, score_output: Dict[str, Any]) -> Dict[str, Any]:
         versions = []
         for version in score_output["versions"]:
@@ -516,6 +841,16 @@ class ScorecardHistory(BaseReportBlock):
         else:
             champion_text = "none were champion-related"
 
+        versions = score_output.get("versions") or []
+        code_change_count = sum(1 for version in versions if version.get("diffs", {}).get("code", {}).get("has_changes"))
+        guideline_change_count = sum(1 for version in versions if version.get("diffs", {}).get("guidelines", {}).get("has_changes"))
+        performance = score_output.get("performance") or {}
+        evaluation_kinds = []
+        if performance.get("recent_feedback"):
+            evaluation_kinds.append("recent feedback")
+        if performance.get("regression"):
+            evaluation_kinds.append("regression")
+
         note_fragments = []
         for version in score_output.get("versions") or []:
             note = str(version.get("note") or "").strip()
@@ -524,13 +859,33 @@ class ScorecardHistory(BaseReportBlock):
             else:
                 note_fragments.append(f"Version {version.get('version_id')}")
 
-        notes_text = "; ".join(note_fragments)
-        if len(notes_text) > 900:
-            notes_text = notes_text[:900].rstrip() + "..."
-        return (
-            f"{featured_count} starred version{' was' if featured_count == 1 else 's were'} "
-            f"created in the window; {champion_text}. {notes_text}"
-        ).strip()
+        note_bullets = []
+        for note in note_fragments[:5]:
+            if len(note) > 240:
+                note = note[:237].rstrip() + "..."
+            note_bullets.append(f"  - {note}")
+        if len(note_fragments) > len(note_bullets):
+            note_bullets.append(f"  - {len(note_fragments) - len(note_bullets)} additional version notes are available below.")
+
+        evaluation_text = (
+            f"Gauge data is available for {' and '.join(evaluation_kinds)}."
+            if evaluation_kinds
+            else "No completed evaluation gauge data was found for the latest included version."
+        )
+
+        return "\n".join([
+            "- **Overview**",
+            f"  - {featured_count} starred version{' was' if featured_count == 1 else 's were'} created in the window.",
+            f"  - Champion coverage: {champion_text}.",
+            "- **Guidelines**",
+            f"  - {guideline_change_count} included version{' changed' if guideline_change_count == 1 else 's changed'} guideline text.",
+            "- **Code / configuration**",
+            f"  - {code_change_count} included version{' changed' if code_change_count == 1 else 's changed'} score configuration.",
+            "- **Evaluations**",
+            f"  - {evaluation_text}",
+            "- **Change notes**",
+            *(note_bullets or ["  - No version notes were provided."]),
+        ]).strip()
 
     def _limit_text(self, text: str) -> str:
         if len(text) <= self.SUMMARY_DIFF_CHAR_LIMIT:
@@ -557,15 +912,19 @@ class ScorecardHistory(BaseReportBlock):
         }
         prompt = (
             "Summarize the featured score-version history below for a report audience.\n"
-            "Explain what changed over the time period in chronological order.\n"
-            "Explicitly state whether all, none, or some included changes were promoted to champion.\n"
+            "The JSON object must contain exactly one key named overall_summary.\n"
+            "The value of overall_summary must be a single Markdown string containing categorized bullet lists, not paragraphs.\n"
+            "Inside that string, use these exact top-level Markdown bullets: **Overview**, **Guidelines**, **Code / configuration**, **Champion promotion**, **Evaluation evidence**, and **Notable score changes**.\n"
+            "Under each Markdown top-level bullet, include concise nested bullets. Keep wording direct and executive-readable.\n"
+            "Explain what changed over the time period in chronological order where chronology matters.\n"
+            "Explicitly state whether all, none, or some included changes were promoted to champion under **Champion promotion**.\n"
             "Use version notes as the source of per-version descriptions and use diffs only to clarify what changed.\n"
-            "Keep overall_summary to one concise paragraph.\n"
+            "Do not write filler like 'this got better' unless the supplied evaluation data supports it.\n"
             "The response must be valid JSON, not Python dict syntax. Use double quotes for every key and string.\n"
             "The first character of the response must be { and the last character must be }.\n"
-            "Return only strict JSON with this shape:\n"
+            "Return only strict JSON with exactly this shape:\n"
             "{\n"
-            '  "overall_summary": "string"\n'
+            '  "overall_summary": "- **Overview**\\n  - ...\\n- **Guidelines**\\n  - ..."\n'
             "}\n\n"
             f"History data:\n{json.dumps(prompt_payload, indent=2, sort_keys=False)}"
         )
@@ -593,13 +952,46 @@ class ScorecardHistory(BaseReportBlock):
         return parsed
 
     def _parse_json_object(self, value: Any) -> Dict[str, Any]:
-        if isinstance(value, dict):
-            return value
+        parsed = self._parse_json_value(value)
+        return parsed if isinstance(parsed, dict) else {}
+
+    def _parse_json_value(self, value: Any) -> Any:
         if isinstance(value, str) and value.strip():
-            parsed = json.loads(value)
-            if isinstance(parsed, dict):
-                return parsed
-        return {}
+            try:
+                return json.loads(value)
+            except Exception:
+                return None
+        return value
+
+    def _parse_datetime(self, value: Any) -> Optional[datetime]:
+        if isinstance(value, datetime):
+            dt = value
+        elif isinstance(value, str) and value.strip():
+            try:
+                dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        else:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    def _finite_number(self, value: Any) -> Optional[float]:
+        if isinstance(value, bool):
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if math.isfinite(number) else None
+
+    def _first_finite(self, *values: Any) -> Optional[float]:
+        for value in values:
+            number = self._finite_number(value)
+            if number is not None:
+                return number
+        return None
 
     async def _run_tac_inference(self, user_message: str, system_prompt: str = "") -> Optional[str]:
         try:
