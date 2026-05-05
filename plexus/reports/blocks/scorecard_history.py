@@ -116,24 +116,47 @@ class ScorecardHistory(BaseReportBlock):
                 )
                 if performance:
                     score_output["performance"] = performance
+                sme_question_context = await self._build_score_sme_question_context(
+                    score_id=score_scope.score_id,
+                    version_entries=version_entries,
+                )
+                if sme_question_context:
+                    score_output["sme_question_context"] = sme_question_context
                 score_output["summary"] = self._build_score_summary_text(score_output)
                 score_outputs.append(score_output)
                 summary_inputs.append(self._build_score_summary_input(score_output))
 
             mode = "single_score" if score_identifier else "scorecard_all_scores"
+            featured_version_count = sum(score["featured_version_count"] for score in score_outputs)
+            champion_version_count = sum(score["champion_version_count"] for score in score_outputs)
+            guideline_change_count = sum(
+                1
+                for score in score_outputs
+                for version in score.get("versions", [])
+                if version.get("diffs", {}).get("guidelines", {}).get("has_changes")
+            )
+            code_change_count = sum(
+                1
+                for score in score_outputs
+                for version in score.get("versions", [])
+                if version.get("diffs", {}).get("code", {}).get("has_changes")
+            )
+            champion_coverage = self._champion_coverage(
+                featured_version_count=featured_version_count,
+                champion_version_count=champion_version_count,
+            )
             summary_payload = self._empty_summary() if not score_outputs else await self._generate_summary_payload(
                 scorecard_name=scorecard.name,
                 mode=mode,
                 start_date=window_start,
                 end_date=window_end,
-                score_summaries=summary_inputs,
-            )
-
-            featured_version_count = sum(score["featured_version_count"] for score in score_outputs)
-            champion_version_count = sum(score["champion_version_count"] for score in score_outputs)
-            champion_coverage = self._champion_coverage(
                 featured_version_count=featured_version_count,
                 champion_version_count=champion_version_count,
+                guideline_change_count=guideline_change_count,
+                code_change_count=code_change_count,
+                scores_changed_count=len(score_outputs),
+                champion_coverage=champion_coverage,
+                score_summaries=summary_inputs,
             )
 
             output: Dict[str, Any] = {
@@ -394,6 +417,95 @@ class ScorecardHistory(BaseReportBlock):
             if not next_token:
                 break
         return evaluations
+
+    async def _fetch_procedures_for_version(self, score_version_id: str, *, limit: int = 5) -> List[Dict[str, Any]]:
+        query = """
+        query ListProceduresForScorecardHistory(
+            $scoreVersionId: String!
+            $sortDirection: ModelSortDirection
+            $limit: Int
+            $nextToken: String
+        ) {
+            listProcedureByScoreVersionIdAndUpdatedAt(
+                scoreVersionId: $scoreVersionId
+                sortDirection: $sortDirection
+                limit: $limit
+                nextToken: $nextToken
+            ) {
+                items {
+                    id
+                    name
+                    status
+                    metadata
+                    scoreVersionId
+                    createdAt
+                    updatedAt
+                }
+                nextToken
+            }
+        }
+        """
+        result = await asyncio.to_thread(
+            self.api_client.execute,
+            query,
+            {
+                "scoreVersionId": score_version_id,
+                "sortDirection": "DESC",
+                "limit": limit,
+                "nextToken": None,
+            },
+        )
+        if not isinstance(result, dict):
+            return []
+        payload = result.get("listProcedureByScoreVersionIdAndUpdatedAt") or {}
+        if not isinstance(payload, dict):
+            return []
+        return [item for item in payload.get("items") or [] if isinstance(item, dict)]
+
+    async def _fetch_procedures_for_score(self, score_id: str, *, limit: int = 12) -> List[Dict[str, Any]]:
+        query = """
+        query ListProceduresForScorecardHistoryScore(
+            $scoreId: String!
+            $sortDirection: ModelSortDirection
+            $limit: Int
+            $nextToken: String
+        ) {
+            listProcedureByScoreIdAndUpdatedAt(
+                scoreId: $scoreId
+                sortDirection: $sortDirection
+                limit: $limit
+                nextToken: $nextToken
+            ) {
+                items {
+                    id
+                    name
+                    status
+                    metadata
+                    scoreId
+                    scoreVersionId
+                    createdAt
+                    updatedAt
+                }
+                nextToken
+            }
+        }
+        """
+        result = await asyncio.to_thread(
+            self.api_client.execute,
+            query,
+            {
+                "scoreId": score_id,
+                "sortDirection": "DESC",
+                "limit": limit,
+                "nextToken": None,
+            },
+        )
+        if not isinstance(result, dict):
+            return []
+        payload = result.get("listProcedureByScoreIdAndUpdatedAt") or {}
+        if not isinstance(payload, dict):
+            return []
+        return [item for item in payload.get("items") or [] if isinstance(item, dict)]
 
     def _select_featured_versions(
         self,
@@ -741,7 +853,52 @@ class ScorecardHistory(BaseReportBlock):
         dataset_id = self._evaluation_dataset_id(evaluation)
         if dataset_id:
             payload["dataset_id"] = dataset_id
+        root_cause_topics = self._extract_root_cause_topics(evaluation)
+        if root_cause_topics:
+            payload["root_cause_topics"] = root_cause_topics
         return payload
+
+    def _extract_root_cause_topics(self, evaluation: Dict[str, Any], *, limit: int = 5) -> List[Dict[str, Any]]:
+        parameters = self._parse_json_object(evaluation.get("parameters"))
+        root_cause = parameters.get("root_cause")
+        if not isinstance(root_cause, dict):
+            return []
+
+        topics = root_cause.get("topics")
+        if not isinstance(topics, list):
+            return []
+
+        extracted: List[Dict[str, Any]] = []
+        for topic in topics:
+            if not isinstance(topic, dict):
+                continue
+            label = (
+                topic.get("label")
+                or topic.get("name")
+                or topic.get("title")
+                or topic.get("topic")
+            )
+            summary = (
+                topic.get("summary")
+                or topic.get("description")
+                or topic.get("explanation")
+                or topic.get("root_cause")
+            )
+            item_count = topic.get("item_count") or topic.get("count") or topic.get("n")
+            entry = {
+                key: value
+                for key, value in {
+                    "label": str(label).strip() if label else None,
+                    "summary": self._limit_text(str(summary).strip()) if summary else None,
+                    "item_count": item_count,
+                }.items()
+                if value not in (None, "")
+            }
+            if entry:
+                extracted.append(entry)
+            if len(extracted) >= limit:
+                break
+        return extracted
 
     def _evaluation_dataset_id(self, evaluation: Optional[Dict[str, Any]]) -> Optional[str]:
         if not evaluation:
@@ -819,13 +976,195 @@ class ScorecardHistory(BaseReportBlock):
                 "code_diff": self._limit_text(code_diff),
                 "guidelines_diff": self._limit_text(guidelines_diff),
             })
+        guideline_change_count = sum(
+            1
+            for version in score_output.get("versions") or []
+            if version.get("diffs", {}).get("guidelines", {}).get("has_changes")
+        )
+        code_change_count = sum(
+            1
+            for version in score_output.get("versions") or []
+            if version.get("diffs", {}).get("code", {}).get("has_changes")
+        )
         return {
             "score_id": score_output["score_id"],
             "score_name": score_output["score_name"],
             "featured_version_count": score_output["featured_version_count"],
             "champion_version_count": score_output["champion_version_count"],
+            "guideline_change_count": guideline_change_count,
+            "code_change_count": code_change_count,
+            "sme_question_context": score_output.get("sme_question_context") or [],
+            "evaluation_context": self._build_score_evaluation_context(score_output),
             "versions": versions,
         }
+
+    async def _build_score_sme_question_context(
+        self,
+        *,
+        score_id: str,
+        version_entries: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        contexts: List[Dict[str, Any]] = []
+        seen_texts = set()
+        version_ids = {
+            str(version.get("version_id") or "").strip()
+            for version in version_entries
+            if version.get("version_id")
+        }
+        procedures_by_id: Dict[str, Dict[str, Any]] = {}
+        for version in sorted(version_entries, key=lambda entry: str(entry.get("created_at") or ""), reverse=True):
+            version_id = str(version.get("version_id") or "").strip()
+            if not version_id:
+                continue
+            procedures = await self._fetch_procedures_for_version(version_id, limit=3)
+            for procedure in procedures:
+                if procedure.get("id"):
+                    procedures_by_id[str(procedure["id"])] = procedure
+                self._append_procedure_sme_contexts(
+                    contexts=contexts,
+                    seen_texts=seen_texts,
+                    procedure=procedure,
+                    version_id=version_id,
+                )
+                if len(contexts) >= 8:
+                    return contexts
+
+        score_procedures = await self._fetch_procedures_for_score(score_id, limit=12)
+        for procedure in score_procedures:
+            if procedure.get("id") and str(procedure["id"]) in procedures_by_id:
+                continue
+            procedure_version_id = str(procedure.get("scoreVersionId") or "").strip()
+            metadata_text = json.dumps(self._parse_json_object(procedure.get("metadata")), default=str)
+            related_version_id = procedure_version_id if procedure_version_id in version_ids else None
+            if not related_version_id:
+                related_version_id = next((version_id for version_id in version_ids if version_id in metadata_text), None)
+            self._append_procedure_sme_contexts(
+                contexts=contexts,
+                seen_texts=seen_texts,
+                procedure=procedure,
+                version_id=related_version_id,
+            )
+            if len(contexts) >= 8:
+                return contexts
+        return contexts
+
+    def _append_procedure_sme_contexts(
+        self,
+        *,
+        contexts: List[Dict[str, Any]],
+        seen_texts: set,
+        procedure: Dict[str, Any],
+        version_id: Optional[str],
+    ) -> None:
+        for text in self._extract_procedure_sme_texts(procedure):
+            normalized = re.sub(r"\s+", " ", text).strip().lower()
+            if not normalized or normalized in seen_texts:
+                continue
+            seen_texts.add(normalized)
+            contexts.append({
+                "version_id": version_id,
+                "procedure_id": procedure.get("id"),
+                "procedure_name": procedure.get("name"),
+                "procedure_status": procedure.get("status"),
+                "procedure_updated_at": procedure.get("updatedAt"),
+                "text": self._limit_text(text),
+            })
+            if len(contexts) >= 8:
+                return
+
+    def _extract_procedure_sme_texts(self, procedure: Dict[str, Any]) -> List[str]:
+        metadata = self._parse_json_object(procedure.get("metadata"))
+        state = self._load_procedure_state_from_metadata(metadata)
+        texts: List[str] = []
+
+        def add_text(value: Any) -> None:
+            text = self._extract_text_value(value)
+            if not text:
+                return
+            lower = text.lower()
+            if "not available" in lower or "no sme decisions needed" in lower:
+                return
+            texts.append(text)
+
+        for root in (state, metadata):
+            if not isinstance(root, dict):
+                continue
+            end_report = root.get("end_of_run_report")
+            if isinstance(end_report, dict):
+                sme_agenda = end_report.get("sme_agenda")
+                if isinstance(sme_agenda, dict):
+                    add_text(sme_agenda.get("text"))
+                else:
+                    add_text(sme_agenda)
+                sme_worksheet = end_report.get("sme_worksheet")
+                if isinstance(sme_worksheet, dict):
+                    add_text(sme_worksheet.get("text"))
+
+            add_text(root.get("sme_agenda_gated"))
+            add_text(root.get("sme_agenda"))
+
+            cycle_insights = root.get("cycle_insights")
+            if isinstance(cycle_insights, list):
+                for insight in reversed(cycle_insights):
+                    if not isinstance(insight, dict):
+                        continue
+                    add_text(insight.get("sme_agenda"))
+                    add_text(insight.get("sme_worksheet"))
+                    if len(texts) >= 6:
+                        break
+
+        return texts[:6]
+
+    def _load_procedure_state_from_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        state_ref = metadata.get("dashboard_state") or metadata.get("state") or {}
+        if isinstance(state_ref, dict) and "_s3_key" in state_ref:
+            try:
+                from plexus.cli.shared.optimizer_results import (
+                    _download_json_from_s3_key,
+                    _resolve_report_block_bucket_name,
+                )
+
+                bucket_name = _resolve_report_block_bucket_name()
+                if not bucket_name:
+                    return {}
+                return _download_json_from_s3_key(bucket_name=bucket_name, key=str(state_ref["_s3_key"]))
+            except Exception as exc:
+                self._log(f"Could not load procedure state from S3 for SME questions: {exc}", level="WARNING")
+                return {}
+        return state_ref if isinstance(state_ref, dict) else {}
+
+    def _extract_text_value(self, value: Any) -> str:
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, dict):
+            for key in ("text", "markdown", "content", "summary"):
+                text = self._extract_text_value(value.get(key))
+                if text:
+                    return text
+        return ""
+
+    def _build_score_evaluation_context(self, score_output: Dict[str, Any]) -> Dict[str, Any]:
+        performance = score_output.get("performance") or {}
+        contexts: Dict[str, Any] = {}
+        for key in ("recent_feedback", "regression"):
+            current = (performance.get(key) or {}).get("current") or {}
+            entry = {
+                field: current.get(field)
+                for field in (
+                    "evaluation_id",
+                    "evaluation_type",
+                    "created_at",
+                    "dataset_id",
+                    "processed_items",
+                    "total_items",
+                    "metrics",
+                    "root_cause_topics",
+                )
+                if current.get(field) not in (None, "", [], {})
+            }
+            if entry:
+                contexts[key] = entry
+        return contexts
 
     def _build_score_summary_text(self, score_output: Dict[str, Any]) -> str:
         featured_count = int(score_output.get("featured_version_count") or 0)
@@ -899,6 +1238,12 @@ class ScorecardHistory(BaseReportBlock):
         mode: str,
         start_date: datetime,
         end_date: datetime,
+        featured_version_count: int,
+        champion_version_count: int,
+        guideline_change_count: int,
+        code_change_count: int,
+        scores_changed_count: int,
+        champion_coverage: str,
         score_summaries: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         prompt_payload = {
@@ -908,28 +1253,57 @@ class ScorecardHistory(BaseReportBlock):
                 "start": start_date.isoformat(),
                 "end": end_date.isoformat(),
             },
+            "overall_counts": {
+                "scores_changed_count": scores_changed_count,
+                "featured_version_count": featured_version_count,
+                "champion_version_count": champion_version_count,
+                "guideline_change_count": guideline_change_count,
+                "code_change_count": code_change_count,
+                "champion_coverage": champion_coverage,
+            },
             "scores": score_summaries,
         }
         prompt = (
-            "Summarize the featured score-version history below for a report audience.\n"
+            "Summarize the featured score-version history below for stakeholders and SMEs.\n"
             "The JSON object must contain exactly one key named overall_summary.\n"
             "The value of overall_summary must be a single Markdown string containing categorized bullet lists, not paragraphs.\n"
-            "Inside that string, use these exact top-level Markdown bullets: **Overview**, **Guidelines**, **Code / configuration**, **Champion promotion**, **Evaluation evidence**, and **Notable score changes**.\n"
-            "Under each Markdown top-level bullet, include concise nested bullets. Keep wording direct and executive-readable.\n"
-            "Explain what changed over the time period in chronological order where chronology matters.\n"
-            "Explicitly state whether all, none, or some included changes were promoted to champion under **Champion promotion**.\n"
-            "Use version notes as the source of per-version descriptions and use diffs only to clarify what changed.\n"
+            "Write in plain stakeholder language: describe what the score now expects or treats differently, not how the implementation changed.\n"
+            "Focus first on rubric, policy, and guidelines meaning. These are the changes SMEs and client stakeholders need to understand.\n"
+            "Also include code/prompt-only changes, but translate them into high-level scoring behavior terms.\n"
+            "Avoid technical implementation terms unless they are unavoidable: do not mention YAML, nodes, classifiers, data classes, external IDs, parent versions, diff mechanics, or prompt internals.\n"
+            "Do not list every version. Combine related same-score changes into one bullet when they represent the same stakeholder-level change.\n"
+            "Keep the whole summary short enough to use at the start of a client meeting: normally 6 to 10 nested bullets total.\n"
+            "Inside the Markdown string, use these exact top-level bullets in this order:\n"
+            "- **What changed**\n"
+            "- **Guideline / rubric changes**\n"
+            "- **Scoring behavior changes**\n"
+            "- **Questions for SMEs / stakeholders**\n"
+            "- **Rollout and evidence**\n"
+            "Under **What changed**, give the fastest plain-language summary of the important changes across the scorecard.\n"
+            "Under **Guideline / rubric changes**, summarize changed SME-facing decision rules. If overall_counts.guideline_change_count is greater than 0, do not say no rubric wording changed; summarize the rubric meaning of those changes.\n"
+            "Only say no rubric wording changed when overall_counts.guideline_change_count is exactly 0.\n"
+            "Under **Scoring behavior changes**, summarize important code/prompt-only behavior changes in stakeholder terms, such as what the score is stricter about, more permissive about, or now handles more consistently.\n"
+            "Under **Questions for SMEs / stakeholders**, list 2 to 5 concrete rubric-clarification questions that would help improve future scoring.\n"
+            "Use each score's sme_question_context first; it comes from optimizer procedure SME agendas and worksheets linked to the score versions.\n"
+            "When sme_question_context is absent or thin, derive concise questions from evaluation_context.root_cause_topics, version notes, and diffs.\n"
+            "Only include questions that require SME or stakeholder policy judgment. Do not include engineering tasks, model tuning tasks, metric interpretation, or requests to inspect YAML.\n"
+            "Phrase every item as a question. Keep each question short enough to read aloud in a meeting.\n"
+            "Under **Rollout and evidence**, use overall_counts.champion_coverage exactly when describing promotion coverage: all, none, or some. Do not infer a different coverage from the narrative notes.\n"
+            "Mention evaluation evidence only when the supplied data supports it.\n"
+            "Use score names so readers can tell which area changed, but do not include version IDs.\n"
+            "Use version notes as the source of per-version intent and use diffs only to clarify the plain-language change.\n"
             "Do not write filler like 'this got better' unless the supplied evaluation data supports it.\n"
             "The response must be valid JSON, not Python dict syntax. Use double quotes for every key and string.\n"
             "The first character of the response must be { and the last character must be }.\n"
             "Return only strict JSON with exactly this shape:\n"
             "{\n"
-            '  "overall_summary": "- **Overview**\\n  - ...\\n- **Guidelines**\\n  - ..."\n'
+            '  "overall_summary": "- **What changed**\\n  - ...\\n- **Guideline / rubric changes**\\n  - ...\\n- **Scoring behavior changes**\\n  - ...\\n- **Questions for SMEs / stakeholders**\\n  - ...\\n- **Rollout and evidence**\\n  - ..."\n'
             "}\n\n"
             f"History data:\n{json.dumps(prompt_payload, indent=2, sort_keys=False)}"
         )
         system_prompt = (
-            "You write concise operational report summaries. "
+            "You write concise stakeholder-facing scorecard change summaries for client and SME meetings. "
+            "Prioritize rubric meaning and operational impact over technical implementation detail. "
             "Do not invent score versions, dates, promotions, or outcomes not present in the data."
         )
         raw_response = await self._run_tac_inference(prompt, system_prompt=system_prompt)

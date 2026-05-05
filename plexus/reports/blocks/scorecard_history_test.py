@@ -369,9 +369,70 @@ async def test_uses_llm_summary_and_score_summaries(mock_api_client):
         output, _ = await block.generate()
 
     assert run_llm.await_count == 1
+    prompt = run_llm.await_args.args[0]
+    system_prompt = run_llm.await_args.kwargs["system_prompt"]
+    assert "stakeholders and SMEs" in prompt
+    assert "**What changed**" in prompt
+    assert "**Guideline / rubric changes**" in prompt
+    assert "**Scoring behavior changes**" in prompt
+    assert "**Questions for SMEs / stakeholders**" in prompt
+    assert "sme_question_context first" in prompt
+    assert "do not include version IDs" in prompt
+    assert '"champion_coverage": "none"' in prompt
+    assert '"guideline_change_count": 1' in prompt
+    assert '"code_change_count": 1' in prompt
+    assert "Only say no rubric wording changed when overall_counts.guideline_change_count is exactly 0" in prompt
+    assert "use overall_counts.champion_coverage exactly" in prompt
+    assert "YAML" in prompt
+    assert "Prioritize rubric meaning and operational impact" in system_prompt
     assert output["summary"]["text"] == "Overall LLM summary."
     assert "1 starred version was created" in output["scores"][0]["summary"]
     assert "v1 note" in output["scores"][0]["summary"]
+
+
+@pytest.mark.asyncio
+async def test_includes_procedure_sme_agenda_context_in_summary_prompt(mock_api_client):
+    block = _block(
+        {"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
+        mock_api_client,
+    )
+    scorecard = SimpleNamespace(id="sc-1", name="Scorecard")
+    scope = SimpleNamespace(score_id="score-1", score_name="Score 1", champion_version_id=None)
+    procedure = {
+        "id": "proc-1",
+        "name": "Optimizer run",
+        "status": "COMPLETE",
+        "updatedAt": "2026-04-11T12:00:00+00:00",
+        "metadata": {
+            "end_of_run_report": {
+                "sme_agenda": {
+                    "text": "### Current medication boundary\n**Question:** Should vitamins count as current medications for dosage review?"
+                }
+            },
+            "cycle_insights": [
+                {
+                    "sme_agenda": "### Pharmacy confirmation\n**Question:** Is pharmacy use enough when the customer does not explicitly confirm it?"
+                }
+            ],
+        },
+    }
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=[scope])),
+        patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=[_version("v1")])),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
+        patch.object(block, "_fetch_procedures_for_version", new=AsyncMock(return_value=[procedure])),
+        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))) as run_llm,
+    ):
+        output, _ = await block.generate()
+
+    context = output["scores"][0]["sme_question_context"]
+    assert context[0]["procedure_id"] == "proc-1"
+    assert "Should vitamins count" in context[0]["text"]
+    prompt = run_llm.await_args.args[0]
+    assert "Should vitamins count as current medications" in prompt
+    assert "Is pharmacy use enough" in prompt
 
 
 @pytest.mark.asyncio

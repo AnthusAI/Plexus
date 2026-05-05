@@ -202,7 +202,7 @@ describe("ScorecardHistory", () => {
     expect(screen.getByText("Version Note")).toBeInTheDocument();
     expect(screen.queryByTestId("diff-editor-yaml")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Code Diff/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Code Changes/i }));
     expect(screen.getByTestId("code-diff-version-1")).toBeInTheDocument();
     expect(screen.getByTestId("diff-editor-yaml")).toHaveAttribute("data-original", "name: old\n");
     expect(screen.getByTestId("diff-editor-yaml")).toHaveAttribute("data-modified", "name: new\n");
@@ -215,7 +215,7 @@ describe("ScorecardHistory", () => {
     expect(screen.getByTestId("window-diff-content")).toBeInTheDocument();
     expect(screen.queryByTestId("diff-editor-yaml")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Full Code Diff/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Code Changes/i }));
     expect(screen.getByTestId("window-code-diff")).toBeInTheDocument();
     expect(screen.getByTestId("diff-editor-yaml")).toHaveAttribute("data-original", "name: old\n");
     expect(screen.getByTestId("diff-editor-yaml")).toHaveAttribute("data-modified", "name: new\n");
