@@ -401,7 +401,7 @@ describe("ConversationViewer streaming updates", () => {
       />
     )
 
-    expect(await screen.findByTitle("author@example.com")).toBeInTheDocument()
+    expect(await screen.findByLabelText("Message author: author@example.com")).toBeInTheDocument()
     for (const call of mockChatMessageList.mock.calls) {
       expect(call[1]?.selectionSet || []).not.toContain("createdByUserId")
     }
