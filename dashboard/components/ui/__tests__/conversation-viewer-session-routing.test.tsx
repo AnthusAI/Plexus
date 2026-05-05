@@ -561,7 +561,7 @@ describe("ConversationViewer session-routing states", () => {
       />
     )
 
-    expect(await screen.findByTitle("author@example.com")).toBeInTheDocument()
+    expect(await screen.findByLabelText("Message author: author@example.com")).toBeInTheDocument()
     expect(userGetMock).toHaveBeenCalledWith(
       { id: "user-1" },
       { authMode: "userPool" },
@@ -598,7 +598,7 @@ describe("ConversationViewer session-routing states", () => {
       />
     )
 
-    expect(await screen.findByTitle("Optimizer Agent")).toBeInTheDocument()
+    expect(await screen.findByLabelText("Message author: Optimizer Agent")).toBeInTheDocument()
   })
 
   it("prefers createdByUserId over conflicting bot attribution metadata", async () => {
@@ -639,7 +639,7 @@ describe("ConversationViewer session-routing states", () => {
       />
     )
 
-    expect(await screen.findByTitle("author@example.com")).toBeInTheDocument()
-    expect(screen.queryByTitle("Optimizer Agent")).not.toBeInTheDocument()
+    expect(await screen.findByLabelText("Message author: author@example.com")).toBeInTheDocument()
+    expect(screen.queryByLabelText("Message author: Optimizer Agent")).not.toBeInTheDocument()
   })
 })
