@@ -49,6 +49,7 @@ const mockChatSessionOnCreate = jest.fn()
 const mockChatSessionOnUpdate = jest.fn()
 const mockChatMessageOnCreate = jest.fn()
 const mockChatMessageOnUpdate = jest.fn()
+const mockUserGet = jest.fn()
 const mockGraphql = jest.fn()
 
 const mockClient = {
@@ -66,6 +67,9 @@ const mockClient = {
       onCreate: mockChatMessageOnCreate,
       onUpdate: mockChatMessageOnUpdate,
     },
+    User: {
+      get: mockUserGet,
+    },
   },
 }
 
@@ -75,6 +79,9 @@ jest.mock("@/utils/data-operations", () => ({
 
 jest.mock("@/utils/user-profile", () => ({
   getCurrentUserAttribution: jest.fn().mockResolvedValue({ createdByUserId: "user-1" }),
+  gravatarAvatarUrl: jest.fn(async (email: string, size = 64) => (
+    `https://www.gravatar.com/avatar/test?s=${size}&email=${encodeURIComponent(email)}`
+  )),
 }))
 
 jest.mock("@/components/ai-elements/conversation", () => ({
@@ -243,6 +250,7 @@ describe("ConversationViewer streaming updates", () => {
     mockChatSessionOnUpdate.mockReset()
     mockChatMessageOnCreate.mockReset()
     mockChatMessageOnUpdate.mockReset()
+    mockUserGet.mockReset()
     mockGraphql.mockReset()
     delete process.env.NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET
 
@@ -309,6 +317,14 @@ describe("ConversationViewer streaming updates", () => {
         return { unsubscribe: jest.fn() }
       },
     })
+
+    mockUserGet.mockResolvedValue({
+      data: {
+        id: "user-1",
+        email: "author@example.com",
+        displayName: "Author Person",
+      },
+    })
   })
 
   it("updates assistant message in place from onUpdate subscription payloads", async () => {
@@ -321,6 +337,9 @@ describe("ConversationViewer streaming updates", () => {
 
     await screen.findByText("Hel")
     expect(container.querySelectorAll('[data-message-id="msg-assistant-1"]')).toHaveLength(1)
+    for (const call of mockChatMessageList.mock.calls) {
+      expect(call[1]?.selectionSet || []).not.toContain("createdByUserId")
+    }
 
     await act(async () => {
       subscriptions.messageUpdate?.next({
@@ -348,6 +367,44 @@ describe("ConversationViewer streaming updates", () => {
       expect(screen.getByText("Hello streaming world")).toBeInTheDocument()
     })
     expect(container.querySelectorAll('[data-message-id="msg-assistant-1"]')).toHaveLength(1)
+  })
+
+  it("renders user avatars from loaded metadata attribution without selecting createdByUserId", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-user-1",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "USER",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT",
+          content: "human message",
+          createdAt: "2026-03-27T00:00:01.000Z",
+          sequenceNumber: 1,
+          metadata: JSON.stringify({
+            attribution: {
+              actorType: "user",
+              userId: "user-1",
+            },
+          }),
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    expect(await screen.findByTitle("author@example.com")).toBeInTheDocument()
+    for (const call of mockChatMessageList.mock.calls) {
+      expect(call[1]?.selectionSet || []).not.toContain("createdByUserId")
+    }
   })
 
   it("ignores regressive assistant streaming updates that arrive out of order", async () => {
@@ -482,6 +539,10 @@ describe("ConversationViewer streaming updates", () => {
     expect(createdMessage.responseTarget).toBe("cloud")
     expect(createdMessage.responseStatus).toBe("PENDING")
     const metadata = JSON.parse(createdMessage.metadata)
+    expect(metadata.attribution).toEqual({
+      actorType: "user",
+      userId: "user-1",
+    })
     expect(metadata.instrumentation.client_history_snapshot).toEqual([
       { role: "ASSISTANT", content: "Hel" },
       { role: "USER", content: "Test thinking state" },
@@ -586,6 +647,10 @@ describe("ConversationViewer streaming updates", () => {
     expect(createdMessage.responseTarget).toBe("local:ryan")
     expect(createdMessage.responseStatus).toBe("PENDING")
     const metadata = JSON.parse(createdMessage.metadata)
+    expect(metadata.attribution).toEqual({
+      actorType: "user",
+      userId: "user-1",
+    })
     expect(metadata.model.id).toBe("gpt-5.4-mini")
     expect(metadata.instrumentation.client_selected_model).toBe("gpt-5.4-mini")
     expect(mockGraphql).not.toHaveBeenCalled()
@@ -620,6 +685,10 @@ describe("ConversationViewer streaming updates", () => {
     expect(createdMessage.responseTarget).toBe("proc-1")
     expect(createdMessage.responseStatus).toBe("COMPLETED")
     expect(JSON.parse(createdMessage.metadata)).toEqual({
+      attribution: {
+        actorType: "user",
+        userId: "user-1",
+      },
       source: "procedure-steering-input",
       scope: "all_agents",
       sent_at: expect.any(String),
