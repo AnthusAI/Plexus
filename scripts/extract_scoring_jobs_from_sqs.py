@@ -44,7 +44,7 @@ import json
 import csv
 import boto3
 from datetime import datetime
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Optional, Tuple
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
@@ -60,6 +60,7 @@ logger = logging.getLogger(__name__)
 try:
     from plexus.dashboard.api.client import PlexusDashboardClient
     from plexus.dashboard.api.models.scoring_job import ScoringJob
+    from plexus.dashboard.api.models.score import Score
 except ImportError as e:
     logger.error(f"Failed to import Plexus modules: {e}")
     logger.error("Make sure you're running this from the Plexus project root")
@@ -70,7 +71,10 @@ class ScoringJobExtractor:
     """Extracts scoring job information from SQS queue and generates CSV report."""
 
     def __init__(self, queue_url: str, max_workers: int = 20, dedupe_column: str = None,
-                 delete_external_id: str = None, dry_run: bool = False):
+                 delete_external_id: str = None, dry_run: bool = False,
+                 source_queue_url: Optional[str] = None,
+                 requeue_filter: str = 'none',
+                 apply_requeue: bool = False):
         """
         Initialize the extractor.
 
@@ -86,6 +90,9 @@ class ScoringJobExtractor:
         self.dedupe_column = dedupe_column
         self.delete_external_id = delete_external_id
         self.dry_run = dry_run
+        self.source_queue_url = source_queue_url
+        self.requeue_filter = requeue_filter
+        self.apply_requeue = apply_requeue
         self.sqs_client = boto3.client('sqs')
         self.dashboard_client = PlexusDashboardClient()
 
@@ -97,6 +104,93 @@ class ScoringJobExtractor:
         # Storage for messages to delete
         self.messages_to_delete: List[Dict] = []
         self.messages_to_delete_lock = Lock()  # Thread-safe access to deletion list
+        self.messages_to_requeue: List[Dict] = []
+        self.messages_to_requeue_lock = Lock()  # Thread-safe access to requeue list
+        self.score_cache: Dict[str, Dict[str, str]] = {}
+        self.score_cache_lock = Lock()
+
+    def get_score_details(self, score_id: str) -> Dict[str, str]:
+        """Get score provider/model/name with a simple thread-safe cache."""
+        if not score_id:
+            return {
+                'score_provider': '',
+                'score_model': '',
+                'score_name': ''
+            }
+
+        with self.score_cache_lock:
+            cached = self.score_cache.get(score_id)
+        if cached is not None:
+            return cached
+
+        details = {
+            'score_provider': 'LOOKUP_ERROR',
+            'score_model': '',
+            'score_name': ''
+        }
+        try:
+            score = Score.get_by_id(score_id, self.dashboard_client)
+            details = {
+                'score_provider': score.aiProvider or 'unknown',
+                'score_model': score.aiModel or 'unknown',
+                'score_name': score.name or ''
+            }
+        except Exception as e:
+            logger.warning(f"Failed to lookup score details for score_id={score_id}: {e}")
+
+        with self.score_cache_lock:
+            self.score_cache[score_id] = details
+
+        return details
+
+    def categorize_result(self, result: Dict[str, str]) -> str:
+        """Categorize each message result for DLQ triage."""
+        status = (result.get('scoring_job_status') or '').upper()
+        provider = (result.get('score_provider') or '').lower()
+        error = (result.get('scoring_job_error_message') or '').lower()
+
+        if status == 'LOOKUP_ERROR':
+            return 'lookup_error'
+        if status == 'COMPLETED':
+            return 'completed_stale'
+        if status == 'FAILED':
+            if 'invalidclienttokenid' in error:
+                return 'failed_invalid_token_reprocessable'
+            if 'converse operation: operation not allowed' in error or 'validationexception' in error:
+                return 'failed_bedrock_converse_issue'
+            return 'failed_other_issue'
+        if status in ('PENDING', 'RUNNING', 'IN_PROGRESS'):
+            if 'bedrock' in provider:
+                return 'inflight_bedrock'
+            if provider in ('unknown', 'lookup_error', ''):
+                return 'inflight_unknown_provider'
+            return 'inflight_non_bedrock'
+        return f"status_{status.lower()}" if status else 'status_unknown'
+
+    def should_requeue_result(self, result: Dict[str, str]) -> bool:
+        """Determine whether a message should be requeued under selected filter."""
+        if self.requeue_filter == 'none':
+            return False
+
+        category = result.get('dlq_category', '')
+        provider = (result.get('score_provider') or '').lower()
+
+        if self.requeue_filter == 'all':
+            return True
+        if self.requeue_filter == 'chatopenai':
+            return provider == 'chatopenai'
+        if self.requeue_filter == 'non-bedrock':
+            if provider in ('', 'unknown', 'lookup_error'):
+                return False
+            return 'bedrock' not in provider
+        if self.requeue_filter == 'retryable':
+            return category in {
+                'completed_stale',
+                'failed_invalid_token_reprocessable',
+                'inflight_non_bedrock'
+            }
+
+        return False
 
     def extract_external_id_from_item_id(self, item_id: str) -> str:
         """
@@ -193,6 +287,7 @@ class ScoringJobExtractor:
 
             # Get the scoring job
             scoring_job = ScoringJob.get_by_id(scoring_job_id, self.dashboard_client)
+            score_details = self.get_score_details(scoring_job.scoreId or '')
 
             # Extract external ID from itemId
             external_id = self.extract_external_id_from_item_id(scoring_job.itemId)
@@ -201,8 +296,14 @@ class ScoringJobExtractor:
                 'scoring_job_id': scoring_job_id,
                 'external_id': external_id,
                 'scorecard_id': scoring_job.scorecardId,
-                'score_id': scoring_job.scoreId or ''
+                'score_id': scoring_job.scoreId or '',
+                'scoring_job_status': scoring_job.status or '',
+                'scoring_job_error_message': scoring_job.errorMessage or '',
+                'score_provider': score_details.get('score_provider', ''),
+                'score_model': score_details.get('score_model', ''),
+                'score_name': score_details.get('score_name', '')
             }
+            result['dlq_category'] = self.categorize_result(result)
 
             logger.debug(f"Found: {result}")
             return result
@@ -213,7 +314,13 @@ class ScoringJobExtractor:
                 'scoring_job_id': scoring_job_id,
                 'external_id': 'ERROR',
                 'scorecard_id': 'ERROR',
-                'score_id': 'ERROR'
+                'score_id': 'ERROR',
+                'scoring_job_status': 'LOOKUP_ERROR',
+                'scoring_job_error_message': str(e),
+                'score_provider': 'LOOKUP_ERROR',
+                'score_model': '',
+                'score_name': '',
+                'dlq_category': 'lookup_error'
             }
 
     def should_delete_message(self, external_id: str) -> bool:
@@ -361,6 +468,14 @@ class ScoringJobExtractor:
                     logger.debug(f"Marked for deletion: scoring_job_id={result['scoring_job_id']}, "
                                f"external_id={result['external_id']}")
 
+            # Check if this message should be marked for requeue
+            if result and self.should_requeue_result(result):
+                with self.messages_to_requeue_lock:
+                    self.messages_to_requeue.append({
+                        'message': message_obj,
+                        'result': result
+                    })
+
             return result
 
         except Exception as e:
@@ -429,6 +544,114 @@ class ScoringJobExtractor:
         # Log deletion statistics if deletion is enabled
         if self.delete_external_id:
             logger.info(f"Messages marked for deletion: {len(self.messages_to_delete)}")
+        if self.requeue_filter != 'none':
+            logger.info(f"Messages marked for requeue ({self.requeue_filter}): {len(self.messages_to_requeue)}")
+
+    def summarize_categories(self) -> None:
+        """Print category and provider summary for quick DLQ triage."""
+        category_counts: Dict[str, int] = {}
+        provider_counts: Dict[str, int] = {}
+
+        for row in self.results:
+            category = row.get('dlq_category', 'unknown')
+            provider = row.get('score_provider', 'unknown')
+            category_counts[category] = category_counts.get(category, 0) + 1
+            provider_counts[provider] = provider_counts.get(provider, 0) + 1
+
+        logger.info("")
+        logger.info("DLQ Category Summary:")
+        for category, count in sorted(category_counts.items(), key=lambda x: x[1], reverse=True):
+            logger.info(f"  {category}: {count}")
+
+        logger.info("")
+        logger.info("Provider Summary:")
+        for provider, count in sorted(provider_counts.items(), key=lambda x: x[1], reverse=True):
+            logger.info(f"  {provider}: {count}")
+
+    def requeue_messages_batch(self) -> Dict[str, int]:
+        """
+        Requeue selected messages to the source queue and delete them from DLQ.
+        Deletes only messages successfully re-sent.
+        """
+        if not self.source_queue_url:
+            raise ValueError("source_queue_url is required for requeue mode")
+
+        total = len(self.messages_to_requeue)
+        sent_count = 0
+        send_failed = 0
+        deleted_count = 0
+        delete_failed = 0
+        successfully_sent_messages: List[Dict] = []
+
+        logger.info("")
+        logger.info(f"Requeueing {total} message(s) to source queue: {self.source_queue_url}")
+
+        # Step 1: Send selected messages to source queue in batches
+        for i in range(0, total, 10):
+            batch = self.messages_to_requeue[i:i + 10]
+            entries = []
+            for j, msg_data in enumerate(batch):
+                entries.append({
+                    'Id': str(j),
+                    'MessageBody': msg_data['message']['Body']
+                })
+
+            try:
+                response = self.sqs_client.send_message_batch(
+                    QueueUrl=self.source_queue_url,
+                    Entries=entries
+                )
+                successful = {entry['Id'] for entry in response.get('Successful', [])}
+                failed = response.get('Failed', [])
+
+                sent_count += len(successful)
+                send_failed += len(failed)
+
+                for j, msg_data in enumerate(batch):
+                    if str(j) in successful:
+                        successfully_sent_messages.append(msg_data)
+
+                for failure in failed:
+                    logger.error(f"Failed to send message to source queue: {failure.get('Message', 'Unknown')}")
+            except Exception as e:
+                logger.error(f"Error sending requeue batch: {e}")
+                send_failed += len(batch)
+
+        # Step 2: Delete only successfully re-sent messages from DLQ
+        for i in range(0, len(successfully_sent_messages), 10):
+            batch = successfully_sent_messages[i:i + 10]
+            entries = []
+            for j, msg_data in enumerate(batch):
+                entries.append({
+                    'Id': str(j),
+                    'ReceiptHandle': msg_data['message']['ReceiptHandle']
+                })
+
+            try:
+                response = self.sqs_client.delete_message_batch(
+                    QueueUrl=self.queue_url,
+                    Entries=entries
+                )
+                deleted_count += len(response.get('Successful', []))
+                failed = response.get('Failed', [])
+                delete_failed += len(failed)
+                for failure in failed:
+                    logger.error(f"Failed to delete DLQ message after successful resend: {failure.get('Message', 'Unknown')}")
+            except Exception as e:
+                logger.error(f"Error deleting requeued DLQ batch: {e}")
+                delete_failed += len(batch)
+
+        logger.info(f"Requeue send successful: {sent_count}")
+        logger.info(f"Requeue send failed: {send_failed}")
+        logger.info(f"DLQ delete successful: {deleted_count}")
+        logger.info(f"DLQ delete failed: {delete_failed}")
+
+        return {
+            'sent_success': sent_count,
+            'sent_failed': send_failed,
+            'deleted_success': deleted_count,
+            'deleted_failed': delete_failed,
+        }
 
     def write_csv(self, output_file: str) -> None:
         """
@@ -441,7 +664,18 @@ class ScoringJobExtractor:
 
         try:
             with open(output_file, 'w', newline='') as csvfile:
-                fieldnames = ['scoring_job_id', 'external_id', 'scorecard_id', 'score_id']
+                fieldnames = [
+                    'scoring_job_id',
+                    'external_id',
+                    'scorecard_id',
+                    'score_id',
+                    'scoring_job_status',
+                    'score_provider',
+                    'score_model',
+                    'score_name',
+                    'dlq_category',
+                    'scoring_job_error_message',
+                ]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
                 writer.writeheader()
@@ -483,6 +717,12 @@ class ScoringJobExtractor:
                 logger.info(f"Dry-run: disabled (messages will be deleted after confirmation)")
         else:
             logger.info(f"Deletion mode: disabled")
+        if self.requeue_filter != 'none':
+            logger.info(f"Requeue mode: enabled (filter: {self.requeue_filter})")
+            logger.info(f"Source queue: {self.source_queue_url or 'NOT SET'}")
+            logger.info(f"Apply requeue: {'yes' if self.apply_requeue else 'no (analysis only)'}")
+        else:
+            logger.info("Requeue mode: disabled")
         logger.info("")
 
         # Step 1: Read messages from SQS
@@ -501,6 +741,7 @@ class ScoringJobExtractor:
 
         # Step 3: Write CSV
         self.write_csv(output_file)
+        self.summarize_categories()
 
         # Step 4: Handle deletion if enabled
         deletion_stats = None
@@ -530,6 +771,28 @@ class ScoringJobExtractor:
                 else:
                     logger.info("Deletion cancelled by user.")
 
+        # Step 5: Handle requeue if enabled
+        requeue_stats = None
+        if self.requeue_filter != 'none' and len(self.messages_to_requeue) > 0:
+            if not self.apply_requeue:
+                logger.info("")
+                logger.info("=" * 80)
+                logger.info("REQUEUE ANALYSIS MODE")
+                logger.info("=" * 80)
+                logger.info(f"Would requeue {len(self.messages_to_requeue)} message(s) with filter={self.requeue_filter}")
+                logger.info("No messages were sent/deleted (set --apply-requeue to execute).")
+                logger.info("=" * 80)
+            elif self.dry_run:
+                logger.info("")
+                logger.info("=" * 80)
+                logger.info("DRY RUN MODE")
+                logger.info("=" * 80)
+                logger.info(f"Would requeue {len(self.messages_to_requeue)} message(s) with filter={self.requeue_filter}")
+                logger.info("No messages were sent/deleted (dry-run mode).")
+                logger.info("=" * 80)
+            else:
+                requeue_stats = self.requeue_messages_batch()
+
         logger.info("")
         logger.info("=" * 80)
         logger.info("Summary:")
@@ -551,6 +814,19 @@ class ScoringJobExtractor:
                 logger.info(f"  Deletion status: DRY RUN (no messages deleted)")
             else:
                 logger.info(f"  Deletion status: Cancelled or no matches")
+        if self.requeue_filter != 'none':
+            logger.info(f"  Requeue filter: {self.requeue_filter}")
+            logger.info(f"  Messages matched for requeue: {len(self.messages_to_requeue)}")
+            if requeue_stats:
+                logger.info(f"  Requeue sent successfully: {requeue_stats['sent_success']}")
+                logger.info(f"  Requeue send failures: {requeue_stats['sent_failed']}")
+                logger.info(f"  DLQ deletes after requeue: {requeue_stats['deleted_success']}")
+                if requeue_stats['deleted_failed'] > 0:
+                    logger.info(f"  DLQ delete failures: {requeue_stats['deleted_failed']}")
+            elif self.apply_requeue and self.dry_run:
+                logger.info("  Requeue status: DRY RUN (no messages sent/deleted)")
+            elif not self.apply_requeue:
+                logger.info("  Requeue status: Analysis-only (set --apply-requeue to execute)")
         logger.info("=" * 80)
 
 
@@ -558,7 +834,7 @@ def main():
     """Main entry point for the script."""
     # Check command line arguments
     if len(sys.argv) < 2:
-        print("Usage: python extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv] [max_workers] [--dedupe COLUMN] [--delete-by-external-id EXTERNAL_ID] [--dry-run]")
+        print("Usage: python extract_scoring_jobs_from_sqs.py <SQS_QUEUE_URL> [output_file.csv] [max_workers] [--dedupe COLUMN] [--delete-by-external-id EXTERNAL_ID] [--dry-run] [--source-queue-url URL] [--requeue-filter FILTER] [--apply-requeue]")
         print("")
         print("Arguments:")
         print("  SQS_QUEUE_URL              - The SQS queue URL to read from")
@@ -567,6 +843,9 @@ def main():
         print("  --dedupe COLUMN            - (Optional) Deduplicate results by specified column")
         print("  --delete-by-external-id ID - (Optional) Delete messages matching this external_id")
         print("  --dry-run                  - (Optional) Show what would be deleted without deleting")
+        print("  --source-queue-url URL     - (Optional) Source queue URL for requeue mode")
+        print("  --requeue-filter FILTER    - (Optional) Requeue selector: none|chatopenai|non-bedrock|retryable|all")
+        print("  --apply-requeue            - (Optional) Actually send selected messages to source queue and delete from DLQ")
         print("")
         print("Available columns for deduplication:")
         print("  - scoring_job_id")
@@ -616,6 +895,9 @@ def main():
     dedupe_column = None
     delete_external_id = None
     dry_run = False
+    source_queue_url = None
+    requeue_filter = 'none'
+    apply_requeue = False
     filtered_argv = []
     i = 0
     while i < len(sys.argv):
@@ -627,6 +909,15 @@ def main():
             i += 2  # Skip both --delete-by-external-id and the external_id value
         elif sys.argv[i] == '--dry-run':
             dry_run = True
+            i += 1
+        elif sys.argv[i] == '--source-queue-url' and i + 1 < len(sys.argv):
+            source_queue_url = sys.argv[i + 1]
+            i += 2
+        elif sys.argv[i] == '--requeue-filter' and i + 1 < len(sys.argv):
+            requeue_filter = sys.argv[i + 1]
+            i += 2
+        elif sys.argv[i] == '--apply-requeue':
+            apply_requeue = True
             i += 1
         else:
             filtered_argv.append(sys.argv[i])
@@ -644,7 +935,26 @@ def main():
 
     # Validate dry_run is only used with delete_external_id
     if dry_run and not delete_external_id:
-        logger.error("--dry-run can only be used with --delete-by-external-id")
+        if not (requeue_filter != 'none' and apply_requeue):
+            logger.error("--dry-run can only be used with --delete-by-external-id or --apply-requeue")
+            sys.exit(1)
+
+    valid_requeue_filters = {'none', 'chatopenai', 'non-bedrock', 'retryable', 'all'}
+    if requeue_filter not in valid_requeue_filters:
+        logger.error(f"Invalid requeue filter: {requeue_filter}")
+        logger.error(f"Valid filters are: {', '.join(sorted(valid_requeue_filters))}")
+        sys.exit(1)
+
+    if apply_requeue and requeue_filter == 'none':
+        logger.error("--apply-requeue requires --requeue-filter to be set")
+        sys.exit(1)
+
+    if requeue_filter != 'none' and not source_queue_url:
+        logger.error("--source-queue-url is required when using --requeue-filter")
+        sys.exit(1)
+
+    if delete_external_id and requeue_filter != 'none':
+        logger.error("Combining --delete-by-external-id with requeue mode is not supported in one run")
         sys.exit(1)
 
     # Validate environment variables
@@ -663,7 +973,10 @@ def main():
             max_workers=max_workers,
             dedupe_column=dedupe_column,
             delete_external_id=delete_external_id,
-            dry_run=dry_run
+            dry_run=dry_run,
+            source_queue_url=source_queue_url,
+            requeue_filter=requeue_filter,
+            apply_requeue=apply_requeue,
         )
         extractor.run(output_file)
     except Exception as e:
