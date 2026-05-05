@@ -28,17 +28,12 @@ describe("LabSettings", () => {
   })
 
   it("shows the current user email and Gravatar management button", () => {
-    const openSpy = jest.spyOn(window, "open").mockImplementation(() => null)
     render(<LabSettings />)
 
     expect(screen.getByText("ada@example.com")).toBeInTheDocument()
-    const manageButton = screen.getByRole("button", { name: /manage gravatar/i })
-    manageButton.click()
-    expect(openSpy).toHaveBeenCalledWith(
-      "https://gravatar.com/profile/avatars",
-      "_blank",
-      "noopener,noreferrer",
-    )
-    openSpy.mockRestore()
+    const manageLink = screen.getByRole("link", { name: /manage gravatar/i })
+    expect(manageLink).toHaveAttribute("href", "https://gravatar.com/profile/avatars")
+    expect(manageLink).toHaveAttribute("target", "_blank")
+    expect(manageLink).toHaveAttribute("rel", "noopener noreferrer")
   })
 })
