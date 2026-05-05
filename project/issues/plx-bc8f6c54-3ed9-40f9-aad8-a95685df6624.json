@@ -82,10 +82,16 @@
       "author": "ryan",
       "text": "Previous Prescriber optimizer launch cab4382c-09a9-4458-bfb0-cd6da0ca3fb5 failed at bootstrap because the cleaned regression pool has only 47 qualifying rows and max_samples=200 implies a hard minimum of 50 rows. Verified that widening to 365 days or all-time does not increase the usable pool beyond 47. Relaunched clean from direct CLI with days=365, max_samples=188, max_iterations=20, start_version=63892e5d-bacc-483c-89ff-429ff2131100, and the recorded GPT 5.4 mini hint. New live run: procedure=175ddd08-5d42-4519-828a-118015348800 task=f6a2c021-46a7-402b-9e61-2c21333e106c chat=f97ea77b-6429-4008-9829-dd91ef9d9db5 log=/tmp/prescriber-optimizer-relaunch-20260423-173949.log pid=54245. Direct CLI log shows the associated dataset was accepted at 47 rows (dataset 9ad2c963-125b-40ac-806f-c4ab6e7b5483), then the optimizer progressed into fresh baseline evaluation dispatch and root-cause analysis, which is past the prior failure point.",
       "created_at": "2026-04-23T21:44:22.489112Z"
+    },
+    {
+      "id": "08857331-77b8-4cd8-8d2c-a8aae18eec9f",
+      "author": "ryan",
+      "text": "2026-05-05: Starting follow-up Prescriber optimization pass after post-invalidation champion re-eval landed at 87.21%. Will inspect current champion, use recent feedback/RCA evidence, and test narrow candidates without reintroducing explicit customer-confirmation requirements.",
+      "created_at": "2026-05-05T16:46:05.764080Z"
     }
   ],
   "created_at": "2026-04-23T19:51:47.677766Z",
-  "updated_at": "2026-04-23T21:44:22.489112Z",
+  "updated_at": "2026-05-05T16:46:05.764080Z",
   "closed_at": null,
   "custom": {}
 }

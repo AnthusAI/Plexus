@@ -1,0 +1,31 @@
+{
+  "id": "plx-18d3b779-b749-4df4-809d-a994e9630049",
+  "title": "Implement ScorecardHistory report block",
+  "description": "Build the Python ScorecardHistory report block with scorecard/score/date parameters, featured-version filtering, champion awareness from existing fields, parent diff payloads, and LLM summary generation. No schema changes.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a4671be7-37b5-466b-9261-81d94dfbe0af",
+      "author": "ryan",
+      "text": "Implemented ScorecardHistory backend block with scorecard/single-score scope resolution, days or explicit date windows, featured-version filtering, champion-awareness, parent diff payloads, and LLM top summary error handling.",
+      "created_at": "2026-05-05T16:57:49.020173Z"
+    },
+    {
+      "id": "6551bb35-a8cf-4113-adec-24e9e8b9413c",
+      "author": "ryan",
+      "text": "Backend validation complete: focused report block tests pass and the manual ScorecardHistory run succeeded against SelectQuote HCS Medium-Risk using scorecard external ID 1438.",
+      "created_at": "2026-05-05T16:58:23.396424Z"
+    }
+  ],
+  "created_at": "2026-05-05T16:25:33.584076Z",
+  "updated_at": "2026-05-05T16:58:31.984959Z",
+  "closed_at": "2026-05-05T16:58:31.984959Z",
+  "custom": {}
+}

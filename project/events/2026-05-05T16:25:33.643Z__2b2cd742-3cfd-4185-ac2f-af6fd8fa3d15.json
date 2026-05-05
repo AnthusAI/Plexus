@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2b2cd742-3cfd-4185-ac2f-af6fd8fa3d15",
+  "issue_id": "plx-63486e72-bf52-420c-b93e-33959d6647c2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-05T16:25:33.643Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Register the report block and add the direct plexus feedback report scorecard-history command with days and explicit date-window support.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "priority": 1,
+    "status": "open",
+    "title": "Wire ScorecardHistory CLI and registry"
+  }
+}

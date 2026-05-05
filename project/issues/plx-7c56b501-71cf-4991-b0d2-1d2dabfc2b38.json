@@ -1,0 +1,31 @@
+{
+  "id": "plx-7c56b501-71cf-4991-b0d2-1d2dabfc2b38",
+  "title": "Scorecard history report summarizes starred score-version changes",
+  "description": "Feature: Scorecard History report\n\nAs a lab report user, I want a scorecard history report for starred score-version changes, so that I can explain what changed over a time period and whether those changes reached champion.\n\nScenario: Scorecard-wide history shows only changed scores\nGiven a scorecard has multiple scores\nAnd some scores have featured versions created in the requested window\nWhen I run the Scorecard History report without a score parameter\nThen the report includes only scores with featured versions created in the window.\n\nScenario: Single-score history limits scope\nGiven a scorecard has a selected score\nWhen I run the Scorecard History report with a score parameter\nThen the report includes featured versions created in the window only for that score.\n\nScenario: Champion coverage is summarized\nGiven included featured versions have champion status for all, none, or some versions\nWhen the report summary is generated\nThen it states whether all, none, or some included changes were promoted to champion.\n\nScenario: Diffs are available on demand\nGiven an included version has a parent version\nWhen I expand the version and then expand code or guidelines diff\nThen I see the original and modified content in a Monaco diff view.",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "cf01c53e-492d-4a4c-9aa7-6e25d0afb499",
+      "author": "ryan",
+      "text": "Implementation branch created from origin/develop. Confirmed no schema changes; the report will use existing Score/ScoreVersion fields only: isFeatured, createdAt, parentVersionId, metadata.championHistory, configuration, guidelines, and championVersionId.",
+      "created_at": "2026-05-05T16:25:44.947578Z"
+    },
+    {
+      "id": "fa3b3620-7b25-4524-9365-01bd93cb08e7",
+      "author": "ryan",
+      "text": "Scorecard History behavior implemented with no schema changes. It reports starred versions created inside the requested window, omits unchanged scores, includes parent code/guideline diffs for on-demand dashboard viewing, and summarizes champion coverage across all/none/some included changes.",
+      "created_at": "2026-05-05T16:58:49.159400Z"
+    }
+  ],
+  "created_at": "2026-05-05T16:25:28.535393Z",
+  "updated_at": "2026-05-05T16:58:51.108890Z",
+  "closed_at": "2026-05-05T16:58:51.108890Z",
+  "custom": {}
+}
