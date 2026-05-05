@@ -1215,7 +1215,8 @@ def push(scorecard: str, score: str, note: str):
     with open(yaml_path, 'r') as f:
         yaml_content = f.read()
 
-    # Read the guidelines file if it exists
+    # Read the guidelines file if it exists. None means no local guidelines file,
+    # so pushes from an existing champion should preserve champion guidelines.
     guidelines_content = None
     if os.path.exists(guidelines_path):
         with open(guidelines_path, 'r') as f:
@@ -1224,9 +1225,6 @@ def push(scorecard: str, score: str, note: str):
         # Strip placeholder text if present
         if guidelines_content and guidelines_content.strip() == "*No guidelines specified for this score.*":
             guidelines_content = ""
-    else:
-        # If guidelines file doesn't exist, use empty string
-        guidelines_content = ""
     
     # Extract version information from the YAML
     version_match = re.search(r'^version:\s*["\']?([^"\'\n]+)["\']?', yaml_content, re.MULTILINE)
@@ -1315,16 +1313,13 @@ def push(scorecard: str, score: str, note: str):
         normalized_cloud_yaml = re.sub(r'\n\n+', '\n', cleaned_cloud_yaml)
         normalized_cloud_guidelines = cleaned_cloud_guidelines
 
+        if guidelines_content is None:
+            guidelines_content = cloud_guidelines
+
         # Compare both code and guidelines independently
         code_changed = normalized_yaml_content.strip() != normalized_cloud_yaml.strip()
         local_guidelines = (guidelines_content or "").strip()
         guidelines_changed = local_guidelines != normalized_cloud_guidelines
-
-        # If the local guidelines file doesn't exist or is placeholder, preserve champion's guidelines
-        # unless the file was intentionally cleared (empty but exists)
-        if not os.path.exists(guidelines_path) and not guidelines_changed:
-            # File doesn't exist, use champion's guidelines
-            guidelines_content = cloud_guidelines
 
         # If neither changed, skip push
         if not code_changed and not guidelines_changed:
@@ -1370,9 +1365,10 @@ def push(scorecard: str, score: str, note: str):
             }
         }
 
-        # Include guidelines if provided
-        if guidelines_content and guidelines_content.strip():
-            mutation_input['input']['guidelines'] = guidelines_content.strip()
+        # Include guidelines whenever they were loaded locally or preserved from
+        # the champion. An explicit empty local file clears guidelines.
+        if guidelines_content is not None:
+            mutation_input['input']['guidelines'] = (guidelines_content or "").strip()
 
         # Only include parentVersionId if it has a value
         if parent_version_id:
