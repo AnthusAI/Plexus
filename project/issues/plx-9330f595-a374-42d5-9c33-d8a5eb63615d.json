@@ -316,10 +316,22 @@
       "author": "ryan",
       "text": "Implemented shared ConversationViewer auto-follow update: tool-call tail activity now participates in live-follow logic, and manual scroll-up now locks follow until bottom is reached again. Added/updated conversation viewer tests for tool-call follow + scroll-lock behavior. Verified with Jest: conversation-viewer-streaming-updates, conversation-viewer-session-routing, ProcedureTask.optimizer-auth.",
       "created_at": "2026-05-02T17:06:15.984325Z"
+    },
+    {
+      "id": "0bd0445d-b70b-49d0-8763-9bd0e2eb02b6",
+      "author": "ryan",
+      "text": "Starting implementation: optimizer-scoped bot attribution metadata for runtime USER/CHAT messages + deterministic optimizer session naming ('Optimization for <scorecard> / <score>') + shared frontend attribution resolver/avatars in ConversationViewer and ChatFeed with focused Python/Jest tests.",
+      "created_at": "2026-05-04T23:04:08.726293Z"
+    },
+    {
+      "id": "c696d99d-2a5c-40ed-aaa0-846865436219",
+      "author": "ryan",
+      "text": "Implemented optimizer attribution + naming updates.\n\nBackend:\n- ProcedureService.run_procedure now passes procedure_name, procedure_key, and is_optimizer_procedure in Tactus context.\n- ProcedureChatRecorder now persists _session_context, detects optimizer context, injects bot attribution metadata for runtime USER/CHAT writes when no human attribution exists, and sets/repairs optimizer session names (Optimization for <scorecard> / <score>) on create/reuse.\n\nFrontend:\n- Extended shared chat attribution module (chat-message-user-avatar.tsx) with resolver + bot avatar registry (optimizer, tactus, dispatcher) and bot avatar component.\n- Updated ConversationViewer and ChatFeed to use shared attribution resolution with precedence: explicit createdByUserId -> metadata user attribution -> metadata bot attribution (USER role only).\n\nTests:\n- Python: pytest -q plexus/cli/procedure/test_chat_recorder_account_resolution.py plexus/cli/procedure/test_builtin_procedures.py plexus/console/test_chat_runtime.py => 60 passed.\n- Frontend: jest --runTestsByPath components/__tests__/chat-feed.attribution.test.tsx components/ui/__tests__/conversation-viewer-session-routing.test.tsx components/ui/__tests__/conversation-viewer-streaming-updates.test.tsx => 31 passed.\n- Dashboard typecheck: npm run typecheck passed.",
+      "created_at": "2026-05-04T23:19:17.967131Z"
     }
   ],
   "created_at": "2026-04-27T12:42:41.687340Z",
-  "updated_at": "2026-05-02T17:06:15.984325Z",
+  "updated_at": "2026-05-04T23:19:17.967131Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
