@@ -11,9 +11,6 @@ import { useCurrentUserProfile } from '@/hooks/use-current-user-profile'
 export default function LabSettings() {
   const { profile, isLoading } = useCurrentUserProfile()
   const displayName = profile?.displayName || profile?.email || 'User'
-  const handleManageGravatar = () => {
-    window.open('https://gravatar.com/profile/avatars', '_blank', 'noopener,noreferrer')
-  }
 
   return (
     <div className="px-6 pt-0 pb-6 space-y-6">
@@ -41,15 +38,15 @@ export default function LabSettings() {
                 {isLoading ? 'Loading profile...' : profile?.email || 'No email available'}
               </p>
             </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="default"
-              className="border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-              onClick={handleManageGravatar}
-            >
-              Manage Gravatar
-              <ExternalLink className="ml-2 h-4 w-4" />
+            <Button asChild type="button" variant="secondary" size="default">
+              <a
+                href="https://gravatar.com/profile/avatars"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Manage Gravatar
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </a>
             </Button>
           </div>
         </div>
