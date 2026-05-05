@@ -52,10 +52,22 @@
       "author": "ryan",
       "text": "Dosage available-feedback rerun complete. Current champion 0c2bf0b8 (gpt-5.4-nano) eval d82f3180 scored 74/86 (86.05%), with 6 yes->no and 6 no->yes errors. GPT-5.4-mini candidate 58ddebeb eval bd4b9a96 scored 62/86 (72.09%), with 17 no->yes and 7 yes->no errors. Updated champion and candidate ScoreVersion notes. No Dosage promotion recommended.",
       "created_at": "2026-05-05T18:25:17.838982Z"
+    },
+    {
+      "id": "85c44bda-70d9-457a-bc8a-aafcf2a65722",
+      "author": "ryan",
+      "text": "User asked for current SME questions for Prescriber, Dosage, and Pharmacy that might improve the scores. Reviewing recent feedback eval/RCA outputs before proposing questions.",
+      "created_at": "2026-05-05T20:09:02.893479Z"
+    },
+    {
+      "id": "89a5f767-5245-4a7b-b8e6-ab02ebe8c315",
+      "author": "ryan",
+      "text": "Current SME question review: RCA shows Prescriber and Pharmacy have no formal guideline_gap_requires_sme items; most issues are score configuration/enrollment detection/prompt boundary problems. Dosage has one explicit SME guideline-gap item around SRX numeric dose requirements when only medication counts/adherence/conditions are discussed. Candidate SME questions drafted around Prescriber SRX/SPM thresholds, Dosage numeric-dose/directions thresholds, and Pharmacy non-retail/private/current-vs-future pharmacy boundaries.",
+      "created_at": "2026-05-05T20:10:14.516318Z"
     }
   ],
   "created_at": "2026-04-22T13:19:21.731868Z",
-  "updated_at": "2026-05-05T18:25:17.838982Z",
+  "updated_at": "2026-05-05T20:10:14.516318Z",
   "closed_at": null,
   "custom": {}
 }
