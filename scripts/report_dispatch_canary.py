@@ -62,6 +62,10 @@ def _require_env(name: str) -> str:
     return value
 
 
+def _auth_mode() -> str:
+    return str(os.getenv("PLEXUS_GRAPHQL_AUTH_MODE") or "api_key").strip().lower()
+
+
 def _prepare_import_path() -> None:
     repo = str(REPO_ROOT)
     cleaned: list[str] = []
@@ -131,7 +135,8 @@ async def _run_canary(args: argparse.Namespace) -> dict[str, Any]:
         pass
 
     api_url = _require_env("PLEXUS_API_URL")
-    api_key = _require_env("PLEXUS_API_KEY")
+    auth_mode = _auth_mode()
+    api_key = None if auth_mode == "iam" else _require_env("PLEXUS_API_KEY")
     account_key = _require_env("PLEXUS_ACCOUNT_KEY")
     os.environ["PLEXUS_DISPATCH_MODE"] = args.dispatch_mode
 
@@ -169,6 +174,7 @@ async def _run_canary(args: argparse.Namespace) -> dict[str, Any]:
     )
     diagnostics: dict[str, Any] = {
         "dispatch_mode": args.dispatch_mode,
+        "auth_mode": auth_mode,
         "cache_key": cache_key,
     }
 

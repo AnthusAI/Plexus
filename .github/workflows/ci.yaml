@@ -135,19 +135,29 @@ jobs:
       - python-tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
     defaults:
       run:
         shell: bash -el {0}
     env:
       PLEXUS_API_URL: ${{ secrets.PLEXUS_STAGING_API_URL }}
-      PLEXUS_API_KEY: ${{ secrets.PLEXUS_STAGING_API_KEY }}
       PLEXUS_ACCOUNT_KEY: ${{ secrets.PLEXUS_STAGING_ACCOUNT_KEY }}
       PLEXUS_DISPATCH_MODE: celery
+      PLEXUS_GRAPHQL_AUTH_MODE: iam
+      PLEXUS_API_REGION: us-west-2
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+      with:
+        role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+        aws-region: us-west-2
 
     - name: Set up Conda with Python 3.12
       uses: conda-incubator/setup-miniconda@fc2d68f6413eb2d87b895e92f8584b5b94a10167 # v3

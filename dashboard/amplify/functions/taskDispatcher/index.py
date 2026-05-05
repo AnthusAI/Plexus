@@ -1,9 +1,12 @@
 import os
 import json
 import logging
+from datetime import datetime, timezone
 from kombu.utils.url import safequote
 
+import boto3
 from boto3.dynamodb.types import TypeDeserializer
+from botocore.exceptions import ClientError
 from celery import Celery
 
 # Set up basic logging with more detailed format
@@ -72,6 +75,7 @@ celery_app.conf.update(
 
 # Initialize DynamoDB deserializer
 deserializer = TypeDeserializer()
+dynamodb = boto3.resource("dynamodb")
 
 def deserialize_dynamo_item(item):
     """Convert a DynamoDB item to a regular dict."""
@@ -81,6 +85,108 @@ def deserialize_dynamo_item(item):
 def _json_for_log(payload):
     """Serialize log payloads defensively (DynamoDB numbers may be Decimal)."""
     return json.dumps(payload, default=str)
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _task_table_name(record):
+    stream_arn = record.get("eventSourceARN") or ""
+    marker = ":table/"
+    if marker not in stream_arn:
+        raise ValueError("DynamoDB stream record is missing eventSourceARN table name")
+    table_segment = stream_arn.split(marker, 1)[1]
+    table_name = table_segment.split("/stream/", 1)[0]
+    if not table_name:
+        raise ValueError("DynamoDB stream record has an empty table name")
+    return table_name
+
+
+def _update_task_record(record, task_id, updates, expected_dispatch_status=None):
+    if not task_id:
+        raise ValueError("Cannot update Task dispatch state without a task id")
+
+    names = {}
+    values = {}
+    assignments = []
+    for index, (field, value) in enumerate(updates.items()):
+        name_key = f"#field{index}"
+        value_key = f":value{index}"
+        names[name_key] = field
+        values[value_key] = value
+        assignments.append(f"{name_key} = {value_key}")
+
+    update_args = {
+        "Key": {"id": task_id},
+        "UpdateExpression": "SET " + ", ".join(assignments),
+        "ExpressionAttributeNames": names,
+        "ExpressionAttributeValues": values,
+    }
+
+    if expected_dispatch_status is not None:
+        names["#expectedDispatchStatus"] = "dispatchStatus"
+        values[":expectedDispatchStatus"] = expected_dispatch_status
+        update_args["ConditionExpression"] = (
+            "#expectedDispatchStatus = :expectedDispatchStatus"
+        )
+
+    table = dynamodb.Table(_task_table_name(record))
+    table.update_item(**update_args)
+
+
+def _claim_task_for_dispatch(record, task_id, dispatcher_id):
+    try:
+        _update_task_record(
+            record,
+            task_id,
+            {
+                "dispatchStatus": "DISPATCHING",
+                "workerNodeId": dispatcher_id,
+                "updatedAt": _utc_now(),
+            },
+            expected_dispatch_status="PENDING",
+        )
+        return True
+    except ClientError as exc:
+        error = exc.response.get("Error", {})
+        if error.get("Code") == "ConditionalCheckFailedException":
+            logger.info(
+                f"Skipping task {task_id}; dispatchStatus was claimed by another dispatcher"
+            )
+            return False
+        raise
+
+
+def _mark_task_dispatched(record, task_id, dispatcher_id, celery_task_id):
+    _update_task_record(
+        record,
+        task_id,
+        {
+            "dispatchStatus": "DISPATCHED",
+            "workerNodeId": dispatcher_id,
+            "celeryTaskId": celery_task_id,
+            "updatedAt": _utc_now(),
+        },
+    )
+
+
+def _mark_task_dispatch_failed(record, task_id, error_message):
+    if not task_id:
+        return
+    try:
+        _update_task_record(
+            record,
+            task_id,
+            {
+                "status": "FAILED",
+                "dispatchStatus": "ERROR",
+                "errorMessage": error_message,
+                "updatedAt": _utc_now(),
+            },
+        )
+    except Exception:
+        logger.error(f"Failed to mark task {task_id} dispatch failure", exc_info=True)
 
 
 def handler(event, context):
@@ -101,6 +207,7 @@ def handler(event, context):
 
     for record in event.get('Records', []):
         logger.info(f"Processing record: {_json_for_log(record.get('eventID'))}")
+        task_id = None
         
         event_name = record.get('eventName')
         logger.info(f"Event type: {event_name}")
@@ -143,9 +250,14 @@ def handler(event, context):
             task_id = task.get('id')
             command = task.get('command')
             target = task.get('target', 'default/command')
+            dispatcher_id = f"lambda:{context.aws_request_id}"
 
             logger.info(f"Dispatching task: id={task_id}, command={command}, target={target}")
             logger.info(f"Command breakdown: {repr(command)}")
+
+            if not _claim_task_for_dispatch(record, task_id, dispatcher_id):
+                skipped_count += 1
+                continue
 
             # Dispatch the Celery task using the existing Celery task name
             result = celery_app.send_task(
@@ -153,12 +265,17 @@ def handler(event, context):
                 args=[command],
                 kwargs={'target': target, 'task_id': task_id}
             )
+            _mark_task_dispatched(record, task_id, dispatcher_id, result.id)
             logger.info(f"Successfully dispatched task {task_id} via Celery. Celery task id: {result.id}")
             processed_count += 1
             
         except Exception as e:
             error_msg = f"Error processing record: {str(e)}"
             logger.error(error_msg, exc_info=True)
+            try:
+                _mark_task_dispatch_failed(record, task_id, error_msg)
+            except Exception:
+                logger.error("Failed while recording dispatch error", exc_info=True)
             error_count += 1
 
     summary = {

@@ -145,6 +145,14 @@ export class TaskDispatcherStack extends Stack {
       })
     );
 
+    this.taskDispatcherFunction.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ['dynamodb:UpdateItem'],
+        resources: [props.taskTable.tableArn]
+      })
+    );
+
     // Create stream policy
     const policy = new Policy(this, 'TaskDispatcherStreamPolicy', {
       statements: [

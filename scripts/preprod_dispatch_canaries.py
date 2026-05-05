@@ -65,6 +65,10 @@ def _require_env(name: str) -> str:
     return value
 
 
+def _auth_mode() -> str:
+    return str(os.getenv("PLEXUS_GRAPHQL_AUTH_MODE") or "api_key").strip().lower()
+
+
 def _client_and_account() -> tuple[Any, str]:
     from plexus.cli.report.utils import resolve_account_id_for_command
     from plexus.cli.shared.client_utils import create_client
@@ -592,7 +596,8 @@ def main() -> int:
     _prepare_import_path()
     _load_env()
     _require_env("PLEXUS_API_URL")
-    _require_env("PLEXUS_API_KEY")
+    if _auth_mode() != "iam":
+        _require_env("PLEXUS_API_KEY")
     _require_env("PLEXUS_ACCOUNT_KEY")
 
     args = parse_args()
