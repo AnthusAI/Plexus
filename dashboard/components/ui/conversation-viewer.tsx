@@ -1155,6 +1155,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
   setHitlTextByMessage,
   submitHitlResponse,
 }: MessageRowProps) {
+  const [showAttributionTooltip, setShowAttributionTooltip] = React.useState(false)
   const message = row.message
   const toolViewModel = mapMessageToToolViewModel(message)
   const controlEnvelope = getControlEnvelope(message.metadata)
@@ -1184,9 +1185,21 @@ const MemoizedMessageRow = React.memo(function MessageRow({
   const attributionAvatar = row.from === 'user'
     ? (
       attribution?.kind === 'user' && attributedUserProfile
-        ? <ChatMessageUserAvatar user={attributedUserProfile} className="mt-1" />
+        ? (
+          <ChatMessageUserAvatar
+            user={attributedUserProfile}
+            open={showAttributionTooltip}
+            onOpenChange={setShowAttributionTooltip}
+          />
+        )
         : attribution?.kind === 'bot'
-          ? <ChatMessageBotAvatar bot={attribution.bot} className="mt-1" />
+          ? (
+            <ChatMessageBotAvatar
+              bot={attribution.bot}
+              open={showAttributionTooltip}
+              onOpenChange={setShowAttributionTooltip}
+            />
+          )
           : null
     )
     : null
@@ -1199,7 +1212,13 @@ const MemoizedMessageRow = React.memo(function MessageRow({
       data-from={row.from}
       className="max-w-full"
     >
-      <div className={cn("flex items-start", showAttributedUserAvatar && "justify-end gap-2")}>
+      <div
+        className={cn("flex items-center", showAttributedUserAvatar && "justify-end gap-2")}
+        onMouseEnter={showAttributedUserAvatar ? () => setShowAttributionTooltip(true) : undefined}
+        onMouseLeave={showAttributedUserAvatar ? () => setShowAttributionTooltip(false) : undefined}
+        onFocusCapture={showAttributedUserAvatar ? () => setShowAttributionTooltip(true) : undefined}
+        onBlurCapture={showAttributedUserAvatar ? () => setShowAttributionTooltip(false) : undefined}
+      >
         <MessageContent className={cn(
           "max-w-full p-0 sm:max-w-[85%]",
           showAttributedUserAvatar && "max-w-[calc(100%-2.25rem)]",

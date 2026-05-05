@@ -328,10 +328,22 @@
       "author": "ryan",
       "text": "Implemented optimizer attribution + naming updates.\n\nBackend:\n- ProcedureService.run_procedure now passes procedure_name, procedure_key, and is_optimizer_procedure in Tactus context.\n- ProcedureChatRecorder now persists _session_context, detects optimizer context, injects bot attribution metadata for runtime USER/CHAT writes when no human attribution exists, and sets/repairs optimizer session names (Optimization for <scorecard> / <score>) on create/reuse.\n\nFrontend:\n- Extended shared chat attribution module (chat-message-user-avatar.tsx) with resolver + bot avatar registry (optimizer, tactus, dispatcher) and bot avatar component.\n- Updated ConversationViewer and ChatFeed to use shared attribution resolution with precedence: explicit createdByUserId -> metadata user attribution -> metadata bot attribution (USER role only).\n\nTests:\n- Python: pytest -q plexus/cli/procedure/test_chat_recorder_account_resolution.py plexus/cli/procedure/test_builtin_procedures.py plexus/console/test_chat_runtime.py => 60 passed.\n- Frontend: jest --runTestsByPath components/__tests__/chat-feed.attribution.test.tsx components/ui/__tests__/conversation-viewer-session-routing.test.tsx components/ui/__tests__/conversation-viewer-streaming-updates.test.tsx => 31 passed.\n- Dashboard typecheck: npm run typecheck passed.",
       "created_at": "2026-05-04T23:19:17.967131Z"
+    },
+    {
+      "id": "2ace3802-e0cd-4de7-a6ad-beed68de6137",
+      "author": "ryan",
+      "text": "UI polish: fix avatar hover tooltip overlap/duplication. Plan: remove native title tooltip from chat avatars, keep a single TooltipContent instance, and position it below + centered under avatar. Update frontend tests accordingly.",
+      "created_at": "2026-05-05T16:22:54.723600Z"
+    },
+    {
+      "id": "cbd334b2-ddf3-464c-8f19-45b2030b3266",
+      "author": "ryan",
+      "text": "Follow-up UI fix: force avatar tooltip to remain below the avatar (disable side flipping/collision fallback) so hover label does not appear above/over the message bubble.",
+      "created_at": "2026-05-05T17:36:02.882673Z"
     }
   ],
   "created_at": "2026-04-27T12:42:41.687340Z",
-  "updated_at": "2026-05-04T23:19:17.967131Z",
+  "updated_at": "2026-05-05T17:36:02.882673Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
