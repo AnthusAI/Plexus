@@ -281,7 +281,7 @@ export function ChatMessageUserAvatar({
             </AvatarFallback>
           </Avatar>
         </TooltipTrigger>
-        <TooltipContent side="bottom" align="center" sideOffset={6}>
+        <TooltipContent side="bottom" align="center" sideOffset={6} avoidCollisions={false}>
           <p>{user.email}</p>
         </TooltipContent>
       </Tooltip>
@@ -314,7 +314,7 @@ export function ChatMessageBotAvatar({
             </AvatarFallback>
           </Avatar>
         </TooltipTrigger>
-        <TooltipContent side="bottom" align="center" sideOffset={6}>
+        <TooltipContent side="bottom" align="center" sideOffset={6} avoidCollisions={false}>
           <p>{label}</p>
         </TooltipContent>
       </Tooltip>
