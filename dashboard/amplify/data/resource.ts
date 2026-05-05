@@ -48,7 +48,6 @@ type DataSourceIndexFields = "accountId" | "scorecardId" | "scoreId" | "name" | 
 type DataSourceVersionIndexFields = "dataSourceId" | "createdAt" | "updatedAt";
 type DataSetIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "dataSourceVersionId" | "createdAt" | "updatedAt";
 type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVersionId" | "parentProcedureId" | "updatedAt" | "createdAt" | "category" | "version" | "status" | "createdByUserId";
-type ProcedureScoreVersionIndexFields = "procedureId" | "scoreVersionId" | "updatedAt";
 
 // New index types for Feedback Alignment
 // type FeedbackAlignmentIndexFields = "accountId" | "scorecardId" | "createdAt"; // REMOVED
@@ -225,8 +224,7 @@ const schema = a.schema({
             childVersions: a.hasMany('ScoreVersion', 'parentVersionId'),
             evaluations: a.hasMany('Evaluation', 'scoreVersionId'),
             dataSets: a.hasMany('DataSet', 'scoreVersionId'),
-            procedures: a.hasMany('Procedure', 'scoreVersionId'),
-            procedureLinks: a.hasMany('ProcedureScoreVersion', 'scoreVersionId')
+            procedures: a.hasMany('Procedure', 'scoreVersionId')
         })
         .authorization((allow) => [
             allow.publicApiKey(),
@@ -906,7 +904,6 @@ const schema = a.schema({
             score: a.belongsTo('Score', 'scoreId'),
             scoreVersionId: a.string(),
             scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
-            scoreVersionLinks: a.hasMany('ProcedureScoreVersion', 'procedureId'),
             chatSessions: a.hasMany('ChatSession', 'procedureId'),
             chatMessages: a.hasMany('ChatMessage', 'procedureId'),
             createdByUserId: a.string(),
@@ -925,28 +922,6 @@ const schema = a.schema({
             idx("category").sortKeys(["version"]).name("byCategory"),
             idx("status").sortKeys(["updatedAt"]).name("byStatus"),
             idx("createdByUserId")
-        ]),
-
-    ProcedureScoreVersion: a
-        .model({
-            procedureId: a.string().required(),
-            procedure: a.belongsTo('Procedure', 'procedureId'),
-            scoreVersionId: a.string().required(),
-            scoreVersion: a.belongsTo('ScoreVersion', 'scoreVersionId'),
-            accountId: a.string().required(),
-            scorecardId: a.string(),
-            scoreId: a.string(),
-            relationshipTypes: a.string().array(),
-            createdAt: a.datetime().required(),
-            updatedAt: a.datetime().required(),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx: (field: ProcedureScoreVersionIndexFields) => any) => [
-            idx("procedureId").sortKeys(["updatedAt"]),
-            idx("scoreVersionId").sortKeys(["updatedAt"])
         ]),
 
     ChatSession: a
