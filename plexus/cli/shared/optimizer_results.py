@@ -136,39 +136,6 @@ def _sort_by_updated_at_desc(items: Iterable[Dict[str, Any]]) -> List[Dict[str, 
     )
 
 
-def _optimizer_manifest_score_version_links(manifest: Dict[str, Any]) -> Dict[str, List[str]]:
-    links: Dict[str, List[str]] = {}
-
-    def add(version_id: Any, relationship_type: str) -> None:
-        if not isinstance(version_id, str) or not version_id:
-            return
-        relationship_types = links.setdefault(version_id, [])
-        if relationship_type not in relationship_types:
-            relationship_types.append(relationship_type)
-
-    baseline = manifest.get("baseline") or {}
-    if isinstance(baseline, dict):
-        add(baseline.get("version_id"), "baseline")
-
-    best = manifest.get("best") or {}
-    if isinstance(best, dict):
-        add(best.get("winning_version_id"), "winning")
-        add(best.get("last_accepted_version_id"), "accepted")
-
-    for cycle in manifest.get("cycles") or []:
-        if not isinstance(cycle, dict):
-            continue
-        add(cycle.get("version_id"), "cycle")
-        for candidate in cycle.get("candidates") or []:
-            if isinstance(candidate, dict):
-                add(candidate.get("version_id"), "candidate")
-        for candidate in cycle.get("no_version_candidates") or []:
-            if isinstance(candidate, dict):
-                add(candidate.get("version_id"), "no_version_candidate")
-
-    return links
-
-
 def _evaluation_url(evaluation_id: Optional[str]) -> Optional[str]:
     return f"{LAB_EVALUATION_BASE_URL}/{evaluation_id}" if evaluation_id else None
 
@@ -647,115 +614,6 @@ class OptimizerResultsService:
             "runtime_log": f"tasks/{task_id}/{OPTIMIZER_RUNTIME_LOG_SUFFIX}",
         }
 
-    def _list_score_version_links_for_procedure(self, procedure_id: str) -> List[Dict[str, Any]]:
-        query = """
-        query ListProcedureScoreVersionByProcedureIdAndUpdatedAtForOptimizer(
-            $procedureId: String!
-            $limit: Int
-            $nextToken: String
-        ) {
-            listProcedureScoreVersionByProcedureIdAndUpdatedAt(
-                procedureId: $procedureId
-                sortDirection: DESC
-                limit: $limit
-                nextToken: $nextToken
-            ) {
-                items {
-                    id
-                    procedureId
-                    scoreVersionId
-                }
-                nextToken
-            }
-        }
-        """
-        links: List[Dict[str, Any]] = []
-        next_token: Optional[str] = None
-        while True:
-            variables: Dict[str, Any] = {"procedureId": procedure_id, "limit": 100}
-            if next_token:
-                variables["nextToken"] = next_token
-            result = self.client.execute(query, variables)
-            payload = result.get("listProcedureScoreVersionByProcedureIdAndUpdatedAt", {})
-            links.extend(item for item in payload.get("items") or [] if isinstance(item, dict))
-            next_token = payload.get("nextToken")
-            if not next_token:
-                break
-        return links
-
-    def _sync_optimizer_score_version_links(
-        self,
-        *,
-        procedure: Dict[str, Any],
-        manifest: Dict[str, Any],
-    ) -> None:
-        procedure_id = str(procedure.get("id") or "")
-        account_id = str(procedure.get("accountId") or "")
-        if not procedure_id or not account_id:
-            return
-
-        now = _utc_now_iso()
-        desired = _optimizer_manifest_score_version_links(manifest)
-        existing = self._list_score_version_links_for_procedure(procedure_id)
-        existing_by_version = {
-            item.get("scoreVersionId"): item
-            for item in existing
-            if isinstance(item.get("scoreVersionId"), str)
-        }
-
-        create_mutation = """
-        mutation CreateProcedureScoreVersionForOptimizer($input: CreateProcedureScoreVersionInput!) {
-            createProcedureScoreVersion(input: $input) {
-                id
-            }
-        }
-        """
-        update_mutation = """
-        mutation UpdateProcedureScoreVersionForOptimizer($input: UpdateProcedureScoreVersionInput!) {
-            updateProcedureScoreVersion(input: $input) {
-                id
-            }
-        }
-        """
-        delete_mutation = """
-        mutation DeleteProcedureScoreVersionForOptimizer($input: DeleteProcedureScoreVersionInput!) {
-            deleteProcedureScoreVersion(input: $input) {
-                id
-            }
-        }
-        """
-
-        for version_id, relationship_types in desired.items():
-            existing_item = existing_by_version.get(version_id)
-            input_data = {
-                "procedureId": procedure_id,
-                "scoreVersionId": version_id,
-                "accountId": account_id,
-                "scorecardId": procedure.get("scorecardId"),
-                "scoreId": procedure.get("scoreId"),
-                "relationshipTypes": relationship_types,
-                "updatedAt": now,
-            }
-            if existing_item:
-                self.client.execute(
-                    update_mutation,
-                    {"input": {"id": existing_item["id"], **input_data}},
-                )
-            else:
-                link_id = f"{procedure_id}:{version_id}"
-                self.client.execute(
-                    create_mutation,
-                    {"input": {"id": link_id, "createdAt": now, **input_data}},
-                )
-
-        desired_versions = set(desired.keys())
-        for existing_item in existing:
-            version_id = existing_item.get("scoreVersionId")
-            link_id = existing_item.get("id")
-            if version_id in desired_versions or not link_id:
-                continue
-            self.client.execute(delete_mutation, {"input": {"id": link_id}})
-
     def index_optimizer_run(
         self,
         procedure_id: str,
@@ -786,7 +644,6 @@ class OptimizerResultsService:
             raise RuntimeError("aws.storage.task_attachments_bucket is required for optimizer artifacts.")
 
         manifest = self.build_manifest(procedure=procedure, task=task, state=state)
-        self._sync_optimizer_score_version_links(procedure=procedure, manifest=manifest)
         artifact_keys = self._artifact_keys_for_task(task.id)
         upload_task_attachment_bytes(
             bucket_name=bucket_name,
