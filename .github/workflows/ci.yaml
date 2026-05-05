@@ -133,8 +133,9 @@ jobs:
     name: Staging Report Dispatch Canary (Hard Fail)
     needs:
       - python-tests
+      - publish-console-worker-image
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       id-token: write
       contents: read
@@ -178,6 +179,49 @@ jobs:
         pip install "poetry>=1.8,<2.0" --no-cache-dir
         poetry config virtualenvs.create false
         poetry install --with dev --no-interaction --no-ansi
+
+    - name: Wait for Amplify staging deployment
+      run: |
+        set -euo pipefail
+        AMPLIFY_APP_ID=$(aws amplify list-apps \
+          --query "apps[?name=='Plexus' && repository=='https://github.com/${GITHUB_REPOSITORY}'].appId | [0]" \
+          --output text)
+
+        if [ -z "${AMPLIFY_APP_ID}" ] || [ "${AMPLIFY_APP_ID}" = "None" ]; then
+          echo "Unable to resolve Amplify app id for ${GITHUB_REPOSITORY}" >&2
+          exit 1
+        fi
+
+        deadline=$((SECONDS + 1200))
+        while [ "${SECONDS}" -lt "${deadline}" ]; do
+          JOB_JSON=$(aws amplify list-jobs \
+            --app-id "${AMPLIFY_APP_ID}" \
+            --branch-name "${GITHUB_REF_NAME}" \
+            --max-results 10 \
+            --query "jobSummaries[?commitId=='${GITHUB_SHA}'] | [0]" \
+            --output json)
+          JOB_ID=$(echo "${JOB_JSON}" | jq -r '.jobId // empty')
+          JOB_STATUS=$(echo "${JOB_JSON}" | jq -r '.status // empty')
+
+          if [ -z "${JOB_ID}" ]; then
+            echo "Waiting for Amplify job for ${GITHUB_SHA::7} to appear..."
+            sleep 20
+            continue
+          fi
+
+          echo "Amplify job ${JOB_ID} for ${GITHUB_SHA::7}: ${JOB_STATUS}"
+          if [ "${JOB_STATUS}" = "SUCCEED" ]; then
+            exit 0
+          fi
+          if [ "${JOB_STATUS}" = "FAILED" ] || [ "${JOB_STATUS}" = "CANCELLED" ]; then
+            echo "Amplify deployment ${JOB_ID} ended with ${JOB_STATUS}" >&2
+            exit 1
+          fi
+          sleep 30
+        done
+
+        echo "Timed out waiting for Amplify staging deployment for ${GITHUB_SHA}" >&2
+        exit 1
 
     - name: Run Staging Dispatch Canary
       run: |
