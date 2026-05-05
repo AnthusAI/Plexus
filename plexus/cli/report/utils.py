@@ -38,18 +38,32 @@ def resolve_account_id_for_command(client: PlexusDashboardClient, account_identi
     if account_identifier:
         account_display_name = f"identifier '{account_identifier}'"
         try:
-            # Try resolving by key first, then ID
             console.print(f"[dim]Resolving account by identifier: {account_identifier}...[/dim]", highlight=False)
-            account_obj = Account.get_by_key_or_id(account_identifier, client)
-            if account_obj:
-                account_id = account_obj.id
-                console.print(f"[dim]Resolved account ID: {account_id}[/dim]", highlight=False)
-            else:
-                console.print(f"[red]Error: Could not resolve account identifier '{account_identifier}' as key or ID.[/red]")
-                raise click.Abort() # Assuming click is available or handle differently
+            account_obj = None
+
+            # First try as an account ID.
+            try:
+                account_obj = Account.get_by_id(account_identifier, client)
+            except Exception:
+                account_obj = None
+
+            # Then try as an account key.
+            if account_obj is None:
+                account_obj = Account.get_by_key(account_identifier, client)
+
+            if account_obj is None:
+                console.print(
+                    f"[red]Error: Could not resolve account identifier '{account_identifier}' as key or ID.[/red]"
+                )
+                raise click.Abort()
+
+            account_id = account_obj.id
+            console.print(f"[dim]Resolved account ID: {account_id}[/dim]", highlight=False)
+        except click.Abort:
+            raise
         except Exception as e:
             console.print(f"[red]Error resolving account identifier '{account_identifier}': {e}[/red]")
-            raise click.Abort() # Assuming click is available or handle differently
+            raise click.Abort()
     else:
         # No identifier provided, use client's internal resolution
         account_display_name = "default account (from environment)"
@@ -61,16 +75,16 @@ def resolve_account_id_for_command(client: PlexusDashboardClient, account_identi
                 pass
             else:
                 console.print(f"[red]Error: Could not resolve default account ID. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
-                raise click.Abort() # Assuming click is available or handle differently
+                raise click.Abort()
         except Exception as e:
              console.print(f"[red]Error resolving default account: {e}. Is PLEXUS_ACCOUNT_KEY set and valid?[/red]")
-             raise click.Abort() # Assuming click is available or handle differently
+             raise click.Abort()
 
     # Final check before returning
     if not account_id:
         # This should ideally be caught by Aborts above, but as a safeguard:
         console.print(f"[red]Error: Failed to determine Account ID for {account_display_name}.[/red]")
-        raise click.Abort() # Assuming click is available or handle differently
+        raise click.Abort()
 
     return account_id
 
