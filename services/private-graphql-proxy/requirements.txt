@@ -1,0 +1,8 @@
+fastapi==0.124.4
+uvicorn[standard]==0.42.0
+graphql-core==3.2.6
+psycopg[binary]==3.3.2
+requests==2.32.5
+httpx==0.28.1
+gql[requests]==3.5.3
+pytest==8.2.2
