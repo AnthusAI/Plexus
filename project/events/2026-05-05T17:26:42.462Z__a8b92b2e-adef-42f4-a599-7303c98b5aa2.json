@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a8b92b2e-adef-42f4-a599-7303c98b5aa2",
+  "issue_id": "plx-cf8b5083-43d0-4f1d-90ba-27fee00ca4d1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-05T17:26:42.462Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "priority": 1,
+    "status": "open",
+    "title": "Add evaluation gauges to Scorecard History report"
+  }
+}

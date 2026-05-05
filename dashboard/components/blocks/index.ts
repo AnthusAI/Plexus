@@ -20,6 +20,7 @@ export { default as AcceptanceRate } from './AcceptanceRate';
 export { default as AcceptanceRateTimeline } from './AcceptanceRateTimeline';
 export { default as RecentFeedback } from './RecentFeedback';
 export { default as ScoreChampionVersionTimeline } from './ScoreChampionVersionTimeline';
+export { default as ScorecardHistory } from './ScorecardHistory';
 export { BlockRenderer } from './BlockRegistry';
 export type { BlockRendererProps } from './BlockRegistry';
 export { getBlock, hasBlock, getRegisteredBlockTypes } from './BlockRegistry';
