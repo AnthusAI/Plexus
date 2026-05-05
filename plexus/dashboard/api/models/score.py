@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from .base import BaseModel
 from .scorecard import Scorecard
-from plexus.cli.shared import get_score_yaml_path
+from plexus.cli.shared import get_score_guidelines_path, get_score_yaml_path
 
 if TYPE_CHECKING:
     from ..client import _BaseAPIClient
@@ -619,11 +619,7 @@ class Score(BaseModel):
             scorecard = Scorecard.get_by_id(scorecard_id, self._client)
             scorecard_name = scorecard.name
             
-        # Use the same directory structure as code, but with .md extension
-        from plexus.cli.shared import get_score_yaml_path
-        code_path = get_score_yaml_path(scorecard_name, self.name)
-        # Replace .yaml extension with .md for guidelines
-        return code_path.with_suffix('.md')
+        return get_score_guidelines_path(scorecard_name, self.name)
 
     def pull_code_and_guidelines(self, scorecard_name: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -935,6 +931,10 @@ class Score(BaseModel):
                         "message": f"Invalid YAML code content: {str(e)}"
                     }
 
+            # None means preserve existing champion guidelines when there is one.
+            # A string, including an empty string, is an explicit guidelines value.
+            effective_guidelines = guidelines
+
             # Get current champion version for comparison
             query = """
             query GetScore($id: ID!) {
@@ -969,11 +969,12 @@ class Score(BaseModel):
                 if version_result and 'getScoreVersion' in version_result:
                     current_version_data = version_result['getScoreVersion']
                     current_yaml = (current_version_data.get('configuration') or '').strip()
-                    current_guidelines = (current_version_data.get('guidelines') or '').strip()
+                    current_guidelines = current_version_data.get('guidelines') or ''
+                    effective_guidelines = current_guidelines if guidelines is None else guidelines
                     
                     # Compare both code and guidelines (ignoring whitespace differences)
                     code_unchanged = current_yaml == (code_content or '').strip()
-                    guidelines_unchanged = current_guidelines == (guidelines or '').strip()
+                    guidelines_unchanged = current_guidelines.strip() == (effective_guidelines or '').strip()
                     
                     if code_unchanged and guidelines_unchanged:
                         logger.info(f"No changes detected for Score {self.name}, skipping version creation")
@@ -1010,11 +1011,10 @@ class Score(BaseModel):
                 'isFeatured': "false"
             }
             
-            # Add guidelines if provided
-            if guidelines:
-                stripped_guidelines = guidelines.strip()
-                if stripped_guidelines:
-                    version_input['guidelines'] = stripped_guidelines
+            # A missing guidelines argument means preserve the champion guidelines.
+            # An explicit empty string means clear guidelines.
+            if effective_guidelines is not None:
+                version_input['guidelines'] = (effective_guidelines or '').strip()
             
             # Include parent version if available
             if current_champion_id:
