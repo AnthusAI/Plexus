@@ -174,9 +174,9 @@ export function ChatFeedView({
             ? attributedUsersById[attribution.userId]
             : null
           const attributionAvatar = attribution.kind === 'user' && attributedUser
-            ? <ChatMessageUserAvatar user={attributedUser} className="mt-1" />
+            ? <ChatMessageUserAvatar user={attributedUser} />
             : attribution.kind === 'bot' && message.role === 'USER'
-              ? <ChatMessageBotAvatar bot={attribution.bot} className="mt-1" />
+              ? <ChatMessageBotAvatar bot={attribution.bot} />
               : null
           const showAttributedUserAvatar = Boolean(
             attributionAvatar && (message.role === 'USER' || message.humanInteraction === 'RESPONSE'),
@@ -185,10 +185,10 @@ export function ChatFeedView({
           return (
             <div
               key={message.id}
-              className={cn("flex items-start gap-3", showAttributedUserAvatar && "justify-end")}
+              className={cn("flex items-center gap-3", showAttributedUserAvatar && "justify-end")}
             >
               {!showAttributedUserAvatar && (
-                <div className="flex-shrink-0 mt-1">
+                <div className="flex-shrink-0">
                   {getMessageIcon(message.role, message.messageType, message.humanInteraction)}
                 </div>
               )}
