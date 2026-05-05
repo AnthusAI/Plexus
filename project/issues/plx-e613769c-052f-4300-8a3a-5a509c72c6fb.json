@@ -142,10 +142,16 @@
       "author": "ryan",
       "text": "Invalidated exactly the two approved Prescriber contradiction items via targeted feedback invalidation: 305141716 (73c423c3-1ac0-4400-bcfe-82db678665b1) and 309504413 (43709332-f4e0-4338-b3e1-e59121b47c92). Both returned updated=true and already_invalid=false. No other Prescriber feedback items were touched.",
       "created_at": "2026-04-23T20:38:26.497835Z"
+    },
+    {
+      "id": "db0a414b-ebcd-45f9-8ab5-0f729f8a9f43",
+      "author": "ryan",
+      "text": "2026-05-05 update: executed the user-approved strong policy-drift invalidations from the latest Medication Review pass. Invalidated Dosage feedback d95201b3-ce0e-4b08-8924-677197ac303a and Prescriber feedback 396d3c3b-827a-40b9-be91-f9efb4cee341 only. Post-invalidation re-evals completed: Dosage eval 60ff1cfa-64e1-4d99-a898-3a11e08a13a6 on champion d1fb6cf4 = 80.49% (66/82), confusion [[39,7],[9,27]]; Prescriber eval 5ec4100f-f06e-4377-bf7d-33a9f41a4929 on champion 3a51521a = 87.21% (75/86), confusion [[56,2],[9,19]]. No other feedback items invalidated.",
+      "created_at": "2026-05-05T16:42:08.251098Z"
     }
   ],
   "created_at": "2026-04-22T14:30:09.933567Z",
-  "updated_at": "2026-04-23T20:38:26.497835Z",
+  "updated_at": "2026-05-05T16:42:08.251098Z",
   "closed_at": null,
   "custom": {}
 }
