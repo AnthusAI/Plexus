@@ -208,6 +208,16 @@ def _wait_until(
     raise RuntimeError(f"Timed out waiting for {label}. Last state: {_json(last)}")
 
 
+def _process_is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
 def _wait_task(client: Any, task_id: str, timeout_seconds: int, poll_seconds: float) -> Any:
     from plexus.dashboard.api.models.task import Task
 
@@ -307,10 +317,19 @@ def canary_direct_local_report(args: argparse.Namespace) -> dict[str, Any]:
     dispatch = handle.get("dispatch_result", {})
     if dispatch.get("status") != "running" or not dispatch.get("pid"):
         raise RuntimeError(f"Expected local subprocess dispatch, got: {_json(dispatch)}")
+    local_pid = int(dispatch["pid"])
 
     def poll_report() -> tuple[str, int] | None:
         report_id, block_count = _find_report_for_cache_key(client, account_id, cache_key)
-        return (report_id, block_count) if report_id and block_count > 0 else None
+        if report_id and block_count > 0:
+            return (report_id, block_count)
+        if not _process_is_running(local_pid):
+            latest_handle = _handle_status(str(handle_id))
+            raise RuntimeError(
+                "Direct local report subprocess exited before report persistence. "
+                f"pid={local_pid} cache_key={cache_key} handle={_json(latest_handle)}"
+            )
+        return None
 
     report_id, block_count = _wait_until(
         "direct local report persistence",
@@ -334,7 +353,7 @@ def canary_direct_local_report(args: argparse.Namespace) -> dict[str, Any]:
         "scenario": "direct-local-report",
         "trace_id": result.get("trace_id"),
         "handle_id": handle_id,
-        "pid": dispatch.get("pid"),
+        "pid": local_pid,
         "report_id": report_id,
         "report_block_count": block_count,
         "cache_key": cache_key,
