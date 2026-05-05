@@ -1,0 +1,18 @@
+{
+  "id": "plx-3636489b-03ee-45ff-986e-206aef1d3bf2",
+  "title": "Enhance DLQ extractor with classification and safe requeue workflow",
+  "description": "Upgrade scripts/extract_scoring_jobs_from_sqs.py to support DLQ triage categories (status/provider/error), identify reprocessable messages, and optional requeue+delete in a single repeatable command.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1d6e6e95-e882-4751-afe3-6f4d37a2a9f3",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-04T18:16:36.088141960Z",
+  "updated_at": "2026-05-05T18:31:11.955959478Z",
+  "closed_at": "2026-05-05T18:31:11.955959478Z",
+  "custom": {}
+}
