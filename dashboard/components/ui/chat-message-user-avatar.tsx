@@ -269,7 +269,6 @@ export function ChatMessageUserAvatar({
         <TooltipTrigger asChild>
           <Avatar
             aria-label={`Message author: ${user.email}`}
-            title={user.email}
             className={cn("h-7 w-7 bg-muted", className)}
           >
             <AvatarImage
@@ -282,7 +281,7 @@ export function ChatMessageUserAvatar({
             </AvatarFallback>
           </Avatar>
         </TooltipTrigger>
-        <TooltipContent side="left">
+        <TooltipContent side="bottom" align="center" sideOffset={6}>
           <p>{user.email}</p>
         </TooltipContent>
       </Tooltip>
@@ -308,7 +307,6 @@ export function ChatMessageBotAvatar({
         <TooltipTrigger asChild>
           <Avatar
             aria-label={`Message author: ${label}`}
-            title={label}
             className={cn("h-7 w-7", className)}
           >
             <AvatarFallback className={cn("text-[10px] font-medium uppercase", fallbackClassName)}>
@@ -316,7 +314,7 @@ export function ChatMessageBotAvatar({
             </AvatarFallback>
           </Avatar>
         </TooltipTrigger>
-        <TooltipContent side="left">
+        <TooltipContent side="bottom" align="center" sideOffset={6}>
           <p>{label}</p>
         </TooltipContent>
       </Tooltip>
