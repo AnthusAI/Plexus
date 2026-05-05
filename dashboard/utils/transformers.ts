@@ -234,6 +234,7 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
         isPredictedClassDistributionBalanced: evaluationData.data?.isPredictedClassDistributionBalanced,
         scoreResults,
         accountId: evaluationData.data?.accountId || '',
+        createdByUserId: evaluationData.data?.createdByUserId ?? null,
         items: evaluationData.data?.items || (() => Promise.resolve({ data: [] })),
         scoringJobs: evaluationData.data?.scoringJobs || (() => Promise.resolve({ data: [] })),
         account: evaluationData.data?.account || (() => Promise.resolve({ data: null })),
@@ -242,7 +243,8 @@ export async function processTask(task: AmplifyTask): Promise<ProcessedTask> {
         task: null,
         scorecard: null,
         score: null,
-        scoreVersion: evaluationData.data?.scoreVersion || (() => Promise.resolve({ data: null }))
+        scoreVersion: evaluationData.data?.scoreVersion || (() => Promise.resolve({ data: null })),
+        createdByUser: evaluationData.data?.createdByUser || (() => Promise.resolve({ data: null }))
       };
     } catch (error) {
       console.error('Error transforming evaluation data:', error);

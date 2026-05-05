@@ -15,15 +15,27 @@ logging.basicConfig(
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Get and quote AWS credentials
-aws_access_key = safequote(os.environ.get("CELERY_AWS_ACCESS_KEY_ID", ""))
-aws_secret_key = safequote(os.environ.get("CELERY_AWS_SECRET_ACCESS_KEY", ""))
-aws_region = os.environ.get("CELERY_AWS_REGION_NAME", "")
+PLACEHOLDER_VALUE = "WILL_BE_SET_AFTER_DEPLOYMENT"
 
-# Get queue name from environment variable or use default
-sqs_queue_name = os.environ.get("CELERY_QUEUE_NAME", "plexus-celery-development")
-logger.info(f"Using queue name: {sqs_queue_name}" + 
-            (f" (from CELERY_QUEUE_NAME environment variable)" if os.environ.get("CELERY_QUEUE_NAME") else " (default)"))
+
+def _required_env(name):
+    value = os.environ.get(name, "").strip()
+    if not value or value == PLACEHOLDER_VALUE:
+        raise ValueError(
+            f"Missing required TaskDispatcher environment variable: {name}"
+        )
+    return value
+
+
+# Get and quote AWS credentials
+aws_access_key = safequote(_required_env("CELERY_AWS_ACCESS_KEY_ID"))
+aws_secret_key = safequote(_required_env("CELERY_AWS_SECRET_ACCESS_KEY"))
+aws_region = _required_env("CELERY_AWS_REGION_NAME")
+
+# Require an explicit queue so staging/production cannot silently dispatch to
+# the development default.
+sqs_queue_name = _required_env("CELERY_QUEUE_NAME")
+logger.info(f"Using queue name: {sqs_queue_name}")
 
 logger.info(f"AWS Region configured: {bool(aws_region)}")
 logger.info(f"AWS credentials configured: {bool(aws_access_key and aws_secret_key)}")
@@ -32,11 +44,8 @@ logger.info(f"AWS credentials configured: {bool(aws_access_key and aws_secret_ke
 broker_url = f"sqs://{aws_access_key}:{aws_secret_key}@/{sqs_queue_name}"
 
 # Get backend URL template and construct full URL
-backend_url_template = os.environ.get("CELERY_RESULT_BACKEND_TEMPLATE")
+backend_url_template = _required_env("CELERY_RESULT_BACKEND_TEMPLATE")
 logger.info(f"Backend template configured: {bool(backend_url_template)}")
-
-if not all([aws_access_key, aws_secret_key, aws_region, backend_url_template]):
-    raise ValueError("Missing required AWS credentials or backend template in environment")
 
 backend_url = backend_url_template.format(
     aws_access_key=aws_access_key,

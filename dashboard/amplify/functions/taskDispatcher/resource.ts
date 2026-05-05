@@ -18,7 +18,20 @@ interface TaskDispatcherStackProps extends StackProps {
   celeryAwsAccessKeyId?: string;
   celeryAwsSecretAccessKey?: string;
   celeryAwsRegion?: string;
+  celeryQueueName?: string;
   celeryResultBackendTemplate?: string;
+}
+
+const PLACEHOLDER_VALUE = 'WILL_BE_SET_AFTER_DEPLOYMENT';
+
+function requireTaskDispatcherConfig(name: string, value: string | undefined): string {
+  const trimmed = (value || '').trim();
+  if (!trimmed || trimmed === PLACEHOLDER_VALUE) {
+    throw new Error(
+      `TaskDispatcher requires ${name}. Set it in the Amplify branch environment before deployment.`
+    );
+  }
+  return trimmed;
 }
 
 // Custom CDK stack for the Python Task Dispatcher function
@@ -31,11 +44,26 @@ export class TaskDispatcherStack extends Stack {
     // Get the directory containing the function code
     const functionDir = path.join(process.cwd(), 'amplify/functions/taskDispatcher');
 
-    // Get Celery configuration from props or environment
-    const celeryAwsAccessKeyId = props.celeryAwsAccessKeyId || process.env.CELERY_AWS_ACCESS_KEY_ID || 'WILL_BE_SET_AFTER_DEPLOYMENT';
-    const celeryAwsSecretAccessKey = props.celeryAwsSecretAccessKey || process.env.CELERY_AWS_SECRET_ACCESS_KEY || 'WILL_BE_SET_AFTER_DEPLOYMENT';
-    const celeryAwsRegion = props.celeryAwsRegion || process.env.CELERY_AWS_REGION_NAME || Stack.of(this).region;
-    const celeryResultBackendTemplate = props.celeryResultBackendTemplate || process.env.CELERY_RESULT_BACKEND_TEMPLATE || 'WILL_BE_SET_AFTER_DEPLOYMENT';
+    const celeryAwsAccessKeyId = requireTaskDispatcherConfig(
+      'CELERY_AWS_ACCESS_KEY_ID',
+      props.celeryAwsAccessKeyId || process.env.CELERY_AWS_ACCESS_KEY_ID
+    );
+    const celeryAwsSecretAccessKey = requireTaskDispatcherConfig(
+      'CELERY_AWS_SECRET_ACCESS_KEY',
+      props.celeryAwsSecretAccessKey || process.env.CELERY_AWS_SECRET_ACCESS_KEY
+    );
+    const celeryAwsRegion = requireTaskDispatcherConfig(
+      'CELERY_AWS_REGION_NAME',
+      props.celeryAwsRegion || process.env.CELERY_AWS_REGION_NAME
+    );
+    const celeryQueueName = requireTaskDispatcherConfig(
+      'CELERY_QUEUE_NAME',
+      props.celeryQueueName || process.env.CELERY_QUEUE_NAME
+    );
+    const celeryResultBackendTemplate = requireTaskDispatcherConfig(
+      'CELERY_RESULT_BACKEND_TEMPLATE',
+      props.celeryResultBackendTemplate || process.env.CELERY_RESULT_BACKEND_TEMPLATE
+    );
 
     this.taskDispatcherFunction = new lambda.Function(this, 'TaskDispatcherFunction', {
       runtime: lambda.Runtime.PYTHON_3_11,
@@ -98,6 +126,7 @@ export class TaskDispatcherStack extends Stack {
         CELERY_AWS_ACCESS_KEY_ID: celeryAwsAccessKeyId,
         CELERY_AWS_SECRET_ACCESS_KEY: celeryAwsSecretAccessKey,
         CELERY_AWS_REGION_NAME: celeryAwsRegion,
+        CELERY_QUEUE_NAME: celeryQueueName,
         CELERY_RESULT_BACKEND_TEMPLATE: celeryResultBackendTemplate
       }
     });

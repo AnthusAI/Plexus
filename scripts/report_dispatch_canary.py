@@ -15,10 +15,16 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+PLACEHOLDER = "WILL_BE_SET_AFTER_DEPLOYMENT"
 
 
 class CanaryError(RuntimeError):
@@ -51,9 +57,37 @@ def _parse_args() -> argparse.Namespace:
 
 def _require_env(name: str) -> str:
     value = str(os.getenv(name) or "").strip()
-    if not value:
+    if not value or value == PLACEHOLDER:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value
+
+
+def _prepare_import_path() -> None:
+    repo = str(REPO_ROOT)
+    cleaned: list[str] = []
+    for entry in sys.path:
+        try:
+            resolved = str(Path(entry or ".").resolve())
+        except OSError:
+            cleaned.append(entry)
+            continue
+        if (
+            resolved.startswith(str(REPO_ROOT.parent / "Plexus"))
+            and resolved != repo
+            and not resolved.startswith(repo + os.sep)
+        ):
+            continue
+        cleaned.append(entry)
+    sys.path = [repo, *[entry for entry in cleaned if entry != repo]]
+
+
+def _load_env() -> None:
+    try:
+        from dotenv import load_dotenv
+    except Exception:
+        return
+    load_dotenv(REPO_ROOT / ".env", override=False)
+    load_dotenv(REPO_ROOT / "dashboard" / ".env.local", override=False)
 
 
 def _build_tactus(scorecard: str, days: int, cache_key: str, child_budget: dict[str, Any]) -> str:
@@ -278,6 +312,8 @@ async def _run_canary(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
+    _prepare_import_path()
+    _load_env()
     args = _parse_args()
     try:
         result = asyncio.run(_run_canary(args))

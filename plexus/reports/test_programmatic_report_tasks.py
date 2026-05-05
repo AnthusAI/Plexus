@@ -42,6 +42,39 @@ def test_run_block_cached_background_queues_durable_task(
 
 @patch("plexus.reports.service._check_db_cache")
 @patch("plexus.reports.service._find_matching_programmatic_task")
+@patch("plexus.reports.service._create_programmatic_report_task")
+def test_run_block_cached_background_passes_child_budget_to_task_payload(
+    mock_create_task,
+    mock_find_matching_task,
+    mock_check_db_cache,
+):
+    mock_check_db_cache.return_value = None
+    mock_find_matching_task.return_value = None
+    queued_task = MagicMock()
+    queued_task.id = "task-123"
+    mock_create_task.return_value = queued_task
+    child_budget = {
+        "usd": 0.2,
+        "wallclock_seconds": 90,
+        "depth": 1,
+        "tool_calls": 3,
+    }
+
+    run_block_cached(
+        block_class="AcceptanceRate",
+        block_config={"scorecard": "sc-1"},
+        account_id="acct-1",
+        client=MagicMock(),
+        cache_key="cache-key",
+        background=True,
+        child_budget=child_budget,
+    )
+
+    assert mock_create_task.call_args.kwargs["child_budget"] == child_budget
+
+
+@patch("plexus.reports.service._check_db_cache")
+@patch("plexus.reports.service._find_matching_programmatic_task")
 def test_run_block_cached_background_dedupes_inflight_task(
     mock_find_matching_task,
     mock_check_db_cache,

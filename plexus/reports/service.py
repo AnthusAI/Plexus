@@ -769,8 +769,9 @@ def _build_programmatic_run_payload(
     account_id: str,
     ttl_hours: float,
     fresh: bool,
+    child_budget: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    return {
+    payload = {
         "cache_key": cache_key,
         "block_class": block_class,
         "block_config": block_config,
@@ -778,6 +779,9 @@ def _build_programmatic_run_payload(
         "ttl_hours": ttl_hours,
         "fresh": fresh,
     }
+    if child_budget is not None:
+        payload["child_budget"] = child_budget
+    return payload
 
 
 def encode_programmatic_run_payload(payload: Dict[str, Any]) -> str:
@@ -956,6 +960,7 @@ def _create_programmatic_report_task(
     client: PlexusDashboardClient,
     ttl_hours: float,
     fresh: bool,
+    child_budget: Optional[Dict[str, Any]] = None,
 ) -> Task:
     payload = _build_programmatic_run_payload(
         cache_key=cache_key,
@@ -964,6 +969,7 @@ def _create_programmatic_report_task(
         account_id=account_id,
         ttl_hours=ttl_hours,
         fresh=fresh,
+        child_budget=child_budget,
     )
     metadata = {
         **payload,
@@ -1531,6 +1537,7 @@ def run_block_cached(
     ttl_hours: float = 24,
     fresh: bool = False,
     background: bool = False,
+    child_budget: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[Any], Optional[str], bool]:
     """Run a report block, returning cached results when available.
 
@@ -1593,6 +1600,7 @@ def run_block_cached(
             client=client,
             ttl_hours=ttl_hours,
             fresh=fresh,
+            child_budget=child_budget,
         )
         logger.info("Queued durable programmatic report task %s for %s", task.id, cache_key)
         return {

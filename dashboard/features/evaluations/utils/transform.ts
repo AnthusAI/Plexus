@@ -19,7 +19,8 @@ export const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['t
       account: async () => ({ data: null }),
       scorecard: async () => ({ data: null }),
       score: async () => ({ data: null }),
-      scoreVersion: async () => ({ data: null })
+      scoreVersion: async () => ({ data: null }),
+      createdByUser: async () => ({ data: null })
     }
   }
 
@@ -45,6 +46,7 @@ export const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['t
     errorMessage: rawEvaluation.errorMessage || undefined,
     errorDetails: rawEvaluation.errorDetails || {},
     accountId: rawEvaluation.accountId || '',
+    createdByUserId: rawEvaluation.createdByUserId || '',
     scorecardId: rawEvaluation.scorecardId || '',
     scoreId: rawEvaluation.scoreId || '',
     task: rawEvaluation.task ? (() => {
@@ -87,7 +89,8 @@ export const transformEvaluation = (rawEvaluation: any): Schema['Evaluation']['t
       }
       return { data: null }
     },
-    scoreVersion: async () => ({ data: null })
+    scoreVersion: async () => ({ data: null }),
+    createdByUser: rawEvaluation.createdByUser || (async () => ({ data: null }))
   }
 
   return safeEvaluation as Schema['Evaluation']['type']
@@ -127,4 +130,4 @@ function convertRawTaskToResponse(rawTask: any) {
       nextToken: rawTask.stages.nextToken
     } : undefined
   }
-} 
+}

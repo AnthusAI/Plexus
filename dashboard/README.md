@@ -40,6 +40,11 @@ For local procedure runs from the dashboard UI:
 `PLEXUS_ACCOUNT_KEY` is required for this local auto-dispatch flow.
 Console chat now targets the built-in procedure key `builtin:console/chat` backed by source-controlled Tactus code under `plexus/procedures/console/`.
 
+The deployed TaskDispatcher Lambda requires explicit Celery dispatch configuration at Amplify build time:
+`CELERY_AWS_ACCESS_KEY_ID`, `CELERY_AWS_SECRET_ACCESS_KEY`, `CELERY_AWS_REGION_NAME`,
+`CELERY_QUEUE_NAME`, and `CELERY_RESULT_BACKEND_TEMPLATE`. Deployment fails if any
+of those values are missing or left as `WILL_BE_SET_AFTER_DEPLOYMENT`.
+
 ## Usage
 
 ### Python API
