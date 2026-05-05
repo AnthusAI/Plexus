@@ -3,12 +3,6 @@
 import * as React from "react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { getClient } from "@/utils/data-operations"
 import { gravatarAvatarUrl } from "@/utils/user-profile"
@@ -259,65 +253,85 @@ export function useAttributedUserProfiles(
 export function ChatMessageUserAvatar({
   user,
   className,
+  open,
+  onOpenChange,
 }: {
   user: AttributedUserProfile
   className?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
+  const showLabel = open === true
+
   return (
-    <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Avatar
-            aria-label={`Message author: ${user.email}`}
-            className={cn("h-7 w-7 bg-muted", className)}
-          >
-            <AvatarImage
-              src={user.gravatarUrl}
-              alt={`${user.displayName} avatar`}
-              referrerPolicy="no-referrer"
-            />
-            <AvatarFallback className="bg-muted text-[10px] font-medium uppercase text-muted-foreground">
-              {user.initials}
-            </AvatarFallback>
-          </Avatar>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" align="center" sideOffset={6} avoidCollisions={false}>
-          <p>{user.email}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <div
+      className="relative inline-flex items-center justify-center"
+      onMouseEnter={() => onOpenChange?.(true)}
+      onMouseLeave={() => onOpenChange?.(false)}
+      onFocus={() => onOpenChange?.(true)}
+      onBlur={() => onOpenChange?.(false)}
+    >
+      <Avatar
+        aria-label={`Message author: ${user.email}`}
+        className={cn("h-7 w-7 bg-muted", className)}
+      >
+        <AvatarImage
+          src={user.gravatarUrl}
+          alt={`${user.displayName} avatar`}
+          referrerPolicy="no-referrer"
+        />
+        <AvatarFallback className="bg-muted text-[10px] font-medium uppercase text-muted-foreground">
+          {user.initials}
+        </AvatarFallback>
+      </Avatar>
+      {showLabel && (
+        <div className="pointer-events-none absolute right-0 top-full z-50 mt-2.5 whitespace-nowrap text-right text-xs text-muted-foreground">
+          {user.email}
+        </div>
+      )}
+    </div>
   )
 }
 
 export function ChatMessageBotAvatar({
   bot,
   className,
+  open,
+  onOpenChange,
 }: {
   bot: MessageBotAttribution
   className?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
   const registryEntry = botAvatarRegistry[bot.avatarKey]
   const label = bot.displayName || registryEntry?.label || "Bot"
   const initials = (registryEntry?.initials || label.slice(0, 2)).toUpperCase()
   const fallbackClassName = registryEntry?.colorClass || "bg-muted text-muted-foreground"
 
+  const showLabel = open === true
+
   return (
-    <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Avatar
-            aria-label={`Message author: ${label}`}
-            className={cn("h-7 w-7", className)}
-          >
-            <AvatarFallback className={cn("text-[10px] font-medium uppercase", fallbackClassName)}>
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" align="center" sideOffset={6} avoidCollisions={false}>
-          <p>{label}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <div
+      className="relative inline-flex items-center justify-center"
+      onMouseEnter={() => onOpenChange?.(true)}
+      onMouseLeave={() => onOpenChange?.(false)}
+      onFocus={() => onOpenChange?.(true)}
+      onBlur={() => onOpenChange?.(false)}
+    >
+      <Avatar
+        aria-label={`Message author: ${label}`}
+        className={cn("h-7 w-7", className)}
+      >
+        <AvatarFallback className={cn("text-[10px] font-medium uppercase", fallbackClassName)}>
+          {initials}
+        </AvatarFallback>
+      </Avatar>
+      {showLabel && (
+        <div className="pointer-events-none absolute right-0 top-full z-50 mt-2.5 whitespace-nowrap text-right text-xs text-muted-foreground">
+          {label}
+        </div>
+      )}
+    </div>
   )
 }
