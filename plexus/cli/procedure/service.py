@@ -848,13 +848,23 @@ class ProcedureService:
                         scorecard_id = procedure_info.procedure.scorecardId if procedure_info else None
                         score_id = procedure_info.procedure.scoreId if procedure_info else None
 
+                        procedure_name = config.get('name') if isinstance(config, dict) else None
+                        procedure_key = config.get('key') if isinstance(config, dict) else None
+                        normalized_procedure_name = str(procedure_name or '').strip().lower()
+
                         # Build context with procedure info
                         context = {
                             'procedure_id': procedure_id,
+                            'procedure_name': procedure_name,
+                            'procedure_key': procedure_key,
                             'scorecard_name': procedure_info.scorecard_name if procedure_info else None,
                             'score_name': procedure_info.score_name if procedure_info else None,
                             'scorecard_id': scorecard_id,
                             'score_id': score_id,
+                            'is_optimizer_procedure': (
+                                'optimizer' in normalized_procedure_name
+                                or 'optimizer' in procedure_id.lower()
+                            ),
                         }
                         if account_id:
                             context['account_id'] = account_id
