@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f6a6edeb-096d-453b-9656-828e1fc04d02",
+  "issue_id": "plx-c561bbea-3cce-4bb0-8cf8-24cd79681f3d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-05T22:06:32.682Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Revise Scorecard History generated content so the top-level report gives a concise stakeholder/SME-facing bullet summary of high-level guideline and code/prompt changes in plain language, prioritizing rubric/guideline meaning over technical implementation detail.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "priority": 1,
+    "status": "open",
+    "title": "Improve Scorecard History stakeholder summary"
+  }
+}

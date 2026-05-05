@@ -4,7 +4,7 @@ import React from "react";
 import { downloadData } from "aws-amplify/storage";
 import { DiffEditor, type Monaco } from "@monaco-editor/react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Link as LinkIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, Link as LinkIcon, Star } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -266,9 +266,12 @@ const ChampionBadges: React.FC<{ version: ScorecardHistoryVersion }> = ({ versio
 
   return (
     <div className="flex flex-wrap gap-1.5">
-      <Badge variant="secondary" className="border-0 bg-card">
-        Starred
-      </Badge>
+      <span
+        aria-label="Starred version"
+        className="inline-flex items-center rounded-sm p-1 text-muted-foreground"
+      >
+        <Star className="h-3.5 w-3.5 fill-current" />
+      </span>
       {status.is_current_champion ? (
         <Badge variant="secondary" className="border-0 bg-green-500/15 text-green-700 dark:text-green-400">
           Current Champion
@@ -439,16 +442,16 @@ const VersionDetails: React.FC<{
 
             <div className="space-y-2">
               <DiffViewer
-                diff={version.diffs?.code}
-                language="yaml"
-                label="Code Diff"
-                testId={`code-diff-${version.version_id}`}
-              />
-              <DiffViewer
                 diff={version.diffs?.guidelines}
                 language="markdown"
-                label="Guidelines Diff"
+                label="Guidelines Changes"
                 testId={`guidelines-diff-${version.version_id}`}
+              />
+              <DiffViewer
+                diff={version.diffs?.code}
+                language="yaml"
+                label="Code Changes"
+                testId={`code-diff-${version.version_id}`}
               />
             </div>
           </div>
@@ -488,10 +491,6 @@ const PerformanceGaugeCard: React.FC<{
 
   return (
     <div className="rounded-lg bg-background p-2" data-testid={`history-gauge-${metric}`}>
-      <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
-        <div className="font-medium text-foreground">{title}</div>
-        <div className="text-muted-foreground">{formatMetricValue(current, metric)}</div>
-      </div>
       <div className="mx-auto w-[145px]">
         <Gauge
           value={current}
@@ -560,8 +559,7 @@ const PerformancePanel: React.FC<{ performance?: ScorecardHistoryPerformance | n
   if (datasets.length === 0) return null;
 
   return (
-    <aside className="rounded-lg bg-card p-3" data-testid="score-performance-panel">
-      <div className="mb-2 text-sm font-semibold">Evaluation Metrics</div>
+    <aside className="min-w-0" data-testid="score-performance-panel">
       {datasets.length === 1 ? (
         <PerformanceGaugeGrid payload={datasets[0].payload} label={datasets[0].label} />
       ) : (
@@ -694,10 +692,10 @@ const WindowDiffSection: React.FC<{
             ) : (
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             )}
-            <span className="truncate text-sm font-medium">Full Window Diff</span>
+            <span className="truncate text-sm font-medium">Changes</span>
           </span>
           <span className="ml-3 shrink-0 text-xs text-muted-foreground">
-            {shortId(windowDiff.baseline_version_id)} to {shortId(windowDiff.latest_version_id)}
+            {formatDateTime(windowDiff.baseline_created_at)} to {formatDateTime(windowDiff.latest_created_at)}
           </span>
         </Button>
       </CollapsibleTrigger>
@@ -716,16 +714,16 @@ const WindowDiffSection: React.FC<{
             </div>
           </div>
           <DiffViewer
-            diff={windowDiff.code}
-            language="yaml"
-            label="Full Code Diff"
-            testId="window-code-diff"
-          />
-          <DiffViewer
             diff={windowDiff.guidelines}
             language="markdown"
-            label="Full Guidelines Diff"
+            label="Guidelines Changes"
             testId="window-guidelines-diff"
+          />
+          <DiffViewer
+            diff={windowDiff.code}
+            language="yaml"
+            label="Code Changes"
+            testId="window-code-diff"
           />
         </div>
       </CollapsibleContent>
@@ -762,18 +760,21 @@ const ScoreHistorySection: React.FC<{
             <LinkedShortId id={score.score_id} href={scoreHref(scorecardId, score.score_id)} label="Open score" />
           </div>
           <div className="rounded-lg bg-card p-3">
-            <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Overview</div>
-            <MarkdownText testId={`score-summary-${score.score_id}`}>
-              {score.summary || "No summary returned for this score."}
-            </MarkdownText>
+            <div className="flex flex-wrap items-start gap-4">
+              <div className={`${hasPerformance ? "min-w-[min(100%,30rem)] flex-[999_1_30rem]" : "min-w-0 flex-1"}`}>
+                <MarkdownText testId={`score-summary-${score.score_id}`}>
+                  {score.summary || "No summary returned for this score."}
+                </MarkdownText>
+              </div>
+              {hasPerformance ? (
+                <div className="min-w-[min(100%,20rem)] flex-[1_1_20rem]">
+                  <PerformancePanel performance={score.performance} />
+                </div>
+              ) : null}
+            </div>
           </div>
           <InterventionSummary score={score} versions={versions} />
         </div>
-        {hasPerformance ? (
-          <div className="min-w-[min(100%,20rem)] flex-[1_1_20rem]">
-            <PerformancePanel performance={score.performance} />
-          </div>
-        ) : null}
         <div className="min-w-0 basis-full">
           <ChangeNotesBrief versions={versions} />
         </div>
