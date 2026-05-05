@@ -40,10 +40,22 @@
       "author": "ryan",
       "text": "User requested moving Medication Review: Dosage to GPT-5.4-mini and trying it. Creating a model-only Dosage candidate from current champion 0c2bf0b8, then evaluating on recent feedback before any champion promotion.",
       "created_at": "2026-05-05T18:09:22.185104Z"
+    },
+    {
+      "id": "0e7ed5b5-3367-408a-ac9a-9f1e975c12bc",
+      "author": "ryan",
+      "text": "Dosage GPT-5.4-mini model-only candidate 58ddebeb evaluated on available feedback: eval bd4b9a96 scored 62/86 (72.09%) with 17 false positives and 7 false negatives. Marked ScoreVersion rejected and did not promote. Current champion rerun with gpt-5.4-nano is in progress for sanity check.",
+      "created_at": "2026-05-05T18:19:19.683225Z"
+    },
+    {
+      "id": "cd4f8e1c-a565-49eb-ba9e-9bca07b36e49",
+      "author": "ryan",
+      "text": "Dosage available-feedback rerun complete. Current champion 0c2bf0b8 (gpt-5.4-nano) eval d82f3180 scored 74/86 (86.05%), with 6 yes->no and 6 no->yes errors. GPT-5.4-mini candidate 58ddebeb eval bd4b9a96 scored 62/86 (72.09%), with 17 no->yes and 7 yes->no errors. Updated champion and candidate ScoreVersion notes. No Dosage promotion recommended.",
+      "created_at": "2026-05-05T18:25:17.838982Z"
     }
   ],
   "created_at": "2026-04-22T13:19:21.731868Z",
-  "updated_at": "2026-05-05T18:09:22.185104Z",
+  "updated_at": "2026-05-05T18:25:17.838982Z",
   "closed_at": null,
   "custom": {}
 }
