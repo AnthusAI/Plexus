@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cf55f70b-1ffa-49e3-a038-356231a93ace",
+  "issue_id": "plx-fa2c51a3-cef8-44b6-9def-b0aa15a5a7d5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T14:05:31.644Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "The existing Suco ScoreChampionVersionTimeline report has a valid ReportBlock, but the dashboard can render the markdown placeholder as 'Block data not available'. Fix ReportTask block matching so existing programmatic report blocks match their markdown placeholders reliably without re-running the report.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix report block placeholder matching for champion timeline"
+  }
+}

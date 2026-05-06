@@ -64,6 +64,7 @@ import { EndOfRunReport, ReportSection } from "./OptimizationInsightsPanel"
 import { OptimizerProblemItemsPanel, type NotableItemRecurrence } from "./OptimizerProblemItemsPanel"
 import { CollapsibleText } from "./ui/message-utils"
 import { OptimizerMetricsChartSkeleton, CycleHistoryTableSkeleton } from "./loading-skeleton"
+import { TaskAuthorIndicator } from "@/components/ui/task-author-indicator"
 
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
@@ -154,6 +155,7 @@ export interface ProcedureTaskData extends BaseTaskData {
     }
   } | null
   feedbackEvaluationSummary?: ProcedureFeedbackEvaluationSummary | null
+  createdByUserId?: string | null
 }
 
 export interface ProcedureTaskProps {
@@ -1186,6 +1188,9 @@ export default function ProcedureTask({
                   </Button>
                 )}
               </div>
+              <div data-testid="procedure-task-author-detail-slot" className="self-end">
+                <TaskAuthorIndicator createdByUserId={procedure.createdByUserId} />
+              </div>
             </div>
           </div>
         </div>
@@ -1226,6 +1231,9 @@ export default function ProcedureTask({
             <div className="flex flex-col items-end flex-shrink-0">
               <div className="flex flex-col items-center gap-1">
                 <div className="flex items-center gap-2">
+                  <div data-testid="procedure-task-author-grid-slot" className="flex items-center">
+                    <TaskAuthorIndicator createdByUserId={procedure.createdByUserId} />
+                  </div>
                   <div className="text-muted-foreground">
                     <Waypoints className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
                   </div>

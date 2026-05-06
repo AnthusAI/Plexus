@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c9adddf1-9227-4fc6-828b-db764e4ac54e",
+  "issue_id": "plx-71c5246a-0aa7-4cea-8413-fb0a587c3812",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-04T22:28:21.791Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Existing console chat sessions show zero messages after attributed avatar UI change. Investigate explicit ChatMessage selection sets and restore message loading while preserving avatar behavior.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix chat session message loading after avatar change"
+  }
+}

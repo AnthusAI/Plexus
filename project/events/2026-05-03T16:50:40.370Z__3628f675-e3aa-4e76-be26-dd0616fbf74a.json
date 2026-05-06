@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3628f675-e3aa-4e76-be26-dd0616fbf74a",
+  "issue_id": "plx-c8dcfb4f-102b-4cf3-92c2-624901ccbb39",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T16:50:40.370Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Run the ScoreChampionVersionTimeline report for suco_home_improvement over the last 21 days with --fresh after the evaluation backfill, then inspect the persisted attachment to verify metric-bearing points for the 2026-05-03T12:49-12:50Z champion-change cluster.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Rerun Suco champion timeline after evaluation backfill"
+  }
+}

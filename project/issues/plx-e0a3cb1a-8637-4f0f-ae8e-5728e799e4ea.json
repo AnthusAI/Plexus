@@ -1,0 +1,18 @@
+{
+  "id": "plx-e0a3cb1a-8637-4f0f-ae8e-5728e799e4ea",
+  "title": "Fix failing develop CI blocking deployment",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-04T21:56:17.511407Z",
+  "updated_at": "2026-05-04T21:56:27.869260Z",
+  "closed_at": null,
+  "custom": {}
+}

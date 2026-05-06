@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "72ccd831-d1ef-4cc0-bba6-98eb68d3d07c",
+  "issue_id": "plx-e2a67397-ada9-4a06-9999-3a7021dbc0d2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-04T21:55:04.544Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Decouple profile display (email/displayName/gravatar) from User model persistence so sidebar/settings still show identity when User schema changes are not yet deployed. Keep User sync best-effort. Also ensure Manage Gravatar control uses standard Button component styling.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-1322887e-825c-4760-ad01-400bc49c686a",
+    "priority": 1,
+    "status": "open",
+    "title": "Make Gravatar profile render before User model deploy"
+  }
+}

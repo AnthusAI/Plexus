@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2193e612-880e-41cc-abed-89f32bc83538",
+  "issue_id": "plx-f349826d-dcb9-439e-89b5-6162ef58ade6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T14:07:29.773Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "The combined ScoreChampionVersionTimeline hover tooltip is visually good but too tall when many scores changed on the same day. Make it vertically compact with one row per score transition and inline metric summaries instead of stacked sections.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Compact combined champion timeline hover tooltip"
+  }
+}

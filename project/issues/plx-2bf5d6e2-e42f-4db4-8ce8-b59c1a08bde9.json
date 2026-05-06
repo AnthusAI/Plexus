@@ -1,0 +1,25 @@
+{
+  "id": "plx-2bf5d6e2-e42f-4db4-8ce8-b59c1a08bde9",
+  "title": "Add combined champion timeline chart",
+  "description": "Add a scorecard-level combined timeline chart to ScoreChampionVersionTimeline when more than one score is present.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0629cea3-3274-47a6-98c6-a87dd77aefb7",
+      "author": "ryan",
+      "text": "Implemented a combined ScoreChampionVersionTimeline chart that renders only when multiple scores are present. The combined chart reuses the shared x-axis/chart styling and aggregates champion-change markers without tooltips or marker hover titles. Focused Jest test and dashboard typecheck passed.",
+      "created_at": "2026-05-03T12:51:57.643148Z"
+    }
+  ],
+  "created_at": "2026-05-03T12:45:51.136254Z",
+  "updated_at": "2026-05-03T12:51:59.908657Z",
+  "closed_at": "2026-05-03T12:51:59.908657Z",
+  "custom": {}
+}

@@ -64,6 +64,7 @@ import { shareLinkClient, ShareLinkViewOptions } from "@/utils/share-link-client
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { ShareResourceModal } from "@/components/share-resource-modal"
 import { EvaluationTasksGauges } from './EvaluationTasksGauges'
+import { parseJsonObjectLoose, resolveCreatedByUserId } from "@/utils/author-attribution"
 
 type TaskResponse = {
   items: Evaluation[]
@@ -168,6 +169,7 @@ const LIST_EVALUATIONS = `
         isDatasetClassDistributionBalanced
         predictedClassDistribution
         isPredictedClassDistributionBalanced
+        createdByUserId
         taskId
         task {
           id
@@ -307,6 +309,13 @@ export function transformEvaluationLocal(evaluation: Schema['Evaluation']['type'
   const transformedStages = transformStages(rawStages);
 
   // Transform the evaluation into the format expected by components
+  const evaluationParams = parseJsonObjectLoose(evaluation.parameters)
+  const evaluationAttribution = (
+    evaluationParams?.attribution
+    && typeof evaluationParams.attribution === "object"
+    && !Array.isArray(evaluationParams.attribution)
+  ) ? (evaluationParams.attribution as Record<string, unknown>) : null
+
   const transformedEvaluation: Evaluation = {
     id: evaluation.id,
     type: evaluation.type,
@@ -340,6 +349,13 @@ export function transformEvaluationLocal(evaluation: Schema['Evaluation']['type'
       stages: transformedStages
     } as AmplifyTask) : null,
     scoreResults: scoreResults,
+    createdByUserId: resolveCreatedByUserId({
+      createdByUserId: evaluation.createdByUserId,
+      legacyFallbacks: [
+        evaluationAttribution?.requestUserId,
+        evaluationAttribution?.userId,
+      ],
+    }),
     parameters: (evaluation.parameters as string | null) ?? null,
   };
 

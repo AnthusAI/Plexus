@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "025688b4-edcb-4756-a6d0-98b0fa1a7bfa",
+  "issue_id": "plx-fd192244-30a4-48f5-9449-0653ccfe7f60",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T00:20:57.701Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix evaluation author attribution fallback from parameters"
+  }
+}

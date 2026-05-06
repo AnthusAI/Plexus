@@ -42,6 +42,7 @@ from plexus.cli.shared.memoized_resolvers import (
 )
 from plexus.cli.shared.score_config_fetching import fetch_and_cache_single_score
 from plexus.score_rubric_consistency import ScoreRubricConsistencyService
+from plexus.attribution.actor_context import apply_actor_attribution
 
 # Define the main command groups that will be exported
 @click.group()
@@ -1373,6 +1374,11 @@ def push(scorecard: str, score: str, note: str):
         # Only include parentVersionId if it has a value
         if parent_version_id:
             mutation_input['input']['parentVersionId'] = parent_version_id
+        mutation_input["input"] = apply_actor_attribution(
+            mutation_input["input"],
+            client_context=getattr(client, "context", None),
+            source="cli",
+        )
 
         with client as session:
             result = session.execute(gql(mutation), mutation_input)

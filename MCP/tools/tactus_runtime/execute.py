@@ -19,8 +19,17 @@ from typing import Annotated, Any, Callable
 from fastmcp import Context, FastMCP
 from pydantic import Field
 from plexus.runtime_budget import RuntimeBudgetSpec
+from plexus.attribution.actor_context import (
+    apply_actor_context_to_env,
+    extract_request_user_id_from_mcp_context,
+    resolve_actor_context,
+    set_runtime_actor_context,
+)
 
 logger = logging.getLogger(__name__)
+
+_EVALUATION_PROCESS_LOCK = threading.Lock()
+_EVALUATION_PROCESSES: dict[int, Any] = {}
 
 
 PLEXUS_DOCS_DIR = os.path.normpath(
@@ -58,6 +67,32 @@ def _resolve_procedure_run_log_dir() -> str:
     )
 
 
+def _register_evaluation_process(process: Any) -> None:
+    pid = getattr(process, "pid", None)
+    if pid is None:
+        return
+    with _EVALUATION_PROCESS_LOCK:
+        _EVALUATION_PROCESSES[int(pid)] = process
+
+
+def _registered_evaluation_process(process_id: Any) -> Any | None:
+    try:
+        pid = int(process_id)
+    except (TypeError, ValueError):
+        return None
+    with _EVALUATION_PROCESS_LOCK:
+        return _EVALUATION_PROCESSES.get(pid)
+
+
+def _forget_evaluation_process(process_id: Any) -> None:
+    try:
+        pid = int(process_id)
+    except (TypeError, ValueError):
+        return
+    with _EVALUATION_PROCESS_LOCK:
+        _EVALUATION_PROCESSES.pop(pid, None)
+
+
 def _local_procedure_env() -> dict[str, str]:
     env = {
         **os.environ,
@@ -70,7 +105,7 @@ def _local_procedure_env() -> dict[str, str]:
         if not existing_pythonpath
         else os.pathsep.join([PLEXUS_PROJECT_ROOT, existing_pythonpath])
     )
-    return env
+    return apply_actor_context_to_env(env)
 
 
 def _launch_local_procedure_subprocess(cmd: list[str], procedure_id: str) -> tuple[Any, str]:
@@ -3118,17 +3153,29 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
     _append_optional_cli_arg(cmd, "--procedure-id", args.get("procedure_id"))
 
     child_budget = args.get("budget")
-    env = os.environ.copy()
+    env = apply_actor_context_to_env(os.environ.copy())
     if isinstance(child_budget, dict):
         env["PLEXUS_CHILD_BUDGET"] = json.dumps(_jsonable(child_budget), sort_keys=True)
 
+    stdout_tmp = tempfile.NamedTemporaryFile(
+        prefix="plexus_eval_stdout_", suffix=".log", delete=False
+    )
+    stderr_tmp = tempfile.NamedTemporaryFile(
+        prefix="plexus_eval_stderr_", suffix=".log", delete=False
+    )
+    stdout_log_path = stdout_tmp.name
+    stderr_log_path = stderr_tmp.name
+
     process = subprocess.Popen(
         cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=stdout_tmp,
+        stderr=stderr_tmp,
         start_new_session=True,
         env=env,
     )
+    stdout_tmp.close()
+    stderr_tmp.close()
+    _register_evaluation_process(process)
 
     # Poll briefly for the id file (evaluation record is created near the start)
     evaluation_id: str | None = None
@@ -3157,6 +3204,8 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
         "process_id": process.pid,
         "evaluation_id": evaluation_id,
         "evaluation_id_file": None if evaluation_id else id_file_path,
+        "stdout_log": stdout_log_path,
+        "stderr_log": stderr_log_path,
         "command": cmd,
         "evaluation_type": evaluation_type,
         "scorecard": scorecard_name,
@@ -3254,7 +3303,7 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
             for k, v in parameters.items():
                 cmd.append(f"{k}={v}")
 
-            env = {**__import__("os").environ, "PYTHONUNBUFFERED": "1"}
+            env = apply_actor_context_to_env({**__import__("os").environ, "PYTHONUNBUFFERED": "1"})
             proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return {
                 "status": "running",
@@ -3337,7 +3386,7 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
         if fresh:
             cmd.append("--fresh")
 
-        env = {**__import__("os").environ, "PYTHONUNBUFFERED": "1"}
+        env = apply_actor_context_to_env({**__import__("os").environ, "PYTHONUNBUFFERED": "1"})
         proc = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return {
             "status": "running",
@@ -3762,18 +3811,29 @@ def _exited_process_status(process_id: Any) -> dict[str, Any] | None:
     except (TypeError, ValueError):
         return None
 
+    registered_process = _registered_evaluation_process(pid)
+    if registered_process is not None:
+        return_code = registered_process.poll()
+        if return_code is None:
+            return None
+        _forget_evaluation_process(pid)
+        return {
+            "process_status": "exited",
+            "process_exit_code": return_code,
+        }
+
     try:
         waited_pid, status = os.waitpid(pid, os.WNOHANG)
     except ChildProcessError:
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
-            return {"process_status": "not_running"}
+            return {"process_status": "not_running", "process_exit_code": None}
         except PermissionError:
             return {"process_status": "running_unknown"}
         return None
     except ProcessLookupError:
-        return {"process_status": "not_running"}
+        return {"process_status": "not_running", "process_exit_code": None}
 
     if waited_pid == 0:
         return None
@@ -3804,6 +3864,33 @@ def _normalize_handle_status(status: Any) -> str:
         "dispatched": "running",
     }
     return status_map.get(normalized, normalized or "running")
+
+
+def _tail_text_file(path: Any, max_chars: int = 4000) -> str | None:
+    if not path:
+        return None
+    try:
+        with open(str(path), "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(size - max_chars, 0), os.SEEK_SET)
+            return handle.read().decode("utf-8", errors="replace").strip()
+    except OSError:
+        return None
+
+
+def _evaluation_process_diagnostics(
+    dispatch_result: dict[str, Any],
+    message: str,
+) -> dict[str, Any]:
+    diagnostics: dict[str, Any] = {"error": message}
+    stdout_tail = _tail_text_file(dispatch_result.get("stdout_log"))
+    stderr_tail = _tail_text_file(dispatch_result.get("stderr_log"))
+    if stdout_tail:
+        diagnostics["stdout_tail"] = stdout_tail
+    if stderr_tail:
+        diagnostics["stderr_tail"] = stderr_tail
+    return diagnostics
 
 
 def _timeout_seconds(value: Any, default: float = 0.0) -> float:
@@ -4528,6 +4615,11 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
             input_obj["guidelines"] = guidelines
         if parent_version_id:
             input_obj["parentVersionId"] = parent_version_id
+        input_obj = apply_actor_attribution(
+            input_obj,
+            client_context=getattr(client, "context", None),
+            source="execute_tactus",
+        )
 
         resp = client.execute(version_mutation, {"input": input_obj})
         new_version = (resp or {}).get("createScoreVersion") or {}
@@ -5640,25 +5732,28 @@ class PlexusRuntimeModule:
             if process_id:
                 process_status = _exited_process_status(process_id)
                 if process_status:
-                    next_status = (
-                        "failed"
-                        if process_status.get("process_exit_code") not in (0, None)
-                        else "completed_unknown"
-                    )
                     update = {
-                        "status": next_status,
+                        "status": "failed",
                         **process_status,
+                        **_evaluation_process_diagnostics(
+                            dispatch_result,
+                            "Evaluation subprocess exited before emitting an evaluation ID.",
+                        ),
                     }
-                    if next_status == "failed":
-                        update["error"] = (
-                            "Evaluation subprocess exited before emitting an evaluation ID."
-                        )
                     return self._handle_store.update(handle_id, update)
                 try:
                     os.kill(int(process_id), 0)
                 except ProcessLookupError:
                     return self._handle_store.update(
-                        handle_id, {"status": "completed_unknown"}
+                        handle_id,
+                        {
+                            "status": "failed",
+                            "process_status": "not_running",
+                            **_evaluation_process_diagnostics(
+                                dispatch_result,
+                                "Evaluation subprocess is no longer running and did not emit an evaluation ID.",
+                            ),
+                        },
                     )
                 except PermissionError:
                     return self._handle_store.update(
@@ -6039,6 +6134,11 @@ async def _execute_tactus_tool(
     started_mono = time.monotonic()
     started_wall = time.time()
     trace_id = str(uuid.uuid4())
+    request_user_id = extract_request_user_id_from_mcp_context(ctx) if ctx is not None else None
+    actor_context = resolve_actor_context(
+        request_user_id=request_user_id,
+        explicit_source="execute_tactus",
+    )
 
     if not isinstance(tactus, str) or not tactus.strip():
         envelope = _response_envelope(
@@ -6064,44 +6164,45 @@ async def _execute_tactus_tool(
         return envelope
 
     try:
-        stream_handler = (
-            _MCPStreamEmitter(trace_id=trace_id, loop=asyncio.get_running_loop())
-            if ctx is not None
-            else None
-        )
-        run_task = asyncio.create_task(
-            asyncio.to_thread(
-                _run_tactus_sync,
-                tactus,
-                mcp,
-                trace_id=trace_id,
-                trace_store=store,
-                budget=budget,
-                handle_store=handle_store,
-                feedback_finder=feedback_finder,
-                evaluation_info=evaluation_info,
-                evaluation_runner=evaluation_runner,
-                report_runner=report_runner,
-                procedure_runner=procedure_runner,
-                stream_handler=stream_handler,
-                score_info=score_info,
+        with set_runtime_actor_context(actor_context):
+            stream_handler = (
+                _MCPStreamEmitter(trace_id=trace_id, loop=asyncio.get_running_loop())
+                if ctx is not None
+                else None
             )
-        )
-        if stream_handler is None:
+            run_task = asyncio.create_task(
+                asyncio.to_thread(
+                    _run_tactus_sync,
+                    tactus,
+                    mcp,
+                    trace_id=trace_id,
+                    trace_store=store,
+                    budget=budget,
+                    handle_store=handle_store,
+                    feedback_finder=feedback_finder,
+                    evaluation_info=evaluation_info,
+                    evaluation_runner=evaluation_runner,
+                    report_runner=report_runner,
+                    procedure_runner=procedure_runner,
+                    stream_handler=stream_handler,
+                    score_info=score_info,
+                )
+            )
+            if stream_handler is None:
+                return _truncate_envelope(await run_task)
+
+            while True:
+                if run_task.done():
+                    await asyncio.sleep(0)
+                    if stream_handler.empty():
+                        break
+                try:
+                    event = await asyncio.wait_for(stream_handler.get(), timeout=0.05)
+                except asyncio.TimeoutError:
+                    continue
+                await _send_mcp_stream_event(ctx, event)
+
             return _truncate_envelope(await run_task)
-
-        while True:
-            if run_task.done():
-                await asyncio.sleep(0)
-                if stream_handler.empty():
-                    break
-            try:
-                event = await asyncio.wait_for(stream_handler.get(), timeout=0.05)
-            except asyncio.TimeoutError:
-                continue
-            await _send_mcp_stream_event(ctx, event)
-
-        return _truncate_envelope(await run_task)
     except Exception as exc:
         logger.error("execute_tactus failed: %s", exc, exc_info=True)
         envelope = _response_envelope(

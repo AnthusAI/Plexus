@@ -9,11 +9,13 @@ Provides methods to manage procedures including:
 Each procedure belongs to an account and is associated with a scorecard and score.
 """
 
+import json
 import logging
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime
 from .base import BaseModel
+from plexus.attribution.actor_context import apply_actor_attribution
 
 if TYPE_CHECKING:
     from ..client import _BaseAPIClient
@@ -49,7 +51,8 @@ class Procedure(BaseModel):
         scoreId: Optional[str] = None,
         scoreVersionId: Optional[str] = None,
         attachedFiles: Optional[List[str]] = None,
-        metadata: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        createdByUserId: Optional[str] = None,
         client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
@@ -70,6 +73,7 @@ class Procedure(BaseModel):
         self.scoreVersionId = scoreVersionId
         self.attachedFiles = attachedFiles or []
         self.metadata = metadata
+        self.createdByUserId = createdByUserId
 
     @classmethod
     def fields(cls) -> str:
@@ -93,6 +97,7 @@ class Procedure(BaseModel):
             scorecardId
             scoreId
             scoreVersionId
+            createdByUserId
         """
 
     @classmethod
@@ -100,6 +105,12 @@ class Procedure(BaseModel):
         # Parse datetime strings
         created_at = datetime.fromisoformat(data['createdAt'].replace('Z', '+00:00'))
         updated_at = datetime.fromisoformat(data['updatedAt'].replace('Z', '+00:00'))
+        metadata = data.get('metadata')
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                metadata = None
         
         return cls(
             id=data['id'],
@@ -117,7 +128,8 @@ class Procedure(BaseModel):
             scoreId=data.get('scoreId'),
             scoreVersionId=data.get('scoreVersionId'),
             attachedFiles=data.get('attachedFiles') or [],
-            metadata=data.get('metadata'),
+            metadata=metadata,
+            createdByUserId=data.get('createdByUserId'),
             client=client
         )
 
@@ -134,7 +146,9 @@ class Procedure(BaseModel):
         code: Optional[str] = None,
         name: Optional[str] = None,
         state: str = "start",
-        scoreVersionId: Optional[str] = None
+        scoreVersionId: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        createdByUserId: Optional[str] = None,
     ) -> 'Procedure':
         """Create a new procedure.
 
@@ -191,6 +205,19 @@ class Procedure(BaseModel):
             input_data['code'] = code
         if scoreVersionId:
             input_data['scoreVersionId'] = scoreVersionId
+        if metadata:
+            input_data["metadata"] = metadata
+        if createdByUserId:
+            input_data["createdByUserId"] = createdByUserId
+
+        input_data = apply_actor_attribution(
+            input_data,
+            client_context=getattr(client, "context", None),
+            source="agent",
+        )
+        metadata_value = input_data.get("metadata")
+        if isinstance(metadata_value, dict):
+            input_data["metadata"] = json.dumps(metadata_value)
             
         mutation = """
         mutation CreateProcedure($input: CreateProcedureInput!) {
@@ -362,4 +389,3 @@ class Procedure(BaseModel):
         if delete_result is None:
             return False
         return delete_result.get('id') == self.id
-
