@@ -305,7 +305,7 @@ class TestScoreConfiguration(unittest.TestCase):
         
         self.assertIn('No API client available', str(context.exception))
 
-    @patch('plexus.dashboard.api.models.score.get_score_yaml_path')
+    @patch('plexus.cli.shared.get_score_yaml_path')
     @patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id')
     def test_error_handling_api_failures(self, mock_get_scorecard, mock_get_path):
         """Test error handling for various API failure scenarios."""
