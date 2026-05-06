@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c6c458b2-941c-4da3-8310-54dd20ce4036",
+  "issue_id": "plx-440ee64d-54a6-4d15-a51e-080310eff36a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T12:22:54.112Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Correct the private GraphQL proxy scoring integration so standard plexus predict through the proxy is validated against the full expected contract, including local PostgreSQL ScoreResult creation and readback.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Make proxy scoring integration assert ScoreResult persistence"
+  }
+}
