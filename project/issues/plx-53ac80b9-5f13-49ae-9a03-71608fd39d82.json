@@ -1,0 +1,31 @@
+{
+  "id": "plx-53ac80b9-5f13-49ae-9a03-71608fd39d82",
+  "title": "Fix Console execute_tactus account context and structured errors",
+  "description": "# Fix Console execute_tactus account context and structured errors\n\nAs a Console chat agent, I want execute_tactus calls to inherit the triggering chat message account and return structured failures, so that I can run Plexus APIs from Lambda and iteratively recover from errors.\n\nFeature: Console execute_tactus account and error handling\n\nScenario: Console feedback alignment uses the chat account\nGiven a Console chat message has accountId acct-console\nWhen the assistant calls execute_tactus with plexus.feedback.alignment for a scorecard and score\nThen the Plexus runtime resolves account operations using acct-console\nAnd it does not issue a GraphQL account-key lookup with key null\n\nScenario: Missing account context is actionable\nGiven execute_tactus runs a feedback API without an explicit account context\nWhen the runtime cannot resolve an account\nThen the tool response has ok false\nAnd error.code is account_context_required\nAnd error.message explains that Console account context or an explicit account is required\n\nScenario: Runtime exceptions remain visible\nGiven a direct Plexus runtime handler raises a Python exception\nWhen execute_tactus catches the failure\nThen the caller receives ok false\nAnd error.message includes the original exception message\nAnd the response is not a blank Sandbox error.\n\nDefinition of Done:\n- Console embedded execute_tactus passes experiment_context account_id into the Tactus runtime.\n- feedback.alignment and feedback.find prefer explicit runtime account context and fail clearly without it.\n- Python handler failures are converted into structured execute_tactus envelopes.\n- Lambda trace persistence uses a writable/default-safe path and cannot mask tool output.\n- Focused unit and console runtime tests pass.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7c2c6ba8-226d-4b51-b922-e4f8075503fc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "caba7a5f-b001-4c39-875b-cdea1c94c382",
+      "author": "ryan",
+      "text": "Started on clean branch codex/console-execute-tactus-account-errors from origin/develop. Scope is account context propagation into embedded execute_tactus, actionable feedback account errors, structured direct-handler exception envelopes, and Lambda-safe trace writes.",
+      "created_at": "2026-05-06T22:41:28.077892Z"
+    },
+    {
+      "id": "136db29e-08e6-41d7-86ca-97ff372ee62f",
+      "author": "ryan",
+      "text": "Implemented account-context propagation into embedded execute_tactus, explicit account resolution for feedback alignment/find, structured runtime error envelopes for Lua-hosted direct handler failures, and Lambda /tmp trace default. Focused tests are green: execute_tactus suite 121 passed; MCP transport/console/procedure compatibility 75 passed; git diff --check passed.",
+      "created_at": "2026-05-06T22:48:32.817356Z"
+    }
+  ],
+  "created_at": "2026-05-06T22:41:23.702375Z",
+  "updated_at": "2026-05-06T22:48:32.817356Z",
+  "closed_at": null,
+  "custom": {}
+}
