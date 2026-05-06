@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from .base import BaseModel
 from .scorecard import Scorecard
-from plexus.cli.shared import get_score_guidelines_path, get_score_yaml_path
+from plexus.cli.shared import get_score_guidelines_path
 from plexus.attribution.actor_context import apply_actor_attribution
 
 if TYPE_CHECKING:
