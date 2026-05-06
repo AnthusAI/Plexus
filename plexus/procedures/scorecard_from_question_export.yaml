@@ -284,14 +284,21 @@ code: |
       return nil, nil
     end
 
-    local inject = "Call plexus_scorecard_info with scorecard_identifier=\"" .. tostring(identifier) .. "\" and return."
-    local observed = wait_for_tool_call(Observer, "plexus_scorecard_info", 3, inject)
-    if not observed then
-      return nil, "Observer failed to call plexus_scorecard_info"
+    local ok, result = pcall(function()
+      return plexus_scorecard_info({scorecard_identifier = tostring(identifier)})
+    end)
+    if not ok then
+      local err_text = string.lower(tostring(result or ""))
+      if string.find(err_text, "not found", 1, true) then
+        return nil, nil
+      end
+      return nil, "Scorecard lookup failed: " .. tostring(result)
     end
 
-    local call = Tool.last_call("plexus_scorecard_info")
-    local data = safe_decode(call.result)
+    local data = result
+    if type(data) == "string" then
+      data = safe_decode(data)
+    end
     if type(data) ~= "table" then
       return nil, nil
     end
