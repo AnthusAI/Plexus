@@ -6,6 +6,7 @@ import { Crown, PanelLeftOpen, PanelLeftClose, Star } from 'lucide-react'
 import { LayoutGroup, motion, useReducedMotion } from 'framer-motion'
 import { Timestamp } from "@/components/ui/timestamp"
 import { ScoreVersion } from "./score-component"
+import { TaskAuthorIndicator } from "@/components/ui/task-author-indicator"
 
 interface ScoreSidebarVersionHistoryProps {
   versions?: ScoreVersion[]
@@ -118,6 +119,7 @@ export const ScoreSidebarVersionHistory: React.FC<ScoreSidebarVersionHistoryProp
             )}
             <Timestamp time={version.createdAt} variant="relative" className="text-xs" />
           </div>
+          <TaskAuthorIndicator createdByUserId={version.createdByUserId} className="shrink-0" />
           {version.id === championVersionId ? (
             <span
               aria-label="Champion version"

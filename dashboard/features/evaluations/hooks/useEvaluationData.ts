@@ -1098,6 +1098,7 @@ export function useEvaluationData({
                     ...transformedEvaluation,
                     // Preserve prior parameter payload when a partial update omits it.
                     parameters: transformedEvaluation.parameters ?? e.parameters,
+                    createdByUserId: transformedEvaluation.createdByUserId ?? e.createdByUserId,
                     scoreResults: e.scoreResults || transformedEvaluation.scoreResults,
                     scorecard: transformedEvaluation.scorecard || e.scorecard,
                     score: transformedEvaluation.score || e.score,

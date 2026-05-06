@@ -242,6 +242,7 @@ const schema = a.schema({
             parameters: a.json(),
             metrics: a.json(),
             metricsExplanation: a.string(),
+            metadata: a.json(),
             inferences: a.integer(),
             accuracy: a.float().required(),
             cost: a.float(),
@@ -633,6 +634,7 @@ const schema = a.schema({
             createdAt: a.datetime().required(),
             parameters: a.json(), // Parameters used for this specific run
             output: a.string(), // Generated report output (original markdown template)
+            metadata: a.json(),
             accountId: a.string().required(),
             account: a.belongsTo('Account', 'accountId'),
             reportConfigurationId: a.string(),

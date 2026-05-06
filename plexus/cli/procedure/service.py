@@ -30,6 +30,7 @@ from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
 from plexus.cli.scorecard.scorecards import resolve_account_identifier
 from plexus.cli.procedure.parameter_parser import ProcedureParameterParser
 from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id, get_builtin_procedure_yaml
+from plexus.attribution.actor_context import resolve_actor_context, set_runtime_actor_context
 
 logger = logging.getLogger(__name__)
 
@@ -502,7 +503,13 @@ class ProcedureService:
             # FIRST-B: Download code.tac from S3 if key is stored in metadata
             try:
                 import json as _json
-                meta = _json.loads(procedure.metadata or "{}") or {}
+                metadata_value = getattr(procedure, "metadata", None)
+                if isinstance(metadata_value, str):
+                    meta = _json.loads(metadata_value or "{}") or {}
+                elif isinstance(metadata_value, dict):
+                    meta = metadata_value
+                else:
+                    meta = {}
                 s3_key = meta.get("code_s3_key")
                 if s3_key:
                     from plexus.reports.s3_utils import download_procedure_code
@@ -848,13 +855,23 @@ class ProcedureService:
                         scorecard_id = procedure_info.procedure.scorecardId if procedure_info else None
                         score_id = procedure_info.procedure.scoreId if procedure_info else None
 
+                        procedure_name = config.get('name') if isinstance(config, dict) else None
+                        procedure_key = config.get('key') if isinstance(config, dict) else None
+                        normalized_procedure_name = str(procedure_name or '').strip().lower()
+
                         # Build context with procedure info
                         context = {
                             'procedure_id': procedure_id,
+                            'procedure_name': procedure_name,
+                            'procedure_key': procedure_key,
                             'scorecard_name': procedure_info.scorecard_name if procedure_info else None,
                             'score_name': procedure_info.score_name if procedure_info else None,
                             'scorecard_id': scorecard_id,
                             'score_id': score_id,
+                            'is_optimizer_procedure': (
+                                'optimizer' in normalized_procedure_name
+                                or 'optimizer' in procedure_id.lower()
+                            ),
                         }
                         if account_id:
                             context['account_id'] = account_id
@@ -899,14 +916,20 @@ class ProcedureService:
                                 experiment_context=context
                             )
 
-                        result = await execute_procedure(
-                            procedure_id=procedure_id,
-                            procedure_code=yaml_config,
-                            client=self.client,
-                            mcp_server=mcp_server,
-                            context=context,
-                            **options
+                        client_context = getattr(self.client, "context", None)
+                        actor_context = resolve_actor_context(
+                            runtime_override=client_context,
+                            explicit_source="agent",
                         )
+                        with set_runtime_actor_context(actor_context):
+                            result = await execute_procedure(
+                                procedure_id=procedure_id,
+                                procedure_code=yaml_config,
+                                client=self.client,
+                                mcp_server=mcp_server,
+                                context=context,
+                                **options
+                            )
 
                         return result
 
@@ -1118,6 +1141,8 @@ class ProcedureService:
                 number_of_samples=n_samples,
                 sampling_method="random",
                 procedure_id=procedure_id,
+                client=self.client,
+                account_id=account_id,
                 fresh=True,
                 use_yaml=True  # Use local YAML configuration
             )

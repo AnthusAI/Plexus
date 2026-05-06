@@ -51,6 +51,12 @@ jest.mock('@/lib/monaco-theme', () => ({
   configureYamlLanguage: jest.fn(),
 }))
 
+jest.mock('@/components/ui/task-author-indicator', () => ({
+  TaskAuthorIndicator: ({ createdByUserId }: { createdByUserId?: string | null }) => (
+    <div data-testid="task-author-indicator-mock">{createdByUserId || ''}</div>
+  ),
+}))
+
 describe('ProcedureTask optimizer auth flow', () => {
   const baseProcedure: any = {
     id: 'proc-1',
@@ -115,6 +121,21 @@ describe('ProcedureTask optimizer auth flow', () => {
 
     expect(screen.getByText('Pending...')).toBeInTheDocument()
     expect(screen.queryByText('Announced...')).not.toBeInTheDocument()
+  })
+
+  it('renders author slots in grid and detail headers when createdByUserId is present', () => {
+    const withAuthor = {
+      ...baseProcedure,
+      createdByUserId: 'user-1',
+    }
+
+    const { rerender } = render(<ProcedureTask variant="grid" procedure={withAuthor} />)
+    expect(screen.getByTestId('procedure-task-author-grid-slot')).toBeInTheDocument()
+    expect(screen.getByText('user-1')).toBeInTheDocument()
+
+    rerender(<ProcedureTask variant="detail" procedure={withAuthor} />)
+    expect(screen.getByTestId('procedure-task-author-detail-slot')).toBeInTheDocument()
+    expect(screen.getByText('user-1')).toBeInTheDocument()
   })
 
   it('renders grid dispatch, timestamp, and duration indicators once', async () => {
