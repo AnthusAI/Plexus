@@ -45,13 +45,16 @@ if (getResourceByShareTokenFunction) {
 
 // Enable streams on tables for metrics aggregation
 const taskTable = backend.data.resources.tables.Task;
-const taskCfnTable = taskTable.node.defaultChild as dynamodb.CfnTable;
-if (!taskCfnTable) {
-    throw new Error('TaskDispatcher requires access to the Task table CloudFormation resource.');
+const taskAmplifyTable = amplifyDynamoDbTables.Task;
+if (!taskAmplifyTable) {
+    throw new Error('TaskDispatcher requires access to the generated Task table resource.');
 }
-taskCfnTable.streamSpecification = {
+taskAmplifyTable.streamSpecification = {
     streamViewType: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES
 };
+if (!taskTable.tableStreamArn) {
+    throw new Error('TaskDispatcher requires the Task table stream ARN.');
+}
 
 const itemTable = backend.data.resources.tables.Item;
 const itemCfnTable = itemTable.node.defaultChild as dynamodb.CfnTable;
@@ -131,7 +134,7 @@ const taskDispatcherStack = new TaskDispatcherStack(
     'TaskDispatcher',
     {
         taskTable,
-        taskTableStreamArn: taskCfnTable.attrStreamArn,
+        taskTableStreamArn: taskTable.tableStreamArn,
         celeryAwsAccessKeyId: requireTaskDispatcherEnv('CELERY_AWS_ACCESS_KEY_ID'),
         celeryAwsSecretAccessKey: requireTaskDispatcherEnv('CELERY_AWS_SECRET_ACCESS_KEY'),
         celeryAwsRegion: requireTaskDispatcherEnv('CELERY_AWS_REGION_NAME'),
