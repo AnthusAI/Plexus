@@ -79,12 +79,12 @@ outputs:
 agents:
   observer:
     system_prompt: |
-      You are the Observe agent. Call plexus_scorecards_list exactly once and return.
+      You are the Observe agent. Call plexus_scorecard_info exactly once and return.
       Do not invent results.
     initial_message: |
-      Call plexus_scorecards_list with return_metadata=true.
+      Call plexus_scorecard_info with the provided identifier.
     tools:
-      - plexus_scorecards_list
+      - plexus_scorecard_info
 
   actor:
     system_prompt: |
@@ -279,6 +279,39 @@ code: |
     return wait_for_tool_call(agent, "done", max_iters, inject)
   end
 
+  local function try_find_existing_scorecard(identifier)
+    if not has_text(identifier) then
+      return nil, nil
+    end
+
+    Observer.reset()
+    local inject = "Call plexus_scorecard_info with scorecard_identifier=\"" .. tostring(identifier) .. "\" and return."
+    local observed = wait_for_tool_call(Observer, "plexus_scorecard_info", 3, inject)
+    if not observed then
+      return nil, "Observer failed to call plexus_scorecard_info"
+    end
+
+    local call = Tool.last_call("plexus_scorecard_info")
+    local data = safe_decode(call.result)
+    if type(data) ~= "table" then
+      return nil, nil
+    end
+    if data.success == false then
+      return nil, nil
+    end
+
+    if has_text(data.id) or has_text(data.scorecard_id) then
+      return {
+        id = data.id or data.scorecard_id,
+        name = data.name,
+        key = data.key,
+        externalId = data.externalId
+      }, nil
+    end
+
+    return nil, nil
+  end
+
   local function run(input)
     local params = input
     local dry_run = params.dry_run == true
@@ -315,18 +348,23 @@ code: |
     if not has_text(scorecard_description) then scorecard_description = "Created from ai-ready question export" end
 
     Stage.set("observe")
-    local observed = wait_for_tool_call(Observer, "plexus_scorecards_list", 3, "Call plexus_scorecards_list with return_metadata=true and limit=100.")
-    if not observed then
-      return {success = false, status = "error", message = "Observer failed to list scorecards"}
+    local existing, lookup_err = try_find_existing_scorecard(scorecard_key)
+    if lookup_err then
+      return {success = false, status = "error", message = lookup_err}
     end
-
-    local list_call = Tool.last_call("plexus_scorecards_list")
-    local list_data = safe_decode(list_call.result)
-    local items = (list_data and (list_data.items or list_data)) or {}
-    for _, sc in ipairs(items) do
-      if normalize(sc.name) == normalize(target_name) or normalize(sc.key) == normalize(scorecard_key) then
-        return {success = false, status = "exists", message = "Target scorecard already exists", scorecard_id = sc.id}
+    if existing == nil and normalize(scorecard_key) ~= normalize(target_name) then
+      existing, lookup_err = try_find_existing_scorecard(target_name)
+      if lookup_err then
+        return {success = false, status = "error", message = lookup_err}
       end
+    end
+    if existing ~= nil then
+      return {
+        success = false,
+        status = "exists",
+        message = "Target scorecard already exists",
+        scorecard_id = existing.id
+      }
     end
 
     Stage.set("plan")
