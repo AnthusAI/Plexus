@@ -9,6 +9,7 @@ def _load_module(monkeypatch):
     monkeypatch.setenv("CELERY_AWS_ACCESS_KEY_ID", "test")
     monkeypatch.setenv("CELERY_AWS_SECRET_ACCESS_KEY", "test")
     monkeypatch.setenv("CELERY_AWS_REGION_NAME", "us-east-1")
+    monkeypatch.setenv("CELERY_QUEUE_NAME", "plexus-celery-test")
     monkeypatch.setenv("CELERY_RESULT_BACKEND_TEMPLATE", "dynamodb://@")
 
     module_path = Path(__file__).with_name("index.py")
