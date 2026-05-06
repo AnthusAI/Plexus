@@ -842,6 +842,7 @@ class EmbeddedMCPServer:
                         trace_store=_et_trace_store,
                         handle_store=_et_handle_store,
                         budget=_et_budget,
+                        runtime_context=self.experiment_context,
                     )
 
                 logger.info("Registered execute_tactus in embedded MCP transport")
