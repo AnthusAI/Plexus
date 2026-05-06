@@ -1308,7 +1308,7 @@ class ScorecardHistory(BaseReportBlock):
             "Do not mention implementation internals such as YAML, prompt wiring, nodes, data classes, parent versions, or diff mechanics.\n"
             "Focus on rubric meaning, behavioral impact, and SME clarification questions.\n"
             "Use score-specific evidence from version notes, diffs, champion context, evaluation context, and SME question context.\n"
-            "Do not include version IDs in the narrative.\n"
+            "In the narrative, do not include version IDs.\n"
             "Under **Questions for SMEs / stakeholders**, include 2 to 5 concise policy questions.\n"
             "If no rubric wording changed for a score, state that explicitly under **Guideline / rubric changes**.\n"
             "Under **Rollout and evidence**, mention champion_coverage for that score and include evaluation evidence only if present.\n"
