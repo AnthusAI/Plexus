@@ -1,3 +1,4 @@
+import json
 from unittest.mock import Mock
 
 import pytest
@@ -919,3 +920,120 @@ def test_get_steering_messages_returns_flat_filtered_rows():
     variables = client.execute.call_args.args[1]
     assert variables["procedureId"] == "proc-1"
     assert variables["createdAt"] == {"gt": "2026-04-01T00:00:00.000Z"}
+
+
+@pytest.mark.asyncio
+async def test_start_session_sets_optimizer_name_on_create(monkeypatch):
+    client = Mock()
+    client.execute.side_effect = [
+        {"data": {"getProcedure": {"accountId": "acct-opt"}}},
+        {"data": {"getProcedure": {"status": "COMPLETED", "waitingOnMessageId": None}}},
+        {"data": {"listTaskByAccountIdAndUpdatedAt": {"items": [], "nextToken": None}}},
+        {"data": {"createChatSession": {"id": "session-opt", "status": "ACTIVE", "createdAt": "2026-05-04T00:00:00.000Z"}}},
+    ]
+    recorder = ProcedureChatRecorder(client, "proc-opt")
+    monkeypatch.setattr(recorder, "_ensure_optimizer_session_name", lambda *_args, **_kwargs: None)
+
+    session_id = await recorder.start_session({
+        "is_optimizer_procedure": True,
+        "scorecard_name": "Claims QA",
+        "score_name": "Prior Auth",
+    })
+
+    assert session_id == "session-opt"
+    create_call = client.execute.call_args_list[-1]
+    assert "mutation CreateChatSession" in create_call.args[0]
+    assert create_call.args[1]["input"]["name"] == "Optimization for Claims QA / Prior Auth"
+
+
+@pytest.mark.asyncio
+async def test_start_session_updates_existing_optimizer_session_name_when_blank(monkeypatch):
+    client = Mock()
+    client.execute.side_effect = [
+        {"data": {"getChatSession": {"id": "session-opt-existing", "name": ""}}},
+        {"data": {"updateChatSession": {"id": "session-opt-existing", "name": "Optimization for SC / Score"}}},
+    ]
+    recorder = ProcedureChatRecorder(client, "proc-opt")
+    monkeypatch.setattr(recorder, "_get_latest_sequence_number_for_session", lambda _session_id: 3)
+
+    session_id = await recorder.start_session({
+        "account_id": "acct-opt",
+        "chat_session_id": "session-opt-existing",
+        "is_optimizer_procedure": True,
+        "scorecard_name": "SC",
+        "score_name": "Score",
+    })
+
+    assert session_id == "session-opt-existing"
+    update_call = client.execute.call_args_list[-1]
+    assert "mutation UpdateChatSessionName" in update_call.args[0]
+    assert update_call.args[1]["input"] == {
+        "id": "session-opt-existing",
+        "name": "Optimization for SC / Score",
+    }
+
+
+@pytest.mark.asyncio
+async def test_record_message_injects_optimizer_bot_attribution_for_runtime_user_chat():
+    client = Mock()
+    client.execute.return_value = {
+        "createChatMessage": {
+            "id": "msg-opt-1",
+            "sequenceNumber": 1,
+            "createdAt": "2026-05-04T00:00:00.000Z",
+        }
+    }
+    recorder = ProcedureChatRecorder(client, "proc-opt")
+    recorder.session_id = "session-opt"
+    recorder.account_id = "acct-opt"
+    recorder._session_context = {"is_optimizer_procedure": True}
+
+    message_id = await recorder.record_message(
+        role="USER",
+        content="Cycle report",
+        message_type="MESSAGE",
+    )
+
+    assert message_id == "msg-opt-1"
+    metadata_payload = json.loads(client.execute.call_args.args[1]["input"]["metadata"])
+    assert metadata_payload["attribution"] == {
+        "actorType": "bot",
+        "actorKey": "optimizer-agent",
+        "displayName": "Optimizer Agent",
+        "avatarKey": "optimizer",
+    }
+
+
+@pytest.mark.asyncio
+async def test_record_message_preserves_existing_user_attribution_metadata():
+    client = Mock()
+    client.execute.return_value = {
+        "createChatMessage": {
+            "id": "msg-opt-2",
+            "sequenceNumber": 1,
+            "createdAt": "2026-05-04T00:00:00.000Z",
+        }
+    }
+    recorder = ProcedureChatRecorder(client, "proc-opt")
+    recorder.session_id = "session-opt"
+    recorder.account_id = "acct-opt"
+    recorder._session_context = {"is_optimizer_procedure": True}
+
+    message_id = await recorder.record_message(
+        role="USER",
+        content="Operator note",
+        message_type="MESSAGE",
+        metadata={
+            "attribution": {
+                "actorType": "user",
+                "userId": "user-123",
+            }
+        },
+    )
+
+    assert message_id == "msg-opt-2"
+    metadata_payload = json.loads(client.execute.call_args.args[1]["input"]["metadata"])
+    assert metadata_payload["attribution"] == {
+        "actorType": "user",
+        "userId": "user-123",
+    }

@@ -17,6 +17,7 @@ from .acceptance_rate import AcceptanceRate
 from .acceptance_rate_timeline import AcceptanceRateTimeline
 from .recent_feedback import RecentFeedback
 from .score_champion_version_timeline import ScoreChampionVersionTimeline
+from .scorecard_history import ScorecardHistory
 
 __all__ = [
     "BaseReportBlock",
@@ -36,4 +37,5 @@ __all__ = [
     "AcceptanceRateTimeline",
     "RecentFeedback",
     "ScoreChampionVersionTimeline",
+    "ScorecardHistory",
 ]

@@ -200,6 +200,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
                   isDatasetClassDistributionBalanced
                   predictedClassDistribution
                   isPredictedClassDistributionBalanced
+                  createdByUserId
                   universalCode
                   taskId
                   task {
@@ -308,7 +309,9 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
 
             const finalEvaluation = {
               ...evaluation,
-              task: evaluation.task || existingEvaluation?.task
+              task: evaluation.task || existingEvaluation?.task,
+              createdByUserId: evaluation.createdByUserId ?? existingEvaluation?.createdByUserId,
+              parameters: evaluation.parameters ?? existingEvaluation?.parameters,
             } as Schema['Evaluation']['type'];
 
             if (action === 'create') {
@@ -364,6 +367,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
               isDatasetClassDistributionBalanced
               predictedClassDistribution
               isPredictedClassDistributionBalanced
+              createdByUserId
               taskId
               task {
                 id
@@ -462,6 +466,7 @@ export function observeRecentEvaluations(limit: number = 100): Observable<{ item
               isDatasetClassDistributionBalanced
               predictedClassDistribution
               isPredictedClassDistributionBalanced
+              createdByUserId
               taskId
               task {
                 id

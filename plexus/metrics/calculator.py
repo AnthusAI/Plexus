@@ -15,7 +15,7 @@ import sqlite3
 import atexit
 
 # Load environment variables from .env file
-load_dotenv('.env', override=True)
+load_dotenv('.env', override=False)
 
 logger = logging.getLogger(__name__)
 

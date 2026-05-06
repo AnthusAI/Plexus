@@ -32,6 +32,21 @@ from .task_output_storage import (
 # Load environment variables from .env file
 load_dotenv()
 
+
+def _should_append_task_id_arg(args: List[str]) -> bool:
+    """Return whether a CLI command accepts the generic --task-id option."""
+    if len(args) >= 2 and args[0] == "procedure" and args[1] == "run":
+        return False
+    return True
+
+
+def _restore_env_value(name: str, previous_value: Optional[str]) -> None:
+    if previous_value is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = previous_value
+
+
 def upload_file_to_s3(bucket_name: str, key: str, content: str, content_type: str = 'text/plain') -> bool:
     """
     Upload a file to S3.
@@ -184,8 +199,9 @@ def register_tasks(app):
             # Parse the command string safely
             args = shlex.split(command_string)
             
-            # Add task_id to args if we have one
-            if task_id and '--task-id' not in args:
+            # Add task_id to args for commands that support it. Procedure runs
+            # receive it through PLEXUS_DISPATCH_TASK_ID instead.
+            if task_id and '--task-id' not in args and _should_append_task_id_arg(args):
                 args.extend(['--task-id', task_id])
             
             # Save the original argv
@@ -297,6 +313,10 @@ def register_tasks(app):
                 set_output_manager(output_manager)
                 logging.info(f"Set up output manager for task {task_id} with format: {format_type}")
             
+            previous_dispatch_task_id = os.environ.get("PLEXUS_DISPATCH_TASK_ID")
+            if task_id:
+                os.environ["PLEXUS_DISPATCH_TASK_ID"] = task_id
+
             try:
                 # Replace argv with our command
                 sys.argv = ['plexus'] + args
@@ -628,6 +648,7 @@ task_info:
                 return result
                 
             finally:
+                _restore_env_value("PLEXUS_DISPATCH_TASK_ID", previous_dispatch_task_id)
                 # Restore the original argv
                 sys.argv = original_argv
                 # Only clear callback if not already cleared due to failure

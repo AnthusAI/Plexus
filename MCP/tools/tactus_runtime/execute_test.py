@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from types import SimpleNamespace
 from typing import Any
 
@@ -260,7 +262,7 @@ def test_default_rubric_memory_recent_entries_runs_provider_awaitable(monkeypatc
 
     monkeypatch.setattr(
         "plexus.cli.shared.client_utils.create_client",
-        lambda: object(),
+        object,
     )
     monkeypatch.setattr(
         execute,
@@ -306,7 +308,7 @@ def test_default_rubric_memory_evidence_pack_runs_provider_awaitable(monkeypatch
 
     monkeypatch.setattr(
         "plexus.cli.shared.client_utils.create_client",
-        lambda: object(),
+        object,
     )
     monkeypatch.setattr(
         execute,
@@ -1723,6 +1725,36 @@ async def test_execute_tactus_writes_trace_for_runtime_error(monkeypatch) -> Non
     assert record["error"]["code"] == "runtime_error"
 
 
+@pytest.mark.asyncio
+async def test_execute_tactus_sets_runtime_actor_context_from_request_context(monkeypatch) -> None:
+    observed: dict[str, str] = {}
+
+    def fake_run_tactus_sync(tactus, mcp, *, trace_id, trace_store, budget=None, **kwargs):
+        actor = execute.resolve_actor_context(explicit_source="cli")
+        observed["user_id"] = actor.user_id or ""
+        observed["source"] = actor.actor_source
+        return {
+            "ok": True,
+            "value": {"ok": True},
+            "error": None,
+            "cost": {"usd": 0.0},
+            "trace_id": trace_id,
+            "partial": False,
+            "api_calls": [],
+        }
+
+    class _Ctx:
+        def __init__(self) -> None:
+            self.request_context = {"claims": {"sub": "user-ctx-123"}}
+
+    monkeypatch.setattr(execute, "_run_tactus_sync", fake_run_tactus_sync)
+    result = await execute._execute_tactus_tool("return 1", FastMCP("test"), ctx=_Ctx())
+
+    assert result["ok"] is True
+    assert observed["user_id"] == "user-ctx-123"
+    assert observed["source"] == "execute_tactus"
+
+
 def test_file_trace_store_writes_json_file_per_trace(tmp_path) -> None:
     store = execute.FileTactusTraceStore(str(tmp_path / "traces"))
     record = {
@@ -2113,18 +2145,26 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     monkeypatch.setattr("subprocess.Popen", fake_popen)
     monkeypatch.setattr("time.sleep", lambda _: None)
 
-    result = execute._default_evaluation_runner(
+    with execute.set_runtime_actor_context(
         {
-            "evaluation_type": "feedback",
-            "scorecard_name": "Compliance",
-            "score_name": "Tone",
-            "max_feedback_items": 25,
-            "days": 30,
-            "procedure_id": "proc-123",
-            "budget": _child_budget(),
-        },
-        FakeMCP(),
-    )
+            "actor_user_id": "user-ctx-123",
+            "actor_type": "agent",
+            "actor_key": "execute_tactus",
+            "actor_source": "execute_tactus",
+        }
+    ):
+        result = execute._default_evaluation_runner(
+            {
+                "evaluation_type": "feedback",
+                "scorecard_name": "Compliance",
+                "score_name": "Tone",
+                "max_feedback_items": 25,
+                "days": 30,
+                "procedure_id": "proc-123",
+                "budget": _child_budget(),
+            },
+            FakeMCP(),
+        )
 
     assert result["status"] == "dispatched"
     assert result["process_id"] == 4242
@@ -2152,6 +2192,7 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     ]
     assert captured["kwargs"]["start_new_session"] is True
     assert json.loads(captured["kwargs"]["env"]["PLEXUS_CHILD_BUDGET"]) == _child_budget()
+    assert json.loads(captured["kwargs"]["env"]["PLEXUS_ACTOR_CONTEXT_JSON"])["actor_user_id"] == "user-ctx-123"
     assert result["child_budget"] == _child_budget()
 
 
@@ -2239,6 +2280,45 @@ def test_handle_peek_marks_no_id_exited_process_failed(monkeypatch) -> None:
     assert snapshot["error"] == (
         "Evaluation subprocess exited before emitting an evaluation ID."
     )
+
+
+def test_handle_peek_marks_no_id_successful_process_failed_with_logs(
+    monkeypatch, tmp_path
+) -> None:
+    stdout_log = tmp_path / "eval.out.log"
+    stderr_log = tmp_path / "eval.err.log"
+    stdout_log.write_text("created task but no evaluation id\n", encoding="utf-8")
+    stderr_log.write_text("warning: id file was not written\n", encoding="utf-8")
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={
+            "process_id": 4242,
+            "stdout_log": str(stdout_log),
+            "stderr_log": str(stderr_log),
+        },
+    )
+
+    monkeypatch.setattr(execute.os, "waitpid", lambda pid, options: (pid, 0))
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "failed"
+    assert snapshot["process_status"] == "exited"
+    assert snapshot["process_exit_code"] == 0
+    assert snapshot["error"] == (
+        "Evaluation subprocess exited before emitting an evaluation ID."
+    )
+    assert snapshot["stdout_tail"] == "created task but no evaluation id"
+    assert snapshot["stderr_tail"] == "warning: id file was not written"
 
 
 def test_handle_peek_marks_running_evaluation_exited_process_failed(monkeypatch) -> None:
@@ -2608,6 +2688,184 @@ def test_score_champion_version_timeline_convenience_maps_report_block() -> None
     assert module.api_calls == ["plexus.report.run"]
 
 
+def test_default_report_runner_uses_remote_dispatch_by_default(monkeypatch) -> None:
+    captured: dict = {}
+    client = object()
+
+    def fake_run_block_cached(**kwargs):
+        captured.update(kwargs)
+        return ({"status": "dispatched", "cache_key": "report-cache", "task_id": "task-1"}, None, False)
+
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr("plexus.reports.service.run_block_cached", fake_run_block_cached)
+    monkeypatch.delenv("PLEXUS_DISPATCH_MODE", raising=False)
+    monkeypatch.setattr(
+        "subprocess.Popen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("local subprocess should not run")),
+    )
+
+    budget = {"usd": 1.0, "wallclock_seconds": 900, "depth": 1, "tool_calls": 3}
+    result = execute._default_report_runner(
+        {
+            "block_class": "FeedbackContradictions",
+            "cache_key": "report-cache",
+            "ttl_hours": 24,
+            "budget": budget,
+            "block_config": {
+                "scorecard": "Card",
+                "score": "Score",
+                "days": 30,
+                "mode": "contradictions",
+                "max_feedback_items": 200,
+                "num_topics": 8,
+                "include_rubric_memory": True,
+                "score_version_id": "version-1",
+            },
+        }
+    )
+
+    assert result == {
+        "status": "dispatched",
+        "cache_key": "report-cache",
+        "task_id": "task-1",
+        "block_class": "FeedbackContradictions",
+        "child_budget": budget,
+    }
+    assert captured == {
+        "block_class": "FeedbackContradictions",
+        "block_config": {
+            "scorecard": "Card",
+            "score": "Score",
+            "days": 30,
+            "mode": "contradictions",
+            "max_feedback_items": 200,
+            "num_topics": 8,
+            "include_rubric_memory": True,
+            "score_version_id": "version-1",
+        },
+        "account_id": "acct-1",
+        "client": client,
+        "cache_key": "report-cache",
+        "ttl_hours": 24,
+        "fresh": False,
+        "background": True,
+        "child_budget": budget,
+    }
+
+
+def test_default_report_runner_uses_remote_dispatch_for_celery_mode(monkeypatch) -> None:
+    calls: list[dict] = []
+    client = object()
+
+    def fake_run_block_cached(**kwargs):
+        calls.append(kwargs)
+        return ({"status": "dispatched", "cache_key": "report-cache", "task_id": "task-1"}, None, False)
+
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "celery")
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr("plexus.reports.service.run_block_cached", fake_run_block_cached)
+
+    result = execute._default_report_runner(
+        {
+            "block_class": "AcceptanceRate",
+            "cache_key": "report-cache",
+            "block_config": {"scorecard": "Card", "score": "Score", "days": 7},
+        }
+    )
+
+    assert result["status"] == "dispatched"
+    assert result["block_class"] == "AcceptanceRate"
+    assert calls[0]["background"] is True
+
+
+def test_default_report_runner_dispatches_report_config_remotely(monkeypatch) -> None:
+    created: dict = {}
+    client = object()
+
+    def fake_create(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace(id="task-1")
+
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr("plexus.dashboard.api.models.task.Task.create", fake_create)
+    monkeypatch.delenv("PLEXUS_DISPATCH_MODE", raising=False)
+    monkeypatch.setattr(
+        "subprocess.Popen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("local subprocess should not run")),
+    )
+
+    result = execute._default_report_runner(
+        {
+            "configuration_id": "config-1",
+            "parameters": {"days": 7, "score": "Project Intent AI"},
+        }
+    )
+
+    assert result == {
+        "status": "dispatched",
+        "configuration_id": "config-1",
+        "parameters": {"days": 7, "score": "Project Intent AI"},
+        "task_id": "task-1",
+    }
+    assert created["client"] is client
+    assert created["accountId"] == "acct-1"
+    assert created["type"] == "Report"
+    assert created["target"] == "report/configuration"
+    assert created["command"] == "report run --config config-1 days=7 'score=Project Intent AI'"
+    assert created["dispatchStatus"] == "PENDING"
+    assert created["status"] == "PENDING"
+    assert json.loads(created["metadata"]) == {
+        "report_configuration_id": "config-1",
+        "report_parameters": {"days": 7, "score": "Project Intent AI"},
+        "account_id": "acct-1",
+        "trigger": "mcp_remote",
+    }
+
+
+def test_default_report_runner_rejects_invalid_dispatch_mode(monkeypatch) -> None:
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "invalid")
+
+    with pytest.raises(ValueError, match="Invalid PLEXUS_DISPATCH_MODE"):
+        execute._default_report_runner({"block_class": "AcceptanceRate"})
+
+
+def test_runtime_env_dispatch_mode_overrides_dotenv_default() -> None:
+    # Reproduce the historical regression: importing execute used to let .env
+    # overwrite an explicitly set PLEXUS_DISPATCH_MODE.
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    script = (
+        "import os\n"
+        "os.environ['PLEXUS_DISPATCH_MODE'] = 'celery'\n"
+        "from MCP.tools.tactus_runtime import execute\n"
+        "print(execute._resolve_report_dispatch_mode())\n"
+    )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{repo_root}{os.pathsep}{env.get('PYTHONPATH', '')}"
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=repo_root,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "celery"
+
+
 def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -> None:
     captured: dict = {}
 
@@ -2645,20 +2903,44 @@ def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -
         "plexus.cli.report.utils.resolve_account_id_for_command",
         lambda _client, _account: "acct-1",
     )
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "local")
     monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
     monkeypatch.setattr("subprocess.Popen", fake_popen)
 
-    result = execute._default_report_runner(
+    with execute.set_runtime_actor_context(
         {
-            "block_class": "FeedbackContradictions",
-            "cache_key": "report-cache",
-            "block_config": {"scorecard": "Card", "score": "Score", "days": 30},
-            "fresh": True,
+            "actor_user_id": "user-ctx-123",
+            "actor_type": "agent",
+            "actor_key": "execute_tactus",
+            "actor_source": "execute_tactus",
         }
-    )
+    ):
+        result = execute._default_report_runner(
+            {
+                "block_class": "FeedbackContradictions",
+                "cache_key": "report-cache",
+                "ttl_hours": 24,
+                "block_config": {
+                    "scorecard": "Card",
+                    "score": "Score",
+                    "days": 30,
+                    "mode": "contradictions",
+                    "max_feedback_items": 200,
+                    "num_topics": 8,
+                    "include_rubric_memory": True,
+                    "score_version_id": "version-1",
+                },
+                "fresh": True,
+            }
+        )
 
     assert result == {"status": "running", "block_class": "FeedbackContradictions", "pid": 12345}
-    assert captured["cmd"][-7:] == [
+    assert captured["cmd"] == [
+        captured["cmd"][0],
+        "-m",
+        "plexus",
+        "feedback",
+        "report",
         "contradictions",
         "--scorecard",
         "Card",
@@ -2666,10 +2948,24 @@ def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -
         "Score",
         "--days",
         "30",
+        "--cache-key",
+        "report-cache",
+        "--ttl-hours",
+        "24",
+        "--score-version-id",
+        "version-1",
+        "--mode",
+        "contradictions",
+        "--max-feedback-items",
+        "200",
+        "--num-topics",
+        "8",
+        "--include-rubric-memory",
         "--fresh",
-    ][-7:]
+    ]
     assert captured["kwargs"]["stdout"] is not None
     assert captured["kwargs"]["stderr"] is not None
+    assert json.loads(captured["kwargs"]["env"]["PLEXUS_ACTOR_CONTEXT_JSON"])["actor_user_id"] == "user-ctx-123"
 
 
 def test_default_report_runner_launches_score_champion_timeline_command(monkeypatch) -> None:
@@ -2687,6 +2983,7 @@ def test_default_report_runner_launches_score_champion_timeline_command(monkeypa
         "plexus.cli.report.utils.resolve_account_id_for_command",
         lambda _client, _account: "acct-1",
     )
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "local")
     monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
     monkeypatch.setattr("subprocess.Popen", fake_popen)
 
@@ -2844,6 +3141,127 @@ async def test_execute_tactus_report_run_async_returns_handle() -> None:
     assert result["value"]["id"] == "handle-1"
     assert result["api_calls"] == ["plexus.report.run"]
     assert result["cost"]["tool_calls"] == 3
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_report_run_async_remote_dispatch_when_mode_celery(monkeypatch) -> None:
+    monkeypatch.setattr(execute, "_resolve_report_dispatch_mode", lambda: "celery")
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+
+    captured: dict[str, Any] = {}
+
+    def fake_run_block_cached(**kwargs):
+        captured.update(kwargs)
+        return (
+            {"status": "dispatched", "cache_key": "report-cache", "task_id": "task-1"},
+            None,
+            False,
+        )
+
+    monkeypatch.setattr("plexus.reports.service.run_block_cached", fake_run_block_cached)
+
+    handles = _MemoryHandleStore()
+    mcp = FastMCP("test-execute-tactus-report-run-celery-dispatch")
+    result = await execute._execute_tactus_tool(
+        (
+            'report{ block_class = "FeedbackContradictions", cache_key = "report-cache", '
+            'ttl_hours = 24, async = true, '
+            'budget = { usd = 0.01, wallclock_seconds = 10, depth = 1, tool_calls = 2 }, '
+            'block_config = { scorecard = "Card", score = "Score", days = 90, '
+            'mode = "contradictions", max_feedback_items = 200, num_topics = 8, '
+            'include_rubric_memory = true, score_version_id = "version-1" } }'
+        ),
+        mcp,
+        handle_store=handles,
+    )
+
+    assert result["ok"] is True
+    assert result["value"]["kind"] == "report"
+    assert handles.created[0]["dispatch_result"]["task_id"] == "task-1"
+    assert captured["background"] is True
+    assert captured["cache_key"] == "report-cache"
+    assert captured["ttl_hours"] == 24
+    assert captured["block_config"]["mode"] == "contradictions"
+    assert captured["child_budget"] == {
+        "usd": 0.01,
+        "wallclock_seconds": 10,
+        "depth": 1,
+        "tool_calls": 2,
+    }
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_report_run_async_local_dispatch_when_mode_local(monkeypatch) -> None:
+    monkeypatch.setattr(execute, "_resolve_report_dispatch_mode", lambda: "local")
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr(
+        "plexus.reports.service.run_block_cached",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("remote dispatcher should not run in local mode")
+        ),
+    )
+
+    class FakeProcess:
+        pid = 9999
+
+    captured_cmd: dict[str, Any] = {}
+
+    def fake_popen(cmd, **kwargs):
+        captured_cmd["cmd"] = cmd
+        captured_cmd["kwargs"] = kwargs
+        return FakeProcess()
+
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+
+    handles = _MemoryHandleStore()
+    mcp = FastMCP("test-execute-tactus-report-run-local-dispatch")
+    result = await execute._execute_tactus_tool(
+        (
+            'report{ block_class = "FeedbackContradictions", async = true, '
+            'budget = { usd = 0.01, wallclock_seconds = 10, depth = 1, tool_calls = 2 }, '
+            'block_config = { scorecard = "Card", score = "Score", days = 90, mode = "contradictions" } }'
+        ),
+        mcp,
+        handle_store=handles,
+    )
+
+    assert result["ok"] is True
+    assert result["value"]["kind"] == "report"
+    assert handles.created[0]["dispatch_result"]["status"] == "running"
+    assert handles.created[0]["dispatch_result"]["pid"] == 9999
+    assert "feedback" in captured_cmd["cmd"]
+    assert "contradictions" in captured_cmd["cmd"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_report_run_async_invalid_dispatch_mode_returns_error(monkeypatch) -> None:
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "invalid-mode")
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+
+    mcp = FastMCP("test-execute-tactus-report-run-invalid-dispatch")
+    result = await execute._execute_tactus_tool(
+        (
+            'report{ block_class = "AcceptanceRate", async = true, '
+            'budget = { usd = 0.01, wallclock_seconds = 10, depth = 1, tool_calls = 2 }, '
+            'block_config = { scorecard = "Card", score = "Score", days = 30 } }'
+        ),
+        mcp,
+    )
+
+    assert result["ok"] is False
+    assert "Invalid PLEXUS_DISPATCH_MODE" in result["error"]["message"]
 
 
 @pytest.mark.asyncio
