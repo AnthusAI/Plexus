@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: plexus
+      POSTGRES_PASSWORD: plexus
+      POSTGRES_DB: plexus_proxy
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plexus -d plexus_proxy"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  proxy:
+    build:
+      context: ../..
+      dockerfile: services/private-graphql-proxy/Dockerfile
+    environment:
+      PLEXUS_PROXY_DATABASE_URL: postgresql://plexus:plexus@postgres:5432/plexus_proxy
+      PLEXUS_PROXY_API_KEY: ${PLEXUS_PROXY_API_KEY:-local-smoke-key}
+      PLEXUS_PROXY_UPSTREAM_API_URL: ${PLEXUS_PROXY_UPSTREAM_API_URL:-}
+      PLEXUS_PROXY_UPSTREAM_API_KEY: ${PLEXUS_PROXY_UPSTREAM_API_KEY:-}
+      PLEXUS_PROXY_CACHE_TTL_SECONDS: ${PLEXUS_PROXY_CACHE_TTL_SECONDS:-900}
+      PLEXUS_PROXY_CACHE_STALE_SECONDS: ${PLEXUS_PROXY_CACHE_STALE_SECONDS:-86400}
+      PLEXUS_PROXY_ENABLE_DEBUG: "true"
+    ports:
+      - "18080:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  smoke-tests:
+    image: python:3.12-slim
+    working_dir: /workspace
+    environment:
+      PYTHONPATH: /workspace:/workspace/services/private-graphql-proxy
+      PLEXUS_API_URL: http://proxy:8000/graphql
+      PLEXUS_API_KEY: ${PLEXUS_PROXY_API_KEY:-local-smoke-key}
+      PLEXUS_PROXY_SMOKE_ACCOUNT_ID: ${PLEXUS_PROXY_SMOKE_ACCOUNT_ID:-}
+      PLEXUS_PROXY_SMOKE_SCORECARD_ID: ${PLEXUS_PROXY_SMOKE_SCORECARD_ID:-}
+      PLEXUS_PROXY_SMOKE_SCORE_ID: ${PLEXUS_PROXY_SMOKE_SCORE_ID:-}
+      PLEXUS_PROXY_SMOKE_SCORE_VERSION_ID: ${PLEXUS_PROXY_SMOKE_SCORE_VERSION_ID:-}
+      PLEXUS_PROXY_SMOKE_EVALUATION_ID: ${PLEXUS_PROXY_SMOKE_EVALUATION_ID:-}
+    volumes:
+      - ../..:/workspace
+    command: >
+      sh -c "pip install --no-cache-dir -r services/private-graphql-proxy/requirements.txt &&
+             pytest -o addopts='' -m integration services/private-graphql-proxy/tests -q"
+    depends_on:
+      proxy:
+        condition: service_healthy
