@@ -22,7 +22,7 @@ try:
     
     for env_path in env_paths:
         if os.path.exists(env_path):
-            dotenv.load_dotenv(env_path, override=True)
+            dotenv.load_dotenv(env_path, override=False)
             break
 except ImportError:
     pass  # dotenv not available, environment variables must be set externally
@@ -1735,4 +1735,4 @@ You are writing copy for a Markdown document that already has an H1 at the top, 
             self._log(f"Traceback: {traceback.format_exc()}", level="ERROR")
             return None
 
-    # Remove custom _log method - now inherited from BaseReportBlock with unified logging 
+    # Remove custom _log method - now inherited from BaseReportBlock with unified logging

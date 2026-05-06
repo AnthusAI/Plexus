@@ -130,11 +130,11 @@ const taskDispatcherStack = new TaskDispatcherStack(
     'TaskDispatcher',
     {
         taskTable,
-        // These will be set in the Lambda function's environment variables after deployment
-        celeryAwsAccessKeyId: process.env.CELERY_AWS_ACCESS_KEY_ID || 'WILL_BE_SET_AFTER_DEPLOYMENT',
-        celeryAwsSecretAccessKey: process.env.CELERY_AWS_SECRET_ACCESS_KEY || 'WILL_BE_SET_AFTER_DEPLOYMENT',
-        celeryAwsRegion: process.env.CELERY_AWS_REGION_NAME || 'us-east-1', // Default to us-east-1 if not specified
-        celeryResultBackendTemplate: process.env.CELERY_RESULT_BACKEND_TEMPLATE || 'WILL_BE_SET_AFTER_DEPLOYMENT'
+        celeryAwsAccessKeyId: requireTaskDispatcherEnv('CELERY_AWS_ACCESS_KEY_ID'),
+        celeryAwsSecretAccessKey: requireTaskDispatcherEnv('CELERY_AWS_SECRET_ACCESS_KEY'),
+        celeryAwsRegion: requireTaskDispatcherEnv('CELERY_AWS_REGION_NAME'),
+        celeryQueueName: requireTaskDispatcherEnv('CELERY_QUEUE_NAME'),
+        celeryResultBackendTemplate: requireTaskDispatcherEnv('CELERY_RESULT_BACKEND_TEMPLATE')
     }
 );
 
@@ -206,6 +206,15 @@ function normalizeForResourceName(value: string): string {
         .replace(/-+/g, '-')
         .replace(/^-|-$/g, '');
     return normalized || 'development';
+}
+
+function requireTaskDispatcherEnv(name: string): string {
+    const placeholder = 'WILL_BE_SET_AFTER_DEPLOYMENT';
+    const value = (process.env[name] || '').trim();
+    if (!value || value === placeholder) {
+        throw new Error(`TaskDispatcher requires ${name}. Set it in the Amplify branch environment before deployment.`);
+    }
+    return value;
 }
 
 const environmentName = normalizeForResourceName(resolveEnvironmentName());
