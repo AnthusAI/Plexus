@@ -1,5 +1,5 @@
 name: Create Scorecard From Question Export
-version: 1.0.1
+version: 1.0.2
 class: Tactus
 description: "Create a scorecard and one score per question from ai-ready JSON export."
 
@@ -79,6 +79,15 @@ outputs:
   plan:
     type: object
     required: false
+
+agents:
+  runtime_guard:
+    system_prompt: |
+      Runtime compatibility agent. Do not act unless explicitly called.
+    initial_message: |
+      Stand by.
+    tools:
+      - plexus
 
 stages:
   - observe
