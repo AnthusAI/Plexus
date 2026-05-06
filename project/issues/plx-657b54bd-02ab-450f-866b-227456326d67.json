@@ -1,0 +1,31 @@
+{
+  "id": "plx-657b54bd-02ab-450f-866b-227456326d67",
+  "title": "Fix scorecard_from_question_export write path to use supported scorecard/score tool calls",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7895ccdc-5347-423d-a961-0b5ce8a8ccf2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5a275b70-2c7c-4e91-9b51-1887625b7441",
+      "author": "derek",
+      "text": "Implementing runtime and procedure fixes for real-run stability: (1) add execute_tactus support for plexus.scorecards.create and plexus.score.create, (2) replace actor-driven act stage in scorecard_from_question_export with deterministic Lua tool calls, (3) validate with procedure loader tests and a dry-run/real-run smoke path.",
+      "created_at": "2026-05-06T22:53:48.771414945Z"
+    },
+    {
+      "id": "b43cff2a-b965-4926-836e-2f39c49b28f8",
+      "author": "derek",
+      "text": "Reworked scorecard_from_question_export to remove actor execution in act stage and route all scorecard/score writes through execute_tactus (The One Tool path). Added deterministic call_plexus_api helper using execute_tactus envelope parsing, explicit error surfacing, and stage progress updates per score. Also removed obsolete agent loop helpers and bumped procedure version to 1.0.1. Validation: pytest plexus/cli/procedure/test_service_yaml_loader.py -q passed.",
+      "created_at": "2026-05-06T23:26:29.731628219Z"
+    }
+  ],
+  "created_at": "2026-05-06T22:50:04.924875855Z",
+  "updated_at": "2026-05-06T23:26:29.731628219Z",
+  "closed_at": null,
+  "custom": {}
+}
