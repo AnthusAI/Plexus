@@ -296,9 +296,65 @@ code: |
       error("execute_tactus tool is not available in this runtime")
     end
 
-    local args_json = Json.encode(args_table or {})
-    args_json = string.gsub(args_json, "%]%]", "] ]")
-    local tactus = "return plexus." .. tostring(namespace) .. "." .. tostring(method) .. "(Json.decode([[" .. args_json .. "]]))"
+    local function to_lua_literal(value)
+      local value_type = type(value)
+      if value == nil then
+        return "nil"
+      end
+      if value_type == "boolean" then
+        return value and "true" or "false"
+      end
+      if value_type == "number" then
+        return tostring(value)
+      end
+      if value_type == "string" then
+        return string.format("%q", value)
+      end
+      if value_type == "table" then
+        local parts = {}
+        local is_array = true
+        local max_index = 0
+        local count = 0
+        for k, _ in pairs(value) do
+          count = count + 1
+          if type(k) ~= "number" or k < 1 or math.floor(k) ~= k then
+            is_array = false
+            break
+          end
+          if k > max_index then max_index = k end
+        end
+        if is_array and max_index ~= count then
+          is_array = false
+        end
+
+        if is_array then
+          for i = 1, max_index do
+            parts[#parts + 1] = to_lua_literal(value[i])
+          end
+          return "{ " .. table.concat(parts, ", ") .. " }"
+        end
+
+        for k, v in pairs(value) do
+          local key_literal
+          if type(k) == "string" and string.match(k, "^[%a_][%w_]*$") then
+            key_literal = k
+          else
+            key_literal = "[" .. to_lua_literal(k) .. "]"
+          end
+          parts[#parts + 1] = key_literal .. " = " .. to_lua_literal(v)
+        end
+        return "{ " .. table.concat(parts, ", ") .. " }"
+      end
+      return string.format("%q", tostring(value))
+    end
+
+    local tactus = "return plexus."
+      .. tostring(namespace)
+      .. "."
+      .. tostring(method)
+      .. "("
+      .. to_lua_literal(args_table or {})
+      .. ")"
 
     local raw = execute_tactus({tactus = tactus})
     local result, decode_err = _decode_tool_result(raw)
