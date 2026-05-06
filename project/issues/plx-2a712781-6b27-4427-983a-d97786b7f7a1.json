@@ -1,0 +1,25 @@
+{
+  "id": "plx-2a712781-6b27-4427-983a-d97786b7f7a1",
+  "title": "Fix task author indicator fallback for report detail",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7778e50b-400d-445a-9911-906176b3f0b4",
+      "author": "ryan",
+      "text": "Implemented task author indicator fallback to signed-in user profile when User.get lookup is unavailable; added focused test coverage and verified report-task author placement tests.",
+      "created_at": "2026-05-05T23:23:53.327374Z"
+    }
+  ],
+  "created_at": "2026-05-05T23:23:18.305523Z",
+  "updated_at": "2026-05-06T00:00:32.475494Z",
+  "closed_at": "2026-05-06T00:00:32.475494Z",
+  "custom": {}
+}
