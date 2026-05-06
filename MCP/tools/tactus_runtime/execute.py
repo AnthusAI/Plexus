@@ -300,7 +300,9 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("scorecards_list", "scorecards", "list"),
     ("scorecards_info", "scorecards", "info"),
     ("scorecards_search", "scorecards", "search"),
+    ("scorecards_create", "scorecards", "create"),
     ("score_info", "score", "info"),
+    ("score_create", "score", "create"),
     ("score_search", "score", "search"),
     ("score_evaluations", "score", "evaluations"),
     ("score_predict", "score", "predict"),
@@ -398,7 +400,9 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("scorecards", "list"): "_call_scorecards",
     ("scorecards", "info"): "_call_scorecards",
     ("scorecards", "search"): "_call_scorecards",
+    ("scorecards", "create"): "_call_scorecards",
     ("score", "info"): "_call_score",
+    ("score", "create"): "_call_score",
     ("score", "search"): "_call_score",
     ("score", "evaluations"): "_call_score",
     ("score", "predict"): "_call_score",
@@ -736,6 +740,93 @@ def _default_scorecards_search(args: dict[str, Any]) -> dict[str, Any]:
         "query": query,
         "count": len(hits),
         "matches": hits,
+    }
+
+
+def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
+    """Create a scorecard directly in Plexus."""
+    from plexus.attribution.actor_context import apply_actor_attribution
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    from plexus.cli.shared.client_utils import create_client
+
+    def _slugify(value: str) -> str:
+        cleaned = re.sub(r"[^a-z0-9]+", "-", str(value).strip().lower())
+        return cleaned.strip("-") or "scorecard"
+
+    name = str(args.get("name") or "").strip()
+    if not name:
+        raise ValueError("plexus.scorecards.create requires name")
+
+    key = str(args.get("key") or "").strip() or _slugify(name)
+    external_id = (
+        str(args.get("external_id") or args.get("externalId") or "").strip()
+        or key
+    )
+    description = args.get("description")
+    account_identifier = (
+        args.get("account_identifier")
+        or args.get("account")
+        or args.get("account_id")
+        or None
+    )
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.scorecards.create: could not create dashboard client")
+
+    account_id = resolve_account_id_for_command(
+        client,
+        str(account_identifier) if account_identifier is not None else None,
+    )
+    if not account_id:
+        raise ValueError(
+            "plexus.scorecards.create could not resolve account; provide account_identifier "
+            "or set PLEXUS_ACCOUNT_KEY"
+        )
+
+    input_obj: dict[str, Any] = {
+        "name": name,
+        "key": key,
+        "externalId": external_id,
+        "accountId": account_id,
+    }
+    if description is not None and str(description).strip():
+        input_obj["description"] = str(description).strip()
+
+    input_obj = apply_actor_attribution(
+        input_obj,
+        client_context=getattr(client, "context", None),
+        source="execute_tactus",
+    )
+
+    mutation = """
+    mutation CreateScorecard($input: CreateScorecardInput!) {
+      createScorecard(input: $input) {
+        id
+        name
+        key
+        externalId
+        accountId
+        description
+      }
+    }
+    """
+    response = client.execute(mutation, {"input": input_obj})
+    created = (response or {}).get("createScorecard") or {}
+    created_id = created.get("id")
+    if not created_id:
+        raise RuntimeError(
+            f"plexus.scorecards.create failed: createScorecard returned no id ({response!r})"
+        )
+
+    return {
+        "success": True,
+        "id": created_id,
+        "name": created.get("name"),
+        "key": created.get("key"),
+        "externalId": created.get("externalId"),
+        "accountId": created.get("accountId"),
+        "description": created.get("description"),
     }
 
 
@@ -4654,6 +4745,161 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _default_score_create(args: dict[str, Any]) -> dict[str, Any]:
+    """Create a score under a scorecard section."""
+    from plexus.attribution.actor_context import apply_actor_attribution
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.direct_identifier_resolution import (
+        direct_resolve_scorecard_identifier,
+    )
+
+    def _slugify(value: str) -> str:
+        cleaned = re.sub(r"[^a-z0-9]+", "-", str(value).strip().lower())
+        return cleaned.strip("-") or "score"
+
+    scorecard_identifier = (
+        args.get("scorecard_identifier") or args.get("scorecard") or args.get("scorecard_id")
+    )
+    if not scorecard_identifier:
+        raise ValueError("plexus.score.create requires scorecard_identifier")
+
+    name = str(args.get("name") or "").strip()
+    if not name:
+        raise ValueError("plexus.score.create requires name")
+
+    key = str(args.get("key") or "").strip() or _slugify(name)
+    external_id = (
+        str(args.get("external_id") or args.get("externalId") or "").strip() or key
+    )
+    score_type = str(args.get("score_type") or args.get("type") or "LangGraphScore").strip()
+    description = args.get("description")
+
+    try:
+        order = int(args.get("order") or 1)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("plexus.score.create order must be an integer") from exc
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.score.create: could not create dashboard client")
+
+    scorecard_id = direct_resolve_scorecard_identifier(client, scorecard_identifier)
+    if not scorecard_id:
+        raise ValueError(f"Scorecard not found: {scorecard_identifier!r}")
+
+    section_id = args.get("section_id") or args.get("sectionId")
+    if not section_id:
+        section_identifier = args.get("section_identifier") or args.get("section")
+        sections_query = """
+        query ListScorecardSections($scorecardId: String!, $limit: Int) {
+          listScorecardSections(filter: { scorecardId: { eq: $scorecardId } }, limit: $limit) {
+            items {
+              id
+              name
+              order
+            }
+          }
+        }
+        """
+        sections_resp = client.execute(sections_query, {"scorecardId": scorecard_id, "limit": 200})
+        sections = (sections_resp.get("listScorecardSections") or {}).get("items") or []
+
+        if section_identifier:
+            wanted = str(section_identifier).strip().lower()
+            for section in sections:
+                if (
+                    str(section.get("id") or "").lower() == wanted
+                    or str(section.get("name") or "").strip().lower() == wanted
+                ):
+                    section_id = section.get("id")
+                    break
+
+        if not section_id and sections:
+            section_id = sections[0].get("id")
+
+        if not section_id:
+            section_name = str(args.get("section_name") or "General").strip() or "General"
+            create_section_mutation = """
+            mutation CreateScorecardSection($input: CreateScorecardSectionInput!) {
+              createScorecardSection(input: $input) {
+                id
+                name
+                order
+              }
+            }
+            """
+            section_input = {
+                "scorecardId": scorecard_id,
+                "name": section_name,
+                "order": 1,
+            }
+            section_input = apply_actor_attribution(
+                section_input,
+                client_context=getattr(client, "context", None),
+                source="execute_tactus",
+            )
+            section_resp = client.execute(create_section_mutation, {"input": section_input})
+            created_section = (section_resp or {}).get("createScorecardSection") or {}
+            section_id = created_section.get("id")
+            if not section_id:
+                raise RuntimeError(
+                    f"plexus.score.create failed to create section: {section_resp!r}"
+                )
+
+    score_input: dict[str, Any] = {
+        "scorecardId": scorecard_id,
+        "sectionId": section_id,
+        "name": name,
+        "key": key,
+        "externalId": external_id,
+        "type": score_type,
+        "order": order,
+    }
+    if description is not None and str(description).strip():
+        score_input["description"] = str(description).strip()
+
+    score_input = apply_actor_attribution(
+        score_input,
+        client_context=getattr(client, "context", None),
+        source="execute_tactus",
+    )
+
+    create_score_mutation = """
+    mutation CreateScore($input: CreateScoreInput!) {
+      createScore(input: $input) {
+        id
+        name
+        key
+        externalId
+        description
+        type
+        order
+        sectionId
+      }
+    }
+    """
+    score_resp = client.execute(create_score_mutation, {"input": score_input})
+    created_score = (score_resp or {}).get("createScore") or {}
+    score_id = created_score.get("id")
+    if not score_id:
+        raise RuntimeError(
+            f"plexus.score.create failed: createScore returned no id ({score_resp!r})"
+        )
+
+    return {
+        "success": True,
+        "id": score_id,
+        "scorecard_id": scorecard_id,
+        "section_id": created_score.get("sectionId") or section_id,
+        "name": created_score.get("name"),
+        "key": created_score.get("key"),
+        "externalId": created_score.get("externalId"),
+        "type": created_score.get("type"),
+        "order": created_score.get("order"),
+        "description": created_score.get("description"),
+    }
+
+
 def _default_score_test(args: dict[str, Any]) -> dict[str, Any]:
     """Run a mechanical smoke-test on a score version against sampled items."""
     from plexus.cli.shared.client_utils import create_client
@@ -5019,7 +5265,9 @@ class PlexusRuntimeModule:
         scorecards_lister: Callable[[dict[str, Any]], Any] | None = None,
         scorecards_infoer: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         scorecards_searcher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        scorecards_creator: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_create: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_searcher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_evaluations: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_predict: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
@@ -5070,7 +5318,15 @@ class PlexusRuntimeModule:
             if scorecards_searcher is not None
             else _default_scorecards_search
         )
+        self._scorecards_creator = (
+            scorecards_creator
+            if scorecards_creator is not None
+            else _default_scorecards_create
+        )
         self._score_info = score_info if score_info is not None else _default_score_info
+        self._score_create = (
+            score_create if score_create is not None else _default_score_create
+        )
         self._score_searcher = (
             score_searcher if score_searcher is not None else _default_score_search
         )
@@ -5236,6 +5492,7 @@ class PlexusRuntimeModule:
     def _call_score(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "score" or method not in {
             "info",
+            "create",
             "search",
             "evaluations",
             "predict",
@@ -5254,6 +5511,8 @@ class PlexusRuntimeModule:
             parsed = _args(args)
             if method == "info":
                 return self._score_info(parsed)
+            if method == "create":
+                return self._score_create(parsed)
             if method == "search":
                 return self._score_searcher(parsed)
             if method == "evaluations":
@@ -5306,7 +5565,7 @@ class PlexusRuntimeModule:
             self._budget.record_after("procedure", method)
 
     def _call_scorecards(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "scorecards" or method not in {"list", "info", "search"}:
+        if namespace != "scorecards" or method not in {"list", "info", "search", "create"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -5316,6 +5575,8 @@ class PlexusRuntimeModule:
             parsed = _args(args)
             if method == "list":
                 return self._scorecards_lister(parsed)
+            if method == "create":
+                return self._scorecards_creator(parsed)
             if method == "search":
                 return self._scorecards_searcher(parsed)
             return self._scorecards_infoer(parsed)
