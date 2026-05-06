@@ -20,5 +20,6 @@ def test_console_worker_dockerfile_verifies_mcp_tool_modules():
     ).read_text()
 
     assert "PYTHONPATH=/workspace:/workspace/MCP" in dockerfile
-    assert "test -f /workspace/MCP/tools/scorecard/scorecards.py" in dockerfile
-    assert "test -f /workspace/MCP/tools/evaluation/evaluations.py" in dockerfile
+    assert "test -f /workspace/MCP/tools/tactus_runtime/execute.py" in dockerfile
+    assert "test -f /workspace/MCP/tools/tactus_runtime/_item_helpers.py" in dockerfile
+    assert "test -f /workspace/MCP/server.py" in dockerfile
