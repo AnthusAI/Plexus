@@ -31,7 +31,7 @@ try:
     
     for env_path in env_paths:
         if os.path.exists(env_path):
-            dotenv.load_dotenv(env_path, override=True)
+            dotenv.load_dotenv(env_path, override=False)
             break
 except ImportError:
     pass  # dotenv not available, environment variables must be set externally

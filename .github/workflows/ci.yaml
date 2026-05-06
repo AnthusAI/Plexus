@@ -109,6 +109,19 @@ jobs:
         echo "Disk space after Python installation:"
         df -h
 
+    - name: Run Dispatch Regression Net
+      run: |
+        poetry run python -m pytest -q \
+          MCP/tools/tactus_runtime/execute_test.py::test_default_report_runner_uses_remote_dispatch_by_default \
+          MCP/tools/tactus_runtime/execute_test.py::test_default_report_runner_uses_remote_dispatch_for_celery_mode \
+          MCP/tools/tactus_runtime/execute_test.py::test_default_report_runner_launches_detached_local_subprocess \
+          MCP/tools/tactus_runtime/execute_test.py::test_default_report_runner_rejects_invalid_dispatch_mode \
+          MCP/tools/tactus_runtime/execute_test.py::test_runtime_env_dispatch_mode_overrides_dotenv_default \
+          MCP/tools/tactus_runtime/execute_test.py::test_execute_tactus_report_run_async_remote_dispatch_when_mode_celery \
+          MCP/tools/tactus_runtime/execute_test.py::test_execute_tactus_report_run_async_local_dispatch_when_mode_local \
+          MCP/tools/tactus_runtime/execute_test.py::test_execute_tactus_report_run_async_invalid_dispatch_mode_returns_error \
+          plexus/cli/report/utils_test.py
+
     - name: Run Python Tests
       run: |
         echo "Current directory: $(pwd)"
