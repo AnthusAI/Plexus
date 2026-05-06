@@ -120,6 +120,21 @@ agents:
       - system_message must encode policy intent and decision boundaries from guidelines and FAQ.
       - user_message must instruct transcript evaluation and class selection clearly.
       - Keep all fields concise and directly actionable.
+      - You MUST finish by calling done() with named fields, not plain-text reason.
+        Example:
+        done(
+          name="...",
+          key="...",
+          external_id="...",
+          description="...",
+          labels={"Yes","No"},
+          target_class="Yes",
+          default_class="No",
+          guidance_summary="...",
+          rationale="...",
+          system_message="...",
+          user_message="..."
+        )
     initial_message: |
       Ready to generate score specs.
     tools:
@@ -152,6 +167,7 @@ agents:
       - Preserve core intent while tightening ambiguities.
       - Ensure output is robust for noisy transcript evidence.
       - Keep explicit class constraints in user_message.
+      - You MUST finish by calling done() with named fields, not plain-text reason.
     initial_message: |
       Ready to review and refine score specs.
     tools:
@@ -382,8 +398,37 @@ code: |
     if done_call == nil or done_call.args == nil then
       return nil, "missing done() call payload"
     end
-    local payload = done_call.args.reason or ""
+
+    -- Preferred path: done(name="...", labels={...}, ...)
+    if type(done_call.args) == "table" then
+      local has_structured = false
+      for k, _ in pairs(done_call.args) do
+        if k ~= "reason" and k ~= "success" then
+          has_structured = true
+          break
+        end
+      end
+      if has_structured then
+        local structured = {}
+        for k, v in pairs(done_call.args) do
+          if k ~= "reason" and k ~= "success" then
+            structured[k] = v
+          end
+        end
+        return structured, nil
+      end
+    end
+
+    local payload = tostring(done_call.args.reason or "")
+
     local data, err = safe_decode(payload)
+    if not data and type(payload) == "string" and payload ~= "" then
+      -- Fallback: salvage first JSON object from noisy text.
+      local candidate = string.match(payload, "%b{}")
+      if candidate ~= nil then
+        data, err = safe_decode(candidate)
+      end
+    end
     if not data then
       return nil, "invalid done() JSON: " .. tostring(err)
     end
@@ -820,6 +865,20 @@ code: |
 
       local draft, draft_err = parse_last_done_json()
       if not draft then
+        for retry = 1, 2 do
+          local repair_prompt = table.concat({
+            "Your previous done() payload was invalid.",
+            "Error: " .. tostring(draft_err),
+            "Return ONLY the required score spec via done() named fields.",
+            "Do not send commentary.",
+          }, "\n")
+          local repaired_ok = wait_for_done(Generator, 3, repair_prompt)
+          if not repaired_ok then break end
+          draft, draft_err = parse_last_done_json()
+          if draft then break end
+        end
+      end
+      if not draft then
         return {success = false, status = "error", message = "Generator JSON parse failed for question " .. tostring(question.id) .. ": " .. tostring(draft_err)}
       end
 
@@ -831,6 +890,20 @@ code: |
       end
 
       local reviewed, reviewed_err = parse_last_done_json()
+      if not reviewed then
+        for retry = 1, 2 do
+          local repair_prompt = table.concat({
+            "Your previous done() payload was invalid.",
+            "Error: " .. tostring(reviewed_err),
+            "Return ONLY the reviewed score spec via done() named fields.",
+            "Do not send commentary.",
+          }, "\n")
+          local repaired_ok = wait_for_done(Critic, 3, repair_prompt)
+          if not repaired_ok then break end
+          reviewed, reviewed_err = parse_last_done_json()
+          if reviewed then break end
+        end
+      end
       if not reviewed then
         return {success = false, status = "error", message = "Critic JSON parse failed for question " .. tostring(question.id) .. ": " .. tostring(reviewed_err)}
       end
