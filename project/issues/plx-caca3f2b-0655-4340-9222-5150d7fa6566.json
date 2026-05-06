@@ -1,0 +1,25 @@
+{
+  "id": "plx-caca3f2b-0655-4340-9222-5150d7fa6566",
+  "title": "Accept PR 295 CodeQL suggestions",
+  "description": "Apply all CodeQL/code-quality review suggestions on PR #295 directly on develop, then run focused checks and push.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "038cd6b6-15f4-453b-bcd2-56b166e09a37",
+      "author": "ryan",
+      "text": "Applied all seven PR #295 CodeQL/code-quality comments directly on develop. Focused Tactus runtime tests passed: 113 passed. py_compile passed for all touched Python files. flake8 E9/F63/F7/F82 passed. Standalone private-graphql-proxy tests still require that service's own dependency/PYTHONPATH setup.",
+      "created_at": "2026-05-06T01:56:42.704359Z"
+    }
+  ],
+  "created_at": "2026-05-06T01:54:53.792992Z",
+  "updated_at": "2026-05-06T01:56:53.024074Z",
+  "closed_at": "2026-05-06T01:56:53.024074Z",
+  "custom": {}
+}

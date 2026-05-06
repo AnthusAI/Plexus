@@ -262,7 +262,7 @@ def test_default_rubric_memory_recent_entries_runs_provider_awaitable(monkeypatc
 
     monkeypatch.setattr(
         "plexus.cli.shared.client_utils.create_client",
-        lambda: object(),
+        object,
     )
     monkeypatch.setattr(
         execute,
@@ -308,7 +308,7 @@ def test_default_rubric_memory_evidence_pack_runs_provider_awaitable(monkeypatch
 
     monkeypatch.setattr(
         "plexus.cli.shared.client_utils.create_client",
-        lambda: object(),
+        object,
     )
     monkeypatch.setattr(
         execute,
@@ -3146,7 +3146,7 @@ async def test_execute_tactus_report_run_async_returns_handle() -> None:
 @pytest.mark.asyncio
 async def test_execute_tactus_report_run_async_remote_dispatch_when_mode_celery(monkeypatch) -> None:
     monkeypatch.setattr(execute, "_resolve_report_dispatch_mode", lambda: "celery")
-    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
     monkeypatch.setattr(
         "plexus.cli.report.utils.resolve_account_id_for_command",
         lambda _client, _account: "acct-1",
@@ -3197,7 +3197,7 @@ async def test_execute_tactus_report_run_async_remote_dispatch_when_mode_celery(
 @pytest.mark.asyncio
 async def test_execute_tactus_report_run_async_local_dispatch_when_mode_local(monkeypatch) -> None:
     monkeypatch.setattr(execute, "_resolve_report_dispatch_mode", lambda: "local")
-    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
     monkeypatch.setattr(
         "plexus.cli.report.utils.resolve_account_id_for_command",
         lambda _client, _account: "acct-1",
@@ -3244,7 +3244,7 @@ async def test_execute_tactus_report_run_async_local_dispatch_when_mode_local(mo
 @pytest.mark.asyncio
 async def test_execute_tactus_report_run_async_invalid_dispatch_mode_returns_error(monkeypatch) -> None:
     monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "invalid-mode")
-    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
     monkeypatch.setattr(
         "plexus.cli.report.utils.resolve_account_id_for_command",
         lambda _client, _account: "acct-1",
