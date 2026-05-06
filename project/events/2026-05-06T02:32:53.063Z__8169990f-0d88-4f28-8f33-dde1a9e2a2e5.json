@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8169990f-0d88-4f28-8f33-dde1a9e2a2e5",
+  "issue_id": "plx-d9d62aba-7851-4b71-9539-271fe572e930",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T02:32:53.063Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix TaskDisplay evaluation createdByUserId typecheck"
+  }
+}
