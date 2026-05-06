@@ -62,7 +62,7 @@ def generate_key(name: str) -> str:
 @click.group()
 def cli():
     """Plexus Dashboard CLI"""
-    load_dotenv(override=True)
+    load_dotenv(override=False)
 
 @cli.group()
 def evaluation():
@@ -1255,4 +1255,4 @@ def list_scores(scorecard_id: Optional[str], scorecard_key: Optional[str], score
         click.echo(f"Error: {str(e)}", err=True)
 
 if __name__ == '__main__':
-    cli() 
+    cli()
