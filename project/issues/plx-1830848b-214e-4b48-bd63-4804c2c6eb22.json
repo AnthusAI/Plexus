@@ -1,0 +1,37 @@
+{
+  "id": "plx-1830848b-214e-4b48-bd63-4804c2c6eb22",
+  "title": "Implement JSON-native scorecard migration procedure YAML",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-14559d76-98d3-4fb4-9074-5c49bce7d2f8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9f05853b-bf29-4164-a953-de6bb8308685",
+      "author": "derek",
+      "text": "Starting implementation: add new procedure YAML under plexus/procedures for JSON export -> scorecard migration, modeled after scorecard_create with deterministic question mapping.",
+      "created_at": "2026-05-06T20:56:39.150466563Z"
+    },
+    {
+      "id": "6d4b5739-6019-455f-b58a-2e0f92ccdcc0",
+      "author": "derek",
+      "text": "Implemented new procedure file plexus/procedures/scorecard_from_question_export.yaml. It consumes ai-ready question export JSON (inline or file path), performs deterministic score planning per question, enforces human approval, supports dry_run, checks scorecard existence, and executes create/update through actor tool chain. Added README entry. Validation: YAML parse + pytest plexus/cli/procedure/test_service_yaml_loader.py.",
+      "created_at": "2026-05-06T20:58:32.159860641Z"
+    },
+    {
+      "id": "e1bb3b0c-5078-4bbf-a2ad-cf538fd65759",
+      "author": "derek",
+      "text": "Task complete.",
+      "created_at": "2026-05-06T20:58:37.836884099Z"
+    }
+  ],
+  "created_at": "2026-05-06T20:56:34.240483632Z",
+  "updated_at": "2026-05-06T20:58:37.851489862Z",
+  "closed_at": "2026-05-06T20:58:37.851489862Z",
+  "custom": {}
+}
