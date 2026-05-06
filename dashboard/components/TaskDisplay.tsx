@@ -58,6 +58,7 @@ interface TaskDisplayProps {
     scoreVersionId?: string | null | undefined
     dataSetId?: string | null | undefined
     parameters?: string | null
+    createdByUserId?: string | null
     baseline_evaluation_id?: string | null
     current_baseline_evaluation_id?: string | null
   }
@@ -366,6 +367,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
             JSON.parse(evaluationData.predictedClassDistribution) : evaluationData.predictedClassDistribution,
           isPredictedClassDistributionBalanced: evaluationData.isPredictedClassDistributionBalanced ?? null,
           parameters: evaluationData.parameters ?? null,
+          createdByUserId: evaluationData.createdByUserId ?? null,
           baseline_evaluation_id: evaluationData.baseline_evaluation_id ?? null,
           current_baseline_evaluation_id: evaluationData.current_baseline_evaluation_id ?? null,
           scoreResults: transformedScoreResults as any,
@@ -551,6 +553,7 @@ export const TaskDisplay = React.memo(function TaskDisplayComponent({
     prevProps.evaluationData.accuracy === nextProps.evaluationData.accuracy &&
     prevProps.evaluationData.elapsedSeconds === nextProps.evaluationData.elapsedSeconds &&
     prevProps.evaluationData.estimatedRemainingSeconds === nextProps.evaluationData.estimatedRemainingSeconds &&
+    prevProps.evaluationData.createdByUserId === nextProps.evaluationData.createdByUserId &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.selectedScoreResultId === nextProps.selectedScoreResultId &&
     prevProps.isFullWidth === nextProps.isFullWidth &&

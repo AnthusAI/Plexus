@@ -274,6 +274,69 @@ def test_score_champion_version_timeline_supports_single_score_explicit_window(m
     assert kwargs["fresh"] is True
 
 
+@patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
+def test_scorecard_history_uses_dedicated_block(mock_run_feedback_report_block):
+    runner = CliRunner()
+    mock_run_feedback_report_block.return_value = {"status": "success", "output": {"scores": []}}
+
+    result = runner.invoke(
+        report,
+        [
+            "scorecard-history",
+            "--scorecard",
+            "Select Quote HCS Medium Risk",
+            "--days",
+            "10",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, kwargs = mock_run_feedback_report_block.call_args
+    assert kwargs["block_class"] == "ScorecardHistory"
+    assert kwargs["scorecard"] == "Select Quote HCS Medium Risk"
+    assert kwargs["score"] is None
+    assert kwargs["days"] == 10
+    assert kwargs["extra_config"] == {}
+
+
+@patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
+def test_scorecard_history_supports_single_score_explicit_window_and_summary_model(mock_run_feedback_report_block):
+    runner = CliRunner()
+    mock_run_feedback_report_block.return_value = {"status": "success", "output": {"scores": []}}
+
+    result = runner.invoke(
+        report,
+        [
+            "scorecard-history",
+            "--scorecard",
+            "1438",
+            "--score",
+            "48059",
+            "--start-date",
+            "2026-04-01",
+            "--end-date",
+            "2026-05-01",
+            "--summary-llm-provider",
+            "openai",
+            "--summary-llm-model",
+            "gpt-5-mini",
+            "--fresh",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, kwargs = mock_run_feedback_report_block.call_args
+    assert kwargs["block_class"] == "ScorecardHistory"
+    assert kwargs["score"] == "48059"
+    assert kwargs["start_date"] == "2026-04-01"
+    assert kwargs["end_date"] == "2026-05-01"
+    assert kwargs["extra_config"] == {
+        "summary_llm_provider": "openai",
+        "summary_llm_model": "gpt-5-mini",
+    }
+    assert kwargs["fresh"] is True
+
+
 @patch("plexus.cli.feedback.feedback_report.resolve_account_id_for_command")
 @patch("plexus.cli.feedback.feedback_report.enrich_parameters_with_names")
 @patch("plexus.cli.feedback.feedback_report.memoized_resolve_score_identifier")

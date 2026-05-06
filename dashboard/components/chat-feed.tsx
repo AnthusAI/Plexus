@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { generateClient } from 'aws-amplify/data'
 import type { Schema } from '@/amplify/data/resource'
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,14 @@ import { Timestamp } from "@/components/ui/timestamp"
 import { getMessageIcon, getMessageTypeColor, getMessageTypeLabel } from "@/components/ui/message-utils"
 import { InteractiveMessage, type InteractiveMessageMetadata } from "@/components/ui/interactive-message"
 import { RichMessageContent } from "@/components/ui/rich-message-content"
+import {
+  ChatMessageBotAvatar,
+  ChatMessageUserAvatar,
+  getMessageAttributionMetadata,
+  resolveMessageAttribution,
+  useAttributedUserProfiles,
+} from "@/components/ui/chat-message-user-avatar"
+import { cn } from "@/lib/utils"
 import { getCurrentUserAttribution } from "@/utils/user-profile"
 
 let amplifyClient: ReturnType<typeof generateClient<Schema>> | null = null
@@ -54,6 +62,9 @@ export interface ChatMessage {
 
   /** Associated account ID */
   accountId?: string
+
+  /** Dashboard user that created the message, when available */
+  createdByUserId?: string
 
   /** Associated session ID */
   sessionId?: string
@@ -104,6 +115,12 @@ export function ChatFeedView({
 }: ChatFeedViewProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messageAttributions = messages.map((message) => resolveMessageAttribution(message))
+  const attributedUsersById = useAttributedUserProfiles(
+    messageAttributions.map((attribution) => (
+      attribution.kind === 'user' ? attribution.userId : undefined
+    )),
+  )
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -151,91 +168,114 @@ export function ChatFeedView({
   return (
     <ScrollArea className={`h-full ${className}`} ref={scrollAreaRef}>
       <div className="space-y-4 p-4">
-        {messages.map((message) => (
-          <div key={message.id} className="flex items-start gap-3">
-            <div className="flex-shrink-0 mt-1">
-              {getMessageIcon(message.role, message.messageType, message.humanInteraction)}
-            </div>
+        {messages.map((message) => {
+          const attribution = resolveMessageAttribution(message)
+          const attributedUser = attribution.kind === 'user'
+            ? attributedUsersById[attribution.userId]
+            : null
+          const attributionAvatar = attribution.kind === 'user' && attributedUser
+            ? <ChatMessageUserAvatar user={attributedUser} />
+            : attribution.kind === 'bot' && message.role === 'USER'
+              ? <ChatMessageBotAvatar bot={attribution.bot} />
+              : null
+          const showAttributedUserAvatar = Boolean(
+            attributionAvatar && (message.role === 'USER' || message.humanInteraction === 'RESPONSE'),
+          )
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
-                <Badge
-                  variant="secondary"
-                  className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
-                >
-                  {getMessageTypeLabel(message.role, message.messageType, message.humanInteraction)}
-                </Badge>
+          return (
+            <div
+              key={message.id}
+              className={cn("flex items-center gap-3", showAttributedUserAvatar && "justify-end")}
+            >
+              {!showAttributedUserAvatar && (
+                <div className="flex-shrink-0">
+                  {getMessageIcon(message.role, message.messageType, message.humanInteraction)}
+                </div>
+              )}
 
-                {message.toolName && (
-                  <Badge variant="outline" className="text-xs">
-                    {message.toolName}
+              <div className={cn("min-w-0", showAttributedUserAvatar ? "max-w-[calc(100%-2.5rem)]" : "flex-1")}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge
+                    variant="secondary"
+                    className={`text-xs ${getMessageTypeColor(message.role, message.messageType, message.humanInteraction)}`}
+                  >
+                    {getMessageTypeLabel(message.role, message.messageType, message.humanInteraction)}
                   </Badge>
-                )}
 
-                {/* Show submission status for PENDING messages */}
-                {message.humanInteraction?.startsWith('PENDING_') && submittedMessages.has(message.id) && (
-                  <Badge variant="outline" className="text-xs text-green-600 border-green-600">
-                    ✓ Response submitted
-                  </Badge>
-                )}
+                  {message.toolName && (
+                    <Badge variant="outline" className="text-xs">
+                      {message.toolName}
+                    </Badge>
+                  )}
 
-                {message.humanInteraction?.startsWith('PENDING_') && submittingMessages.has(message.id) && (
-                  <Badge variant="outline" className="text-xs text-blue-600 border-blue-600">
-                    <Spinner size="sm" className="mr-1" />
-                    Submitting...
-                  </Badge>
-                )}
+                  {/* Show submission status for PENDING messages */}
+                  {message.humanInteraction?.startsWith('PENDING_') && submittedMessages.has(message.id) && (
+                    <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                      ✓ Response submitted
+                    </Badge>
+                  )}
 
-                <Timestamp time={message.createdAt} variant="relative" className="text-xs text-muted-foreground" />
+                  {message.humanInteraction?.startsWith('PENDING_') && submittingMessages.has(message.id) && (
+                    <Badge variant="outline" className="text-xs text-blue-600 border-blue-600">
+                      <Spinner size="sm" className="mr-1" />
+                      Submitting...
+                    </Badge>
+                  )}
+
+                  <Timestamp time={message.createdAt} variant="relative" className="text-xs text-muted-foreground" />
+                </div>
+
+                <div className="text-sm">
+                  {/* Interactive messages (with buttons/inputs) */}
+                  {onHitlSubmit && message.metadata && (
+                    message.humanInteraction === 'PENDING_APPROVAL' ||
+                    message.humanInteraction === 'PENDING_INPUT' ||
+                    message.humanInteraction === 'PENDING_REVIEW'
+                  ) ? (
+                    <InteractiveMessage
+                      metadata={message.metadata as InteractiveMessageMetadata}
+                      onSubmit={async (data) => {
+                        console.log('[ChatFeedView] InteractiveMessage onSubmit called with data:', data)
+                        const messageId = message.id
+                        console.log('[ChatFeedView] Message ID:', messageId)
+                        console.log('[ChatFeedView] Submitted messages:', Array.from(submittedMessages))
+                        console.log('[ChatFeedView] Submitting messages:', Array.from(submittingMessages))
+
+                        // Prevent double-submit
+                        if (submittedMessages.has(messageId) || submittingMessages.has(messageId)) {
+                          console.log('[ChatFeedView] Double-submit prevented')
+                          return
+                        }
+
+                        // Call the parent handler
+                        console.log('[ChatFeedView] onHitlSubmit exists:', !!onHitlSubmit)
+                        if (onHitlSubmit) {
+                          console.log('[ChatFeedView] Calling onHitlSubmit...')
+                          await onHitlSubmit(message, data)
+                          console.log('[ChatFeedView] onHitlSubmit completed')
+                        } else {
+                          console.error('[ChatFeedView] onHitlSubmit is undefined!')
+                        }
+                      }}
+                      disabled={submittedMessages.has(message.id) || submittingMessages.has(message.id)}
+                    />
+                  ) : message.metadata ? (
+                    /* Rich content messages (with collapsible sections but no buttons) */
+                    <RichMessageContent
+                      metadata={message.metadata}
+                    />
+                  ) : (
+                    /* Legacy plain content */
+                    <RichMessageContent
+                      content={message.content}
+                    />
+                  )}
+                </div>
               </div>
-
-              <div className="text-sm">
-                {/* Interactive messages (with buttons/inputs) */}
-                {onHitlSubmit && message.metadata && (message.humanInteraction === 'PENDING_APPROVAL' ||
-                                      message.humanInteraction === 'PENDING_INPUT' ||
-                                      message.humanInteraction === 'PENDING_REVIEW') ? (
-                  <InteractiveMessage
-                    metadata={message.metadata as InteractiveMessageMetadata}
-                    onSubmit={async (data) => {
-                      console.log('[ChatFeedView] InteractiveMessage onSubmit called with data:', data)
-                      const messageId = message.id
-                      console.log('[ChatFeedView] Message ID:', messageId)
-                      console.log('[ChatFeedView] Submitted messages:', Array.from(submittedMessages))
-                      console.log('[ChatFeedView] Submitting messages:', Array.from(submittingMessages))
-
-                      // Prevent double-submit
-                      if (submittedMessages.has(messageId) || submittingMessages.has(messageId)) {
-                        console.log('[ChatFeedView] Double-submit prevented')
-                        return
-                      }
-
-                      // Call the parent handler
-                      console.log('[ChatFeedView] onHitlSubmit exists:', !!onHitlSubmit)
-                      if (onHitlSubmit) {
-                        console.log('[ChatFeedView] Calling onHitlSubmit...')
-                        await onHitlSubmit(message, data)
-                        console.log('[ChatFeedView] onHitlSubmit completed')
-                      } else {
-                        console.error('[ChatFeedView] onHitlSubmit is undefined!')
-                      }
-                    }}
-                    disabled={submittedMessages.has(message.id) || submittingMessages.has(message.id)}
-                  />
-                ) : message.metadata ? (
-                  /* Rich content messages (with collapsible sections but no buttons) */
-                  <RichMessageContent
-                    metadata={message.metadata}
-                  />
-                ) : (
-                  /* Legacy plain content */
-                  <RichMessageContent
-                    content={message.content}
-                  />
-                )}
-              </div>
+              {showAttributedUserAvatar && attributionAvatar}
             </div>
-          </div>
-        ))}
+          )
+        })}
         <div ref={messagesEndRef} />
       </div>
     </ScrollArea>
@@ -324,6 +364,7 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
       content: JSON.stringify(responseContent),
       createdAt: new Date().toISOString(),
       metadata: JSON.stringify({
+        ...getMessageAttributionMetadata(attribution.createdByUserId),
         callback_id: pendingMessage.metadata?.callback_id, // Pass through for Lambda Durable mode
         response_type: pendingMessage.humanInteraction?.replace('PENDING_', '').toLowerCase(),
         original_request: pendingMessage.id,
@@ -398,6 +439,8 @@ export function ChatFeed({ accountId, className = '' }: ChatFeedProps) {
             messageType: msg.messageType as 'MESSAGE' | 'TOOL_CALL' | 'TOOL_RESPONSE' | undefined,
             humanInteraction: msg.humanInteraction,
             toolName: msg.toolName,
+            accountId: msg.accountId,
+            createdByUserId: msg.createdByUserId,
             procedureId: msg.procedureId,
             parentMessageId: msg.parentMessageId,
             createdAt: msg.createdAt,

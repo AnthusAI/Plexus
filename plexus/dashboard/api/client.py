@@ -102,6 +102,10 @@ class ClientContext:
     scorecard_id: Optional[str] = None
     score_name: Optional[str] = None
     score_id: Optional[str] = None
+    actor_user_id: Optional[str] = None
+    actor_type: Optional[str] = None
+    actor_key: Optional[str] = None
+    actor_source: Optional[str] = None
 
 
 @dataclass(frozen=True)
