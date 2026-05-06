@@ -273,6 +273,12 @@ class TestPredictCommand:
 
 class TestPredictImpl:
     """Test the predict_impl async function"""
+
+    @pytest.fixture(autouse=True)
+    def mock_score_result_persistence(self):
+        with patch('plexus.cli.prediction.predictions.persist_prediction_score_result') as mock_persist:
+            mock_persist.return_value = Mock(id='score-result-123')
+            yield mock_persist
     
     @pytest.mark.asyncio
     async def test_predict_impl_success_fixed_format(self, mock_scorecard_registry, sample_scorecard_class):
@@ -302,7 +308,7 @@ class TestPredictImpl:
             mock_rich.print.assert_called()
     
     @pytest.mark.asyncio
-    async def test_predict_impl_success_json_format(self, mock_scorecard_registry, sample_scorecard_class):
+    async def test_predict_impl_success_json_format(self, mock_scorecard_registry, sample_scorecard_class, mock_score_result_persistence):
         """Test predict_impl with successful prediction in JSON format"""
         # Mock the new individual score loading pipeline
         with patch('plexus.cli.prediction.predictions.select_sample') as mock_select_sample, \
@@ -335,9 +341,13 @@ class TestPredictImpl:
             assert len(parsed_json) == 1
             assert parsed_json[0]['item_id'] == 'item-123'
             assert parsed_json[0]['scores'][0]['name'] == 'test-score'
+            assert parsed_json[0]['scores'][0]['score_result_id'] == 'score-result-123'
             assert parsed_json[0]['scores'][0]['value'] == 8.5
             # cost should be present either from result metadata or fallback
             assert 'cost' in parsed_json[0]['scores'][0]
+            mock_score_result_persistence.assert_called_once()
+            assert mock_score_result_persistence.call_args.kwargs['item_id'] == 'item-123'
+            assert mock_score_result_persistence.call_args.kwargs['score_name'] == 'test-score'
 
     @pytest.mark.asyncio
     async def test_predict_impl_json_without_cost_in_metadata_uses_fallback(self, mock_scorecard_registry, sample_scorecard_class):
