@@ -1,0 +1,37 @@
+{
+  "id": "plx-7240082e-6d88-4d46-b1ba-c16e1af7acc0",
+  "title": "Fix Console Worker CI image publish failure on main",
+  "description": "CI publish job fails on main before updating CONSOLE_WORKER_IMAGE_URI because Dockerfile guard checks deleted MCP module paths. Update guard to validate current MCP runtime files and verify the publish workflow can complete branch env var update.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9c030269-00b1-4ab6-8ac6-97dcbf64378b",
+      "author": "derek",
+      "text": "Started on branch feature/console-worker-ci-image-guard-fix. Confirmed main run 25446922375 failed in Publish Console Worker Image before branch env var update, leaving CONSOLE_WORKER_IMAGE_URI stale on main.",
+      "created_at": "2026-05-06T17:43:44.379595027Z"
+    },
+    {
+      "id": "79cd2a47-6d5a-4cb2-a606-dfdde56ba4c2",
+      "author": "derek",
+      "text": "Implementation in progress on feature/console-worker-ci-image-guard-fix. Fix is in Dockerfile and test_docker_context.py; pending PR/CI rerun to confirm publish job updates main branch CONSOLE_WORKER_IMAGE_URI.",
+      "created_at": "2026-05-06T17:51:16.822395829Z"
+    },
+    {
+      "id": "71c4af9c-c522-4111-bd95-06847a5717c9",
+      "author": "derek",
+      "text": "Sub-task plx-d75e54 closed after code patch + targeted test pass.",
+      "created_at": "2026-05-06T17:51:20.979076593Z"
+    }
+  ],
+  "created_at": "2026-05-06T17:43:38.270474511Z",
+  "updated_at": "2026-05-06T17:51:20.979076593Z",
+  "closed_at": null,
+  "custom": {}
+}

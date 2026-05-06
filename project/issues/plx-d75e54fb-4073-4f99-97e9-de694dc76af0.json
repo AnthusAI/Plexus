@@ -1,0 +1,25 @@
+{
+  "id": "plx-d75e54fb-4073-4f99-97e9-de694dc76af0",
+  "title": "Patch console worker Dockerfile guard and validate locally",
+  "description": "Replace stale MCP path checks with current runtime module checks and run local docker build verification.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7240082e-6d88-4d46-b1ba-c16e1af7acc0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bc81707b-4fed-4304-8b38-2464fc0d2031",
+      "author": "derek",
+      "text": "Patched Dockerfile guard to current execute_tactus-era files: MCP/tools/tactus_runtime/execute.py, MCP/tools/tactus_runtime/_item_helpers.py, and MCP/server.py. Updated docker context test assertions accordingly. Validation: pytest dashboard/amplify/functions/consoleRunWorker/test_docker_context.py passed (2 tests).",
+      "created_at": "2026-05-06T17:51:16.801131480Z"
+    }
+  ],
+  "created_at": "2026-05-06T17:43:41.975922299Z",
+  "updated_at": "2026-05-06T17:51:20.964187157Z",
+  "closed_at": "2026-05-06T17:51:20.964187157Z",
+  "custom": {}
+}
