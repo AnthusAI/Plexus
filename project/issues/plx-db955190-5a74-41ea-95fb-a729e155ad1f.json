@@ -1,0 +1,247 @@
+{
+  "id": "plx-db955190-5a74-41ea-95fb-a729e155ad1f",
+  "title": "Fix staging/main Amplify console worker deployment race and Lambda update 403",
+  "description": "Staging/main currently have two deployment triggers: Amplify auto-build starts immediately on push, while GitHub Actions later builds/pushes the ConsoleRunWorker image, updates Amplify CONSOLE_WORKER_IMAGE_URI, and starts a RELEASE job. This creates stale-image races. Separately, Lambda UpdateFunctionCode currently returns AccessDeniedException/UnknownError for no-op same-code updates on both ConsoleChatResponder image Lambda and AmplifyBranchLinker zip Lambda in account 695039645615. Evidence: Amplify jobs 126/127/128 failed on Lambda 403; job 129 succeeded only after pinning staging CONSOLE_WORKER_IMAGE_URI to already-deployed sha256:503909... so no Lambda code update was required. Need decide one deployment path, likely disable Amplify auto-build for staging/main and let GitHub Actions trigger release only after image publish, then resolve AWS Lambda update 403 with AWS Support/request IDs or account policy fix.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1322887e-825c-4760-ad01-400bc49c686a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c0350489-cc06-48ba-a5ba-34646cfd3ffb",
+      "author": "ryan",
+      "text": "Continuing account-level investigation with profile capacity_anthus. Proven so far: Lambda mutating APIs fail account-wide, across us-west-2 and us-east-1, even for a disposable inline-zip CreateFunction. Read APIs still work. Next checks: CloudTrail visibility, Organizations/SCP visibility, account/security/quota signals.",
+      "created_at": "2026-05-03T20:20:47.156592Z"
+    },
+    {
+      "id": "3dac1169-e8dc-45eb-acd3-4f6ae0fc2d44",
+      "author": "ryan",
+      "text": "Investigation update: Lambda write APIs are failing account-wide, not just Amplify. Direct no-op UpdateFunctionCode fails for image and zip functions; CreateFunction fails in us-west-2 and us-east-1; DeleteFunction/AddPermission on nonexistent functions fail with AccessDenied instead of normal ResourceNotFound. Lambda read APIs and IAM writes still succeed. IAM simulation allows the Lambda actions and OrganizationsDecisionDetail is allowed. AnthrusAI has AdministratorAccess through Administrators; no AWSCompromisedKeyQuarantine policy is attached to the user or group. Lambda account usage/quotas are normal. CloudTrail on 2026-05-03 shows Lambda read/list events but no Lambda write events, matching rejection before normal Lambda management event recording. GuardDuty latest findings are low-severity EC2 port probe/bruteforce findings, not IAM credential/Lambda findings. Current working theory: AWS-side account/service restriction or management-account/reseller guardrail; needs AWS Support / org management account visibility with the failing request IDs.",
+      "created_at": "2026-05-03T20:29:54.195366Z"
+    },
+    {
+      "id": "40929a54-50be-4427-b828-18ea8e243061",
+      "author": "ryan",
+      "text": "Diagnostic step requested: temporarily attach explicit AWS managed Lambda full-access policy to IAM user AnthrusAI, retry direct Lambda write operation, and remove the policy afterward if it does not change behavior. This tests whether the failure is somehow related to group-policy inheritance despite AdministratorAccess simulation showing allowed.",
+      "created_at": "2026-05-03T20:34:13.655661Z"
+    },
+    {
+      "id": "3251e748-816a-478b-a0af-d2059c8eb62c",
+      "author": "ryan",
+      "text": "Diagnostic result: temporarily attached arn:aws:iam::aws:policy/AWSLambda_FullAccess directly to user AnthrusAI and retried a no-op UpdateFunctionCode on staging ConsoleChatResponder using the currently deployed image digest. It still failed with AccessDeniedException/UnknownError, HTTP 403, requestId 6465394f-b660-4a7b-bf46-5756863e2722. Detached AWSLambda_FullAccess afterward; user policy attachments are back to prior state. This further rules out missing direct Lambda identity policy or group inheritance issues.",
+      "created_at": "2026-05-03T20:34:34.517305Z"
+    },
+    {
+      "id": "bb35daa7-b648-464c-9da9-51f2c889fe7a",
+      "author": "ryan",
+      "text": "Timeline refinement: production score processor is currently active and last modified 2026-04-29T23:10:30Z. Its ImageUri is the ECR tag plexus/lambda/score-processor-production:latest, resolved by Lambda to sha256:8d0dc39c9ec5a670a80e50221c4438ff9f55ebeb63bfd6c9a4e643ebae87b531. Staging score processor last modified 2026-04-26T16:07:48Z. CloudTrail shows successful Lambda UpdateFunctionCode events as late as 2026-05-02T00:03:26Z for main TaskDispatcher via CloudFormation, then later on 2026-05-03 direct and Amplify/CloudFormation Lambda write operations fail with AccessDeniedException/UnknownError. This supports a recently introduced write-control-plane block; Lambda execution/read paths can still work.",
+      "created_at": "2026-05-03T20:38:02.783457Z"
+    },
+    {
+      "id": "32d71ff4-88ae-4b75-a4e9-923e2ec945cb",
+      "author": "ryan",
+      "text": "Additional diagnostic requested by timeline confusion: test direct Lambda write while assuming the CloudFormation execution role, not just the AnthrusAI IAM user. Goal: prove whether the block applies to the deploy role path as well as direct user path.",
+      "created_at": "2026-05-03T20:39:13.321636Z"
+    },
+    {
+      "id": "8e7172e8-de4e-4b5f-8459-741e30b81ef9",
+      "author": "ryan",
+      "text": "Attempted to assume cdk-hnb659fds-cfn-exec-role-695039645615-us-west-2 directly for a deploy-role Lambda write diagnostic, but STS AssumeRole was denied because AnthrusAI is not trusted by that role. This is expected for a CloudFormation execution role and does not change the conclusion; CloudFormation itself already used the role and hit Lambda UpdateFunctionCode AccessDenied/UnknownError during Amplify deploys.",
+      "created_at": "2026-05-03T20:39:30.907519Z"
+    },
+    {
+      "id": "b6dfc225-5f7f-428b-93bc-a32a1dcc681a",
+      "author": "ryan",
+      "text": "Continuing investigation per user request. Plan: run controlled experiments using only disposable resources: create a temporary caller role that trusts AnthrusAI and has admin permissions, create a separate temporary Lambda execution role, assume the temporary caller role, then attempt CreateFunction/UpdateFunctionCode on a disposable Lambda. Clean up all temporary resources afterward. Also do targeted research for Lambda AccessDeniedException/UnknownError and account-level restrictions.",
+      "created_at": "2026-05-03T20:40:31.856543Z"
+    },
+    {
+      "id": "234a2bad-fd9f-4b8b-9d1c-5c6b794e8034",
+      "author": "ryan",
+      "text": "Fresh assumed-role diagnostic result: created temporary caller role trusted by AnthrusAI with AdministratorAccess and temporary Lambda execution role with AWSLambdaBasicExecutionRole. Successfully assumed the caller role, then attempted CreateFunction for a disposable diagnostic Lambda in us-west-2. CreateFunction failed with AccessDeniedException/UnknownError, HTTP 403, requestId 8d124783-0a89-4f20-a592-22dfc3cd9a69. No Lambda function was created. Temporary IAM roles were cleaned up. User requested a CLI demonstration next; local aws CLI is not installed, preparing temporary CLI install.",
+      "created_at": "2026-05-03T20:42:01.341521Z"
+    },
+    {
+      "id": "3d9b0bec-76b0-4a7c-8255-dbe11d32c3c1",
+      "author": "ryan",
+      "text": "Temporary IAM user diagnostic result: created a new IAM user with direct AdministratorAccess and a fresh access key, plus a disposable Lambda execution role. The temporary user authenticated successfully as arn:aws:iam::695039645615:user/plexus-lambda-diag-user-codex-moq8mcvy, but Lambda CreateFunction for a disposable test function still failed with AccessDeniedException/UnknownError, HTTP 403, requestId ca49f298-e360-44a8-9fa9-930274ccc862. No Lambda function was created. Temporary access key, user, and execution role were cleaned up. This rules out AnthrusAI-specific identity policy/group inheritance as the cause.",
+      "created_at": "2026-05-03T20:43:45.263904Z"
+    },
+    {
+      "id": "9ec0e8ee-e88f-4380-8b14-a44b8713d833",
+      "author": "ryan",
+      "text": "Testing regional/intermittent hypothesis: create a temporary Lambda execution role and attempt disposable Lambda CreateFunction in multiple regions, including regions not involved in Amplify staging. Clean up any created resources. Goal: distinguish us-west-2 regional failure from account-wide Lambda write block.",
+      "created_at": "2026-05-03T20:51:32.907176Z"
+    },
+    {
+      "id": "6a216117-1f36-4fdd-9d4f-49bd7fdb0c68",
+      "author": "ryan",
+      "text": "Regional diagnostic result: using a new temporary Lambda execution role, attempted disposable CreateFunction in us-west-2, us-east-1, us-east-2, and eu-west-1. All regions failed with AccessDeniedException/UnknownError HTTP 403. Request IDs: us-west-2 398f3059-1a77-477e-8e96-8f41d26ce188; us-east-1 1d7da525-5de4-4451-a4af-8109815fd96f; us-east-2 df394fbe-d4b1-48c0-a184-e2f8a8db985c; eu-west-1 c6641086-a251-400d-b6e7-30a3423535e2. Temporary execution role plexus-lambda-diag-codex-region-moq8xh9s was deleted. This strongly rules out a us-west-2-only Lambda regional incident and points to account-wide Lambda write restriction.",
+      "created_at": "2026-05-03T20:52:16.815043Z"
+    },
+    {
+      "id": "6a952796-e5d2-4847-a173-4d93f1c0cc42",
+      "author": "ryan",
+      "text": "Additional Lambda write scope diagnostic: attempted disposable PublishLayerVersion in us-west-2 using local zip bytes. This Lambda write does not involve Lambda function resources, execution role/iam:PassRole, ECR image access, S3 asset bucket access, VPC config, or CloudFormation. It failed with AccessDeniedException, HTTP 403. Debug request ID: a978630e-ba04-4da5-b444-23ab0d95fd4b. This indicates Lambda write APIs broadly are blocked, not only CreateFunction/UpdateFunctionCode.",
+      "created_at": "2026-05-03T20:54:30.984510Z"
+    },
+    {
+      "id": "fe158811-bac3-461d-8a11-6333398ed273",
+      "author": "ryan",
+      "text": "Pre-validation diagnostic: submitted intentionally invalid Lambda CreateFunction request in us-west-2 with made-up runtime and nonexistent execution role. Expected normal Lambda validation would be InvalidParameterValueException or role-not-found style error. Actual response was still AccessDeniedException HTTP 403 before validation, requestId 3d755e36-cbe4-4d44-b77e-48487382718e. This reinforces that a front-door/account-level Lambda write gate is rejecting requests before normal service validation.",
+      "created_at": "2026-05-03T20:55:48.059961Z"
+    },
+    {
+      "id": "0ffb55d8-312b-4fd9-83b8-5bb247617dd4",
+      "author": "ryan",
+      "text": "Found root cause via AWS Health/Support console using temporary federated console session. Health Dashboard open issue: 'Risk credentials exposure suspected' in us-east-1, start 2026-05-02 16:35:58 PDT, affected resources: 1 key. Support case displayId 177776500000835, title '[Action Required] Suspicious activity in your AWS account [695039645615]', status pending customer action. AWS says access key AKIA2DU4XK6XXJNVLLAH belonging to user AnthrusAI may be compromised, and they temporarily limited ability to use some AWS services. Required before 2026-05-07: rotate/delete exposed key, check CloudTrail for unwanted IAM/security activity, review account for unwanted usage across regions, then reply to the existing support case confirming completion to restore access and prevent suspension.",
+      "created_at": "2026-05-03T21:07:07.122047Z"
+    },
+    {
+      "id": "61dba8d6-1fe3-4550-b858-e3265a85b586",
+      "author": "ryan",
+      "text": "Status check on 2026-05-04: attempted to re-open AWS Support case 177776500000835 via federated console session, but local profile capacity_anthus now fails STS with InvalidClientTokenId. Checked local AWS profiles; no other valid local profile resolves to account 695039645615. This likely means the exposed AnthrusAI key was disabled/deleted as part of remediation. Need a refreshed valid profile/session for account 695039645615 or manual console access to check latest case correspondence/status.",
+      "created_at": "2026-05-04T10:43:30.133093Z"
+    },
+    {
+      "id": "b02305e4-7e74-4af3-b854-2c510b1b62c7",
+      "author": "ryan",
+      "text": "User refreshed local credentials for account 695039645615. Retrying STS and AWS Support case check for displayId 177776500000835.",
+      "created_at": "2026-05-04T10:51:00.389402Z"
+    },
+    {
+      "id": "af743fe8-8880-45e2-8acd-8752073fa227",
+      "author": "ryan",
+      "text": "Case check after credential refresh: AWS Support case 177776500000835 has new AWS response from Sun May 03 2026 20:39:12 EDT. AWS says pending actions remain: delete exposed AnthrusAI access key ending LLAH, and reply with account access location country/city/VPN info plus list of other users (IT/developer/IAM users) and their access locations. Current IAM list-access-keys for AnthrusAI shows old key AKIA2DU4XK6XXJNVLLAH is still present but Inactive, and new key AKIA2DU4XK6XZ2Y2ZIUI is Active. Next remediation: delete old key LLAH after confirming new key works everywhere, then reply to support with requested details.",
+      "created_at": "2026-05-04T10:54:08.145893Z"
+    },
+    {
+      "id": "1c15ed7e-96ac-43ed-8f34-4d4401d77316",
+      "author": "ryan",
+      "text": "2026-05-04 direct test with refreshed AnthrusAI key ending ZIUI: STS succeeds for account 695039645615. Lambda write remains blocked: disposable PublishLayerVersion in us-west-2 failed with AccessDeniedException, requestId bfe8c296-685d-4a37-bd90-b1f72ca16d68. Amplify read-side works; staging branch latest job 129 is still SUCCEED and root stack amplify-d1cegb1ft4iove-staging-branch-e30046ad8c is UPDATE_COMPLETE. Old exposed key AKIA2DU4XK6XXJNVLLAH remains present but Inactive; AWS Support explicitly requested deleting it, so service limitation likely remains until old key is deleted and support case is updated.",
+      "created_at": "2026-05-04T10:55:02.851199Z"
+    },
+    {
+      "id": "3f08b060-d913-4a50-a7b2-61c92a02c84f",
+      "author": "ryan",
+      "text": "User requested deletion of exposed inactive AnthrusAI access key AKIA2DU4XK6XXJNVLLAH. Proceeding to delete that key only, then verify remaining keys and retest harmless Lambda write.",
+      "created_at": "2026-05-04T10:55:43.066556Z"
+    },
+    {
+      "id": "5cc771e3-36f2-44a3-9829-8eafb2d99471",
+      "author": "ryan",
+      "text": "Deleted exposed inactive AnthrusAI key AKIA2DU4XK6XXJNVLLAH. Verified only active key remains: AKIA2DU4XK6XZ2Y2ZIUI. Retested harmless Lambda PublishLayerVersion in us-west-2 immediately afterward; still failed with AccessDeniedException, indicating AWS service limitation has not been lifted automatically yet. Next step: reply to Support case 177776500000835 confirming key deletion and requested location/user details.",
+      "created_at": "2026-05-04T10:56:05.641875Z"
+    },
+    {
+      "id": "c5f7fa8c-a68d-4fb9-b0a7-a7e689620067",
+      "author": "ryan",
+      "text": "Preparing draft support response; user requested no posting yet. Need identify existing IAM users for Derek/Ryan or Anthus-specific users before drafting final wording.",
+      "created_at": "2026-05-04T15:08:35.936617Z"
+    },
+    {
+      "id": "c83728de-e303-4882-b2f0-43280830ad0b",
+      "author": "ryan",
+      "text": "User requested creation of IAM user ryanporter set up like dereknorrbom. Proceeding with conservative credential handling: create user and mirror dereknorrbom's groups/direct managed policies, but do not create access key or console password unless explicitly requested.",
+      "created_at": "2026-05-04T15:10:02.650181Z"
+    },
+    {
+      "id": "57892168-a379-41b0-ae3e-8ea5aef03600",
+      "author": "ryan",
+      "text": "Created IAM user ryanporter. Mirrored dereknorrbom's permission shape: groups Administrators and AWSS3FullAccess; directly attached managed policies AmazonBedrockFullAccess, AmazonS3FullAccess, and AmazonSQSFullAccess. Did not create console password, access key, or MFA device. Verified ryanporter has no access keys and no MFA devices yet.",
+      "created_at": "2026-05-04T15:10:30.301394Z"
+    },
+    {
+      "id": "ada0c15e-9681-4d8f-bcbb-759ca1ab669f",
+      "author": "ryan",
+      "text": "Tested new capacity_ryan profile. STS resolves to arn:aws:iam::695039645615:user/ryanporter with access key AKIA2DU4XK6XWGST5UXL. ryanporter has no MFA devices yet and one active access key. Harmless Lambda PublishLayerVersion still fails with AccessDeniedException; debug requestId e26949cd-5dae-4472-a6fa-bb921a7547eb. This confirms the block is account/service-level and not specific to AnthrusAI credentials.",
+      "created_at": "2026-05-04T15:41:02.558721Z"
+    },
+    {
+      "id": "e841f83f-6847-4e85-8467-85ce66245f8a",
+      "author": "ryan",
+      "text": "Investigated AWS-listed unauthorized IAM user/key e2b-test-s3-1771988329 / AKIA2DU4XK6XSVIL47FQ. Current IAM: user exists, no groups, no attached policies, no inline policies, no MFA, one active access key. IAM reports key last used N/A. Local repo search found no references. CloudTrail: created 2026-02-25T02:58:51Z by AnthrusAI key LLAH from source IP 54.214.204.196, which is EIP on EC2 i-09a4607c2829b6c11 tag Plexus-Staging. It created user, put temporary inline policy e2b-test-s3-policy for bucket e2b-test-695039645615-1771988329, created access key, deleted inline policy, then DeleteUser failed due to remaining access key. Associated S3 bucket no longer exists and no e2b-test buckets listed. This looks like a failed cleanup from a staging/dev E2B S3 test, not active production use. AWS explicitly lists it as unauthorized and requiring deletion.",
+      "created_at": "2026-05-04T16:01:06.685226Z"
+    },
+    {
+      "id": "f5a76943-0230-4547-b3d9-ff7d7a0badaa",
+      "author": "ryan",
+      "text": "User approved deletion of AWS-listed unauthorized IAM user/key e2b-test-s3-1771988329 / AKIA2DU4XK6XSVIL47FQ. Proceeding to delete the access key first, then the IAM user, then verify removal.",
+      "created_at": "2026-05-04T16:05:21.297870Z"
+    },
+    {
+      "id": "035daa03-a629-4900-a194-5efe9e8c2aeb",
+      "author": "ryan",
+      "text": "Deleted AWS-listed unauthorized e2b test credential: access key AKIA2DU4XK6XSVIL47FQ and IAM user e2b-test-s3-1771988329. Verified get-user returns NoSuchEntity, list-users exact match returns empty, and full scan of all users' access keys found no matching user/key.",
+      "created_at": "2026-05-04T16:05:52.617505Z"
+    },
+    {
+      "id": "0ee88527-b003-44d3-9ef5-495653bd24f5",
+      "author": "ryan",
+      "text": "Verifying whether the AWS e2b credential remediation requires a separate support-case response or belongs to the existing suspicious-activity support case. Read-only inspection only; no AWS Support reply will be posted without explicit approval.",
+      "created_at": "2026-05-04T16:14:58.816773Z"
+    },
+    {
+      "id": "7a63ec1f-d7e1-4f78-bb98-694d91c06cca",
+      "author": "ryan",
+      "text": "Confirmed via AWS Support console that there is a separate active support case for the e2b key: 177789311600589, created 2026-05-04 07:11:56 EDT / 11:11:56 UTC, status Pending customer action. It specifically names access key AKIA2DU4XK6XSVIL47FQ belonging to IAM user e2b-test-s3-1771988329 and asks for confirmation after key/user cleanup, CloudTrail review, and account usage review. The original AnthrusAI case 177776500000835 also remains pending customer action.",
+      "created_at": "2026-05-04T16:20:58.627006Z"
+    },
+    {
+      "id": "1b1f20aa-21df-4b33-be2a-b38c5ff11fe0",
+      "author": "ryan",
+      "text": "User approved sending the scoped response to separate AWS Support case 177789311600589 for e2b-test-s3-1771988329 / AKIA2DU4XK6XSVIL47FQ. Next: post only that response, then re-check IAM for any remaining named/listed credentials before drafting the original AnthrusAI case reply.",
+      "created_at": "2026-05-04T16:22:32.452213Z"
+    },
+    {
+      "id": "213d2fa3-dd34-4562-85f1-3258a357ceac",
+      "author": "ryan",
+      "text": "Posted the approved remediation response to AWS Support case 177789311600589 and verified the response text appears on the case page. Continuing with read-only IAM/CloudTrail checks to identify whether any additional credentials must be deleted before replying to original case 177776500000835.",
+      "created_at": "2026-05-04T16:25:47.766938Z"
+    },
+    {
+      "id": "6518aa77-b44f-4412-bd2e-9345e27800e0",
+      "author": "ryan",
+      "text": "User approved sending the drafted response to original AWS Support case 177776500000835 for AnthrusAI / exposed key AKIA2DU4XK6XXJNVLLAH. Posting that response now, then verifying it appears in the case correspondence.",
+      "created_at": "2026-05-04T16:36:41.817354Z"
+    },
+    {
+      "id": "5d7ec373-5ecb-43e4-8101-32b22e53da23",
+      "author": "ryan",
+      "text": "Posted the approved remediation response to original AWS Support case 177776500000835 and verified the response text appears in the case correspondence. Both the e2b case and original AnthrusAI case now have customer remediation responses submitted.",
+      "created_at": "2026-05-04T16:40:58.094547Z"
+    },
+    {
+      "id": "18002cd6-bc42-4200-9bb2-8d0ea944341c",
+      "author": "ryan",
+      "text": "User asked whether Lambda write APIs work again yet; not checking AWS Support correspondence. Running a small direct Lambda publish/delete layer test with capacity_ryan to verify whether the AWS Lambda account restriction has been lifted.",
+      "created_at": "2026-05-04T17:31:20.730517Z"
+    },
+    {
+      "id": "0f294bf5-560c-473b-8b1c-82a51f19df47",
+      "author": "ryan",
+      "text": "Lambda write restriction smoke test now succeeds with capacity_ryan in us-west-2: published temporary layer plexus-lambda-restriction-smoke-1777915889 version 1 and immediately deleted that layer version. This is the same API family that previously returned AccessDeniedException, so Lambda account restriction appears lifted for direct Lambda writes. Full Amplify deployment has not been retested yet.",
+      "created_at": "2026-05-04T17:31:45.665906Z"
+    },
+    {
+      "id": "6086af93-b342-4c05-b959-2d9720df306f",
+      "author": "ryan",
+      "text": "User asked to test the staging Amplify deployment that had been blocked by the Lambda restriction. Next steps: inspect current staging branch/job state for app d1cegb1ft4iove, trigger or retry the appropriate deployment job, and monitor until it clearly passes or fails.",
+      "created_at": "2026-05-04T17:33:59.495715Z"
+    },
+    {
+      "id": "499439c1-053f-456b-81e9-871837718f70",
+      "author": "ryan",
+      "text": "Staging Amplify retest succeeded. Started job 130 on app d1cegb1ft4iove / branch staging with reason: Retest staging deployment after AWS Lambda service restriction was lifted. Job 130 reached SUCCEED with BUILD, DEPLOY, and VERIFY all SUCCEED. Build logs showed backend CloudFormation deployment completed successfully, including data/auth/function/MCP stacks reaching UPDATE_COMPLETE; frontend build/deploy/verify also completed.",
+      "created_at": "2026-05-04T17:48:27.786635Z"
+    }
+  ],
+  "created_at": "2026-05-03T20:03:59.905072Z",
+  "updated_at": "2026-05-04T17:48:27.786635Z",
+  "closed_at": null,
+  "custom": {}
+}

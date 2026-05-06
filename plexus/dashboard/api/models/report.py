@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from .base import BaseModel
+from plexus.attribution.actor_context import apply_actor_attribution
 
 if TYPE_CHECKING:
     from ..client import _BaseAPIClient
@@ -24,6 +25,7 @@ class Report(BaseModel):
     reportConfigurationId: Optional[str] = None
     parameters: Optional[Dict[str, Any]] = field(default_factory=dict)
     output: Optional[str] = None
+    createdByUserId: Optional[str] = None
 
     def __init__(
         self,
@@ -36,6 +38,7 @@ class Report(BaseModel):
         reportConfigurationId: Optional[str] = None,
         parameters: Optional[Dict[str, Any]] = None,
         output: Optional[str] = None,
+        createdByUserId: Optional[str] = None,
         client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
@@ -47,6 +50,7 @@ class Report(BaseModel):
         self.updatedAt = updatedAt
         self.parameters = parameters or {}
         self.output = output
+        self.createdByUserId = createdByUserId
 
     @classmethod
     def fields(cls) -> str:
@@ -61,6 +65,7 @@ class Report(BaseModel):
             updatedAt
             parameters # Assuming JSON string
             output
+            createdByUserId
         """
 
     @classmethod
@@ -107,6 +112,7 @@ class Report(BaseModel):
             reportConfigurationId=data.get('reportConfigurationId'),
             parameters=data.get('parameters'),
             output=data.get('output'),
+            createdByUserId=data.get('createdByUserId'),
             client=client
         )
 
@@ -119,7 +125,8 @@ class Report(BaseModel):
         name: str,
         reportConfigurationId: Optional[str] = None,
         parameters: Optional[Dict[str, Any]] = None,
-        output: Optional[str] = None
+        output: Optional[str] = None,
+        createdByUserId: Optional[str] = None,
     ) -> 'Report':
         """Create a new Report record via GraphQL mutation, linked to a Task."""
         mutation = f"""
@@ -136,10 +143,29 @@ class Report(BaseModel):
             'name': name,
             'parameters': json.dumps(parameters or {})
         }
+        if createdByUserId:
+            input_data["createdByUserId"] = createdByUserId
         if reportConfigurationId is not None:
             input_data['reportConfigurationId'] = reportConfigurationId
         if output is not None:
             input_data['output'] = output
+
+        input_data = apply_actor_attribution(
+            input_data,
+            client_context=getattr(client, "context", None),
+            source="agent",
+        )
+        actor_metadata = input_data.pop("metadata", None)
+        if isinstance(actor_metadata, dict) and actor_metadata.get("attribution"):
+            merged_parameters = parameters.copy() if isinstance(parameters, dict) else {}
+            existing_attribution = merged_parameters.get("attribution")
+            if not isinstance(existing_attribution, dict):
+                existing_attribution = {}
+            merged_parameters["attribution"] = {
+                **existing_attribution,
+                **actor_metadata["attribution"],
+            }
+            input_data["parameters"] = json.dumps(merged_parameters)
 
         try:
             result = client.execute(mutation, {'input': input_data})
@@ -449,7 +475,7 @@ class Report(BaseModel):
             except Exception as e:
                 logger.error(f"Failed to delete Report {report_id}: {e}")
                 results[report_id] = False
-                
+
         return results
 
-    # get_by_id is inherited from BaseModel 
+    # get_by_id is inherited from BaseModel

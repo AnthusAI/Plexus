@@ -19,6 +19,7 @@ from plexus.cli.shared.file_editor import FileEditor
 from plexus.cli.shared import get_score_yaml_path
 from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier, resolve_score_identifier
 from plexus.cli.shared.plexus_tool import PlexusTool
+from plexus.attribution.actor_context import apply_actor_attribution
 
 
 class ScoreChatService:
@@ -547,13 +548,13 @@ Then ask the user what they would like to change about the scorecard."""
             """
             
             result = self.client.execute(mutation, {
-                'input': {
+                'input': apply_actor_attribution({
                     'scoreId': score_id,
                     'configuration': yaml_content,
                     'parentVersionId': score_data.get('championVersionId'),
                     'note': 'Updated via API chat command',
                     'isFeatured': "true"
-                }
+                }, client_context=getattr(self.client, "context", None), source="agent")
             })
             
             if result.get('createScoreVersion'):

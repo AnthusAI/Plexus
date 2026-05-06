@@ -1,0 +1,31 @@
+{
+  "id": "plx-bc3a8917-632b-4b47-a257-09a8130f5f17",
+  "title": "Fix score push guidelines persistence",
+  "description": "Score push can create a ScoreVersion without the expected guidelines. Behavior needed: pushes must read the canonical local guidelines path, include guidelines when local guidelines exist, and preserve the current champion guidelines on code-only pushes instead of silently omitting them. Verification should cover both CLI push logic and the Score model helper path.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9539e9a9-d6c8-416b-8fda-55aeac89d368",
+      "author": "ryan",
+      "text": "Started investigation. Raw getScoreVersion for champion ef9666a4-dc57-4613-92aa-f74325f347fa currently has non-empty guidelines (12,217 chars), but the push code has two risks: the Score model helper reads root <score>.md instead of the canonical guidelines/<score>.md path, and both push paths can omit guidelines instead of preserving champion guidelines on code-only pushes.",
+      "created_at": "2026-05-05T18:24:09.614009Z"
+    },
+    {
+      "id": "12f2e25e-439a-4dab-9d3b-1c385688057b",
+      "author": "ryan",
+      "text": "Fixed production data first: rewrote Individual Confirmation champion ScoreVersion ef9666a4-dc57-4613-92aa-f74325f347fa guidelines from the local canonical file and verified 12,217 chars via score.info. Then fixed push behavior: Score model now uses the canonical guidelines/<score>.md path; create_version_from_code preserves champion guidelines when guidelines are omitted and allows explicit empty string clears; CLI push preserves champion guidelines when the local guidelines file is missing and sends guidelines explicitly on create. Verification: /Users/ryan/miniconda3/bin/python -m pytest plexus/dashboard/api/models/score_push_guidelines_test.py plexus/cli/score/score_push_guidelines_test.py -q passed 5 tests; py_compile passed for changed modules and tests.",
+      "created_at": "2026-05-05T18:29:21.439783Z"
+    }
+  ],
+  "created_at": "2026-05-05T18:24:06.012437Z",
+  "updated_at": "2026-05-05T18:29:21.450592Z",
+  "closed_at": "2026-05-05T18:29:21.450592Z",
+  "custom": {}
+}

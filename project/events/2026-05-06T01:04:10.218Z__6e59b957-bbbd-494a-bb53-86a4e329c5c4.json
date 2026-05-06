@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6e59b957-bbbd-494a-bb53-86a4e329c5c4",
+  "issue_id": "plx-12351d2b-d61c-4f1a-8715-2a7d19262e29",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T01:04:10.218Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-07dc0d44-08df-4248-97af-1f928bc2e19d",
+    "priority": 1,
+    "status": "open",
+    "title": "Merge scoped dispatch runtime fixes into develop"
+  }
+}

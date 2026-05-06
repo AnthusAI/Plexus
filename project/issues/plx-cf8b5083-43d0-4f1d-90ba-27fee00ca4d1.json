@@ -1,0 +1,67 @@
+{
+  "id": "plx-cf8b5083-43d0-4f1d-90ba-27fee00ca4d1",
+  "title": "Add evaluation gauges to Scorecard History report",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "80154d8b-0cc2-493b-95e6-51bca3c1822a",
+      "author": "ryan",
+      "text": "Implemented local backend and dashboard support for Scorecard History evaluation gauges. Manual fresh report run created report 1d2ebc2e-ef3e-4bbe-81ce-9cd81a0a81a8 with performance payloads on 4 of 5 changed scores. Awaiting human review; not committed or pushed.",
+      "created_at": "2026-05-05T17:33:45.735168Z"
+    },
+    {
+      "id": "d3b48fbd-aead-4d21-bb1e-819f3103ee2e",
+      "author": "ryan",
+      "text": "Updated generated summaries to categorized Markdown bullet lists for top-level and per-score summaries. Fresh report 054d4876-d764-4d7a-85d2-1b301425affa generated successfully for human review.",
+      "created_at": "2026-05-05T17:47:28.721303Z"
+    },
+    {
+      "id": "bc22409b-b505-4014-9489-da19f720f1b3",
+      "author": "ryan",
+      "text": "Adding score-level window diffs: compare the latest same-score version before the report window to the latest in-window starred version, in addition to existing per-version diffs.",
+      "created_at": "2026-05-05T17:57:04.941272Z"
+    },
+    {
+      "id": "eee782ab-8335-4075-b146-3be96105d344",
+      "author": "ryan",
+      "text": "Added full-window score diffs from the latest version before the report window to the latest included starred version. Fresh report b43acd7d-11c5-411b-9528-3805a2c8984c generated with window_diff on all 5 changed scores.",
+      "created_at": "2026-05-05T17:59:10.380255Z"
+    },
+    {
+      "id": "4e0dae7e-dc7a-4aa8-aef6-d6eabcf798e2",
+      "author": "ryan",
+      "text": "Adjusted Scorecard History evaluation metric tabs to use the score component's subtle underline tab styling: transparent background, no pill/shadow, active border-only indicator.",
+      "created_at": "2026-05-05T18:00:05.422131Z"
+    },
+    {
+      "id": "eefb314d-35a5-4d32-8658-5fadfc94c984",
+      "author": "ryan",
+      "text": "Removed the per-dataset label/evaluation-id row above Scorecard History gauges so the subtle tab selector sits directly above the gauge grid.",
+      "created_at": "2026-05-05T18:08:42.196656Z"
+    },
+    {
+      "id": "a67db98a-2957-4c4a-a392-a46ffb2c84cd",
+      "author": "ryan",
+      "text": "Changed the Scorecard History score summary/gauge layout from viewport-breakpoint grid to wrapping flex columns, so gauges move below the text when the score section itself is too narrow.",
+      "created_at": "2026-05-05T18:12:07.176232Z"
+    },
+    {
+      "id": "ccbf4558-1ddc-4021-94ff-4dd3a288cb85",
+      "author": "ryan",
+      "text": "Moved Scorecard History change notes into their own full-width row after the summary/gauge row, so wrapped/narrow layouts show gauges before change notes.",
+      "created_at": "2026-05-05T18:13:31.088602Z"
+    }
+  ],
+  "created_at": "2026-05-05T17:26:42.461913Z",
+  "updated_at": "2026-05-05T18:15:59.821822Z",
+  "closed_at": "2026-05-05T18:15:59.821822Z",
+  "custom": {}
+}

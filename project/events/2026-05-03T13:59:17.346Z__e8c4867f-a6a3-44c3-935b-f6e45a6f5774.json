@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e8c4867f-a6a3-44c3-935b-f6e45a6f5774",
+  "issue_id": "plx-1f06a6d6-a6c6-4930-9afa-24290cbbe838",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T13:59:17.346Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Add an x-axis driven tooltip to the combined ScoreChampionVersionTimeline chart. The hover should list all score champion changes in the hovered time bucket and show before, delta, and after for alignment and accuracy without overwhelming detail.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Add combined champion timeline hover summary"
+  }
+}

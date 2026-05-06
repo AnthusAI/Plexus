@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from plexus.metrics.calculator import create_calculator_from_env
 
 # Load environment variables from .env file
-load_dotenv('.env', override=True)
+load_dotenv('.env', override=False)
 
 # Set up console for rich output
 console = Console()
@@ -283,4 +283,4 @@ count_group.add_command(count_scoreresults)
 count_group.add_command(count_results)
 
 # Export the group so it can be imported by the main CLI
-count = count_group 
+count = count_group

@@ -1,0 +1,37 @@
+{
+  "id": "plx-f349826d-dcb9-439e-89b5-6162ef58ade6",
+  "title": "Compact combined champion timeline hover tooltip",
+  "description": "The combined ScoreChampionVersionTimeline hover tooltip is visually good but too tall when many scores changed on the same day. Make it vertically compact with one row per score transition and inline metric summaries instead of stacked sections.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b923738c-24e1-42c2-88a6-e1f43da98648",
+      "author": "ryan",
+      "text": "Compacted the combined champion timeline tooltip to one row per score transition. Removed stacked dataset cards and replaced them with inline feedback/regression metric chips showing AC1 and accuracy before/delta/after. Focused ScoreChampionVersionTimeline Jest test passes. Full dashboard typecheck is currently blocked by unrelated ProcedureTask.tsx errors for baselineAccuracy/currentBaselineAccuracy on ProcedureFeedbackEvaluationSummary.",
+      "created_at": "2026-05-03T14:08:41.455901Z"
+    },
+    {
+      "id": "9f074fcd-6281-4ad5-abe9-1b4ae4ac0c93",
+      "author": "ryan",
+      "text": "Follow-up: remove version IDs from the compact combined tooltip entirely to reduce visual noise and make each score transition row smaller.",
+      "created_at": "2026-05-03T14:10:21.997758Z"
+    },
+    {
+      "id": "c00f7f9f-dd52-4d60-bbdb-b6610334beae",
+      "author": "ryan",
+      "text": "Removed version IDs from the combined tooltip row. The tooltip now uses a two-column row: score name and inline metric chips. Focused ScoreChampionVersionTimeline Jest test passes. Full dashboard typecheck remains blocked by unrelated ProcedureTask.tsx baselineAccuracy/currentBaselineAccuracy type errors.",
+      "created_at": "2026-05-03T14:10:38.965655Z"
+    }
+  ],
+  "created_at": "2026-05-03T14:07:29.772326Z",
+  "updated_at": "2026-05-03T14:10:38.965655Z",
+  "closed_at": null,
+  "custom": {}
+}

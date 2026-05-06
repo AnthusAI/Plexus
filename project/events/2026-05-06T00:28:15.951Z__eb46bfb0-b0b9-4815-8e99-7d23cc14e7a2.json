@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "eb46bfb0-b0b9-4815-8e99-7d23cc14e7a2",
+  "issue_id": "plx-e37ef692-166a-4312-bab5-aa5cbb8bc5b6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T00:28:15.951Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Bind runtime actor context at procedure execution boundary and pass parent client/account into procedure-triggered evaluation runs so child Evaluation records keep deterministic createdByUserId + metadata.attribution.requestUserId.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+    "priority": 1,
+    "status": "open",
+    "title": "Procedure child evaluations inherit parent actor context"
+  }
+}

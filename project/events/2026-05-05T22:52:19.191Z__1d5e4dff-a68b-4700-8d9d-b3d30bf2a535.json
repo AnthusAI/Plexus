@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1d5e4dff-a68b-4700-8d9d-b3d30bf2a535",
+  "issue_id": "plx-563e779e-dcfb-4214-9896-971d0eb77ad9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-05T22:52:19.191Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Standardize task author indicator placement across grid/detail cards"
+  }
+}

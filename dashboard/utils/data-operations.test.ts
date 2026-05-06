@@ -80,6 +80,45 @@ describe('transformEvaluation', () => {
     expect(result!.current_baseline_evaluation_id).toBe('eval-current-best');
   });
 
+  it('preserves createdByUserId when transforming evaluation data', () => {
+    const mockEvaluation: BaseEvaluation = {
+      id: 'eval-author',
+      type: 'accuracy',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+      status: 'COMPLETED',
+      accountId: 'account-1',
+      createdByUserId: 'user-123',
+    } as any;
+
+    const result = transformEvaluation(mockEvaluation);
+
+    expect(result).toBeTruthy();
+    expect(result!.createdByUserId).toBe('user-123');
+  });
+
+  it('falls back to parameters attribution requestUserId when createdByUserId is missing', () => {
+    const mockEvaluation: BaseEvaluation = {
+      id: 'eval-author-fallback',
+      type: 'accuracy',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+      status: 'COMPLETED',
+      accountId: 'account-1',
+      createdByUserId: null,
+      parameters: JSON.stringify({
+        attribution: {
+          requestUserId: 'user-request',
+        },
+      }),
+    } as any;
+
+    const result = transformEvaluation(mockEvaluation);
+
+    expect(result).toBeTruthy();
+    expect(result!.createdByUserId).toBe('user-request');
+  });
+
   describe('itemIdentifiers extraction', () => {
     it('normalizes object-map legacy identifiers for shared display consumption', () => {
       const identifiers = extractScoreResultItemIdentifiers({

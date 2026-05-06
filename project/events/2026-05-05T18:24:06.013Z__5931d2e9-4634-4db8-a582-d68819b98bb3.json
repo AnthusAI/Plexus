@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5931d2e9-4634-4db8-a582-d68819b98bb3",
+  "issue_id": "plx-bc3a8917-632b-4b47-a257-09a8130f5f17",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-05T18:24:06.013Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Score push can create a ScoreVersion without the expected guidelines. Behavior needed: pushes must read the canonical local guidelines path, include guidelines when local guidelines exist, and preserve the current champion guidelines on code-only pushes instead of silently omitting them. Verification should cover both CLI push logic and the Score model helper path.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-f506cb4b-4478-4ab6-87dd-701cc8c41beb",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix score push guidelines persistence"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0ccde73e-6622-490a-92c9-512ba31e0d97",
+  "issue_id": "plx-2ed60fa0-7985-4df3-8efe-0ceb22eab27d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T02:08:40.406Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix execute_tactus actor attribution import"
+  }
+}

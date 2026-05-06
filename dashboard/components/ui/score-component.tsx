@@ -40,6 +40,7 @@ import { EvaluationDialog, FeedbackEvaluationDialog } from '@/components/task-di
 import { createTask } from '@/utils/data-operations'
 import { formatAmplifyError } from '@/utils/amplify-client'
 import { getCurrentUserAttribution } from '@/utils/user-profile'
+import { resolveCreatedByUserId } from '@/utils/author-attribution'
 import { useAccount } from '@/app/contexts/AccountContext'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
 import { ScoreProcedureList } from '@/components/ui/score-procedure-list'
@@ -80,6 +81,7 @@ export interface ScoreVersion {
   branch?: string
   parentVersionId?: string
   metadata?: Record<string, any> | null
+  createdByUserId?: string | null
   createdAt: string
   updatedAt: string
   user?: {
@@ -120,6 +122,14 @@ const parseScoreVersionMetadata = (metadata: unknown): Record<string, any> => {
   }
   return typeof metadata === 'object' && !Array.isArray(metadata) ? metadata as Record<string, any> : {}
 }
+
+const normalizeScoreVersionAuthor = (version: ScoreVersion): ScoreVersion => ({
+  ...version,
+  createdByUserId: resolveCreatedByUserId({
+    createdByUserId: version.createdByUserId,
+    metadata: version.metadata,
+  }),
+})
 
 const assertGraphQLSuccess = (response: any, action: string) => {
   if (response?.errors?.length) {
@@ -2260,6 +2270,7 @@ export function ScoreComponent({
               createdAt
               updatedAt
               metadata
+              createdByUserId
             }
           }
         `,
@@ -2268,10 +2279,11 @@ export function ScoreComponent({
 
       const version = response.data?.getScoreVersion ?? null;
       if (!version || version.scoreId !== score.id) return null
+      const normalized = normalizeScoreVersionAuthor(version)
 
-      setVersions(prev => mergeScoreVersions(prev, [version]))
-      setLoadedVersionCount(prev => Math.max(prev, mergeScoreVersions(versions, [version]).length))
-      return version
+      setVersions(prev => mergeScoreVersions(prev, [normalized]))
+      setLoadedVersionCount(prev => Math.max(prev, mergeScoreVersions(versions, [normalized]).length))
+      return normalized
     } catch (error) {
       console.error('Failed to hydrate related score version:', formatAmplifyError(error))
       return null
@@ -2387,6 +2399,7 @@ export function ScoreComponent({
               createdAt
               updatedAt
               metadata
+              createdByUserId
             }
           }
         `,
@@ -2394,7 +2407,8 @@ export function ScoreComponent({
       }) as GraphQLResult<GetScoreVersionResponse>;
 
       const version = response.data?.getScoreVersion ?? null;
-      return version?.scoreId === score.id ? version : null;
+      if (!version || version.scoreId !== score.id) return null
+      return normalizeScoreVersionAuthor(version)
     };
 
     const fetchVersionPage = async (nextToken: string | null) => {
@@ -2424,6 +2438,7 @@ export function ScoreComponent({
                 createdAt
                 updatedAt
                 metadata
+                createdByUserId
               }
               nextToken
             }
@@ -2443,7 +2458,7 @@ export function ScoreComponent({
 
       const resultData = response.data?.listScoreVersionByScoreIdAndCreatedAt;
       return {
-        items: resultData?.items ?? [],
+        items: (resultData?.items ?? []).map(normalizeScoreVersionAuthor),
         nextToken: resultData?.nextToken ?? null,
       };
     };
@@ -2474,6 +2489,7 @@ export function ScoreComponent({
                 createdAt
                 updatedAt
                 metadata
+                createdByUserId
               }
             }
           }
@@ -2489,7 +2505,8 @@ export function ScoreComponent({
         }
       }>;
 
-      return response.data?.listScoreVersionByScoreIdAndIsFeaturedAndCreatedAt?.items ?? [];
+      return (response.data?.listScoreVersionByScoreIdAndIsFeaturedAndCreatedAt?.items ?? [])
+        .map(normalizeScoreVersionAuthor);
     };
 
     const selectPreferredVersion = async (
@@ -3016,6 +3033,8 @@ export function ScoreComponent({
               note
               createdAt
               updatedAt
+              metadata
+              createdByUserId
             }
           }
         `,
@@ -3028,8 +3047,9 @@ export function ScoreComponent({
       
       // Update local state with the new version
       if (newVersion) {
+        const normalizedNewVersion = normalizeScoreVersionAuthor(newVersion)
         const placeholderVersion = {
-          ...newVersion,
+          ...normalizedNewVersion,
           user: {
             name: "Ryan Porter",
             avatar: "/user-avatar.png",

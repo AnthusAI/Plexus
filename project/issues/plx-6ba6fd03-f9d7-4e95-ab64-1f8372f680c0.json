@@ -1,0 +1,25 @@
+{
+  "id": "plx-6ba6fd03-f9d7-4e95-ab64-1f8372f680c0",
+  "title": "Tune champion timeline curve smoothing",
+  "description": "Adjust ScoreChampionVersionTimeline line interpolation to reduce excessive Bezier-like curvature while keeping lines smoother than sharp angular turns.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f5a76820-9f3a-412e-b53b-f306a253c778",
+      "author": "ryan",
+      "text": "Adjusted champion timeline line interpolation from Recharts monotone to a tuned cardinal curve (tension 0.55) across combined and per-score series. This keeps rounded motion but sharpens the turns compared with the previous Bezier-like curve. Focused ScoreChampionVersionTimeline Jest test and dashboard typecheck pass.",
+      "created_at": "2026-05-03T14:14:57.249721Z"
+    }
+  ],
+  "created_at": "2026-05-03T14:13:54.686437Z",
+  "updated_at": "2026-05-03T14:14:57.249721Z",
+  "closed_at": null,
+  "custom": {}
+}

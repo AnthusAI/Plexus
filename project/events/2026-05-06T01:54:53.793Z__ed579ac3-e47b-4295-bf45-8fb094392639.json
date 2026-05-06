@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ed579ac3-e47b-4295-bf45-8fb094392639",
+  "issue_id": "plx-caca3f2b-0655-4340-9222-5150d7fa6566",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T01:54:53.793Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Apply all CodeQL/code-quality review suggestions on PR #295 directly on develop, then run focused checks and push.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Accept PR 295 CodeQL suggestions"
+  }
+}

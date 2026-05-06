@@ -1,0 +1,18 @@
+{
+  "id": "plx-563e779e-dcfb-4214-9896-971d0eb77ad9",
+  "title": "Standardize task author indicator placement across grid/detail cards",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-05T22:52:19.191023Z",
+  "updated_at": "2026-05-05T22:57:18.388387Z",
+  "closed_at": "2026-05-05T22:57:18.388387Z",
+  "custom": {}
+}

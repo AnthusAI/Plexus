@@ -1,9 +1,12 @@
 import os
 import json
 import logging
+from datetime import datetime, timezone
 from kombu.utils.url import safequote
 
+import boto3
 from boto3.dynamodb.types import TypeDeserializer
+from botocore.exceptions import ClientError
 from celery import Celery
 
 # Set up basic logging with more detailed format
@@ -15,15 +18,27 @@ logging.basicConfig(
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Get and quote AWS credentials
-aws_access_key = safequote(os.environ.get("CELERY_AWS_ACCESS_KEY_ID", ""))
-aws_secret_key = safequote(os.environ.get("CELERY_AWS_SECRET_ACCESS_KEY", ""))
-aws_region = os.environ.get("CELERY_AWS_REGION_NAME", "")
+PLACEHOLDER_VALUE = "WILL_BE_SET_AFTER_DEPLOYMENT"
 
-# Get queue name from environment variable or use default
-sqs_queue_name = os.environ.get("CELERY_QUEUE_NAME", "plexus-celery-development")
-logger.info(f"Using queue name: {sqs_queue_name}" + 
-            (f" (from CELERY_QUEUE_NAME environment variable)" if os.environ.get("CELERY_QUEUE_NAME") else " (default)"))
+
+def _required_env(name):
+    value = os.environ.get(name, "").strip()
+    if not value or value == PLACEHOLDER_VALUE:
+        raise ValueError(
+            f"Missing required TaskDispatcher environment variable: {name}"
+        )
+    return value
+
+
+# Get and quote AWS credentials
+aws_access_key = safequote(_required_env("CELERY_AWS_ACCESS_KEY_ID"))
+aws_secret_key = safequote(_required_env("CELERY_AWS_SECRET_ACCESS_KEY"))
+aws_region = _required_env("CELERY_AWS_REGION_NAME")
+
+# Require an explicit queue so staging/production cannot silently dispatch to
+# the development default.
+sqs_queue_name = _required_env("CELERY_QUEUE_NAME")
+logger.info(f"Using queue name: {sqs_queue_name}")
 
 logger.info(f"AWS Region configured: {bool(aws_region)}")
 logger.info(f"AWS credentials configured: {bool(aws_access_key and aws_secret_key)}")
@@ -32,11 +47,8 @@ logger.info(f"AWS credentials configured: {bool(aws_access_key and aws_secret_ke
 broker_url = f"sqs://{aws_access_key}:{aws_secret_key}@/{sqs_queue_name}"
 
 # Get backend URL template and construct full URL
-backend_url_template = os.environ.get("CELERY_RESULT_BACKEND_TEMPLATE")
+backend_url_template = _required_env("CELERY_RESULT_BACKEND_TEMPLATE")
 logger.info(f"Backend template configured: {bool(backend_url_template)}")
-
-if not all([aws_access_key, aws_secret_key, aws_region, backend_url_template]):
-    raise ValueError("Missing required AWS credentials or backend template in environment")
 
 backend_url = backend_url_template.format(
     aws_access_key=aws_access_key,
@@ -87,13 +99,133 @@ def is_self_managed_task(task):
     return metadata.get("dispatch_mode") in SELF_MANAGED_DISPATCH_MODES
 
 
+def _json_for_log(payload):
+    """Serialize log payloads defensively (DynamoDB numbers may be Decimal)."""
+    return json.dumps(payload, default=str)
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _task_table_name(record):
+    stream_arn = record.get("eventSourceARN") or ""
+    marker = ":table/"
+    if marker not in stream_arn:
+        raise ValueError("DynamoDB stream record is missing eventSourceARN table name")
+    table_segment = stream_arn.split(marker, 1)[1]
+    table_name = table_segment.split("/stream/", 1)[0]
+    if not table_name:
+        raise ValueError("DynamoDB stream record has an empty table name")
+    return table_name
+
+
+def _task_table_region(record):
+    region = (record.get("awsRegion") or "").strip()
+    if not region:
+        raise ValueError("DynamoDB stream record is missing awsRegion")
+    return region
+
+
+def _task_table(record):
+    return boto3.resource(
+        "dynamodb",
+        region_name=_task_table_region(record),
+    ).Table(_task_table_name(record))
+
+
+def _update_task_record(record, task_id, updates, expected_dispatch_status=None):
+    if not task_id:
+        raise ValueError("Cannot update Task dispatch state without a task id")
+
+    names = {}
+    values = {}
+    assignments = []
+    for index, (field, value) in enumerate(updates.items()):
+        name_key = f"#field{index}"
+        value_key = f":value{index}"
+        names[name_key] = field
+        values[value_key] = value
+        assignments.append(f"{name_key} = {value_key}")
+
+    update_args = {
+        "Key": {"id": task_id},
+        "UpdateExpression": "SET " + ", ".join(assignments),
+        "ExpressionAttributeNames": names,
+        "ExpressionAttributeValues": values,
+    }
+
+    if expected_dispatch_status is not None:
+        names["#expectedDispatchStatus"] = "dispatchStatus"
+        values[":expectedDispatchStatus"] = expected_dispatch_status
+        update_args["ConditionExpression"] = (
+            "#expectedDispatchStatus = :expectedDispatchStatus"
+        )
+
+    _task_table(record).update_item(**update_args)
+
+
+def _claim_task_for_dispatch(record, task_id, dispatcher_id):
+    try:
+        _update_task_record(
+            record,
+            task_id,
+            {
+                "dispatchStatus": "DISPATCHING",
+                "workerNodeId": dispatcher_id,
+                "updatedAt": _utc_now(),
+            },
+            expected_dispatch_status="PENDING",
+        )
+        return True
+    except ClientError as exc:
+        error = exc.response.get("Error", {})
+        if error.get("Code") == "ConditionalCheckFailedException":
+            logger.info(
+                f"Skipping task {task_id}; dispatchStatus was claimed by another dispatcher"
+            )
+            return False
+        raise
+
+
+def _mark_task_dispatched(record, task_id, dispatcher_id, celery_task_id):
+    _update_task_record(
+        record,
+        task_id,
+        {
+            "dispatchStatus": "DISPATCHED",
+            "workerNodeId": dispatcher_id,
+            "celeryTaskId": celery_task_id,
+            "updatedAt": _utc_now(),
+        },
+    )
+
+
+def _mark_task_dispatch_failed(record, task_id, error_message):
+    if not task_id:
+        return
+    try:
+        _update_task_record(
+            record,
+            task_id,
+            {
+                "status": "FAILED",
+                "dispatchStatus": "ERROR",
+                "errorMessage": error_message,
+                "updatedAt": _utc_now(),
+            },
+        )
+    except Exception:
+        logger.error(f"Failed to mark task {task_id} dispatch failure", exc_info=True)
+
+
 def handler(event, context):
     """
     AWS Lambda handler that processes DynamoDB stream events.
     For each new or modified task record with dispatchStatus 'PENDING', dispatch the task using Celery.
     """
     logger.info(f"Lambda function started with RequestId: {context.aws_request_id}")
-    logger.info(f"Received event: {json.dumps(event)}")
+    logger.info(f"Received event: {_json_for_log(event)}")
     
     if not event.get('Records'):
         logger.warning("No records found in event")
@@ -104,7 +236,8 @@ def handler(event, context):
     error_count = 0
 
     for record in event.get('Records', []):
-        logger.info(f"Processing record: {json.dumps(record.get('eventID'))}")
+        logger.info(f"Processing record: {_json_for_log(record.get('eventID'))}")
+        task_id = None
         
         event_name = record.get('eventName')
         logger.info(f"Event type: {event_name}")
@@ -122,10 +255,10 @@ def handler(event, context):
 
         try:
             task = deserialize_dynamo_item(new_image)
-            logger.info(f"Deserialized task: {json.dumps(task)}")
+            logger.info(f"Deserialized task: {_json_for_log(task)}")
 
             if is_self_managed_task(task):
-                logger.info("Skipping self-managed task with dispatch_mode: %s", metadata_dict(task.get("metadata")).get("dispatch_mode"))
+                logger.info("Skipping self-managed task dispatch")
                 skipped_count += 1
                 continue
             
@@ -152,9 +285,14 @@ def handler(event, context):
             task_id = task.get('id')
             command = task.get('command')
             target = task.get('target', 'default/command')
+            dispatcher_id = f"lambda:{context.aws_request_id}"
 
             logger.info(f"Dispatching task: id={task_id}, command={command}, target={target}")
             logger.info(f"Command breakdown: {repr(command)}")
+
+            if not _claim_task_for_dispatch(record, task_id, dispatcher_id):
+                skipped_count += 1
+                continue
 
             # Dispatch the Celery task using the existing Celery task name
             result = celery_app.send_task(
@@ -162,12 +300,17 @@ def handler(event, context):
                 args=[command],
                 kwargs={'target': target, 'task_id': task_id}
             )
+            _mark_task_dispatched(record, task_id, dispatcher_id, result.id)
             logger.info(f"Successfully dispatched task {task_id} via Celery. Celery task id: {result.id}")
             processed_count += 1
             
         except Exception as e:
             error_msg = f"Error processing record: {str(e)}"
             logger.error(error_msg, exc_info=True)
+            try:
+                _mark_task_dispatch_failed(record, task_id, error_msg)
+            except Exception:
+                logger.error("Failed while recording dispatch error", exc_info=True)
             error_count += 1
 
     summary = {
@@ -176,5 +319,5 @@ def handler(event, context):
         "skipped": skipped_count,
         "errors": error_count
     }
-    logger.info(f"Lambda execution complete. Summary: {json.dumps(summary)}")
+    logger.info(f"Lambda execution complete. Summary: {_json_for_log(summary)}")
     return summary
