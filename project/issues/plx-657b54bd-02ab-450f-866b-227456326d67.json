@@ -28,10 +28,16 @@
       "author": "derek",
       "text": "Implemented and pushed: scorecard_from_question_export now uses execute_tactus for all scorecard/score writes, removes actor-loop dependency in act stage, and includes runtime support for plexus.scorecards.create and plexus.score.create in execute_tactus. Verified with python3 -m py_compile MCP/tools/tactus_runtime/execute.py and pytest plexus/cli/procedure/test_service_yaml_loader.py -q.",
       "created_at": "2026-05-06T23:27:56.310876287Z"
+    },
+    {
+      "id": "9a5f35cb-1380-48e2-bb03-6c84373bdd1d",
+      "author": "derek",
+      "text": "Regression identified from local run: Tactus runtime rejects procedures without agents (error: 'At least one agent must be defined'). Action: restore a minimal agent block for runtime compatibility while keeping execution path deterministic via execute_tactus-only API calls in Lua. This preserves One-Tool architecture and avoids actor follow-up loops.",
+      "created_at": "2026-05-06T23:33:47.071850319Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-06T23:27:56.310876287Z",
+  "updated_at": "2026-05-06T23:33:47.071850319Z",
   "closed_at": null,
   "custom": {}
 }
