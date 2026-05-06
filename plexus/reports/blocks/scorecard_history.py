@@ -38,6 +38,8 @@ class ScorecardHistory(BaseReportBlock):
     DEFAULT_DESCRIPTION = "Featured score-version changes and champion promotion status"
     DEFAULT_DAYS = 30
     SUMMARY_DIFF_CHAR_LIMIT = 1500
+    PER_SCORE_SUMMARY_BATCH_SIZE = 4
+    PER_SCORE_SUMMARY_BATCH_PAYLOAD_CHAR_LIMIT = 45000
     REQUIRED_SUMMARY_SECTION_HEADINGS = (
         "What changed",
         "Guideline / rubric changes",
@@ -167,16 +169,12 @@ class ScorecardHistory(BaseReportBlock):
                     champion_coverage=champion_coverage,
                     score_summaries=summary_inputs,
                 )
-                per_score_summary_payload = await self._generate_per_score_summary_payload(
+                per_score_summaries = await self._generate_per_score_summaries_batched(
                     scorecard_name=scorecard.name,
                     mode=mode,
                     start_date=window_start,
                     end_date=window_end,
                     score_summaries=summary_inputs,
-                )
-                per_score_summaries = self._parse_per_score_summary_response(
-                    per_score_summary_payload,
-                    expected_score_ids=[score_output["score_id"] for score_output in score_outputs],
                 )
                 for score_output in score_outputs:
                     score_output["summary"] = per_score_summaries[score_output["score_id"]].strip()
@@ -1327,6 +1325,220 @@ class ScorecardHistory(BaseReportBlock):
             "Do not invent facts, scores, promotions, or evaluation outcomes."
         )
         return await self._run_tac_inference(prompt, system_prompt=system_prompt)
+
+    def _per_score_summary_payload_size(
+        self,
+        *,
+        scorecard_name: str,
+        mode: str,
+        start_date: datetime,
+        end_date: datetime,
+        score_summaries: List[Dict[str, Any]],
+    ) -> int:
+        payload = {
+            "scorecard_name": scorecard_name,
+            "scope": mode,
+            "date_range": {
+                "start": start_date.isoformat(),
+                "end": end_date.isoformat(),
+            },
+            "scores": score_summaries,
+        }
+        return len(json.dumps(payload, indent=2, sort_keys=False))
+
+    def _build_per_score_summary_batches(
+        self,
+        *,
+        scorecard_name: str,
+        mode: str,
+        start_date: datetime,
+        end_date: datetime,
+        score_summaries: List[Dict[str, Any]],
+    ) -> List[List[Dict[str, Any]]]:
+        if not score_summaries:
+            return []
+
+        batches: List[List[Dict[str, Any]]] = []
+        current_batch: List[Dict[str, Any]] = []
+        for score_summary in score_summaries:
+            candidate_batch = current_batch + [score_summary]
+            payload_size = self._per_score_summary_payload_size(
+                scorecard_name=scorecard_name,
+                mode=mode,
+                start_date=start_date,
+                end_date=end_date,
+                score_summaries=candidate_batch,
+            )
+            exceeds_count = len(candidate_batch) > self.PER_SCORE_SUMMARY_BATCH_SIZE
+            exceeds_payload = payload_size > self.PER_SCORE_SUMMARY_BATCH_PAYLOAD_CHAR_LIMIT
+
+            if current_batch and (exceeds_count or exceeds_payload):
+                batches.append(current_batch)
+                current_batch = [score_summary]
+                single_payload_size = self._per_score_summary_payload_size(
+                    scorecard_name=scorecard_name,
+                    mode=mode,
+                    start_date=start_date,
+                    end_date=end_date,
+                    score_summaries=current_batch,
+                )
+                if single_payload_size > self.PER_SCORE_SUMMARY_BATCH_PAYLOAD_CHAR_LIMIT:
+                    score_id = str(score_summary.get("score_id") or "")
+                    self._log(
+                        f"Single score summary payload exceeds char limit for score '{score_id}' "
+                        f"({single_payload_size} > {self.PER_SCORE_SUMMARY_BATCH_PAYLOAD_CHAR_LIMIT}).",
+                        level="WARNING",
+                    )
+                continue
+
+            current_batch = candidate_batch
+
+        if current_batch:
+            batches.append(current_batch)
+        return batches
+
+    async def _generate_per_score_summaries_batched(
+        self,
+        *,
+        scorecard_name: str,
+        mode: str,
+        start_date: datetime,
+        end_date: datetime,
+        score_summaries: List[Dict[str, Any]],
+    ) -> Dict[str, str]:
+        expected_score_ids = [str(score.get("score_id") or "").strip() for score in score_summaries]
+        expected_score_ids = [score_id for score_id in expected_score_ids if score_id]
+        initial_batches = self._build_per_score_summary_batches(
+            scorecard_name=scorecard_name,
+            mode=mode,
+            start_date=start_date,
+            end_date=end_date,
+            score_summaries=score_summaries,
+        )
+        self._log(
+            f"Generating per-score summaries in {len(initial_batches)} initial batch(es) "
+            f"for {len(expected_score_ids)} score(s)."
+        )
+
+        merged_summaries: Dict[str, str] = {}
+        for index, batch in enumerate(initial_batches, start=1):
+            parsed_batch = await self._generate_per_score_batch_with_adaptive_split(
+                scorecard_name=scorecard_name,
+                mode=mode,
+                start_date=start_date,
+                end_date=end_date,
+                batch_score_summaries=batch,
+                batch_label=f"{index}/{len(initial_batches)}",
+            )
+
+            duplicate_ids = sorted(set(merged_summaries.keys()) & set(parsed_batch.keys()))
+            if duplicate_ids:
+                raise ValueError(
+                    "LLM per-score summary response included duplicate score ids across batches: "
+                    + ", ".join(duplicate_ids)
+                )
+            merged_summaries.update(parsed_batch)
+
+        expected_set = set(expected_score_ids)
+        merged_set = set(merged_summaries.keys())
+        missing_ids = sorted(expected_set - merged_set)
+        extra_ids = sorted(merged_set - expected_set)
+        if missing_ids:
+            raise ValueError(
+                "LLM per-score summary merged response missing score ids: "
+                + ", ".join(missing_ids)
+            )
+        if extra_ids:
+            raise ValueError(
+                "LLM per-score summary merged response included unexpected score ids: "
+                + ", ".join(extra_ids)
+            )
+
+        return merged_summaries
+
+    async def _generate_per_score_batch_with_adaptive_split(
+        self,
+        *,
+        scorecard_name: str,
+        mode: str,
+        start_date: datetime,
+        end_date: datetime,
+        batch_score_summaries: List[Dict[str, Any]],
+        batch_label: str,
+    ) -> Dict[str, str]:
+        queue: List[List[Dict[str, Any]]] = [batch_score_summaries]
+        parsed_output: Dict[str, str] = {}
+        attempt = 0
+
+        while queue:
+            segment = queue.pop(0)
+            attempt += 1
+            segment_ids = [str(score.get("score_id") or "").strip() for score in segment]
+            segment_ids = [score_id for score_id in segment_ids if score_id]
+            self._log(
+                f"Per-score summary batch {batch_label} attempt {attempt} "
+                f"(scores={len(segment_ids)} ids={','.join(segment_ids)})"
+            )
+
+            raw_payload = await self._generate_per_score_summary_payload(
+                scorecard_name=scorecard_name,
+                mode=mode,
+                start_date=start_date,
+                end_date=end_date,
+                score_summaries=segment,
+            )
+            try:
+                parsed_segment = self._parse_per_score_summary_response(
+                    raw_payload,
+                    expected_score_ids=segment_ids,
+                )
+            except Exception as exc:
+                if len(segment_ids) > 1:
+                    midpoint = len(segment) // 2
+                    left_segment = segment[:midpoint]
+                    right_segment = segment[midpoint:]
+                    self._log(
+                        f"Per-score summary batch {batch_label} attempt {attempt} failed; "
+                        f"splitting segment into sizes {len(left_segment)} and {len(right_segment)}. "
+                        f"Failure: {exc}",
+                        level="WARNING",
+                    )
+                    queue = [left_segment, right_segment] + queue
+                    continue
+                raise ValueError(
+                    f"LLM per-score summary batch {batch_label} failed "
+                    f"for score ids {', '.join(segment_ids)}: {exc}"
+                ) from exc
+
+            duplicate_ids = sorted(set(parsed_output.keys()) & set(parsed_segment.keys()))
+            if duplicate_ids:
+                raise ValueError(
+                    f"LLM per-score summary batch {batch_label} produced duplicate score ids "
+                    f"within split retries: {', '.join(duplicate_ids)}"
+                )
+            parsed_output.update(parsed_segment)
+
+        expected_segment_ids = [
+            str(score.get("score_id") or "").strip()
+            for score in batch_score_summaries
+            if str(score.get("score_id") or "").strip()
+        ]
+        expected_segment_set = set(expected_segment_ids)
+        parsed_segment_set = set(parsed_output.keys())
+        missing_ids = sorted(expected_segment_set - parsed_segment_set)
+        extra_ids = sorted(parsed_segment_set - expected_segment_set)
+        if missing_ids:
+            raise ValueError(
+                f"LLM per-score summary batch {batch_label} merged response missing score ids: "
+                + ", ".join(missing_ids)
+            )
+        if extra_ids:
+            raise ValueError(
+                f"LLM per-score summary batch {batch_label} merged response included unexpected score ids: "
+                + ", ".join(extra_ids)
+            )
+
+        return parsed_output
 
     def _parse_summary_response(self, raw_response: Optional[str]) -> Dict[str, Any]:
         if not raw_response or not raw_response.strip():
