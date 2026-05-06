@@ -4,17 +4,14 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import * as path from 'path';
-import { createRequire } from 'module';
 import { execFileSync } from 'child_process';
-import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
-import { StartingPosition } from 'aws-cdk-lib/aws-lambda';
 import { Policy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import { ITable } from 'aws-cdk-lib/aws-dynamodb';
 
 // Interface for TaskDispatcher stack props
 interface TaskDispatcherStackProps extends StackProps {
   taskTable: ITable;
+  taskTableStreamArn: string;
   celeryAwsAccessKeyId?: string;
   celeryAwsSecretAccessKey?: string;
   celeryAwsRegion?: string;
@@ -172,16 +169,14 @@ export class TaskDispatcherStack extends Stack {
     // Attach the policy to the Lambda function
     this.taskDispatcherFunction.role?.attachInlinePolicy(policy);
 
-    // Create event source mapping
-    const eventSource = new DynamoEventSource(props.taskTable, {
-      startingPosition: StartingPosition.LATEST,
+    new lambda.CfnEventSourceMapping(this, 'TaskDispatcherEventSourceMapping', {
+      functionName: this.taskDispatcherFunction.functionName,
+      eventSourceArn: props.taskTableStreamArn,
+      startingPosition: 'LATEST',
       batchSize: 1,
-      retryAttempts: 3,
-      enabled: true
+      maximumRetryAttempts: 3,
+      enabled: true,
     });
-
-    // Add the event source to the Lambda function
-    this.taskDispatcherFunction.addEventSource(eventSource);
 
     new CfnOutput(this, 'TaskDispatcherFunctionArn', {
       value: this.taskDispatcherFunction.functionArn,
