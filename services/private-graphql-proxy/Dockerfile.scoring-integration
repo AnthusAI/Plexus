@@ -1,0 +1,27 @@
+FROM python:3.12-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV POETRY_NO_INTERACTION=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        git \
+        graphviz \
+        libcurl4-openssl-dev \
+        libgraphviz-dev \
+        libssl-dev \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+RUN pip install --no-cache-dir poetry==1.8.5
+
+COPY pyproject.toml poetry.lock poetry.toml ./
+RUN poetry config virtualenvs.create false \
+    && poetry install --with dev --no-root --no-ansi
+
+CMD ["pytest", "-o", "addopts=", "-m", "integration", "services/private-graphql-proxy/tests/test_scoring_integration.py", "-q"]

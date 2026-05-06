@@ -115,13 +115,18 @@ def _cache_key(label: str) -> str:
     return f"preprod-dispatch-canary:{label}:{_stamp()}:{uuid.uuid4().hex[:8]}"
 
 
-def _block_tactus(cache_key: str, child_seconds: int = 90) -> str:
+def _block_tactus(
+    cache_key: str,
+    scorecard: str,
+    days: int,
+    child_seconds: int = 90,
+) -> str:
     return f"""
 local h = plexus.report.run({{
   block_class = "ScoreChampionVersionTimeline",
   block_config = {{
-    scorecard = "selectquote_hcs_medium_risk",
-    days = 365,
+    scorecard = "{scorecard}",
+    days = {days},
   }},
   cache_key = "{cache_key}",
   ttl_hours = 24,
@@ -221,16 +226,34 @@ def _process_is_running(pid: int) -> bool:
 def _wait_task(client: Any, task_id: str, timeout_seconds: int, poll_seconds: float) -> Any:
     from plexus.dashboard.api.models.task import Task
 
-    def poll() -> Any:
+    deadline = time.time() + timeout_seconds
+    last_snapshot: dict[str, Any] = {"id": task_id, "state": "not_observed"}
+
+    while time.time() < deadline:
         task = Task.get_by_id(task_id, client)
         status = str(getattr(task, "status", "") or "").upper()
+        dispatch_status = str(getattr(task, "dispatchStatus", "") or "").upper()
+        last_snapshot = {
+            "id": task_id,
+            "status": status or None,
+            "dispatchStatus": dispatch_status or None,
+            "updatedAt": getattr(task, "updatedAt", None),
+            "errorMessage": getattr(task, "errorMessage", None),
+            "workerNodeId": getattr(task, "workerNodeId", None),
+            "target": getattr(task, "target", None),
+            "type": getattr(task, "type", None),
+        }
         if status in TERMINAL_BAD:
             raise RuntimeError(
-                f"Task {task_id} failed: {getattr(task, 'errorMessage', None)}"
+                f"Task {task_id} failed. Last state: {_json(last_snapshot)}"
             )
-        return task if status in TERMINAL_OK else None
+        if status in TERMINAL_OK:
+            return task
+        time.sleep(poll_seconds)
 
-    return _wait_until(f"task {task_id}", timeout_seconds, poll_seconds, poll)
+    raise RuntimeError(
+        f"Timed out waiting for task {task_id}. Last state: {_json(last_snapshot)}"
+    )
 
 
 def _create_report_block_task(cache_key: str) -> dict[str, Any]:
@@ -258,29 +281,6 @@ def _create_report_block_task(cache_key: str) -> dict[str, Any]:
     return output
 
 
-def _create_task(
-    client: Any,
-    account_id: str,
-    task_type: str,
-    target: str,
-    command: str,
-    metadata: dict[str, Any],
-) -> Any:
-    from plexus.dashboard.api.models.task import Task
-
-    return Task.create(
-        client=client,
-        accountId=account_id,
-        type=task_type,
-        target=target,
-        command=command,
-        description=f"Preprod dispatch canary: {target}",
-        metadata=json.dumps(metadata, sort_keys=True),
-        dispatchStatus="PENDING",
-        status="PENDING",
-    )
-
-
 def _create_log_demo_procedure() -> str:
     from plexus.cli.procedure.service import ProcedureService
 
@@ -301,13 +301,46 @@ def _print_result(result: dict[str, Any]) -> None:
     print(_json(result))
 
 
+def _wait_handle_dispatched_task(
+    handle_id: str,
+    timeout_seconds: int,
+    poll_seconds: float,
+) -> tuple[str, dict[str, Any]]:
+    def poll_handle() -> tuple[str, dict[str, Any]] | None:
+        handle = _handle_status(handle_id)
+        dispatch = handle.get("dispatch_result", {})
+        if isinstance(dispatch, dict):
+            task_id = dispatch.get("task_id")
+            if task_id:
+                return str(task_id), handle
+        status = str(handle.get("status") or "").lower()
+        if status in {"failed", "error", "cancelled", "completed_unknown"}:
+            raise RuntimeError(f"Handle {handle_id} ended before task dispatch: {_json(handle)}")
+        return None
+
+    return _wait_until(
+        f"task dispatch for handle {handle_id}",
+        timeout_seconds,
+        poll_seconds,
+        poll_handle,
+    )
+
+
 def canary_direct_local_report(args: argparse.Namespace) -> dict[str, Any]:
     os.environ["PLEXUS_DISPATCH_MODE"] = "local"
     client, account_id = _client_and_account()
     cache_key = _cache_key("direct-local-report")
     before = _recent_tasks_for_account(client, account_id, limit=50)
 
-    result = asyncio.run(_execute_tactus(_block_tactus(cache_key)))
+    result = asyncio.run(
+        _execute_tactus(
+            _block_tactus(
+                cache_key=cache_key,
+                scorecard=args.timeline_scorecard,
+                days=args.timeline_days,
+            )
+        )
+    )
     if not result.get("ok"):
         raise RuntimeError(f"execute_tactus failed: {_json(result)}")
     handle_id = result.get("value", {}).get("id")
@@ -429,14 +462,14 @@ def canary_direct_local_evaluation(args: argparse.Namespace) -> dict[str, Any]:
     tactus = """
 local h = plexus.evaluation.run({
   evaluation_type = "accuracy",
-  scorecard_name = "SelectQuote HCS Medium-Risk",
-  score_name = "Patient Allergies",
+  scorecard_name = "%s",
+  score_name = "%s",
   n_samples = 1,
   async = true,
   budget = { usd = 0.50, wallclock_seconds = 180, depth = 1, tool_calls = 3 },
 })
 return h
-"""
+""" % (args.scorecard_name, args.score_name)
     result = asyncio.run(_execute_tactus(tactus))
     if not result.get("ok"):
         raise RuntimeError(f"execute_tactus failed: {_json(result)}")
@@ -537,55 +570,141 @@ return plexus.procedure.run({{
 
 
 def canary_remote_evaluation_task(args: argparse.Namespace) -> dict[str, Any]:
-    client, account_id = _client_and_account()
-    marker = _cache_key("remote-evaluation-task")
-    task = _create_task(
-        client,
-        account_id,
-        task_type="Evaluation",
-        target="evaluation/accuracy",
-        command=(
-            "evaluate accuracy --scorecard 'SelectQuote HCS Medium-Risk' "
-            "--score 'Patient Allergies' --number-of-samples 1 --json-only"
-        ),
-        metadata={"canary": marker, "scenario": "remote-evaluation-task"},
+    os.environ["PLEXUS_DISPATCH_MODE"] = "celery"
+    tactus = """
+local h = plexus.evaluation.run({
+  evaluation_type = "accuracy",
+  scorecard_name = "%s",
+  score_name = "%s",
+  n_samples = 1,
+  async = true,
+  budget = { usd = 0.50, wallclock_seconds = 180, depth = 1, tool_calls = 3 },
+})
+return h
+""" % (args.scorecard_name, args.score_name)
+    result = asyncio.run(_execute_tactus(tactus))
+    if not result.get("ok"):
+        raise RuntimeError(f"execute_tactus failed: {_json(result)}")
+    handle_id = str(result.get("value", {}).get("id") or "")
+    if not handle_id:
+        raise RuntimeError(f"execute_tactus did not return a handle: {_json(result)}")
+    task_id, handle = _wait_handle_dispatched_task(
+        handle_id,
+        args.timeout_seconds,
+        args.poll_interval_seconds,
     )
-    final = _wait_task(client, task.id, args.timeout_seconds, args.poll_interval_seconds)
+    client, _account_id = _client_and_account()
+    final = _wait_task(client, task_id, args.timeout_seconds, args.poll_interval_seconds)
+    dispatch = handle.get("dispatch_result", {}) if isinstance(handle, dict) else {}
     return {
         "status": "ok",
         "scenario": "remote-evaluation-task",
-        "task_id": task.id,
+        "trace_id": result.get("trace_id"),
+        "handle_id": handle_id,
+        "task_id": task_id,
         "task_status": final.status,
         "dispatch_status": final.dispatchStatus,
-        "marker": marker,
+        "evaluation_id": dispatch.get("evaluation_id"),
+        "scorecard_name": args.scorecard_name,
+        "score_name": args.score_name,
     }
 
 
 def canary_remote_procedure_task(args: argparse.Namespace) -> dict[str, Any]:
-    client, account_id = _client_and_account()
+    os.environ["PLEXUS_DISPATCH_MODE"] = "celery"
     procedure_id = args.procedure_id or _create_log_demo_procedure()
-    marker = _cache_key("remote-procedure-task")
-    task = _create_task(
-        client,
-        account_id,
-        task_type="Procedure",
-        target="procedure/run",
-        command=f"procedure run {procedure_id} --dry-run -o json",
-        metadata={
-            "canary": marker,
-            "scenario": "remote-procedure-task",
-            "procedure_id": procedure_id,
-        },
+    result = asyncio.run(
+        _execute_tactus(
+            f"""
+return plexus.procedure.run({{
+  procedure_id = "{procedure_id}",
+  dry_run = true,
+  async = true,
+  budget = {{ usd = 0.25, wallclock_seconds = 180, depth = 1, tool_calls = 4 }},
+}})
+"""
+        )
     )
-    final = _wait_task(client, task.id, args.timeout_seconds, args.poll_interval_seconds)
+    if not result.get("ok"):
+        raise RuntimeError(f"execute_tactus failed: {_json(result)}")
+    handle_id = str(result.get("value", {}).get("id") or "")
+    if not handle_id:
+        raise RuntimeError(f"execute_tactus did not return a handle: {_json(result)}")
+    task_id, _handle = _wait_handle_dispatched_task(
+        handle_id,
+        args.timeout_seconds,
+        args.poll_interval_seconds,
+    )
+    client, _account_id = _client_and_account()
+    final = _wait_task(client, task_id, args.timeout_seconds, args.poll_interval_seconds)
     return {
         "status": "ok",
         "scenario": "remote-procedure-task",
-        "task_id": task.id,
+        "trace_id": result.get("trace_id"),
+        "handle_id": handle_id,
+        "task_id": task_id,
         "task_status": final.status,
         "dispatch_status": final.dispatchStatus,
         "procedure_id": procedure_id,
-        "marker": marker,
+    }
+
+
+def canary_procedure_chat_linkage(args: argparse.Namespace) -> dict[str, Any]:
+    os.environ["PLEXUS_DISPATCH_MODE"] = "local"
+    procedure_id = args.procedure_id or _create_log_demo_procedure()
+
+    result = asyncio.run(
+        _execute_tactus(
+            f"""
+return plexus.procedure.run({{
+  procedure_id = "{procedure_id}",
+  dry_run = true,
+  async = true,
+  budget = {{ usd = 0.10, wallclock_seconds = 120, depth = 1, tool_calls = 3 }},
+}})
+"""
+        )
+    )
+    if not result.get("ok"):
+        raise RuntimeError(f"execute_tactus failed: {_json(result)}")
+
+    from plexus.dashboard.api.models.procedure import Procedure
+
+    client, _account_id = _client_and_account()
+
+    def poll_proc() -> Any:
+        proc = Procedure.get_by_id(procedure_id, client)
+        status = str(getattr(proc, "status", "") or "").upper()
+        if status in TERMINAL_BAD:
+            raise RuntimeError(f"Procedure {procedure_id} failed")
+        return proc if status in TERMINAL_OK else None
+
+    _wait_until(
+        f"procedure {procedure_id}",
+        args.timeout_seconds,
+        args.poll_interval_seconds,
+        poll_proc,
+    )
+
+    summary = asyncio.run(
+        _execute_tactus(f'return procedure_chat_messages{{ id = "{procedure_id}" }}')
+    )
+    if not summary.get("ok"):
+        raise RuntimeError(f"procedure_chat_messages failed: {_json(summary)}")
+    value = summary.get("value") or {}
+    missing = int(value.get("missing_tool_responses") or 0)
+    if missing != 0:
+        raise RuntimeError(f"Procedure chat linkage has missing tool responses: {_json(value)}")
+    return {
+        "status": "ok",
+        "scenario": "procedure-chat-linkage",
+        "trace_id": result.get("trace_id"),
+        "handle_id": result.get("value", {}).get("id"),
+        "procedure_id": procedure_id,
+        "session_count": value.get("session_count"),
+        "tool_call_count": value.get("tool_call_count"),
+        "tool_response_count": value.get("tool_response_count"),
+        "missing_tool_responses": missing,
     }
 
 
@@ -596,6 +715,7 @@ SCENARIOS: dict[str, Callable[[argparse.Namespace], dict[str, Any]]] = {
     "direct-local-procedure": canary_direct_local_procedure,
     "remote-evaluation-task": canary_remote_evaluation_task,
     "remote-procedure-task": canary_remote_procedure_task,
+    "procedure-chat-linkage": canary_procedure_chat_linkage,
 }
 
 
@@ -608,6 +728,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-seconds", type=int, default=600)
     parser.add_argument("--poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--procedure-id", default=None)
+    parser.add_argument("--scorecard-name", default="SelectQuote HCS Medium-Risk")
+    parser.add_argument("--score-name", default="Patient Allergies")
+    parser.add_argument("--timeline-scorecard", default="selectquote_hcs_medium_risk")
+    parser.add_argument("--timeline-days", type=int, default=365)
     return parser.parse_args()
 
 
@@ -627,6 +751,7 @@ def main() -> int:
             "local-task-dispatcher",
             "direct-local-evaluation",
             "direct-local-procedure",
+            "procedure-chat-linkage",
         ]
     elif args.scenario == "all-remote-tasks":
         scenario_names = ["remote-evaluation-task", "remote-procedure-task"]
