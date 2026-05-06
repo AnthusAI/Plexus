@@ -17,6 +17,7 @@ import FeedbackContradictions from "@/components/blocks/FeedbackContradictions";
 import FeedbackVolumeTimeline from "@/components/blocks/FeedbackVolumeTimeline";
 import RecentFeedback from "@/components/blocks/RecentFeedback";
 import ScoreChampionVersionTimeline from "@/components/blocks/ScoreChampionVersionTimeline";
+import ScorecardHistory from "@/components/blocks/ScorecardHistory";
 import ScoreInfo from "@/components/blocks/ScoreInfo";
 import TopicAnalysis from "@/components/blocks/TopicAnalysis";
 import VectorTopicMemory from "@/components/blocks/VectorTopicMemory";
@@ -40,6 +41,7 @@ const componentByType = {
   FeedbackVolumeTimeline,
   RecentFeedback,
   ScoreChampionVersionTimeline,
+  ScorecardHistory,
   ScoreInfo,
   TopicAnalysis,
   VectorTopicMemory,
