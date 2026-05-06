@@ -284,7 +284,6 @@ code: |
       return nil, nil
     end
 
-    Observer.reset()
     local inject = "Call plexus_scorecard_info with scorecard_identifier=\"" .. tostring(identifier) .. "\" and return."
     local observed = wait_for_tool_call(Observer, "plexus_scorecard_info", 3, inject)
     if not observed then
@@ -318,7 +317,9 @@ code: |
 
     local export_json = trim(params.questions_export_json)
     if not has_text(export_json) and has_text(params.questions_export_path) then
-      export_json = File.read(params.questions_export_path)
+      export_json = Step.checkpoint(function()
+        return File.read(params.questions_export_path)
+      end)
     end
     if not has_text(export_json) then
       return {success = false, status = "error", message = "Provide questions_export_json or questions_export_path"}
