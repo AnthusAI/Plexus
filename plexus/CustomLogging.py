@@ -11,7 +11,8 @@ import time
 from dotenv import load_dotenv, find_dotenv
 # Use an absolute path anchored to this file so the .env loads regardless of CWD.
 _env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.env')
-load_dotenv(_env_file, override=True)
+# Keep explicit runtime environment variables authoritative; .env should fill gaps only.
+load_dotenv(_env_file, override=False)
 
 # Create a Rich console for logging output on stderr.
 console = Console(stderr=True)
