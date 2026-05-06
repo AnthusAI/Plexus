@@ -20,6 +20,7 @@ from fastmcp import Context, FastMCP
 from pydantic import Field
 from plexus.runtime_budget import RuntimeBudgetSpec
 from plexus.attribution.actor_context import (
+    apply_actor_attribution,
     apply_actor_context_to_env,
     extract_request_user_id_from_mcp_context,
     resolve_actor_context,
