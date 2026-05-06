@@ -35,6 +35,7 @@ import logging
 import time
 
 from plexus.cli.shared.plexus_tool import PlexusTool
+from plexus.attribution.actor_context import apply_actor_attribution
 
 class StreamingCallbackHandler(BaseCallbackHandler):
     """Callback handler for streaming LLM responses."""
@@ -1128,13 +1129,13 @@ You can also just ask me questions or tell me what you'd like to do in plain Eng
             """
             
             result = self.client.execute(mutation, {
-                'input': {
+                'input': apply_actor_attribution({
                     'scoreId': score_id,
                     'configuration': yaml_content,
                     'parentVersionId': score_data.get('championVersionId'),
                     'note': 'Updated via CLI push command',
                     'isFeatured': "true"
-                }
+                }, client_context=getattr(self.client, "context", None), source="agent")
             })
             
             if result.get('createScoreVersion'):

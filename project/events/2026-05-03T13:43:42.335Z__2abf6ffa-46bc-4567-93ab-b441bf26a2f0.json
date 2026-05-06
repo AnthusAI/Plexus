@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2abf6ffa-46bc-4567-93ab-b441bf26a2f0",
+  "issue_id": "plx-9f94e39b-50f7-4105-bca7-0956d704dbd5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T13:43:42.335Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "ScoreChampionVersionTimeline charts currently start one day before the first champion transition. Adjust the frontend timeline domain so score timelines start at the first champion version transition timestamp while preserving the shared scale across scores.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Align champion timeline start to first transition date"
+  }
+}

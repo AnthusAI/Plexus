@@ -1,0 +1,37 @@
+{
+  "id": "plx-cc743397-9c82-4661-8363-1f1690c469a0",
+  "title": "Implement dashboard Gravatar integration",
+  "description": "Implementation task for the Gravatar avatar feature.\n\nExpected work:\n- Locate current sidebar user identity and user settings components.\n- Add a single shared way to derive Gravatar avatar URLs from the authenticated user email.\n- Render the Gravatar in the left sidebar behind/alongside the user name according to existing UI conventions.\n- Add user settings affordance that links users to Gravatar profile management for updates.\n- Add focused tests/specs for URL derivation, sidebar rendering, and settings link behavior.\n\nNotes:\n- Do not add a direct avatar upload path.\n- Do not add provider fallback chains unless explicitly requested.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1322887e-825c-4760-ad01-400bc49c686a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "88645287-7e4e-4193-9343-e4d193603774",
+      "author": "ryan",
+      "text": "Design note: no Gravatar API key is needed for the first implementation. The scoped requirement is avatar image display plus a settings link; avatar images can use the public Gravatar image URL built from the normalized email SHA-256 hash. REST profile enrichment and Quick Editor can remain out of scope unless requested.",
+      "created_at": "2026-05-03T17:45:32.695209Z"
+    },
+    {
+      "id": "14f7b94b-b94f-49de-9fa2-60a0066ea083",
+      "author": "ryan",
+      "text": "Research summary: Gravatar avatar images are served as normal HTTPS image URLs from the normalized email SHA-256 hash, with size/default/rating query parameters. API keys/Bearer tokens apply to the REST profile API and richer account/profile access, not to basic avatar image rendering. Recommended first slice: keyless avatar URL helper, authenticated user attribute hook, sidebar AvatarImage replacement for the hard-coded RP/Ryan Porter row, and a settings card linking to Gravatar avatar management. Quick Editor remains optional future scope.",
+      "created_at": "2026-05-03T17:46:36.170826Z"
+    },
+    {
+      "id": "a07c70c7-f3bb-483d-8e1f-5c8b3a4bfdf6",
+      "author": "ryan",
+      "text": "Schema verification: Amplify Gen2 auth is configured with email login only, and the data schema has Account plus domain models but no User/UserProfile model. Current app-level state has account selection, not persisted per-user profile data. Gravatar first slice should read Cognito email at runtime rather than add a Users table.",
+      "created_at": "2026-05-03T17:55:14.772259Z"
+    }
+  ],
+  "created_at": "2026-05-03T17:44:39.015287Z",
+  "updated_at": "2026-05-03T17:55:14.772259Z",
+  "closed_at": null,
+  "custom": {}
+}

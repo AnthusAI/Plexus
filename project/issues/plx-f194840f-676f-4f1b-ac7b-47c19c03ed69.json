@@ -1,0 +1,18 @@
+{
+  "id": "plx-f194840f-676f-4f1b-ac7b-47c19c03ed69",
+  "title": "Cross-model actor attribution for eval/report/procedure/scoreversion",
+  "description": "Implement shared actor context resolution and auto-tagging for createdByUserId + metadata.attribution across execute_tactus, CLI, and model create paths; includes schema update for Evaluation/Report metadata and tests.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-05T21:56:51.178318Z",
+  "updated_at": "2026-05-05T22:02:05.536759Z",
+  "closed_at": null,
+  "custom": {}
+}

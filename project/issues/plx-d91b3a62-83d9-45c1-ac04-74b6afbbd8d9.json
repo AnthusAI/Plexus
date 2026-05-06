@@ -1,0 +1,25 @@
+{
+  "id": "plx-d91b3a62-83d9-45c1-ac04-74b6afbbd8d9",
+  "title": "Tune optimizer procedure chart curve smoothing",
+  "description": "Apply the same tuned curve smoothing used by ScoreChampionVersionTimeline to the optimization procedure task chart so procedure progress lines remain smooth but less overly curved.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "aff21432-e95d-4c8e-9c55-bceaf624761b",
+      "author": "ryan",
+      "text": "Applied curveCardinal.tension(0.55) to OptimizerMetricsChart line interpolation, matching the champion timeline curve tuning. Added a focused test asserting optimizer metric lines receive a curve factory. Validation passed: OptimizerMetricsChart test, ScoreChampionVersionTimeline test, and dashboard typecheck.",
+      "created_at": "2026-05-03T14:17:02.288868Z"
+    }
+  ],
+  "created_at": "2026-05-03T14:16:34.228567Z",
+  "updated_at": "2026-05-03T14:17:02.288868Z",
+  "closed_at": null,
+  "custom": {}
+}

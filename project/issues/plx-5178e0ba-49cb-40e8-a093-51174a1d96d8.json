@@ -1,0 +1,67 @@
+{
+  "id": "plx-5178e0ba-49cb-40e8-a093-51174a1d96d8",
+  "title": "Users can see and manage Gravatar-backed avatars",
+  "description": "Feature: Gravatar-backed dashboard avatars\n\nAs a dashboard user, I want my sidebar avatar to come from Gravatar and my settings page to tell me where to update it, so that my profile image is consistent and self-service.\n\nScenario: Sidebar shows the user's Gravatar\nGiven I am signed in with an email address\nWhen I view the dashboard sidebar user identity area\nThen the avatar image is loaded from Gravatar for that email address\nAnd the user name remains visible beside the avatar\n\nScenario: Settings explain where to change the avatar\nGiven I am signed in with an email address\nWhen I open user settings\nThen I see the same Gravatar-backed avatar context\nAnd I can follow a link to Gravatar to update the profile image\n\nOut of scope:\n- Uploading avatar images directly in Plexus\n- Storing avatar binaries in Plexus\n- Adding alternate avatar providers or fallback provider chains",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1322887e-825c-4760-ad01-400bc49c686a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a3427f1a-8b6c-45f0-abe0-bf9bdbe5f6fa",
+      "author": "ryan",
+      "text": "Implementation note: added the required schema slice for user attribution: new User model using Cognito sub as id, nullable createdByUserId belongsTo relationships on Evaluation, Procedure, Report, ScoreVersion, and ChatMessage, plus the minimum relationship indexes. Prioritizing a staging deployment rehearsal of this schema before waiting on full CI, per user direction.",
+      "created_at": "2026-05-04T18:21:34.503440Z"
+    },
+    {
+      "id": "cdeb0f0a-542e-4c2d-b2fd-418b5048237b",
+      "author": "ryan",
+      "text": "Validation note: backend schema TypeScript compile passed on feature branch. Cherry-picked the schema commit onto the current staging cleanup branch in an isolated worktree and resolved the staging-only resource.ts conflict without reintroducing removed cleanup resources. Staging worktree backend compile also passed after linking existing dashboard node_modules.",
+      "created_at": "2026-05-04T18:23:01.066797Z"
+    },
+    {
+      "id": "a9c7523f-cbab-4522-8602-a5a6240b618e",
+      "author": "ryan",
+      "text": "Staging rehearsal result: Amplify job 131 failed during CDK assembly before deploy because ConnectionStack synthesized 505 resources, 5 over the 500-resource CloudFormation stack limit. Breakdown: 336 AppSync FunctionConfiguration, 168 AppSync Resolver, 1 CDK Metadata. Next test removes the ChatMessage User relationship and createdByUserId index while keeping ChatMessage.createdByUserId as a scalar attribution field; local backend schema compile passes with that reduction.",
+      "created_at": "2026-05-04T18:29:57.729749Z"
+    },
+    {
+      "id": "7a31c5b5-7480-4602-8f7e-4320183c2400",
+      "author": "ryan",
+      "text": "Staging schema rehearsal succeeded. Amplify job 132 completed successfully on staging after changing ChatMessage attribution to scalar-only createdByUserId. ConnectionStack is now 499 resources (332 AppSync functions, 166 resolvers, 1 metadata). Proceeding with schema-only promotion path; Gravatar UI changes remain out of this release.",
+      "created_at": "2026-05-04T19:08:52.563343Z"
+    },
+    {
+      "id": "f8b42c32-832a-4ad7-8df5-e0d784e1690b",
+      "author": "ryan",
+      "text": "Created PR #286 from develop to main for the schema release: https://github.com/AnthusAI/Plexus/pull/286. The release includes the staging-proven User attribution schema with ChatMessage scalar-only attribution.",
+      "created_at": "2026-05-04T19:10:37.287892Z"
+    },
+    {
+      "id": "3fce9caa-58f3-45fc-8ae2-77b9cab90fab",
+      "author": "ryan",
+      "text": "CI follow-up for PR #286: pushed fix commit to develop for dashboard generated relation typing and the MCP documentation lookup failure exposed by the develop-to-main PR checks. Local dashboard ci:typecheck now passes; MCP docs tool was smoke-tested manually with optimizer-cookbook.",
+      "created_at": "2026-05-04T19:28:57.835643Z"
+    },
+    {
+      "id": "e6272edb-c848-404a-a529-e2bdabce388d",
+      "author": "ryan",
+      "text": "PR #286 CI passed after the follow-up fix. Checks passing include Dashboard Unit Tests, Dashboard Storybook Tests, Python Tests 3.11/3.12, CodeQL analyses, version sync, and Snyk.",
+      "created_at": "2026-05-04T19:43:21.781407Z"
+    },
+    {
+      "id": "3204c0b8-2645-4a9f-9e09-b021624d5e8b",
+      "author": "ryan",
+      "text": "Accepted PR #286 code-quality suggestion by removing unused import in scripts/migrate_agent_docs.py (commit 4e4d0e2a on develop).",
+      "created_at": "2026-05-04T19:46:20.952846Z"
+    }
+  ],
+  "created_at": "2026-05-03T17:44:34.895321Z",
+  "updated_at": "2026-05-04T19:46:20.952846Z",
+  "closed_at": null,
+  "custom": {}
+}

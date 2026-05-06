@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a228b844-8079-4a0c-ae53-cc03ce37367d",
+  "issue_id": "plx-05e39ee5-2305-42b0-9694-7f896d25d84b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-05T01:28:49.716Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Resolve cases where lab sidebar/settings show fallback User/No email available by making profile lookup resilient when fetchUserAttributes fails or omits email. Add auth-session token claim fallbacks for id/email/display name. Keep Gravatar management action on standard Button styling.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix current user profile resolution for Gravatar sidebar/settings"
+  }
+}

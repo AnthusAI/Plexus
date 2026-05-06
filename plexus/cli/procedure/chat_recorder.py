@@ -80,6 +80,7 @@ class ProcedureChatRecorder:
         self.sequence_number = 0
         self._sequence_lock = None  # Will be initialized when needed
         self._state_data: Optional[Dict[str, Any]] = None  # Conversation state machine data
+        self._session_context: Dict[str, Any] = {}
 
     @staticmethod
     def _graphql_field(result: Any, field_name: str) -> Any:
@@ -107,6 +108,130 @@ class ProcedureChatRecorder:
     def _response_target(self) -> str:
         """Return the target used by response-status GraphQL indexes."""
         return self.procedure_id or self.session_id
+
+    def _is_optimizer_context(self, context: Optional[Dict[str, Any]] = None) -> bool:
+        """Return True when this recorder is handling an optimizer procedure run."""
+        merged: Dict[str, Any] = {}
+        if isinstance(self._session_context, dict):
+            merged.update(self._session_context)
+        if isinstance(context, dict):
+            merged.update(context)
+
+        explicit = merged.get("is_optimizer_procedure")
+        if isinstance(explicit, bool):
+            return explicit
+
+        procedure_name = str(merged.get("procedure_name") or "").strip().lower()
+        if procedure_name and "optimizer" in procedure_name:
+            return True
+
+        procedure_key = str(merged.get("procedure_key") or "").strip().lower()
+        if procedure_key and "optimizer" in procedure_key:
+            return True
+
+        procedure_id = str(self.procedure_id or "").strip().lower()
+        return "optimizer" in procedure_id
+
+    @staticmethod
+    def _derive_optimizer_session_name(context: Optional[Dict[str, Any]]) -> Optional[str]:
+        if not isinstance(context, dict):
+            return None
+
+        scorecard = (
+            context.get("scorecard_name")
+            or context.get("scorecard_id")
+            or context.get("scorecardId")
+        )
+        score = (
+            context.get("score_name")
+            or context.get("score_id")
+            or context.get("scoreId")
+        )
+        scorecard_text = str(scorecard).strip() if scorecard else ""
+        score_text = str(score).strip() if score else ""
+        if not scorecard_text or not score_text:
+            return None
+        return f"Optimization for {scorecard_text} / {score_text}"
+
+    def _get_session_name(self, session_id: str) -> Optional[str]:
+        query = """
+        query GetChatSessionName($id: ID!) {
+            getChatSession(id: $id) {
+                id
+                name
+            }
+        }
+        """
+        result = self.client.execute(query, {"id": session_id})
+        session = self._graphql_field(result, "getChatSession")
+        if not isinstance(session, dict):
+            return None
+        name = session.get("name")
+        return str(name).strip() if isinstance(name, str) and name.strip() else ""
+
+    def _ensure_optimizer_session_name(self, session_id: Optional[str], context: Optional[Dict[str, Any]] = None) -> None:
+        """Name optimizer sessions deterministically when missing."""
+        if not session_id or not self._is_optimizer_context(context):
+            return
+        desired_name = self._derive_optimizer_session_name(context or self._session_context)
+        if not desired_name:
+            return
+        try:
+            existing_name = self._get_session_name(session_id)
+        except Exception as exc:
+            logger.debug("Could not fetch existing chat session name for %s: %s", session_id, exc)
+            existing_name = None
+        if isinstance(existing_name, str) and existing_name.strip():
+            return
+        try:
+            mutation = """
+            mutation UpdateChatSessionName($input: UpdateChatSessionInput!) {
+                updateChatSession(input: $input) {
+                    id
+                    name
+                }
+            }
+            """
+            self.client.execute(
+                mutation,
+                {"input": {"id": session_id, "name": desired_name}},
+                retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
+            )
+        except Exception as exc:
+            logger.warning("Could not set optimizer chat session name for %s: %s", session_id, exc)
+
+    def _enrich_optimizer_user_message_metadata(
+        self,
+        role: str,
+        human_interaction: str,
+        metadata: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if role != "USER" or human_interaction != "CHAT":
+            return metadata
+        if not self._is_optimizer_context():
+            return metadata
+
+        next_metadata: Dict[str, Any] = dict(metadata) if isinstance(metadata, dict) else {}
+        if isinstance(next_metadata.get("createdByUserId"), str) and next_metadata.get("createdByUserId", "").strip():
+            return next_metadata
+
+        existing_attribution = next_metadata.get("attribution")
+        if isinstance(existing_attribution, dict):
+            actor_type = str(existing_attribution.get("actorType") or "").strip().lower()
+            if actor_type == "user":
+                return next_metadata
+        else:
+            existing_attribution = {}
+
+        bot_attribution = {
+            **existing_attribution,
+            "actorType": "bot",
+            "actorKey": "optimizer-agent",
+            "displayName": "Optimizer Agent",
+            "avatarKey": "optimizer",
+        }
+        next_metadata["attribution"] = bot_attribution
+        return next_metadata
 
     def _get_resume_session_id(self) -> Optional[str]:
         """Return existing session id when procedure is waiting for human input."""
@@ -868,6 +993,8 @@ class ProcedureChatRecorder:
     async def start_session(self, context: Optional[Dict[str, Any]] = None) -> str:
         """Start a new chat session for the procedure run."""
         try:
+            if isinstance(context, dict):
+                self._session_context = dict(context)
             # Resolve account first so resumed writes stay account-scoped.
             account_id = self._resolve_account_id_for_session(context)
             if not account_id:
@@ -888,6 +1015,7 @@ class ProcedureChatRecorder:
                     f"Reusing explicit chat session: {self.session_id} for account: {account_id} "
                     f"(last sequence: {self.sequence_number})"
                 )
+                self._ensure_optimizer_session_name(self.session_id, context)
                 return self.session_id
 
             resume_session_id = self._get_resume_session_id()
@@ -899,6 +1027,7 @@ class ProcedureChatRecorder:
                     f"Reusing active chat session: {self.session_id} for account: {account_id} "
                     f"(last sequence: {self.sequence_number})"
                 )
+                self._ensure_optimizer_session_name(self.session_id, context)
                 return self.session_id
 
             console_chat_metadata = self._get_latest_console_chat_metadata(account_id)
@@ -916,6 +1045,7 @@ class ProcedureChatRecorder:
                     f"Reusing console chat session from task metadata: {self.session_id} for account: {account_id} "
                     f"(last sequence: {self.sequence_number})"
                 )
+                self._ensure_optimizer_session_name(self.session_id, context)
                 return self.session_id
 
             # Create ChatSession record
@@ -944,6 +1074,12 @@ class ProcedureChatRecorder:
                 
             if score_id and str(score_id).strip():
                 session_data['scoreId'] = score_id
+
+            optimizer_session_name = None
+            if self._is_optimizer_context(context):
+                optimizer_session_name = self._derive_optimizer_session_name(context)
+            if optimizer_session_name:
+                session_data["name"] = optimizer_session_name
             
             # Execute GraphQL mutation to create session
             mutation = """
@@ -977,6 +1113,7 @@ class ProcedureChatRecorder:
             if chat_session_result and 'id' in chat_session_result:
                 self.session_id = chat_session_result['id']
                 self.account_id = account_id  # Store account_id for use in message recording
+                self._ensure_optimizer_session_name(self.session_id, context)
                 logger.info(f"Chat session created: {self.session_id} for account: {account_id}")
                 return self.session_id
             else:
@@ -1039,6 +1176,8 @@ class ProcedureChatRecorder:
                 else:
                     # SYSTEM and other messages default to INTERNAL
                     human_interaction = 'INTERNAL'
+
+            metadata = self._enrich_optimizer_user_message_metadata(role, human_interaction, metadata)
 
             message_data = {
                 'sessionId': self.session_id,

@@ -1,0 +1,21 @@
+{
+  "id": "plx-d70f269c-e751-437f-8d0a-887cfa054299",
+  "title": "Show attributed user avatars on chat messages",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-04T22:10:56.526266Z",
+  "updated_at": "2026-05-04T22:22:34.583675Z",
+  "closed_at": "2026-05-04T22:22:34.583675Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

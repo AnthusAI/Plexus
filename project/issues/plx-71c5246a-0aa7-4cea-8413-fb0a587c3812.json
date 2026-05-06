@@ -1,0 +1,21 @@
+{
+  "id": "plx-71c5246a-0aa7-4cea-8413-fb0a587c3812",
+  "title": "Fix chat session message loading after avatar change",
+  "description": "Existing console chat sessions show zero messages after attributed avatar UI change. Investigate explicit ChatMessage selection sets and restore message loading while preserving avatar behavior.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-04T22:28:21.789741Z",
+  "updated_at": "2026-05-04T22:28:24.862022Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

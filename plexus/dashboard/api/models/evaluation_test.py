@@ -11,6 +11,8 @@ The tests use mocking to avoid actual API calls and to verify
 mutation behavior.
 """
 
+import json
+
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
@@ -69,6 +71,23 @@ def test_create_evaluation(mock_client):
     mock_client.execute.assert_called_once()
     mutation = mock_client.execute.call_args[0][0]
     assert "mutation CreateEvaluation" in mutation
+
+
+def test_create_evaluation_injects_actor_attribution(mock_client):
+    class _Context:
+        actor_user_id = "user-123"
+        actor_type = "agent"
+        actor_key = "execute_tactus"
+        actor_source = "execute_tactus"
+
+    mock_client.context = _Context()
+    Evaluation.create(client=mock_client, type="accuracy", accountId="acc-123")
+    payload = mock_client.execute.call_args[0][1]["input"]
+    assert payload["createdByUserId"] == "user-123"
+    parameters = json.loads(payload["parameters"])
+    assert parameters["attribution"]["actorType"] == "agent"
+    assert parameters["attribution"]["actorKey"] == "execute_tactus"
+    assert parameters["attribution"]["requestUserId"] == "user-123"
 
 def test_update_evaluation(sample_evaluation):
     """Test that evaluation updates execute and sync locally."""

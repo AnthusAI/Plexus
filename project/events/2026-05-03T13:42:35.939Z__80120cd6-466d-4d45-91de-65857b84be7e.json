@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "80120cd6-466d-4d45-91de-65857b84be7e",
+  "issue_id": "plx-7c9d263f-521d-4dae-9e3b-43d999e44720",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T13:42:35.939Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Report detail views are responding to real-time report/block subscriptions, but unstable Date.now-based React keys force report blocks to remount every render. Replace timestamp keys with stable keys so completed reports do not flicker or reload during subscription/refetch updates.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Stop report flicker from unstable report keys"
+  }
+}

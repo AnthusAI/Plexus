@@ -1,0 +1,25 @@
+{
+  "id": "plx-e2a67397-ada9-4a06-9999-3a7021dbc0d2",
+  "title": "Make Gravatar profile render before User model deploy",
+  "description": "Decouple profile display (email/displayName/gravatar) from User model persistence so sidebar/settings still show identity when User schema changes are not yet deployed. Keep User sync best-effort. Also ensure Manage Gravatar control uses standard Button component styling.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-1322887e-825c-4760-ad01-400bc49c686a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "faefdbc3-156f-454f-b7b8-7352fc3fe5df",
+      "author": "ryan",
+      "text": "Implemented Gravatar/profile UX fix in dashboard code: (1) user profile rendering now remains available from Cognito even if User model sync fails (best-effort sync, warning-only), so sidebar/settings no longer collapse to 'User'/'No email available' during staged schema rollout; (2) Manage Gravatar control on /lab/settings now uses standard Button component with explicit click handler to open https://gravatar.com/profile/avatars. Validation: dashboard targeted Jest suites passed (settings + dashboard layout) and dashboard typecheck passed.",
+      "created_at": "2026-05-04T22:02:38.086434Z"
+    }
+  ],
+  "created_at": "2026-05-04T21:55:04.543676Z",
+  "updated_at": "2026-05-04T22:02:38.086434Z",
+  "closed_at": null,
+  "custom": {}
+}
