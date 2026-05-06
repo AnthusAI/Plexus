@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib.util
 import json
 import os
 import sys
@@ -127,13 +128,14 @@ def _safe_get(dct: Any, *keys: str) -> Any:
 
 async def _run_canary(args: argparse.Namespace) -> dict[str, Any]:
     # Keep process-level explicit env authoritative for dispatch behavior.
-    try:
+    dotenv_spec = importlib.util.find_spec("dotenv")
+    if dotenv_spec is not None:
         import dotenv  # type: ignore
 
-        dotenv.load_dotenv = lambda *a, **k: False
-    except Exception:
-        # dotenv is optional here; process-level env must remain authoritative.
-        _ = None
+        def _ignore_load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
+            return False
+
+        dotenv.load_dotenv = _ignore_load_dotenv
 
     api_url = _require_env("PLEXUS_API_URL")
     auth_mode = _auth_mode()
