@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a76cc93d-ffab-4ff6-b3d6-cf3c810b1d6e",
+  "issue_id": "plx-3d1626a8-038f-4e3c-9019-73183aa9c4b4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T02:10:01.871Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Clear remaining report canary suggestion anchor"
+  }
+}

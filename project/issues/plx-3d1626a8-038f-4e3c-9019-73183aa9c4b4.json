@@ -1,0 +1,34 @@
+{
+  "id": "plx-3d1626a8-038f-4e3c-9019-73183aa9c4b4",
+  "title": "Clear remaining report canary suggestion anchor",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ec1b37d8-95e8-4f7a-9350-0a14366cdd87",
+      "author": "ryan",
+      "text": "Changing report_dispatch_canary dotenv handling to remove the remaining review-thread anchor entirely.",
+      "created_at": "2026-05-06T02:10:13.424024Z"
+    },
+    {
+      "id": "4123c397-61d1-462f-bce5-06ec5d202576",
+      "author": "ryan",
+      "text": "Replaced the optional dotenv try/except block with an importability check, removing the line that still anchored the visible suggestion. py_compile and flake8 fatal-error selection passed.",
+      "created_at": "2026-05-06T02:10:27.275516Z"
+    }
+  ],
+  "created_at": "2026-05-06T02:10:01.870919Z",
+  "updated_at": "2026-05-06T02:10:27.282940Z",
+  "closed_at": "2026-05-06T02:10:27.282940Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}
