@@ -87,6 +87,28 @@ plexus procedure run --yaml plexus/procedures/scorecard_create.yaml
 4. Requests human approval
 5. Creates scorecard and scores if approved (unless dry_run=true)
 
+### 4. scorecard_from_question_export.yaml - JSON-native Scorecard Migration
+
+**Purpose**: Creates a new scorecard and one score per question from an `ai-ready` question export JSON.
+
+**What it demonstrates**:
+- Deterministic score planning from structured export data
+- Scorecard existence check before write operations
+- Human approval gate before apply
+- Dry-run planning mode
+- Tool-driven create/update flow (`plexus_scorecard_create`, `plexus_score_create`, `plexus_score_update`)
+
+**How to run**:
+```bash
+plexus procedure run --yaml plexus/procedures/scorecard_from_question_export.yaml
+```
+
+**Expected behavior**:
+1. Validates and parses export JSON (from text or file path)
+2. Builds one score plan per question (labels from `active_answer_values` or answers)
+3. Requests human approval
+4. Creates scorecard and applies YAML code/guidelines when approved (unless `dry_run=true`)
+
 **Key pattern demonstrated**:
 ```lua
 -- Phase 1: First agent

@@ -1,0 +1,511 @@
+name: Create Scorecard From Question Export
+version: 1.0.0
+class: Tactus
+description: "Create a scorecard and one score per question from ai-ready JSON export."
+
+params:
+  questions_export_json:
+    type: string
+    input: textarea
+    rows: 12
+    required: false
+    description: "Raw ai-ready export JSON text. Optional when questions_export_path is provided."
+  questions_export_path:
+    type: string
+    required: false
+    description: "Path to ai-ready export JSON file. Optional when questions_export_json is provided."
+  target_scorecard_name:
+    type: string
+    required: true
+    description: "Name for the new scorecard to create"
+  target_scorecard_key:
+    type: string
+    required: false
+    description: "Optional key for scorecard. Defaults to slugified target_scorecard_name."
+  target_scorecard_external_id:
+    type: string
+    required: false
+    description: "Optional external ID for scorecard. Defaults to key."
+  target_scorecard_description:
+    type: string
+    required: false
+    description: "Optional scorecard description"
+  account_identifier:
+    type: string
+    input: hidden
+    default: "default"
+    description: "Account identifier (key/name/id)"
+  model_name:
+    type: string
+    default: "gpt-5-mini-2025-08-07"
+    description: "Model used in generated LangGraphScore YAML"
+  model_provider:
+    type: string
+    default: "ChatOpenAI"
+    description: "Model provider used in generated LangGraphScore YAML"
+  reasoning_effort:
+    type: string
+    default: "low"
+    description: "Reasoning effort used in generated LangGraphScore YAML"
+  max_scores:
+    type: number
+    default: 0
+    description: "Optional limit for number of questions to process (0 means all)"
+  dry_run:
+    type: boolean
+    default: false
+    description: "If true, return plan only and do not create/update in Plexus"
+
+outputs:
+  success:
+    type: boolean
+    required: true
+  status:
+    type: string
+    required: true
+  message:
+    type: string
+    required: true
+  scorecard_id:
+    type: string
+    required: false
+  score_ids:
+    type: array
+    required: false
+  plan:
+    type: object
+    required: false
+
+agents:
+  observer:
+    system_prompt: |
+      You are the Observe agent. Call plexus_scorecards_list exactly once and return.
+      Do not invent results.
+    initial_message: |
+      Call plexus_scorecards_list with return_metadata=true.
+    tools:
+      - plexus_scorecards_list
+
+  actor:
+    system_prompt: |
+      You are the Act agent. You receive an execution payload JSON.
+      Run tools in this order:
+      1) plexus_scorecard_create
+      2) For each score: plexus_score_create
+      3) For each created score: plexus_score_update with code + guidelines
+
+      Call done() with JSON:
+      {"scorecard_id": "...", "score_ids": ["..."], "success": true}
+
+      If any step fails, call done() with JSON:
+      {"success": false, "error": "..."}
+
+      Output only JSON in done().
+    initial_message: |
+      Execute the provided payload and call done().
+    tools:
+      - plexus_scorecard_create
+      - plexus_score_create
+      - plexus_score_update
+
+stages:
+  - observe
+  - plan
+  - approval
+  - act
+  - complete
+
+code: |
+  local function safe_decode(value)
+    if value == nil then
+      return nil, "nil"
+    end
+    if type(value) ~= "string" then
+      local ok_encode, encoded = pcall(function() return Json.encode(value) end)
+      if ok_encode then
+        local ok_decode, decoded = pcall(function() return Json.decode(encoded) end)
+        if ok_decode then return decoded, nil end
+      end
+      return value, nil
+    end
+    local ok, decoded = pcall(function() return Json.decode(value) end)
+    if ok then return decoded, nil end
+    return nil, decoded
+  end
+
+  local function trim(value)
+    if value == nil then return "" end
+    local s = tostring(value)
+    s = string.gsub(s, "^%s+", "")
+    s = string.gsub(s, "%s+$", "")
+    return s
+  end
+
+  local function has_text(value)
+    return trim(value) ~= ""
+  end
+
+  local function normalize(value)
+    return string.lower(trim(value))
+  end
+
+  local function slugify(value)
+    local s = normalize(value)
+    s = string.gsub(s, "[^a-z0-9]+", "-")
+    s = string.gsub(s, "^-+", "")
+    s = string.gsub(s, "-+$", "")
+    if s == "" then return "score" end
+    return s
+  end
+
+  local function escape_yaml(value)
+    if value == nil then return "" end
+    local s = tostring(value)
+    s = string.gsub(s, "\\", "\\\\")
+    s = string.gsub(s, '"', '\\"')
+    s = string.gsub(s, "\r", " ")
+    s = string.gsub(s, "\n", " ")
+    return s
+  end
+
+  local function split_lines(value)
+    local out = {}
+    local text = tostring(value or "")
+    for line in string.gmatch(text, "([^\n]*)\n?") do
+      if line == "" and #out > 0 and out[#out] == "" then
+      else
+        out[#out + 1] = line
+      end
+    end
+    if #out == 0 then out[1] = "" end
+    return out
+  end
+
+  local function append_block(lines, indent, text)
+    local block_lines = split_lines(text)
+    for _, line in ipairs(block_lines) do
+      table.insert(lines, indent .. line)
+    end
+  end
+
+  local function build_faq_text(faqs)
+    if type(faqs) ~= "table" or #faqs == 0 then return "" end
+    local parts = {}
+    for i, faq in ipairs(faqs) do
+      local q = trim(faq.question_text or faq.question or "")
+      local a = trim(faq.answer_text or faq.answer or "")
+      local entry = ""
+      if has_text(q) then entry = entry .. "Q: " .. q end
+      if has_text(a) then
+        if has_text(entry) then entry = entry .. "\n" end
+        entry = entry .. "A: " .. a
+      end
+      if has_text(entry) then parts[#parts + 1] = entry end
+    end
+    return table.concat(parts, "\n\n")
+  end
+
+  local function build_guidelines(question, labels)
+    local objective = trim(question.source_text or question.short_name or "")
+    local guidance = trim(question.guidelines or "")
+    local faq_text = build_faq_text(question.faqs)
+    local lines = {}
+    table.insert(lines, "# Guidelines for " .. (question.short_name or "Score"))
+    table.insert(lines, "")
+    table.insert(lines, "## Objective")
+    table.insert(lines, objective)
+    table.insert(lines, "")
+    table.insert(lines, "## Classes")
+    table.insert(lines, "Valid labels: [" .. table.concat(labels, ", ") .. "]")
+    table.insert(lines, "Target class: " .. labels[1])
+    table.insert(lines, "Default class: " .. labels[#labels])
+    if has_text(guidance) then
+      table.insert(lines, "")
+      table.insert(lines, "## Source Guidance")
+      table.insert(lines, guidance)
+    end
+    if has_text(faq_text) then
+      table.insert(lines, "")
+      table.insert(lines, "## FAQ Context")
+      table.insert(lines, faq_text)
+    end
+    return table.concat(lines, "\n")
+  end
+
+  local function build_score_yaml(score, params)
+    local lines = {}
+    table.insert(lines, 'name: "' .. escape_yaml(score.name) .. '"')
+    table.insert(lines, 'description: "' .. escape_yaml(score.description or score.name) .. '"')
+    table.insert(lines, 'external_id: "' .. escape_yaml(score.external_id) .. '"')
+    table.insert(lines, 'class: LangGraphScore')
+    table.insert(lines, 'model_name: ' .. tostring(params.model_name or "gpt-5-mini-2025-08-07"))
+    table.insert(lines, 'model_provider: ' .. tostring(params.model_provider or "ChatOpenAI"))
+    table.insert(lines, 'reasoning_effort: ' .. tostring(params.reasoning_effort or "low"))
+    table.insert(lines, 'max_tokens: 2000')
+    table.insert(lines, 'graph:')
+    table.insert(lines, '  - name: classifier')
+    table.insert(lines, '    class: Classifier')
+    table.insert(lines, '    batch: false')
+    table.insert(lines, '    valid_classes:')
+    for _, label in ipairs(score.labels) do
+      table.insert(lines, "      - '" .. tostring(label) .. "'")
+    end
+    table.insert(lines, '    system_message: |-')
+    append_block(lines, '      ', score.system_message)
+    table.insert(lines, '    user_message: |-')
+    append_block(lines, '      ', score.user_message)
+    table.insert(lines, '    output:')
+    table.insert(lines, '      value: classification')
+    table.insert(lines, '      explanation: explanation')
+    table.insert(lines, 'output:')
+    table.insert(lines, '  value: classification')
+    table.insert(lines, '  explanation: explanation')
+    return table.concat(lines, "\n")
+  end
+
+  local function wait_for_tool_call(agent, tool_name, max_iters, inject)
+    local start_count = Tool.get_call_count(tool_name)
+    if inject then agent({message = inject}) else agent() end
+    local iter = 0
+    repeat
+      if Tool.get_call_count(tool_name) > start_count then return true end
+      if iter >= max_iters then return false end
+      agent()
+      iter = iter + 1
+    until false
+  end
+
+  local function wait_for_done(agent, max_iters, inject)
+    return wait_for_tool_call(agent, "done", max_iters, inject)
+  end
+
+  local function run(input)
+    local params = input
+    local dry_run = params.dry_run == true
+
+    local export_json = trim(params.questions_export_json)
+    if not has_text(export_json) and has_text(params.questions_export_path) then
+      export_json = File.read(params.questions_export_path)
+    end
+    if not has_text(export_json) then
+      return {success = false, status = "error", message = "Provide questions_export_json or questions_export_path"}
+    end
+
+    local export_data, export_err = safe_decode(export_json)
+    if not export_data then
+      return {success = false, status = "error", message = "Invalid export JSON: " .. tostring(export_err)}
+    end
+
+    local questions = export_data.questions or {}
+    if #questions == 0 then
+      return {success = false, status = "error", message = "Export JSON has no questions"}
+    end
+
+    local max_scores = tonumber(params.max_scores) or 0
+    local target_name = trim(params.target_scorecard_name)
+    if not has_text(target_name) then
+      return {success = false, status = "error", message = "target_scorecard_name is required"}
+    end
+
+    local scorecard_key = trim(params.target_scorecard_key)
+    if not has_text(scorecard_key) then scorecard_key = slugify(target_name) end
+    local scorecard_external_id = trim(params.target_scorecard_external_id)
+    if not has_text(scorecard_external_id) then scorecard_external_id = scorecard_key end
+    local scorecard_description = trim(params.target_scorecard_description)
+    if not has_text(scorecard_description) then scorecard_description = "Created from ai-ready question export" end
+
+    Stage.set("observe")
+    local observed = wait_for_tool_call(Observer, "plexus_scorecards_list", 3, "Call plexus_scorecards_list with return_metadata=true and limit=100.")
+    if not observed then
+      return {success = false, status = "error", message = "Observer failed to list scorecards"}
+    end
+
+    local list_call = Tool.last_call("plexus_scorecards_list")
+    local list_data = safe_decode(list_call.result)
+    local items = (list_data and (list_data.items or list_data)) or {}
+    for _, sc in ipairs(items) do
+      if normalize(sc.name) == normalize(target_name) or normalize(sc.key) == normalize(scorecard_key) then
+        return {success = false, status = "exists", message = "Target scorecard already exists", scorecard_id = sc.id}
+      end
+    end
+
+    Stage.set("plan")
+    local used_keys = {}
+    local plan_scores = {}
+    local processed = 0
+
+    for _, q in ipairs(questions) do
+      if max_scores > 0 and processed >= max_scores then break end
+      local labels = q.active_answer_values or {}
+      if #labels < 2 and q.answers then
+        for _, ans in ipairs(q.answers) do
+          local text = trim(ans.text)
+          if has_text(text) then labels[#labels + 1] = text end
+        end
+      end
+      if #labels < 2 then
+        labels = {"Yes", "No"}
+      end
+
+      local name = trim(q.short_name)
+      if not has_text(name) then
+        name = trim(q.source_text or q.question_text)
+      end
+      if not has_text(name) then
+        name = "Question " .. tostring(q.id or (#plan_scores + 1))
+      end
+
+      local key_base = slugify(name)
+      local key = key_base
+      local suffix = 2
+      while used_keys[key] do
+        key = key_base .. "-" .. tostring(suffix)
+        suffix = suffix + 1
+      end
+      used_keys[key] = true
+
+      local source_text = trim(q.source_text or q.question_text or q.short_name)
+      local guidelines_md = build_guidelines(q, labels)
+      local faq_text = build_faq_text(q.faqs)
+
+      local system_message = "You are a call quality evaluator.\n\nQuestion: " .. source_text .. "\n\nUse the following policy guidance to classify the call.\n\n" .. trim(q.guidelines or "")
+      if has_text(faq_text) then
+        system_message = system_message .. "\n\nFAQ context:\n" .. faq_text
+      end
+      system_message = system_message .. "\n\nReturn exactly one valid class and concise reasoning."
+
+      local user_message = "Evaluate the transcript for this question and choose one class.\n\n<transcript>\n{{text}}\n</transcript>\n\nValid classes: [" .. table.concat(labels, ", ") .. "]\n\nRespond with concise reasoning, then on a new line the final class."
+
+      plan_scores[#plan_scores + 1] = {
+        question_id = q.id,
+        name = name,
+        key = key,
+        external_id = "question-" .. tostring(q.id or key),
+        description = source_text,
+        labels = labels,
+        guidelines = guidelines_md,
+        system_message = system_message,
+        user_message = user_message
+      }
+      processed = processed + 1
+    end
+
+    if #plan_scores == 0 then
+      return {success = false, status = "error", message = "No scores generated from export"}
+    end
+
+    local normalized_scorecard = {
+      name = target_name,
+      key = scorecard_key,
+      external_id = scorecard_external_id,
+      description = scorecard_description
+    }
+
+    Stage.set("approval")
+    local approved = Human.approve({
+      message = dry_run and "Approve dry-run migration plan?" or "Approve scorecard migration execution?",
+      context = {
+        scorecard = normalized_scorecard,
+        score_count = #plan_scores,
+        first_scores = {plan_scores[1], plan_scores[2], plan_scores[3]},
+        dry_run = dry_run
+      },
+      timeout = 7200,
+      default = false
+    })
+
+    if not approved then
+      return {success = false, status = "rejected", message = "Human rejected migration", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
+    end
+
+    if dry_run then
+      return {success = true, status = "planned", message = "Dry run - no changes applied", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
+    end
+
+    Stage.set("act")
+    local exec_scores = {}
+    for _, score in ipairs(plan_scores) do
+      exec_scores[#exec_scores + 1] = {
+        name = score.name,
+        key = score.key,
+        external_id = score.external_id,
+        description = score.description,
+        score_type = "LangGraphScore",
+        yaml_code = build_score_yaml(score, params),
+        guidelines = score.guidelines
+      }
+    end
+
+    local exec_payload = {
+      account_identifier = params.account_identifier or "default",
+      scorecard = normalized_scorecard,
+      scores = exec_scores
+    }
+
+    local max_actor_iterations = 20 + (#exec_scores * 2)
+    local acted = wait_for_done(Actor, max_actor_iterations, "Execution Payload JSON:\n" .. Json.encode(exec_payload))
+    if not acted then
+      return {success = false, status = "error", message = "Actor did not complete"}
+    end
+
+    local act_call = Tool.last_call("done")
+    local act_data, act_err = safe_decode(act_call.args.reason or "")
+    if not act_data then
+      return {success = false, status = "error", message = "Failed to parse actor JSON: " .. tostring(act_err)}
+    end
+    if act_data.success == false then
+      return {success = false, status = "error", message = act_data.error or "Actor failed"}
+    end
+
+    Stage.set("complete")
+    return {
+      success = true,
+      status = "created",
+      message = "Scorecard and scores created from question export",
+      scorecard_id = act_data.scorecard_id,
+      score_ids = act_data.score_ids,
+      plan = {scorecard = normalized_scorecard, scores = plan_scores}
+    }
+  end
+
+  Specification([[
+  Feature: JSON-native scorecard migration procedure
+    Scenario: Procedure initializes
+      Given the procedure has started
+
+    Scenario: Procedure initializes for dry-run path
+      Given the procedure has started
+
+    Scenario: Procedure initializes for execution path
+      Given the procedure has started
+  ]])
+
+  Procedure {
+    input = {
+      questions_export_json = field.string{},
+      questions_export_path = field.string{},
+      target_scorecard_name = field.string{required = true},
+      target_scorecard_key = field.string{},
+      target_scorecard_external_id = field.string{},
+      target_scorecard_description = field.string{},
+      account_identifier = field.string{default = "default"},
+      model_name = field.string{default = "gpt-5-mini-2025-08-07"},
+      model_provider = field.string{default = "ChatOpenAI"},
+      reasoning_effort = field.string{default = "low"},
+      max_scores = field.number{default = 0},
+      dry_run = field.boolean{default = false}
+    },
+
+    output = {
+      success = field.boolean{required = true},
+      status = field.string{required = true},
+      message = field.string{required = true},
+      scorecard_id = field.string{},
+      score_ids = field.array{},
+      plan = field.object{}
+    },
+
+    function(input)
+      return run(input)
+    end
+  }
