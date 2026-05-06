@@ -22,10 +22,16 @@
       "author": "derek",
       "text": "Reworked scorecard_from_question_export to remove actor execution in act stage and route all scorecard/score writes through execute_tactus (The One Tool path). Added deterministic call_plexus_api helper using execute_tactus envelope parsing, explicit error surfacing, and stage progress updates per score. Also removed obsolete agent loop helpers and bumped procedure version to 1.0.1. Validation: pytest plexus/cli/procedure/test_service_yaml_loader.py -q passed.",
       "created_at": "2026-05-06T23:26:29.731628219Z"
+    },
+    {
+      "id": "91dde05f-fb77-4d31-b710-777f4b7bce99",
+      "author": "derek",
+      "text": "Implemented and pushed: scorecard_from_question_export now uses execute_tactus for all scorecard/score writes, removes actor-loop dependency in act stage, and includes runtime support for plexus.scorecards.create and plexus.score.create in execute_tactus. Verified with python3 -m py_compile MCP/tools/tactus_runtime/execute.py and pytest plexus/cli/procedure/test_service_yaml_loader.py -q.",
+      "created_at": "2026-05-06T23:27:56.310876287Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-06T23:26:29.731628219Z",
+  "updated_at": "2026-05-06T23:27:56.310876287Z",
   "closed_at": null,
   "custom": {}
 }
