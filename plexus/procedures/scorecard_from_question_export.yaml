@@ -149,6 +149,26 @@ code: |
     return string.lower(trim(value))
   end
 
+  local function to_bool(value, default)
+    if value == nil then
+      return default == true
+    end
+    if type(value) == "boolean" then
+      return value
+    end
+    if type(value) == "number" then
+      return value ~= 0
+    end
+    local s = normalize(value)
+    if s == "true" or s == "1" or s == "yes" or s == "y" then
+      return true
+    end
+    if s == "false" or s == "0" or s == "no" or s == "n" then
+      return false
+    end
+    return default == true
+  end
+
   local function slugify(value)
     local s = normalize(value)
     s = string.gsub(s, "[^a-z0-9]+", "-")
@@ -320,7 +340,7 @@ code: |
 
   local function run(input)
     local params = input
-    local dry_run = params.dry_run == true
+    local dry_run = to_bool(params.dry_run, false)
 
     local export_json = trim(params.questions_export_json)
     if not has_text(export_json) and has_text(params.questions_export_path) then
