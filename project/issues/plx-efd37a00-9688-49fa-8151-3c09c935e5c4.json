@@ -1,0 +1,25 @@
+{
+  "id": "plx-efd37a00-9688-49fa-8151-3c09c935e5c4",
+  "title": "Clear remaining visible CodeQL thread on PR 295",
+  "description": "Remove the still-visible CodeQL helper thread from PR #295 by eliminating the generic GraphQL error helper and returning sanitized JSONResponse objects directly.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e47b28ae-9392-4c97-88e1-ec0d337923a8",
+      "author": "ryan",
+      "text": "Removed the generic graphql_error helper and replaced both call sites with direct sanitized JSONResponse objects. Local py_compile and flake8 E9/F63/F7/F82 passed for services/private-graphql-proxy/proxy/app.py.",
+      "created_at": "2026-05-06T02:02:30.697951Z"
+    }
+  ],
+  "created_at": "2026-05-06T02:02:15.054890Z",
+  "updated_at": "2026-05-06T02:02:30.710747Z",
+  "closed_at": "2026-05-06T02:02:30.710747Z",
+  "custom": {}
+}
