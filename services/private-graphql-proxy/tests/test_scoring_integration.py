@@ -259,9 +259,63 @@ def test_real_prediction_reads_seeded_postgres_items_through_proxy():
     predictions = parse_prediction_json(predict_result.stdout)
     assert len(predictions) == len(seeded_items)
     assert {result["item_id"] for result in predictions} == {item["id"] for item in seeded_items}
+    predictions_by_item = {result["item_id"]: result for result in predictions}
     for result in predictions:
         assert result["scores"], result
         assert result["scores"][0]["name"] == score
+        assert result["scores"][0]["score_result_id"], result
+
+    for item in seeded_items:
+        result = predictions_by_item[item["id"]]
+        score_data = result["scores"][0]
+        score_result_check = execute(
+            """
+            query VerifyPredictionScoreResult($scoreResultId: ID!, $itemId: String!) {
+                getScoreResult(id: $scoreResultId) {
+                    id
+                    itemId
+                    accountId
+                    scorecardId
+                    scoreId
+                    scoreVersionId
+                    value
+                    explanation
+                    type
+                    status
+                    code
+                }
+                listScoreResultByItemId(itemId: $itemId, limit: 10) {
+                    items {
+                        id
+                        itemId
+                        scoreId
+                        value
+                        type
+                        status
+                    }
+                    nextToken
+                }
+            }
+            """,
+            {
+                "scoreResultId": score_data["score_result_id"],
+                "itemId": item["id"],
+            },
+        )
+        persisted = score_result_check["data"]["getScoreResult"]
+        assert persisted["id"] == score_data["score_result_id"]
+        assert persisted["itemId"] == item["id"]
+        assert persisted["accountId"] == account_id
+        assert persisted["value"] == str(score_data["value"])
+        assert persisted["type"] == "prediction"
+        assert persisted["status"] == "COMPLETED"
+        by_item_ids = {
+            row["id"]
+            for row in score_result_check["data"]["listScoreResultByItemId"]["items"]
+        }
+        assert score_data["score_result_id"] in by_item_ids
+        assert "getScoreResult" in score_result_check["extensions"]["proxy"]["private"]
+        assert "listScoreResultByItemId" in score_result_check["extensions"]["proxy"]["private"]
 
     debug_response = requests.get(
         f"{proxy_base_url()}/debug/upstream-requests",
