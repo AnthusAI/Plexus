@@ -1791,6 +1791,16 @@ def test_default_trace_store_honours_env_override(monkeypatch, tmp_path) -> None
     assert store.directory == str(target)
 
 
+def test_default_trace_store_uses_lambda_writable_tmp(monkeypatch) -> None:
+    monkeypatch.delenv("PLEXUS_TACTUS_TRACE_DIR", raising=False)
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "console-chat-responder")
+
+    store = execute._default_trace_store()
+
+    assert isinstance(store, execute.FileTactusTraceStore)
+    assert store.directory == "/tmp/tactus_traces"
+
+
 def test_default_budget_spec_uses_initiative_defaults() -> None:
     spec = execute.BudgetSpec()
 
@@ -3612,6 +3622,92 @@ def test_default_feedback_finder_chains_through_resolvers_and_service(
     assert kwargs["prioritize_edit_comments"] is False
 
 
+def test_default_feedback_alignment_uses_explicit_runtime_account(
+    monkeypatch,
+) -> None:
+    captured: dict = {}
+
+    class FakeFeedbackService:
+        @staticmethod
+        async def summarize_feedback(**kwargs):
+            captured["summary_kwargs"] = kwargs
+            return SimpleNamespace(stub_summary_result=True)
+
+        @staticmethod
+        def format_summary_result_as_dict(result):
+            captured["formatted_from"] = result
+            return {"summary": {"total": 3}}
+
+    fake_client = SimpleNamespace(
+        context=SimpleNamespace(account_id=None, account_key=None)
+    )
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: fake_client
+    )
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("default account resolver should not run")
+        ),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.memoized_resolvers.memoized_resolve_scorecard_identifier",
+        lambda client, name: f"sc:{name}",
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.memoized_resolvers.memoized_resolve_score_identifier",
+        lambda client, scorecard_id, score_name: f"sn:{scorecard_id}:{score_name}",
+    )
+    monkeypatch.setattr(
+        "plexus.cli.feedback.feedback_service.FeedbackService",
+        FakeFeedbackService,
+    )
+
+    result = execute._default_feedback_alignment(
+        {
+            "scorecard_name": "IA Call Center - Universal Pilot",
+            "score_name": "Professionalism Manners",
+            "account_id": "acct-console",
+            "days": 14,
+        }
+    )
+
+    assert result == {"summary": {"total": 3}}
+    assert fake_client.context.account_id == "acct-console"
+    kwargs = captured["summary_kwargs"]
+    assert kwargs["account_id"] == "acct-console"
+    assert kwargs["scorecard_name"] == "IA Call Center - Universal Pilot"
+    assert kwargs["score_name"] == "Professionalism Manners"
+    assert kwargs["days"] == 14
+
+
+def test_default_feedback_alignment_requires_account_context_without_null_key(
+    monkeypatch,
+) -> None:
+    fake_client = SimpleNamespace(
+        context=SimpleNamespace(account_id=None, account_key=None)
+    )
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: fake_client
+    )
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("must not resolve default account with a null key")
+        ),
+    )
+
+    with pytest.raises(execute.AccountContextRequired, match="requires account context"):
+        execute._default_feedback_alignment(
+            {
+                "scorecard_name": "IA Call Center - Universal Pilot",
+                "score_name": "Professionalism Manners",
+            }
+        )
+
+
 @pytest.mark.asyncio
 async def test_execute_tactus_runs_feedback_find_through_direct_finder() -> None:
     mcp = FastMCP("test-execute-tactus-feedback-direct")
@@ -3656,6 +3752,48 @@ async def test_execute_tactus_runs_feedback_find_through_direct_finder() -> None
 
 
 @pytest.mark.asyncio
+async def test_execute_tactus_injects_runtime_account_into_feedback_handler() -> None:
+    mcp = FastMCP("test-execute-tactus-feedback-context")
+    seen_args: dict = {}
+
+    def fake_finder(args: dict) -> dict:
+        seen_args.update(args)
+        return {"context": {"account_id": args.get("account_id")}, "feedback_items": []}
+
+    result = await execute._execute_tactus_tool(
+        'feedback{ scorecard_name = "x", score_name = "y" }',
+        mcp,
+        feedback_finder=fake_finder,
+        runtime_context={"account_id": "acct-console"},
+    )
+
+    assert result["ok"] is True
+    assert result["value"]["context"]["account_id"] == "acct-console"
+    assert seen_args["account_id"] == "acct-console"
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_direct_handler_exception_is_structured() -> None:
+    mcp = FastMCP("test-execute-tactus-feedback-handler-error")
+
+    def fake_finder(_args: dict) -> dict:
+        raise RuntimeError("original handler failure")
+
+    result = await execute._execute_tactus_tool(
+        'feedback{ scorecard_name = "x", score_name = "y" }',
+        mcp,
+        feedback_finder=fake_finder,
+    )
+
+    assert result["ok"] is False
+    assert result["value"] is None
+    assert result["error"]["code"] == "runtime_api_error"
+    assert result["error"]["type"] == "RuntimeError"
+    assert "original handler failure" in result["error"]["message"]
+    assert "Sandbox error:" not in result["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_execute_tactus_feedback_find_missing_args_surfaces_as_tactus_error() -> (
     None
 ):
@@ -3667,7 +3805,7 @@ async def test_execute_tactus_feedback_find_missing_args_surfaces_as_tactus_erro
     )
 
     assert result["ok"] is False
-    assert result["error"]["code"] == "tactus_execution_failed"
+    assert result["error"]["code"] == "invalid_request"
     assert "scorecard_name and score_name" in result["error"]["message"]
 
 
