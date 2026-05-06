@@ -1,0 +1,49 @@
+{
+  "id": "plx-0b6b0c04-880b-473f-9a50-df9f721367a4",
+  "title": "Prototype private GraphQL proxy with PostgreSQL smoke tests",
+  "description": "Build a standalone containerized private GraphQL proxy under services/private-graphql-proxy. It should use PostgreSQL for authoritative private models (Item, ScoreResult, FeedbackItem, Identifier), cache read-only control-plane AppSync responses with 15 minute freshness and 24 hour stale window, and include real smoke-test harnesses that can connect to production AppSync for read-only control-plane verification while proving private writes remain local.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a6cecd27-7364-42c8-9dbb-422e1371e06b",
+      "author": "ryan",
+      "text": "Implemented the initial private GraphQL proxy prototype in a clean worktree on feature/private-graphql-proxy-prototype. Added a standalone FastAPI service under services/private-graphql-proxy, PostgreSQL schemas for private_data and control_cache, AppSync cache-aside forwarding for allowlisted control-plane reads, local private model CRUD/list routing for Item/ScoreResult/FeedbackItem/Identifier, Docker Compose smoke harness, and tests. Verified offline classifier/routing tests pass and Compose config renders. Full container smoke run is blocked locally because Docker daemon is not running.",
+      "created_at": "2026-05-05T20:55:21.021447Z"
+    },
+    {
+      "id": "fdadabb6-c50d-4b4a-906a-6c8a58b5e0c2",
+      "author": "ryan",
+      "text": "Ran Docker Compose smoke testing with real AppSync credentials from /Users/ryan/Projects/Plexus/.env and read-only control-plane fixture IDs. The real API control-plane smoke and local PostgreSQL private-data smoke passed: 2 passed, 1 skipped, 6 deselected. The skipped test is the optional existing Plexus client compatibility smoke because the smoke container installs only the proxy requirements and not the full Plexus dependency stack (missing pandas). Real AppSync interactions were read-only; private model writes were local PostgreSQL-only.",
+      "created_at": "2026-05-05T21:03:18.278980Z"
+    },
+    {
+      "id": "0a1cd234-5c4b-402f-b4ee-724d3fb0c120",
+      "author": "ryan",
+      "text": "Follow-up read-only Docker check: ran only services/private-graphql-proxy/tests/test_smoke_proxy.py::test_control_plane_cache_smoke_read_only against the real AppSync credentials from .env through the proxy/PostgreSQL Compose stack. Pytest result: 1 passed in 0.64s. No AWS mutations were executed. Containers and temporary env file were cleaned up afterward.",
+      "created_at": "2026-05-05T21:04:14.619332Z"
+    },
+    {
+      "id": "886b311e-459f-4a7a-93d8-73bc2faa351d",
+      "author": "ryan",
+      "text": "Added explicit seeded Item read-path smoke coverage. The test seeds a local PostgreSQL-backed Item through the proxy, then verifies getItem, listItemByAccountIdAndUpdatedAt, listItemByScoreIdAndUpdatedAt, and listItemByAccountIdAndExternalId all return that item. Ran it in Docker Compose against the proxy/PostgreSQL stack with AppSync credentials blank: 1 passed in 0.14s. This exercises private Item reads without touching AWS.",
+      "created_at": "2026-05-05T21:10:55.057539Z"
+    },
+    {
+      "id": "e16d1947-d42b-441e-bffd-cc02bd61e1e6",
+      "author": "ryan",
+      "text": "Added and ran focused ScoreResult-for-Item smoke coverage. The test seeds a local Item, creates a ScoreResult with itemId pointing to that Item, then verifies getScoreResult, listScoreResultByItemId, and listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt all return it. It also exposed and fixed a prototype bug where private GraphQL responses returned full documents instead of honoring selected fields. Rebuilt the proxy Docker image and reran the focused smoke: 1 passed in 0.12s. AppSync credentials were blank; AWS was not touched.",
+      "created_at": "2026-05-05T21:14:08.612978Z"
+    }
+  ],
+  "created_at": "2026-05-05T20:49:03.847277Z",
+  "updated_at": "2026-05-05T21:15:01.390372Z",
+  "closed_at": "2026-05-05T21:15:01.390372Z",
+  "custom": {}
+}
