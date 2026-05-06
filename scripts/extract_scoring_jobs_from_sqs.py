@@ -44,7 +44,7 @@ import json
 import csv
 import boto3
 from datetime import datetime
-from typing import Dict, List, Set, Optional, Tuple
+from typing import Dict, List, Set, Optional
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock

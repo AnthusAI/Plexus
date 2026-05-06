@@ -80,8 +80,8 @@ async def graphql_endpoint(
 
     try:
         plan = build_operation_plan(query, operation_name)
-    except Exception as exc:
-        return graphql_error(str(exc), status_code=400)
+    except Exception:
+        return graphql_error("invalid GraphQL operation", status_code=400)
 
     if plan.blocked_fields:
         blocked = ", ".join(field.name for field in plan.blocked_fields)
@@ -204,7 +204,7 @@ def execute_control_query(
     except Exception as exc:
         if cache_row and cache_row["stale_until"].astimezone(timezone.utc) >= now:
             return cache_row["response"], "stale"
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail="upstream control query failed") from exc
 
 
 def key_arguments(field: RootField, variables: dict[str, Any]) -> dict[str, Any]:

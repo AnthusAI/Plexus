@@ -132,7 +132,8 @@ async def _run_canary(args: argparse.Namespace) -> dict[str, Any]:
 
         dotenv.load_dotenv = lambda *a, **k: False
     except Exception:
-        pass
+        # dotenv is optional here; process-level env must remain authoritative.
+        _ = None
 
     api_url = _require_env("PLEXUS_API_URL")
     auth_mode = _auth_mode()
