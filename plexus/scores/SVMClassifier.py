@@ -4,7 +4,7 @@ import numpy as np
 import logging
 import datetime
 from dotenv import load_dotenv
-load_dotenv('.env', override=True)
+load_dotenv('.env', override=False)
 # import mlflow
 # import mlflow.keras
 from tqdm import tqdm

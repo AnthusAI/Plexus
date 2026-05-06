@@ -24,15 +24,15 @@ def create_client() -> PlexusDashboardClient:
         # Optionally raise an error or log a warning if key is expected
         logger.warning("PLEXUS_ACCOUNT_KEY environment variable not set.")
         
-    # Dashboard-oriented tooling should prefer the frontend API credentials when present.
-    # This keeps CLI/MCP behavior aligned with the web app's active AppSync endpoint.
+    # Dispatch-critical CLI/MCP flows must honor the explicit runtime endpoint first.
+    # NEXT_PUBLIC values are frontend defaults and may point at a different checkout/env.
     api_url = (
-        os.getenv('NEXT_PUBLIC_PLEXUS_API_URL')
-        or os.getenv('PLEXUS_API_URL')
+        os.getenv('PLEXUS_API_URL')
+        or os.getenv('NEXT_PUBLIC_PLEXUS_API_URL')
     )
     api_key = (
-        os.getenv('NEXT_PUBLIC_PLEXUS_API_KEY')
-        or os.getenv('PLEXUS_API_KEY')
+        os.getenv('PLEXUS_API_KEY')
+        or os.getenv('NEXT_PUBLIC_PLEXUS_API_KEY')
     )
 
     # Create context with the key

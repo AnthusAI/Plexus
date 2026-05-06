@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-load_dotenv(override=True, verbose=True)
+load_dotenv(override=False, verbose=True)
 
 import re
 import sys
