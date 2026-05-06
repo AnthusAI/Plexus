@@ -1,0 +1,25 @@
+{
+  "id": "plx-c8dcfb4f-102b-4cf3-92c2-624901ccbb39",
+  "title": "Rerun Suco champion timeline after evaluation backfill",
+  "description": "Run the ScoreChampionVersionTimeline report for suco_home_improvement over the last 21 days with --fresh after the evaluation backfill, then inspect the persisted attachment to verify metric-bearing points for the 2026-05-03T12:49-12:50Z champion-change cluster.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "dcc5b49d-3c12-42e5-a729-dee08af8c774",
+      "author": "ryan",
+      "text": "Fresh Suco champion timeline report completed after backfill. Report 880849bd-f5c6-4ee5-8f44-913516ce55ae, block 28155aa5-67d9-4b70-a365-25a02865680c. Summary: 29 scores with changes, 58 champion changes, 61 procedures, 177 evaluations, 15335 score results, total optimization cost 136.04663335. Validation: 2026-05-03T12:49-12:50Z cluster still has 7 transitions; only Early Transfer AI has feedback/regression metrics. Missing metric-bearing points: Reason Call - Roofing AI, Zillow AI, Reason Call - Windows AI, Branding Hand-Off AI, Invalid Transfer - AI, Customer Questions AI.",
+      "created_at": "2026-05-03T16:53:14.259991Z"
+    }
+  ],
+  "created_at": "2026-05-03T16:50:40.369679Z",
+  "updated_at": "2026-05-03T16:53:14.274141Z",
+  "closed_at": "2026-05-03T16:53:14.274141Z",
+  "custom": {}
+}

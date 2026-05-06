@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "166bf1ff-8c00-4bc6-9d9b-0200f8a7063e",
+  "issue_id": "plx-cc743397-9c82-4661-8363-1f1690c469a0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T17:44:39.015Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implementation task for the Gravatar avatar feature.\n\nExpected work:\n- Locate current sidebar user identity and user settings components.\n- Add a single shared way to derive Gravatar avatar URLs from the authenticated user email.\n- Render the Gravatar in the left sidebar behind/alongside the user name according to existing UI conventions.\n- Add user settings affordance that links users to Gravatar profile management for updates.\n- Add focused tests/specs for URL derivation, sidebar rendering, and settings link behavior.\n\nNotes:\n- Do not add a direct avatar upload path.\n- Do not add provider fallback chains unless explicitly requested.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-1322887e-825c-4760-ad01-400bc49c686a",
+    "priority": 2,
+    "status": "open",
+    "title": "Implement dashboard Gravatar integration"
+  }
+}

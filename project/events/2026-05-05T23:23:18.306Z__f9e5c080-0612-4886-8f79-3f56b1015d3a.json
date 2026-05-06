@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f9e5c080-0612-4886-8f79-3f56b1015d3a",
+  "issue_id": "plx-2a712781-6b27-4427-983a-d97786b7f7a1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-05T23:23:18.306Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix task author indicator fallback for report detail"
+  }
+}

@@ -34,10 +34,16 @@
       "author": "ryan",
       "text": "Stopped the active Dosage optimizer direct-CLI process on 2026-04-23 at process level. Terminated optimizer shell PID 95073 and child optimizer PID 95085; verification via pgrep shows no remaining `python -m plexus.cli procedure optimize --scorecard SelectQuote HCS Medium-Risk --score Medication Review: Dosage` process. Also cleaned up the abandoned item-ID feedback invalidation process from the earlier failed command path.",
       "created_at": "2026-04-23T20:51:30.135593Z"
+    },
+    {
+      "id": "86527252-a327-4651-beb6-76bec7a663a1",
+      "author": "ryan",
+      "text": "2026-05-05 Dosage optimization continuation: after the approved invalidation and cleaned baseline, tested three candidate versions. Rejected 0436ddcd-4128-47be-a808-c77c0a17ca30 because it regressed to 74.39% (61/82). Skipped 1d35f881-8884-4523-81b6-4e2fceb10de0 because it matched baseline at 80.49% while adding context cost. Promoted 0c2bf0b8-6923-4b5a-9da7-98a526562df5 after eval 2fd9ab6b-1547-4264-a366-6949008b6276 scored 86.59% (71/82), confusion [[40,6],[5,31]], alignment 0.7349, precision 83.78%, recall 86.11%. Champion moved from d1fb6cf4-4633-4909-9d50-7ad5f7be4d42 to 0c2bf0b8-6923-4b5a-9da7-98a526562df5 and was verified by score.info.",
+      "created_at": "2026-05-05T16:42:12.708568Z"
     }
   ],
   "created_at": "2026-04-23T05:59:09.781153Z",
-  "updated_at": "2026-04-23T20:51:30.135593Z",
+  "updated_at": "2026-05-05T16:42:12.708568Z",
   "closed_at": null,
   "custom": {}
 }

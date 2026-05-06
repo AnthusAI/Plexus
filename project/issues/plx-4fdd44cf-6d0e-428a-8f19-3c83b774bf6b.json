@@ -1,0 +1,25 @@
+{
+  "id": "plx-4fdd44cf-6d0e-428a-8f19-3c83b774bf6b",
+  "title": "Rerun Suco champion timeline after new promotions",
+  "description": "Run the ScoreChampionVersionTimeline report for the Suco Home Improvement scorecard over the last 21 days after newly promoted champions, and report the new report ID and summary.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "648abb98-d052-46a5-a150-aa823b43f20b",
+      "author": "ryan",
+      "text": "Reran ScoreChampionVersionTimeline for Suco Home Improvement over the last 21 days with --fresh. New report ID: 844d0be4-f1e1-4f58-a039-a3f8ccad1f74. Block ID: 9759c8a3-42b1-40e5-8405-5d3b14aae52e. Summary: 39 scores analyzed, 29 scores with champion changes, 58 champion changes, 61 procedures, 153 evaluations, 13,866 score results, total optimization cost .0466. Activity range normalized to 2026-04-28T19:40:06.392Z through 2026-05-03T16:10:48.936Z.",
+      "created_at": "2026-05-03T16:12:52.225515Z"
+    }
+  ],
+  "created_at": "2026-05-03T16:10:37.345317Z",
+  "updated_at": "2026-05-03T16:12:52.241803Z",
+  "closed_at": "2026-05-03T16:12:52.241803Z",
+  "custom": {}
+}

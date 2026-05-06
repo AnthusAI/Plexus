@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "eab2add7-9ad5-4eeb-a823-39bed9e8c747",
+  "issue_id": "plx-7c56b501-71cf-4991-b0d2-1d2dabfc2b38",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-05T16:25:28.536Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: Scorecard History report\n\nAs a lab report user, I want a scorecard history report for starred score-version changes, so that I can explain what changed over a time period and whether those changes reached champion.\n\nScenario: Scorecard-wide history shows only changed scores\nGiven a scorecard has multiple scores\nAnd some scores have featured versions created in the requested window\nWhen I run the Scorecard History report without a score parameter\nThen the report includes only scores with featured versions created in the window.\n\nScenario: Single-score history limits scope\nGiven a scorecard has a selected score\nWhen I run the Scorecard History report with a score parameter\nThen the report includes featured versions created in the window only for that score.\n\nScenario: Champion coverage is summarized\nGiven included featured versions have champion status for all, none, or some versions\nWhen the report summary is generated\nThen it states whether all, none, or some included changes were promoted to champion.\n\nScenario: Diffs are available on demand\nGiven an included version has a parent version\nWhen I expand the version and then expand code or guidelines diff\nThen I see the original and modified content in a Monaco diff view.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "priority": 1,
+    "status": "open",
+    "title": "Scorecard history report summarizes starred score-version changes"
+  }
+}

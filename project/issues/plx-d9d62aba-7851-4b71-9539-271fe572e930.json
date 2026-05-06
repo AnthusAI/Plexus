@@ -1,0 +1,25 @@
+{
+  "id": "plx-d9d62aba-7851-4b71-9539-271fe572e930",
+  "title": "Fix TaskDisplay evaluation createdByUserId typecheck",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e9722ddc-54c3-4012-a8b2-b3477393c0d1",
+      "author": "ryan",
+      "text": "Fixed TaskDisplay evaluationData prop typing for createdByUserId. Local dashboard ci:typecheck passes.",
+      "created_at": "2026-05-06T02:38:58.971102Z"
+    }
+  ],
+  "created_at": "2026-05-06T02:32:53.062101Z",
+  "updated_at": "2026-05-06T02:39:04.077881Z",
+  "closed_at": "2026-05-06T02:39:04.077881Z",
+  "custom": {}
+}

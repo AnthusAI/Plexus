@@ -10,9 +10,64 @@
   "parent": null,
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "f547f141-995e-4842-8d27-cc3617f50783",
+      "author": "ryan",
+      "text": "2026-05-05 champion state update: Medication Review Dosage, Pharmacy, and Prescriber had already been aligned to the client policy that dosage/pharmacy/prescriber customer confirmation is not separately required when Individual Confirmation covers individual confirmation. Champions now: Dosage 0c2bf0b8-6923-4b5a-9da7-98a526562df5 (promoted today after 86.59% cleaned 30-day feedback eval), Pharmacy 8f226eb1-f6a7-4a94-a712-d7314ba4acf7, Prescriber 3a51521a-691d-4e90-8e89-67ad6f3ce595. Post-invalidation Prescriber eval confirmed 87.21% (75/86). Strong policy-drift invalidations performed today were limited to Dosage d95201b3-ce0e-4b08-8924-677197ac303a and Prescriber 396d3c3b-827a-40b9-be91-f9efb4cee341.",
+      "created_at": "2026-05-05T16:42:17.363094Z"
+    },
+    {
+      "id": "a06090c6-37a3-45aa-be81-c521d01e8a53",
+      "author": "ryan",
+      "text": "2026-05-05: User requested clearer ScoreVersion labels/notes explaining what changed and why. Updating existing Medication Review champion and recent candidate ScoreVersion notes directly via updateScoreVersion so version history/promotion packets are self-explanatory.",
+      "created_at": "2026-05-05T17:34:23.181935Z"
+    },
+    {
+      "id": "1a4d3812-787c-47ef-9198-5341d3a9f1b0",
+      "author": "ryan",
+      "text": "Pharmacy GPT-5.4-mini model-only candidate 35b96510-fae1-4c02-9243-e0f8cc5641d4 evaluated on the same 72 newest feedback items: 66/72 (91.67%), confusion no/no=5 no/yes=0 yes/no=6 yes/yes=61, below current champion 8f226eb1-f6a7-4a94-a712-d7314ba4acf7 at 68/72 (94.44%). Leaving Pharmacy champion unchanged and labeling the GPT-5.4-mini version as rejected.",
+      "created_at": "2026-05-05T17:44:08.936113Z"
+    },
+    {
+      "id": "ae76caf0-b309-4a3a-b1fd-fdb2f725df17",
+      "author": "ryan",
+      "text": "Pharmacy paired model repeat completed after user noted single-run stochastic variation: gpt-5-mini candidate 051a6bc5 repeated at 68/72 (94.44%, eval e999605e), while GPT-5.4-mini candidate 35b96510 repeated at 66/72 (91.67%, eval fccff8cd). Updated ScoreVersion notes to frame this as no demonstrated improvement / not promoted, not proof that GPT-5.4-mini is intrinsically worse. Pharmacy champion remains 8f226eb1.",
+      "created_at": "2026-05-05T17:57:57.823613Z"
+    },
+    {
+      "id": "9c7ed6de-0ff5-4d91-bc05-945319c75702",
+      "author": "ryan",
+      "text": "User requested moving Medication Review: Dosage to GPT-5.4-mini and trying it. Creating a model-only Dosage candidate from current champion 0c2bf0b8, then evaluating on recent feedback before any champion promotion.",
+      "created_at": "2026-05-05T18:09:22.185104Z"
+    },
+    {
+      "id": "0e7ed5b5-3367-408a-ac9a-9f1e975c12bc",
+      "author": "ryan",
+      "text": "Dosage GPT-5.4-mini model-only candidate 58ddebeb evaluated on available feedback: eval bd4b9a96 scored 62/86 (72.09%) with 17 false positives and 7 false negatives. Marked ScoreVersion rejected and did not promote. Current champion rerun with gpt-5.4-nano is in progress for sanity check.",
+      "created_at": "2026-05-05T18:19:19.683225Z"
+    },
+    {
+      "id": "cd4f8e1c-a565-49eb-ba9e-9bca07b36e49",
+      "author": "ryan",
+      "text": "Dosage available-feedback rerun complete. Current champion 0c2bf0b8 (gpt-5.4-nano) eval d82f3180 scored 74/86 (86.05%), with 6 yes->no and 6 no->yes errors. GPT-5.4-mini candidate 58ddebeb eval bd4b9a96 scored 62/86 (72.09%), with 17 no->yes and 7 yes->no errors. Updated champion and candidate ScoreVersion notes. No Dosage promotion recommended.",
+      "created_at": "2026-05-05T18:25:17.838982Z"
+    },
+    {
+      "id": "85c44bda-70d9-457a-bc8a-aafcf2a65722",
+      "author": "ryan",
+      "text": "User asked for current SME questions for Prescriber, Dosage, and Pharmacy that might improve the scores. Reviewing recent feedback eval/RCA outputs before proposing questions.",
+      "created_at": "2026-05-05T20:09:02.893479Z"
+    },
+    {
+      "id": "89a5f767-5245-4a7b-b8e6-ab02ebe8c315",
+      "author": "ryan",
+      "text": "Current SME question review: RCA shows Prescriber and Pharmacy have no formal guideline_gap_requires_sme items; most issues are score configuration/enrollment detection/prompt boundary problems. Dosage has one explicit SME guideline-gap item around SRX numeric dose requirements when only medication counts/adherence/conditions are discussed. Candidate SME questions drafted around Prescriber SRX/SPM thresholds, Dosage numeric-dose/directions thresholds, and Pharmacy non-retail/private/current-vs-future pharmacy boundaries.",
+      "created_at": "2026-05-05T20:10:14.516318Z"
+    }
+  ],
   "created_at": "2026-04-22T13:19:21.731868Z",
-  "updated_at": "2026-04-22T13:19:51.547815Z",
+  "updated_at": "2026-05-05T20:10:14.516318Z",
   "closed_at": null,
   "custom": {}
 }

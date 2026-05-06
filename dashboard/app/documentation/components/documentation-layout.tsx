@@ -148,6 +148,7 @@ const docSections: DocSidebarItem[] = [
       { name: "FeedbackAlignmentTimeline", href: "/documentation/report-blocks/feedback-alignment-timeline" },
       { name: "FeedbackVolumeTimeline", href: "/documentation/report-blocks/feedback-volume-timeline" },
       { name: "ScoreChampionVersionTimeline", href: "/documentation/report-blocks/score-champion-version-timeline" },
+      { name: "ScorecardHistory", href: "/documentation/report-blocks/scorecard-history" },
       { name: "AcceptanceRateTimeline", href: "/documentation/report-blocks/acceptance-rate-timeline" },
       { name: "AcceptanceRate", href: "/documentation/report-blocks/acceptance-rate" },
       { name: "CorrectionRate", href: "/documentation/report-blocks/correction-rate" },

@@ -1,0 +1,31 @@
+{
+  "id": "plx-5b5f824e-64f3-4aae-aad3-38ed7b69800c",
+  "title": "Flatten Gravatar settings button styling",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "83c12994-4dad-4313-aab5-5004a0b9a31a",
+      "author": "ryan",
+      "text": "Updated settings UI so both Manage Gravatar and Manage Menu Visibility use flat secondary button styling with no border, shadow, or focus ring. Targeted settings page test passes.",
+      "created_at": "2026-05-04T22:05:27.145581Z"
+    },
+    {
+      "id": "720ad609-2c2a-48f0-a2d5-5367a426b21f",
+      "author": "ryan",
+      "text": "Adjusted both settings action buttons from small to default button sizing so they use normal dashboard text size while keeping the flat no-border/no-shadow styling. Settings page test still passes.",
+      "created_at": "2026-05-04T22:05:53.662958Z"
+    }
+  ],
+  "created_at": "2026-05-04T22:03:44.579130Z",
+  "updated_at": "2026-05-04T22:10:34.337115Z",
+  "closed_at": "2026-05-04T22:10:34.337115Z",
+  "custom": {}
+}

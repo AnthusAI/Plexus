@@ -1,0 +1,18 @@
+{
+  "id": "plx-bffbdcdb-3da6-42e2-8607-ab35c8720a5d",
+  "title": "Agent KB docs: add reports.scorecard-history reference topic",
+  "description": "Add canonical reports namespace topic with parameters, behavior rules, output contract, and CLI/Tactus examples; update reports index mention.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-05T23:19:09.396079Z",
+  "updated_at": "2026-05-05T23:26:44.505540Z",
+  "closed_at": "2026-05-05T23:26:44.505540Z",
+  "custom": {}
+}

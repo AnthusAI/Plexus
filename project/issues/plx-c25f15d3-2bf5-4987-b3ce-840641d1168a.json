@@ -1,0 +1,25 @@
+{
+  "id": "plx-c25f15d3-2bf5-4987-b3ce-840641d1168a",
+  "title": "Show metric series on combined champion timeline",
+  "description": "Update the ScoreChampionVersionTimeline combined multi-score chart so it renders each score's available alignment and accuracy metric series, not just champion-change markers.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d269f89c-74a0-435f-bf62-b27972bb4d16",
+      "author": "ryan",
+      "text": "Updated the combined ScoreChampionVersionTimeline chart to render each score's available feedback/regression alignment and accuracy series on the shared timeline. Combined chart still has no tooltip and uses activeDot=false. Focused Jest test and dashboard typecheck passed.",
+      "created_at": "2026-05-03T13:38:04.042521Z"
+    }
+  ],
+  "created_at": "2026-05-03T13:36:30.251921Z",
+  "updated_at": "2026-05-03T13:38:11.613611Z",
+  "closed_at": "2026-05-03T13:38:11.613611Z",
+  "custom": {}
+}

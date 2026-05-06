@@ -1,0 +1,25 @@
+{
+  "id": "plx-9f94e39b-50f7-4105-bca7-0956d704dbd5",
+  "title": "Align champion timeline start to first transition date",
+  "description": "ScoreChampionVersionTimeline charts currently start one day before the first champion transition. Adjust the frontend timeline domain so score timelines start at the first champion version transition timestamp while preserving the shared scale across scores.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9bcbad8f-4ea2-4ba6-82f0-53c363bd38d6",
+      "author": "ryan",
+      "text": "Updated ScoreChampionVersionTimeline shared x-domain calculation so chart start is anchored to the earliest actual champion transition timestamp across included scores instead of the report date_range start. Updated focused renderer test accordingly. Validation passed: focused Jest test and dashboard typecheck.",
+      "created_at": "2026-05-03T13:44:29.695743Z"
+    }
+  ],
+  "created_at": "2026-05-03T13:43:42.334599Z",
+  "updated_at": "2026-05-03T13:44:29.695743Z",
+  "closed_at": null,
+  "custom": {}
+}

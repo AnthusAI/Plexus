@@ -35,6 +35,7 @@ import {
   type ProcedureFeedbackEvaluationSummary,
 } from "@/components/ui/optimizer-results-utils"
 import { getCurrentUserAttribution } from "@/utils/user-profile"
+import { resolveCreatedByUserId } from "@/utils/author-attribution"
 
 type Procedure = Schema['Procedure']['type']
 type Task = Schema['Task']['type']
@@ -1029,6 +1030,10 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     score: procedure.score ? { name: procedure.score.name } : null,
     procedureType: procedureType,
     description: procedure.description || undefined,
+    createdByUserId: resolveCreatedByUserId({
+      createdByUserId: procedure.createdByUserId,
+      metadata: procedure.metadata,
+    }),
     task: procedure.task ? {
       id: procedure.task.id,
       type: procedureType,

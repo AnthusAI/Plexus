@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1da70749-3837-45b7-8e6f-1d2491c36335",
+  "issue_id": "plx-e0a3cb1a-8637-4f0f-ae8e-5728e799e4ea",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-04T21:56:17.513Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix failing develop CI blocking deployment"
+  }
+}

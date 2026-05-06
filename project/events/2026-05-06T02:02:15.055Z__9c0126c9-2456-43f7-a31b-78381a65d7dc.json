@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9c0126c9-2456-43f7-a31b-78381a65d7dc",
+  "issue_id": "plx-efd37a00-9688-49fa-8151-3c09c935e5c4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T02:02:15.055Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Remove the still-visible CodeQL helper thread from PR #295 by eliminating the generic GraphQL error helper and returning sanitized JSONResponse objects directly.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Clear remaining visible CodeQL thread on PR 295"
+  }
+}

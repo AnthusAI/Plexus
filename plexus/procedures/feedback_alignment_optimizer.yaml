@@ -865,7 +865,7 @@ code: |
   local EVAL_AWAIT_TIMEOUT = "PT90M"
 
   -- Await a single evaluation handle and return the evaluation data dict.
-  local function _await_eval_handle(h, label)
+  local function _await_eval_handle(h, label, dispatch_args)
     label = label or tostring(h and h.id or "?")
     diag("Awaiting evaluation handle " .. label .. " (timeout=" .. EVAL_AWAIT_TIMEOUT .. ")...")
     local waited = plexus.handle.await({id = h.id, timeout = EVAL_AWAIT_TIMEOUT})
@@ -878,6 +878,33 @@ code: |
       if eval_id then
         local ok, info = pcall(function() return plexus.evaluation.info({evaluation_id = eval_id}) end)
         if ok and type(info) == "table" then eval_data = info end
+      end
+    end
+    if not eval_data then
+      local waited_status = tostring(waited.status or "")
+      if waited_status == "completed_unknown" then
+        local recent_lookup = {
+          evaluation_type = (dispatch_args and dispatch_args.evaluation_type) or nil,
+          score_version_id = (dispatch_args and (dispatch_args.score_version_id or dispatch_args.version)) or nil,
+          scorecard = dispatch_args and dispatch_args.scorecard or nil,
+          score = dispatch_args and dispatch_args.score or nil,
+          dataset_id = dispatch_args and dispatch_args.dataset_id or nil,
+          days = dispatch_args and dispatch_args.days or nil,
+          max_feedback_items = dispatch_args and dispatch_args.max_feedback_items or nil,
+          sampling_mode = dispatch_args and dispatch_args.sampling_mode or nil,
+          max_age_hours = 6,
+          min_items = 1,
+        }
+        local ok_recent, recent = pcall(function()
+          return plexus.evaluation.find_recent(recent_lookup)
+        end)
+        if ok_recent and type(recent) == "table" and not recent.error then
+          local recent_id = recent.evaluation_id or recent.id
+          if recent_id then
+            diag("Recovered completed_unknown handle via evaluation.find_recent: " .. tostring(recent_id))
+            eval_data = recent
+          end
+        end
       end
     end
     if not eval_data then
@@ -915,7 +942,7 @@ code: |
       dispatch_args.wait = nil
       local ok, h = pcall(function() return plexus.evaluation.run(dispatch_args) end)
       if ok and type(h) == "table" and h.id then
-        table.insert(handles, {handle = h, idx = i})
+        table.insert(handles, {handle = h, idx = i, dispatch_args = dispatch_args})
         diag(string.format("Dispatched evaluation %d/%d: %s (handle=%s)",
           i, #batch_list, tostring(dispatch_args.evaluation_type), tostring(h.id)))
       else
@@ -928,7 +955,7 @@ code: |
     local results = {}
     for _, entry in ipairs(handles) do
       if entry.handle then
-        local eval_data = _await_eval_handle(entry.handle, tostring(entry.idx))
+        local eval_data = _await_eval_handle(entry.handle, tostring(entry.idx), entry.dispatch_args)
         table.insert(results, eval_data)
       else
         table.insert(results, {error = entry.error})
@@ -948,7 +975,7 @@ code: |
     if not h or not h.id then
       return {error = "plexus.evaluation.run returned no handle: " .. tostring(h)}
     end
-    return _await_eval_handle(h, dispatch_args.evaluation_type)
+    return _await_eval_handle(h, dispatch_args.evaluation_type, dispatch_args)
   end
 
   local function call_plexus_tool(tool_name, args_table, opts)
@@ -1016,13 +1043,35 @@ code: |
     elseif tool_name == "get_plexus_documentation" then
       dispatch = function(a)
         -- Accept name, filename, or key (all used by different call sites)
-        local key = a.name or a.filename or a.key or ""
-        local result = plexus.docs.get({key = key})
-        -- Return the raw content string (callers use raw_string=true)
-        if type(result) == "table" then
-          return result.content or ""
+        local raw_key = a.name or a.filename or a.key or ""
+        local key = tostring(raw_key or "")
+        local candidates = { key }
+        if key ~= "" and not key:find("%.") then
+          table.insert(candidates, "evaluation-feedback." .. key)
+          table.insert(candidates, "score-authoring." .. key)
+          table.insert(candidates, "procedures." .. key)
+          table.insert(candidates, "optimizer." .. key)
+          table.insert(candidates, "repo-workflows." .. key)
+          table.insert(candidates, "mcp." .. key)
         end
-        return tostring(result)
+
+        local last_err = nil
+        for _, candidate in ipairs(candidates) do
+          local ok, result = pcall(function()
+            return plexus.docs.get({key = candidate})
+          end)
+          if ok and type(result) == "table" and result.content and result.content ~= "" then
+            return result.content
+          end
+          if ok and type(result) == "string" and result ~= "" then
+            return result
+          end
+          if not ok then
+            last_err = result
+          end
+        end
+
+        error("Unknown documentation id: '" .. key .. "'" .. (last_err and (" (" .. tostring(last_err) .. ")") or ""))
       end
     elseif tool_name == "plexus_set_status_message" then
       dispatch = function(a)

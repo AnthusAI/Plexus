@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0bcfdeb8-2209-431c-9650-f541a4c9cc6c",
+  "issue_id": "plx-0b6b0c04-880b-473f-9a50-df9f721367a4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-05T20:49:03.847Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Build a standalone containerized private GraphQL proxy under services/private-graphql-proxy. It should use PostgreSQL for authoritative private models (Item, ScoreResult, FeedbackItem, Identifier), cache read-only control-plane AppSync responses with 15 minute freshness and 24 hour stale window, and include real smoke-test harnesses that can connect to production AppSync for read-only control-plane verification while proving private writes remain local.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Prototype private GraphQL proxy with PostgreSQL smoke tests"
+  }
+}

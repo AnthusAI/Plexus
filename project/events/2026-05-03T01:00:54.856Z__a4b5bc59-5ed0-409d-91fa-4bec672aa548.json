@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a4b5bc59-5ed0-409d-91fa-4bec672aa548",
+  "issue_id": "plx-6a860b6f-fa4a-4834-8372-26d684a7032d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T01:00:54.856Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Rerun the ScoreChampionVersionTimeline report for SUCO Home Improvement after new champion promotions.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Rerun SUCO champion timeline report"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ccb02443-88fd-4237-be06-7b325d8b0a50",
+  "issue_id": "plx-758239bb-3e31-43d9-8682-78a7eca2e91c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T02:20:13.833Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix score model test after unused import cleanup"
+  }
+}

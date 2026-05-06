@@ -1,0 +1,25 @@
+{
+  "id": "plx-a341e48e-5868-4582-bcc1-449650d6f3c9",
+  "title": "Test ScorecardHistory report",
+  "description": "Add backend, CLI, and dashboard tests for filtering, champion coverage, diff payloads, collapsed UI behavior, and mocked LLM summaries.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "20e312a9-0c3b-40fd-b5d7-ab1b6076dd91",
+      "author": "ryan",
+      "text": "Validation complete: Python report block tests pass, CLI mapping tests pass, ScorecardHistory Jest tests pass, dashboard typecheck passed, py_compile passed, and manual CLI validation completed using scorecard external ID 1438.",
+      "created_at": "2026-05-05T16:58:44.271501Z"
+    }
+  ],
+  "created_at": "2026-05-05T16:25:33.676470Z",
+  "updated_at": "2026-05-05T16:58:46.168149Z",
+  "closed_at": "2026-05-05T16:58:46.168149Z",
+  "custom": {}
+}

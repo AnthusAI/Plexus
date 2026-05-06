@@ -1,0 +1,49 @@
+{
+  "id": "plx-c561bbea-3cce-4bb0-8cf8-24cd79681f3d",
+  "title": "Improve Scorecard History stakeholder summary",
+  "description": "Revise Scorecard History generated content so the top-level report gives a concise stakeholder/SME-facing bullet summary of high-level guideline and code/prompt changes in plain language, prioritizing rubric/guideline meaning over technical implementation detail.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "14b75d6c-3780-48c8-9129-3444fe51c14e",
+      "author": "ryan",
+      "text": "Retuned the Scorecard History LLM summary prompt toward stakeholder/SME meeting language: high-level what changed, guideline/rubric meaning first, code/prompt-only changes translated into scoring behavior, and no version IDs or implementation terminology.",
+      "created_at": "2026-05-05T22:07:22.696451Z"
+    },
+    {
+      "id": "055b028e-a220-4ce2-86e1-9fa351b5dc8f",
+      "author": "ryan",
+      "text": "Follow-up from manual report run: the stakeholder summary tone improved, but the LLM incorrectly claimed all changes were promoted. Added aggregate counts and champion_coverage to the prompt payload and instructed the LLM to use that exact value for rollout coverage.",
+      "created_at": "2026-05-05T22:09:11.686409Z"
+    },
+    {
+      "id": "a9127a9a-96a1-4d01-bf0f-f2eb8866bbf2",
+      "author": "ryan",
+      "text": "Second manual run exposed guideline-count drift: the LLM said no rubric wording changed despite guideline diffs. Added aggregate and per-score guideline/code change counts to the prompt payload and explicit instructions not to claim no rubric wording changed unless the aggregate guideline count is zero.",
+      "created_at": "2026-05-05T22:11:07.129292Z"
+    },
+    {
+      "id": "710f0662-56a0-4282-9e9d-6839ffd07da4",
+      "author": "ryan",
+      "text": "New requirement: add SME/stakeholder rubric-clarification questions after the high-level change summary. Prefer questions found in recent procedures associated with included score versions; when unavailable, derive concise SME questions from RCA/misclassification context during report generation.",
+      "created_at": "2026-05-05T22:13:06.693457Z"
+    },
+    {
+      "id": "33f1012f-6b99-410d-8c6e-4a5b2200f345",
+      "author": "ryan",
+      "text": "Added SME question sourcing to Scorecard History: version-level Procedure lookup, score-level recent Procedure lookup, extraction of optimizer SME agenda/worksheet fields, and S3-backed procedure state support when dashboard_state/state is offloaded. The top summary now requires a Questions for SMEs / stakeholders section and can derive questions from RCA context when procedure agendas are unavailable.",
+      "created_at": "2026-05-05T22:20:54.696461Z"
+    }
+  ],
+  "created_at": "2026-05-05T22:06:32.681566Z",
+  "updated_at": "2026-05-05T22:20:54.696461Z",
+  "closed_at": null,
+  "custom": {}
+}

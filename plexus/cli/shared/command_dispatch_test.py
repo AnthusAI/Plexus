@@ -1,4 +1,3 @@
-import json
 import unittest
 from unittest.mock import patch
 
@@ -78,13 +77,6 @@ class TestCommandDispatchConfig(unittest.TestCase):
                             {"id": "a", "status": "PENDING", "dispatchStatus": "PENDING", "createdAt": "2026-03-16T10:00:00Z"},
                             {"id": "b", "status": "COMPLETED", "dispatchStatus": "PENDING", "createdAt": "2026-03-16T12:00:00Z"},
                             {"id": "c", "status": "PENDING", "dispatchStatus": "PENDING", "createdAt": "2026-03-16T11:00:00Z"},
-                            {
-                                "id": "local",
-                                "status": "PENDING",
-                                "dispatchStatus": "PENDING",
-                                "createdAt": "2026-03-16T12:30:00Z",
-                                "metadata": json.dumps({"dispatch_mode": "local"}),
-                            },
                         ]
                     }
                 }

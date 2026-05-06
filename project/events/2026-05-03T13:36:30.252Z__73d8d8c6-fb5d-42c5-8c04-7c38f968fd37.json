@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "73d8d8c6-fb5d-42c5-8c04-7c38f968fd37",
+  "issue_id": "plx-c25f15d3-2bf5-4987-b3ce-840641d1168a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T13:36:30.252Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Update the ScoreChampionVersionTimeline combined multi-score chart so it renders each score's available alignment and accuracy metric series, not just champion-change markers.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Show metric series on combined champion timeline"
+  }
+}

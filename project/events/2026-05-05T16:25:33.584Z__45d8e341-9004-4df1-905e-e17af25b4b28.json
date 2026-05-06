@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "45d8e341-9004-4df1-905e-e17af25b4b28",
+  "issue_id": "plx-18d3b779-b749-4df4-809d-a994e9630049",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-05T16:25:33.584Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Build the Python ScorecardHistory report block with scorecard/score/date parameters, featured-version filtering, champion awareness from existing fields, parent diff payloads, and LLM summary generation. No schema changes.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement ScorecardHistory report block"
+  }
+}
