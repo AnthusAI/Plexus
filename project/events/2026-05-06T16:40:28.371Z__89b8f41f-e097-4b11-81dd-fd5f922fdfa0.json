@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "89b8f41f-e097-4b11-81dd-fd5f922fdfa0",
+  "issue_id": "plx-76b80607-cc8f-4587-a39b-22319e53b569",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T16:40:28.371Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "chore",
+    "labels": [],
+    "parent": "plx-9c323730-efed-4edb-a559-e8acf8f04164",
+    "priority": 2,
+    "status": "open",
+    "title": "Update pyproject tactus pin and regenerate poetry.lock with Python 3.11"
+  }
+}

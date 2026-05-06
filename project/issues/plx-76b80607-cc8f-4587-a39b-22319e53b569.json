@@ -1,0 +1,67 @@
+{
+  "id": "plx-76b80607-cc8f-4587-a39b-22319e53b569",
+  "title": "Update pyproject tactus pin and regenerate poetry.lock with Python 3.11",
+  "description": "",
+  "type": "chore",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-9c323730-efed-4edb-a559-e8acf8f04164",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "432d4ffa-d094-4944-83ef-8127da244b7d",
+      "author": "derek.norrbom",
+      "text": "Starting implementation: 1) bump tactus pin to 0.48.1 in pyproject.toml, 2) regenerate poetry.lock using Python 3.11, 3) verify lock now resolves tactus 0.48.1.",
+      "created_at": "2026-05-06T16:40:31.208393Z"
+    },
+    {
+      "id": "0d4a5a0b-8e18-480c-af7e-a5cb2e5c9582",
+      "author": "derek.norrbom",
+      "text": "Completed implementation. Updated  tactus pin from  to . Regenerated  using Python 3.11 (Using virtualenv: /Users/derek.norrbom/miniconda3/envs/py311 + Updating dependencies\nResolving dependencies...). Verified lock now includes tactus 0.48.1 artifacts.",
+      "created_at": "2026-05-06T16:41:28.605325Z"
+    },
+    {
+      "id": "b5b10e8b-647f-4471-906f-1c4ef0174d81",
+      "author": "derek.norrbom",
+      "text": "Completed implementation. Updated pyproject.toml tactus pin from ^0.48.0 to 0.48.1. Regenerated poetry.lock using Python 3.11 (poetry env use 3.11 and poetry lock --regenerate). Verified lock includes tactus-0.48.1 wheel and sdist.",
+      "created_at": "2026-05-06T16:41:35.110860Z"
+    },
+    {
+      "id": "e3df9753-b2bc-434c-a0e0-cd9d97f9c4e2",
+      "author": "derek.norrbom",
+      "text": "Follow-up change requested: restore caret constraint for tactus to ^0.48.1 while keeping locked resolution at 0.48.1.",
+      "created_at": "2026-05-06T16:43:52.154333Z"
+    },
+    {
+      "id": "7bc7c190-87dd-4cb9-a07f-fbc3348a5cdf",
+      "author": "derek.norrbom",
+      "text": "Completed follow-up: changed tactus constraint to ^0.48.1 in pyproject.toml and verified poetry.lock remains resolved to tactus 0.48.1.",
+      "created_at": "2026-05-06T16:44:04.161618Z"
+    },
+    {
+      "id": "5f1b41ea-98bf-4ca4-8504-d1f0c34f5316",
+      "author": "derek.norrbom",
+      "text": "New follow-up: align score-processor-lambda requirements tactus version with pyproject and run lambda scoring Docker smoke tests.",
+      "created_at": "2026-05-06T16:45:54.834327Z"
+    },
+    {
+      "id": "1d628c8b-9d42-4bbc-944c-0fa830b97632",
+      "author": "derek.norrbom",
+      "text": "Completed follow-up: updated score-processor-lambda/requirements.txt tactus pin to 0.48.1 and ran lambda Docker smoke test via `cd score-processor-lambda && make test-smoke`. Smoke results: 10 passed, 0 failed. Note: test logs include expected non-fatal CloudWatch credential warning in local environment.",
+      "created_at": "2026-05-06T16:56:32.171543Z"
+    },
+    {
+      "id": "dbc5edda-eab0-48e8-815f-22571b1a5b3a",
+      "author": "derek.norrbom",
+      "text": "Created branch `bugfix/tactus-0.48.1-alignment`, committed semantic-release patch commit `fix: align tactus 0.48.1 pins across app and lambda` (e58faaad), pushed to origin, and opened PR #301 targeting `develop`: https://github.com/AnthusAI/Plexus/pull/301.",
+      "created_at": "2026-05-06T17:00:41.146836Z"
+    }
+  ],
+  "created_at": "2026-05-06T16:40:28.371531Z",
+  "updated_at": "2026-05-06T17:00:41.146836Z",
+  "closed_at": "2026-05-06T16:56:32.188403Z",
+  "custom": {}
+}
