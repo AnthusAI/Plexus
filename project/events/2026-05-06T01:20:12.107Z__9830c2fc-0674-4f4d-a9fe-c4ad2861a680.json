@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9830c2fc-0674-4f4d-a9fe-c4ad2861a680",
+  "issue_id": "plx-3d7df8f9-0a76-4da7-802d-e0e31474169b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T01:20:12.107Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Develop CI is failing after the scoped dispatch runtime merge. Fix the failing taskDispatcher env tests and scorecard history prompt assertion, then push through the git-flow PR path so the develop-to-main release PR can pass.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-b953e903-b4e7-446c-affc-36850cc6b59b",
+    "priority": 0,
+    "status": "open",
+    "title": "Fix develop Python CI failures after dispatch merge"
+  }
+}
