@@ -75,7 +75,6 @@ celery_app.conf.update(
 
 # Initialize DynamoDB deserializer
 deserializer = TypeDeserializer()
-dynamodb = boto3.resource("dynamodb", region_name=aws_region)
 
 def deserialize_dynamo_item(item):
     """Convert a DynamoDB item to a regular dict."""
@@ -101,6 +100,20 @@ def _task_table_name(record):
     if not table_name:
         raise ValueError("DynamoDB stream record has an empty table name")
     return table_name
+
+
+def _task_table_region(record):
+    region = (record.get("awsRegion") or "").strip()
+    if not region:
+        raise ValueError("DynamoDB stream record is missing awsRegion")
+    return region
+
+
+def _task_table(record):
+    return boto3.resource(
+        "dynamodb",
+        region_name=_task_table_region(record),
+    ).Table(_task_table_name(record))
 
 
 def _update_task_record(record, task_id, updates, expected_dispatch_status=None):
@@ -131,8 +144,7 @@ def _update_task_record(record, task_id, updates, expected_dispatch_status=None)
             "#expectedDispatchStatus = :expectedDispatchStatus"
         )
 
-    table = dynamodb.Table(_task_table_name(record))
-    table.update_item(**update_args)
+    _task_table(record).update_item(**update_args)
 
 
 def _claim_task_for_dispatch(record, task_id, dispatcher_id):

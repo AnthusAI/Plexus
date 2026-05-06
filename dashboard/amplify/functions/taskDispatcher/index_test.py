@@ -21,6 +21,7 @@ def _stream_insert_record():
     return {
         "eventID": "evt-1",
         "eventName": "INSERT",
+        "awsRegion": "us-west-2",
         "eventSourceARN": (
             "arn:aws:dynamodb:us-west-2:123456789012:"
             "table/Task-test-NONE/stream/2026-05-05T00:00:00.000"
@@ -73,11 +74,7 @@ def test_handler_logs_decimal_task_without_crashing(monkeypatch):
         def update_item(self, **kwargs):
             updates.append(kwargs)
 
-    monkeypatch.setattr(
-        module,
-        "dynamodb",
-        SimpleNamespace(Table=lambda table_name: FakeTable()),
-    )
+    monkeypatch.setattr(module, "_task_table", lambda _record: FakeTable())
 
     result = module.handler(
         {"Records": [_stream_insert_record()]},
@@ -129,11 +126,7 @@ def test_handler_skips_already_claimed_task_without_sending(monkeypatch):
                 "UpdateItem",
             )
 
-    monkeypatch.setattr(
-        module,
-        "dynamodb",
-        SimpleNamespace(Table=lambda table_name: FakeTable()),
-    )
+    monkeypatch.setattr(module, "_task_table", lambda _record: FakeTable())
 
     result = module.handler(
         {"Records": [_stream_insert_record()]},
