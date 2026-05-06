@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-dotenv.load_dotenv('.env', override=True)
+dotenv.load_dotenv('.env', override=False)
 
 def analyze_topics(*args, **kwargs):
     """Lazy wrapper for analyze_topics to avoid loading PyTorch unless needed."""
