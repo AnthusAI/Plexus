@@ -488,6 +488,10 @@ plexus report config delete <id_or_name> --yes`}</code>
                   <code>{`# Trigger a new report generation run based on a configuration (using ID or Name for config)
 plexus report run --config <config_id_or_name> [param1=value1 param2=value2 ...]
 
+# Run ScorecardHistory directly (scorecard-wide or single-score)
+plexus feedback report scorecard-history --scorecard "Customer Service QA" --days 10
+plexus feedback report scorecard-history --scorecard "Customer Service QA" --score "Medication Review: Dosage" --days 10
+
 # List generated reports, optionally filtered by configuration (using ID or Name for config filter)
 # Shows Report ID, Name, Config ID, Task ID, and Task Status
 plexus report list [--config <config_id_or_name>]

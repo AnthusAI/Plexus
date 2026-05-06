@@ -38,6 +38,13 @@ class ScorecardHistory(BaseReportBlock):
     DEFAULT_DESCRIPTION = "Featured score-version changes and champion promotion status"
     DEFAULT_DAYS = 30
     SUMMARY_DIFF_CHAR_LIMIT = 1500
+    REQUIRED_SUMMARY_SECTION_HEADINGS = (
+        "What changed",
+        "Guideline / rubric changes",
+        "Scoring behavior changes",
+        "Questions for SMEs / stakeholders",
+        "Rollout and evidence",
+    )
 
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         self.log_messages = []
@@ -122,7 +129,6 @@ class ScorecardHistory(BaseReportBlock):
                 )
                 if sme_question_context:
                     score_output["sme_question_context"] = sme_question_context
-                score_output["summary"] = self._build_score_summary_text(score_output)
                 score_outputs.append(score_output)
                 summary_inputs.append(self._build_score_summary_input(score_output))
 
@@ -145,19 +151,35 @@ class ScorecardHistory(BaseReportBlock):
                 featured_version_count=featured_version_count,
                 champion_version_count=champion_version_count,
             )
-            summary_payload = self._empty_summary() if not score_outputs else await self._generate_summary_payload(
-                scorecard_name=scorecard.name,
-                mode=mode,
-                start_date=window_start,
-                end_date=window_end,
-                featured_version_count=featured_version_count,
-                champion_version_count=champion_version_count,
-                guideline_change_count=guideline_change_count,
-                code_change_count=code_change_count,
-                scores_changed_count=len(score_outputs),
-                champion_coverage=champion_coverage,
-                score_summaries=summary_inputs,
-            )
+            if not score_outputs:
+                summary_payload = self._empty_summary()
+            else:
+                summary_payload = await self._generate_summary_payload(
+                    scorecard_name=scorecard.name,
+                    mode=mode,
+                    start_date=window_start,
+                    end_date=window_end,
+                    featured_version_count=featured_version_count,
+                    champion_version_count=champion_version_count,
+                    guideline_change_count=guideline_change_count,
+                    code_change_count=code_change_count,
+                    scores_changed_count=len(score_outputs),
+                    champion_coverage=champion_coverage,
+                    score_summaries=summary_inputs,
+                )
+                per_score_summary_payload = await self._generate_per_score_summary_payload(
+                    scorecard_name=scorecard.name,
+                    mode=mode,
+                    start_date=window_start,
+                    end_date=window_end,
+                    score_summaries=summary_inputs,
+                )
+                per_score_summaries = self._parse_per_score_summary_response(
+                    per_score_summary_payload,
+                    expected_score_ids=[score_output["score_id"] for score_output in score_outputs],
+                )
+                for score_output in score_outputs:
+                    score_output["summary"] = per_score_summaries[score_output["score_id"]].strip()
 
             output: Dict[str, Any] = {
                 "report_type": "scorecard_history",
@@ -991,6 +1013,10 @@ class ScorecardHistory(BaseReportBlock):
             "score_name": score_output["score_name"],
             "featured_version_count": score_output["featured_version_count"],
             "champion_version_count": score_output["champion_version_count"],
+            "champion_coverage": self._champion_coverage(
+                featured_version_count=int(score_output.get("featured_version_count") or 0),
+                champion_version_count=int(score_output.get("champion_version_count") or 0),
+            ),
             "guideline_change_count": guideline_change_count,
             "code_change_count": code_change_count,
             "sme_question_context": score_output.get("sme_question_context") or [],
@@ -1166,66 +1192,6 @@ class ScorecardHistory(BaseReportBlock):
                 contexts[key] = entry
         return contexts
 
-    def _build_score_summary_text(self, score_output: Dict[str, Any]) -> str:
-        featured_count = int(score_output.get("featured_version_count") or 0)
-        champion_count = int(score_output.get("champion_version_count") or 0)
-        coverage = self._champion_coverage(
-            featured_version_count=featured_count,
-            champion_version_count=champion_count,
-        )
-        if coverage == "all":
-            champion_text = "all were champion-related"
-        elif coverage == "some":
-            champion_text = f"{champion_count} were champion-related"
-        else:
-            champion_text = "none were champion-related"
-
-        versions = score_output.get("versions") or []
-        code_change_count = sum(1 for version in versions if version.get("diffs", {}).get("code", {}).get("has_changes"))
-        guideline_change_count = sum(1 for version in versions if version.get("diffs", {}).get("guidelines", {}).get("has_changes"))
-        performance = score_output.get("performance") or {}
-        evaluation_kinds = []
-        if performance.get("recent_feedback"):
-            evaluation_kinds.append("recent feedback")
-        if performance.get("regression"):
-            evaluation_kinds.append("regression")
-
-        note_fragments = []
-        for version in score_output.get("versions") or []:
-            note = str(version.get("note") or "").strip()
-            if note:
-                note_fragments.append(note)
-            else:
-                note_fragments.append(f"Version {version.get('version_id')}")
-
-        note_bullets = []
-        for note in note_fragments[:5]:
-            if len(note) > 240:
-                note = note[:237].rstrip() + "..."
-            note_bullets.append(f"  - {note}")
-        if len(note_fragments) > len(note_bullets):
-            note_bullets.append(f"  - {len(note_fragments) - len(note_bullets)} additional version notes are available below.")
-
-        evaluation_text = (
-            f"Gauge data is available for {' and '.join(evaluation_kinds)}."
-            if evaluation_kinds
-            else "No completed evaluation gauge data was found for the latest included version."
-        )
-
-        return "\n".join([
-            "- **Overview**",
-            f"  - {featured_count} starred version{' was' if featured_count == 1 else 's were'} created in the window.",
-            f"  - Champion coverage: {champion_text}.",
-            "- **Guidelines**",
-            f"  - {guideline_change_count} included version{' changed' if guideline_change_count == 1 else 's changed'} guideline text.",
-            "- **Code / configuration**",
-            f"  - {code_change_count} included version{' changed' if code_change_count == 1 else 's changed'} score configuration.",
-            "- **Evaluations**",
-            f"  - {evaluation_text}",
-            "- **Change notes**",
-            *(note_bullets or ["  - No version notes were provided."]),
-        ]).strip()
-
     def _limit_text(self, text: str) -> str:
         if len(text) <= self.SUMMARY_DIFF_CHAR_LIMIT:
             return text
@@ -1309,6 +1275,59 @@ class ScorecardHistory(BaseReportBlock):
         raw_response = await self._run_tac_inference(prompt, system_prompt=system_prompt)
         return self._parse_summary_response(raw_response)
 
+    async def _generate_per_score_summary_payload(
+        self,
+        *,
+        scorecard_name: str,
+        mode: str,
+        start_date: datetime,
+        end_date: datetime,
+        score_summaries: List[Dict[str, Any]],
+    ) -> Optional[str]:
+        prompt_payload = {
+            "scorecard_name": scorecard_name,
+            "scope": mode,
+            "date_range": {
+                "start": start_date.isoformat(),
+                "end": end_date.isoformat(),
+            },
+            "scores": score_summaries,
+        }
+        prompt = (
+            "Generate one stakeholder-facing summary per score from the score history JSON below.\n"
+            "Return strict JSON with exactly one key named per_score_summaries.\n"
+            "per_score_summaries must be an object keyed by score_id.\n"
+            "Include every provided score_id exactly once; do not add extra keys.\n"
+            "Each value must be a non-empty Markdown string and must use these exact top-level bullets in this order:\n"
+            "- **What changed**\n"
+            "- **Guideline / rubric changes**\n"
+            "- **Scoring behavior changes**\n"
+            "- **Questions for SMEs / stakeholders**\n"
+            "- **Rollout and evidence**\n"
+            "Write in stakeholder language, not engineering language.\n"
+            "Do not mention implementation internals such as YAML, prompt wiring, nodes, data classes, parent versions, or diff mechanics.\n"
+            "Focus on rubric meaning, behavioral impact, and SME clarification questions.\n"
+            "Use score-specific evidence from version notes, diffs, champion context, evaluation context, and SME question context.\n"
+            "Do not include version IDs in the narrative.\n"
+            "Under **Questions for SMEs / stakeholders**, include 2 to 5 concise policy questions.\n"
+            "If no rubric wording changed for a score, state that explicitly under **Guideline / rubric changes**.\n"
+            "Under **Rollout and evidence**, mention champion_coverage for that score and include evaluation evidence only if present.\n"
+            "The response must be valid JSON with double quotes for all keys and strings.\n"
+            "Return only JSON in this shape:\n"
+            "{\n"
+            '  "per_score_summaries": {\n'
+            '    "<score_id>": "- **What changed**\\n  - ...\\n- **Guideline / rubric changes**\\n  - ...\\n- **Scoring behavior changes**\\n  - ...\\n- **Questions for SMEs / stakeholders**\\n  - ...\\n- **Rollout and evidence**\\n  - ..."\n'
+            "  }\n"
+            "}\n\n"
+            f"Score history data:\n{json.dumps(prompt_payload, indent=2, sort_keys=False)}"
+        )
+        system_prompt = (
+            "You write concise score-by-score summaries for SME and stakeholder meetings. "
+            "Prioritize rubric meaning, policy clarity, and operational impact. "
+            "Do not invent facts, scores, promotions, or evaluation outcomes."
+        )
+        return await self._run_tac_inference(prompt, system_prompt=system_prompt)
+
     def _parse_summary_response(self, raw_response: Optional[str]) -> Dict[str, Any]:
         if not raw_response or not raw_response.strip():
             raise ValueError("LLM summary response was empty.")
@@ -1324,6 +1343,53 @@ class ScorecardHistory(BaseReportBlock):
         if not isinstance(parsed.get("overall_summary"), str):
             raise ValueError("LLM summary response missing 'overall_summary'.")
         return parsed
+
+    def _parse_per_score_summary_response(
+        self,
+        raw_response: Optional[str],
+        *,
+        expected_score_ids: List[str],
+    ) -> Dict[str, str]:
+        if not raw_response or not raw_response.strip():
+            raise ValueError("LLM per-score summary response was empty.")
+
+        text = raw_response.strip()
+        fenced_match = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, flags=re.DOTALL)
+        if fenced_match:
+            text = fenced_match.group(1).strip()
+
+        parsed = json.loads(text)
+        if not isinstance(parsed, dict):
+            raise ValueError("LLM per-score summary response must be a JSON object.")
+        per_score_summaries = parsed.get("per_score_summaries")
+        if not isinstance(per_score_summaries, dict):
+            raise ValueError("LLM per-score summary response missing 'per_score_summaries'.")
+
+        expected_ids = {str(score_id) for score_id in expected_score_ids}
+        returned_ids = {str(score_id) for score_id in per_score_summaries.keys()}
+        missing_ids = sorted(expected_ids - returned_ids)
+        extra_ids = sorted(returned_ids - expected_ids)
+        if missing_ids:
+            raise ValueError(f"LLM per-score summary response missing score ids: {', '.join(missing_ids)}")
+        if extra_ids:
+            raise ValueError(f"LLM per-score summary response included unexpected score ids: {', '.join(extra_ids)}")
+
+        output: Dict[str, str] = {}
+        for score_id in expected_ids:
+            summary = per_score_summaries.get(score_id)
+            if not isinstance(summary, str) or not summary.strip():
+                raise ValueError(f"LLM per-score summary missing non-empty markdown for score id '{score_id}'.")
+            self._validate_required_summary_sections(summary, label=f"score '{score_id}'")
+            output[score_id] = summary.strip()
+        return output
+
+    def _validate_required_summary_sections(self, summary_markdown: str, *, label: str) -> None:
+        for heading in self.REQUIRED_SUMMARY_SECTION_HEADINGS:
+            pattern = rf"(?m)^\s*-\s*\*\*{re.escape(heading)}\*\*\s*$"
+            if not re.search(pattern, summary_markdown):
+                raise ValueError(
+                    f"LLM summary for {label} is missing required section heading '**{heading}**'."
+                )
 
     def _parse_json_object(self, value: Any) -> Dict[str, Any]:
         parsed = self._parse_json_value(value)
