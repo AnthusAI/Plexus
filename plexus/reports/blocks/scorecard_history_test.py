@@ -82,8 +82,24 @@ def _evaluation(
 def _summary_response(*score_ids):
     return json.dumps({
         "overall_summary": "Some included changes were promoted to champion.",
-        "score_summaries": {
-            score_id: f"Summary for {score_id}."
+    })
+
+
+def _per_score_summary_response(*score_ids):
+    return json.dumps({
+        "per_score_summaries": {
+            score_id: (
+                "- **What changed**\n"
+                "  - Stakeholder-facing change summary.\n"
+                "- **Guideline / rubric changes**\n"
+                "  - Rubric wording clarified for this score.\n"
+                "- **Scoring behavior changes**\n"
+                "  - Scoring behavior was tightened for ambiguous cases.\n"
+                "- **Questions for SMEs / stakeholders**\n"
+                "  - Should borderline inferred cases pass without explicit confirmation?\n"
+                "- **Rollout and evidence**\n"
+                "  - Champion coverage is some for this score."
+            )
             for score_id in score_ids
         },
     })
@@ -172,7 +188,11 @@ async def test_single_score_mode_filters_scope(mock_api_client):
             new=AsyncMock(return_value=[_version("v1", note="Tightened routing criteria.")]),
         ),
         patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
-        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
+        patch.object(
+            block,
+            "_run_tac_inference",
+            new=AsyncMock(side_effect=[_summary_response("score-1"), _per_score_summary_response("score-1")]),
+        ),
     ):
         output, _ = await block.generate()
 
@@ -214,7 +234,11 @@ async def test_filters_featured_versions_created_in_window_and_omits_unchanged_s
             new=AsyncMock(side_effect=lambda score_id: versions_by_score[score_id]),
         ),
         patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
-        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
+        patch.object(
+            block,
+            "_run_tac_inference",
+            new=AsyncMock(side_effect=[_summary_response("score-1"), _per_score_summary_response("score-1")]),
+        ),
     ):
         output, _ = await block.generate()
 
@@ -251,7 +275,11 @@ async def test_builds_parent_diff_payloads(mock_api_client):
         patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=[scope])),
         patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=[parent, featured])),
         patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
-        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
+        patch.object(
+            block,
+            "_run_tac_inference",
+            new=AsyncMock(side_effect=[_summary_response("score-1"), _per_score_summary_response("score-1")]),
+        ),
     ):
         output, _ = await block.generate()
 
@@ -290,7 +318,11 @@ async def test_fetches_missing_parent_version_for_diff(mock_api_client):
         patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=[featured])),
         patch.object(block, "_fetch_score_version_by_id", new=AsyncMock(return_value=parent)) as fetch_parent,
         patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
-        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
+        patch.object(
+            block,
+            "_run_tac_inference",
+            new=AsyncMock(side_effect=[_summary_response("score-1"), _per_score_summary_response("score-1")]),
+        ),
     ):
         output, _ = await block.generate()
 
@@ -336,7 +368,11 @@ async def test_champion_coverage_all_none_some(
         patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=[scope])),
         patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=versions)),
         patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
-        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
+        patch.object(
+            block,
+            "_run_tac_inference",
+            new=AsyncMock(side_effect=[_summary_response("score-1"), _per_score_summary_response("score-1")]),
+        ),
     ):
         output, _ = await block.generate()
 
@@ -360,34 +396,46 @@ async def test_uses_llm_summary_and_score_summaries(mock_api_client):
         patch.object(
             block,
             "_run_tac_inference",
-            new=AsyncMock(return_value=json.dumps({
-                "overall_summary": "Overall LLM summary.",
-                "score_summaries": {"score-1": "Score-specific LLM summary."},
-            })),
+            new=AsyncMock(side_effect=[
+                json.dumps({"overall_summary": "Overall LLM summary."}),
+                json.dumps({
+                    "per_score_summaries": {
+                        "score-1": (
+                            "- **What changed**\n"
+                            "  - Score-specific stakeholder summary.\n"
+                            "- **Guideline / rubric changes**\n"
+                            "  - Rubric meaning was tightened.\n"
+                            "- **Scoring behavior changes**\n"
+                            "  - Behavior became stricter for ambiguous cases.\n"
+                            "- **Questions for SMEs / stakeholders**\n"
+                            "  - Should ambiguous evidence be treated as insufficient?\n"
+                            "- **Rollout and evidence**\n"
+                            "  - Champion coverage is none for this score."
+                        )
+                    }
+                }),
+            ]),
         ) as run_llm,
     ):
         output, _ = await block.generate()
 
-    assert run_llm.await_count == 1
-    prompt = run_llm.await_args.args[0]
-    system_prompt = run_llm.await_args.kwargs["system_prompt"]
-    assert "stakeholders and SMEs" in prompt
-    assert "**What changed**" in prompt
-    assert "**Guideline / rubric changes**" in prompt
-    assert "**Scoring behavior changes**" in prompt
-    assert "**Questions for SMEs / stakeholders**" in prompt
-    assert "sme_question_context first" in prompt
-    assert "do not include version IDs" in prompt
-    assert '"champion_coverage": "none"' in prompt
-    assert '"guideline_change_count": 1' in prompt
-    assert '"code_change_count": 1' in prompt
-    assert "Only say no rubric wording changed when overall_counts.guideline_change_count is exactly 0" in prompt
-    assert "use overall_counts.champion_coverage exactly" in prompt
-    assert "YAML" in prompt
-    assert "Prioritize rubric meaning and operational impact" in system_prompt
+    assert run_llm.await_count == 2
+    first_prompt = run_llm.await_args_list[0].args[0]
+    first_system_prompt = run_llm.await_args_list[0].kwargs["system_prompt"]
+    second_prompt = run_llm.await_args_list[1].args[0]
+    second_system_prompt = run_llm.await_args_list[1].kwargs["system_prompt"]
+    assert "stakeholders and SMEs" in first_prompt
+    assert "sme_question_context first" in first_prompt
+    assert "Prioritize rubric meaning and operational impact" in first_system_prompt
+    assert "Generate one stakeholder-facing summary per score" in second_prompt
+    assert '"champion_coverage": "none"' in second_prompt
+    assert "**Questions for SMEs / stakeholders**" in second_prompt
+    assert "do not include version IDs" in second_prompt
+    assert "YAML" in second_prompt
+    assert "rubric meaning, policy clarity, and operational impact" in second_system_prompt
     assert output["summary"]["text"] == "Overall LLM summary."
-    assert "1 starred version was created" in output["scores"][0]["summary"]
-    assert "v1 note" in output["scores"][0]["summary"]
+    assert "Score-specific stakeholder summary." in output["scores"][0]["summary"]
+    assert "- **What changed**" in output["scores"][0]["summary"]
 
 
 @pytest.mark.asyncio
@@ -423,14 +471,18 @@ async def test_includes_procedure_sme_agenda_context_in_summary_prompt(mock_api_
         patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=[_version("v1")])),
         patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
         patch.object(block, "_fetch_procedures_for_version", new=AsyncMock(return_value=[procedure])),
-        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))) as run_llm,
+        patch.object(
+            block,
+            "_run_tac_inference",
+            new=AsyncMock(side_effect=[_summary_response("score-1"), _per_score_summary_response("score-1")]),
+        ) as run_llm,
     ):
         output, _ = await block.generate()
 
     context = output["scores"][0]["sme_question_context"]
     assert context[0]["procedure_id"] == "proc-1"
     assert "Should vitamins count" in context[0]["text"]
-    prompt = run_llm.await_args.args[0]
+    prompt = run_llm.await_args_list[1].args[0]
     assert "Should vitamins count as current medications" in prompt
     assert "Is pharmacy use enough" in prompt
 
@@ -454,6 +506,45 @@ async def test_llm_summary_failure_returns_report_error(mock_api_client):
         output, _ = await block.generate()
 
     assert "LLM unavailable" in output["error"]
+    assert output["scores"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "per_score_response,error_text",
+    [
+        ("{not-json}", "Expecting property name enclosed in double quotes"),
+        (json.dumps({"wrong_key": {}}), "missing 'per_score_summaries'"),
+        (json.dumps({"per_score_summaries": {}}), "missing score ids"),
+        (json.dumps({"per_score_summaries": {"score-1": ""}}), "missing non-empty markdown"),
+        (
+            json.dumps({"per_score_summaries": {"score-1": "- **What changed**\n  - only one section"}}),
+            "missing required section heading",
+        ),
+    ],
+)
+async def test_per_score_summary_validation_failures_return_report_error(mock_api_client, per_score_response, error_text):
+    block = _block(
+        {"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
+        mock_api_client,
+    )
+    scorecard = SimpleNamespace(id="sc-1", name="Scorecard")
+    scope = SimpleNamespace(score_id="score-1", score_name="Score 1", champion_version_id=None)
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=[scope])),
+        patch.object(block, "_fetch_versions_for_score", new=AsyncMock(return_value=[_version("v1")])),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
+        patch.object(
+            block,
+            "_run_tac_inference",
+            new=AsyncMock(side_effect=[_summary_response("score-1"), per_score_response]),
+        ),
+    ):
+        output, _ = await block.generate()
+
+    assert error_text in output["error"]
     assert output["scores"] == []
 
 
@@ -484,7 +575,11 @@ async def test_performance_uses_latest_in_window_version_and_created_at_predeces
             "_fetch_evaluations_for_version",
             new=AsyncMock(side_effect=lambda version_id: evaluations_by_version.get(version_id, [])),
         ),
-        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
+        patch.object(
+            block,
+            "_run_tac_inference",
+            new=AsyncMock(side_effect=[_summary_response("score-1"), _per_score_summary_response("score-1")]),
+        ),
     ):
         output, _ = await block.generate()
 
@@ -551,7 +646,11 @@ async def test_regression_baseline_requires_same_dataset(mock_api_client):
             "_fetch_evaluations_for_version",
             new=AsyncMock(side_effect=lambda version_id: evaluations_by_version.get(version_id, [])),
         ),
-        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
+        patch.object(
+            block,
+            "_run_tac_inference",
+            new=AsyncMock(side_effect=[_summary_response("score-1"), _per_score_summary_response("score-1")]),
+        ),
     ):
         output, _ = await block.generate()
 
@@ -580,7 +679,11 @@ async def test_omits_regression_without_dataset_and_omits_empty_performance(mock
             "_fetch_evaluations_for_version",
             new=AsyncMock(return_value=[_evaluation("eval-v1-accuracy", evaluation_type="accuracy")]),
         ),
-        patch.object(block, "_run_tac_inference", new=AsyncMock(return_value=_summary_response("score-1"))),
+        patch.object(
+            block,
+            "_run_tac_inference",
+            new=AsyncMock(side_effect=[_summary_response("score-1"), _per_score_summary_response("score-1")]),
+        ),
     ):
         output, _ = await block.generate()
 

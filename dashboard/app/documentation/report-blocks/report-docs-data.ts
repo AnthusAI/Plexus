@@ -462,6 +462,188 @@ bucket_count: 6`,
     },
   },
   {
+    slug: "scorecard-history",
+    title: "ScorecardHistory",
+    type: "ScorecardHistory",
+    category: "Trends",
+    badge: "Stakeholder",
+    summary: "Summarizes starred score-version changes over a time window, with champion coverage, high-level change bullets, and optional evaluation gauge context.",
+    answers: ["What changed across this scorecard in the requested window?", "Which changes were champion-related (all, some, or none)?", "What stakeholder/SME questions should we ask next?"],
+    useWhen: ["Preparing a weekly client update.", "Reviewing optimizer-driven changes across many scores.", "Explaining changes in stakeholder language before deep diff review."],
+    avoidWhen: ["You only need champion transitions; use ScoreChampionVersionTimeline.", "You need item-level feedback rows; use RecentFeedback.", "No starred versions were created in the window; unchanged scores are intentionally omitted."],
+    cli: `plexus feedback report scorecard-history \\
+  --scorecard "Customer Service QA" \\
+  --days 10
+
+# Single-score scope on the same scorecard.
+plexus feedback report scorecard-history \\
+  --scorecard "Customer Service QA" \\
+  --score "Medication Review: Dosage" \\
+  --days 10
+
+# Explicit date range (instead of days).
+plexus feedback report scorecard-history \\
+  --scorecard "Customer Service QA" \\
+  --start-date 2026-03-01 \\
+  --end-date 2026-03-31`,
+    tactus: `return plexus.report.scorecard_history{
+  scorecard = "Customer Service QA",
+  days = 10,
+  sync = true
+}`,
+    config: `# Scorecard-wide scope
+class: ScorecardHistory
+scorecard: "Customer Service QA"
+days: 10
+
+# Single-score scope
+class: ScorecardHistory
+scorecard: "Customer Service QA"
+score: "Medication Review: Dosage"
+days: 10
+
+# Explicit date range
+class: ScorecardHistory
+scorecard: "Customer Service QA"
+start_date: "2026-03-01"
+end_date: "2026-03-31"`,
+    interpretation: ["Only starred versions created inside the requested window are included.", "Scores with no in-window starred versions are intentionally omitted.", "Champion coverage is reported as all/some/none across included versions.", "Summary bullets are stakeholder-focused; use expanded diff panels for technical details.", "If both recent-feedback and regression evaluation data exist, gauges are shown with tabs."],
+    sampleOutput: {
+      report_type: "scorecard_history",
+      block_title: "Scorecard History",
+      block_description: "Featured score-version changes and champion promotion status",
+      scope: "scorecard_all_scores",
+      scorecard_id: "scorecard-qa",
+      scorecard_name: "Customer Service QA",
+      date_range: {
+        start: "2026-03-01T00:00:00Z",
+        end: "2026-03-31T23:59:59Z",
+      },
+      summary: {
+        text: "- **What changed**\n  - Three starred updates changed policy handling in dosage and transfer workflows.\n- **Guideline / rubric changes**\n  - Dosage now requires explicit numeric dosage confirmation before a pass.\n- **Scoring behavior changes**\n  - Transfer routing is stricter for unresolved medication risk scenarios.\n- **Questions for SMEs / stakeholders**\n  - Should implied dosage ever qualify when no number is restated?\n- **Rollout and evidence**\n  - Champion coverage is some; both recent-feedback and regression gauges are available for the latest included versions.",
+        champion_coverage: "some",
+        featured_version_count: 3,
+        champion_version_count: 1,
+        scores_changed_count: 2,
+      },
+      scores: [
+        {
+          score_id: "score-dosage",
+          score_name: "Medication Review: Dosage",
+          summary: "- **Overview**\n  - 2 starred versions were created in the window.\n  - Champion coverage: 1 were champion-related.\n- **Guidelines**\n  - 2 included versions changed guideline text.\n- **Code / configuration**\n  - 1 included version changed score configuration.\n- **Evaluations**\n  - Gauge data is available for recent feedback and regression.\n- **Change notes**\n  - Tightened dosage confirmation criteria.\n  - Clarified edge cases for inferred dosage language.",
+          featured_version_count: 2,
+          champion_version_count: 1,
+          performance: {
+            current_version_id: "version-102",
+            baseline_version_id: "version-100",
+            recent_feedback: {
+              current: {
+                evaluation_id: "eval-feedback-102",
+                evaluation_type: "feedback",
+                created_at: "2026-03-28T14:20:00Z",
+                processed_items: 100,
+                total_items: 100,
+                metrics: { alignment: 0.78, accuracy: 87, precision: 86, recall: 88 },
+              },
+              baseline: {
+                evaluation_id: "eval-feedback-100",
+                evaluation_type: "feedback",
+                created_at: "2026-03-08T08:10:00Z",
+                processed_items: 100,
+                total_items: 100,
+                metrics: { alignment: 0.71, accuracy: 82, precision: 81, recall: 83 },
+              },
+            },
+            regression: {
+              current: {
+                evaluation_id: "eval-regression-102",
+                evaluation_type: "accuracy",
+                dataset_id: "dataset-regression-qa-v3",
+                created_at: "2026-03-28T14:35:00Z",
+                processed_items: 200,
+                total_items: 200,
+                metrics: { alignment: 0.72, accuracy: 84, precision: 83, recall: 85 },
+              },
+              baseline: {
+                evaluation_id: "eval-regression-100",
+                evaluation_type: "accuracy",
+                dataset_id: "dataset-regression-qa-v3",
+                created_at: "2026-03-08T08:30:00Z",
+                processed_items: 200,
+                total_items: 200,
+                metrics: { alignment: 0.67, accuracy: 80, precision: 79, recall: 81 },
+              },
+            },
+          },
+          window_diff: {
+            baseline_version_id: "version-100",
+            latest_version_id: "version-102",
+            baseline_created_at: "2026-03-08T08:00:00Z",
+            latest_created_at: "2026-03-28T14:00:00Z",
+            guidelines: {
+              original_version_id: "version-100",
+              modified_version_id: "version-102",
+              original_label: "Pre-window Guidelines",
+              modified_label: "Latest Guidelines",
+              has_changes: true,
+              original: "Old rubric",
+              modified: "New rubric",
+              unified_diff: "--- old\n+++ new",
+            },
+            code: {
+              original_version_id: "version-100",
+              modified_version_id: "version-102",
+              original_label: "Pre-window Code",
+              modified_label: "Latest Code",
+              has_changes: true,
+              original: "name: old",
+              modified: "name: new",
+              unified_diff: "--- old\n+++ new",
+            },
+          },
+          versions: [
+            {
+              version_id: "version-101",
+              score_id: "score-dosage",
+              note: "Tightened dosage confirmation criteria.",
+              branch: "feature/dosage-tightening",
+              created_at: "2026-03-21T10:00:00Z",
+              updated_at: "2026-03-21T10:15:00Z",
+              parent_version_id: "version-100",
+              champion_status: {
+                is_current_champion: false,
+                is_champion_related: false,
+                promotions_in_window: [],
+              },
+              diffs: {
+                guidelines: {
+                  original_version_id: "version-100",
+                  modified_version_id: "version-101",
+                  original_label: "Parent Guidelines",
+                  modified_label: "Version Guidelines",
+                  original: "Old rubric text",
+                  modified: "Updated rubric text",
+                  unified_diff: "--- old\n+++ new",
+                  has_changes: true,
+                },
+                code: {
+                  original_version_id: "version-100",
+                  modified_version_id: "version-101",
+                  original_label: "Parent Code",
+                  modified_label: "Version Code",
+                  original: "name: old",
+                  modified: "name: old",
+                  unified_diff: "",
+                  has_changes: false,
+                },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     slug: "acceptance-rate",
     title: "AcceptanceRate",
     type: "AcceptanceRate",
