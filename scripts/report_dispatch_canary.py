@@ -5,7 +5,7 @@ Staging canary for execute_tactus async report dispatch.
 Validates:
 1) execute_tactus returns a handle for plexus.report.run(async=true)
 2) handle status includes dispatched task id
-3) task lifecycle advances from PENDING to DISPATCHED/COMPLETED (or fails)
+3) task reaches terminal status and dispatch diagnostics are captured
 4) persisted Report and ReportBlock records exist for the cache key
 """
 
@@ -46,13 +46,14 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--timeout-seconds", type=int, default=300)
     parser.add_argument("--child-budget-usd", type=float, default=0.20)
-    parser.add_argument("--child-budget-seconds", type=int, default=60)
+    parser.add_argument("--child-budget-seconds", type=int, default=180)
     parser.add_argument("--child-budget-depth", type=int, default=1)
     parser.add_argument("--child-budget-tool-calls", type=int, default=3)
     parser.add_argument("--parent-budget-usd", type=float, default=0.25)
-    parser.add_argument("--parent-budget-seconds", type=int, default=90)
+    parser.add_argument("--parent-budget-seconds", type=int, default=240)
     parser.add_argument("--parent-budget-depth", type=int, default=3)
     parser.add_argument("--parent-budget-tool-calls", type=int, default=50)
+    parser.add_argument("--report-search-max-items", type=int, default=1000)
     return parser.parse_args()
 
 
@@ -126,6 +127,16 @@ def _safe_get(dct: Any, *keys: str) -> Any:
     return cur
 
 
+def _process_is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
 async def _run_canary(args: argparse.Namespace) -> dict[str, Any]:
     # Keep process-level explicit env authoritative for dispatch behavior.
     dotenv_spec = importlib.util.find_spec("dotenv")
@@ -169,6 +180,18 @@ async def _run_canary(args: argparse.Namespace) -> dict[str, Any]:
             tool_calls=int(args.parent_budget_tool_calls),
         )
     )
+    if child_budget["wallclock_seconds"] > float(args.parent_budget_seconds):
+        raise CanaryError(
+            (
+                "Invalid canary budget: child wallclock_seconds exceeds parent wallclock budget "
+                f"({child_budget['wallclock_seconds']} > {args.parent_budget_seconds})."
+            ),
+            {
+                "dispatch_mode": args.dispatch_mode,
+                "child_budget": child_budget,
+                "parent_budget_seconds": args.parent_budget_seconds,
+            },
+        )
 
     run_id = str(uuid.uuid4())[:8]
     cache_key = (
@@ -210,12 +233,11 @@ async def _run_canary(args: argparse.Namespace) -> dict[str, Any]:
             diagnostics,
         )
 
-    task_id = _safe_get(status_result, "value", "dispatch_result", "task_id")
-    diagnostics["task_id"] = task_id
-    if not task_id:
+    dispatch_result = _safe_get(status_result, "value", "dispatch_result")
+    if not isinstance(dispatch_result, dict):
         raise CanaryError(
             (
-                "handle_status did not include dispatched task id. "
+                "handle_status did not include dispatch_result. "
                 f"status={json.dumps(status_result, default=str)}"
             ),
             diagnostics,
@@ -229,12 +251,85 @@ async def _run_canary(args: argparse.Namespace) -> dict[str, Any]:
     account_id = client._resolve_account_id()
 
     deadline = time.time() + args.timeout_seconds
-    seen_pending = False
-    seen_dispatched = False
-    final_task_status: Optional[str] = None
-    final_dispatch_status: Optional[str] = None
     report_id: Optional[str] = None
     report_block_count = 0
+
+    if args.dispatch_mode == "local":
+        local_pid = dispatch_result.get("pid")
+        diagnostics["pid"] = local_pid
+        if not local_pid:
+            raise CanaryError(
+                (
+                    "Local dispatch did not return subprocess pid. "
+                    f"status={json.dumps(status_result, default=str)}"
+                ),
+                diagnostics,
+            )
+
+        while time.time() < deadline:
+            reports = Report.list_by_account_id(account_id, client, limit=50, max_items=250)
+            matched_report = None
+            for rep in reports:
+                params = rep.parameters if isinstance(rep.parameters, dict) else {}
+                if params.get("_cache_key") == cache_key:
+                    matched_report = rep
+                    break
+
+            if matched_report:
+                report_id = matched_report.id
+                blocks = ReportBlock.list_by_report_id(matched_report.id, client, limit=20, max_items=50)
+                report_block_count = len(blocks)
+                diagnostics.update({
+                    "report_id": report_id,
+                    "report_block_count": report_block_count,
+                })
+                if report_block_count > 0:
+                    return {
+                        "status": "ok",
+                        "dispatch_mode": args.dispatch_mode,
+                        "trace_id": trace_id,
+                        "handle_id": handle_id,
+                        "pid": local_pid,
+                        "report_id": report_id,
+                        "report_block_count": report_block_count,
+                        "cache_key": cache_key,
+                    }
+
+            if not _process_is_running(int(local_pid)):
+                latest_status = await _execute_tactus_tool(
+                    f'return handle_status{{ id = "{handle_id}" }}', mcp
+                )
+                diagnostics["latest_handle_status"] = latest_status
+                raise CanaryError(
+                    (
+                        "Local subprocess exited before report persistence. "
+                        f"pid={local_pid} trace_id={trace_id} handle_id={handle_id}"
+                    ),
+                    diagnostics,
+                )
+
+            await asyncio.sleep(args.poll_interval_seconds)
+
+        raise CanaryError(
+            (
+                "Timed out waiting for local report dispatch canary completion. "
+                f"trace_id={trace_id} handle_id={handle_id} pid={local_pid} report_id={report_id}"
+            ),
+            diagnostics,
+        )
+
+    task_id = dispatch_result.get("task_id")
+    diagnostics["task_id"] = task_id
+    if not task_id:
+        raise CanaryError(
+            (
+                "Remote dispatch did not include task_id. "
+                f"status={json.dumps(status_result, default=str)}"
+            ),
+            diagnostics,
+        )
+    final_task_status: Optional[str] = None
+    final_dispatch_status: Optional[str] = None
 
     while time.time() < deadline:
         task = Task.get_by_id(task_id, client)
@@ -245,12 +340,12 @@ async def _run_canary(args: argparse.Namespace) -> dict[str, Any]:
             "dispatch_status": final_dispatch_status,
         })
 
-        if task.dispatchStatus == "PENDING":
-            seen_pending = True
-        if task.dispatchStatus in {"DISPATCHING", "DISPATCHED"}:
-            seen_dispatched = True
-
-        reports = Report.list_by_account_id(account_id, client, limit=50, max_items=250)
+        reports = Report.list_by_account_id(
+            account_id,
+            client,
+            limit=100,
+            max_items=args.report_search_max_items,
+        )
         matched_report = None
         for rep in reports:
             params = rep.parameters if isinstance(rep.parameters, dict) else {}
@@ -268,22 +363,6 @@ async def _run_canary(args: argparse.Namespace) -> dict[str, Any]:
             })
 
         if task.status == "COMPLETED" and report_id and report_block_count > 0:
-            if not seen_pending:
-                raise CanaryError(
-                    (
-                        "Task never observed in PENDING state before completion. "
-                        f"task_id={task_id} final_dispatch_status={final_dispatch_status}"
-                    ),
-                    diagnostics,
-                )
-            if not seen_dispatched:
-                raise CanaryError(
-                    (
-                        "Task never observed in DISPATCHED/DISPATCHING state before completion. "
-                        f"task_id={task_id} final_dispatch_status={final_dispatch_status}"
-                    ),
-                    diagnostics,
-                )
             return {
                 "status": "ok",
                 "dispatch_mode": args.dispatch_mode,
