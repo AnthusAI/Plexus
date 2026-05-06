@@ -81,12 +81,24 @@ async def graphql_endpoint(
     try:
         plan = build_operation_plan(query, operation_name)
     except Exception:
-        return graphql_error("invalid GraphQL operation", status_code=400)
+        return JSONResponse(
+            {"errors": [{"message": "invalid GraphQL operation"}]},
+            status_code=400,
+        )
 
     if plan.blocked_fields:
         blocked = ", ".join(field.name for field in plan.blocked_fields)
-        return graphql_error(
-            f"operation contains unsupported or unsafe root fields: {blocked}",
+        return JSONResponse(
+            {
+                "errors": [
+                    {
+                        "message": (
+                            "operation contains unsupported or unsafe root fields: "
+                            f"{blocked}"
+                        )
+                    }
+                ]
+            },
             status_code=400,
         )
 
@@ -255,7 +267,3 @@ def sort_field_for_root(root_name: str) -> Optional[str]:
         if root_name.endswith(suffix):
             return field_name
     return None
-
-
-def graphql_error(message: str, status_code: int = 200) -> JSONResponse:
-    return JSONResponse({"errors": [{"message": message}]}, status_code=status_code)
