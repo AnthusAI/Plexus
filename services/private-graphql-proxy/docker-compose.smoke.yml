@@ -56,3 +56,49 @@ services:
     depends_on:
       proxy:
         condition: service_healthy
+
+  scoring-integration:
+    profiles:
+      - scoring-integration
+    build:
+      context: ../..
+      dockerfile: services/private-graphql-proxy/Dockerfile.scoring-integration
+    working_dir: /workspace
+    environment:
+      PYTHONPATH: /workspace:/workspace/services/private-graphql-proxy
+      PLEXUS_API_URL: http://proxy:8000/graphql
+      PLEXUS_API_KEY: ${PLEXUS_PROXY_API_KEY:-local-smoke-key}
+      NEXT_PUBLIC_PLEXUS_API_URL: ""
+      NEXT_PUBLIC_PLEXUS_API_KEY: ""
+      PLEXUS_ACCOUNT_KEY: ${PLEXUS_ACCOUNT_KEY:-}
+      PLEXUS_PROXY_SCORING_ACCOUNT_ID: ${PLEXUS_PROXY_SCORING_ACCOUNT_ID:-}
+      PLEXUS_PROXY_SCORING_SCORECARD: ${PLEXUS_PROXY_SCORING_SCORECARD:-}
+      PLEXUS_PROXY_SCORING_SCORE: ${PLEXUS_PROXY_SCORING_SCORE:-}
+      PLEXUS_PROXY_SCORING_SCORE_ID: ${PLEXUS_PROXY_SCORING_SCORE_ID:-}
+      PLEXUS_PROXY_SCORING_DATASET: ${PLEXUS_PROXY_SCORING_DATASET:-fancyzhx/ag_news}
+      PLEXUS_PROXY_SCORING_SPLIT: ${PLEXUS_PROXY_SCORING_SPLIT:-test}
+      PLEXUS_PROXY_SCORING_START: ${PLEXUS_PROXY_SCORING_START:-0}
+      PLEXUS_PROXY_SCORING_FIXTURE_LIMIT: ${PLEXUS_PROXY_SCORING_FIXTURE_LIMIT:-3}
+      PLEXUS_PROXY_SCORING_FIXTURE_PREFIX: ${PLEXUS_PROXY_SCORING_FIXTURE_PREFIX:-proxy-scoring-ag-news}
+      PLEXUS_PROXY_SCORING_TIMEOUT_SECONDS: ${PLEXUS_PROXY_SCORING_TIMEOUT_SECONDS:-300}
+      SCORECARD_CACHE_DIR: /tmp/plexus-scorecards
+      HF_HOME: /tmp/huggingface
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AZURE_API_KEY: ${AZURE_API_KEY:-}
+      AZURE_API_BASE: ${AZURE_API_BASE:-}
+      AZURE_API_VERSION: ${AZURE_API_VERSION:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION_NAME: ${AWS_REGION_NAME:-}
+      AWS_REGION: ${AWS_REGION:-}
+    volumes:
+      - ../..:/workspace
+    command: >
+      pytest -o addopts='' -m integration services/private-graphql-proxy/tests/test_scoring_integration.py -q
+    depends_on:
+      proxy:
+        condition: service_healthy
