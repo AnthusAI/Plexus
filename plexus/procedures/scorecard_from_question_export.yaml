@@ -1,5 +1,5 @@
 name: Create Scorecard From Question Export
-version: 1.0.0
+version: 1.0.1
 class: Tactus
 description: "Create a scorecard and one score per question from ai-ready JSON export."
 
@@ -79,38 +79,6 @@ outputs:
   plan:
     type: object
     required: false
-
-agents:
-  observer:
-    system_prompt: |
-      You are the Observe agent. Call plexus.scorecards.info exactly once and return.
-      Do not invent results.
-    initial_message: |
-      Call plexus.scorecards.info with the provided identifier.
-    tools:
-      - plexus
-
-  actor:
-    system_prompt: |
-      You are the Act agent. You receive an execution payload JSON.
-      Run tools in this order:
-      1) plexus_scorecard_create
-      2) For each score: plexus_score_create
-      3) For each created score: plexus_score_update with code + guidelines
-
-      Call done() with JSON:
-      {"scorecard_id": "...", "score_ids": ["..."], "success": true}
-
-      If any step fails, call done() with JSON:
-      {"success": false, "error": "..."}
-
-      Output only JSON in done().
-    initial_message: |
-      Execute the provided payload and call done().
-    tools:
-      - plexus_scorecard_create
-      - plexus_score_create
-      - plexus_score_update
 
 stages:
   - observe
@@ -287,20 +255,59 @@ code: |
     return table.concat(lines, "\n")
   end
 
-  local function wait_for_tool_call(agent, tool_name, max_iters, inject)
-    local start_count = Tool.get_call_count(tool_name)
-    if inject then agent({message = inject}) else agent() end
-    local iter = 0
-    repeat
-      if Tool.get_call_count(tool_name) > start_count then return true end
-      if iter >= max_iters then return false end
-      agent()
-      iter = iter + 1
-    until false
+  local function _decode_tool_result(raw)
+    if type(raw) == "table" then
+      return raw, nil
+    end
+    if type(raw) == "string" then
+      return safe_decode(raw)
+    end
+    return nil, "unexpected tool response type: " .. tostring(type(raw))
   end
 
-  local function wait_for_done(agent, max_iters, inject)
-    return wait_for_tool_call(agent, "done", max_iters, inject)
+  local function _extract_error_message(result)
+    if type(result) ~= "table" then
+      return tostring(result)
+    end
+    if type(result.error) == "table" and has_text(result.error.message) then
+      return result.error.message
+    end
+    if has_text(result.error) then
+      return result.error
+    end
+    if has_text(result.message) then
+      return result.message
+    end
+    return "unknown error"
+  end
+
+  local function call_plexus_api(namespace, method, args_table)
+    local execute_tactus = Tool.get("execute_tactus")
+    if execute_tactus == nil then
+      error("execute_tactus tool is not available in this runtime")
+    end
+
+    local args_json = Json.encode(args_table or {})
+    args_json = string.gsub(args_json, "%]%]", "] ]")
+    local tactus = "return plexus." .. tostring(namespace) .. "." .. tostring(method) .. "(Json.decode([[" .. args_json .. "]]))"
+
+    local raw = execute_tactus({tactus = tactus})
+    local result, decode_err = _decode_tool_result(raw)
+    if not result then
+      error("execute_tactus decode failed: " .. tostring(decode_err))
+    end
+    if result.ok == false then
+      error(_extract_error_message(result))
+    end
+
+    return result.value
+  end
+
+  local function set_stage_progress(current, total)
+    local progress_tool = Tool.get("plexus_set_stage_progress")
+    if progress_tool ~= nil then
+      progress_tool({current = current, total = total})
+    end
   end
 
   local function try_find_existing_scorecard(identifier)
@@ -309,7 +316,7 @@ code: |
     end
 
     local ok, result = pcall(function()
-      return plexus.scorecards.info({scorecard_identifier = tostring(identifier)})
+      return call_plexus_api("scorecards", "info", {scorecard_identifier = tostring(identifier)})
     end)
     if not ok then
       local err_text = string.lower(tostring(result or ""))
@@ -497,47 +504,137 @@ code: |
     end
 
     Stage.set("act")
-    local exec_scores = {}
-    for _, score in ipairs(plan_scores) do
-      exec_scores[#exec_scores + 1] = {
-        name = score.name,
-        key = score.key,
-        external_id = score.external_id,
-        description = score.description,
-        score_type = "LangGraphScore",
-        yaml_code = build_score_yaml(score, params),
-        guidelines = score.guidelines
+    local created_score_ids = {}
+    local created_scorecard_id = nil
+
+    local ok_create_scorecard, create_scorecard_result = pcall(function()
+      return call_plexus_api("scorecards", "create", {
+        name = normalized_scorecard.name,
+        key = normalized_scorecard.key,
+        external_id = normalized_scorecard.external_id,
+        description = normalized_scorecard.description,
+        account_identifier = params.account_identifier or "default"
+      })
+    end)
+
+    if not ok_create_scorecard then
+      return {
+        success = false,
+        status = "error",
+        message = "Scorecard creation failed: " .. tostring(create_scorecard_result)
       }
     end
 
-    local exec_payload = {
-      account_identifier = params.account_identifier or "default",
-      scorecard = normalized_scorecard,
-      scores = exec_scores
-    }
-
-    local max_actor_iterations = 20 + (#exec_scores * 2)
-    local acted = wait_for_done(Actor, max_actor_iterations, "Execution Payload JSON:\n" .. Json.encode(exec_payload))
-    if not acted then
-      return {success = false, status = "error", message = "Actor did not complete"}
+    if type(create_scorecard_result) == "table" and create_scorecard_result.success == false then
+      return {
+        success = false,
+        status = "error",
+        message = "Scorecard creation failed: " .. tostring(create_scorecard_result.error or "unknown error")
+      }
     end
 
-    local act_call = Tool.last_call("done")
-    local act_data, act_err = safe_decode(act_call.args.reason or "")
-    if not act_data then
-      return {success = false, status = "error", message = "Failed to parse actor JSON: " .. tostring(act_err)}
+    if type(create_scorecard_result) ~= "table" then
+      return {
+        success = false,
+        status = "error",
+        message = "Scorecard creation failed: invalid response type"
+      }
     end
-    if act_data.success == false then
-      return {success = false, status = "error", message = act_data.error or "Actor failed"}
+
+    created_scorecard_id = create_scorecard_result.id or create_scorecard_result.scorecard_id
+    if not has_text(created_scorecard_id) then
+      return {
+        success = false,
+        status = "error",
+        message = "Scorecard creation failed: missing scorecard id in response"
+      }
     end
+
+    for idx, score in ipairs(plan_scores) do
+      set_stage_progress(idx - 1, #plan_scores)
+
+      local ok_create_score, create_score_result = pcall(function()
+        return call_plexus_api("score", "create", {
+          scorecard_identifier = created_scorecard_id,
+          name = score.name,
+          key = score.key,
+          external_id = score.external_id,
+          description = score.description,
+          score_type = "LangGraphScore",
+          order = idx
+        })
+      end)
+
+      if not ok_create_score then
+        return {
+          success = false,
+          status = "error",
+          message = "Score creation failed for '" .. tostring(score.name) .. "': " .. tostring(create_score_result)
+        }
+      end
+
+      if type(create_score_result) ~= "table" then
+        return {
+          success = false,
+          status = "error",
+          message = "Score creation failed for '" .. tostring(score.name) .. "': invalid response type"
+        }
+      end
+
+      if create_score_result.success == false then
+        return {
+          success = false,
+          status = "error",
+          message = "Score creation failed for '" .. tostring(score.name) .. "': " .. tostring(create_score_result.error or "unknown error")
+        }
+      end
+
+      local created_score_id = create_score_result.id or create_score_result.score_id
+      if not has_text(created_score_id) then
+        return {
+          success = false,
+          status = "error",
+          message = "Score creation failed for '" .. tostring(score.name) .. "': missing score id"
+        }
+      end
+
+      local ok_update_score, update_score_result = pcall(function()
+        return call_plexus_api("score", "update", {
+          scorecard_identifier = created_scorecard_id,
+          score_identifier = created_score_id,
+          code = build_score_yaml(score, params),
+          guidelines = score.guidelines,
+          version_note = "Created from question export"
+        })
+      end)
+
+      if not ok_update_score then
+        return {
+          success = false,
+          status = "error",
+          message = "Score update failed for '" .. tostring(score.name) .. "': " .. tostring(update_score_result)
+        }
+      end
+
+      if type(update_score_result) == "table" and update_score_result.success == false then
+        return {
+          success = false,
+          status = "error",
+          message = "Score update failed for '" .. tostring(score.name) .. "': " .. tostring(update_score_result.error or "unknown error")
+        }
+      end
+
+      created_score_ids[#created_score_ids + 1] = created_score_id
+    end
+    set_stage_progress(#plan_scores, #plan_scores)
 
     Stage.set("complete")
     return {
       success = true,
       status = "created",
       message = "Scorecard and scores created from question export",
-      scorecard_id = act_data.scorecard_id,
-      score_ids = act_data.score_ids,
+      scorecard_id = created_scorecard_id,
+      score_ids = created_score_ids,
       plan = {scorecard = normalized_scorecard, scores = plan_scores}
     }
   end
