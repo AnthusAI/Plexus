@@ -36,6 +36,15 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Timestamp } from "@/components/ui/timestamp"
 import {
+  type AttributedUserProfile,
+  ChatMessageBotAvatar,
+  ChatMessageUserAvatar,
+  getMessageAttributionMetadata,
+  resolveMessageAttribution,
+  type ResolvedMessageAttribution,
+  useAttributedUserProfiles,
+} from "@/components/ui/chat-message-user-avatar"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -229,6 +238,7 @@ export interface ChatMessage {
   metadata?: any
   parentMessageId?: string
   accountId?: string
+  createdByUserId?: string
   procedureId?: string
   responseTarget?: string
   responseStatus?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
@@ -524,6 +534,7 @@ const parseRawChatMessage = (msg: any): ChatMessage | null => {
       }
     }
   }
+  const parsedMetadata = parseMessageMetadata(msg.metadata)
 
   return {
     id: msg.id,
@@ -534,9 +545,10 @@ const parseRawChatMessage = (msg: any): ChatMessage | null => {
     toolName: parsedToolName,
     toolParameters: parsedToolParameters,
     toolResponse: parseJsonField(msg.toolResponse),
-    metadata: parseMessageMetadata(msg.metadata),
+    metadata: parsedMetadata,
     parentMessageId: msg.parentMessageId,
     accountId: msg.accountId,
+    createdByUserId: msg.createdByUserId,
     procedureId: msg.procedureId,
     responseTarget: msg.responseTarget,
     responseStatus: msg.responseStatus,
@@ -643,6 +655,7 @@ const areMessagesEquivalent = (left: ChatMessage, right: ChatMessage): boolean =
     && getMetadataFingerprint(left.metadata) === getMetadataFingerprint(right.metadata)
     && left.parentMessageId === right.parentMessageId
     && left.accountId === right.accountId
+    && left.createdByUserId === right.createdByUserId
     && left.procedureId === right.procedureId
     && left.createdAt === right.createdAt
     && left.sequenceNumber === right.sequenceNumber
@@ -1123,6 +1136,8 @@ interface MessageRowProps {
   submittingMessageIds: Set<string>
   hitlTextByMessage: Record<string, string>
   hitlSubmitErrors: Record<string, string>
+  attribution?: ResolvedMessageAttribution
+  attributedUserProfile?: AttributedUserProfile | null
   setHitlTextByMessage: React.Dispatch<React.SetStateAction<Record<string, string>>>
   submitHitlResponse: (message: ChatMessage, action: string, text?: string) => Promise<void>
 }
@@ -1135,9 +1150,12 @@ const MemoizedMessageRow = React.memo(function MessageRow({
   submittingMessageIds,
   hitlTextByMessage,
   hitlSubmitErrors,
+  attribution,
+  attributedUserProfile,
   setHitlTextByMessage,
   submitHitlResponse,
 }: MessageRowProps) {
+  const [showAttributionTooltip, setShowAttributionTooltip] = React.useState(false)
   const message = row.message
   const toolViewModel = mapMessageToToolViewModel(message)
   const controlEnvelope = getControlEnvelope(message.metadata)
@@ -1164,6 +1182,28 @@ const MemoizedMessageRow = React.memo(function MessageRow({
     ? `${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costTotal)}`
     : null
   const showMetadataBadges = showMessageTypeBadge || showToolNameBadge || Boolean(costBadgeLabel)
+  const attributionAvatar = row.from === 'user'
+    ? (
+      attribution?.kind === 'user' && attributedUserProfile
+        ? (
+          <ChatMessageUserAvatar
+            user={attributedUserProfile}
+            open={showAttributionTooltip}
+            onOpenChange={setShowAttributionTooltip}
+          />
+        )
+        : attribution?.kind === 'bot'
+          ? (
+            <ChatMessageBotAvatar
+              bot={attribution.bot}
+              open={showAttributionTooltip}
+              onOpenChange={setShowAttributionTooltip}
+            />
+          )
+          : null
+    )
+    : null
+  const showAttributedUserAvatar = Boolean(attributionAvatar)
 
   return (
     <Message
@@ -1172,8 +1212,17 @@ const MemoizedMessageRow = React.memo(function MessageRow({
       data-from={row.from}
       className="max-w-full"
     >
-      <div className="flex items-start">
-        <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
+      <div
+        className={cn("flex items-center", showAttributedUserAvatar && "justify-end gap-2")}
+        onMouseEnter={showAttributedUserAvatar ? () => setShowAttributionTooltip(true) : undefined}
+        onMouseLeave={showAttributedUserAvatar ? () => setShowAttributionTooltip(false) : undefined}
+        onFocusCapture={showAttributedUserAvatar ? () => setShowAttributionTooltip(true) : undefined}
+        onBlurCapture={showAttributedUserAvatar ? () => setShowAttributionTooltip(false) : undefined}
+      >
+        <MessageContent className={cn(
+          "max-w-full p-0 sm:max-w-[85%]",
+          showAttributedUserAvatar && "max-w-[calc(100%-2.25rem)]",
+        )}>
           {showMetadataBadges && (
             <div className="mb-2 flex items-center gap-2">
               {showMessageTypeBadge && (
@@ -1463,6 +1512,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
             </div>
           )}
         </MessageContent>
+        {showAttributedUserAvatar && attributionAvatar}
       </div>
     </Message>
   )
@@ -1781,6 +1831,7 @@ function ConversationViewer({
       const responseTarget = getConsoleResponseTarget()
       const attribution = await getCurrentUserAttribution()
       const responseMetadata = {
+        ...getMessageAttributionMetadata(attribution.createdByUserId),
         control: {
           request_id: control.request_id,
           procedure_id: control.procedure_id,
@@ -1836,6 +1887,7 @@ function ConversationViewer({
           responseTarget,
           responseStatus: 'PENDING',
           createdAt: respondedAt,
+          createdByUserId: attribution.createdByUserId,
         }
         const deduped = prev.filter(message => message.id !== responseMessageId)
         return [...deduped, responseMessage]
@@ -2401,8 +2453,16 @@ function ConversationViewer({
     }
     return compareChatMessages(a, b)
   })
+  const messageAttributions = React.useMemo(
+    () => sortedMessages.map((message) => resolveMessageAttribution(message)),
+    [sortedMessages],
+  )
+  const attributedUsersById = useAttributedUserProfiles(
+    messageAttributions.map((attribution) => (
+      attribution.kind === 'user' ? attribution.userId : undefined
+    )),
+  )
 
-  
   // Get the current selected session
   const selectedSession = selectedSessionId ? sessions.find(s => s.id === selectedSessionId) : null
   const selectedSessionMissing = Boolean(selectedSessionId && !selectedSession)
@@ -2855,13 +2915,22 @@ function ConversationViewer({
         try {
           const client = getClient()
           const attribution = await getCurrentUserAttribution()
+          if (attribution.createdByUserId) {
+            setInternalMessages(prev => prev.map(message => (
+              message.id === optimisticMessageId
+                ? { ...message, createdByUserId: attribution.createdByUserId }
+                : message
+            )))
+          }
           const metadata = enableProcedureSteering
             ? {
+                ...getMessageAttributionMetadata(attribution.createdByUserId),
                 source: 'procedure-steering-input',
                 scope: 'all_agents',
                 sent_at: nowIso,
               }
             : {
+                ...getMessageAttributionMetadata(attribution.createdByUserId),
                 source: 'console-prompt-input',
                 sent_at: nowIso,
                 model: {
@@ -2904,7 +2973,7 @@ function ConversationViewer({
           const persistedCreatedAt = created?.data?.createdAt || nowIso
           setInternalMessages(prev => prev.map(message => (
             message.id === optimisticMessageId
-              ? { ...optimisticMessage, id: createdMessageId, createdAt: persistedCreatedAt }
+              ? { ...optimisticMessage, ...attribution, id: createdMessageId, createdAt: persistedCreatedAt }
               : message
           )))
 
@@ -3219,8 +3288,9 @@ function ConversationViewer({
                 atBottomThreshold={50}
                 overscan={600}
                 increaseViewportBy={{ top: 400, bottom: 400 }}
-                itemContent={(_index, row) => (
-                  row.kind === 'thinking' ? (
+                itemContent={(_index, row) => {
+                  if (row.kind === 'thinking') {
+                    return (
                     <div className="px-3 py-2 pb-8">
                       <Message
                         from="assistant"
@@ -3235,7 +3305,15 @@ function ConversationViewer({
                         </div>
                       </Message>
                     </div>
-                  ) : (
+                    )
+                  }
+
+                  const rowAttribution = resolveMessageAttribution(row.message)
+                  const rowAttributedUser = rowAttribution.kind === 'user'
+                    ? attributedUsersById[rowAttribution.userId] ?? null
+                    : null
+
+                  return (
                     <div className="px-3 py-2">
                       <MemoizedMessageRow
                         row={row}
@@ -3245,12 +3323,14 @@ function ConversationViewer({
                         submittingMessageIds={submittingMessageIds}
                         hitlTextByMessage={hitlTextByMessage}
                         hitlSubmitErrors={hitlSubmitErrors}
+                        attribution={rowAttribution}
+                        attributedUserProfile={rowAttributedUser}
                         setHitlTextByMessage={setHitlTextByMessage}
                         submitHitlResponse={submitHitlResponse}
                       />
                     </div>
                   )
-                )}
+                }}
                 components={{
                   Scroller: VirtuosoScroller,
                   Footer: () => (!showThinkingPlaceholder ? <div aria-hidden className="h-8" /> : null),

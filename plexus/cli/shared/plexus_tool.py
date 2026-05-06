@@ -25,6 +25,7 @@ from plexus.cli.shared.memoized_resolvers import (
     memoized_resolve_score_identifier,
     clear_resolver_caches
 )
+from plexus.attribution.actor_context import apply_actor_attribution
 
 console = Console()
 
@@ -340,6 +341,11 @@ class PlexusTool:
                 }
                 if champion_version_id:
                     version_input['parentVersionId'] = champion_version_id
+                version_input = apply_actor_attribution(
+                    version_input,
+                    client_context=getattr(self.client, "context", None),
+                    source="agent",
+                )
                 
                 result = self.client.execute(mutation, {'input': version_input})
                 new_version = result.get('createScoreVersion')

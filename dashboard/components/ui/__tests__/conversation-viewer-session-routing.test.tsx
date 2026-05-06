@@ -4,12 +4,44 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import ConversationViewer, { type ChatMessage, type ChatSession } from "../conversation-viewer"
 import { getClient } from "@/utils/data-operations"
 
+jest.mock("react-virtuoso", () => {
+  const React = require("react")
+  const Virtuoso = React.forwardRef(function MockVirtuoso(props: any, ref: any) {
+    const { data = [], itemContent, components, className, atBottomStateChange } = props
+    const Footer = components?.Footer
+
+    React.useImperativeHandle(ref, () => ({
+      scrollToIndex: jest.fn(),
+    }))
+
+    React.useEffect(() => {
+      atBottomStateChange?.(true)
+    }, [atBottomStateChange, data.length])
+
+    return (
+      <div data-testid="virtuoso-scroller" className={className}>
+        {data.map((row: any, index: number) => (
+          <div key={row?.id ?? index} data-testid="virtuoso-item">
+            {itemContent ? itemContent(index, row) : null}
+          </div>
+        ))}
+        {Footer ? <Footer /> : null}
+      </div>
+    )
+  })
+
+  return { Virtuoso }
+})
+
 jest.mock("@/utils/data-operations", () => ({
   getClient: jest.fn(),
 }))
 
 jest.mock("@/utils/user-profile", () => ({
   getCurrentUserAttribution: jest.fn().mockResolvedValue({ createdByUserId: "user-1" }),
+  gravatarAvatarUrl: jest.fn(async (email: string, size = 64) => (
+    `https://www.gravatar.com/avatar/test?s=${size}&email=${encodeURIComponent(email)}`
+  )),
 }))
 
 jest.mock("@/components/ai-elements/conversation", () => ({
@@ -496,5 +528,118 @@ describe("ConversationViewer session-routing states", () => {
     })
 
     expect(screen.getAllByText("My Renamed Session")).not.toHaveLength(0)
+  })
+
+  it("shows the attributed user avatar with the user email on user messages", async () => {
+    const userGetMock = jest.fn().mockResolvedValue({
+      data: {
+        id: "user-1",
+        email: "author@example.com",
+        displayName: "Author Person",
+      },
+    })
+
+    mockedGetClient.mockReturnValue({
+      models: {
+        User: {
+          get: userGetMock,
+        },
+      },
+    } as any)
+
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={[
+          {
+            ...messages[0],
+            createdByUserId: "user-1",
+          },
+        ]}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    expect(await screen.findByLabelText("Message author: author@example.com")).toBeInTheDocument()
+    expect(userGetMock).toHaveBeenCalledWith(
+      { id: "user-1" },
+      { authMode: "userPool" },
+    )
+  })
+
+  it("shows bot avatar for bot-attributed USER chat messages", async () => {
+    mockedGetClient.mockReturnValue({
+      models: {
+        User: {
+          get: jest.fn(),
+        },
+      },
+    } as any)
+
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={[
+          {
+            ...messages[0],
+            metadata: {
+              attribution: {
+                actorType: "bot",
+                actorKey: "optimizer-agent",
+                displayName: "Optimizer Agent",
+                avatarKey: "optimizer",
+              },
+            },
+          },
+        ]}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    expect(await screen.findByLabelText("Message author: Optimizer Agent")).toBeInTheDocument()
+  })
+
+  it("prefers createdByUserId over conflicting bot attribution metadata", async () => {
+    const userGetMock = jest.fn().mockResolvedValue({
+      data: {
+        id: "user-1",
+        email: "author@example.com",
+        displayName: "Author Person",
+      },
+    })
+    mockedGetClient.mockReturnValue({
+      models: {
+        User: {
+          get: userGetMock,
+        },
+      },
+    } as any)
+
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={[
+          {
+            ...messages[0],
+            createdByUserId: "user-1",
+            metadata: {
+              attribution: {
+                actorType: "bot",
+                actorKey: "optimizer-agent",
+                displayName: "Optimizer Agent",
+                avatarKey: "optimizer",
+              },
+            },
+          },
+        ]}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    expect(await screen.findByLabelText("Message author: author@example.com")).toBeInTheDocument()
+    expect(screen.queryByLabelText("Message author: Optimizer Agent")).not.toBeInTheDocument()
   })
 })

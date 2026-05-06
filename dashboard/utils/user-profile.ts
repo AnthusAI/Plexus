@@ -1,4 +1,4 @@
-import { fetchUserAttributes, getCurrentUser } from "aws-amplify/auth"
+import { fetchAuthSession, fetchUserAttributes, getCurrentUser } from "aws-amplify/auth"
 import { generateClient } from "aws-amplify/data"
 import { Sha256 } from "@aws-crypto/sha256-js"
 import type { Schema } from "@/amplify/data/resource"
@@ -18,6 +18,8 @@ let pendingProfile: Promise<CurrentUserProfile | null> | null = null
 const getAmplifyClient = () => (amplifyClient ??= generateClient<Schema>())
 
 const userAuthOptions = { authMode: "userPool" as const }
+type UserAttributes = Record<string, string | undefined>
+type TokenClaims = Record<string, unknown>
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
@@ -54,7 +56,34 @@ function initialsFrom(displayName: string, email: string): string {
   return source.slice(0, 2).toUpperCase()
 }
 
-function displayNameFromAttributes(attributes: Record<string, string | undefined>, email: string): string {
+function claimString(claims: TokenClaims, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = claims[key]
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+  return undefined
+}
+
+function extractEmail(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  const normalized = value.trim()
+  return normalized.includes("@") ? normalized : undefined
+}
+
+function getSessionClaims(
+  session: Awaited<ReturnType<typeof fetchAuthSession>> | null,
+): TokenClaims {
+  const idTokenPayload = session?.tokens?.idToken?.payload ?? {}
+  const accessTokenPayload = session?.tokens?.accessToken?.payload ?? {}
+  return {
+    ...accessTokenPayload,
+    ...idTokenPayload,
+  } as TokenClaims
+}
+
+function displayNameFromAttributes(attributes: UserAttributes, claims: TokenClaims, email: string): string {
   const fullName = attributes.name?.trim()
   if (fullName) return fullName
 
@@ -63,18 +92,32 @@ function displayNameFromAttributes(attributes: Record<string, string | undefined
     .filter(Boolean)
   if (nameParts.length > 0) return nameParts.join(" ")
 
+  const claimName = claimString(claims, "name")
+  if (claimName) return claimName
+
+  const claimGivenName = claimString(claims, "given_name")
+  const claimFamilyName = claimString(claims, "family_name")
+  if (claimGivenName || claimFamilyName) {
+    return [claimGivenName, claimFamilyName].filter(Boolean).join(" ")
+  }
+
+  const preferredUsername = claimString(claims, "preferred_username")
+  if (preferredUsername && !preferredUsername.includes("@")) return preferredUsername
+
   return email
 }
 
 function emailFromCurrentUser(
-  attributes: Record<string, string | undefined>,
-  currentUser: Awaited<ReturnType<typeof getCurrentUser>>,
+  attributes: UserAttributes,
+  currentUser: Awaited<ReturnType<typeof getCurrentUser>> | null,
+  claims: TokenClaims,
 ): string | undefined {
-  const username = (currentUser as { username?: string }).username
-  return (
+  const username = currentUser ? (currentUser as { username?: string }).username : undefined
+  return extractEmail(
     attributes.email ||
-    currentUser.signInDetails?.loginId ||
-    (typeof username === "string" && username.includes("@") ? username : undefined)
+      claimString(claims, "email") ||
+      currentUser?.signInDetails?.loginId ||
+      (typeof username === "string" ? username : undefined),
   )
 }
 
@@ -114,19 +157,25 @@ async function syncUserModelProfile(profile: CurrentUserProfile): Promise<void> 
 }
 
 export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null> {
-  const [currentUser, attributes] = await Promise.all([
+  const [currentUserResult, attributesResult, sessionResult] = await Promise.allSettled([
     getCurrentUser(),
     fetchUserAttributes(),
+    fetchAuthSession(),
   ])
 
-  const id = attributes.sub || currentUser.userId
-  const email = emailFromCurrentUser(attributes, currentUser)
+  const currentUser = currentUserResult.status === "fulfilled" ? currentUserResult.value : null
+  const attributes: UserAttributes = attributesResult.status === "fulfilled" ? attributesResult.value : {}
+  const session = sessionResult.status === "fulfilled" ? sessionResult.value : null
+  const claims = getSessionClaims(session)
+
+  const id = attributes.sub || currentUser?.userId || claimString(claims, "sub")
+  const email = emailFromCurrentUser(attributes, currentUser, claims)
 
   if (!id || !email) {
     return null
   }
 
-  const displayName = displayNameFromAttributes(attributes, email)
+  const displayName = displayNameFromAttributes(attributes, claims, email)
 
   return {
     id,

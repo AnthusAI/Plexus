@@ -46,6 +46,7 @@ type ReportDisplayData = {
   subtitle?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  createdByUserId?: string | null;
   output?: string | null;
   reportConfiguration?: {
     id: string;
@@ -75,6 +76,7 @@ const LIST_REPORTS = `
         name
         createdAt
         updatedAt
+        createdByUserId
         parameters
         output
         accountId
@@ -141,6 +143,7 @@ const LIST_REPORTS_BY_CONFIG = `
         name
         createdAt
         updatedAt
+        createdByUserId
         parameters
         output
         accountId
@@ -196,6 +199,7 @@ const GET_REPORT_WITH_BLOCKS = `
       name
       createdAt
       updatedAt
+      createdByUserId
       parameters
       output
       accountId
@@ -260,6 +264,7 @@ const SUBSCRIBE_ON_CREATE_REPORT = `
       name
       createdAt
       updatedAt
+      createdByUserId
       parameters
       output
       accountId
@@ -312,6 +317,7 @@ const SUBSCRIBE_ON_UPDATE_REPORT = `
       name
       createdAt
       updatedAt
+      createdByUserId
       parameters
       output
       accountId
@@ -463,6 +469,17 @@ const parseReportParameters = (raw: any): Record<string, any> | null => {
   return null;
 };
 
+const resolveReportAuthorUserId = (reportLike: { createdByUserId?: string | null; parameters?: any }): string | null => {
+  const explicit = typeof reportLike.createdByUserId === "string" ? reportLike.createdByUserId.trim() : "";
+  if (explicit) return explicit;
+  const params = parseReportParameters(reportLike.parameters);
+  const attribution = params?.attribution && typeof params.attribution === "object" ? params.attribution : null;
+  const requestUserId = typeof attribution?.requestUserId === "string" ? attribution.requestUserId.trim() : "";
+  if (requestUserId) return requestUserId;
+  const userId = typeof attribution?.userId === "string" ? attribution.userId.trim() : "";
+  return userId || null;
+};
+
 // Transformation function
 function transformReportData(report: Report): ReportDisplayData | null {
   if (!report) return null;
@@ -520,6 +537,7 @@ function transformReportData(report: Report): ReportDisplayData | null {
     subtitle: displaySubtitle,
     createdAt: report.createdAt,
     updatedAt: report.updatedAt,
+    createdByUserId: resolveReportAuthorUserId(report),
     output: report.output || null,
     reportConfiguration: configInfo,
     task: taskData as Task | null
@@ -730,6 +748,7 @@ export default function ReportsDashboard({
                    `Report ${newReport.id.substring(0, 6)}`,
               createdAt: newReport.createdAt,
               updatedAt: newReport.updatedAt,
+              createdByUserId: resolveReportAuthorUserId(newReport),
               output: newReport.output || null,
               reportConfiguration: newReport.reportConfiguration ? {
                 id: newReport.reportConfiguration!.id,
@@ -1153,6 +1172,7 @@ export default function ReportsDashboard({
             configDescription: displaySubtitle,
             createdAt: report.createdAt,
             updatedAt: report.updatedAt,
+            createdByUserId: report.createdByUserId ?? null,
             output: report.output,
             reportBlocks: selectedReportBlocks || [] // Add the report blocks here
           },
@@ -1367,7 +1387,8 @@ export default function ReportsDashboard({
                               configName: displayName,  // This is what ReportTask actually displays
                               configDescription: displaySubtitle || report.reportConfiguration?.description,
                               createdAt: report.createdAt,
-                              updatedAt: report.updatedAt
+                              updatedAt: report.updatedAt,
+                              createdByUserId: report.createdByUserId ?? null
                             },
                             stages: stages,
                             status: report.task?.status as any || 'PENDING',
