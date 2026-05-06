@@ -8,12 +8,14 @@ This model represents individual Evaluations in the system, tracking:
 - Relationships to accounts, scorecards, and scores
 """
 
+import json
 import logging
 from typing import Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from .base import BaseModel
 from ..client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+from plexus.attribution.actor_context import apply_actor_attribution
 
 if TYPE_CHECKING:
     from ..client import _BaseAPIClient
@@ -57,6 +59,8 @@ class Evaluation(BaseModel):
     predictedClassDistribution: Optional[Dict] = None
     isPredictedClassDistributionBalanced: Optional[bool] = None
     taskId: Optional[str] = None
+    createdByUserId: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
     def __init__(
         self,
@@ -90,6 +94,8 @@ class Evaluation(BaseModel):
         predictedClassDistribution: Optional[Dict] = None,
         isPredictedClassDistributionBalanced: Optional[bool] = None,
         taskId: Optional[str] = None,
+        createdByUserId: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(id, client)
         self.type = type
@@ -120,6 +126,8 @@ class Evaluation(BaseModel):
         self.predictedClassDistribution = predictedClassDistribution
         self.isPredictedClassDistributionBalanced = isPredictedClassDistributionBalanced
         self.taskId = taskId
+        self.createdByUserId = createdByUserId
+        self.metadata = metadata
 
     @classmethod
     def fields(cls) -> str:
@@ -153,6 +161,7 @@ class Evaluation(BaseModel):
             predictedClassDistribution
             isPredictedClassDistributionBalanced
             taskId
+            createdByUserId
         """
         if _evaluation_cost_details_enabled():
             fields = fields.replace("            cost\n", "            cost\n            costDetails\n")
@@ -191,6 +200,33 @@ class Evaluation(BaseModel):
             input_data['scoreId'] = scoreId
         if taskId:
             input_data['taskId'] = taskId
+
+        input_data = apply_actor_attribution(
+            input_data,
+            client_context=getattr(client, "context", None),
+            source="agent",
+        )
+        actor_metadata = input_data.pop("metadata", None)
+        if isinstance(actor_metadata, dict) and actor_metadata.get("attribution"):
+            parameters = input_data.get("parameters")
+            if isinstance(parameters, str):
+                try:
+                    merged_parameters = json.loads(parameters) if parameters.strip() else {}
+                except json.JSONDecodeError:
+                    merged_parameters = {}
+            elif isinstance(parameters, dict):
+                merged_parameters = dict(parameters)
+            else:
+                merged_parameters = {}
+
+            existing_attribution = merged_parameters.get("attribution")
+            if not isinstance(existing_attribution, dict):
+                existing_attribution = {}
+            merged_parameters["attribution"] = {
+                **existing_attribution,
+                **actor_metadata["attribution"],
+            }
+            input_data["parameters"] = json.dumps(merged_parameters)
         
         mutation = """
         mutation CreateEvaluation($input: CreateEvaluationInput!) {
@@ -245,6 +281,8 @@ class Evaluation(BaseModel):
             predictedClassDistribution=data.get('predictedClassDistribution'),
             isPredictedClassDistributionBalanced=data.get('isPredictedClassDistributionBalanced'),
             taskId=data.get('taskId'),
+            createdByUserId=data.get('createdByUserId'),
+            metadata=data.get('metadata'),
             client=client
         )
 

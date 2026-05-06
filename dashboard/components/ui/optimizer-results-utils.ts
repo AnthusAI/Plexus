@@ -74,6 +74,7 @@ export const PROCEDURE_CARD_FIELDS = `
     name
   }
   scoreVersionId
+  createdByUserId
 `
 
 export const EVALUATION_CARD_FIELDS = `

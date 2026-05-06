@@ -15,6 +15,7 @@ jest.mock('./EvaluationTask', () => {
         <div data-testid="task-procedure-id">{task?.procedureId || ''}</div>
         <div data-testid="task-baseline-id">{task?.data?.baseline_evaluation_id || ''}</div>
         <div data-testid="task-current-baseline-id">{task?.data?.current_baseline_evaluation_id || ''}</div>
+        <div data-testid="task-created-by-user-id">{task?.data?.createdByUserId || ''}</div>
         <div data-testid="score-results-count">{scoreResults.length}</div>
         {scoreResults.map((result: any, index: number) => (
           <div key={result.id || index} data-testid={`score-result-${index}`}>
@@ -267,6 +268,25 @@ describe('TaskDisplay Golden Path', () => {
       expect(screen.getByTestId('task-scorecard')).toHaveTextContent('scorecard-123');
       expect(screen.getByTestId('task-score')).toHaveTextContent('score-456');
       expect(screen.getByTestId('task-procedure-id')).toHaveTextContent('procedure-789');
+    });
+
+    it('passes evaluation author id through to EvaluationTask data', () => {
+      const mockEvaluationData = {
+        id: 'eval-authored',
+        type: 'accuracy',
+        createdByUserId: 'user-123',
+        scoreResults: []
+      };
+
+      render(
+        <TaskDisplay
+          variant="grid"
+          task={mockTask}
+          evaluationData={mockEvaluationData}
+        />
+      );
+
+      expect(screen.getByTestId('task-created-by-user-id')).toHaveTextContent('user-123');
     });
 
     it('derives procedure id from task metadata when evaluationData does not provide it', () => {
