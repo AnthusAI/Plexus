@@ -75,7 +75,7 @@ celery_app.conf.update(
 
 # Initialize DynamoDB deserializer
 deserializer = TypeDeserializer()
-dynamodb = boto3.resource("dynamodb")
+dynamodb = boto3.resource("dynamodb", region_name=aws_region)
 
 def deserialize_dynamo_item(item):
     """Convert a DynamoDB item to a regular dict."""
