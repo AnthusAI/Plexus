@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "12d50127-3f8f-4a07-afe5-536e11751876",
+  "issue_id": "plx-3dba895a-229d-4028-a938-c642c2e71652",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T03:00:50.536Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implement batched per-score LLM summary generation with strict merge/validation and tests for large scorecard windows.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "priority": 1,
+    "status": "open",
+    "title": "Batch per-score summary generation for Scorecard History"
+  }
+}

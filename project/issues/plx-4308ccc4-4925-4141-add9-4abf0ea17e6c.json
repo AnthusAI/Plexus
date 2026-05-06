@@ -1,0 +1,31 @@
+{
+  "id": "plx-4308ccc4-4925-4141-add9-4abf0ea17e6c",
+  "title": "Add full item-backed proxy scoring integration smoke",
+  "description": "Seed Hugging Face text-classification fixtures into the private GraphQL proxy/PostgreSQL data plane, run normal Plexus prediction code through the proxy against real read-only AppSync control-plane data, and assert private Item/Identifier traffic remains local.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e2f0935f-fe30-40a0-a6fc-f23a3787efe3",
+      "author": "ryan",
+      "text": "Implemented fixture-backed scoring integration. Added Hugging Face AG News seeder, full Plexus dependency Compose runner, real plexus predict integration test through the private proxy, and README instructions. Validation: proxy unit tests passed, proxy Docker smoke passed, full scoring integration passed with one seeded AG News item against read-only AppSync control-plane data.",
+      "created_at": "2026-05-06T12:12:22.822189Z"
+    },
+    {
+      "id": "544121a3-57b0-4575-954a-bfe171b00003",
+      "author": "ryan",
+      "text": "Clarification after review: the original scoring integration smoke was not sufficient by itself because it verified prediction output but did not assert ScoreResult persistence. Follow-up task plx-440ee6 corrected that by exercising the standard plexus predict command path and asserting ScoreResult create/readback through the proxy-backed PostgreSQL store.",
+      "created_at": "2026-05-06T12:43:33.191391Z"
+    }
+  ],
+  "created_at": "2026-05-06T12:00:54.381291Z",
+  "updated_at": "2026-05-06T12:43:33.191391Z",
+  "closed_at": "2026-05-06T12:12:22.838914Z",
+  "custom": {}
+}

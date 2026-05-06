@@ -40,10 +40,16 @@
       "author": "ryan",
       "text": "Added and ran focused ScoreResult-for-Item smoke coverage. The test seeds a local Item, creates a ScoreResult with itemId pointing to that Item, then verifies getScoreResult, listScoreResultByItemId, and listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt all return it. It also exposed and fixed a prototype bug where private GraphQL responses returned full documents instead of honoring selected fields. Rebuilt the proxy Docker image and reran the focused smoke: 1 passed in 0.12s. AppSync credentials were blank; AWS was not touched.",
       "created_at": "2026-05-05T21:14:08.612978Z"
+    },
+    {
+      "id": "13c1f95f-a936-4d10-b819-b1ad0b2e1ce9",
+      "author": "ryan",
+      "text": "Updated outcome after scoring integration follow-up: the PostgreSQL design is a hybrid relational/document model. Private GraphQL rows use indexed relational projections for lookup fields plus authoritative jsonb documents for the full Item, Identifier, ScoreResult, and FeedbackItem payloads. The latest verification now covers standard plexus predict creating and reading back a local PostgreSQL ScoreResult through the proxy.",
+      "created_at": "2026-05-06T12:43:29.110221Z"
     }
   ],
   "created_at": "2026-05-05T20:49:03.847277Z",
-  "updated_at": "2026-05-05T21:15:01.390372Z",
+  "updated_at": "2026-05-06T12:43:29.110221Z",
   "closed_at": "2026-05-05T21:15:01.390372Z",
   "custom": {}
 }
