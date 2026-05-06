@@ -1,7 +1,7 @@
 name: Create Scorecard From Question Export
-version: 1.0.2
+version: 2.0.0
 class: Tactus
-description: "Create a scorecard and one score per question from ai-ready JSON export."
+description: "AI-generated scorecard migration from ai-ready question export (two-pass generation + review)."
 
 params:
   questions_export_json:
@@ -14,6 +14,10 @@ params:
     type: string
     required: false
     description: "Path to ai-ready export JSON file. Optional when questions_export_json is provided."
+  reference_scorecard_identifier:
+    type: string
+    required: true
+    description: "Reference scorecard id/key/name used for style/examples"
   target_scorecard_name:
     type: string
     required: true
@@ -37,7 +41,7 @@ params:
     description: "Account identifier (key/name/id)"
   model_name:
     type: string
-    default: "gpt-5-mini-2025-08-07"
+    default: "gpt-5"
     description: "Model used in generated LangGraphScore YAML"
   model_provider:
     type: string
@@ -45,7 +49,7 @@ params:
     description: "Model provider used in generated LangGraphScore YAML"
   reasoning_effort:
     type: string
-    default: "low"
+    default: "medium"
     description: "Reasoning effort used in generated LangGraphScore YAML"
   max_scores:
     type: number
@@ -89,14 +93,82 @@ agents:
     tools:
       - plexus
 
+  generator:
+    provider: openai
+    model: gpt-5.4
+    verbosity: low
+    system_prompt: |
+      You are an expert Plexus score author. Generate a high-quality classifier score spec from policy text.
+
+      Required JSON output schema (output JSON only, no markdown):
+      {
+        "name": "...",
+        "key": "...",
+        "external_id": "...",
+        "description": "...",
+        "labels": ["...", "..."],
+        "target_class": "...",
+        "default_class": "...",
+        "guidance_summary": "...",
+        "rationale": "...",
+        "system_message": "...",
+        "user_message": "..."
+      }
+
+      Rules:
+      - labels length must be >= 2 and include target_class/default_class.
+      - system_message must encode policy intent and decision boundaries from guidelines and FAQ.
+      - user_message must instruct transcript evaluation and class selection clearly.
+      - Keep all fields concise and directly actionable.
+    initial_message: |
+      Ready to generate score specs.
+    tools:
+      - done
+
+  critic:
+    provider: openai
+    model: gpt-5.4
+    verbosity: low
+    system_prompt: |
+      You are a strict reviewer for Plexus score authoring.
+      Improve draft score specs for policy fidelity, decision clarity, and class consistency.
+
+      Return JSON only, same schema:
+      {
+        "name": "...",
+        "key": "...",
+        "external_id": "...",
+        "description": "...",
+        "labels": ["...", "..."],
+        "target_class": "...",
+        "default_class": "...",
+        "guidance_summary": "...",
+        "rationale": "...",
+        "system_message": "...",
+        "user_message": "..."
+      }
+
+      Rules:
+      - Preserve core intent while tightening ambiguities.
+      - Ensure output is robust for noisy transcript evidence.
+      - Keep explicit class constraints in user_message.
+    initial_message: |
+      Ready to review and refine score specs.
+    tools:
+      - done
+
 stages:
   - observe
   - plan
+  - generate
+  - review
   - approval
   - act
   - complete
 
 code: |
+  local PROMPT_VERSION = "scorecard_from_question_export.v2"
+
   local function safe_decode(value)
     if value == nil then
       return nil, "nil"
@@ -131,22 +203,12 @@ code: |
   end
 
   local function to_bool(value, default)
-    if value == nil then
-      return default == true
-    end
-    if type(value) == "boolean" then
-      return value
-    end
-    if type(value) == "number" then
-      return value ~= 0
-    end
+    if value == nil then return default == true end
+    if type(value) == "boolean" then return value end
+    if type(value) == "number" then return value ~= 0 end
     local s = normalize(value)
-    if s == "true" or s == "1" or s == "yes" or s == "y" then
-      return true
-    end
-    if s == "false" or s == "0" or s == "no" or s == "n" then
-      return false
-    end
+    if s == "true" or s == "1" or s == "yes" or s == "y" then return true end
+    if s == "false" or s == "0" or s == "no" or s == "n" then return false end
     return default == true
   end
 
@@ -156,16 +218,6 @@ code: |
     s = string.gsub(s, "^-+", "")
     s = string.gsub(s, "-+$", "")
     if s == "" then return "score" end
-    return s
-  end
-
-  local function escape_yaml(value)
-    if value == nil then return "" end
-    local s = tostring(value)
-    s = string.gsub(s, "\\", "\\\\")
-    s = string.gsub(s, '"', '\\"')
-    s = string.gsub(s, "\r", " ")
-    s = string.gsub(s, "\n", " ")
     return s
   end
 
@@ -189,10 +241,20 @@ code: |
     end
   end
 
+  local function escape_yaml(value)
+    if value == nil then return "" end
+    local s = tostring(value)
+    s = string.gsub(s, "\\", "\\\\")
+    s = string.gsub(s, '"', '\\"')
+    s = string.gsub(s, "\r", " ")
+    s = string.gsub(s, "\n", " ")
+    return s
+  end
+
   local function build_faq_text(faqs)
     if type(faqs) ~= "table" or #faqs == 0 then return "" end
     local parts = {}
-    for i, faq in ipairs(faqs) do
+    for _, faq in ipairs(faqs) do
       local q = trim(faq.question_text or faq.question or "")
       local a = trim(faq.answer_text or faq.answer or "")
       local entry = ""
@@ -206,30 +268,405 @@ code: |
     return table.concat(parts, "\n\n")
   end
 
-  local function build_guidelines(question, labels)
-    local objective = trim(question.source_text or question.short_name or "")
-    local guidance = trim(question.guidelines or "")
-    local faq_text = build_faq_text(question.faqs)
+  local function to_lua_literal(value)
+    local value_type = type(value)
+    if value == nil then return "nil" end
+    if value_type == "boolean" then return value and "true" or "false" end
+    if value_type == "number" then return tostring(value) end
+    if value_type == "string" then return string.format("%q", value) end
+    if value_type == "table" then
+      local parts = {}
+      local is_array = true
+      local max_index = 0
+      local count = 0
+      for k, _ in pairs(value) do
+        count = count + 1
+        if type(k) ~= "number" or k < 1 or math.floor(k) ~= k then
+          is_array = false
+          break
+        end
+        if k > max_index then max_index = k end
+      end
+      if is_array and max_index ~= count then is_array = false end
+      if is_array then
+        for i = 1, max_index do
+          parts[#parts + 1] = to_lua_literal(value[i])
+        end
+        return "{ " .. table.concat(parts, ", ") .. " }"
+      end
+      for k, v in pairs(value) do
+        local key_literal
+        if type(k) == "string" and string.match(k, "^[%a_][%w_]*$") then
+          key_literal = k
+        else
+          key_literal = "[" .. to_lua_literal(k) .. "]"
+        end
+        parts[#parts + 1] = key_literal .. " = " .. to_lua_literal(v)
+      end
+      return "{ " .. table.concat(parts, ", ") .. " }"
+    end
+    return string.format("%q", tostring(value))
+  end
+
+  local function decode_tool_result(raw)
+    if type(raw) == "table" then return raw, nil end
+    if type(raw) == "string" then return safe_decode(raw) end
+    return nil, "unexpected tool response type: " .. tostring(type(raw))
+  end
+
+  local function extract_error_message(result)
+    if type(result) ~= "table" then return tostring(result) end
+    if type(result.error) == "table" and has_text(result.error.message) then
+      return result.error.message
+    end
+    if has_text(result.error) then return result.error end
+    if has_text(result.message) then return result.message end
+    return "unknown error"
+  end
+
+  local function call_plexus_api(namespace, method, args_table)
+    local execute_tactus = Tool.get("execute_tactus")
+    if execute_tactus == nil then
+      error("execute_tactus tool is not available in this runtime")
+    end
+
+    local tactus = "return plexus."
+      .. tostring(namespace)
+      .. "."
+      .. tostring(method)
+      .. "("
+      .. to_lua_literal(args_table or {})
+      .. ")"
+
+    local raw = execute_tactus({tactus = tactus})
+    local result, decode_err = decode_tool_result(raw)
+    if not result then
+      error("execute_tactus decode failed: " .. tostring(decode_err))
+    end
+    if result.ok == false then
+      error(extract_error_message(result))
+    end
+
+    return result.value
+  end
+
+  local function set_stage_progress(current, total)
+    local progress_tool = Tool.get("plexus_set_stage_progress")
+    if progress_tool ~= nil then
+      progress_tool({current = current, total = total})
+    end
+  end
+
+  local function wait_for_done(agent, max_iters, inject)
+    local start_count = Tool.get_call_count("done")
+    if inject then
+      agent({message = inject})
+    else
+      agent()
+    end
+    local iter = 0
+    repeat
+      if Tool.get_call_count("done") > start_count then
+        return true
+      end
+      if iter >= max_iters then
+        return false
+      end
+      agent()
+      iter = iter + 1
+    until false
+  end
+
+  local function parse_last_done_json()
+    local done_call = Tool.last_call("done")
+    if done_call == nil or done_call.args == nil then
+      return nil, "missing done() call payload"
+    end
+    local payload = done_call.args.reason or ""
+    local data, err = safe_decode(payload)
+    if not data then
+      return nil, "invalid done() JSON: " .. tostring(err)
+    end
+    if type(data) ~= "table" then
+      return nil, "done() payload must be a JSON object"
+    end
+    return data, nil
+  end
+
+  local function try_find_existing_scorecard(identifier)
+    if not has_text(identifier) then return nil, nil end
+    local ok, result = pcall(function()
+      return call_plexus_api("scorecards", "info", {scorecard_identifier = tostring(identifier)})
+    end)
+    if not ok then
+      local err_text = string.lower(tostring(result or ""))
+      if string.find(err_text, "not found", 1, true) then
+        return nil, nil
+      end
+      return nil, "Scorecard lookup failed: " .. tostring(result)
+    end
+
+    if type(result) ~= "table" then return nil, nil end
+    local scorecard_id = result.id or result.scorecard_id or (result.additionalDetails or {}).id
+    if not has_text(scorecard_id) then return nil, nil end
+
+    return {
+      id = scorecard_id,
+      name = result.name,
+      key = result.key,
+      externalId = result.externalId
+    }, nil
+  end
+
+  local function safe_slice(value, limit)
+    local s = trim(value)
+    if #s <= limit then return s end
+    return string.sub(s, 1, limit) .. " ..."
+  end
+
+  local function extract_reference_examples(reference_scorecard_identifier, max_examples)
+    local ref = call_plexus_api("scorecards", "info", {scorecard_identifier = reference_scorecard_identifier})
+    if type(ref) ~= "table" then
+      error("reference scorecard lookup returned invalid response")
+    end
+
+    local ref_id = ref.id or ref.scorecard_id or (ref.additionalDetails or {}).id
+    if not has_text(ref_id) then
+      error("reference scorecard lookup did not return id")
+    end
+
+    local score_rows = {}
+    local sections = ((ref.sections or {}).items) or {}
+    for _, section in ipairs(sections) do
+      local scores = ((section.scores or {}).items) or {}
+      for _, score in ipairs(scores) do
+        score_rows[#score_rows + 1] = {
+          id = score.id,
+          name = score.name,
+          key = score.key,
+          externalId = score.externalId,
+          description = score.description,
+          order = tonumber(score.order) or 0
+        }
+      end
+    end
+
+    table.sort(score_rows, function(a, b)
+      if a.order ~= b.order then return a.order < b.order end
+      return tostring(a.id or "") < tostring(b.id or "")
+    end)
+
+    local examples = {}
+    local take = math.min(#score_rows, max_examples)
+    for i = 1, take do
+      local row = score_rows[i]
+      local info = call_plexus_api("score", "info", {
+        scorecard_identifier = reference_scorecard_identifier,
+        score_identifier = row.id or row.name or row.key
+      })
+      if type(info) == "table" then
+        examples[#examples + 1] = {
+          id = info.scoreId or row.id,
+          name = info.scoreName or row.name,
+          key = info.scoreKey or row.key,
+          description = info.description or row.description,
+          type = info.type or "LangGraphScore",
+          guidelines = safe_slice(info.guidelines or "", 1800),
+          code = safe_slice(info.code or "", 3500)
+        }
+      end
+    end
+
+    return {
+      id = ref_id,
+      name = ref.name,
+      key = ref.key,
+      externalId = ref.externalId,
+      examples = examples
+    }
+  end
+
+  local function normalize_question(raw, index)
+    local labels = {}
+    if type(raw.active_answer_values) == "table" then
+      for _, v in ipairs(raw.active_answer_values) do
+        local t = trim(v)
+        if has_text(t) then labels[#labels + 1] = t end
+      end
+    end
+    if #labels < 2 and type(raw.answers) == "table" then
+      for _, ans in ipairs(raw.answers) do
+        local t = trim(ans.text)
+        if has_text(t) then labels[#labels + 1] = t end
+      end
+    end
+    if #labels < 2 then labels = {"Yes", "No"} end
+
+    local name = trim(raw.short_name)
+    if not has_text(name) then name = trim(raw.source_text or raw.question_text) end
+    if not has_text(name) then name = "Question " .. tostring(raw.id or index) end
+
+    local source_text = trim(raw.source_text or raw.question_text or raw.short_name)
+    if not has_text(source_text) then source_text = name end
+
+    return {
+      id = raw.id,
+      order = tonumber(raw.order) or index,
+      index = index,
+      short_name = name,
+      source_text = source_text,
+      guidelines = trim(raw.guidelines or ""),
+      faq_text = build_faq_text(raw.faqs),
+      labels = labels
+    }
+  end
+
+  local function build_generate_prompt(question, reference_context)
+    local prompt = {}
+    table.insert(prompt, "Generate one Plexus classifier score spec from this question policy.")
+    table.insert(prompt, "")
+    table.insert(prompt, "Question Payload JSON:")
+    table.insert(prompt, Json.encode(question))
+    table.insert(prompt, "")
+    table.insert(prompt, "Reference Score Patterns JSON:")
+    table.insert(prompt, Json.encode(reference_context))
+    table.insert(prompt, "")
+    table.insert(prompt, "Output strict JSON only matching the required schema.")
+    table.insert(prompt, "No markdown, no code fences.")
+    return table.concat(prompt, "\n")
+  end
+
+  local function build_review_prompt(question, draft, reference_context)
+    local prompt = {}
+    table.insert(prompt, "Review and refine this generated score spec for policy fidelity and clarity.")
+    table.insert(prompt, "")
+    table.insert(prompt, "Question Payload JSON:")
+    table.insert(prompt, Json.encode(question))
+    table.insert(prompt, "")
+    table.insert(prompt, "Draft Spec JSON:")
+    table.insert(prompt, Json.encode(draft))
+    table.insert(prompt, "")
+    table.insert(prompt, "Reference Score Patterns JSON:")
+    table.insert(prompt, Json.encode(reference_context))
+    table.insert(prompt, "")
+    table.insert(prompt, "Return strict JSON only with same schema.")
+    return table.concat(prompt, "\n")
+  end
+
+  local function contains_label(labels, value)
+    local needle = normalize(value)
+    for _, label in ipairs(labels) do
+      if normalize(label) == needle then return true end
+    end
+    return false
+  end
+
+  local function validate_generated_spec(question, generated)
+    if type(generated) ~= "table" then
+      return nil, "generated spec must be object"
+    end
+
+    local labels = {}
+    if type(generated.labels) == "table" then
+      for _, label in ipairs(generated.labels) do
+        local t = trim(label)
+        if has_text(t) then labels[#labels + 1] = t end
+      end
+    end
+    if #labels < 2 then
+      labels = question.labels
+    end
+
+    local name = trim(generated.name)
+    if not has_text(name) then name = question.short_name end
+
+    local key = trim(generated.key)
+    if not has_text(key) then key = slugify(name) end
+
+    local external_id = trim(generated.external_id)
+    if not has_text(external_id) then
+      external_id = "question-" .. tostring(question.id or key)
+    end
+
+    local description = trim(generated.description)
+    if not has_text(description) then description = question.source_text end
+
+    local target_class = trim(generated.target_class)
+    if not has_text(target_class) or not contains_label(labels, target_class) then
+      target_class = labels[1]
+    end
+
+    local default_class = trim(generated.default_class)
+    if not has_text(default_class) or not contains_label(labels, default_class) then
+      default_class = labels[#labels]
+    end
+
+    local guidance_summary = trim(generated.guidance_summary)
+    if not has_text(guidance_summary) then
+      guidance_summary = safe_slice(question.guidelines, 1200)
+    end
+
+    local rationale = trim(generated.rationale)
+    if not has_text(rationale) then
+      rationale = "Generated from source guidelines and FAQ context"
+    end
+
+    local system_message = trim(generated.system_message)
+    if not has_text(system_message) then
+      return nil, "system_message is required"
+    end
+
+    local user_message = trim(generated.user_message)
+    if not has_text(user_message) then
+      return nil, "user_message is required"
+    end
+
+    return {
+      question_id = question.id,
+      question_name = question.short_name,
+      name = name,
+      key = key,
+      external_id = external_id,
+      description = description,
+      labels = labels,
+      target_class = target_class,
+      default_class = default_class,
+      guidance_summary = guidance_summary,
+      rationale = rationale,
+      system_message = system_message,
+      user_message = user_message,
+      source_guidelines = question.guidelines,
+      source_faq = question.faq_text
+    }, nil
+  end
+
+  local function build_guidelines_from_generated(score)
     local lines = {}
-    table.insert(lines, "# Guidelines for " .. (question.short_name or "Score"))
+    table.insert(lines, "# Guidelines for " .. tostring(score.name))
     table.insert(lines, "")
     table.insert(lines, "## Objective")
-    table.insert(lines, objective)
+    table.insert(lines, tostring(score.description))
     table.insert(lines, "")
     table.insert(lines, "## Classes")
-    table.insert(lines, "Valid labels: [" .. table.concat(labels, ", ") .. "]")
-    table.insert(lines, "Target class: " .. labels[1])
-    table.insert(lines, "Default class: " .. labels[#labels])
-    if has_text(guidance) then
+    table.insert(lines, "Valid labels: [" .. table.concat(score.labels, ", ") .. "]")
+    table.insert(lines, "Target class: " .. tostring(score.target_class))
+    table.insert(lines, "Default class: " .. tostring(score.default_class))
+    table.insert(lines, "")
+    table.insert(lines, "## Guidance Summary")
+    table.insert(lines, tostring(score.guidance_summary))
+    if has_text(score.source_guidelines) then
       table.insert(lines, "")
       table.insert(lines, "## Source Guidance")
-      table.insert(lines, guidance)
+      table.insert(lines, tostring(score.source_guidelines))
     end
-    if has_text(faq_text) then
+    if has_text(score.source_faq) then
       table.insert(lines, "")
       table.insert(lines, "## FAQ Context")
-      table.insert(lines, faq_text)
+      table.insert(lines, tostring(score.source_faq))
     end
+    table.insert(lines, "")
+    table.insert(lines, "## Authoring Rationale")
+    table.insert(lines, tostring(score.rationale))
     return table.concat(lines, "\n")
   end
 
@@ -239,10 +676,10 @@ code: |
     table.insert(lines, 'description: "' .. escape_yaml(score.description or score.name) .. '"')
     table.insert(lines, 'external_id: "' .. escape_yaml(score.external_id) .. '"')
     table.insert(lines, 'class: LangGraphScore')
-    table.insert(lines, 'model_name: ' .. tostring(params.model_name or "gpt-5-mini-2025-08-07"))
+    table.insert(lines, 'model_name: ' .. tostring(params.model_name or "gpt-5"))
     table.insert(lines, 'model_provider: ' .. tostring(params.model_provider or "ChatOpenAI"))
-    table.insert(lines, 'reasoning_effort: ' .. tostring(params.reasoning_effort or "low"))
-    table.insert(lines, 'max_tokens: 2000')
+    table.insert(lines, 'reasoning_effort: ' .. tostring(params.reasoning_effort or "medium"))
+    table.insert(lines, 'max_tokens: 3000')
     table.insert(lines, 'graph:')
     table.insert(lines, '  - name: classifier')
     table.insert(lines, '    class: Classifier')
@@ -264,160 +701,16 @@ code: |
     return table.concat(lines, "\n")
   end
 
-  local function _decode_tool_result(raw)
-    if type(raw) == "table" then
-      return raw, nil
-    end
-    if type(raw) == "string" then
-      return safe_decode(raw)
-    end
-    return nil, "unexpected tool response type: " .. tostring(type(raw))
-  end
-
-  local function _extract_error_message(result)
-    if type(result) ~= "table" then
-      return tostring(result)
-    end
-    if type(result.error) == "table" and has_text(result.error.message) then
-      return result.error.message
-    end
-    if has_text(result.error) then
-      return result.error
-    end
-    if has_text(result.message) then
-      return result.message
-    end
-    return "unknown error"
-  end
-
-  local function call_plexus_api(namespace, method, args_table)
-    local execute_tactus = Tool.get("execute_tactus")
-    if execute_tactus == nil then
-      error("execute_tactus tool is not available in this runtime")
-    end
-
-    local function to_lua_literal(value)
-      local value_type = type(value)
-      if value == nil then
-        return "nil"
-      end
-      if value_type == "boolean" then
-        return value and "true" or "false"
-      end
-      if value_type == "number" then
-        return tostring(value)
-      end
-      if value_type == "string" then
-        return string.format("%q", value)
-      end
-      if value_type == "table" then
-        local parts = {}
-        local is_array = true
-        local max_index = 0
-        local count = 0
-        for k, _ in pairs(value) do
-          count = count + 1
-          if type(k) ~= "number" or k < 1 or math.floor(k) ~= k then
-            is_array = false
-            break
-          end
-          if k > max_index then max_index = k end
-        end
-        if is_array and max_index ~= count then
-          is_array = false
-        end
-
-        if is_array then
-          for i = 1, max_index do
-            parts[#parts + 1] = to_lua_literal(value[i])
-          end
-          return "{ " .. table.concat(parts, ", ") .. " }"
-        end
-
-        for k, v in pairs(value) do
-          local key_literal
-          if type(k) == "string" and string.match(k, "^[%a_][%w_]*$") then
-            key_literal = k
-          else
-            key_literal = "[" .. to_lua_literal(k) .. "]"
-          end
-          parts[#parts + 1] = key_literal .. " = " .. to_lua_literal(v)
-        end
-        return "{ " .. table.concat(parts, ", ") .. " }"
-      end
-      return string.format("%q", tostring(value))
-    end
-
-    local tactus = "return plexus."
-      .. tostring(namespace)
-      .. "."
-      .. tostring(method)
-      .. "("
-      .. to_lua_literal(args_table or {})
-      .. ")"
-
-    local raw = execute_tactus({tactus = tactus})
-    local result, decode_err = _decode_tool_result(raw)
-    if not result then
-      error("execute_tactus decode failed: " .. tostring(decode_err))
-    end
-    if result.ok == false then
-      error(_extract_error_message(result))
-    end
-
-    return result.value
-  end
-
-  local function set_stage_progress(current, total)
-    local progress_tool = Tool.get("plexus_set_stage_progress")
-    if progress_tool ~= nil then
-      progress_tool({current = current, total = total})
-    end
-  end
-
-  local function try_find_existing_scorecard(identifier)
-    if not has_text(identifier) then
-      return nil, nil
-    end
-
-    local ok, result = pcall(function()
-      return call_plexus_api("scorecards", "info", {scorecard_identifier = tostring(identifier)})
-    end)
-    if not ok then
-      local err_text = string.lower(tostring(result or ""))
-      if string.find(err_text, "not found", 1, true) then
-        return nil, nil
-      end
-      return nil, "Scorecard lookup failed: " .. tostring(result)
-    end
-
-    local data = result
-    if type(data) == "string" then
-      data = safe_decode(data)
-    end
-    if type(data) ~= "table" then
-      return nil, nil
-    end
-    if data.success == false then
-      return nil, nil
-    end
-
-    if has_text(data.id) or has_text(data.scorecard_id) then
-      return {
-        id = data.id or data.scorecard_id,
-        name = data.name,
-        key = data.key,
-        externalId = data.externalId
-      }, nil
-    end
-
-    return nil, nil
-  end
-
   local function run(input)
     local params = input
     local dry_run = to_bool(params.dry_run, false)
     local require_approval = to_bool(params.require_approval, true)
+    local max_scores = tonumber(params.max_scores) or 0
+
+    local reference_scorecard_identifier = trim(params.reference_scorecard_identifier)
+    if not has_text(reference_scorecard_identifier) then
+      return {success = false, status = "error", message = "reference_scorecard_identifier is required"}
+    end
 
     local export_json = trim(params.questions_export_json)
     if not has_text(export_json) and has_text(params.questions_export_path) then
@@ -439,25 +732,31 @@ code: |
       return {success = false, status = "error", message = "Export JSON has no questions"}
     end
 
-    local max_scores = tonumber(params.max_scores) or 0
     local target_name = trim(params.target_scorecard_name)
     if not has_text(target_name) then
       return {success = false, status = "error", message = "target_scorecard_name is required"}
     end
 
-    local scorecard_key = trim(params.target_scorecard_key)
-    if not has_text(scorecard_key) then scorecard_key = slugify(target_name) end
-    local scorecard_external_id = trim(params.target_scorecard_external_id)
-    if not has_text(scorecard_external_id) then scorecard_external_id = scorecard_key end
-    local scorecard_description = trim(params.target_scorecard_description)
-    if not has_text(scorecard_description) then scorecard_description = "Created from ai-ready question export" end
+    local target_key = trim(params.target_scorecard_key)
+    if not has_text(target_key) then target_key = slugify(target_name) end
+
+    local target_external_id = trim(params.target_scorecard_external_id)
+    if not has_text(target_external_id) then target_external_id = target_key end
+
+    local target_description = trim(params.target_scorecard_description)
+    if not has_text(target_description) then
+      target_description = "Created from ai-ready question export"
+    end
+
+    local run_started_at = (os and os.date and os.date("!%Y-%m-%dT%H:%M:%SZ")) or ""
 
     Stage.set("observe")
-    local existing, lookup_err = try_find_existing_scorecard(scorecard_key)
+
+    local existing, lookup_err = try_find_existing_scorecard(target_key)
     if lookup_err then
       return {success = false, status = "error", message = lookup_err}
     end
-    if existing == nil and normalize(scorecard_key) ~= normalize(target_name) then
+    if existing == nil and normalize(target_key) ~= normalize(target_name) then
       existing, lookup_err = try_find_existing_scorecard(target_name)
       if lookup_err then
         return {success = false, status = "error", message = lookup_err}
@@ -472,33 +771,76 @@ code: |
       }
     end
 
+    local reference_context
+    local ok_ref, ref_or_err = pcall(function()
+      return extract_reference_examples(reference_scorecard_identifier, 5)
+    end)
+    if not ok_ref then
+      return {
+        success = false,
+        status = "error",
+        message = "Failed to load reference scorecard: " .. tostring(ref_or_err)
+      }
+    end
+    reference_context = ref_or_err
+
     Stage.set("plan")
+    local normalized_questions = {}
+    for i, q in ipairs(questions) do
+      normalized_questions[#normalized_questions + 1] = normalize_question(q, i)
+    end
+
+    table.sort(normalized_questions, function(a, b)
+      if a.order ~= b.order then return a.order < b.order end
+      local aid = tonumber(a.id) or 0
+      local bid = tonumber(b.id) or 0
+      if aid ~= bid then return aid < bid end
+      return a.index < b.index
+    end)
+
+    if max_scores > 0 and #normalized_questions > max_scores then
+      local limited = {}
+      for i = 1, max_scores do limited[i] = normalized_questions[i] end
+      normalized_questions = limited
+    end
+
+    local generated_scores = {}
     local used_keys = {}
-    local plan_scores = {}
-    local processed = 0
 
-    for _, q in ipairs(questions) do
-      if max_scores > 0 and processed >= max_scores then break end
-      local labels = q.active_answer_values or {}
-      if #labels < 2 and q.answers then
-        for _, ans in ipairs(q.answers) do
-          local text = trim(ans.text)
-          if has_text(text) then labels[#labels + 1] = text end
-        end
-      end
-      if #labels < 2 then
-        labels = {"Yes", "No"}
+    local total = #normalized_questions
+    Stage.set("generate")
+    for idx, question in ipairs(normalized_questions) do
+      set_stage_progress(idx - 1, total)
+
+      local generate_prompt = build_generate_prompt(question, reference_context)
+      local generated_ok = wait_for_done(Generator, 6, generate_prompt)
+      if not generated_ok then
+        return {success = false, status = "error", message = "Generator did not return done() for question " .. tostring(question.id)}
       end
 
-      local name = trim(q.short_name)
-      if not has_text(name) then
-        name = trim(q.source_text or q.question_text)
-      end
-      if not has_text(name) then
-        name = "Question " .. tostring(q.id or (#plan_scores + 1))
+      local draft, draft_err = parse_last_done_json()
+      if not draft then
+        return {success = false, status = "error", message = "Generator JSON parse failed for question " .. tostring(question.id) .. ": " .. tostring(draft_err)}
       end
 
-      local key_base = slugify(name)
+      Stage.set("review")
+      local review_prompt = build_review_prompt(question, draft, reference_context)
+      local reviewed_ok = wait_for_done(Critic, 6, review_prompt)
+      if not reviewed_ok then
+        return {success = false, status = "error", message = "Critic did not return done() for question " .. tostring(question.id)}
+      end
+
+      local reviewed, reviewed_err = parse_last_done_json()
+      if not reviewed then
+        return {success = false, status = "error", message = "Critic JSON parse failed for question " .. tostring(question.id) .. ": " .. tostring(reviewed_err)}
+      end
+
+      local final_spec, final_err = validate_generated_spec(question, reviewed)
+      if not final_spec then
+        return {success = false, status = "error", message = "Generated spec validation failed for question " .. tostring(question.id) .. ": " .. tostring(final_err)}
+      end
+
+      local key_base = slugify(final_spec.key or final_spec.name)
       local key = key_base
       local suffix = 2
       while used_keys[key] do
@@ -507,70 +849,97 @@ code: |
       end
       used_keys[key] = true
 
-      local source_text = trim(q.source_text or q.question_text or q.short_name)
-      local guidelines_md = build_guidelines(q, labels)
-      local faq_text = build_faq_text(q.faqs)
-
-      local system_message = "You are a call quality evaluator.\n\nQuestion: " .. source_text .. "\n\nUse the following policy guidance to classify the call.\n\n" .. trim(q.guidelines or "")
-      if has_text(faq_text) then
-        system_message = system_message .. "\n\nFAQ context:\n" .. faq_text
+      final_spec.key = key
+      if not has_text(final_spec.external_id) then
+        final_spec.external_id = "question-" .. tostring(question.id or key)
       end
-      system_message = system_message .. "\n\nReturn exactly one valid class and concise reasoning."
 
-      local user_message = "Evaluate the transcript for this question and choose one class.\n\n<transcript>\n{{text}}\n</transcript>\n\nValid classes: [" .. table.concat(labels, ", ") .. "]\n\nRespond with concise reasoning, then on a new line the final class."
-
-      plan_scores[#plan_scores + 1] = {
-        question_id = q.id,
-        name = name,
-        key = key,
-        external_id = "question-" .. tostring(q.id or key),
-        description = source_text,
-        labels = labels,
-        guidelines = guidelines_md,
-        system_message = system_message,
-        user_message = user_message
+      local score_record = {
+        question_id = question.id,
+        question_name = question.short_name,
+        name = final_spec.name,
+        key = final_spec.key,
+        external_id = final_spec.external_id,
+        description = final_spec.description,
+        labels = final_spec.labels,
+        target_class = final_spec.target_class,
+        default_class = final_spec.default_class,
+        guidance_summary = final_spec.guidance_summary,
+        rationale = final_spec.rationale,
+        system_message = final_spec.system_message,
+        user_message = final_spec.user_message,
+        guidelines = build_guidelines_from_generated(final_spec),
+        yaml_code = build_score_yaml(final_spec, params)
       }
-      processed = processed + 1
-    end
 
-    if #plan_scores == 0 then
-      return {success = false, status = "error", message = "No scores generated from export"}
+      generated_scores[#generated_scores + 1] = score_record
+      Stage.set("generate")
     end
+    set_stage_progress(total, total)
 
     local normalized_scorecard = {
       name = target_name,
-      key = scorecard_key,
-      external_id = scorecard_external_id,
-      description = scorecard_description
+      key = target_key,
+      external_id = target_external_id,
+      description = target_description
+    }
+
+    local plan = {
+      scorecard = normalized_scorecard,
+      generated_scores = generated_scores,
+      run_metadata = {
+        prompt_version = PROMPT_VERSION,
+        model_name = params.model_name,
+        model_provider = params.model_provider,
+        reasoning_effort = params.reasoning_effort,
+        reference_scorecard_id = reference_context.id,
+        reference_scorecard_identifier = reference_scorecard_identifier,
+        reference_example_count = #reference_context.examples,
+        started_at = run_started_at
+      }
     }
 
     if dry_run then
       Stage.set("complete")
-      return {success = true, status = "planned", message = "Dry run - no changes applied", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
+      return {
+        success = true,
+        status = "planned",
+        message = "Dry run complete - generated score plans only",
+        plan = plan
+      }
     end
 
     if require_approval then
       Stage.set("approval")
       local approved = Human.approve({
-        message = "Approve scorecard migration execution?",
+        message = "Approve AI-generated scorecard migration execution?",
         context = {
           scorecard = normalized_scorecard,
-          score_count = #plan_scores,
-          first_scores = {plan_scores[1], plan_scores[2], plan_scores[3]},
-          dry_run = false
+          score_count = #generated_scores,
+          sample_scores = {generated_scores[1], generated_scores[2]},
+          reference_scorecard = {
+            id = reference_context.id,
+            name = reference_context.name,
+            key = reference_context.key
+          },
+          run_metadata = plan.run_metadata
         },
         timeout = 7200,
         default = false
       })
 
       if not approved then
-        return {success = false, status = "rejected", message = "Human rejected migration", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
+        return {
+          success = false,
+          status = "rejected",
+          message = "Human rejected migration",
+          plan = plan
+        }
       end
     end
 
     Stage.set("act")
     local created_score_ids = {}
-    local created_scorecard_id = nil
 
     local ok_create_scorecard, create_scorecard_result = pcall(function()
       return call_plexus_api("scorecards", "create", {
@@ -581,42 +950,21 @@ code: |
         account_identifier = params.account_identifier or "default"
       })
     end)
-
     if not ok_create_scorecard then
-      return {
-        success = false,
-        status = "error",
-        message = "Scorecard creation failed: " .. tostring(create_scorecard_result)
-      }
-    end
-
-    if type(create_scorecard_result) == "table" and create_scorecard_result.success == false then
-      return {
-        success = false,
-        status = "error",
-        message = "Scorecard creation failed: " .. tostring(create_scorecard_result.error or "unknown error")
-      }
+      return {success = false, status = "error", message = "Scorecard creation failed: " .. tostring(create_scorecard_result)}
     end
 
     if type(create_scorecard_result) ~= "table" then
-      return {
-        success = false,
-        status = "error",
-        message = "Scorecard creation failed: invalid response type"
-      }
+      return {success = false, status = "error", message = "Scorecard creation failed: invalid response type"}
     end
 
-    created_scorecard_id = create_scorecard_result.id or create_scorecard_result.scorecard_id
+    local created_scorecard_id = create_scorecard_result.id or create_scorecard_result.scorecard_id
     if not has_text(created_scorecard_id) then
-      return {
-        success = false,
-        status = "error",
-        message = "Scorecard creation failed: missing scorecard id in response"
-      }
+      return {success = false, status = "error", message = "Scorecard creation failed: missing scorecard id"}
     end
 
-    for idx, score in ipairs(plan_scores) do
-      set_stage_progress(idx - 1, #plan_scores)
+    for idx, score in ipairs(generated_scores) do
+      set_stage_progress(idx - 1, #generated_scores)
 
       local ok_create_score, create_score_result = pcall(function()
         return call_plexus_api("score", "create", {
@@ -629,83 +977,53 @@ code: |
           order = idx
         })
       end)
-
       if not ok_create_score then
-        return {
-          success = false,
-          status = "error",
-          message = "Score creation failed for '" .. tostring(score.name) .. "': " .. tostring(create_score_result)
-        }
+        return {success = false, status = "error", message = "Score creation failed for '" .. tostring(score.name) .. "': " .. tostring(create_score_result)}
       end
 
       if type(create_score_result) ~= "table" then
-        return {
-          success = false,
-          status = "error",
-          message = "Score creation failed for '" .. tostring(score.name) .. "': invalid response type"
-        }
-      end
-
-      if create_score_result.success == false then
-        return {
-          success = false,
-          status = "error",
-          message = "Score creation failed for '" .. tostring(score.name) .. "': " .. tostring(create_score_result.error or "unknown error")
-        }
+        return {success = false, status = "error", message = "Score creation failed for '" .. tostring(score.name) .. "': invalid response type"}
       end
 
       local created_score_id = create_score_result.id or create_score_result.score_id
       if not has_text(created_score_id) then
-        return {
-          success = false,
-          status = "error",
-          message = "Score creation failed for '" .. tostring(score.name) .. "': missing score id"
-        }
+        return {success = false, status = "error", message = "Score creation failed for '" .. tostring(score.name) .. "': missing score id"}
       end
 
       local ok_update_score, update_score_result = pcall(function()
         return call_plexus_api("score", "update", {
           scorecard_identifier = created_scorecard_id,
           score_identifier = created_score_id,
-          code = build_score_yaml(score, params),
+          code = score.yaml_code,
           guidelines = score.guidelines,
-          version_note = "Created from question export"
+          version_note = "Created from question export (" .. tostring(score.question_id or "unknown") .. ")"
         })
       end)
-
       if not ok_update_score then
-        return {
-          success = false,
-          status = "error",
-          message = "Score update failed for '" .. tostring(score.name) .. "': " .. tostring(update_score_result)
-        }
+        return {success = false, status = "error", message = "Score update failed for '" .. tostring(score.name) .. "': " .. tostring(update_score_result)}
       end
 
       if type(update_score_result) == "table" and update_score_result.success == false then
-        return {
-          success = false,
-          status = "error",
-          message = "Score update failed for '" .. tostring(score.name) .. "': " .. tostring(update_score_result.error or "unknown error")
-        }
+        return {success = false, status = "error", message = "Score update failed for '" .. tostring(score.name) .. "': " .. tostring(update_score_result.error or "unknown error")}
       end
 
       created_score_ids[#created_score_ids + 1] = created_score_id
     end
-    set_stage_progress(#plan_scores, #plan_scores)
+    set_stage_progress(#generated_scores, #generated_scores)
 
     Stage.set("complete")
     return {
       success = true,
       status = "created",
-      message = "Scorecard and scores created from question export",
+      message = "Scorecard and AI-generated scores created from question export",
       scorecard_id = created_scorecard_id,
       score_ids = created_score_ids,
-      plan = {scorecard = normalized_scorecard, scores = plan_scores}
+      plan = plan
     }
   end
 
   Specification([[
-  Feature: JSON-native scorecard migration procedure
+  Feature: AI-generated JSON-native scorecard migration procedure
     Scenario: Procedure initializes
       Given the procedure has started
 
@@ -720,14 +1038,15 @@ code: |
     input = {
       questions_export_json = field.string{},
       questions_export_path = field.string{},
+      reference_scorecard_identifier = field.string{required = true},
       target_scorecard_name = field.string{required = true},
       target_scorecard_key = field.string{},
       target_scorecard_external_id = field.string{},
       target_scorecard_description = field.string{},
       account_identifier = field.string{default = "default"},
-      model_name = field.string{default = "gpt-5-mini-2025-08-07"},
+      model_name = field.string{default = "gpt-5"},
       model_provider = field.string{default = "ChatOpenAI"},
-      reasoning_effort = field.string{default = "low"},
+      reasoning_effort = field.string{default = "medium"},
       max_scores = field.number{default = 0},
       dry_run = field.boolean{default = false},
       require_approval = field.boolean{default = true}

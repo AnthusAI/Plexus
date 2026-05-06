@@ -40,10 +40,22 @@
       "author": "derek",
       "text": "Root cause from local run: execute_tactus nested snippet failed at parse-time because the child snippet referenced global Json (nil in that parse path). Fix: call_plexus_api now serializes args to native Lua table literals and builds snippets without Json.encode/decode dependency.",
       "created_at": "2026-05-06T23:36:50.754110835Z"
+    },
+    {
+      "id": "393a603d-447a-486a-ac56-458805f0e609",
+      "author": "derek",
+      "text": "Implementing full two-pass AI generation architecture now: add required reference_scorecard_identifier, add generator+critic agents, deterministic worklist ordering, strict JSON handoff via done() schema, execute_tactus-only reads/writes, single approval gate, enriched plan output metadata/generated_scores.",
+      "created_at": "2026-05-06T23:48:30.881063805Z"
+    },
+    {
+      "id": "5886e2d0-ea5c-44e4-a5e7-71937c8dfc76",
+      "author": "derek",
+      "text": "Implementation complete in code; runtime validation in this agent environment is blocked by split-brained Python env (conda vs Poetry), so local user validation in canonical Poetry env is required for dry-run/apply smoke tests.",
+      "created_at": "2026-05-06T23:51:36.531977535Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-06T23:36:50.754110835Z",
+  "updated_at": "2026-05-06T23:51:36.531977535Z",
   "closed_at": null,
   "custom": {}
 }
