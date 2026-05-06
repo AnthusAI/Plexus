@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "Implemented standard plexus predict ScoreResult persistence and tightened the private proxy scoring integration to assert create/readback of local PostgreSQL ScoreResults. Verified with Docker scoring integration against suco_home_improvement / blind_transfer_ai: prediction value Yes, ScoreResult persisted locally, and proxy debug showed 8 upstream control-plane requests with 0 private roots forwarded.",
       "created_at": "2026-05-06T12:30:11.663631Z"
+    },
+    {
+      "id": "fb9da607-af40-459a-b556-f2da9586e273",
+      "author": "ryan",
+      "text": "Final review note: the accepted implementation persists ScoreResult from the normal plexus predict CLI path, not a special harness-only shortcut. The integration test now seeds private Item/Identifier rows through the proxy, runs plexus predict with PLEXUS_API_URL pointed at the proxy, verifies the returned score_result_id with getScoreResult/listScoreResultByItemId, and checks proxy diagnostics for zero private upstream roots.",
+      "created_at": "2026-05-06T12:43:37.661128Z"
     }
   ],
   "created_at": "2026-05-06T12:22:54.112564Z",
-  "updated_at": "2026-05-06T12:30:11.676838Z",
+  "updated_at": "2026-05-06T12:43:37.661128Z",
   "closed_at": "2026-05-06T12:30:11.676838Z",
   "custom": {}
 }
