@@ -55,6 +55,10 @@ params:
     type: boolean
     default: false
     description: "If true, return plan only and do not create/update in Plexus"
+  require_approval:
+    type: boolean
+    default: true
+    description: "If true, require Human.approve before write operations"
 
 outputs:
   success:
@@ -341,6 +345,7 @@ code: |
   local function run(input)
     local params = input
     local dry_run = to_bool(params.dry_run, false)
+    local require_approval = to_bool(params.require_approval, true)
 
     local export_json = trim(params.questions_export_json)
     if not has_text(export_json) and has_text(params.questions_export_path) then
@@ -472,21 +477,23 @@ code: |
       return {success = true, status = "planned", message = "Dry run - no changes applied", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
     end
 
-    Stage.set("approval")
-    local approved = Human.approve({
-      message = "Approve scorecard migration execution?",
-      context = {
-        scorecard = normalized_scorecard,
-        score_count = #plan_scores,
-        first_scores = {plan_scores[1], plan_scores[2], plan_scores[3]},
-        dry_run = false
-      },
-      timeout = 7200,
-      default = false
-    })
+    if require_approval then
+      Stage.set("approval")
+      local approved = Human.approve({
+        message = "Approve scorecard migration execution?",
+        context = {
+          scorecard = normalized_scorecard,
+          score_count = #plan_scores,
+          first_scores = {plan_scores[1], plan_scores[2], plan_scores[3]},
+          dry_run = false
+        },
+        timeout = 7200,
+        default = false
+      })
 
-    if not approved then
-      return {success = false, status = "rejected", message = "Human rejected migration", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
+      if not approved then
+        return {success = false, status = "rejected", message = "Human rejected migration", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
+      end
     end
 
     Stage.set("act")
@@ -560,7 +567,8 @@ code: |
       model_provider = field.string{default = "ChatOpenAI"},
       reasoning_effort = field.string{default = "low"},
       max_scores = field.number{default = 0},
-      dry_run = field.boolean{default = false}
+      dry_run = field.boolean{default = false},
+      require_approval = field.boolean{default = true}
     },
 
     output = {
