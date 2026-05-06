@@ -1,0 +1,25 @@
+{
+  "id": "plx-7c9d263f-521d-4dae-9e3b-43d999e44720",
+  "title": "Stop report flicker from unstable report keys",
+  "description": "Report detail views are responding to real-time report/block subscriptions, but unstable Date.now-based React keys force report blocks to remount every render. Replace timestamp keys with stable keys so completed reports do not flicker or reload during subscription/refetch updates.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "edbd73bd-eaf5-4004-b047-5e2d95349fea",
+      "author": "ryan",
+      "text": "Implemented local fix: removed Date.now()-based React keys from report detail/block rendering, preserved backend block ids through report block transforms, and stopped fetchReportBlocks from writing a synthetic _lastUpdated timestamp. Focused ScoreChampionVersionTimeline test and dashboard typecheck pass.",
+      "created_at": "2026-05-03T13:43:24.144510Z"
+    }
+  ],
+  "created_at": "2026-05-03T13:42:35.937984Z",
+  "updated_at": "2026-05-03T13:43:24.144510Z",
+  "closed_at": null,
+  "custom": {}
+}

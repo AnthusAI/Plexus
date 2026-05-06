@@ -9,6 +9,7 @@ import { BlockRenderer } from './blocks/BlockRegistry'
 import { getClient } from '@/utils/amplify-client'
 import BlockDetails from './reports/BlockDetails'
 import { parseOutputString } from '@/lib/utils'
+import { TaskAuthorIndicator } from '@/components/ui/task-author-indicator'
 
 // Define the data structure for report tasks
 export interface ReportTaskData {
@@ -23,6 +24,7 @@ export interface ReportTaskData {
    * This is preferred over task.time when available
    */
   updatedAt?: string | null;
+  createdByUserId?: string | null;
   /** 
    * Markdown content of the report - shown in detail view 
    */
@@ -608,8 +610,13 @@ const ReportTask: React.FC<ReportTaskProps> = ({
             <div className="flex flex-col items-end flex-shrink-0">
               {variant === 'grid' ? (
                 <div className="flex flex-col items-center gap-1">
-                  <div className="text-muted-foreground">
-                    <FileBarChart className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                  <div className="flex items-center gap-2">
+                    <div data-testid="report-task-author-grid-slot" className="flex items-center">
+                      <TaskAuthorIndicator createdByUserId={task.data?.createdByUserId} />
+                    </div>
+                    <div className="text-muted-foreground">
+                      <FileBarChart className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
+                    </div>
                   </div>
                   <div className="text-xs text-muted-foreground text-center">Report</div>
                 </div>
@@ -640,6 +647,9 @@ const ReportTask: React.FC<ReportTaskProps> = ({
                         <X className="h-4 w-4" />
                       </button>
                     )}
+                  </div>
+                  <div data-testid="report-task-author-detail-slot" className="self-end">
+                    <TaskAuthorIndicator createdByUserId={task.data?.createdByUserId} className="mt-2" />
                   </div>
                 </>
               )}

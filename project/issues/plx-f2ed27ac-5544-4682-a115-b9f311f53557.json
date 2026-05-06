@@ -1,0 +1,18 @@
+{
+  "id": "plx-f2ed27ac-5544-4682-a115-b9f311f53557",
+  "title": "Fix report attribution to use parameters instead of metadata",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-05T22:44:02.652891Z",
+  "updated_at": "2026-05-05T22:46:13.292451Z",
+  "closed_at": "2026-05-05T22:46:13.292451Z",
+  "custom": {}
+}

@@ -30,6 +30,7 @@ from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
 from plexus.cli.scorecard.scorecards import resolve_account_identifier
 from plexus.cli.procedure.parameter_parser import ProcedureParameterParser
 from plexus.cli.procedure.builtin_procedures import is_builtin_procedure_id, get_builtin_procedure_yaml
+from plexus.attribution.actor_context import resolve_actor_context, set_runtime_actor_context
 
 logger = logging.getLogger(__name__)
 
@@ -502,7 +503,13 @@ class ProcedureService:
             # FIRST-B: Download code.tac from S3 if key is stored in metadata
             try:
                 import json as _json
-                meta = _json.loads(procedure.metadata or "{}") or {}
+                metadata_value = getattr(procedure, "metadata", None)
+                if isinstance(metadata_value, str):
+                    meta = _json.loads(metadata_value or "{}") or {}
+                elif isinstance(metadata_value, dict):
+                    meta = metadata_value
+                else:
+                    meta = {}
                 s3_key = meta.get("code_s3_key")
                 if s3_key:
                     from plexus.reports.s3_utils import download_procedure_code
@@ -909,14 +916,20 @@ class ProcedureService:
                                 experiment_context=context
                             )
 
-                        result = await execute_procedure(
-                            procedure_id=procedure_id,
-                            procedure_code=yaml_config,
-                            client=self.client,
-                            mcp_server=mcp_server,
-                            context=context,
-                            **options
+                        client_context = getattr(self.client, "context", None)
+                        actor_context = resolve_actor_context(
+                            runtime_override=client_context,
+                            explicit_source="agent",
                         )
+                        with set_runtime_actor_context(actor_context):
+                            result = await execute_procedure(
+                                procedure_id=procedure_id,
+                                procedure_code=yaml_config,
+                                client=self.client,
+                                mcp_server=mcp_server,
+                                context=context,
+                                **options
+                            )
 
                         return result
 
@@ -1128,6 +1141,8 @@ class ProcedureService:
                 number_of_samples=n_samples,
                 sampling_method="random",
                 procedure_id=procedure_id,
+                client=self.client,
+                account_id=account_id,
                 fresh=True,
                 use_yaml=True  # Use local YAML configuration
             )

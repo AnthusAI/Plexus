@@ -12,6 +12,7 @@ import { Hub } from 'aws-amplify/utils';
 import type { ScoreResult } from "@/types/evaluation";
 import type { AmplifyListResult } from "@/types/shared";
 import { convertToAmplifyTask, processTask } from './transformers';
+import { parseJsonObjectLoose, resolveCreatedByUserId } from './author-attribution';
 
 // Re-export the transformation functions for backward compatibility
 export { convertToAmplifyTask as transformAmplifyTask, processTask };
@@ -296,6 +297,7 @@ const EVALUATION_FIELDS = `
   isDatasetClassDistributionBalanced
   predictedClassDistribution
   isPredictedClassDistributionBalanced
+  createdByUserId
   taskId
   task {
     id
@@ -639,7 +641,9 @@ export function observeRecentEvaluations(
               const updatedEvaluation = {
                 ...evaluation,
                 scorecard: evaluation.scorecard || e.scorecard,
-                score: evaluation.score || e.score
+                score: evaluation.score || e.score,
+                createdByUserId: evaluation.createdByUserId ?? e.createdByUserId,
+                parameters: evaluation.parameters ?? e.parameters,
               };
               return updatedEvaluation;
             }
@@ -725,6 +729,7 @@ export function observeRecentEvaluations(
             isDatasetClassDistributionBalanced
             predictedClassDistribution
             isPredictedClassDistributionBalanced
+            createdByUserId
             taskId
             task {
               ...TaskFields
@@ -775,6 +780,7 @@ export function observeRecentEvaluations(
             isDatasetClassDistributionBalanced
             predictedClassDistribution
             isPredictedClassDistributionBalanced
+            createdByUserId
             taskId
             task {
               ...TaskFields
@@ -1153,6 +1159,12 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
   const currentBaselineEvaluationId = parsedMetadata && typeof parsedMetadata === 'object' && typeof (parsedMetadata as Record<string, unknown>).current_baseline === 'string'
     ? (parsedMetadata as Record<string, unknown>).current_baseline as string
     : null;
+  const parsedParameterObject = parseJsonObjectLoose(parsedParameters);
+  const parameterAttribution = (
+    parsedParameterObject?.attribution
+    && typeof parsedParameterObject.attribution === "object"
+    && !Array.isArray(parsedParameterObject.attribution)
+  ) ? (parsedParameterObject.attribution as Record<string, unknown>) : null;
 
   // Transform the evaluation into the format expected by components
   const transformedEvaluation: ProcessedEvaluation = {
@@ -1171,7 +1183,14 @@ export function transformEvaluation(evaluation: BaseEvaluation): ProcessedEvalua
       JSON.parse(evaluation.datasetClassDistribution) : evaluation.datasetClassDistribution,
     predictedClassDistribution: typeof evaluation.predictedClassDistribution === 'string' ?
       JSON.parse(evaluation.predictedClassDistribution) : evaluation.predictedClassDistribution,
-    scoreResults: transformedScoreResults
+    scoreResults: transformedScoreResults,
+    createdByUserId: resolveCreatedByUserId({
+      createdByUserId: (evaluation as any).createdByUserId,
+      legacyFallbacks: [
+        parameterAttribution?.requestUserId,
+        parameterAttribution?.userId,
+      ],
+    }),
   };
 
 
@@ -1243,6 +1262,7 @@ export type Evaluation = {
   scoreId?: string | null;
   scoreVersionId?: string | null;
   parameters?: string | null;
+  createdByUserId?: string | null;
 };
 
 // Add type definitions for subscription events

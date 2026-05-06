@@ -8,6 +8,12 @@ jest.mock('@/utils/amplify-client', () => ({
   })),
 }))
 
+jest.mock('@/components/ui/task-author-indicator', () => ({
+  TaskAuthorIndicator: ({ createdByUserId }: { createdByUserId?: string | null }) => (
+    <div data-testid="task-author-indicator-mock">{createdByUserId || ''}</div>
+  ),
+}))
+
 const makeData = (overrides: Partial<any> = {}) => ({
   id: 'e1',
   title: 'Eval',
@@ -73,6 +79,29 @@ describe('EvaluationTask memo behavior', () => {
 
     expect(screen.getByLabelText('Evaluation actions')).toBeInTheDocument()
     expect(container.querySelectorAll('br').length).toBe(0)
+  })
+
+  test('renders author slot in grid and detail variants when createdByUserId is present', () => {
+    const data = makeData({ createdByUserId: 'user-1' })
+    const { rerender } = render(
+      <EvaluationTask
+        variant="grid"
+        task={{ id:'id', type:'Accuracy Evaluation', scorecard:'', score:'', time:new Date().toISOString(), data }}
+      />
+    )
+
+    expect(screen.getByTestId('evaluation-task-author-grid-slot')).toBeInTheDocument()
+    expect(screen.getByText('user-1')).toBeInTheDocument()
+
+    rerender(
+      <EvaluationTask
+        variant="detail"
+        task={{ id:'id', type:'Accuracy Evaluation', scorecard:'', score:'', time:new Date().toISOString(), data }}
+      />
+    )
+
+    expect(screen.getByTestId('evaluation-task-author-detail-slot')).toBeInTheDocument()
+    expect(screen.getByText('user-1')).toBeInTheDocument()
   })
 
   test('grid header keeps split type label when no actions are present', () => {

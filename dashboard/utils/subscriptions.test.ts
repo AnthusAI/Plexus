@@ -193,7 +193,8 @@ describe('subscriptions', () => {
               listEvaluationByAccountIdAndUpdatedAt: {
                 items: [{
                   id: 'eval123',
-                  type: 'test'
+                  type: 'test',
+                  createdByUserId: 'user-123'
                 }]
               }
             }
@@ -226,6 +227,11 @@ describe('subscriptions', () => {
             expect(data.items[0].type).toBe('test');
           } else {
             expect(data.items[0].type).toBe('updated');
+            expect(data.items[0].createdByUserId).toBe('user-123');
+            const updateSubscriptionCall = mockClient.graphql.mock.calls.find(([options]: any[]) => (
+              String(options.query).includes('onUpdateEvaluation')
+            ));
+            expect(updateSubscriptionCall?.[0].query).toContain('createdByUserId');
             done();
           }
         },
@@ -337,4 +343,4 @@ describe('subscriptions', () => {
       expect(mockUnsubscribe).toHaveBeenCalledTimes(3);
     });
   });
-}); 
+});

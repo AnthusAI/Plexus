@@ -1,0 +1,25 @@
+{
+  "id": "plx-98cbc187-a70b-4dd0-b70d-4bef46bcd386",
+  "title": "Unify author attribution resolution for evaluations procedures and score versions",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8853b4ec-9139-473c-80ae-866cedd045d7",
+      "author": "ryan",
+      "text": "Implemented shared author resolver for createdByUserId -> metadata.attribution.requestUserId fallback, wired into evaluations/procedures transforms and score-version normalization, added TaskAuthorIndicator usage on score-version sidebar rows, and added frontend + backend attribution tests.",
+      "created_at": "2026-05-06T00:09:16.124872Z"
+    }
+  ],
+  "created_at": "2026-05-06T00:06:36.442889Z",
+  "updated_at": "2026-05-06T00:09:19.896500Z",
+  "closed_at": "2026-05-06T00:09:19.896500Z",
+  "custom": {}
+}

@@ -40,6 +40,30 @@ const formatReportDisplayName = (name?: string | null): string | null => {
   return name;
 };
 
+const parseReportParameters = (raw: any): Record<string, any> | null => {
+  if (!raw) return null;
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof raw === 'object') return raw as any;
+  return null;
+};
+
+const resolveReportAuthorUserId = (reportLike: { createdByUserId?: string | null; parameters?: any }): string | null => {
+  const explicit = typeof reportLike.createdByUserId === 'string' ? reportLike.createdByUserId.trim() : '';
+  if (explicit) return explicit;
+  const params = parseReportParameters(reportLike.parameters);
+  const attribution = params?.attribution && typeof params.attribution === 'object' ? params.attribution : null;
+  const requestUserId = typeof attribution?.requestUserId === 'string' ? attribution.requestUserId.trim() : '';
+  if (requestUserId) return requestUserId;
+  const userId = typeof attribution?.userId === 'string' ? attribution.userId.trim() : '';
+  return userId || null;
+};
+
 // Share link data type
 type ShareLinkData = {
   token: string;
@@ -91,6 +115,7 @@ export class ReportService {
               name
               createdAt
               updatedAt
+              createdByUserId
               parameters
               output
               accountId
@@ -225,6 +250,7 @@ export class ReportService {
                   name
                   createdAt
                   updatedAt
+                  createdByUserId
                   parameters
                   output
                   accountId
@@ -476,6 +502,7 @@ export function PublicReport({
                 configDescription: config?.description,
                 createdAt: report.createdAt,
                 updatedAt: report.updatedAt,
+                createdByUserId: resolveReportAuthorUserId(report),
                 output: report.output,
                 reportBlocks: reportBlocks
               },

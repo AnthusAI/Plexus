@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bdd01066-7f02-426b-97b5-95a54e282b3f",
+  "issue_id": "plx-d91b3a62-83d9-45c1-ac04-74b6afbbd8d9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T14:16:34.229Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Apply the same tuned curve smoothing used by ScoreChampionVersionTimeline to the optimization procedure task chart so procedure progress lines remain smooth but less overly curved.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 3,
+    "status": "open",
+    "title": "Tune optimizer procedure chart curve smoothing"
+  }
+}

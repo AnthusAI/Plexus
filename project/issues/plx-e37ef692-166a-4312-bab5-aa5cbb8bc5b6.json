@@ -1,0 +1,31 @@
+{
+  "id": "plx-e37ef692-166a-4312-bab5-aa5cbb8bc5b6",
+  "title": "Procedure child evaluations inherit parent actor context",
+  "description": "Bind runtime actor context at procedure execution boundary and pass parent client/account into procedure-triggered evaluation runs so child Evaluation records keep deterministic createdByUserId + metadata.attribution.requestUserId.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a478745c-8259-4de1-bd3e-ff3f8ebe5811",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5dc4597c-5ac7-4264-8194-85d0a044dba5",
+      "author": "ryan",
+      "text": "Starting implementation: 1) bind actor context around ProcedureService execute_procedure call, 2) pass parent client/account into run_accuracy_evaluation in _run_evaluation_for_procedure, 3) add/extend focused tests for wiring + attribution propagation.",
+      "created_at": "2026-05-06T00:28:19.123950Z"
+    },
+    {
+      "id": "b064e6d7-540e-4c7d-9571-94455ec79c44",
+      "author": "ryan",
+      "text": "Implemented core propagation changes: ProcedureService now resolves actor from client context and wraps execute_procedure inside set_runtime_actor_context; _run_evaluation_for_procedure now passes client=self.client and account_id to run_accuracy_evaluation. Added tests in plexus/cli/procedure/test_service_actor_attribution.py for both behaviors, and extended evaluation attribution assertion to include metadata.attribution.requestUserId. Local focused tests passed: test_service_actor_attribution.py (2), evaluation_test.py (6). execute_test actor-context subset could not run in this shell due missing fastmcp dependency.",
+      "created_at": "2026-05-06T00:29:56.704454Z"
+    }
+  ],
+  "created_at": "2026-05-06T00:28:15.950382Z",
+  "updated_at": "2026-05-06T00:29:56.704454Z",
+  "closed_at": null,
+  "custom": {}
+}
