@@ -9,6 +9,8 @@ a separate server process.
 import pytest
 import asyncio
 import json
+import os
+import sys
 from unittest.mock import Mock, patch
 from plexus.cli.procedure.mcp_transport import (
     _advance_task_to_stage_by_name,
@@ -248,6 +250,62 @@ class TestEmbeddedMCPServer:
             content_text = result["content"][0]["text"]
             response_data = json.loads(content_text)
             assert "Logged message at info level" in response_data["message"]
+
+    @pytest.mark.asyncio
+    async def test_execute_tactus_receives_experiment_context(self, monkeypatch):
+        """Console account context should be passed into nested execute_tactus."""
+        project_root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        )
+        mcp_path = os.path.join(project_root, "MCP")
+        if mcp_path not in sys.path:
+            sys.path.insert(0, mcp_path)
+
+        from tools.tactus_runtime import execute as tactus_execute
+
+        captured: dict = {}
+
+        async def fake_execute_tactus_tool(
+            tactus,
+            mcp,
+            *,
+            ctx=None,
+            trace_store=None,
+            handle_store=None,
+            budget=None,
+            runtime_context=None,
+            **_kwargs,
+        ):
+            captured["tactus"] = tactus
+            captured["runtime_context"] = runtime_context
+            return {
+                "ok": True,
+                "value": {"seen_account": runtime_context.get("account_id")},
+                "error": None,
+                "cost": {},
+                "trace_id": "trace-1",
+                "partial": False,
+                "api_calls": [],
+            }
+
+        monkeypatch.setattr(
+            tactus_execute, "_execute_tactus_tool", fake_execute_tactus_tool
+        )
+
+        server = EmbeddedMCPServer(
+            {"procedure_id": "proc-1", "account_id": "acct-console"}
+        )
+        server.register_plexus_tools([])
+        await server.transport.initialize({"name": "Test"})
+
+        result = await server.transport.call_tool(
+            "execute_tactus", {"tactus": "return 1"}
+        )
+
+        response_data = json.loads(result["content"][0]["text"])
+        assert response_data["value"]["seen_account"] == "acct-console"
+        assert captured["tactus"] == "return 1"
+        assert captured["runtime_context"]["account_id"] == "acct-console"
     
     @pytest.mark.asyncio
     async def test_connection_context_manager(self, server):
