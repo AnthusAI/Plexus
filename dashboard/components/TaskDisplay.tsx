@@ -58,6 +58,7 @@ interface TaskDisplayProps {
     scoreVersionId?: string | null | undefined
     dataSetId?: string | null | undefined
     parameters?: string | null
+    createdByUserId?: string | null
     baseline_evaluation_id?: string | null
     current_baseline_evaluation_id?: string | null
   }
