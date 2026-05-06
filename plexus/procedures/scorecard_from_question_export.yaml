@@ -79,12 +79,12 @@ outputs:
 agents:
   observer:
     system_prompt: |
-      You are the Observe agent. Call plexus_scorecard_info exactly once and return.
+      You are the Observe agent. Call plexus.scorecards.info exactly once and return.
       Do not invent results.
     initial_message: |
-      Call plexus_scorecard_info with the provided identifier.
+      Call plexus.scorecards.info with the provided identifier.
     tools:
-      - plexus_scorecard_info
+      - plexus
 
   actor:
     system_prompt: |
@@ -285,7 +285,7 @@ code: |
     end
 
     local ok, result = pcall(function()
-      return plexus_scorecard_info({scorecard_identifier = tostring(identifier)})
+      return plexus.scorecards.info({scorecard_identifier = tostring(identifier)})
     end)
     if not ok then
       local err_text = string.lower(tostring(result or ""))
