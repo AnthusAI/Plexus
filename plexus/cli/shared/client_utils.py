@@ -9,6 +9,7 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.client import ClientContext
 import os
 from plexus.config.loader import load_config
+from plexus.attribution.actor_context import resolve_actor_context
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +36,14 @@ def create_client() -> PlexusDashboardClient:
         or os.getenv('PLEXUS_API_KEY')
     )
 
-    # Create context with the key
-    context = ClientContext(account_key=account_key)
+    actor = resolve_actor_context(explicit_source="cli")
+    context = ClientContext(
+        account_key=account_key,
+        actor_user_id=actor.user_id,
+        actor_type=actor.actor_type,
+        actor_key=actor.actor_key,
+        actor_source=actor.actor_source,
+    )
     
     # Pass context to the client constructor
     client = PlexusDashboardClient(api_url=api_url, api_key=api_key, context=context)

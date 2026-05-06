@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "abc54dcc-9055-4840-bbf7-b4c7cb483878",
+  "issue_id": "plx-f2ed27ac-5544-4682-a115-b9f311f53557",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-05T22:44:02.653Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix report attribution to use parameters instead of metadata"
+  }
+}

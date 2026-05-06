@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "27914f21-ba0c-41c2-b73a-ce260b332fb8",
+  "issue_id": "plx-f194840f-676f-4f1b-ac7b-47c19c03ed69",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-05T21:56:51.179Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implement shared actor context resolution and auto-tagging for createdByUserId + metadata.attribution across execute_tactus, CLI, and model create paths; includes schema update for Evaluation/Report metadata and tests.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Cross-model actor attribution for eval/report/procedure/scoreversion"
+  }
+}

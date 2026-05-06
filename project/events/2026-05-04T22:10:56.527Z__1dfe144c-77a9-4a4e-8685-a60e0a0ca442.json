@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1dfe144c-77a9-4a4e-8685-a60e0a0ca442",
+  "issue_id": "plx-d70f269c-e751-437f-8d0a-887cfa054299",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-04T22:10:56.527Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Show attributed user avatars on chat messages"
+  }
+}

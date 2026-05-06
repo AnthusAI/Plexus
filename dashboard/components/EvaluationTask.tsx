@@ -21,6 +21,7 @@ import { BaseTaskData } from '@/types/base'
 import { EvaluationListAccuracyBar } from '@/components/EvaluationListAccuracyBar'
 import isEqual from 'lodash/isEqual'
 import { ScoreResultComponent, ScoreResultData } from '@/components/ui/score-result'
+import { TaskAuthorIndicator } from '@/components/ui/task-author-indicator'
 import { cn } from '@/lib/utils'
 import { Timestamp } from '@/components/ui/timestamp'
 import { RelatedResourceCard } from '@/components/ui/related-resource-card'
@@ -205,6 +206,7 @@ export interface EvaluationTaskData extends BaseTaskData {
   baseline_evaluation_id?: string | null
   current_baseline_evaluation_id?: string | null
   dataSetId?: string | null
+  createdByUserId?: string | null
 }
 
 export interface EvaluationTaskProps extends Omit<BaseTaskProps<EvaluationTaskData>, 'variant'> {
@@ -2778,6 +2780,9 @@ ${categoryLines}${mechanicalLines}
               {variant === 'grid' ? (
                 <div className="flex flex-col items-center gap-1">
                   <div className="flex items-center gap-2">
+                    <div data-testid="evaluation-task-author-grid-slot" className="flex items-center">
+                      <TaskAuthorIndicator createdByUserId={data.createdByUserId} />
+                    </div>
                     {!hasGridActions && (
                       <div className="text-muted-foreground">
                         <FlaskConical className="h-[2.25rem] w-[2.25rem]" strokeWidth={1.25} />
@@ -2834,8 +2839,13 @@ ${categoryLines}${mechanicalLines}
                   )}
                 </div>
               ) : (
-                <div className="flex gap-2">
-                  {headerContent}
+                <div className="flex flex-col items-end gap-2">
+                  <div className="flex gap-2">
+                    {headerContent}
+                  </div>
+                  <div data-testid="evaluation-task-author-detail-slot" className="self-end">
+                    <TaskAuthorIndicator createdByUserId={data.createdByUserId} />
+                  </div>
                 </div>
               )}
             </div>

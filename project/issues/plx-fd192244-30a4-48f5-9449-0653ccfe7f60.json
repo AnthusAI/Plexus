@@ -1,0 +1,25 @@
+{
+  "id": "plx-fd192244-30a4-48f5-9449-0653ccfe7f60",
+  "title": "Fix evaluation author attribution fallback from parameters",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1653d632-d51f-49de-8975-819c399294f4",
+      "author": "ryan",
+      "text": "Patched evaluation author resolution to fallback from parameters.attribution.requestUserId/userId in both dashboard transform paths (evaluations-dashboard local and shared data-operations transform); added regression test in data-operations.test.ts and validated focused Jest tests.",
+      "created_at": "2026-05-06T00:21:55.958069Z"
+    }
+  ],
+  "created_at": "2026-05-06T00:20:57.700715Z",
+  "updated_at": "2026-05-06T00:21:59.668162Z",
+  "closed_at": "2026-05-06T00:21:59.668162Z",
+  "custom": {}
+}

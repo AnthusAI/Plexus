@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d5044288-5ae0-42ad-ae60-9918b893e71c",
+  "issue_id": "plx-6ba6fd03-f9d7-4e95-ab64-1f8372f680c0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-03T14:13:54.688Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Adjust ScoreChampionVersionTimeline line interpolation to reduce excessive Bezier-like curvature while keeping lines smoother than sharp angular turns.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 3,
+    "status": "open",
+    "title": "Tune champion timeline curve smoothing"
+  }
+}

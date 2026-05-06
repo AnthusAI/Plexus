@@ -1,0 +1,25 @@
+{
+  "id": "plx-1f06a6d6-a6c6-4930-9afa-24290cbbe838",
+  "title": "Add combined champion timeline hover summary",
+  "description": "Add an x-axis driven tooltip to the combined ScoreChampionVersionTimeline chart. The hover should list all score champion changes in the hovered time bucket and show before, delta, and after for alignment and accuracy without overwhelming detail.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3f533931-d3da-4329-af6d-a4ebd71f3002",
+      "author": "ryan",
+      "text": "Implemented combined timeline hover tooltip. The combined chart now uses an x-axis tooltip grouped by transition day, listing all scores with champion changes in that bucket and showing before/delta/after for available AC1 and accuracy metrics by dataset. Focused Jest test and dashboard typecheck pass.",
+      "created_at": "2026-05-03T14:01:19.357037Z"
+    }
+  ],
+  "created_at": "2026-05-03T13:59:17.345636Z",
+  "updated_at": "2026-05-03T14:01:19.357037Z",
+  "closed_at": null,
+  "custom": {}
+}

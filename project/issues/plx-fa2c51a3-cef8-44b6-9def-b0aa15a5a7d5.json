@@ -1,0 +1,25 @@
+{
+  "id": "plx-fa2c51a3-cef8-44b6-9def-b0aa15a5a7d5",
+  "title": "Fix report block placeholder matching for champion timeline",
+  "description": "The existing Suco ScoreChampionVersionTimeline report has a valid ReportBlock, but the dashboard can render the markdown placeholder as 'Block data not available'. Fix ReportTask block matching so existing programmatic report blocks match their markdown placeholders reliably without re-running the report.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ed31d98b-3577-4222-8039-5b50531bae99",
+      "author": "ryan",
+      "text": "Verified persisted Suco report e71e98eb-449f-4fb9-b360-22b344329779 still has a valid ScoreChampionVersionTimeline block and S3 output attachment, so no report rerun is required. Patched ReportTask block matching to allow the explicit markdown block name to match the ReportBlock record, while using the markdown class as the renderer type. Focused ScoreChampionVersionTimeline Jest test and dashboard typecheck pass.",
+      "created_at": "2026-05-03T14:06:33.556069Z"
+    }
+  ],
+  "created_at": "2026-05-03T14:05:31.643058Z",
+  "updated_at": "2026-05-03T14:06:33.556069Z",
+  "closed_at": null,
+  "custom": {}
+}
