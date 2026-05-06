@@ -3018,6 +3018,25 @@ def test_default_report_runner_launches_score_champion_timeline_command(monkeypa
     ]
 
 
+def test_default_report_runner_rejects_unknown_block_class_for_local_dispatch(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "local")
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+
+    with pytest.raises(ValueError) as exc:
+        execute._default_report_runner(
+            {
+                "block_class": "UnknownReportBlock",
+                "block_config": {"scorecard": "Card"},
+            }
+        )
+
+    assert "Unsupported block_class for local report dispatch" in str(exc.value)
+
+
 def test_report_run_blocking_requires_handle_protocol() -> None:
     module = execute.PlexusRuntimeModule(FastMCP("test"))
 

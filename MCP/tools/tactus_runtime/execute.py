@@ -3348,15 +3348,30 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
         import sys
         import json as _json
 
+        report_cli_by_block = {
+            "FeedbackAlignment": "alignment",
+            "FeedbackContradictions": "contradictions",
+            "AcceptanceRate": "acceptance-rate",
+            "CorrectionRate": "correction-rate",
+            "ScoreChampionVersionTimeline": "score-champion-version-timeline",
+        }
+        report_cli_subcommand = report_cli_by_block.get(str(block_class))
+        if not report_cli_subcommand:
+            allowed = ", ".join(sorted(report_cli_by_block.keys()))
+            raise ValueError(
+                f"Unsupported block_class for local report dispatch: {block_class!r}. "
+                f"Supported values: {allowed}"
+            )
+
         cmd = [
-            sys.executable, "-m", "plexus", "feedback", "report", "alignment"
-            if block_class == "FeedbackAlignment" else
-            "contradictions" if block_class == "FeedbackContradictions" else
-            "acceptance-rate" if block_class == "AcceptanceRate" else
-            "correction-rate" if block_class == "CorrectionRate" else
-            "score-champion-version-timeline" if block_class == "ScoreChampionVersionTimeline" else
-            "recent",
-            "--scorecard", str(block_config.get("scorecard", "")),
+            sys.executable,
+            "-m",
+            "plexus",
+            "feedback",
+            "report",
+            report_cli_subcommand,
+            "--scorecard",
+            str(block_config.get("scorecard", "")),
         ]
         if block_config.get("score"):
             cmd += ["--score", str(block_config["score"])]
