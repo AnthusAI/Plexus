@@ -1,0 +1,25 @@
+{
+  "id": "plx-3dba895a-229d-4028-a938-c642c2e71652",
+  "title": "Batch per-score summary generation for Scorecard History",
+  "description": "Implement batched per-score LLM summary generation with strict merge/validation and tests for large scorecard windows.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2029fa8f-71b6-4145-bfbd-53d22c27d150",
+      "author": "ryan",
+      "text": "Implemented per-score summary batching with payload+count limits, strict merge validation, adaptive split retries for failed segments, and added backend tests for batching/failure scenarios. Verified Suco 14-day report now completes successfully.",
+      "created_at": "2026-05-06T03:13:43.054430Z"
+    }
+  ],
+  "created_at": "2026-05-06T03:00:50.535525Z",
+  "updated_at": "2026-05-06T03:13:46.933576Z",
+  "closed_at": "2026-05-06T03:13:46.933576Z",
+  "custom": {}
+}

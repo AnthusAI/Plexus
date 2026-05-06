@@ -105,6 +105,21 @@ def _per_score_summary_response(*score_ids):
     })
 
 
+def _structured_summary_text(label: str = "Stakeholder-facing change summary.") -> str:
+    return (
+        "- **What changed**\n"
+        f"  - {label}\n"
+        "- **Guideline / rubric changes**\n"
+        "  - Rubric wording clarified for this score.\n"
+        "- **Scoring behavior changes**\n"
+        "  - Scoring behavior was tightened for ambiguous cases.\n"
+        "- **Questions for SMEs / stakeholders**\n"
+        "  - Should borderline inferred cases pass without explicit confirmation?\n"
+        "- **Rollout and evidence**\n"
+        "  - Champion coverage is some for this score."
+    )
+
+
 def _block(config, api_client):
     return ScorecardHistory(config=config, params={"account_id": "acct-1"}, api_client=api_client)
 
@@ -430,7 +445,7 @@ async def test_uses_llm_summary_and_score_summaries(mock_api_client):
     assert "Generate one stakeholder-facing summary per score" in second_prompt
     assert '"champion_coverage": "none"' in second_prompt
     assert "**Questions for SMEs / stakeholders**" in second_prompt
-    assert "do not include version IDs" in second_prompt
+    assert "do not include version ids" in second_prompt.lower()
     assert "YAML" in second_prompt
     assert "rubric meaning, policy clarity, and operational impact" in second_system_prompt
     assert output["summary"]["text"] == "Overall LLM summary."
@@ -755,3 +770,180 @@ def test_extracts_nested_tactus_message_text(mock_api_client):
     })
 
     assert extracted == "{\"overall_summary\":\"Overall.\",\"score_summaries\":{}}"
+
+
+@pytest.mark.asyncio
+async def test_generate_per_score_summaries_batches_large_scope(mock_api_client):
+    block = _block({"scorecard": "sc-1"}, mock_api_client)
+    score_summaries = [
+        {
+            "score_id": f"score-{index}",
+            "score_name": f"Score {index}",
+            "versions": [],
+            "sme_question_context": [],
+            "evaluation_context": {},
+            "champion_coverage": "none",
+            "featured_version_count": 1,
+            "champion_version_count": 0,
+            "guideline_change_count": 0,
+            "code_change_count": 1,
+        }
+        for index in range(1, 10)
+    ]
+
+    async def _batch_response(*, score_summaries, **_kwargs):
+        ids = [score["score_id"] for score in score_summaries]
+        return _per_score_summary_response(*ids)
+
+    with patch.object(block, "_generate_per_score_summary_payload", new=AsyncMock(side_effect=_batch_response)) as run_batch:
+        summaries = await block._generate_per_score_summaries_batched(
+            scorecard_name="Scorecard",
+            mode="scorecard_all_scores",
+            start_date=datetime(2026, 4, 1, tzinfo=timezone.utc),
+            end_date=datetime(2026, 4, 30, tzinfo=timezone.utc),
+            score_summaries=score_summaries,
+        )
+
+    assert set(summaries.keys()) == {f"score-{index}" for index in range(1, 10)}
+    assert run_batch.await_count == 3
+    batch_sizes = [len(call.kwargs["score_summaries"]) for call in run_batch.await_args_list]
+    assert batch_sizes == [4, 4, 1]
+
+
+@pytest.mark.asyncio
+async def test_generate_per_score_summaries_batch_missing_ids_raises_with_batch_context(mock_api_client):
+    block = _block({"scorecard": "sc-1"}, mock_api_client)
+    score_summaries = [
+        {"score_id": "score-1"},
+        {"score_id": "score-2"},
+        {"score_id": "score-3"},
+        {"score_id": "score-4"},
+        {"score_id": "score-5"},
+    ]
+    valid_first_batch = _per_score_summary_response("score-1", "score-2", "score-3", "score-4")
+    invalid_second_batch = json.dumps({"per_score_summaries": {}})
+
+    with patch.object(
+        block,
+        "_generate_per_score_summary_payload",
+        new=AsyncMock(side_effect=[valid_first_batch, invalid_second_batch]),
+    ):
+        with pytest.raises(ValueError) as exc_info:
+            await block._generate_per_score_summaries_batched(
+                scorecard_name="Scorecard",
+                mode="scorecard_all_scores",
+                start_date=datetime(2026, 4, 1, tzinfo=timezone.utc),
+                end_date=datetime(2026, 4, 30, tzinfo=timezone.utc),
+                score_summaries=score_summaries,
+            )
+
+    message = str(exc_info.value)
+    assert "batch 2/2" in message
+    assert "missing score ids" in message
+    assert "score-5" in message
+
+
+@pytest.mark.asyncio
+async def test_generate_per_score_summaries_adaptively_splits_failed_batch(mock_api_client):
+    block = _block({"scorecard": "sc-1"}, mock_api_client)
+    score_summaries = [{"score_id": f"score-{index}"} for index in range(1, 5)]
+
+    async def _batch_response(*, score_summaries, **_kwargs):
+        ids = [score["score_id"] for score in score_summaries]
+        if ids == ["score-1", "score-2", "score-3", "score-4"]:
+            return _per_score_summary_response("score-1")
+        return _per_score_summary_response(*ids)
+
+    with patch.object(block, "_generate_per_score_summary_payload", new=AsyncMock(side_effect=_batch_response)) as run_batch:
+        summaries = await block._generate_per_score_summaries_batched(
+            scorecard_name="Scorecard",
+            mode="scorecard_all_scores",
+            start_date=datetime(2026, 4, 1, tzinfo=timezone.utc),
+            end_date=datetime(2026, 4, 30, tzinfo=timezone.utc),
+            score_summaries=score_summaries,
+        )
+
+    assert set(summaries.keys()) == {"score-1", "score-2", "score-3", "score-4"}
+    assert run_batch.await_count == 3
+    requested_id_sets = [
+        [score["score_id"] for score in call.kwargs["score_summaries"]]
+        for call in run_batch.await_args_list
+    ]
+    assert requested_id_sets == [
+        ["score-1", "score-2", "score-3", "score-4"],
+        ["score-1", "score-2"],
+        ["score-3", "score-4"],
+    ]
+
+
+@pytest.mark.asyncio
+async def test_generate_per_score_summaries_duplicate_ids_across_batches_raises(mock_api_client):
+    block = _block({"scorecard": "sc-1"}, mock_api_client)
+    score_summaries = [
+        {"score_id": "score-1"},
+        {"score_id": "score-2"},
+        {"score_id": "score-3"},
+        {"score_id": "score-4"},
+        {"score_id": "score-5"},
+    ]
+
+    with patch.object(
+        block,
+        "_generate_per_score_batch_with_adaptive_split",
+        new=AsyncMock(side_effect=[
+            {"score-1": _structured_summary_text()},
+            {"score-1": _structured_summary_text("Duplicate summary")},
+        ]),
+    ):
+        with pytest.raises(ValueError) as exc_info:
+            await block._generate_per_score_summaries_batched(
+                scorecard_name="Scorecard",
+                mode="scorecard_all_scores",
+                start_date=datetime(2026, 4, 1, tzinfo=timezone.utc),
+                end_date=datetime(2026, 4, 30, tzinfo=timezone.utc),
+                score_summaries=score_summaries,
+            )
+
+    assert "duplicate score ids across batches" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_generate_reports_malformed_json_in_later_batch_as_report_error(mock_api_client):
+    block = _block(
+        {"scorecard": "sc-1", "start_date": "2026-04-01", "end_date": "2026-04-30"},
+        mock_api_client,
+    )
+    scorecard = SimpleNamespace(id="sc-1", name="Scorecard")
+    scopes = [
+        SimpleNamespace(score_id=f"score-{index}", score_name=f"Score {index}", champion_version_id=None)
+        for index in range(1, 6)
+    ]
+
+    versions_by_score = {
+        f"score-{index}": [_version(f"v{index}", score_id=f"score-{index}")]
+        for index in range(1, 6)
+    }
+
+    first_batch_per_score = _per_score_summary_response("score-1", "score-2", "score-3", "score-4")
+    malformed_second_batch = "{not-json}"
+
+    with (
+        patch.object(block, "_resolve_scorecard", new=AsyncMock(return_value=scorecard)),
+        patch.object(block, "_resolve_scores_for_mode", new=AsyncMock(return_value=scopes)),
+        patch.object(
+            block,
+            "_fetch_versions_for_score",
+            new=AsyncMock(side_effect=lambda score_id: versions_by_score[score_id]),
+        ),
+        patch.object(block, "_fetch_evaluations_for_version", new=AsyncMock(return_value=[])),
+        patch.object(
+            block,
+            "_run_tac_inference",
+            new=AsyncMock(side_effect=[_summary_response(*(scope.score_id for scope in scopes)), first_batch_per_score, malformed_second_batch]),
+        ),
+    ):
+        output, _ = await block.generate()
+
+    assert "batch 2/2" in output["error"]
+    assert "Expecting property name enclosed in double quotes" in output["error"]
+    assert output["scores"] == []
