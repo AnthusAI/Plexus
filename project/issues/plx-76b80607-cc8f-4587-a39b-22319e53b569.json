@@ -58,10 +58,22 @@
       "author": "derek.norrbom",
       "text": "Created branch `bugfix/tactus-0.48.1-alignment`, committed semantic-release patch commit `fix: align tactus 0.48.1 pins across app and lambda` (e58faaad), pushed to origin, and opened PR #301 targeting `develop`: https://github.com/AnthusAI/Plexus/pull/301.",
       "created_at": "2026-05-06T17:00:41.146836Z"
+    },
+    {
+      "id": "f8eef721-6960-4eaa-969f-92ea396669d0",
+      "author": "derek.norrbom",
+      "text": "CI lock mismatch remediation: regenerate poetry.lock with Poetry 1.8.5 (CI version) to restore compatibility and content-hash sync with pyproject.toml.",
+      "created_at": "2026-05-06T17:04:07.485717Z"
+    },
+    {
+      "id": "aa40507c-08eb-4af6-aeff-f7a84af5693b",
+      "author": "derek.norrbom",
+      "text": "CI remediation complete: regenerated poetry.lock with Poetry 1.8.5 (CI version). Verified with `poetry check --lock` and `poetry lock --check` under Poetry 1.8.5; lock is now consistent and compatible.",
+      "created_at": "2026-05-06T17:05:47.924591Z"
     }
   ],
   "created_at": "2026-05-06T16:40:28.371531Z",
-  "updated_at": "2026-05-06T17:00:41.146836Z",
-  "closed_at": "2026-05-06T16:56:32.188403Z",
+  "updated_at": "2026-05-06T17:05:47.938510Z",
+  "closed_at": "2026-05-06T17:05:47.938510Z",
   "custom": {}
 }
