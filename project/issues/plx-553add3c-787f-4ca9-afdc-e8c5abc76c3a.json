@@ -1,0 +1,37 @@
+{
+  "id": "plx-553add3c-787f-4ca9-afdc-e8c5abc76c3a",
+  "title": "Capture failing CI evidence and root cause",
+  "description": "Document failing main run, failing step, and exact Dockerfile path check mismatch.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7240082e-6d88-4d46-b1ba-c16e1af7acc0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2548b2d4-999d-4dd8-afb9-c03fb201f5bd",
+      "author": "derek",
+      "text": "Gathered evidence from GitHub Actions and Dockerfile. Next: finalize root-cause note and close this sub-task.",
+      "created_at": "2026-05-06T17:43:44.392771343Z"
+    },
+    {
+      "id": "7b14806b-d9c1-46bd-a247-642e34f39653",
+      "author": "derek",
+      "text": "Root cause confirmed from run 25446922375: Publish Console Worker Image failed during docker build at Dockerfile line 15 because it checked removed MCP files (scorecards.py, evaluations.py, chats.py). Since that step failed, branch env var update and release trigger steps were skipped for main.",
+      "created_at": "2026-05-06T17:51:12.473881070Z"
+    },
+    {
+      "id": "d9e50abb-264f-45a4-9258-9d3958873d54",
+      "author": "derek",
+      "text": "RCA complete.",
+      "created_at": "2026-05-06T17:51:16.738246433Z"
+    }
+  ],
+  "created_at": "2026-05-06T17:43:41.946564121Z",
+  "updated_at": "2026-05-06T17:51:16.765030182Z",
+  "closed_at": "2026-05-06T17:51:16.765030182Z",
+  "custom": {}
+}
