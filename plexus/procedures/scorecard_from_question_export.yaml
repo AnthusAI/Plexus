@@ -447,14 +447,19 @@ code: |
       description = scorecard_description
     }
 
+    if dry_run then
+      Stage.set("complete")
+      return {success = true, status = "planned", message = "Dry run - no changes applied", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
+    end
+
     Stage.set("approval")
     local approved = Human.approve({
-      message = dry_run and "Approve dry-run migration plan?" or "Approve scorecard migration execution?",
+      message = "Approve scorecard migration execution?",
       context = {
         scorecard = normalized_scorecard,
         score_count = #plan_scores,
         first_scores = {plan_scores[1], plan_scores[2], plan_scores[3]},
-        dry_run = dry_run
+        dry_run = false
       },
       timeout = 7200,
       default = false
@@ -462,10 +467,6 @@ code: |
 
     if not approved then
       return {success = false, status = "rejected", message = "Human rejected migration", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
-    end
-
-    if dry_run then
-      return {success = true, status = "planned", message = "Dry run - no changes applied", plan = {scorecard = normalized_scorecard, scores = plan_scores}}
     end
 
     Stage.set("act")
