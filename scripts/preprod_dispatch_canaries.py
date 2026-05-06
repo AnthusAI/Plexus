@@ -221,16 +221,34 @@ def _process_is_running(pid: int) -> bool:
 def _wait_task(client: Any, task_id: str, timeout_seconds: int, poll_seconds: float) -> Any:
     from plexus.dashboard.api.models.task import Task
 
-    def poll() -> Any:
+    deadline = time.time() + timeout_seconds
+    last_snapshot: dict[str, Any] = {"id": task_id, "state": "not_observed"}
+
+    while time.time() < deadline:
         task = Task.get_by_id(task_id, client)
         status = str(getattr(task, "status", "") or "").upper()
+        dispatch_status = str(getattr(task, "dispatchStatus", "") or "").upper()
+        last_snapshot = {
+            "id": task_id,
+            "status": status or None,
+            "dispatchStatus": dispatch_status or None,
+            "updatedAt": getattr(task, "updatedAt", None),
+            "errorMessage": getattr(task, "errorMessage", None),
+            "workerNodeId": getattr(task, "workerNodeId", None),
+            "target": getattr(task, "target", None),
+            "type": getattr(task, "type", None),
+        }
         if status in TERMINAL_BAD:
             raise RuntimeError(
-                f"Task {task_id} failed: {getattr(task, 'errorMessage', None)}"
+                f"Task {task_id} failed. Last state: {_json(last_snapshot)}"
             )
-        return task if status in TERMINAL_OK else None
+        if status in TERMINAL_OK:
+            return task
+        time.sleep(poll_seconds)
 
-    return _wait_until(f"task {task_id}", timeout_seconds, poll_seconds, poll)
+    raise RuntimeError(
+        f"Timed out waiting for task {task_id}. Last state: {_json(last_snapshot)}"
+    )
 
 
 def _create_report_block_task(cache_key: str) -> dict[str, Any]:
