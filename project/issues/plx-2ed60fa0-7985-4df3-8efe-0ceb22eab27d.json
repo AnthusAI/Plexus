@@ -1,0 +1,37 @@
+{
+  "id": "plx-2ed60fa0-7985-4df3-8efe-0ceb22eab27d",
+  "title": "Fix execute_tactus actor attribution import",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c90658a6-9bf8-47a1-b714-2b40bb543a30",
+      "author": "ryan",
+      "text": "CI failed on develop because execute_tactus uses apply_actor_attribution without importing it. Fixing the missing import and rerunning focused checks.",
+      "created_at": "2026-05-06T02:08:45.711249Z"
+    },
+    {
+      "id": "5a283f46-851e-49e5-b503-df4edcd980c3",
+      "author": "ryan",
+      "text": "Added the missing apply_actor_attribution import. Local checks passed: py_compile, flake8 E9/F fatal selection, and MCP/tools/tactus_runtime/execute_test.py.",
+      "created_at": "2026-05-06T02:09:11.962883Z"
+    },
+    {
+      "id": "8a94db89-e2d9-4578-8c24-111eb4b95bac",
+      "author": "ryan",
+      "text": "Closed after fixing the import and passing focused local checks.",
+      "created_at": "2026-05-06T02:09:19.348927Z"
+    }
+  ],
+  "created_at": "2026-05-06T02:08:40.405799Z",
+  "updated_at": "2026-05-06T02:09:19.348927Z",
+  "closed_at": "2026-05-06T02:09:19.336578Z",
+  "custom": {}
+}
