@@ -4104,8 +4104,11 @@ def _resolve_runtime_account_id(
             if getattr(client, "context", None) is not None:
                 try:
                     client.context.account_id = account_id
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(
+                        "Unable to set client.context.account_id during runtime account resolution",
+                        exc_info=exc,
+                    )
             return account_id
 
     account_identifier = args.get("account")
