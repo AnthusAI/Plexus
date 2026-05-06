@@ -1,0 +1,31 @@
+{
+  "id": "plx-758239bb-3e31-43d9-8682-78a7eca2e91c",
+  "title": "Fix score model test after unused import cleanup",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "84a0faa2-3d78-42b8-b6e8-d334fb62181a",
+      "author": "ryan",
+      "text": "Python CI fails because test_score patches plexus.dashboard.api.models.score.get_score_yaml_path after the unused import was removed. Updating the test to patch the live plexus.cli.shared dependency path.",
+      "created_at": "2026-05-06T02:20:17.995108Z"
+    },
+    {
+      "id": "e7c89f4b-0cc7-4d58-825b-9545ddd9f8a9",
+      "author": "ryan",
+      "text": "Updated test_error_handling_api_failures to patch plexus.cli.shared.get_score_yaml_path, matching the live dependency after removing the unused score.py import. Focused pytest, py_compile, and flake8 fatal-error selection passed.",
+      "created_at": "2026-05-06T02:20:36.657904Z"
+    }
+  ],
+  "created_at": "2026-05-06T02:20:13.831967Z",
+  "updated_at": "2026-05-06T02:20:36.672474Z",
+  "closed_at": "2026-05-06T02:20:36.672474Z",
+  "custom": {}
+}
