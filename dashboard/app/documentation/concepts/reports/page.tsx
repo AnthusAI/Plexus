@@ -128,6 +128,9 @@ plexus report last`}</code>
           <p className="text-muted-foreground mb-4">
             Explore how Reports integrate with other core concepts like Scores and Evaluations. Check the CLI documentation for detailed commands on managing and running reports, or browse the available report blocks to see what types of analysis you can include in your reports.
           </p>
+          <p className="text-muted-foreground mb-4">
+            For stakeholder update workflows, the <code>ScorecardHistory</code> report block summarizes featured score-version changes across a scorecard window, including champion coverage, high-level change summaries, and evaluation gauge context.
+          </p>
           <div className="flex gap-4">
             <Link href="/documentation/concepts">
               <DocButton variant="outline">Back to Core Concepts</DocButton>
