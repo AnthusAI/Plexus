@@ -10,7 +10,7 @@ import sys
 import traceback
 import socket
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from plexus.CustomLogging import logging
 from plexus.Registries import scorecard_registry
@@ -378,7 +378,7 @@ async def predict_impl(
                         tracker.current_stage.status_message = f"Running prediction for score: {score_name}"
                     
                     # Use centralized Scorecard path for dependency-aware predictions
-                    transcript, predictions, costs = await predict_score_with_individual_loading(
+                    scorecard_instance, predictions, costs = await predict_score_with_individual_loading(
                         scorecard_identifier, score_name, sample_row, used_item_id, no_cache=no_cache, yaml_only=yaml_only, specific_version=resolved_version
                     )
                     
@@ -397,6 +397,16 @@ async def predict_impl(
                                     row_result[f'{score_name}_trace'] = prediction.metadata.get('trace')
                                 else:
                                     row_result[f'{score_name}_trace'] = None
+                                score_result = persist_prediction_score_result(
+                                    scorecard_instance=scorecard_instance,
+                                    scorecard_identifier=scorecard_identifier,
+                                    score_name=score_name,
+                                    item_id=used_item_id,
+                                    prediction=prediction,
+                                    costs=costs,
+                                    trace=row_result[f'{score_name}_trace'],
+                                )
+                                row_result[f'{score_name}_score_result_id'] = score_result.id
                                 logging.info(f"Got predictions: {predictions}")
                         else:
                             # Handle Score.Result object
@@ -477,6 +487,16 @@ async def predict_impl(
                                     logging.warning(f"  ⚠️ No trace data found anywhere in predictions object")
                                 
                                 row_result[f'{score_name}_trace'] = trace
+                                score_result = persist_prediction_score_result(
+                                    scorecard_instance=scorecard_instance,
+                                    scorecard_identifier=scorecard_identifier,
+                                    score_name=score_name,
+                                    item_id=used_item_id,
+                                    prediction=predictions,
+                                    costs=costs,
+                                    trace=trace,
+                                )
+                                row_result[f'{score_name}_score_result_id'] = score_result.id
                                 logging.info(f"Got predictions: {predictions}")
                     else:
                         row_result[f'{score_name}_value'] = None
@@ -576,7 +596,7 @@ async def predict_impl(
                                 tracker.current_stage.status_message = f"Running prediction for score: {score_name}"
                                 tracker.update(current_items=current_prediction)
                             
-                            transcript, predictions, costs = await predict_score_with_individual_loading(
+                            scorecard_instance, predictions, costs = await predict_score_with_individual_loading(
                                 scorecard_identifier, score_name, sample_row, used_item_id, no_cache=no_cache, yaml_only=yaml_only, specific_version=resolved_version
                             )
                             
@@ -595,6 +615,16 @@ async def predict_impl(
                                             row_result[f'{score_name}_trace'] = prediction.metadata.get('trace')
                                         else:
                                             row_result[f'{score_name}_trace'] = None
+                                        score_result = persist_prediction_score_result(
+                                            scorecard_instance=scorecard_instance,
+                                            scorecard_identifier=scorecard_identifier,
+                                            score_name=score_name,
+                                            item_id=used_item_id,
+                                            prediction=prediction,
+                                            costs=costs,
+                                            trace=row_result[f'{score_name}_trace'],
+                                        )
+                                        row_result[f'{score_name}_score_result_id'] = score_result.id
                                         logging.info(f"Got predictions: {predictions}")
                                 else:
                                     # Handle Score.Result object
@@ -675,6 +705,16 @@ async def predict_impl(
                                             logging.warning(f"  ⚠️ No trace data found anywhere in predictions object")
                                         
                                         row_result[f'{score_name}_trace'] = trace
+                                        score_result = persist_prediction_score_result(
+                                            scorecard_instance=scorecard_instance,
+                                            scorecard_identifier=scorecard_identifier,
+                                            score_name=score_name,
+                                            item_id=used_item_id,
+                                            prediction=predictions,
+                                            costs=costs,
+                                            trace=trace,
+                                        )
+                                        row_result[f'{score_name}_score_result_id'] = score_result.id
                                         logging.info(f"Got predictions: {predictions}")
                             else:
                                 row_result[f'{score_name}_value'] = None
@@ -740,6 +780,7 @@ async def predict_impl(
                     for name in score_names:
                         score_data = {
                             'name': name,
+                            'score_result_id': result.get(f'{name}_score_result_id'),
                             'value': result.get(f'{name}_value'),
                             'explanation': result.get(f'{name}_explanation'),
                             'cost': result.get(f'{name}_cost'),
@@ -809,11 +850,14 @@ async def predict_impl(
                     
                     for name in score_names:
                         value = result.get(f'{name}_value')
+                        score_result_id = result.get(f'{name}_score_result_id')
                         explanation = result.get(f'{name}_explanation')
                         cost = result.get(f'{name}_cost')
                         trace = result.get(f'{name}_trace')
                         
                         rich.print(f"\n[bold cyan]{name} Score:[/bold cyan]")
+                        if score_result_id:
+                            rich.print(f"  [bold]ScoreResult ID:[/bold] {score_result_id}")
                         rich.print(f"  [bold]Value:[/bold] {value}")
                         if explanation:
                             rich.print(f"  [bold]Explanation:[/bold] {explanation}")
@@ -903,6 +947,7 @@ def output_excel(results, score_names, scorecard_identifier):
     columns = ['item_id', 'text']
     for name in score_names:
         columns.extend([
+            f'{name}_score_result_id',
             f'{name}_value',
             f'{name}_explanation',
             f'{name}_cost',
@@ -939,6 +984,146 @@ def output_excel(results, score_names, scorecard_identifier):
             cell.font = Font(bold=True)
 
     logging.info(f"Excel file '{filename}' has been created with the prediction results.")
+
+
+def _prediction_explanation(prediction: Any) -> str:
+    explanation = getattr(prediction, 'explanation', None)
+    if explanation:
+        return explanation
+    metadata = getattr(prediction, 'metadata', None)
+    if isinstance(metadata, dict):
+        return metadata.get('explanation', '') or ''
+    return ''
+
+
+def _prediction_score_id(prediction: Any) -> Optional[str]:
+    parameters = getattr(prediction, 'parameters', None)
+    score_id = getattr(parameters, 'id', None)
+    return str(score_id) if score_id else None
+
+
+def _scorecard_id_from_instance(scorecard_instance: Any) -> Optional[str]:
+    properties = getattr(scorecard_instance, 'properties', None)
+    if isinstance(properties, dict) and properties.get('id'):
+        return str(properties['id'])
+    scorecard_identifier = getattr(scorecard_instance, 'scorecard_identifier', None)
+    return str(scorecard_identifier) if scorecard_identifier else None
+
+
+def _score_version_id_from_instance(
+    scorecard_instance: Any,
+    score_name: str,
+    score_id: Optional[str],
+) -> Optional[str]:
+    for score_config in getattr(scorecard_instance, 'scores', []) or []:
+        if not isinstance(score_config, dict):
+            continue
+        identifiers = {
+            str(value)
+            for value in (
+                score_config.get('id'),
+                score_config.get('name'),
+                score_config.get('key'),
+                score_config.get('externalId'),
+                score_config.get('originalExternalId'),
+            )
+            if value
+        }
+        if (score_id and score_id in identifiers) or score_name in identifiers:
+            version_id = score_config.get('version') or score_config.get('championVersionId')
+            return str(version_id) if version_id else None
+    return None
+
+
+def persist_prediction_score_result(
+    *,
+    scorecard_instance: Any,
+    scorecard_identifier: str,
+    score_name: str,
+    item_id: str,
+    prediction: Any,
+    costs: Any,
+    trace: Any,
+) -> Any:
+    """Persist a successful `plexus predict` result through the configured GraphQL client."""
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.direct_memoized_resolvers import (
+        direct_memoized_resolve_score_identifier,
+        direct_memoized_resolve_scorecard_identifier,
+    )
+    from plexus.dashboard.api.models.score_result import ScoreResult
+
+    if not item_id:
+        raise ValueError("Cannot create ScoreResult without item_id")
+    if not hasattr(prediction, 'value') or prediction.value is None:
+        raise ValueError("Cannot create ScoreResult without prediction value")
+
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, None)
+    scorecard_id = (
+        direct_memoized_resolve_scorecard_identifier(client, scorecard_identifier)
+        or _scorecard_id_from_instance(scorecard_instance)
+    )
+    if not scorecard_id:
+        raise ValueError(f"Could not resolve scorecard ID for {scorecard_identifier}")
+
+    score_id = _prediction_score_id(prediction) or direct_memoized_resolve_score_identifier(
+        client,
+        scorecard_id,
+        score_name,
+    )
+    if not score_id:
+        raise ValueError(f"Could not resolve score ID for {score_name}")
+
+    score_version_id = _score_version_id_from_instance(scorecard_instance, score_name, score_id)
+
+    prediction_metadata = getattr(prediction, 'metadata', None)
+    metadata = {
+        "source": "plexus predict",
+        "scorecard_identifier": scorecard_identifier,
+        "score_name": score_name,
+        "item_id": item_id,
+    }
+    if isinstance(prediction_metadata, dict):
+        metadata["prediction_metadata"] = {
+            key: value
+            for key, value in prediction_metadata.items()
+            if key != "trace"
+        }
+
+    cost_payload = costs if isinstance(costs, dict) else None
+    if cost_payload is None and costs is not None:
+        cost_payload = {"total_cost": costs}
+
+    create_kwargs = {
+        "scoreId": score_id,
+        "explanation": _prediction_explanation(prediction),
+        "metadata": metadata,
+    }
+    confidence = getattr(prediction, 'confidence', None)
+    if confidence is not None:
+        create_kwargs["confidence"] = confidence
+    if score_version_id:
+        create_kwargs["scoreVersionId"] = score_version_id
+    if trace is not None:
+        create_kwargs["trace"] = trace
+    if cost_payload is not None:
+        create_kwargs["cost"] = cost_payload
+
+    score_result = ScoreResult.create(
+        client=client,
+        value=str(prediction.value),
+        itemId=item_id,
+        accountId=account_id,
+        scorecardId=scorecard_id,
+        type="prediction",
+        status="COMPLETED",
+        code=getattr(prediction, 'code', None) or "200",
+        **create_kwargs,
+    )
+    logging.info(f"Created ScoreResult {score_result.id} for item {item_id}, score {score_name}")
+    return score_result
 
 
 def select_sample(scorecard_identifier, score_name, item_identifier, fresh, compare_to_feedback=False, scorecard_id=None, score_id=None):
