@@ -52,10 +52,16 @@
       "author": "derek",
       "text": "Implementation complete in code; runtime validation in this agent environment is blocked by split-brained Python env (conda vs Poetry), so local user validation in canonical Poetry env is required for dry-run/apply smoke tests.",
       "created_at": "2026-05-06T23:51:36.531977535Z"
+    },
+    {
+      "id": "4f6568fc-22c1-4d82-879b-3a868f2ca2d8",
+      "author": "derek",
+      "text": "Local repro shows generator calls done(reason='Completed ...') instead of schema JSON, causing parse failure. Implementing robustness: require done() named-field payload, salvage JSON object from noisy reason text, and add corrective retry loop for generator/critic invalid outputs before failing.",
+      "created_at": "2026-05-06T23:58:18.416361637Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-06T23:51:36.531977535Z",
+  "updated_at": "2026-05-06T23:58:18.416361637Z",
   "closed_at": null,
   "custom": {}
 }
