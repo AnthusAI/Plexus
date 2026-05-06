@@ -1,0 +1,1 @@
+"""Private GraphQL proxy prototype."""
