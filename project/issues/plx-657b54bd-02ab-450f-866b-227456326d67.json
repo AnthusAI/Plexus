@@ -34,10 +34,16 @@
       "author": "derek",
       "text": "Regression identified from local run: Tactus runtime rejects procedures without agents (error: 'At least one agent must be defined'). Action: restore a minimal agent block for runtime compatibility while keeping execution path deterministic via execute_tactus-only API calls in Lua. This preserves One-Tool architecture and avoids actor follow-up loops.",
       "created_at": "2026-05-06T23:33:47.071850319Z"
+    },
+    {
+      "id": "e7ddc6ef-4619-4f70-8076-45f73809e9bd",
+      "author": "derek",
+      "text": "Root cause from local run: execute_tactus nested snippet failed at parse-time because the child snippet referenced global Json (nil in that parse path). Fix: call_plexus_api now serializes args to native Lua table literals and builds snippets without Json.encode/decode dependency.",
+      "created_at": "2026-05-06T23:36:50.754110835Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-06T23:33:47.071850319Z",
+  "updated_at": "2026-05-06T23:36:50.754110835Z",
   "closed_at": null,
   "custom": {}
 }
