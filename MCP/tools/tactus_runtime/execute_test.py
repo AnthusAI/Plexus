@@ -1723,6 +1723,36 @@ async def test_execute_tactus_writes_trace_for_runtime_error(monkeypatch) -> Non
     assert record["error"]["code"] == "runtime_error"
 
 
+@pytest.mark.asyncio
+async def test_execute_tactus_sets_runtime_actor_context_from_request_context(monkeypatch) -> None:
+    observed: dict[str, str] = {}
+
+    def fake_run_tactus_sync(tactus, mcp, *, trace_id, trace_store, budget=None, **kwargs):
+        actor = execute.resolve_actor_context(explicit_source="cli")
+        observed["user_id"] = actor.user_id or ""
+        observed["source"] = actor.actor_source
+        return {
+            "ok": True,
+            "value": {"ok": True},
+            "error": None,
+            "cost": {"usd": 0.0},
+            "trace_id": trace_id,
+            "partial": False,
+            "api_calls": [],
+        }
+
+    class _Ctx:
+        def __init__(self) -> None:
+            self.request_context = {"claims": {"sub": "user-ctx-123"}}
+
+    monkeypatch.setattr(execute, "_run_tactus_sync", fake_run_tactus_sync)
+    result = await execute._execute_tactus_tool("return 1", FastMCP("test"), ctx=_Ctx())
+
+    assert result["ok"] is True
+    assert observed["user_id"] == "user-ctx-123"
+    assert observed["source"] == "execute_tactus"
+
+
 def test_file_trace_store_writes_json_file_per_trace(tmp_path) -> None:
     store = execute.FileTactusTraceStore(str(tmp_path / "traces"))
     record = {
@@ -2113,18 +2143,26 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     monkeypatch.setattr("subprocess.Popen", fake_popen)
     monkeypatch.setattr("time.sleep", lambda _: None)
 
-    result = execute._default_evaluation_runner(
+    with execute.set_runtime_actor_context(
         {
-            "evaluation_type": "feedback",
-            "scorecard_name": "Compliance",
-            "score_name": "Tone",
-            "max_feedback_items": 25,
-            "days": 30,
-            "procedure_id": "proc-123",
-            "budget": _child_budget(),
-        },
-        FakeMCP(),
-    )
+            "actor_user_id": "user-ctx-123",
+            "actor_type": "agent",
+            "actor_key": "execute_tactus",
+            "actor_source": "execute_tactus",
+        }
+    ):
+        result = execute._default_evaluation_runner(
+            {
+                "evaluation_type": "feedback",
+                "scorecard_name": "Compliance",
+                "score_name": "Tone",
+                "max_feedback_items": 25,
+                "days": 30,
+                "procedure_id": "proc-123",
+                "budget": _child_budget(),
+            },
+            FakeMCP(),
+        )
 
     assert result["status"] == "dispatched"
     assert result["process_id"] == 4242
@@ -2152,6 +2190,7 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     ]
     assert captured["kwargs"]["start_new_session"] is True
     assert json.loads(captured["kwargs"]["env"]["PLEXUS_CHILD_BUDGET"]) == _child_budget()
+    assert json.loads(captured["kwargs"]["env"]["PLEXUS_ACTOR_CONTEXT_JSON"])["actor_user_id"] == "user-ctx-123"
     assert result["child_budget"] == _child_budget()
 
 
@@ -2239,6 +2278,45 @@ def test_handle_peek_marks_no_id_exited_process_failed(monkeypatch) -> None:
     assert snapshot["error"] == (
         "Evaluation subprocess exited before emitting an evaluation ID."
     )
+
+
+def test_handle_peek_marks_no_id_successful_process_failed_with_logs(
+    monkeypatch, tmp_path
+) -> None:
+    stdout_log = tmp_path / "eval.out.log"
+    stderr_log = tmp_path / "eval.err.log"
+    stdout_log.write_text("created task but no evaluation id\n", encoding="utf-8")
+    stderr_log.write_text("warning: id file was not written\n", encoding="utf-8")
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={
+            "process_id": 4242,
+            "stdout_log": str(stdout_log),
+            "stderr_log": str(stderr_log),
+        },
+    )
+
+    monkeypatch.setattr(execute.os, "waitpid", lambda pid, options: (pid, 0))
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "failed"
+    assert snapshot["process_status"] == "exited"
+    assert snapshot["process_exit_code"] == 0
+    assert snapshot["error"] == (
+        "Evaluation subprocess exited before emitting an evaluation ID."
+    )
+    assert snapshot["stdout_tail"] == "created task but no evaluation id"
+    assert snapshot["stderr_tail"] == "warning: id file was not written"
 
 
 def test_handle_peek_marks_running_evaluation_exited_process_failed(monkeypatch) -> None:
@@ -2648,14 +2726,22 @@ def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -
     monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
     monkeypatch.setattr("subprocess.Popen", fake_popen)
 
-    result = execute._default_report_runner(
+    with execute.set_runtime_actor_context(
         {
-            "block_class": "FeedbackContradictions",
-            "cache_key": "report-cache",
-            "block_config": {"scorecard": "Card", "score": "Score", "days": 30},
-            "fresh": True,
+            "actor_user_id": "user-ctx-123",
+            "actor_type": "agent",
+            "actor_key": "execute_tactus",
+            "actor_source": "execute_tactus",
         }
-    )
+    ):
+        result = execute._default_report_runner(
+            {
+                "block_class": "FeedbackContradictions",
+                "cache_key": "report-cache",
+                "block_config": {"scorecard": "Card", "score": "Score", "days": 30},
+                "fresh": True,
+            }
+        )
 
     assert result == {"status": "running", "block_class": "FeedbackContradictions", "pid": 12345}
     assert captured["cmd"][-7:] == [
@@ -2670,6 +2756,7 @@ def test_default_report_runner_launches_detached_local_subprocess(monkeypatch) -
     ][-7:]
     assert captured["kwargs"]["stdout"] is not None
     assert captured["kwargs"]["stderr"] is not None
+    assert json.loads(captured["kwargs"]["env"]["PLEXUS_ACTOR_CONTEXT_JSON"])["actor_user_id"] == "user-ctx-123"
 
 
 def test_default_report_runner_launches_score_champion_timeline_command(monkeypatch) -> None:

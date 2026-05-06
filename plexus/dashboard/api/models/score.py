@@ -16,6 +16,7 @@ from pathlib import Path
 from .base import BaseModel
 from .scorecard import Scorecard
 from plexus.cli.shared import get_score_yaml_path
+from plexus.attribution.actor_context import apply_actor_attribution
 
 if TYPE_CHECKING:
     from ..client import _BaseAPIClient
@@ -991,6 +992,8 @@ class Score(BaseModel):
                 createScoreVersion(input: $input) {
                     id
                     configuration
+                    metadata
+                    createdByUserId
                     createdAt
                     updatedAt
                     note
@@ -1019,6 +1022,12 @@ class Score(BaseModel):
             # Include parent version if available
             if current_champion_id:
                 version_input['parentVersionId'] = current_champion_id
+
+            version_input = apply_actor_attribution(
+                version_input,
+                client_context=getattr(self._client, "context", None),
+                source="agent",
+            )
             
             result = self._client.execute(mutation, {'input': version_input})
             
