@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7eb688e5-f54c-4eec-9bbb-2ce02d634725",
+  "issue_id": "plx-8384c396-3e57-49f0-9e52-936ad58cc7e4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-07T22:23:24.567Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Console chat should stay pinned to the bottom while the user is at the bottom, stop auto-scrolling when the user scrolls up, and allow reliable manual scrolling to the latest message.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix Console chat sticky-bottom scrolling"
+  }
+}
