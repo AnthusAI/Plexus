@@ -1459,9 +1459,13 @@ def test_default_score_predict_uses_account_context_for_item_resolution(
         "plexus.cli.shared.identifier_resolution.resolve_item_identifier",
         fake_resolve_item_identifier,
     )
+    def fake_load_scorecard_from_api(*args, **kwargs):
+        captured["load_scorecard_from_api"] = {"args": args, "kwargs": kwargs}
+        return FakeScorecard()
+
     monkeypatch.setattr(
         "plexus.cli.evaluation.evaluations.load_scorecard_from_api",
-        lambda *args, **kwargs: FakeScorecard(),
+        fake_load_scorecard_from_api,
     )
     monkeypatch.setattr(
         "plexus.dashboard.api.models.item.Item.from_dict",
@@ -1482,6 +1486,7 @@ def test_default_score_predict_uses_account_context_for_item_resolution(
         "identifier": "311432364",
         "account_id": "acct-console",
     }
+    assert captured["load_scorecard_from_api"]["kwargs"]["use_cache"] is False
     assert captured["dependency_names"] == ["Acknowledges Before Redirecting"]
     assert captured["score_kwargs"]["subset_of_score_names"] == [
         "Acknowledges Before Redirecting"
