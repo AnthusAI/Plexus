@@ -256,10 +256,22 @@
       "author": "derek",
       "text": "Implemented transcript extraction fallback in score_version_test: smoke predictions now derive text from item metadata keys (transcript/content/body/conversation, including nested payload/input/request/data) when item.text/description is sparse. Added procedure param smoke_test_item_ids (CSV) and pass-through to score.test for deterministic smoke runs on known transcript items. Validation passed: shared score_version_test + procedure YAML loader tests.",
       "created_at": "2026-05-07T19:46:14.660632311Z"
+    },
+    {
+      "id": "e9a0e17d-e454-45cc-a292-696b513e75a9",
+      "author": "derek",
+      "text": "Regression fix in progress: smoke-test failure due to Python local variable initialization bug ( referenced before assignment) in score_version_test._predict_single_item. Applying minimal fix and rerunning targeted tests.",
+      "created_at": "2026-05-07T19:57:59.360636516Z"
+    },
+    {
+      "id": "58bfd803-8890-4bfe-9666-006825991ea6",
+      "author": "derek",
+      "text": "Fixed regression: in score_version_test._predict_single_item metadata normalization now occurs before _extract_item_text call, resolving runtime error 'cannot access local variable metadata where it is not associated with a value'. Re-ran targeted tests (score_version_test + service_yaml_loader) and both passed.",
+      "created_at": "2026-05-07T19:58:25.878743180Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T19:46:14.660632311Z",
+  "updated_at": "2026-05-07T19:58:25.878743180Z",
   "closed_at": null,
   "custom": {}
 }
