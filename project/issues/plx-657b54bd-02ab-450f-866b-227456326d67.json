@@ -328,10 +328,22 @@
       "author": "derek",
       "text": "Applied prompt text normalization: all generated/validated output-format header checks now use literal 'Output format requirements (MANDATORY):' (removed legacy '%(' artifact). YAML loader test still passes.",
       "created_at": "2026-05-07T21:25:27.594490806Z"
+    },
+    {
+      "id": "033ddfd4-261f-43fb-897a-412ff1f1a9ff",
+      "author": "derek",
+      "text": "Implementing minimal invariant prompt contract: keep model-authored prompts flexible, remove output-format auto-append, and enforce required blocks via validation+critic rewrite only.",
+      "created_at": "2026-05-07T21:32:30.438049981Z"
+    },
+    {
+      "id": "01643d28-83e3-4a00-9fa1-d08990aeb69a",
+      "author": "derek",
+      "text": "Implemented non-templated invariant mode: removed output-format auto-append in validate_generated_spec. user_message now must already include Output format requirements (MANDATORY) and reference all allowed labels; violations are handled through existing bounded critic rewrite loop. YAML loader test passes.",
+      "created_at": "2026-05-07T21:33:09.706698758Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T21:25:27.594490806Z",
+  "updated_at": "2026-05-07T21:33:09.706698758Z",
   "closed_at": null,
   "custom": {}
 }
