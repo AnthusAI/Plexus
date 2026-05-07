@@ -1771,7 +1771,6 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
     item_ids_raw = args.get("item_ids")
     include_input = bool(args.get("include_input", False))
     include_trace = bool(args.get("include_trace", False))
-    no_cache = bool(args.get("no_cache", False))
     yaml_mode = bool(args.get("yaml", False))
     version = args.get("version") or args.get("version_id")
     latest = bool(args.get("latest", False))
@@ -1895,7 +1894,7 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
         from plexus.cli.evaluation.evaluations import load_scorecard_from_api
         scorecard_instance = load_scorecard_from_api(
             str(scorecard_identifier), score_names=[str(score_identifier)],
-            use_cache=not no_cache, specific_version=resolved_version
+            use_cache=False, specific_version=resolved_version
         )
 
     resolved_score_name = str(score_identifier)
