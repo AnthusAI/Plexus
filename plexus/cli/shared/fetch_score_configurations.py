@@ -25,9 +25,9 @@ def fetch_score_configurations(
         target_scores: List of score objects to process
         cache_status: Either a dictionary mapping score IDs to their cache status (bool)
                      or a tuple of (cached_ids, uncached_ids) lists
-        use_cache: Whether to return configurations from cache (True) or use in-memory data (False)
+        use_cache: Whether to use local cache files.
                   When True: after fetching, load everything from cache files
-                  When False: return API results directly without loading from cache
+                  When False: return API results directly without reading or writing cache files
         
     Returns:
         Dictionary mapping score IDs to their parsed configurations
@@ -190,21 +190,22 @@ def fetch_score_configurations(
                 yaml.dump(ordered_config, rendered_config)
                 normalized_config_yaml = rendered_config.getvalue()
 
-                # Get the YAML file path
-                yaml_path = get_score_yaml_path(scorecard_name, score_name)
-                
-                # Write to file with proper formatting
-                with open(yaml_path, 'w') as f:
-                    f.write(normalized_config_yaml)
-                
-                # Keep the in-memory configuration identical to the cached YAML on disk.
+                if use_cache:
+                    # Get the YAML file path
+                    yaml_path = get_score_yaml_path(scorecard_name, score_name)
+
+                    # Write to file with proper formatting
+                    with open(yaml_path, 'w') as f:
+                        f.write(normalized_config_yaml)
+
+                    logging.info(f"==== CONFIGURATION SAVED ====")
+                    logging.info(f"Score: {score_name}")
+                    logging.info(f"Version: {champion_version_id}")
+                    logging.info(f"Saved to: {yaml_path}")
+                    logging.info(f"===============================")
+
+                # Keep the in-memory configuration identical to what cache mode writes.
                 configurations[score_id] = normalized_config_yaml
-                
-                logging.info(f"==== CONFIGURATION SAVED ====")
-                logging.info(f"Score: {score_name}")
-                logging.info(f"Version: {champion_version_id}")
-                logging.info(f"Saved to: {yaml_path}")
-                logging.info(f"===============================")
                 
             except Exception as e:
                 message = f"Error parsing YAML for score {score_name}: {str(e)}"

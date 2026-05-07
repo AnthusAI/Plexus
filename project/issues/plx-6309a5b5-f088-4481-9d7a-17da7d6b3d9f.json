@@ -1,0 +1,18 @@
+{
+  "id": "plx-6309a5b5-f088-4481-9d7a-17da7d6b3d9f",
+  "title": "Fix Console prediction API-only config loading",
+  "description": "Console execute_tactus predictions fail in Lambda because API-loaded score configs are still written to the local scorecards cache when use_cache=false. Make non-cache GraphQL loading in-memory only and prove with read-only smoke.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-07T18:39:43.966399Z",
+  "updated_at": "2026-05-07T18:45:08.552877Z",
+  "closed_at": "2026-05-07T18:45:08.552877Z",
+  "custom": {}
+}
