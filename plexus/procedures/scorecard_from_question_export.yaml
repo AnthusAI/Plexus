@@ -391,7 +391,13 @@ code: |
     end
 
     local value = result.value
-    if value.scorecards_create ~= "function" or value.score_create ~= "function" or value.score_update ~= "function" then
+    local function is_callable_type(t)
+      return t == "function" or t == "userdata"
+    end
+
+    if not is_callable_type(value.scorecards_create)
+      or not is_callable_type(value.score_create)
+      or not is_callable_type(value.score_update) then
       return nil, "write APIs unavailable in execute_tactus runtime: scorecards.create=" .. tostring(value.scorecards_create)
         .. ", score.create=" .. tostring(value.score_create)
         .. ", score.update=" .. tostring(value.score_update)
