@@ -58,10 +58,16 @@
       "author": "derek",
       "text": "Local repro shows generator calls done(reason='Completed ...') instead of schema JSON, causing parse failure. Implementing robustness: require done() named-field payload, salvage JSON object from noisy reason text, and add corrective retry loop for generator/critic invalid outputs before failing.",
       "created_at": "2026-05-06T23:58:18.416361637Z"
+    },
+    {
+      "id": "a8922b6a-3294-4088-a356-e1868a193df2",
+      "author": "derek",
+      "text": "Added early write-path preflight in observe stage (non-destructive execute_tactus capability probe for scorecards.create/score.create/score.update) so failures happen before expensive generation. Also now return plan on act-stage failures to preserve generated output for recovery/debug.",
+      "created_at": "2026-05-07T01:40:27.669015017Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-06T23:58:18.416361637Z",
+  "updated_at": "2026-05-07T01:40:27.669015017Z",
   "closed_at": null,
   "custom": {}
 }
