@@ -120,21 +120,9 @@ agents:
       - system_message must encode policy intent and decision boundaries from guidelines and FAQ.
       - user_message must instruct transcript evaluation and class selection clearly.
       - Keep all fields concise and directly actionable.
-      - You MUST finish by calling done() with named fields, not plain-text reason.
-        Example:
-        done(
-          name="...",
-          key="...",
-          external_id="...",
-          description="...",
-          labels={"Yes","No"},
-          target_class="Yes",
-          default_class="No",
-          guidance_summary="...",
-          rationale="...",
-          system_message="...",
-          user_message="..."
-        )
+      - You MUST finish by calling done(reason=<JSON>, success=true).
+      - The reason must be ONLY a JSON object string matching the required schema.
+      - No prose, no prefixes, no markdown.
     initial_message: |
       Ready to generate score specs.
     tools:
@@ -167,7 +155,9 @@ agents:
       - Preserve core intent while tightening ambiguities.
       - Ensure output is robust for noisy transcript evidence.
       - Keep explicit class constraints in user_message.
-      - You MUST finish by calling done() with named fields, not plain-text reason.
+      - You MUST finish by calling done(reason=<JSON>, success=true).
+      - The reason must be ONLY a JSON object string matching the required schema.
+      - No prose, no prefixes, no markdown.
     initial_message: |
       Ready to review and refine score specs.
     tools:
@@ -620,6 +610,61 @@ code: |
         data, err = safe_decode(candidate)
       end
     end
+    if not data and type(payload) == "string" and payload ~= "" then
+      local ordered_keys = {
+        "name",
+        "key",
+        "external_id",
+        "description",
+        "labels",
+        "target_class",
+        "default_class",
+        "guidance_summary",
+        "rationale",
+        "system_message",
+        "user_message",
+      }
+
+      local parsed = {}
+      local function extract_segment(text, start_key, next_key)
+        local start_pat = start_key .. "%s*="
+        local start_pos = string.find(text, start_pat)
+        if not start_pos then return nil end
+        local value_start = start_pos + #start_pat
+        if next_key then
+          local end_pat = ";%s*" .. next_key .. "%s*="
+          local end_pos = string.find(text, end_pat, value_start)
+          if end_pos then
+            return trim(string.sub(text, value_start, end_pos - 1))
+          end
+        end
+        return trim(string.sub(text, value_start))
+      end
+
+      for i, key_name in ipairs(ordered_keys) do
+        local next_key = ordered_keys[i + 1]
+        local raw_value = extract_segment(payload, key_name, next_key)
+        if raw_value ~= nil then
+          parsed[key_name] = raw_value
+        end
+      end
+
+      if has_text(parsed.labels) then
+        local labels = {}
+        local inner = parsed.labels
+        inner = string.gsub(inner, "^%[", "")
+        inner = string.gsub(inner, "%]$", "")
+        for label in string.gmatch(inner, "([^,]+)") do
+          local cleaned = trim(label)
+          if has_text(cleaned) then labels[#labels + 1] = cleaned end
+        end
+        parsed.labels = labels
+      end
+
+      if has_text(parsed.name) and has_text(parsed.key) and has_text(parsed.user_message) then
+        data = parsed
+      end
+    end
     if not data then
       return nil, "invalid done() JSON: " .. tostring(err)
     end
@@ -828,22 +873,24 @@ code: |
   end
 
   local function probe_agent_done_contract(agent, role_name)
+    local probe_payload = Json.encode({
+      name = "Probe Score",
+      key = "probe-score",
+      external_id = "probe-score",
+      description = "probe description",
+      labels = {"Yes", "No"},
+      target_class = "Yes",
+      default_class = "No",
+      guidance_summary = "probe guidance",
+      rationale = "probe rationale",
+      system_message = "probe system",
+      user_message = "probe user"
+    })
     local probe_prompt = table.concat({
-      "Contract probe. Return via done() named fields only.",
-      "Required fields:",
-      "name,key,external_id,description,labels,target_class,default_class,guidance_summary,rationale,system_message,user_message",
-      "Use this exact minimal payload values.",
-      "name=Probe Score",
-      "key=probe-score",
-      "external_id=probe-score",
-      "description=probe description",
-      "labels={Yes,No}",
-      "target_class=Yes",
-      "default_class=No",
-      "guidance_summary=probe guidance",
-      "rationale=probe rationale",
-      "system_message=probe system",
-      "user_message=probe user"
+      "Contract probe.",
+      "Call done(reason=<JSON object string>, success=true).",
+      "Put ONLY this JSON in reason (no extra text):",
+      probe_payload
     }, "\n")
 
     local ok = wait_for_done(agent, 4, probe_prompt)
@@ -1158,7 +1205,8 @@ code: |
           local repair_prompt = table.concat({
             "Your previous done() payload was invalid.",
             "Error: " .. tostring(draft_err),
-            "Return ONLY the required score spec via done() named fields.",
+            "Return ONLY via done(reason=<JSON object string>, success=true).",
+            "Do NOT use done named fields. reason must be pure JSON.",
             "Do not send commentary.",
           }, "\n")
           local repaired_ok = wait_for_done(Generator, 3, repair_prompt)
@@ -1184,9 +1232,8 @@ code: |
           local repair_prompt = table.concat({
             "Your previous done() payload was invalid.",
             "Error: " .. tostring(reviewed_err),
-            "Return ONLY via done() NAMED FIELDS. Do NOT put JSON in reason.",
-            "Required fields: name,key,external_id,description,labels,target_class,default_class,guidance_summary,rationale,system_message,user_message.",
-            "Example: done(name='...', key='...', external_id='...', description='...', labels={'Yes','No'}, target_class='Yes', default_class='No', guidance_summary='...', rationale='...', system_message='...', user_message='...')",
+            "Return ONLY via done(reason=<JSON object string>, success=true).",
+            "Do NOT use done named fields. reason must be pure JSON.",
             "Do not send commentary.",
           }, "\n")
           local repaired_ok = wait_for_done(Critic, 3, repair_prompt)
