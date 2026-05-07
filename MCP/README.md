@@ -47,8 +47,8 @@ Run a local prediction:
 
 ```lua
 return plexus.score.predict{
-  scorecard_name = "Quality Assurance v1.0",
-  score_name = "Compliance Check",
+  scorecard_identifier = "Quality Assurance v1.0",
+  score_identifier = "Compliance Check",
   item_id = "item-123",
   yaml = true,
 }

@@ -70,11 +70,24 @@ def test_builtin_console_procedure_prompt_teaches_report_dispatch_contract():
     assert "Do not use `plexus.procedure.optimize` to run a report" in system_prompt
 
 
+def test_builtin_console_procedure_prompt_teaches_prediction_contract():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+
+    assert "PREDICTION REQUESTS (HARD RULES)" in system_prompt
+    assert "use `plexus.score.predict`" in system_prompt
+    assert "Do not use report or evaluation APIs for a single-item prediction" in system_prompt
+    assert "scorecard_identifier = \"My Scorecard\"" in system_prompt
+    assert "score_identifier = \"My Score\"" in system_prompt
+    assert "do not ask for another confirmation" in system_prompt
+
+
 def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    # Bumped when the report recipe changed to prefer resolved scorecard IDs.
-    assert parsed["version"] == "1.6.2"
+    # Bumped when the prediction contract changed to canonical identifiers.
+    assert parsed["version"] == "1.6.3"
 
 
 def test_is_builtin_procedure_id():
