@@ -3,7 +3,7 @@
   "title": "Fix Console prediction execute_tactus contract",
   "description": "As a Console user, I want prediction requests to run once item, score, and scorecard are known, so that the assistant does not fail on its own documented execute_tactus example.\n\nFeature: Console score prediction\n\nScenario: Run prediction with resolved identifiers\nGiven a Console conversation has an item id, scorecard identifier, and score identifier\nWhen the assistant calls plexus.score.predict through execute_tactus\nThen the call uses scorecard_identifier and score_identifier and returns a structured prediction result.\n\nScenario: Missing prediction context is actionable\nGiven a prediction request lacks required score or scorecard context\nWhen execute_tactus validates the request\nThen it returns a structured error naming scorecard_identifier and score_identifier.\n\nDefinition of Done:\n- Runtime score prediction accepts the canonical identifier argument names.\n- Console prompt teaches the canonical prediction recipe and no repeated confirmation once identifiers are known.\n- Runtime account context is used for item resolution.\n- Focused tests and the failing-session smoke call pass.",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-05-07T16:06:34.386032Z",
-  "updated_at": "2026-05-07T16:17:41.235996Z",
-  "closed_at": null,
+  "updated_at": "2026-05-07T16:41:09.231705Z",
+  "closed_at": "2026-05-07T16:41:09.231705Z",
   "custom": {}
 }
