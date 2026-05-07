@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "39e2e7d4-ea30-4559-856a-c762912d2028",
+  "issue_id": "plx-58da7260-1ec3-43a5-ab56-2f0d96accb85",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-07T00:38:52.021Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-7c2c6ba8-226d-4b51-b922-e4f8075503fc",
+    "priority": 0,
+    "status": "open",
+    "title": "Fix production Console execute_tactus failure"
+  }
+}
