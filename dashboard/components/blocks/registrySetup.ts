@@ -26,6 +26,7 @@ import AcceptanceRateTimeline from './AcceptanceRateTimeline';
 import RecentFeedback from './RecentFeedback';
 import ScoreChampionVersionTimeline from './ScoreChampionVersionTimeline';
 import ScorecardHistory from './ScorecardHistory';
+import ScoreResultsReport from './ScoreResultsReport';
 
 // Register all block components
 // Register the default block handler first
@@ -51,3 +52,4 @@ registerBlock('AcceptanceRateTimeline', AcceptanceRateTimeline as BlockComponent
 registerBlock('RecentFeedback', RecentFeedback as BlockComponent);
 registerBlock('ScoreChampionVersionTimeline', ScoreChampionVersionTimeline as BlockComponent);
 registerBlock('ScorecardHistory', ScorecardHistory as BlockComponent);
+registerBlock('ScoreResultsReport', ScoreResultsReport as BlockComponent);
