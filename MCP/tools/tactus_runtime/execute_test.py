@@ -959,6 +959,9 @@ async def test_execute_tactus_tool_description_contains_curated_examples() -> No
         "Human.approve",
     ):
         assert term in description, f"description missing curated term: {term!r}"
+    assert "scorecard_identifier = \"My Scorecard\"" in description
+    assert "score_identifier = \"Compliance Tone\"" in description
+    assert "predict{ score_id" not in description
 
 
 def test_execute_tactus_description_constant_includes_themed_doc_pointers() -> None:
@@ -1278,6 +1281,216 @@ async def test_execute_tactus_runs_canonical_helper_call_through_host_module() -
     }
     assert result["ok"] is True
     assert result["api_calls"] == ["plexus.score.info"]
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_score_predict_uses_canonical_identifiers(
+    monkeypatch,
+) -> None:
+    mcp = FastMCP("test-execute-tactus-predict-canonical")
+    seen: dict[str, Any] = {}
+
+    def fake_score_predict(args):
+        seen.update(args)
+        return {"success": True, "predictions": [{"item_id": args["item_id"]}]}
+
+    monkeypatch.setattr(execute, "_default_score_predict", fake_score_predict)
+
+    result = await execute._execute_tactus_tool(
+        (
+            'return plexus.score.predict({ scorecard_identifier = "card", '
+            'score_identifier = "score", item_id = "item-1" })'
+        ),
+        mcp,
+        runtime_context={"account_id": "acct-console"},
+    )
+
+    assert result["ok"] is True
+    assert result["value"] == {
+        "success": True,
+        "predictions": [{"item_id": "item-1"}],
+    }
+    assert result["api_calls"] == ["plexus.score.predict"]
+    assert seen["scorecard_identifier"] == "card"
+    assert seen["score_identifier"] == "score"
+    assert seen["item_id"] == "item-1"
+    assert seen["account_id"] == "acct-console"
+
+
+def test_default_score_predict_requires_canonical_identifier_fields() -> None:
+    with pytest.raises(
+        ValueError,
+        match="scorecard_identifier and score_identifier",
+    ):
+        execute._default_score_predict({"item_id": "item-1"})
+
+    with pytest.raises(
+        ValueError,
+        match="scorecard_identifier and score_identifier",
+    ):
+        execute._default_score_predict(
+            {"scorecard": "card", "score": "score", "item_id": "item-1"}
+        )
+
+
+def test_default_score_predict_requires_account_context(monkeypatch) -> None:
+    fake_client = SimpleNamespace(
+        context=SimpleNamespace(account_id=None, account_key=None)
+    )
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: fake_client
+    )
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("default account resolver should not run")
+        ),
+    )
+
+    with pytest.raises(execute.AccountContextRequired, match="requires account context"):
+        execute._default_score_predict(
+            {
+                "scorecard_identifier": "card",
+                "score_identifier": "score",
+                "item_id": "external-item",
+            }
+        )
+
+
+def test_default_score_predict_uses_account_context_for_item_resolution(
+    monkeypatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeClient:
+        def __init__(self):
+            self.context = SimpleNamespace(account_id=None, account_key=None)
+
+        def execute(self, query):
+            if "getScorecard" in query:
+                return {
+                    "getScorecard": {
+                        "id": "sc-id",
+                        "name": "PolicyPoint - Non-Sales",
+                        "sections": {
+                            "items": [
+                                {
+                                    "id": "section-1",
+                                    "scores": {
+                                        "items": [
+                                            {
+                                                "id": "score-id",
+                                                "name": "Acknowledges Before Redirecting",
+                                                "key": "acknowledges-before-redirecting",
+                                                "externalId": "48849",
+                                                "championVersionId": "version-1",
+                                                "isDisabled": False,
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                }
+            if "getItem" in query:
+                return {
+                    "getItem": {
+                        "id": "item-internal",
+                        "text": "hello",
+                        "description": "",
+                        "metadata": {},
+                        "attachedFiles": None,
+                        "externalId": "311432364",
+                        "createdAt": "2026-05-07T00:00:00Z",
+                        "updatedAt": "2026-05-07T00:00:00Z",
+                    }
+                }
+            raise AssertionError(query)
+
+    class FakeScorecard:
+        scores = [
+            {
+                "id": "score-id",
+                "name": "Acknowledges Before Redirecting",
+                "key": "acknowledges-before-redirecting",
+                "externalId": "48849",
+            }
+        ]
+
+        def build_dependency_graph(self, names):
+            captured["dependency_names"] = names
+            return {}, {"Acknowledges Before Redirecting": "score-id"}
+
+        async def score_entire_text(self, **kwargs):
+            captured["score_kwargs"] = kwargs
+            return {
+                "score-id": SimpleNamespace(
+                    value="No",
+                    explanation="prediction explanation",
+                    cost={},
+                    metadata={},
+                )
+            }
+
+    fake_client = FakeClient()
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: fake_client
+    )
+    monkeypatch.setattr(
+        "plexus.cli.scorecard.scorecards.resolve_scorecard_identifier",
+        lambda client, identifier: f"sc:{identifier}",
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.identifier_resolution.resolve_score_identifier",
+        lambda client, scorecard_id, identifier: f"score:{identifier}",
+    )
+
+    def fake_resolve_item_identifier(client, identifier, account_id=None):
+        captured["item_resolution"] = {
+            "identifier": identifier,
+            "account_id": account_id,
+        }
+        return "item-internal"
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.identifier_resolution.resolve_item_identifier",
+        fake_resolve_item_identifier,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.evaluation.evaluations.load_scorecard_from_api",
+        lambda *args, **kwargs: FakeScorecard(),
+    )
+    monkeypatch.setattr(
+        "plexus.dashboard.api.models.item.Item.from_dict",
+        lambda item_data, client: SimpleNamespace(id=item_data["id"]),
+    )
+
+    result = execute._default_score_predict(
+        {
+            "scorecard_identifier": "PolicyPoint - Non-Sales",
+            "score_identifier": "48849",
+            "item_id": "311432364",
+            "account_id": "acct-console",
+        }
+    )
+
+    assert fake_client.context.account_id == "acct-console"
+    assert captured["item_resolution"] == {
+        "identifier": "311432364",
+        "account_id": "acct-console",
+    }
+    assert captured["dependency_names"] == ["Acknowledges Before Redirecting"]
+    assert captured["score_kwargs"]["subset_of_score_names"] == [
+        "Acknowledges Before Redirecting"
+    ]
+    assert result["success"] is True
+    assert result["scorecard_identifier"] == "PolicyPoint - Non-Sales"
+    assert result["score_identifier"] == "48849"
+    assert result["predictions"][0]["item_id"] == "item-internal"
+    assert result["predictions"][0]["scores"][0]["value"] == "No"
 
 
 @pytest.mark.asyncio
@@ -2009,6 +2222,11 @@ def test_evaluation_run_async_creates_handle_and_records_budget() -> None:
         "status_url": "https://example.test/evaluations/eval-1",
         "created_at": "2026-04-29T00:00:00Z",
         "parent_trace_id": "trace-1",
+        "dispatch_result": {
+            "status": "dispatched",
+            "evaluation_id": "eval-1",
+            "dashboard_url": "https://example.test/evaluations/eval-1",
+        },
         "child_budget": budget,
     }
     assert seen_args == {
