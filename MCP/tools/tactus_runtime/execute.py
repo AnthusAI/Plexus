@@ -4991,6 +4991,11 @@ def _default_score_test(args: dict[str, Any]) -> dict[str, Any]:
     version = args.get("version")
     samples = int(args.get("samples") or 3)
     item_ids = args.get("item_ids")
+    fallback_scorecard_identifier = (
+        args.get("fallback_scorecard_identifier")
+        or args.get("source_scorecard_identifier")
+        or args.get("item_source_scorecard_identifier")
+    )
     days = int(args.get("days") or 90)
 
     if not scorecard_identifier:
@@ -5014,6 +5019,7 @@ def _default_score_test(args: dict[str, Any]) -> dict[str, Any]:
             version=version,
             samples=samples,
             item_identifiers=parsed_item_ids,
+            fallback_scorecard_identifier=fallback_scorecard_identifier,
             days=days,
         )
     )

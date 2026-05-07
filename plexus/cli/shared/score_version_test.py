@@ -194,20 +194,25 @@ def _sample_recent_scorecard_item_ids(
     desired_count: int,
 ) -> List[str]:
     cutoff = _utc_now() - timedelta(days=days)
+    now = _utc_now()
     query = """
-    query ListScoreResultByScorecardId(
+    query ListScoreResultByScorecardIdAndUpdatedAt(
       $scorecardId: String!,
+      $startTime: String!,
+      $endTime: String!,
       $limit: Int,
       $nextToken: String
     ) {
-      listScoreResultByScorecardId(
+      listScoreResultByScorecardIdAndUpdatedAt(
         scorecardId: $scorecardId,
+        sortDirection: DESC,
+        updatedAt: { between: [$startTime, $endTime] },
         limit: $limit,
         nextToken: $nextToken
       ) {
         items {
           itemId
-          createdAt
+          updatedAt
         }
         nextToken
       }
@@ -221,15 +226,18 @@ def _sample_recent_scorecard_item_ids(
     for _ in range(20):
         response = client.execute(
             query,
-            {"scorecardId": scorecard_id, "limit": 500, "nextToken": next_token},
+            {
+                "scorecardId": scorecard_id,
+                "startTime": cutoff.isoformat(),
+                "endTime": now.isoformat(),
+                "limit": 500,
+                "nextToken": next_token,
+            },
         ) or {}
-        payload = response.get("listScoreResultByScorecardId") or {}
+        payload = response.get("listScoreResultByScorecardIdAndUpdatedAt") or {}
         items = payload.get("items", []) or []
 
         for result in items:
-            created_at = _parse_iso_timestamp(result.get("createdAt"))
-            if created_at and created_at < cutoff:
-                continue
             item_id = result.get("itemId")
             if item_id and item_id not in seen:
                 seen.add(item_id)
@@ -393,6 +401,7 @@ async def run_score_version_test(
     version: Optional[str] = None,
     samples: int = 3,
     item_identifiers: Optional[Sequence[str]] = None,
+    fallback_scorecard_identifier: Optional[str] = None,
     days: int = 90,
 ) -> Dict[str, Any]:
     if samples <= 0:
@@ -449,8 +458,25 @@ async def run_score_version_test(
                 days=days,
                 desired_count=desired,
             )
+        if (not resolved_items) and fallback_scorecard_identifier:
+            fallback_scorecard_id = resolve_scorecard_identifier(
+                client, fallback_scorecard_identifier
+            )
+            if not fallback_scorecard_id:
+                selection_error = (
+                    "invalid_fallback_scorecard",
+                    f"Unable to resolve fallback_scorecard_identifier: {fallback_scorecard_identifier}",
+                )
+            else:
+                selection_source = "fallback_scorecard_items"
+                resolved_items = _sample_recent_scorecard_item_ids(
+                    client=client,
+                    scorecard_id=fallback_scorecard_id,
+                    days=days,
+                    desired_count=desired,
+                )
 
-        if len(resolved_items) < desired:
+        if (not selection_error) and len(resolved_items) < desired:
             if len(resolved_items) == 0:
                 selection_error = (
                     "no_samples_found",
