@@ -184,10 +184,16 @@
       "author": "derek",
       "text": "Updated scorecard_from_question_export defaults for resulting score YAML: model_name now defaults to gpt-5-mini in params, build_score_yaml fallback, and field schema declaration. This affects generated score version configs, not agent runtime model overrides.",
       "created_at": "2026-05-07T05:04:53.344389159Z"
+    },
+    {
+      "id": "33610f6d-d3eb-4d48-abce-1fd89fd6d7cd",
+      "author": "derek",
+      "text": "Aligned generated score prompt contract with Suco-style output requirements. Updated generator/critic prompt rules and validate_generated_spec to enforce appending a mandatory user_message block requiring: (1) 2-3 sentence reasoning, (2) final line exactly one allowed classification label, (3) no extra text on final line. This guarantees resulting score YAML carries explicit response-format instructions.",
+      "created_at": "2026-05-07T16:53:55.841813720Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T05:04:53.344389159Z",
+  "updated_at": "2026-05-07T16:53:55.841813720Z",
   "closed_at": null,
   "custom": {}
 }
