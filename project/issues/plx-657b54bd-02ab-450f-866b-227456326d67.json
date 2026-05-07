@@ -118,10 +118,16 @@
       "author": "derek",
       "text": "Implemented anti-guess hardening for repeated critic parse failures: (1) drastically reduced prompt payload size by sending compact reference context (no full reference score code blobs) to generator/critic prompts; (2) added early generator/critic done() contract probes in observe stage so invalid done payload behavior fails fast before expensive generation. Loader test passes.",
       "created_at": "2026-05-07T04:09:16.616467393Z"
+    },
+    {
+      "id": "f01f984d-2a4c-4896-af2f-efeff9894c56",
+      "author": "derek",
+      "text": "Root cause confirmed from runtime logs: done tool in this environment only accepts reason/success. Previous prompts required impossible named-field done args, forcing parse failures. Patched procedure contract to done(reason=<JSON>, success=true) for generator+critic, updated repair prompts accordingly, and added parser fallback for observed key=value;... reason payloads (including labels list parsing) so current runtime output shape can still be normalized.",
+      "created_at": "2026-05-07T04:18:00.009631500Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T04:09:16.616467393Z",
+  "updated_at": "2026-05-07T04:18:00.009631500Z",
   "closed_at": null,
   "custom": {}
 }
