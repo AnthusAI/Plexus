@@ -337,6 +337,51 @@ def test_scorecard_history_supports_single_score_explicit_window_and_summary_mod
     assert kwargs["fresh"] is True
 
 
+@patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
+def test_score_results_report_supports_ids_and_repeated_id_flags(mock_run_feedback_report_block):
+    runner = CliRunner()
+    mock_run_feedback_report_block.return_value = {"status": "success", "output": {"scores": []}}
+
+    result = runner.invoke(
+        report,
+        [
+            "score-results-report",
+            "--scorecard",
+            "1562",
+            "--score",
+            "48059",
+            "--ids",
+            "311434634,311432364",
+            "--id",
+            "311432363",
+            "--id",
+            "311432364",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, kwargs = mock_run_feedback_report_block.call_args
+    assert kwargs["block_class"] == "ScoreResultsReport"
+    assert kwargs["scorecard"] == "1562"
+    assert kwargs["score"] == "48059"
+    assert kwargs["extra_config"] == {"ids": ["311434634", "311432364", "311432363"]}
+
+
+def test_score_results_report_requires_at_least_one_identifier():
+    runner = CliRunner()
+    result = runner.invoke(
+        report,
+        [
+            "score-results-report",
+            "--scorecard",
+            "1562",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "At least one item identifier is required" in result.output
+
+
 @patch("plexus.cli.feedback.feedback_report.resolve_account_id_for_command")
 @patch("plexus.cli.feedback.feedback_report.enrich_parameters_with_names")
 @patch("plexus.cli.feedback.feedback_report.memoized_resolve_score_identifier")

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "fb4956b7-333c-4fdd-84aa-7a793cb260fb",
+  "issue_id": "plx-7cc6f8f1-b34f-45b2-9ada-12cc8a1650e7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T14:53:06.934Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Sync PolicyPoint classifier code classes with guidelines",
+    "description": "Compare PolicyPoint classifier champion guidelines against score code classes and update code where the class labels diverge.\n\nScope:\n- Inspect champion versions for PolicyPoint - Non-Sales.\n- Identify scores whose guidelines define classes that differ from `valid_classes` or `ClassifyProcedure` classes in code.\n- Publish corrected score versions preserving existing guidelines.\n- Promote corrected versions and verify by read-back.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-03d93482-b49d-4d3a-a997-31dc558f9979",
+    "labels": []
+  }
+}

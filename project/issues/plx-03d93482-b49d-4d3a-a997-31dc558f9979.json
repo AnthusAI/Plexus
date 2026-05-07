@@ -1,0 +1,25 @@
+{
+  "id": "plx-03d93482-b49d-4d3a-a997-31dc558f9979",
+  "title": "Set up PolicyPoint Sales Skills QA scorecard",
+  "description": "Create the new PolicyPoint Sales Skills QA scorecard from the SalesFloor SOW workbook.\n\nScope:\n- Extract scorecard metadata and populated score rubrics from `/Users/ryan/Downloads/SalesFloor_Sales Skills SOW_v2.xlsx`.\n- Create the scorecard and score records in Plexus.\n- Transform each rubric into Plexus classifier guidelines.\n- Validate every generated guidelines document before publishing it to score versions.\n\nDefinition of Done:\n- Scorecard record exists and is verified.\n- All populated workbook items have score records.\n- Each score has valid guidelines created from the workbook rubric.\n- Final setup is verified with Plexus read APIs.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7f1a3723-f979-494e-bd83-5fe2641da673",
+      "author": "ryan",
+      "text": "Closed after completion of child task plx-37b7f7. Scorecard and all populated workbook score rubrics are set up and verified in Plexus.",
+      "created_at": "2026-05-06T14:39:40.463078Z"
+    }
+  ],
+  "created_at": "2026-05-06T14:31:37.602876Z",
+  "updated_at": "2026-05-06T14:39:44.788067Z",
+  "closed_at": "2026-05-06T14:39:44.788067Z",
+  "custom": {}
+}

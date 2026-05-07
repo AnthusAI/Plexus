@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a5d49f0c-a0ae-4ef7-9068-74d24bfce175",
+  "issue_id": "plx-a579d9c5-3dd3-4490-9612-8ceefb3604dd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T14:47:19.891Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Apply PolicyPoint external IDs and pending questions",
+    "description": "Update the existing PolicyPoint scorecard setup with the source system external IDs supplied by the user.\n\nScope:\n- Set scorecard external ID to `1562` for `PolicyPoint - Non-Sales`.\n- Set score external IDs 48846-48859 for the named questions.\n- Create any missing question records where needed.\n- Use workbook Items Template rubrics when available for guidelines/configuration.\n- Validate any generated or changed guidelines with `skills/guidelines/validate_guidelines.py`.\n- Verify final Plexus state by read-back.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-03d93482-b49d-4d3a-a997-31dc558f9979",
+    "labels": []
+  }
+}
