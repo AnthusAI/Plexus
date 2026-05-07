@@ -316,10 +316,22 @@
       "author": "derek",
       "text": "Cleanup completed: removed temporary smoke-test debug instrumentation (logger + input_debug payload fields + verbose item extraction logs) from score_version_test while preserving functional transcript extraction and validation fixes. Re-ran targeted tests: score_version_test and procedure YAML loader passed.",
       "created_at": "2026-05-07T21:13:54.793078788Z"
+    },
+    {
+      "id": "2f89fb63-bd1a-4603-a1ef-bdcde6d78a2c",
+      "author": "derek",
+      "text": "Refinement pass from Suco comparison: normalize generated output-format header text to plain '(MANDATORY)' (remove stray '%(' artifact) and align prompt contract checks to same literal. This keeps generated prompts closer to existing scorecard style.",
+      "created_at": "2026-05-07T21:25:04.538612795Z"
+    },
+    {
+      "id": "4b0e82b1-85ad-4f9a-8bca-666f0134b0ac",
+      "author": "derek",
+      "text": "Applied prompt text normalization: all generated/validated output-format header checks now use literal 'Output format requirements (MANDATORY):' (removed legacy '%(' artifact). YAML loader test still passes.",
+      "created_at": "2026-05-07T21:25:27.594490806Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T21:13:54.793078788Z",
+  "updated_at": "2026-05-07T21:25:27.594490806Z",
   "closed_at": null,
   "custom": {}
 }
