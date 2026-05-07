@@ -1,0 +1,31 @@
+{
+  "id": "plx-58da7260-1ec3-43a5-ab56-2f0d96accb85",
+  "title": "Fix production Console execute_tactus failure",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 0,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7c2c6ba8-226d-4b51-b922-e4f8075503fc",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bf02cae3-f714-4e96-a714-53b83e64737a",
+      "author": "ryan",
+      "text": "Investigating production Console conversation 55f31221-1e9d-4b09-af3e-db3a4035c9f9 for execute_tactus/tool failure after PR #312 deployment path.",
+      "created_at": "2026-05-07T00:38:54.445762Z"
+    },
+    {
+      "id": "dbdc4fa9-57dd-4188-a44a-5095e7840fbc",
+      "author": "ryan",
+      "text": "Diagnosis: production Console conversation 55f31221-1e9d-4b09-af3e-db3a4035c9f9 reached execute_tactus, but scorecards.search failed with [Errno 30] Read-only file system: /home/sbx_user1051. Root cause was embedded Tactus scorecard/report config helpers importing MCP shared.utils, which imports shared.setup and creates ~/.plexus/mcp-server.log. Fix removes that import path and resolves account from runtime context instead.",
+      "created_at": "2026-05-07T00:42:45.913425Z"
+    }
+  ],
+  "created_at": "2026-05-07T00:38:52.020616Z",
+  "updated_at": "2026-05-07T00:42:45.913425Z",
+  "closed_at": null,
+  "custom": {}
+}
