@@ -1,0 +1,18 @@
+{
+  "id": "plx-78b08ea4-dd6a-44d3-a04f-1e290da6e6fd",
+  "title": "Add score-results-report direct CLI command",
+  "description": "Add feedback report score-results-report command with --scorecard, optional --score, and identifier inputs via --ids and repeatable --id; normalize/validate IDs and map to report block config.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-07T16:10:19.897220Z",
+  "updated_at": "2026-05-07T16:17:43.502748Z",
+  "closed_at": null,
+  "custom": {}
+}
