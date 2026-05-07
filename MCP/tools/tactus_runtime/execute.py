@@ -4752,20 +4752,37 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
             input_obj["guidelines"] = guidelines
         if parent_version_id:
             input_obj["parentVersionId"] = parent_version_id
-        input_obj = apply_actor_attribution(
-            input_obj,
-            client_context=getattr(client, "context", None),
-            source="execute_tactus",
-        )
-
-        resp = client.execute(version_mutation, {"input": input_obj})
-        new_version = (resp or {}).get("createScoreVersion") or {}
-        new_version_id = new_version.get("id")
+        version_errors: list[str] = []
+        for use_attribution in (False, True):
+            payload = dict(input_obj)
+            if use_attribution:
+                payload = apply_actor_attribution(
+                    payload,
+                    client_context=getattr(client, "context", None),
+                    source="execute_tactus",
+                )
+            try:
+                resp = client.execute(version_mutation, {"input": payload})
+                new_version = (resp or {}).get("createScoreVersion") or {}
+                new_version_id = new_version.get("id")
+                if new_version_id:
+                    result["created_at"] = new_version.get("createdAt") or ""
+                    break
+                version_errors.append(
+                    f"attribution={use_attribution} payload={payload!r} -> missing id in response {resp!r}"
+                )
+            except Exception as exc:
+                version_errors.append(
+                    f"attribution={use_attribution} payload={payload!r} -> {exc}"
+                )
         if not new_version_id:
-            return {"success": False, "error": f"createScoreVersion returned no id: {resp!r}"}
+            return {
+                "success": False,
+                "error": "createScoreVersion failed after compatibility attempts: "
+                + " | ".join(version_errors),
+            }
         result["version_id"] = new_version_id
         result["parent_version_id"] = parent_version_id
-        result["created_at"] = new_version.get("createdAt") or ""
         result["version_created"] = True
 
     result["message"] = (
