@@ -214,10 +214,28 @@
       "author": "derek",
       "text": "Patched format_prompt_message gsub replacement to callback form, preventing '%' in marker text from being interpreted as replacement tokens. This resolves Lua error: invalid use of '%' in replacement string.",
       "created_at": "2026-05-07T17:44:21.061057223Z"
+    },
+    {
+      "id": "1acaf37d-e30c-404a-b82e-adb42fa06d73",
+      "author": "derek",
+      "text": "Adding optimizer-style smoke test to scorecard_from_question_export apply path: after each score.update/createScoreVersion, run score.test via execute_tactus, record result, and fail (configurable) when mechanical test fails. Will add params for enable/disable, sample size, and fail_on_smoke_test.",
+      "created_at": "2026-05-07T18:32:22.222891075Z"
+    },
+    {
+      "id": "d52c837a-c11c-40a9-97ad-5d2eeaee8168",
+      "author": "derek",
+      "text": "Implementing optimizer-style smoke prediction checks in scorecard_from_question_export procedure. Next steps: add new input schema fields (run_smoke_test, smoke_test_samples, fail_on_smoke_test), run loader tests, and verify git status before push.",
+      "created_at": "2026-05-07T18:34:08.524019423Z"
+    },
+    {
+      "id": "37d2bd1a-1d0d-4ed9-8ede-85ccecc85b0d",
+      "author": "derek",
+      "text": "Implemented smoke-test controls in procedure input schema: run_smoke_test (default true), smoke_test_samples (default 3), fail_on_smoke_test (default true). Verified parser compatibility with .                                                                        [100%]\n1 passed in 0.72s (pass).",
+      "created_at": "2026-05-07T18:34:32.686559286Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T17:44:21.061057223Z",
+  "updated_at": "2026-05-07T18:34:32.686559286Z",
   "closed_at": null,
   "custom": {}
 }
