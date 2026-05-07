@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -11,6 +12,8 @@ from plexus.cli.shared.identifier_resolution import (
     resolve_scorecard_identifier,
 )
 from plexus.dashboard.api.models.item import Item as PlexusItem
+
+logger = logging.getLogger(__name__)
 
 
 def _utc_now() -> datetime:
@@ -76,10 +79,13 @@ def _coerce_text(value: Any) -> str:
     return ""
 
 
-def _extract_item_text(item_data: Dict[str, Any], metadata: Dict[str, Any]) -> str:
+def _extract_item_text(item_data: Dict[str, Any], metadata: Dict[str, Any]) -> Tuple[str, str]:
     direct_text = _coerce_text(item_data.get("text"))
     direct_description = _coerce_text(item_data.get("description"))
+    source = ""
     best_text = direct_text if len(direct_text) >= len(direct_description) else direct_description
+    if best_text:
+        source = "item.text" if len(direct_text) >= len(direct_description) else "item.description"
 
     metadata_candidates = []
     for key in (
@@ -95,7 +101,7 @@ def _extract_item_text(item_data: Dict[str, Any], metadata: Dict[str, Any]) -> s
     ):
         candidate = _coerce_text(metadata.get(key))
         if candidate:
-            metadata_candidates.append(candidate)
+            metadata_candidates.append((candidate, "metadata." + key))
 
     # Some payloads wrap content in nested envelopes.
     for container_key in ("payload", "input", "request", "data"):
@@ -104,14 +110,15 @@ def _extract_item_text(item_data: Dict[str, Any], metadata: Dict[str, Any]) -> s
             for key in ("transcript", "text", "content", "body", "conversation"):
                 candidate = _coerce_text(container.get(key))
                 if candidate:
-                    metadata_candidates.append(candidate)
+                    metadata_candidates.append((candidate, "metadata." + container_key + "." + key))
 
     if metadata_candidates:
-        best_meta = max(metadata_candidates, key=len)
+        best_meta, best_meta_source = max(metadata_candidates, key=lambda x: len(x[0]))
         if len(best_meta) > len(best_text):
             best_text = best_meta
+            source = best_meta_source
 
-    return best_text.strip()
+    return best_text.strip(), source or "none"
 
 
 def _resolve_scorecard_and_score(
@@ -367,13 +374,30 @@ async def _predict_single_item(
         }
 
     metadata = _normalize_metadata(item_data.get("metadata"))
-    text = _extract_item_text(item_data, metadata)
+    text, text_source = _extract_item_text(item_data, metadata)
+    input_debug = {
+        "text_source": text_source,
+        "text_length": len(text or ""),
+        "text_preview": (text or "")[:240],
+        "metadata_keys": sorted(list(metadata.keys()))[:50],
+        "attached_files_count": len(item_data.get("attachedFiles") or []),
+        "item_id": item_id,
+    }
+    logger.info(
+        "score_version_test item=%s text_source=%s text_length=%d attached_files=%d metadata_keys=%s",
+        item_id,
+        text_source,
+        len(text or ""),
+        len(item_data.get("attachedFiles") or []),
+        ",".join(input_debug["metadata_keys"]),
+    )
     if not text:
         return {
             "item_id": item_id,
             "passed": False,
             "error": "missing_item_text",
             "message": f"Item has no usable transcript text: {item_id}",
+            "input_debug": input_debug,
         }
 
     try:
@@ -395,6 +419,7 @@ async def _predict_single_item(
             "passed": False,
             "error": "prediction_exception",
             "message": str(exc),
+            "input_debug": input_debug,
             "score": {
                 "name": score_name_for_output,
                 "value": "ERROR",
@@ -448,6 +473,7 @@ async def _predict_single_item(
     payload: Dict[str, Any] = {
         "item_id": item_id,
         "passed": passed,
+        "input_debug": input_debug,
         "score": {
             "name": score_name_for_output,
             "value": value,
