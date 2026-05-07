@@ -1109,8 +1109,11 @@ code: |
         end
       end
       if not reviewed then
-        reviewed = draft
-        reviewed.rationale = trim((reviewed.rationale or "") .. " | critic_fallback: " .. tostring(reviewed_err))
+        return {
+          success = false,
+          status = "error",
+          message = "Critic JSON parse failed for question " .. tostring(question.id) .. ": " .. tostring(reviewed_err)
+        }
       end
 
       local final_spec, final_err = validate_generated_spec(question, reviewed)
