@@ -14,7 +14,7 @@ import threading
 import time
 import traceback
 import uuid
-from typing import Annotated, Any, Callable
+from typing import Annotated, Any, Callable, Optional
 
 from fastmcp import Context, FastMCP
 from pydantic import Field
@@ -758,17 +758,9 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("plexus.scorecards.create requires name")
 
     key = str(args.get("key") or "").strip() or _slugify(name)
-    external_id = (
-        str(args.get("external_id") or args.get("externalId") or "").strip()
-        or key
-    )
-    description = args.get("description")
-    account_identifier = (
-        args.get("account_identifier")
-        or args.get("account")
-        or args.get("account_id")
-        or None
-    )
+    external_id = str(args.get("external_id") or args.get("externalId") or "").strip() or key
+    description = str(args.get("description") or "").strip() or None
+    account_identifier = args.get("account_identifier") or args.get("account") or args.get("account_id") or None
 
     client = create_client()
     if not client:
@@ -778,26 +770,6 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
         client,
         str(account_identifier) if account_identifier is not None else None,
     )
-    if not account_id:
-        raise ValueError(
-            "plexus.scorecards.create could not resolve account; provide account_identifier "
-            "or set PLEXUS_ACCOUNT_KEY"
-        )
-
-    input_obj: dict[str, Any] = {
-        "name": name,
-        "key": key,
-        "externalId": external_id,
-        "accountId": account_id,
-    }
-    if description is not None and str(description).strip():
-        input_obj["description"] = str(description).strip()
-
-    input_obj = apply_actor_attribution(
-        input_obj,
-        client_context=getattr(client, "context", None),
-        source="execute_tactus",
-    )
 
     mutation = """
     mutation CreateScorecard($input: CreateScorecardInput!) {
@@ -806,28 +778,86 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
         name
         key
         externalId
-        accountId
-        description
       }
     }
     """
-    response = client.execute(mutation, {"input": input_obj})
-    created = (response or {}).get("createScorecard") or {}
-    created_id = created.get("id")
-    if not created_id:
-        raise RuntimeError(
-            f"plexus.scorecards.create failed: createScorecard returned no id ({response!r})"
+
+    # Compatibility strategy:
+    # 1) Try plain CreateScorecardInput variants first (older schemas often reject attribution fields).
+    # 2) If plain variants fail, retry with actor attribution for newer schemas that support it.
+    base_variants: list[dict[str, Any]] = [{"name": name}]
+    if key:
+        base_variants.append({"name": name, "key": key})
+    if external_id:
+        base_variants.append({"name": name, "externalId": external_id})
+    if key and external_id:
+        base_variants.append({"name": name, "key": key, "externalId": external_id})
+    if description:
+        base_variants.append({"name": name, "description": description})
+    if key and description:
+        base_variants.append({"name": name, "key": key, "description": description})
+    if external_id and description:
+        base_variants.append({"name": name, "externalId": external_id, "description": description})
+    if key and external_id and description:
+        base_variants.append(
+            {
+                "name": name,
+                "key": key,
+                "externalId": external_id,
+                "description": description,
+            }
         )
 
-    return {
-        "success": True,
-        "id": created_id,
-        "name": created.get("name"),
-        "key": created.get("key"),
-        "externalId": created.get("externalId"),
-        "accountId": created.get("accountId"),
-        "description": created.get("description"),
-    }
+    if account_id:
+        account_variants: list[dict[str, Any]] = []
+        for variant in base_variants:
+            with_account = dict(variant)
+            with_account["accountId"] = account_id
+            account_variants.append(with_account)
+        base_variants.extend(account_variants)
+
+    attempted_errors: list[str] = []
+    seen_payloads: set[str] = set()
+
+    for use_attribution in (False, True):
+        for variant in base_variants:
+            input_obj = dict(variant)
+            if use_attribution:
+                input_obj = apply_actor_attribution(
+                    input_obj,
+                    client_context=getattr(client, "context", None),
+                    source="execute_tactus",
+                )
+
+            payload_key = json.dumps(input_obj, sort_keys=True, default=str)
+            if payload_key in seen_payloads:
+                continue
+            seen_payloads.add(payload_key)
+
+            try:
+                response = client.execute(mutation, {"input": input_obj})
+                created = (response or {}).get("createScorecard") or {}
+                created_id = created.get("id")
+                if created_id:
+                    return {
+                        "success": True,
+                        "id": created_id,
+                        "name": created.get("name"),
+                        "key": created.get("key"),
+                        "externalId": created.get("externalId"),
+                    }
+                attempted_errors.append(
+                    f"attribution={use_attribution} payload={input_obj!r} -> missing id in response {response!r}"
+                )
+            except Exception as exc:
+                attempted_errors.append(
+                    f"attribution={use_attribution} payload={input_obj!r} -> {exc}"
+                )
+
+    raise RuntimeError(
+        "plexus.scorecards.create failed after compatibility attempts: "
+        + " | ".join(attempted_errors)
+    )
 
 
 def _default_score_search(args: dict[str, Any]) -> dict[str, Any]:

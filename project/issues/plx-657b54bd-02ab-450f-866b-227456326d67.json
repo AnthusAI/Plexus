@@ -130,10 +130,28 @@
       "author": "derek",
       "text": "Patched scorecard create compatibility again to avoid CreateScorecardInput schema rejection in this account: removed all description-bearing variants and moved to strict-minimal payloads first (name, name+key, name+external_id, name+key+external_id). account_identifier variants remain only as late fallbacks and also exclude description.",
       "created_at": "2026-05-07T04:28:18.906362651Z"
+    },
+    {
+      "id": "6ee0aaee-d036-4ae7-b4f1-5defdcba07c9",
+      "author": "derek",
+      "text": "Identified root cause for persistent CreateScorecardInput failures: execute_tactus scorecards.create always applies actor attribution (createdByUserId + metadata) before mutation, which appears unsupported in this account/schema and causes every variant to fail regardless of procedure payload. Implementing runtime fix in MCP/tools/tactus_runtime/execute.py: attempt plain input variants first (no attribution), with attribution only as fallback.",
+      "created_at": "2026-05-07T04:36:35.803049820Z"
+    },
+    {
+      "id": "90502847-57aa-435e-ac9e-b59aaaf3b727",
+      "author": "derek",
+      "text": "Verified live GraphQL schema via introspection: CreateScorecardInput fields are name,key,description,guidelines,accountId,externalId,id. Proceeding with runtime-side fix in MCP/tools/tactus_runtime/execute.py to avoid injecting non-schema attribution fields in default scorecards.create path and use schema-valid payloads first.",
+      "created_at": "2026-05-07T04:38:54.284033047Z"
+    },
+    {
+      "id": "eed6ef6c-a478-4c76-bda6-3c1195481acb",
+      "author": "derek",
+      "text": "Implemented runtime fix in execute_tactus scorecards.create (_default_scorecards_create): now performs compatibility attempts with schema-valid plain payloads first and attribution-injected payloads second, with detailed attempted payload diagnostics on failure. Also restored default account resolution via resolve_account_id_for_command(client, None) so required accountId is still included by default. Validation: python3 -m py_compile MCP/tools/tactus_runtime/execute.py and pytest plexus/cli/procedure/test_service_yaml_loader.py -q both pass.",
+      "created_at": "2026-05-07T04:39:12.981980354Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T04:28:18.906362651Z",
+  "updated_at": "2026-05-07T04:39:12.981980354Z",
   "closed_at": null,
   "custom": {}
 }
