@@ -475,6 +475,12 @@ def _instantiate_and_run_block(
     block_display_name = block_def.get("block_name", class_name) # Use provided name or class name
 
     logger.info(f"Instantiating block: {class_name} with config: {block_config}")
+    report_account_id = (report_params or {}).get("account_id")
+    if report_account_id:
+        try:
+            api_client.context.account_id = str(report_account_id)
+        except Exception:
+            logger.debug("Unable to apply report account context to API client", exc_info=True)
 
     if class_name not in BLOCK_CLASSES:
         error_msg = f"Block class '{class_name}' not found or not registered. Available: {list(BLOCK_CLASSES.keys())}"
@@ -1098,6 +1104,10 @@ def run_programmatic_block_and_persist(
         report_params=report_params,
         api_client=client,
     )
+    block_failed = output_data is None or (
+        isinstance(output_data, dict)
+        and bool(output_data.get("error"))
+    )
     failure_output = (
         output_data
         if output_data is not None
@@ -1112,7 +1122,7 @@ def run_programmatic_block_and_persist(
     )
     error_message = (
         _summarize_error_message(failure_output, f"Block {block_class} failed.")
-        if output_data is None
+        if block_failed
         else None
     )
 
@@ -1125,7 +1135,7 @@ def run_programmatic_block_and_persist(
             log_output,
             account_id,
             client,
-            success=output_data is not None,
+            success=not block_failed,
             error_message=error_message,
         )
     except Exception as exc:
@@ -1133,8 +1143,8 @@ def run_programmatic_block_and_persist(
         if persist_required:
             raise
 
-    if output_data is None:
-        return None, log_output
+    if block_failed:
+        return None, log_output or error_message
 
     return output_data, log_output
 
