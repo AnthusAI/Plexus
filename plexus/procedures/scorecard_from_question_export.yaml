@@ -965,7 +965,7 @@ code: |
       "Decision rule:",
       "What counts as",
       "Important scoring constraints:",
-      "Output format requirements %(MANDATORY%)",
+      "Output format requirements (MANDATORY):",
     }
     for _, marker in ipairs(markers) do
       s = string.gsub(s, "%s*" .. marker, function()
@@ -990,7 +990,7 @@ code: |
       return "user_message Transcript section must place {{text}} after 'Transcript:'"
     end
 
-    local output_idx = string.find(user_message, "Output format requirements %(MANDATORY%)", 1, true)
+    local output_idx = string.find(user_message, "Output format requirements (MANDATORY):", 1, true)
     if output_idx and text_idx > output_idx then
       return "user_message must place Transcript/{{text}} before output format requirements"
     end
@@ -1064,7 +1064,7 @@ code: |
       "2. On the FINAL line, output exactly one label from [" .. labels_csv .. "].",
       "3. The final line must contain only the label and nothing else."
     }, "\n")
-    if not string.find(user_message, "Output format requirements %(MANDATORY%)", 1, true) then
+    if not string.find(user_message, "Output format requirements (MANDATORY):", 1, true) then
       user_message = user_message .. "\n\n" .. format_block
     end
     user_message = format_prompt_message(user_message)
