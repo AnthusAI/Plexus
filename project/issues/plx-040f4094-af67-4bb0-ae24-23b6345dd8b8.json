@@ -1,0 +1,37 @@
+{
+  "id": "plx-040f4094-af67-4bb0-ae24-23b6345dd8b8",
+  "title": "Rename PolicyPoint four-class labels to Yes and No",
+  "description": "Update the PolicyPoint Sales Skills QA score versions that currently use Met / Partially Met / Missed / NA.\n\nRequired behavior:\n- Rename Met to Yes.\n- Rename Missed/not met to No.\n- Retain Partially Met and NA.\n- Regenerate matching guidelines and score configs.\n- Validate guidelines with `skills/guidelines/validate_guidelines.py`.\n- Publish and promote updated score versions for the affected scores only.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-03d93482-b49d-4d3a-a997-31dc558f9979",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d849ebe6-b357-47c5-b287-1d4938fab9ba",
+      "author": "ryan",
+      "text": "Started label correction. Existing setup payload is available. Affected scores are the 8 four-class classifiers; the 2 existing Yes / No / NA qualifying question scores are already aligned and will not be changed.",
+      "created_at": "2026-05-06T14:41:45.525527Z"
+    },
+    {
+      "id": "66f98194-2323-474f-84a9-b1ea3213ca59",
+      "author": "ryan",
+      "text": "Validated 8 regenerated guideline files and 8 regenerated score configs. Created 8 new score versions with the corrected classes: Yes / No / Partially Met / NA. Next step is champion promotion and read-back verification.",
+      "created_at": "2026-05-06T14:43:12.513936Z"
+    },
+    {
+      "id": "e513f3e1-0fa3-4448-a0c2-b16d275b47e2",
+      "author": "ryan",
+      "text": "Completed label correction. Published and promoted updated champion versions for all 8 four-class PolicyPoint Sales Skills scores. Final verification confirmed champion configs and code classes are exactly `Yes`, `No`, `Partially Met`, `NA`; guidelines match the generated payload; all promoted versions are featured; old `Met` / `Missed` headings are absent. The 2 binary Yes / No / NA scores were unchanged.",
+      "created_at": "2026-05-06T14:44:01.653522Z"
+    }
+  ],
+  "created_at": "2026-05-06T14:41:26.276143Z",
+  "updated_at": "2026-05-06T14:44:05.006001Z",
+  "closed_at": "2026-05-06T14:44:05.006001Z",
+  "custom": {}
+}

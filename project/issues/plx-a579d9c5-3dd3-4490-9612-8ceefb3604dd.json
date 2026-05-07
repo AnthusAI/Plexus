@@ -1,0 +1,31 @@
+{
+  "id": "plx-a579d9c5-3dd3-4490-9612-8ceefb3604dd",
+  "title": "Apply PolicyPoint external IDs and pending questions",
+  "description": "Update the existing PolicyPoint scorecard setup with the source system external IDs supplied by the user.\n\nScope:\n- Set scorecard external ID to `1562` for `PolicyPoint - Non-Sales`.\n- Set score external IDs 48846-48859 for the named questions.\n- Create any missing question records where needed.\n- Use workbook Items Template rubrics when available for guidelines/configuration.\n- Validate any generated or changed guidelines with `skills/guidelines/validate_guidelines.py`.\n- Verify final Plexus state by read-back.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-03d93482-b49d-4d3a-a997-31dc558f9979",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6db3d90b-94c1-464c-9652-28b163e0cc4b",
+      "author": "ryan",
+      "text": "Started external ID alignment. Rechecked workbook `/Users/ryan/Downloads/SalesFloor_Sales Skills SOW_v2.xlsx`: Items Template still contains populated rubrics for 10 questions only. Missing/pending rows are 48852 Conversational, Not Robotic; 48853 Shows Empathy and Warmth; 48854 Builds Trust and Confidence; 48855 No-Sale Root Cause Classification. Those will be created as administrative score records without champion guideline/config versions until rubrics are supplied.",
+      "created_at": "2026-05-06T14:48:01.800753Z"
+    },
+    {
+      "id": "f468503b-d5ce-4669-969f-560cb8698c14",
+      "author": "ryan",
+      "text": "Completed external ID alignment and pending question creation. Scorecard `049ac545-c75b-4d36-9c3d-8d58b99db320` now has name `PolicyPoint - Non-Sales`, key `policy-point-non-sales`, external ID `1562`. Verified 14 questions with external IDs 48846-48859 in order. Created pending score records for 48852-48855 without champion versions because their rubric rows are not present in the workbook. Validated the 10 available champion guideline documents from workbook-backed scores.",
+      "created_at": "2026-05-06T14:50:18.555705Z"
+    }
+  ],
+  "created_at": "2026-05-06T14:47:19.890893Z",
+  "updated_at": "2026-05-06T14:50:18.574195Z",
+  "closed_at": "2026-05-06T14:50:18.574195Z",
+  "custom": {}
+}
