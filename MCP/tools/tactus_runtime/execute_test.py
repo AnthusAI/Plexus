@@ -453,6 +453,7 @@ def test_default_scorecards_search_ranks_matches(monkeypatch) -> None:
     assert result["success"] is True
     assert result["count"] == 1
     assert result["matches"][0]["scorecard"]["id"] == "sc-a"
+    assert result["matches"][0]["scorecard"]["updatedAt"] == "2026-01-02T00:00:00Z"
     assert result["matches"][0]["match_score"] >= 55.0
 
 
@@ -463,6 +464,9 @@ def test_default_score_search_cross_scorecards_and_scorecard_filter(monkeypatch)
                 "id": "sc-one",
                 "name": "Card One",
                 "key": "c1",
+                "externalId": "ext-c1",
+                "createdAt": "2026-01-01T00:00:00Z",
+                "updatedAt": "2026-01-04T00:00:00Z",
                 "sections": {
                     "items": [
                         {
@@ -479,6 +483,8 @@ def test_default_score_search_cross_scorecards_and_scorecard_filter(monkeypatch)
                                         "type": "LANGGRAPH",
                                         "championVersionId": "v1",
                                         "isDisabled": False,
+                                        "createdAt": "2026-01-02T00:00:00Z",
+                                        "updatedAt": "2026-01-03T00:00:00Z",
                                     }
                                 ]
                             },
@@ -490,6 +496,9 @@ def test_default_score_search_cross_scorecards_and_scorecard_filter(monkeypatch)
                 "id": "sc-two",
                 "name": "Card Two",
                 "key": "c2",
+                "externalId": "ext-c2",
+                "createdAt": "2026-02-01T00:00:00Z",
+                "updatedAt": "2026-02-04T00:00:00Z",
                 "sections": {
                     "items": [
                         {
@@ -506,6 +515,8 @@ def test_default_score_search_cross_scorecards_and_scorecard_filter(monkeypatch)
                                         "type": "LANGGRAPH",
                                         "championVersionId": "v2",
                                         "isDisabled": False,
+                                        "createdAt": "2026-02-02T00:00:00Z",
+                                        "updatedAt": "2026-02-03T00:00:00Z",
                                     }
                                 ]
                             },
@@ -519,8 +530,10 @@ def test_default_score_search_cross_scorecards_and_scorecard_filter(monkeypatch)
     class FakeClient:
         def execute(self, query: str, variables: dict | None = None) -> dict:
             if "ListScorecardsForScoreSearch" in query:
+                assert "createdAt updatedAt" in query
                 return {"listScorecards": nested}
             if "GetScorecardWithScores" in query:
+                assert "createdAt updatedAt" in query
                 return {"getScorecard": nested["items"][0]}
             raise AssertionError(f"Unexpected query: {query!r}")
 
@@ -538,6 +551,11 @@ def test_default_score_search_cross_scorecards_and_scorecard_filter(monkeypatch)
     ids = {m["score_id"] for m in wide["matches"]}
     assert ids == {"score-a", "score-b"}
     assert wide["matches"][0]["match_score"] >= wide["matches"][1]["match_score"]
+    score_a = next(match for match in wide["matches"] if match["score_id"] == "score-a")
+    assert score_a["score_updated_at"] == "2026-01-03T00:00:00Z"
+    assert score_a["scorecard_updated_at"] == "2026-01-04T00:00:00Z"
+    assert score_a["score"]["updatedAt"] == "2026-01-03T00:00:00Z"
+    assert score_a["scorecard"]["updatedAt"] == "2026-01-04T00:00:00Z"
 
     monkeypatch.setattr(
         "plexus.cli.scorecard.scorecards.resolve_scorecard_identifier",

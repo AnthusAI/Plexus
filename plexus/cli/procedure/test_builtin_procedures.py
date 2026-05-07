@@ -70,6 +70,24 @@ def test_builtin_console_procedure_prompt_teaches_report_dispatch_contract():
     assert "Do not use `plexus.procedure.optimize` to run a report" in system_prompt
 
 
+def test_builtin_console_procedure_prompt_teaches_shorthand_resolution():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+
+    assert "ENTITY RESOLUTION / SHORTHAND (HARD RULES)" in system_prompt
+    assert "may refer to either a scorecard or a score" in system_prompt
+    assert "search both in one `execute_tactus` call" in system_prompt
+    assert "plexus.scorecards.search" in system_prompt
+    assert "plexus.score.search" in system_prompt
+    assert "updatedAt" in system_prompt
+    assert "HCS Medium-Risk" in system_prompt
+    assert "Dosage" in system_prompt
+    assert "scorecard_candidates = card_hits" in system_prompt
+    assert "score_candidates = score_hits" in system_prompt
+    assert "ask one concise clarification" in system_prompt
+
+
 def test_builtin_console_procedure_prompt_teaches_prediction_contract():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
@@ -86,8 +104,8 @@ def test_builtin_console_procedure_prompt_teaches_prediction_contract():
 def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    # Bumped when the prediction contract changed to canonical identifiers.
-    assert parsed["version"] == "1.6.3"
+    # Bumped when shorthand score/scorecard discovery guidance changed.
+    assert parsed["version"] == "1.6.4"
 
 
 def test_is_builtin_procedure_id():

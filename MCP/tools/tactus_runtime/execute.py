@@ -805,10 +805,10 @@ def _default_score_search(args: dict[str, Any]) -> dict[str, Any]:
         result = client.execute(
             f"""query GetScorecardWithScores {{
                 getScorecard(id: "{scorecard_id}") {{
-                    id name key
+                    id name key externalId createdAt updatedAt
                     sections {{ items {{ id name scores {{ items {{
                         id name key externalId description type
-                        championVersionId isDisabled
+                        championVersionId isDisabled createdAt updatedAt
                     }} }} }} }}
                 }}
             }}"""
@@ -827,10 +827,10 @@ def _default_score_search(args: dict[str, Any]) -> dict[str, Any]:
             f"""query ListScorecardsForScoreSearch {{
                 listScorecards(filter: {{ accountId: {{ eq: "{account_id}" }} }}, limit: {scorecard_fetch_limit}) {{
                     items {{
-                        id name key
+                        id name key externalId createdAt updatedAt
                         sections {{ items {{ id name scores {{ items {{
                             id name key externalId description type
-                            championVersionId isDisabled
+                            championVersionId isDisabled createdAt updatedAt
                         }} }} }} }}
                     }}
                 }}
@@ -848,6 +848,10 @@ def _default_score_search(args: dict[str, Any]) -> dict[str, Any]:
     for scorecard in scorecards:
         sc_name = str(scorecard.get("name") or "")
         sc_id = str(scorecard.get("id") or "")
+        sc_key = str(scorecard.get("key") or "")
+        sc_external_id = str(scorecard.get("externalId") or "")
+        sc_created_at = scorecard.get("createdAt")
+        sc_updated_at = scorecard.get("updatedAt")
         for section in scorecard.get("sections", {}).get("items", []) or []:
             sec_name = str(section.get("name") or "")
             for score in section.get("scores", {}).get("items", []) or []:
@@ -865,6 +869,10 @@ def _default_score_search(args: dict[str, Any]) -> dict[str, Any]:
                         "section_name": sec_name,
                         "scorecard_id": sc_id,
                         "scorecard_name": sc_name,
+                        "scorecard_key": sc_key,
+                        "scorecard_external_id": sc_external_id,
+                        "scorecard_created_at": sc_created_at,
+                        "scorecard_updated_at": sc_updated_at,
                     }
                 )
 
@@ -898,10 +906,36 @@ def _default_score_search(args: dict[str, Any]) -> dict[str, Any]:
                 "score_name": sc_row.get("name"),
                 "score_key": sc_row.get("key"),
                 "external_id": sc_row.get("externalId"),
+                "score_created_at": sc_row.get("createdAt"),
+                "score_updated_at": sc_row.get("updatedAt"),
                 "section_name": meta["section_name"],
                 "scorecard_id": meta["scorecard_id"],
                 "scorecard_name": meta["scorecard_name"],
+                "scorecard_key": meta["scorecard_key"],
+                "scorecard_external_id": meta["scorecard_external_id"],
+                "scorecard_created_at": meta["scorecard_created_at"],
+                "scorecard_updated_at": meta["scorecard_updated_at"],
                 "is_disabled": sc_row.get("isDisabled", False),
+                "score": {
+                    "id": sc_row.get("id"),
+                    "name": sc_row.get("name"),
+                    "key": sc_row.get("key"),
+                    "externalId": sc_row.get("externalId"),
+                    "description": sc_row.get("description"),
+                    "type": sc_row.get("type"),
+                    "championVersionId": sc_row.get("championVersionId"),
+                    "isDisabled": sc_row.get("isDisabled", False),
+                    "createdAt": sc_row.get("createdAt"),
+                    "updatedAt": sc_row.get("updatedAt"),
+                },
+                "scorecard": {
+                    "id": meta["scorecard_id"],
+                    "name": meta["scorecard_name"],
+                    "key": meta["scorecard_key"],
+                    "externalId": meta["scorecard_external_id"],
+                    "createdAt": meta["scorecard_created_at"],
+                    "updatedAt": meta["scorecard_updated_at"],
+                },
             }
         )
         if len(hits) >= result_limit:

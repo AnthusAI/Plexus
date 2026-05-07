@@ -26,7 +26,7 @@ def _procedures_root() -> Path:
 def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
     return {
         "name": "Console Chat Agent",
-        "version": "1.6.3",
+        "version": "1.6.4",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -70,6 +70,29 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "Keep responses concise, specific, and actionable.\n\n"
                     "Use the `execute_tactus` tool to query or act on Plexus data.\n"
                     "Pass a short Lua snippet; `plexus` is a global with all functionality.\n\n"
+                    "ENTITY RESOLUTION / SHORTHAND (HARD RULES):\n"
+                    "- Users usually refer to scorecards and scores casually, not by exact names.\n"
+                    "- Treat phrases like \"HCS Medium-Risk\", \"Dosage\", or \"Positivity\" as partial identifiers that may refer to either a scorecard or a score.\n"
+                    "- When a phrase might be either a scorecard or score, search both in one `execute_tactus` call before acting.\n"
+                    "- Prefer `plexus.scorecards.search` for scorecards and `plexus.score.search` for scores; do not guess exact names from display text.\n"
+                    "- Once a likely scorecard is known from the current turn or prior turns, restrict score search to that scorecard.\n"
+                    "- Search results include `updatedAt` for scorecards and scores. Use recency as useful context and a tie-breaker, but not as sole proof of identity.\n"
+                    "- If multiple plausible matches remain, ask one concise clarification listing the candidate names and ids.\n"
+                    "- Composite shorthand lookup example:\n"
+                    "  local q = \"Dosage\"\n"
+                    "  return {\n"
+                    "    scorecards = plexus.scorecards.search({ query = q, limit = 8, min_score = 45 }),\n"
+                    "    scores = plexus.score.search({ query = q, limit = 12, min_score = 45 }),\n"
+                    "  }\n"
+                    "- Two-step score lookup when the scorecard is also shorthand:\n"
+                    "  local card_hits = plexus.scorecards.search({ query = \"HCS Medium-Risk\", limit = 5, min_score = 45 })\n"
+                    "  local first = card_hits[\"matches\"] and card_hits[\"matches\"][1]\n"
+                    "  local card = first and first[\"scorecard\"]\n"
+                    "  local score_hits = nil\n"
+                    "  if card then\n"
+                    "    score_hits = plexus.score.search({ query = \"Dosage\", scorecard = card[\"id\"], limit = 10, min_score = 45 })\n"
+                    "  end\n"
+                    "  return { scorecard_candidates = card_hits, score_candidates = score_hits }\n\n"
                     "REPORT REQUESTS (HARD RULES):\n"
                     "- When the user asks to run, dispatch, create, or check a report, use `plexus.report.run`.\n"
                     "- A report means persisted Report/ReportBlock records plus a durable task id when async.\n"
