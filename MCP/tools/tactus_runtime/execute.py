@@ -3235,6 +3235,13 @@ def _build_report_config_command(configuration_id: str, parameters: dict[str, An
     return " ".join(shlex.quote(str(part)) for part in parts)
 
 
+def _normalize_report_block_config(block_class: Any, block_config: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(block_config or {})
+    if str(block_class) == "FeedbackAlignment" and "memory_analysis" not in normalized:
+        normalized["memory_analysis"] = False
+    return normalized
+
+
 def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
     """Dispatch report.run async.
 
@@ -3309,7 +3316,7 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
 
     from plexus.reports.service import run_block_cached
 
-    block_config = args.get("block_config") or {}
+    block_config = _normalize_report_block_config(block_class, args.get("block_config") or {})
     cache_key = args.get("cache_key")
     ttl_hours = args.get("ttl_hours") if args.get("ttl_hours") is not None else 24
     fresh = bool(args.get("fresh", False))
@@ -3425,7 +3432,7 @@ def _default_report_runner_sync(args: dict[str, Any]) -> dict[str, Any]:
 
     output_data, log_output, was_cached = run_block_cached(
         block_class=str(block_class),
-        block_config=args.get("block_config") or {},
+        block_config=_normalize_report_block_config(block_class, args.get("block_config") or {}),
         account_id=account_id,
         client=client,
         cache_key=cache_key,
@@ -3800,6 +3807,8 @@ def _public_handle(record: dict[str, Any]) -> dict[str, Any]:
     }
     if record.get("child_budget") is not None:
         public["child_budget"] = record.get("child_budget")
+    if record.get("dispatch_result") is not None:
+        public["dispatch_result"] = record.get("dispatch_result")
     return public
 
 
