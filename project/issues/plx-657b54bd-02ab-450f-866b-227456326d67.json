@@ -112,10 +112,16 @@
       "author": "derek",
       "text": "Per user direction, removed critic->draft fallback. Procedure is strict again: critic parse still hard-fails, but retains improved done() parser and expanded repair retries/prompt to reduce invalid payloads. Loader test passes.",
       "created_at": "2026-05-07T03:48:16.342290868Z"
+    },
+    {
+      "id": "29afc0e9-9ac1-4a37-8e15-198cf1ba6cb9",
+      "author": "derek",
+      "text": "Implemented anti-guess hardening for repeated critic parse failures: (1) drastically reduced prompt payload size by sending compact reference context (no full reference score code blobs) to generator/critic prompts; (2) added early generator/critic done() contract probes in observe stage so invalid done payload behavior fails fast before expensive generation. Loader test passes.",
+      "created_at": "2026-05-07T04:09:16.616467393Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T03:48:16.342290868Z",
+  "updated_at": "2026-05-07T04:09:16.616467393Z",
   "closed_at": null,
   "custom": {}
 }

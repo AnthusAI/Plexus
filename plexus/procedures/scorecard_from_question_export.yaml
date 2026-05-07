@@ -758,6 +758,26 @@ code: |
   end
 
   local function build_generate_prompt(question, reference_context)
+    local reference_examples = {}
+    if type(reference_context.examples) == "table" then
+      for i, ex in ipairs(reference_context.examples) do
+        if i > 3 then break end
+        reference_examples[#reference_examples + 1] = {
+          id = ex.id,
+          name = ex.name,
+          key = ex.key,
+          description = safe_slice(ex.description or "", 240),
+          guidelines = safe_slice(ex.guidelines or "", 600)
+        }
+      end
+    end
+    local prompt_reference = {
+      id = reference_context.id,
+      name = reference_context.name,
+      key = reference_context.key,
+      examples = reference_examples
+    }
+
     local prompt = {}
     table.insert(prompt, "Generate one Plexus classifier score spec from this question policy.")
     table.insert(prompt, "")
@@ -765,7 +785,7 @@ code: |
     table.insert(prompt, Json.encode(question))
     table.insert(prompt, "")
     table.insert(prompt, "Reference Score Patterns JSON:")
-    table.insert(prompt, Json.encode(reference_context))
+    table.insert(prompt, Json.encode(prompt_reference))
     table.insert(prompt, "")
     table.insert(prompt, "Output strict JSON only matching the required schema.")
     table.insert(prompt, "No markdown, no code fences.")
@@ -773,6 +793,24 @@ code: |
   end
 
   local function build_review_prompt(question, draft, reference_context)
+    local reference_examples = {}
+    if type(reference_context.examples) == "table" then
+      for i, ex in ipairs(reference_context.examples) do
+        if i > 2 then break end
+        reference_examples[#reference_examples + 1] = {
+          name = ex.name,
+          key = ex.key,
+          description = safe_slice(ex.description or "", 240),
+          guidelines = safe_slice(ex.guidelines or "", 450)
+        }
+      end
+    end
+    local prompt_reference = {
+      name = reference_context.name,
+      key = reference_context.key,
+      examples = reference_examples
+    }
+
     local prompt = {}
     table.insert(prompt, "Review and refine this generated score spec for policy fidelity and clarity.")
     table.insert(prompt, "")
@@ -783,10 +821,41 @@ code: |
     table.insert(prompt, Json.encode(draft))
     table.insert(prompt, "")
     table.insert(prompt, "Reference Score Patterns JSON:")
-    table.insert(prompt, Json.encode(reference_context))
+    table.insert(prompt, Json.encode(prompt_reference))
     table.insert(prompt, "")
     table.insert(prompt, "Return strict JSON only with same schema.")
     return table.concat(prompt, "\n")
+  end
+
+  local function probe_agent_done_contract(agent, role_name)
+    local probe_prompt = table.concat({
+      "Contract probe. Return via done() named fields only.",
+      "Required fields:",
+      "name,key,external_id,description,labels,target_class,default_class,guidance_summary,rationale,system_message,user_message",
+      "Use this exact minimal payload values.",
+      "name=Probe Score",
+      "key=probe-score",
+      "external_id=probe-score",
+      "description=probe description",
+      "labels={Yes,No}",
+      "target_class=Yes",
+      "default_class=No",
+      "guidance_summary=probe guidance",
+      "rationale=probe rationale",
+      "system_message=probe system",
+      "user_message=probe user"
+    }, "\n")
+
+    local ok = wait_for_done(agent, 4, probe_prompt)
+    if not ok then
+      return nil, role_name .. " did not call done() in contract probe"
+    end
+
+    local parsed, err = parse_last_done_json()
+    if not parsed then
+      return nil, role_name .. " contract probe parse failed: " .. tostring(err)
+    end
+    return parsed, nil
   end
 
   local function contains_label(labels, value)
@@ -1030,6 +1099,24 @@ code: |
       }
     end
     reference_context = ref_or_err
+
+    local _, generator_probe_err = probe_agent_done_contract(Generator, "Generator")
+    if generator_probe_err then
+      return {
+        success = false,
+        status = "error",
+        message = generator_probe_err
+      }
+    end
+
+    local _, critic_probe_err = probe_agent_done_contract(Critic, "Critic")
+    if critic_probe_err then
+      return {
+        success = false,
+        status = "error",
+        message = critic_probe_err
+      }
+    end
 
     Stage.set("plan")
     local normalized_questions = {}
