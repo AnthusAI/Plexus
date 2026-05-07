@@ -64,6 +64,7 @@ class _MemoryHandleStore(execute.TactusHandleStore):
             "status_url": dispatch_result.get("dashboard_url"),
             "created_at": record["created_at"],
             "parent_trace_id": parent_trace_id,
+            "dispatch_result": dispatch_result,
         }
         if child_budget is not None:
             public["child_budget"] = child_budget
@@ -2795,6 +2796,69 @@ def test_default_report_runner_uses_remote_dispatch_by_default(monkeypatch) -> N
     }
 
 
+def test_default_report_runner_disables_feedback_alignment_memory_by_default(monkeypatch) -> None:
+    captured: dict = {}
+    client = object()
+
+    def fake_run_block_cached(**kwargs):
+        captured.update(kwargs)
+        return ({"status": "dispatched", "cache_key": "report-cache", "task_id": "task-1"}, None, False)
+
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr("plexus.reports.service.run_block_cached", fake_run_block_cached)
+    monkeypatch.delenv("PLEXUS_DISPATCH_MODE", raising=False)
+
+    result = execute._default_report_runner(
+        {
+            "block_class": "FeedbackAlignment",
+            "cache_key": "report-cache",
+            "block_config": {"scorecard": "Suco - Home Improvement", "days": 30},
+        }
+    )
+
+    assert result["task_id"] == "task-1"
+    assert captured["block_config"] == {
+        "scorecard": "Suco - Home Improvement",
+        "days": 30,
+        "memory_analysis": False,
+    }
+
+
+def test_default_report_runner_preserves_explicit_feedback_alignment_memory(monkeypatch) -> None:
+    captured: dict = {}
+    client = object()
+
+    def fake_run_block_cached(**kwargs):
+        captured.update(kwargs)
+        return ({"status": "dispatched", "cache_key": "report-cache", "task_id": "task-1"}, None, False)
+
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr("plexus.reports.service.run_block_cached", fake_run_block_cached)
+    monkeypatch.delenv("PLEXUS_DISPATCH_MODE", raising=False)
+
+    execute._default_report_runner(
+        {
+            "block_class": "FeedbackAlignment",
+            "cache_key": "report-cache",
+            "block_config": {
+                "scorecard": "Suco - Home Improvement",
+                "days": 30,
+                "memory_analysis": True,
+            },
+        }
+    )
+
+    assert captured["block_config"]["memory_analysis"] is True
+
+
 def test_default_report_runner_requires_account_context_without_null_key(monkeypatch) -> None:
     fake_client = SimpleNamespace(
         context=SimpleNamespace(account_id=None, account_key=None)
@@ -3214,6 +3278,7 @@ async def test_execute_tactus_report_run_async_returns_handle() -> None:
     assert result["ok"] is True
     assert result["value"]["kind"] == "report"
     assert result["value"]["id"] == "handle-1"
+    assert result["value"]["dispatch_result"]["task_id"] == "task-1"
     assert result["api_calls"] == ["plexus.report.run"]
     assert result["cost"]["tool_calls"] == 3
 
