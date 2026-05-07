@@ -224,6 +224,7 @@ const CONSOLE_CHAT_MODEL_OPTIONS = [
 ] as const
 
 const DEFAULT_CONSOLE_CHAT_MODEL = 'gpt-5.4-mini'
+const CONVERSATION_BOTTOM_THRESHOLD_PX = 96
 
 // Types for the conversation data
 export interface ChatMessage {
@@ -1563,6 +1564,9 @@ function ConversationViewer({
   const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
   const manualScrollLockRef = React.useRef(false)
   const lastScrollerTopRef = React.useRef<number | null>(null)
+  const conversationScrollerRef = React.useRef<HTMLDivElement | null>(null)
+  const programmaticScrollRef = React.useRef(false)
+  const programmaticScrollFrameRef = React.useRef<number | null>(null)
   const promptSubmitLockRef = React.useRef(false)
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const [atBottom, setAtBottom] = useState(true)
@@ -2560,6 +2564,57 @@ function ConversationViewer({
   )
   const canCreateSession = Boolean(fallbackSessionAccountId && fallbackSessionProcedureId)
 
+  const isScrollerNearBottom = React.useCallback((scroller: HTMLDivElement) => {
+    const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+    return distanceFromBottom <= CONVERSATION_BOTTOM_THRESHOLD_PX
+  }, [])
+
+  const clearProgrammaticScrollAfterPaint = React.useCallback(() => {
+    if (programmaticScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(programmaticScrollFrameRef.current)
+      programmaticScrollFrameRef.current = null
+    }
+    programmaticScrollFrameRef.current = window.requestAnimationFrame(() => {
+      programmaticScrollFrameRef.current = window.requestAnimationFrame(() => {
+        programmaticScrollRef.current = false
+        programmaticScrollFrameRef.current = null
+      })
+    })
+  }, [])
+
+  useEffect(() => (
+    () => {
+      if (programmaticScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(programmaticScrollFrameRef.current)
+      }
+    }
+  ), [])
+
+  const markConversationAtBottom = React.useCallback(() => {
+    manualScrollLockRef.current = false
+    lastScrollerTopRef.current = conversationScrollerRef.current?.scrollTop ?? null
+    setAtBottom(true)
+    setAutoFollowEnabled(true)
+  }, [])
+
+  const scrollConversationToBottom = React.useCallback((behavior: "auto" | "smooth" = "auto") => {
+    programmaticScrollRef.current = true
+    markConversationAtBottom()
+    virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior })
+
+    const scroller = conversationScrollerRef.current
+    if (scroller) {
+      window.requestAnimationFrame(() => {
+        scroller.scrollTop = scroller.scrollHeight
+        markConversationAtBottom()
+        clearProgrammaticScrollAfterPaint()
+      })
+      return
+    }
+
+    clearProgrammaticScrollAfterPaint()
+  }, [clearProgrammaticScrollAfterPaint, markConversationAtBottom])
+
   const openRenameDialog = React.useCallback(() => {
     if (!selectedSession) {
       return
@@ -2621,9 +2676,7 @@ function ConversationViewer({
   const handleAtBottomStateChange = React.useCallback((isNowAtBottom: boolean) => {
     setAtBottom(isNowAtBottom)
     if (isNowAtBottom) {
-      setAutoFollowEnabled(true)
-      manualScrollLockRef.current = false
-      lastScrollerTopRef.current = null
+      markConversationAtBottom()
       return
     }
     if (manualScrollLockRef.current) {
@@ -2639,17 +2692,28 @@ function ConversationViewer({
   }, [selectedSessionId])
 
   const handleScrollerScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    const currentTop = event.currentTarget.scrollTop
+    const scroller = event.currentTarget
+    const currentTop = scroller.scrollTop
     const previousTop = lastScrollerTopRef.current
-    if (previousTop !== null && currentTop < previousTop - 1) {
+    const isNearBottom = isScrollerNearBottom(scroller)
+
+    if (isNearBottom) {
+      markConversationAtBottom()
+      return
+    }
+
+    setAtBottom(false)
+    if (!programmaticScrollRef.current && previousTop !== null && currentTop < previousTop - 1) {
       manualScrollLockRef.current = true
+      setAutoFollowEnabled(false)
     }
     lastScrollerTopRef.current = currentTop
-  }, [])
+  }, [isScrollerNearBottom, markConversationAtBottom])
 
   const handleScrollerWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     if (event.deltaY < 0) {
       manualScrollLockRef.current = true
+      setAutoFollowEnabled(false)
     }
   }, [])
 
@@ -2657,9 +2721,19 @@ function ConversationViewer({
     () =>
       React.forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<"div">>(
         function ConversationVirtuosoScroller({ onScroll, onWheel, ...props }, ref) {
+          const setRef = (node: HTMLDivElement | null) => {
+            conversationScrollerRef.current = node
+            if (typeof ref === "function") {
+              ref(node)
+            } else if (ref) {
+              ref.current = node
+            }
+          }
+
           return (
             <div
-              ref={ref}
+              ref={setRef}
+              data-testid="conversation-scroll-region"
               {...props}
               onScroll={(event) => {
                 handleScrollerScroll(event)
@@ -2689,14 +2763,12 @@ function ConversationViewer({
       return
     }
 
-    const rafId = window.requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" })
-    })
+    const rafId = window.requestAnimationFrame(() => scrollConversationToBottom("auto"))
 
     return () => {
       window.cancelAnimationFrame(rafId)
     }
-  }, [latestConversationRenderSignature, selectedSessionId, shouldForceFollow])
+  }, [latestConversationRenderSignature, scrollConversationToBottom, selectedSessionId, shouldForceFollow])
 
   const previousThinkingStateRef = React.useRef(false)
   const pendingInitialTailJumpSessionRef = React.useRef<string | null>(null)
@@ -2712,14 +2784,14 @@ function ConversationViewer({
     }
 
     const rafId = window.requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" })
+      scrollConversationToBottom("auto")
       pendingInitialTailJumpSessionRef.current = null
     })
 
     return () => {
       window.cancelAnimationFrame(rafId)
     }
-  }, [renderRows.length, selectedSessionId])
+  }, [renderRows.length, scrollConversationToBottom, selectedSessionId])
 
   useEffect(() => {
     const transitionedFromThinkingToMessage = previousThinkingStateRef.current && !showThinkingPlaceholder
@@ -2729,13 +2801,11 @@ function ConversationViewer({
       return
     }
 
-    const rafId = window.requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" })
-    })
+    const rafId = window.requestAnimationFrame(() => scrollConversationToBottom("auto"))
     return () => {
       window.cancelAnimationFrame(rafId)
     }
-  }, [selectedSessionId, shouldForceFollow, showThinkingPlaceholder])
+  }, [scrollConversationToBottom, selectedSessionId, shouldForceFollow, showThinkingPlaceholder])
 
   const createNewSession = React.useCallback(async (options?: { hiddenUntilNamed?: boolean }) => {
     if (!fallbackSessionAccountId || !fallbackSessionProcedureId) {
@@ -3340,6 +3410,7 @@ function ConversationViewer({
             <ConversationScrollButton
               isAtBottom={atBottom}
               virtuosoRef={virtuosoRef}
+              onClick={() => scrollConversationToBottom("smooth")}
             />
           </Conversation>
         </div>
