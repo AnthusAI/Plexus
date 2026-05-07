@@ -70,10 +70,16 @@
       "author": "derek",
       "text": "Fixed YAML parse regression introduced by multiline nested tactus literal in preflight_write_capabilities. Replaced block literal with single-line concatenated tactus string to preserve YAML block indentation safety.",
       "created_at": "2026-05-07T01:42:01.401859825Z"
+    },
+    {
+      "id": "62b535f6-1779-4e53-955c-f54d22d4e360",
+      "author": "derek",
+      "text": "Observed runtime type mismatch in preflight: execute_tactus reports callable Plexus methods as Lua 'userdata' (not 'function'). Updating preflight check to treat both function and userdata as callable capabilities.",
+      "created_at": "2026-05-07T01:47:29.850443587Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T01:42:01.401859825Z",
+  "updated_at": "2026-05-07T01:47:29.850443587Z",
   "closed_at": null,
   "custom": {}
 }
