@@ -459,7 +459,6 @@ def _default_scorecards_list(args: dict[str, Any]) -> Any:
     from plexus.cli.shared.memoized_resolvers import (
         memoized_resolve_scorecard_identifier,
     )
-    from shared.utils import get_default_account_id
 
     identifier = args.get("identifier") or args.get("name") or args.get("key")
     next_token = args.get("next_token") or args.get("nextToken")
@@ -506,9 +505,8 @@ def _default_scorecards_list(args: dict[str, Any]) -> Any:
             return items
 
     filter_parts: list[str] = []
-    default_account_id = get_default_account_id()
-    if default_account_id:
-        filter_parts.append(f'accountId: {{ eq: "{default_account_id}" }}')
+    account_id = _resolve_runtime_account_id(client, args, "plexus.scorecards.list")
+    filter_parts.append(f'accountId: {{ eq: "{account_id}" }}')
     if identifier:
         ident = str(identifier)
         if " " in ident or not ident.islower():
@@ -627,7 +625,6 @@ def _default_scorecards_search(args: dict[str, Any]) -> dict[str, Any]:
     from rapidfuzz import fuzz, process
 
     from plexus.cli.shared.client_utils import create_client
-    from shared.utils import get_default_account_id
 
     query = _search_query_string(args)
     if not query:
@@ -667,9 +664,8 @@ def _default_scorecards_search(args: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("plexus.scorecards.search: could not create dashboard client")
 
     filter_parts: list[str] = []
-    default_account_id = get_default_account_id()
-    if default_account_id:
-        filter_parts.append(f'accountId: {{ eq: "{default_account_id}" }}')
+    account_id = _resolve_runtime_account_id(client, args, "plexus.scorecards.search")
+    filter_parts.append(f'accountId: {{ eq: "{account_id}" }}')
     filter_str = ", ".join(filter_parts)
     gql = (
         "query ListScorecardsForSearch { "
@@ -826,11 +822,7 @@ def _default_score_search(args: dict[str, Any]) -> dict[str, Any]:
         if one:
             scorecards = [one]
     else:
-        account_id = resolve_account_id_for_command(client, None)
-        if not account_id:
-            raise RuntimeError(
-                "plexus.score.search: no default account — is PLEXUS_ACCOUNT_KEY set?"
-            )
+        account_id = _resolve_runtime_account_id(client, args, "plexus.score.search")
         result = client.execute(
             f"""query ListScorecardsForScoreSearch {{
                 listScorecards(filter: {{ accountId: {{ eq: "{account_id}" }} }}, limit: {scorecard_fetch_limit}) {{
@@ -2714,7 +2706,6 @@ def _default_report_configurations_list(args: dict[str, Any]) -> Any:
     """Run plexus.report.configurations_list directly via dashboard GraphQL."""
 
     from plexus.cli.shared.client_utils import create_client
-    from shared.utils import get_default_account_id
 
     client = create_client()
     if not client:
@@ -2722,12 +2713,9 @@ def _default_report_configurations_list(args: dict[str, Any]) -> Any:
             "plexus.report.configurations_list: could not create dashboard client"
         )
 
-    account_id = get_default_account_id()
-    if not account_id:
-        raise RuntimeError(
-            "plexus.report.configurations_list: PLEXUS_ACCOUNT_KEY not set or "
-            "default account could not be resolved"
-        )
+    account_id = _resolve_runtime_account_id(
+        client, args, "plexus.report.configurations_list"
+    )
 
     query = (
         "query MyQuery { "
@@ -5407,7 +5395,7 @@ class PlexusRuntimeModule:
         self._budget.check_before("score", method)
         self._record_api_call("score", method)
         try:
-            parsed = _args(args)
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
             if method == "info":
                 return self._score_info(parsed)
             if method == "search":
@@ -5469,7 +5457,7 @@ class PlexusRuntimeModule:
         self._budget.check_before("scorecards", method)
         self._record_api_call("scorecards", method)
         try:
-            parsed = _args(args)
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
             if method == "list":
                 return self._scorecards_lister(parsed)
             if method == "search":
@@ -5589,7 +5577,8 @@ class PlexusRuntimeModule:
         self._budget.check_before("report", "configurations_list")
         self._record_api_call("report", "configurations_list")
         try:
-            return self._report_configurations_list(_args(args))
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
+            return self._report_configurations_list(parsed)
         finally:
             self._budget.record_after("report", "configurations_list")
 
