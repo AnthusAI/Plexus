@@ -1031,6 +1031,14 @@ code: |
       return nil, "user_message is required"
     end
 
+    if not string.find(user_message, "{{text}}", 1, true) then
+      local transcript_block = table.concat({
+        "Transcript:",
+        "{{text}}"
+      }, "\n")
+      user_message = user_message .. "\n\n" .. transcript_block
+    end
+
     local labels_csv = table.concat(labels, ", ")
     local format_block = table.concat({
       "Output format requirements (MANDATORY):",
