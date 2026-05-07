@@ -1,0 +1,43 @@
+{
+  "id": "plx-37b7f7ac-fdd5-463a-809a-65842883b990",
+  "title": "Create records and validated guidelines for PolicyPoint sales skills",
+  "description": "Implement the setup for the PolicyPoint Sales Skills QA Scorecard.\n\nSteps:\n1. Parse workbook metadata and populated item rubrics.\n2. Create or verify the scorecard and score records.\n3. Generate classifier guidelines for each populated score.\n4. Validate guidelines with `skills/guidelines/validate_guidelines.py`.\n5. Publish validated guidelines to score versions and verify via Plexus read APIs.\n\nNotes:\n- Workbook contains populated Items 1-6 and 11-14; item numbers 7-10 are not populated in the provided workbook.\n- MCP exposes score version update but not scorecard/score create methods, so record creation may need the local GraphQL client path.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-03d93482-b49d-4d3a-a997-31dc558f9979",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "08d5e8ec-9e05-408f-9ea5-fb951b6abe89",
+      "author": "ryan",
+      "text": "Started setup. Parsed workbook metadata and found 10 populated score rubrics: Items 1-6 and 11-14. MCP score setup create methods are not exposed by api_list; score.update is available for publishing versions/guidelines.",
+      "created_at": "2026-05-06T14:31:48.493858Z"
+    },
+    {
+      "id": "cd8bdcbc-18cd-42df-a462-e01be1c66a18",
+      "author": "ryan",
+      "text": "Created Plexus records under Call Criteria account. Scorecard `049ac545-c75b-4d36-9c3d-8d58b99db320`, Default section `cdbdeaf3-7a8f-475e-8d7d-57dad9107316`, and 10 score records were created and verified. Next step is publishing the validated score versions/guidelines.",
+      "created_at": "2026-05-06T14:36:59.372585Z"
+    },
+    {
+      "id": "96f6752e-ac30-46cc-a87b-a2bc8f29d7d2",
+      "author": "ryan",
+      "text": "Published and promoted 10 initial score versions. Final verification confirmed all champion versions match the generated YAML configuration and guidelines, and each champion version is featured. Guidelines validator passed for all 10 files; score YAML linter passed for all 10 configs.",
+      "created_at": "2026-05-06T14:39:25.703320Z"
+    },
+    {
+      "id": "53fd0314-f714-4d1f-9bfa-bdadbd1e51cb",
+      "author": "ryan",
+      "text": "Completed setup. Created scorecard `PolicyPoint Sales Skills QA Scorecard` (`049ac545-c75b-4d36-9c3d-8d58b99db320`) under Call Criteria, created Default section and 10 score records from workbook Items 1-6 and 11-14, generated/validated guidelines, published initial score versions, promoted all versions to champion, and verified champion configuration/guidelines match the generated payload.",
+      "created_at": "2026-05-06T14:39:40.463081Z"
+    }
+  ],
+  "created_at": "2026-05-06T14:31:43.889101Z",
+  "updated_at": "2026-05-06T14:39:44.788066Z",
+  "closed_at": "2026-05-06T14:39:44.788066Z",
+  "custom": {}
+}
