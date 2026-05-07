@@ -416,6 +416,52 @@ code: |
     local variants = {
       {
         name = normalized_scorecard.name,
+        account_identifier = account_identifier
+      },
+      {
+        name = normalized_scorecard.name,
+      },
+      {
+        name = normalized_scorecard.name,
+        key = normalized_scorecard.key,
+        account_identifier = account_identifier
+      },
+      {
+        name = normalized_scorecard.name,
+        external_id = normalized_scorecard.external_id,
+        account_identifier = account_identifier
+      },
+      {
+        name = normalized_scorecard.name,
+        key = normalized_scorecard.key
+      },
+      {
+        name = normalized_scorecard.name,
+        external_id = normalized_scorecard.external_id
+      },
+      {
+        name = normalized_scorecard.name,
+        key = normalized_scorecard.key,
+        external_id = normalized_scorecard.external_id,
+        account_identifier = account_identifier
+      },
+      {
+        name = normalized_scorecard.name,
+        key = normalized_scorecard.key,
+        external_id = normalized_scorecard.external_id
+      },
+      {
+        name = normalized_scorecard.name,
+        external_id = normalized_scorecard.external_id,
+        description = normalized_scorecard.description
+      },
+      {
+        name = normalized_scorecard.name,
+        description = normalized_scorecard.description,
+        account_identifier = account_identifier
+      },
+      {
+        name = normalized_scorecard.name,
         key = normalized_scorecard.key,
         external_id = normalized_scorecard.external_id,
         description = normalized_scorecard.description,
@@ -423,28 +469,8 @@ code: |
       },
       {
         name = normalized_scorecard.name,
-        external_id = normalized_scorecard.external_id,
-        description = normalized_scorecard.description,
-        account_identifier = account_identifier
-      },
-      {
-        name = normalized_scorecard.name,
-        description = normalized_scorecard.description,
-        account_identifier = account_identifier
-      },
-      {
-        name = normalized_scorecard.name,
         key = normalized_scorecard.key,
         external_id = normalized_scorecard.external_id,
-        description = normalized_scorecard.description
-      },
-      {
-        name = normalized_scorecard.name,
-        external_id = normalized_scorecard.external_id,
-        description = normalized_scorecard.description
-      },
-      {
-        name = normalized_scorecard.name,
         description = normalized_scorecard.description
       },
     }

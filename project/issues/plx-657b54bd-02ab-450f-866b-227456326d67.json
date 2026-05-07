@@ -82,10 +82,28 @@
       "author": "derek",
       "text": "Implementing compatibility retries for act-stage create operations: scorecards.create and score.create will attempt multiple payload shapes (with/without key/external/account_identifier and score_type vs type) to handle schema/adapter differences without long-run hard failures.",
       "created_at": "2026-05-07T03:12:11.213528849Z"
+    },
+    {
+      "id": "dabbb07c-1064-41c5-8603-324343a8d286",
+      "author": "derek",
+      "text": "New failure indicates CreateScorecardInput field incompatibility persists across all variants. Root-cause likely shared field carried by every variant (description). Implementing additional minimal create payload variants without description (and other optional fields) so schema-incompatible fields are avoided.",
+      "created_at": "2026-05-07T03:37:14.940663543Z"
+    },
+    {
+      "id": "5f717284-6277-45f0-80d7-f027209df89f",
+      "author": "derek",
+      "text": "Working this failure now. Next patch will reorder scorecard create compatibility variants to try strict-minimal payloads first (name-only, then account_identifier/key/external_id combos) and move description-bearing variants to the end so CreateScorecardInput schema mismatches fail fast without wasting full generation runs. Then I’ll run procedure loader tests and push.",
+      "created_at": "2026-05-07T03:38:13.347244284Z"
+    },
+    {
+      "id": "1a4a191d-8202-49f5-8cd2-6ceaa2aebcd7",
+      "author": "derek",
+      "text": "Patched create_scorecard_with_compat in scorecard_from_question_export to try minimal create payloads first (name-only, then account_identifier/key/external_id combinations), with description-bearing payloads moved to late fallbacks. This specifically addresses CreateScorecardInput field incompatibility failures. Validation: poetry run pytest plexus/cli/procedure/test_service_yaml_loader.py -q => pass.",
+      "created_at": "2026-05-07T03:38:34.277931893Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T03:12:11.213528849Z",
+  "updated_at": "2026-05-07T03:38:34.277931893Z",
   "closed_at": null,
   "custom": {}
 }
