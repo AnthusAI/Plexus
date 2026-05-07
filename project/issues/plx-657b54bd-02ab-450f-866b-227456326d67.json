@@ -160,10 +160,22 @@
       "author": "derek",
       "text": "New failure mode: ToolHandle UTF-8 decode crash during execute_tactus args normalization in score.update path ('invalid continuation byte'). Implementing transport hardening in scorecard_from_question_export: recursively sanitize outbound execute_tactus argument strings to ASCII-safe bytes before tool invocation to prevent Lua->Python decode exceptions.",
       "created_at": "2026-05-07T04:50:52.068313040Z"
+    },
+    {
+      "id": "8488fe16-7176-45cc-ad74-e7c95a457b36",
+      "author": "derek",
+      "text": "Latest failure moved to score.update/createScoreVersion: GraphQL rejects variable metadata (invalid value). Implementing same compatibility pattern in _default_score_update: attempt createScoreVersion with plain schema-valid input first; only retry with apply_actor_attribution if needed.",
+      "created_at": "2026-05-07T04:56:13.586161328Z"
+    },
+    {
+      "id": "906258a5-67df-4c63-a9d9-79c789ec74c0",
+      "author": "derek",
+      "text": "Patched _default_score_update createScoreVersion path: removed unconditional apply_actor_attribution and added compatibility attempts (plain payload first, attribution payload second) with detailed failure diagnostics. This addresses GraphQL 'Variable metadata has an invalid value' errors seen during score update.",
+      "created_at": "2026-05-07T04:56:30.268420398Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T04:50:52.068313040Z",
+  "updated_at": "2026-05-07T04:56:30.268420398Z",
   "closed_at": null,
   "custom": {}
 }
