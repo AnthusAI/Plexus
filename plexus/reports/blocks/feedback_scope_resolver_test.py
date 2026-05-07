@@ -29,6 +29,82 @@ async def test_resolve_scorecard_accepts_hyphenated_name():
 
 
 @pytest.mark.asyncio
+async def test_resolve_scorecard_accepts_case_insensitive_name_with_account_scope():
+    client = MagicMock()
+    client.execute.return_value = {
+        "listScorecards": {
+            "items": [
+                {
+                    "id": "sc-mel",
+                    "name": "Selectquote - MEL HRA v1.0",
+                    "key": "selectquote_mel_hra",
+                    "externalId": "1461",
+                    "accountId": "acct-1",
+                    "description": None,
+                }
+            ],
+            "nextToken": None,
+        }
+    }
+
+    with (
+        patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_key", side_effect=ValueError("missing")),
+        patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name", side_effect=ValueError("missing")),
+        patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_external_id", side_effect=ValueError("missing")),
+    ):
+        resolved = await resolve_scorecard(
+            client,
+            "SelectQuote - MEL HRA v1.0",
+            account_id="acct-1",
+        )
+
+    assert resolved.id == "sc-mel"
+    assert resolved.name == "Selectquote - MEL HRA v1.0"
+    variables = client.execute.call_args.args[1]
+    assert variables["filter"] == {"accountId": {"eq": "acct-1"}}
+
+
+@pytest.mark.asyncio
+async def test_resolve_scorecard_rejects_ambiguous_case_insensitive_names():
+    client = MagicMock()
+    client.execute.return_value = {
+        "listScorecards": {
+            "items": [
+                {
+                    "id": "sc-1",
+                    "name": "Selectquote - MEL HRA v1.0",
+                    "key": "one",
+                    "externalId": "1",
+                    "accountId": "acct-1",
+                    "description": None,
+                },
+                {
+                    "id": "sc-2",
+                    "name": "SELECTQUOTE - MEL HRA V1.0",
+                    "key": "two",
+                    "externalId": "2",
+                    "accountId": "acct-1",
+                    "description": None,
+                },
+            ],
+            "nextToken": None,
+        }
+    }
+
+    with (
+        patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_key", side_effect=ValueError("missing")),
+        patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name", side_effect=ValueError("missing")),
+        patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_external_id", side_effect=ValueError("missing")),
+    ):
+        with pytest.raises(ValueError, match="matched multiple scorecards"):
+            await resolve_scorecard(
+                client,
+                "SelectQuote - MEL HRA v1.0",
+                account_id="acct-1",
+            )
+
+
+@pytest.mark.asyncio
 async def test_resolve_score_for_scorecard_uuid_success():
     client = MagicMock()
     client.execute.return_value = {
