@@ -117,8 +117,8 @@ Test current configuration on items with known ground-truth:
 
 ```lua
 return plexus.score.predict{
-  scorecard_name = "Quality Assurance v1.0",
-  score_name = "Compliance Check",
+  scorecard_identifier = "Quality Assurance v1.0",
+  score_identifier = "Compliance Check",
   item_id = "88ed6e27-b5ae-4641-b024-d47f4c6ba631",
   output_format = "yaml",
   include_input = true,
@@ -130,8 +130,8 @@ Test multiple related items:
 
 ```lua
 return plexus.score.predict{
-  scorecard_name = "Quality Assurance v1.0",
-  score_name = "Compliance Check",
+  scorecard_identifier = "Quality Assurance v1.0",
+  score_identifier = "Compliance Check",
   item_ids = "item1,item2,item3,item4,item5",
   output_format = "yaml",
   yaml = true, -- LOCAL YAML ONLY
@@ -149,8 +149,8 @@ Test configuration changes:
 
 ```lua
 return plexus.score.predict{
-  scorecard_name = "Quality Assurance v1.0",
-  score_name = "Compliance Check",
+  scorecard_identifier = "Quality Assurance v1.0",
+  score_identifier = "Compliance Check",
   item_ids = "known_problematic_items",
   output_format = "yaml",
   yaml = true,
@@ -232,8 +232,8 @@ return plexus.evaluation.run{
 ### 4. Testing (LOCAL ONLY)
 ```lua
 return plexus.score.predict{
-  scorecard_name = "Quality Assurance v1.0",
-  score_name = "Compliance Check",
+  scorecard_identifier = "Quality Assurance v1.0",
+  score_identifier = "Compliance Check",
   item_ids = "problematic_item_ids_from_feedback",
   output_format = "yaml",
   include_input = true,
@@ -249,8 +249,8 @@ return plexus.score.predict{
 ### 6. Validation (LOCAL ONLY)
 ```lua
 return plexus.score.predict{
-  scorecard_name = "Quality Assurance v1.0",
-  score_name = "Compliance Check",
+  scorecard_identifier = "Quality Assurance v1.0",
+  score_identifier = "Compliance Check",
   item_ids = "same_test_items",
   output_format = "yaml",
   yaml = true,
