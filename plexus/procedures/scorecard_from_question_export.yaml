@@ -373,13 +373,11 @@ code: |
     end
 
     local raw = execute_tactus({
-      tactus = [[
-return {
-  scorecards_create = type(plexus.scorecards.create),
-  score_create = type(plexus.score.create),
-  score_update = type(plexus.score.update)
-}
-]]
+      tactus = "return { "
+        .. "scorecards_create = type(plexus.scorecards.create), "
+        .. "score_create = type(plexus.score.create), "
+        .. "score_update = type(plexus.score.update) "
+        .. "}"
     })
     local result, decode_err = decode_tool_result(raw)
     if not result then
