@@ -412,6 +412,116 @@ code: |
     end
   end
 
+  local function create_scorecard_with_compat(normalized_scorecard, account_identifier)
+    local variants = {
+      {
+        name = normalized_scorecard.name,
+        key = normalized_scorecard.key,
+        external_id = normalized_scorecard.external_id,
+        description = normalized_scorecard.description,
+        account_identifier = account_identifier
+      },
+      {
+        name = normalized_scorecard.name,
+        external_id = normalized_scorecard.external_id,
+        description = normalized_scorecard.description,
+        account_identifier = account_identifier
+      },
+      {
+        name = normalized_scorecard.name,
+        description = normalized_scorecard.description,
+        account_identifier = account_identifier
+      },
+      {
+        name = normalized_scorecard.name,
+        key = normalized_scorecard.key,
+        external_id = normalized_scorecard.external_id,
+        description = normalized_scorecard.description
+      },
+      {
+        name = normalized_scorecard.name,
+        external_id = normalized_scorecard.external_id,
+        description = normalized_scorecard.description
+      },
+      {
+        name = normalized_scorecard.name,
+        description = normalized_scorecard.description
+      },
+    }
+
+    local errors = {}
+    for i, payload in ipairs(variants) do
+      local ok, result = pcall(function()
+        return call_plexus_api("scorecards", "create", payload)
+      end)
+      if ok and type(result) == "table" then
+        local scorecard_id = result.id or result.scorecard_id
+        if has_text(scorecard_id) then
+          return result, nil
+        end
+        errors[#errors + 1] = "variant " .. tostring(i) .. ": missing id in response"
+      else
+        errors[#errors + 1] = "variant " .. tostring(i) .. ": " .. tostring(result)
+      end
+    end
+    return nil, table.concat(errors, " | ")
+  end
+
+  local function create_score_with_compat(created_scorecard_id, score, order)
+    local variants = {
+      {
+        scorecard_identifier = created_scorecard_id,
+        name = score.name,
+        key = score.key,
+        external_id = score.external_id,
+        description = score.description,
+        score_type = "LangGraphScore",
+        order = order
+      },
+      {
+        scorecard_identifier = created_scorecard_id,
+        name = score.name,
+        key = score.key,
+        external_id = score.external_id,
+        description = score.description,
+        type = "LangGraphScore",
+        order = order
+      },
+      {
+        scorecard_identifier = created_scorecard_id,
+        name = score.name,
+        external_id = score.external_id,
+        description = score.description,
+        type = "LangGraphScore",
+        order = order
+      },
+      {
+        scorecard_identifier = created_scorecard_id,
+        name = score.name,
+        description = score.description,
+        type = "LangGraphScore",
+        order = order
+      },
+    }
+
+    local errors = {}
+    for i, payload in ipairs(variants) do
+      local ok, result = pcall(function()
+        return call_plexus_api("score", "create", payload)
+      end)
+      if ok and type(result) == "table" then
+        local created_score_id = result.id or result.score_id
+        if has_text(created_score_id) then
+          return result, nil
+        end
+        errors[#errors + 1] = "variant " .. tostring(i) .. ": missing score id"
+      else
+        errors[#errors + 1] = "variant " .. tostring(i) .. ": " .. tostring(result)
+      end
+    end
+    return nil, table.concat(errors, " | ")
+  end
+
   local function wait_for_done(agent, max_iters, inject)
     local start_count = Tool.get_call_count("done")
     if inject then
@@ -1064,20 +1174,15 @@ code: |
     Stage.set("act")
     local created_score_ids = {}
 
-    local ok_create_scorecard, create_scorecard_result = pcall(function()
-      return call_plexus_api("scorecards", "create", {
-        name = normalized_scorecard.name,
-        key = normalized_scorecard.key,
-        external_id = normalized_scorecard.external_id,
-        description = normalized_scorecard.description,
-        account_identifier = params.account_identifier or "default"
-      })
-    end)
-    if not ok_create_scorecard then
+    local create_scorecard_result, scorecard_create_err = create_scorecard_with_compat(
+      normalized_scorecard,
+      params.account_identifier or "default"
+    )
+    if not create_scorecard_result then
       return {
         success = false,
         status = "error",
-        message = "Scorecard creation failed: " .. tostring(create_scorecard_result),
+        message = "Scorecard creation failed: " .. tostring(scorecard_create_err),
         plan = plan
       }
     end
@@ -1104,22 +1209,16 @@ code: |
     for idx, score in ipairs(generated_scores) do
       set_stage_progress(idx - 1, #generated_scores)
 
-      local ok_create_score, create_score_result = pcall(function()
-        return call_plexus_api("score", "create", {
-          scorecard_identifier = created_scorecard_id,
-          name = score.name,
-          key = score.key,
-          external_id = score.external_id,
-          description = score.description,
-          score_type = "LangGraphScore",
-          order = idx
-        })
-      end)
-      if not ok_create_score then
+      local create_score_result, create_score_err = create_score_with_compat(
+        created_scorecard_id,
+        score,
+        idx
+      )
+      if not create_score_result then
         return {
           success = false,
           status = "error",
-          message = "Score creation failed for '" .. tostring(score.name) .. "': " .. tostring(create_score_result),
+          message = "Score creation failed for '" .. tostring(score.name) .. "': " .. tostring(create_score_err),
           plan = plan
         }
       end
