@@ -1760,10 +1760,12 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
             return [_sanitize_dec(v) for v in obj]
         return obj
 
-    scorecard_name = args.get("scorecard_name") or args.get("scorecard")
-    score_name = args.get("score_name") or args.get("score")
-    if not scorecard_name or not score_name:
-        raise ValueError("plexus.score.predict requires scorecard_name and score_name")
+    scorecard_identifier = args.get("scorecard_identifier")
+    score_identifier = args.get("score_identifier")
+    if not scorecard_identifier or not score_identifier:
+        raise ValueError(
+            "plexus.score.predict requires scorecard_identifier and score_identifier"
+        )
 
     item_id = args.get("item_id") or args.get("id") or args.get("item")
     item_ids_raw = args.get("item_ids")
@@ -1783,17 +1785,22 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
     client = create_client()
     if not client:
         raise RuntimeError("plexus.score.predict: could not create dashboard client")
+    account_id = None if yaml_mode else _resolve_runtime_account_id(
+        client, args, "plexus.score.predict"
+    )
 
     if yaml_mode:
         scorecard_id = "yaml-mode-scorecard"
-        resolved_score: dict[str, Any] = {"id": "yaml-mode-score", "name": str(score_name),
-                                           "key": str(score_name).lower().replace(" ", "-"),
+        resolved_score: dict[str, Any] = {"id": "yaml-mode-score", "name": str(score_identifier),
+                                           "key": str(score_identifier).lower().replace(" ", "-"),
                                            "championVersionId": "yaml-mode-version"}
     else:
-        scorecard_id_resolved = resolve_scorecard_identifier(client, str(scorecard_name))
+        scorecard_id_resolved = resolve_scorecard_identifier(
+            client, str(scorecard_identifier)
+        )
         if not scorecard_id_resolved:
             raise ValueError(
-                f"plexus.score.predict: scorecard {scorecard_name!r} not found"
+                f"plexus.score.predict: scorecard {scorecard_identifier!r} not found"
             )
         scorecard_id = scorecard_id_resolved
         sc_result = client.execute(
@@ -1809,14 +1816,14 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
         scorecard_data = sc_result.get("getScorecard")
         if not scorecard_data:
             raise ValueError(
-                f"plexus.score.predict: could not load scorecard {scorecard_name!r}"
+                f"plexus.score.predict: could not load scorecard {scorecard_identifier!r}"
             )
 
         try:
             from plexus.cli.shared.identifier_resolution import (
                 resolve_score_identifier as _rsi,
             )
-            resolved_score_id = _rsi(client, scorecard_id, str(score_name))
+            resolved_score_id = _rsi(client, scorecard_id, str(score_identifier))
         except Exception:
             resolved_score_id = None
 
@@ -1825,10 +1832,10 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
             for sc in section.get("scores", {}).get("items", []):
                 if (
                     (resolved_score_id and sc.get("id") == resolved_score_id)
-                    or sc.get("id") == str(score_name)
-                    or sc.get("externalId") == str(score_name)
-                    or sc.get("key") == str(score_name)
-                    or sc.get("name") == str(score_name)
+                    or sc.get("id") == str(score_identifier)
+                    or sc.get("externalId") == str(score_identifier)
+                    or sc.get("key") == str(score_identifier)
+                    or sc.get("name") == str(score_identifier)
                 ):
                     resolved_score = sc
                     break
@@ -1836,8 +1843,8 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
                 break
         if not resolved_score:
             raise ValueError(
-                f"plexus.score.predict: score {score_name!r} not found in "
-                f"scorecard {scorecard_name!r}"
+                f"plexus.score.predict: score {score_identifier!r} not found in "
+                f"scorecard {scorecard_identifier!r}"
             )
 
     resolved_version = version if not latest else None
@@ -1857,20 +1864,9 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
 
     if not yaml_mode:
         try:
-            import os as _os
             from plexus.cli.shared.identifier_resolution import (
                 resolve_item_identifier as _rii,
             )
-            from plexus.dashboard.api.models.account import Account as _Account
-            account_id = None
-            try:
-                ak = _os.getenv("PLEXUS_ACCOUNT_KEY")
-                if ak:
-                    acc = _Account.list_by_key(key=ak, client=client)
-                    if acc:
-                        account_id = acc.id
-            except Exception:
-                pass
             resolved_ids = []
             for raw_id in target_item_ids:
                 try:
@@ -1887,27 +1883,29 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
         from plexus.scores.Scorecard import Scorecard
         with open(yaml_path, "r") as f:
             sc_cfg = _yaml.safe_load(f.read())
-        scorecard_instance = Scorecard({"name": scorecard_name, "sections": [{"name": "Custom", "scores": [sc_cfg]}]})
+        scorecard_instance = Scorecard({"name": scorecard_identifier, "sections": [{"name": "Custom", "scores": [sc_cfg]}]})
         scorecard_instance.yaml_only = True
     elif yaml_mode:
         from plexus.cli.evaluation.evaluations import load_scorecard_from_yaml_files
-        scorecard_instance = load_scorecard_from_yaml_files(str(scorecard_name), score_names=[str(score_name)])
+        scorecard_instance = load_scorecard_from_yaml_files(
+            str(scorecard_identifier), score_names=[str(score_identifier)]
+        )
         scorecard_instance.yaml_only = True
     else:
         from plexus.cli.evaluation.evaluations import load_scorecard_from_api
         scorecard_instance = load_scorecard_from_api(
-            str(scorecard_name), score_names=[str(score_name)],
+            str(scorecard_identifier), score_names=[str(score_identifier)],
             use_cache=not no_cache, specific_version=resolved_version
         )
 
-    resolved_score_name = str(score_name)
+    resolved_score_name = str(score_identifier)
     if hasattr(scorecard_instance, "scores") and isinstance(scorecard_instance.scores, list):
         for s in scorecard_instance.scores:
             sn = s.get("name")
             if sn and (
-                sn == str(score_name) or str(s.get("id", "")) == str(score_name)
-                or str(s.get("key", "")) == str(score_name)
-                or str(s.get("externalId", "")) == str(score_name)
+                sn == str(score_identifier) or str(s.get("id", "")) == str(score_identifier)
+                or str(s.get("key", "")) == str(score_identifier)
+                or str(s.get("externalId", "")) == str(score_identifier)
             ):
                 resolved_score_name = sn
                 break
@@ -1962,7 +1960,7 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
 
                 if score_result_obj is None:
                     if results and any(isinstance(v, Score.Result) and v.value == "SKIPPED" for v in results.values()):
-                        return {"item_id": target_id, "scores": [{"name": score_name, "value": None,
+                        return {"item_id": target_id, "scores": [{"name": score_identifier, "value": None,
                                 "explanation": "Not applicable — unmet dependency conditions", "cost": {}}]}
                     return {"item_id": target_id, "error": f"No result for score {resolved_score_name!r}"}
 
@@ -1977,7 +1975,7 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
                     costs = score_result_obj.metadata.get("cost", {})
 
                 prediction_result: dict = {"item_id": target_id, "scores": [{
-                    "name": score_name, "value": score_result_obj.value,
+                    "name": score_identifier, "value": score_result_obj.value,
                     "explanation": explanation, "cost": costs
                 }]}
                 if include_trace:
@@ -1987,7 +1985,7 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
                     prediction_result["scores"][0]["trace"] = trace
             except Exception as exc:
                 prediction_result = {"item_id": target_id, "scores": [{
-                    "name": score_name, "value": "ERROR",
+                    "name": score_identifier, "value": "ERROR",
                     "explanation": f"Prediction failed: {exc}",
                     "error_details": {"error_message": str(exc), "error_type": type(exc).__name__,
                                       "traceback": _traceback.format_exc()},
@@ -2009,8 +2007,8 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
     prediction_results_list = _run_async_from_sync(_gather_all())
     return _sanitize_dec({
         "success": True,
-        "scorecard_name": scorecard_name,
-        "score_name": score_name,
+        "scorecard_identifier": scorecard_identifier,
+        "score_identifier": score_identifier,
         "scorecard_id": scorecard_id,
         "score_id": resolved_score["id"],
         "item_count": len(target_item_ids),
@@ -6469,7 +6467,11 @@ return item{ id = "item_1007" }
 
 4) Run a single prediction:
 ```tactus
-return predict{ score_id = "score_compliance_tone", item_id = "item_1007" }
+return predict{
+  scorecard_identifier = "My Scorecard",
+  score_identifier = "Compliance Tone",
+  item_id = "item_1007",
+}
 ```
 
 5) Run a bounded synchronous evaluation:
