@@ -314,6 +314,30 @@ code: |
     return string.format("%q", tostring(value))
   end
 
+  local function sanitize_ascii_text(value)
+    local s = tostring(value or "")
+    -- Remove problematic control bytes except common whitespace.
+    s = string.gsub(s, "[%z\1-\8\11\12\14-\31]", " ")
+    -- Keep payloads ASCII-safe to avoid Lua->Python UTF-8 decode errors in tool arg marshaling.
+    s = string.gsub(s, "[\128-\255]", "")
+    return s
+  end
+
+  local function sanitize_tool_args(value)
+    local t = type(value)
+    if t == "string" then
+      return sanitize_ascii_text(value)
+    end
+    if t == "table" then
+      local out = {}
+      for k, v in pairs(value) do
+        out[k] = sanitize_tool_args(v)
+      end
+      return out
+    end
+    return value
+  end
+
   local function decode_tool_result(raw)
     if type(raw) == "table" then return raw, nil end
     if type(raw) == "string" then return safe_decode(raw) end
@@ -336,12 +360,13 @@ code: |
       error("execute_tactus tool is not available in this runtime")
     end
 
+    local safe_args = sanitize_tool_args(args_table or {})
     local tactus = "return plexus."
       .. tostring(namespace)
       .. "."
       .. tostring(method)
       .. "("
-      .. to_lua_literal(args_table or {})
+      .. to_lua_literal(safe_args)
       .. ")"
 
     local raw = execute_tactus({tactus = tactus})
