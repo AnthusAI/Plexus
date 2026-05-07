@@ -232,3 +232,32 @@ def test_run_programmatic_block_and_persist_uses_concise_failure_message(
         mock_persist_block_result.call_args.kwargs["error_message"]
         == "Error running block FeedbackContradictions (FeedbackContradictions): Score not found"
     )
+
+
+@patch("plexus.reports.service._persist_block_result")
+@patch("plexus.reports.service._instantiate_and_run_block")
+def test_run_programmatic_block_and_persist_treats_error_payload_as_failure(
+    mock_instantiate_and_run_block,
+    mock_persist_block_result,
+):
+    mock_instantiate_and_run_block.return_value = (
+        {"error": "Scorecard not found for identifier 'SelectQuote'.", "scores": []},
+        "Scorecard not found for identifier 'SelectQuote'.",
+        None,
+    )
+
+    output, log_output = run_programmatic_block_and_persist(
+        cache_key="cache-key",
+        block_class="FeedbackAlignment",
+        block_config={"scorecard": "SelectQuote"},
+        account_id="acct-1",
+        client=MagicMock(),
+    )
+
+    assert output is None
+    assert "Scorecard not found" in log_output
+    assert mock_persist_block_result.call_args.kwargs["success"] is False
+    assert (
+        mock_persist_block_result.call_args.kwargs["error_message"]
+        == "Scorecard not found for identifier 'SelectQuote'."
+    )

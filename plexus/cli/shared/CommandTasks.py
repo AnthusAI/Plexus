@@ -37,6 +37,13 @@ def _should_append_task_id_arg(args: List[str]) -> bool:
     """Return whether a CLI command accepts the generic --task-id option."""
     if len(args) >= 2 and args[0] == "procedure" and args[1] == "run":
         return False
+    if (
+        len(args) >= 3
+        and args[0] == "feedback"
+        and args[1] == "report"
+        and args[2] == "run-programmatic-block"
+    ):
+        return False
     return True
 
 
