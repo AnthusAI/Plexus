@@ -292,10 +292,22 @@
       "author": "derek",
       "text": "Root-cause patch: scorecard_from_question_export now enforces transcript placeholder presence in generated user prompts. If {{text}} is missing, normalization appends a Transcript section with {{text}} before YAML assembly. Verified YAML loader test passes.",
       "created_at": "2026-05-07T20:56:40.372276612Z"
+    },
+    {
+      "id": "c899fa24-d042-4442-9572-2a88ce1ae9ad",
+      "author": "derek",
+      "text": "Implementing strict prompt-contract enforcement (no auto-append): validate transcript placeholder/section/order, then allow bounded critic rewrites. Plan: default max rewrite attempts = 2 to balance quality and runtime.",
+      "created_at": "2026-05-07T21:01:13.364026128Z"
+    },
+    {
+      "id": "115ebd57-7c3d-4455-9ad3-390678c10a2b",
+      "author": "derek",
+      "text": "Implemented strict transcript prompt contract path (no silent append): validate user_message must include Transcript section + literal {{text}} and enforce ordering before output format block. Added bounded critic rewrite loop on validation failures with explicit remediation hints; configurable via prompt_contract_rewrite_attempts (default 2). Added param in procedure schema and strengthened generator/critic instructions to require Transcript/{{text}}.",
+      "created_at": "2026-05-07T21:02:31.481157284Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T20:56:40.372276612Z",
+  "updated_at": "2026-05-07T21:02:31.481157284Z",
   "closed_at": null,
   "custom": {}
 }

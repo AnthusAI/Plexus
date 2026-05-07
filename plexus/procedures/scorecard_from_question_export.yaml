@@ -75,6 +75,10 @@ params:
     type: boolean
     default: true
     description: "If true, fail the procedure when a smoke test fails"
+  prompt_contract_rewrite_attempts:
+    type: number
+    default: 2
+    description: "How many critic rewrite attempts to allow when generated prompts fail contract validation"
   smoke_test_source_scorecard_identifier:
     type: string
     required: false
@@ -139,6 +143,7 @@ agents:
       - labels length must be >= 2 and include target_class/default_class.
       - system_message must encode policy intent and decision boundaries from guidelines and FAQ.
       - user_message must instruct transcript evaluation and class selection clearly.
+      - user_message MUST include a Transcript section with the literal placeholder {{text}}.
       - Both system_message and user_message must be readable multi-line text, using short paragraphs and section headers where useful; avoid single giant paragraph blocks.
       - user_message must enforce output format:
         1) first line(s): concise reasoning in 2-3 sentences
@@ -180,6 +185,7 @@ agents:
       - Preserve core intent while tightening ambiguities.
       - Ensure output is robust for noisy transcript evidence.
       - Keep explicit class constraints in user_message.
+      - user_message MUST include a transcript section with the literal placeholder {{text}}.
       - Rewrite any dense single-paragraph prompt into readable multi-line sections/bullets.
       - Enforce output contract in user_message:
         1) 2-3 sentence reasoning
@@ -971,6 +977,26 @@ code: |
     return trim(s)
   end
 
+  local function validate_user_message_contract(user_message)
+    local transcript_idx = string.find(user_message, "Transcript:", 1, true)
+    local text_idx = string.find(user_message, "{{text}}", 1, true)
+    if not text_idx then
+      return "user_message must include literal {{text}} placeholder in a Transcript section"
+    end
+    if not transcript_idx then
+      return "user_message must include a 'Transcript:' section header before {{text}}"
+    end
+    if transcript_idx > text_idx then
+      return "user_message Transcript section must place {{text}} after 'Transcript:'"
+    end
+
+    local output_idx = string.find(user_message, "Output format requirements %(MANDATORY%)", 1, true)
+    if output_idx and text_idx > output_idx then
+      return "user_message must place Transcript/{{text}} before output format requirements"
+    end
+    return nil
+  end
+
   local function validate_generated_spec(question, generated)
     if type(generated) ~= "table" then
       return nil, "generated spec must be object"
@@ -1031,14 +1057,6 @@ code: |
       return nil, "user_message is required"
     end
 
-    if not string.find(user_message, "{{text}}", 1, true) then
-      local transcript_block = table.concat({
-        "Transcript:",
-        "{{text}}"
-      }, "\n")
-      user_message = user_message .. "\n\n" .. transcript_block
-    end
-
     local labels_csv = table.concat(labels, ", ")
     local format_block = table.concat({
       "Output format requirements (MANDATORY):",
@@ -1050,6 +1068,10 @@ code: |
       user_message = user_message .. "\n\n" .. format_block
     end
     user_message = format_prompt_message(user_message)
+    local user_contract_err = validate_user_message_contract(user_message)
+    if user_contract_err then
+      return nil, user_contract_err
+    end
 
     return {
       question_id = question.id,
@@ -1265,6 +1287,8 @@ code: |
 
     local generated_scores = {}
     local used_keys = {}
+    local prompt_contract_rewrite_attempts = tonumber(params.prompt_contract_rewrite_attempts) or 2
+    if prompt_contract_rewrite_attempts < 0 then prompt_contract_rewrite_attempts = 0 end
 
     local total = #normalized_questions
     Stage.set("generate")
@@ -1329,6 +1353,31 @@ code: |
       end
 
       local final_spec, final_err = validate_generated_spec(question, reviewed)
+      if not final_spec and prompt_contract_rewrite_attempts > 0 then
+        for attempt = 1, prompt_contract_rewrite_attempts do
+          local rewrite_prompt = table.concat({
+            "Your previous spec failed strict prompt contract validation.",
+            "Validation error: " .. tostring(final_err),
+            "Return corrected JSON with same schema.",
+            "Required user_message rules:",
+            "- Include 'Transcript:' section",
+            "- Include literal '{{text}}' immediately under Transcript section",
+            "- Keep Transcript/{{text}} before 'Output format requirements (MANDATORY)'",
+            "- Keep output format contract and labels valid",
+            "No prose. done(reason=<JSON object string>, success=true) only."
+          }, "\n")
+          local rewrite_ok = wait_for_done(Critic, 4, rewrite_prompt)
+          if not rewrite_ok then break end
+          local rewritten, rewritten_err = parse_last_done_json()
+          if not rewritten then
+            final_err = "Critic rewrite parse failed: " .. tostring(rewritten_err)
+          else
+            reviewed = rewritten
+            final_spec, final_err = validate_generated_spec(question, reviewed)
+            if final_spec then break end
+          end
+        end
+      end
       if not final_spec then
         return {success = false, status = "error", message = "Generated spec validation failed for question " .. tostring(question.id) .. ": " .. tostring(final_err)}
       end
@@ -1636,6 +1685,7 @@ code: |
       run_smoke_test = field.boolean{default = true},
       smoke_test_samples = field.number{default = 3},
       fail_on_smoke_test = field.boolean{default = true},
+      prompt_contract_rewrite_attempts = field.number{default = 2},
       smoke_test_source_scorecard_identifier = field.string{},
       smoke_test_item_ids = field.string{}
     },
