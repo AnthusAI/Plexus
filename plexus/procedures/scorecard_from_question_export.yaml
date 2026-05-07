@@ -119,6 +119,7 @@ agents:
       - labels length must be >= 2 and include target_class/default_class.
       - system_message must encode policy intent and decision boundaries from guidelines and FAQ.
       - user_message must instruct transcript evaluation and class selection clearly.
+      - Both system_message and user_message must be readable multi-line text, using short paragraphs and section headers where useful; avoid single giant paragraph blocks.
       - user_message must enforce output format:
         1) first line(s): concise reasoning in 2-3 sentences
         2) final line only: classification label
@@ -159,6 +160,7 @@ agents:
       - Preserve core intent while tightening ambiguities.
       - Ensure output is robust for noisy transcript evidence.
       - Keep explicit class constraints in user_message.
+      - Rewrite any dense single-paragraph prompt into readable multi-line sections/bullets.
       - Enforce output contract in user_message:
         1) 2-3 sentence reasoning
         2) final line exactly one allowed classification label
@@ -918,6 +920,35 @@ code: |
     return false
   end
 
+  local function format_prompt_message(text)
+    local s = trim(text or "")
+    if not has_text(s) then return s end
+
+    s = string.gsub(s, "\r\n", "\n")
+    s = string.gsub(s, "\r", "\n")
+    s = string.gsub(s, "\n\n\n+", "\n\n")
+
+    -- If the model gave a dense single paragraph, split roughly by sentence.
+    if not string.find(s, "\n", 1, true) then
+      s = string.gsub(s, "%. ", ".\n")
+    end
+
+    -- Encourage section structure for common instruction markers.
+    local markers = {
+      "Allowed labels:",
+      "Decision rule:",
+      "What counts as",
+      "Important scoring constraints:",
+      "Output format requirements %(MANDATORY%)",
+    }
+    for _, marker in ipairs(markers) do
+      s = string.gsub(s, "%s*" .. marker, "\n\n" .. marker)
+    end
+
+    s = string.gsub(s, "\n\n\n+", "\n\n")
+    return trim(s)
+  end
+
   local function validate_generated_spec(question, generated)
     if type(generated) ~= "table" then
       return nil, "generated spec must be object"
@@ -968,12 +999,12 @@ code: |
       rationale = "Generated from source guidelines and FAQ context"
     end
 
-    local system_message = trim(generated.system_message)
+    local system_message = format_prompt_message(generated.system_message)
     if not has_text(system_message) then
       return nil, "system_message is required"
     end
 
-    local user_message = trim(generated.user_message)
+    local user_message = format_prompt_message(generated.user_message)
     if not has_text(user_message) then
       return nil, "user_message is required"
     end
@@ -988,6 +1019,7 @@ code: |
     if not string.find(user_message, "Output format requirements %(MANDATORY%)", 1, true) then
       user_message = user_message .. "\n\n" .. format_block
     end
+    user_message = format_prompt_message(user_message)
 
     return {
       question_id = question.id,
