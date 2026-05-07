@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "231a0159-96e2-4b44-8902-41415c7ce68b",
+  "issue_id": "plx-55a63c67-5265-46b9-abb9-7f8a400a82b4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-07T12:15:00.845Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 0,
+    "status": "open",
+    "title": "Fix Console execute_tactus report dispatch IDs"
+  }
+}

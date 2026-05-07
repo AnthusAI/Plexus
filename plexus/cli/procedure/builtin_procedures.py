@@ -26,7 +26,7 @@ def _procedures_root() -> Path:
 def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
     return {
         "name": "Console Chat Agent",
-        "version": "1.6.0",
+        "version": "1.6.2",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -77,6 +77,7 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- Do not use `plexus.procedure.optimize` to run a report; that starts an optimizer procedure only.\n"
                     "- Return and mention durable ids from report dispatch: task_id, report_id when present, and handle_id.\n"
                     "- For status follow-up, prefer durable task_id/report_id from recent conversation over in-memory handles.\n"
+                    "- For report `block_config.scorecard`, pass a resolved scorecard UUID. If the user gives a name or partial name, first call `plexus.scorecards.search`, choose the intended match, and use the returned `scorecard.id`; do not pass guessed names or display casing.\n"
                     "- Use bracket indexing for execute_tactus results, e.g. h[\"id\"], not h.id.\n\n"
                     "DOCUMENTATION (USE BEFORE ANSWERING \"HOW DOES X WORK?\" QUESTIONS):\n"
                     "  -- The agent knowledge base lives at `plexus.docs.*`. Always consult it\n"
@@ -111,9 +112,10 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "  return plexus.feedback.alignment({ scorecard_name = \"My Scorecard\", score_name = \"My Score\", days = 30 })\n\n"
                     "WRITE / TRIGGER OPERATIONS:\n"
                     "  -- Run a persisted Feedback Alignment report for a whole scorecard (async):\n"
+                    "  -- If the user gave a scorecard name, first resolve it with `plexus.scorecards.search`, then use the returned scorecard.id below.\n"
                     "  local h = plexus.report.run({\n"
                     "    block_class = \"FeedbackAlignment\",\n"
-                    "    block_config = { scorecard = \"Suco - Home Improvement\", days = 30 },\n"
+                    "    block_config = { scorecard = \"<resolved-scorecard-uuid>\", days = 30, memory_analysis = false },\n"
                     "    cache_key = \"console-feedback-alignment:<unique>\",\n"
                     "    ttl_hours = 24,\n"
                     "    async = true,\n"
