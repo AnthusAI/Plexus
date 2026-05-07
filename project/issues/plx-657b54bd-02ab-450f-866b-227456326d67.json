@@ -268,10 +268,22 @@
       "author": "derek",
       "text": "Fixed regression: in score_version_test._predict_single_item metadata normalization now occurs before _extract_item_text call, resolving runtime error 'cannot access local variable metadata where it is not associated with a value'. Re-ran targeted tests (score_version_test + service_yaml_loader) and both passed.",
       "created_at": "2026-05-07T19:58:25.878743180Z"
+    },
+    {
+      "id": "db4fc100-8432-4bdb-8397-f681d42cf4e1",
+      "author": "derek",
+      "text": "Adding deterministic smoke-test diagnostics (input text source, text length, preview, metadata keys, attached-file count) in score_version_test prediction path so failures can be root-caused from one run output instead of iterative guessing.",
+      "created_at": "2026-05-07T20:15:48.654129335Z"
+    },
+    {
+      "id": "21f3fe3a-766f-448b-8923-6280f9271197",
+      "author": "derek",
+      "text": "Added deterministic smoke-test diagnostics to score_version_test prediction path. Each prediction now records/logs input_debug: text_source, text_length, text_preview (first 240 chars), metadata_keys, attached_files_count, item_id. This allows root-cause analysis of NA/no-transcript outcomes from one run. Targeted tests still passing.",
+      "created_at": "2026-05-07T20:16:16.825031082Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T19:58:25.878743180Z",
+  "updated_at": "2026-05-07T20:16:16.825031082Z",
   "closed_at": null,
   "custom": {}
 }
