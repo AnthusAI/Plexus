@@ -366,6 +366,41 @@ code: |
     return result.value
   end
 
+  local function preflight_write_capabilities()
+    local execute_tactus = Tool.get("execute_tactus")
+    if execute_tactus == nil then
+      return nil, "execute_tactus tool is not available in this runtime"
+    end
+
+    local raw = execute_tactus({
+      tactus = [[
+return {
+  scorecards_create = type(plexus.scorecards.create),
+  score_create = type(plexus.score.create),
+  score_update = type(plexus.score.update)
+}
+]]
+    })
+    local result, decode_err = decode_tool_result(raw)
+    if not result then
+      return nil, "execute_tactus decode failed: " .. tostring(decode_err)
+    end
+    if result.ok == false then
+      return nil, extract_error_message(result)
+    end
+    if type(result.value) ~= "table" then
+      return nil, "execute_tactus preflight returned invalid response"
+    end
+
+    local value = result.value
+    if value.scorecards_create ~= "function" or value.score_create ~= "function" or value.score_update ~= "function" then
+      return nil, "write APIs unavailable in execute_tactus runtime: scorecards.create=" .. tostring(value.scorecards_create)
+        .. ", score.create=" .. tostring(value.score_create)
+        .. ", score.update=" .. tostring(value.score_update)
+    end
+    return value, nil
+  end
+
   local function set_stage_progress(current, total)
     local progress_tool = Tool.get("plexus_set_stage_progress")
     if progress_tool ~= nil then
@@ -797,6 +832,17 @@ code: |
 
     Stage.set("observe")
 
+    if not dry_run then
+      local _, preflight_err = preflight_write_capabilities()
+      if preflight_err then
+        return {
+          success = false,
+          status = "error",
+          message = "Write-path preflight failed before generation: " .. tostring(preflight_err)
+        }
+      end
+    end
+
     local existing, lookup_err = try_find_existing_scorecard(target_key)
     if lookup_err then
       return {success = false, status = "error", message = lookup_err}
@@ -1024,16 +1070,31 @@ code: |
       })
     end)
     if not ok_create_scorecard then
-      return {success = false, status = "error", message = "Scorecard creation failed: " .. tostring(create_scorecard_result)}
+      return {
+        success = false,
+        status = "error",
+        message = "Scorecard creation failed: " .. tostring(create_scorecard_result),
+        plan = plan
+      }
     end
 
     if type(create_scorecard_result) ~= "table" then
-      return {success = false, status = "error", message = "Scorecard creation failed: invalid response type"}
+      return {
+        success = false,
+        status = "error",
+        message = "Scorecard creation failed: invalid response type",
+        plan = plan
+      }
     end
 
     local created_scorecard_id = create_scorecard_result.id or create_scorecard_result.scorecard_id
     if not has_text(created_scorecard_id) then
-      return {success = false, status = "error", message = "Scorecard creation failed: missing scorecard id"}
+      return {
+        success = false,
+        status = "error",
+        message = "Scorecard creation failed: missing scorecard id",
+        plan = plan
+      }
     end
 
     for idx, score in ipairs(generated_scores) do
@@ -1051,16 +1112,31 @@ code: |
         })
       end)
       if not ok_create_score then
-        return {success = false, status = "error", message = "Score creation failed for '" .. tostring(score.name) .. "': " .. tostring(create_score_result)}
+        return {
+          success = false,
+          status = "error",
+          message = "Score creation failed for '" .. tostring(score.name) .. "': " .. tostring(create_score_result),
+          plan = plan
+        }
       end
 
       if type(create_score_result) ~= "table" then
-        return {success = false, status = "error", message = "Score creation failed for '" .. tostring(score.name) .. "': invalid response type"}
+        return {
+          success = false,
+          status = "error",
+          message = "Score creation failed for '" .. tostring(score.name) .. "': invalid response type",
+          plan = plan
+        }
       end
 
       local created_score_id = create_score_result.id or create_score_result.score_id
       if not has_text(created_score_id) then
-        return {success = false, status = "error", message = "Score creation failed for '" .. tostring(score.name) .. "': missing score id"}
+        return {
+          success = false,
+          status = "error",
+          message = "Score creation failed for '" .. tostring(score.name) .. "': missing score id",
+          plan = plan
+        }
       end
 
       local ok_update_score, update_score_result = pcall(function()
@@ -1073,11 +1149,21 @@ code: |
         })
       end)
       if not ok_update_score then
-        return {success = false, status = "error", message = "Score update failed for '" .. tostring(score.name) .. "': " .. tostring(update_score_result)}
+        return {
+          success = false,
+          status = "error",
+          message = "Score update failed for '" .. tostring(score.name) .. "': " .. tostring(update_score_result),
+          plan = plan
+        }
       end
 
       if type(update_score_result) == "table" and update_score_result.success == false then
-        return {success = false, status = "error", message = "Score update failed for '" .. tostring(score.name) .. "': " .. tostring(update_score_result.error or "unknown error")}
+        return {
+          success = false,
+          status = "error",
+          message = "Score update failed for '" .. tostring(score.name) .. "': " .. tostring(update_score_result.error or "unknown error"),
+          plan = plan
+        }
       end
 
       created_score_ids[#created_score_ids + 1] = created_score_id
