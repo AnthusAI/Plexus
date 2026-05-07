@@ -1608,8 +1608,8 @@ def load_scorecard_from_api(scorecard_identifier: str, score_names=None, use_cac
         scorecard_identifier: A string that can identify the scorecard (id, key, name, etc.)
         score_names: Optional list of specific score names to load
         use_cache: Whether to prefer local cache files over API (default: False)
-                   When False, will always fetch from API but still write cache files
-                   When True, will check local cache first and only fetch missing configs
+                   When False, fetch from API and keep configurations in memory only
+                   When True, check local cache first and only fetch missing configs
         specific_version: Optional specific score version ID to use instead of champion version
         
     Returns:
