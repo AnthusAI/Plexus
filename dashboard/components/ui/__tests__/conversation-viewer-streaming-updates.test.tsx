@@ -517,6 +517,46 @@ describe("ConversationViewer streaming updates", () => {
     })
   })
 
+  it("keeps auto-follow pinned through final completion layout changes", async () => {
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByText("Hel")
+    mockScrollToIndex.mockClear()
+
+    await act(async () => {
+      subscriptions.messageUpdate?.next({
+        data: {
+          id: "msg-assistant-1",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "Final completed response",
+          responseStatus: "COMPLETED",
+          createdAt: "2026-03-27T00:00:01.000Z",
+          sequenceNumber: 1,
+          metadata: JSON.stringify({
+            streaming: {
+              state: "complete",
+            },
+          }),
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(mockScrollToIndex.mock.calls.length).toBeGreaterThanOrEqual(2)
+    })
+    expect(latestVirtuosoProps?.followOutput(false)).toBe("auto")
+  })
+
   it("pauses auto-follow after an upward user scroll and resumes at the bottom", async () => {
     render(
       <ConversationViewer
