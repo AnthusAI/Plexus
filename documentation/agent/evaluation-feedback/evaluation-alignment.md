@@ -358,8 +358,8 @@ Test specific items using local YAML to validate behavior:
 ```lua
 # ✅ Test single item with local YAML
 return plexus.score.predict{
-  scorecard_name = "Quality Assurance v1.0",
-  score_name = "Compliance Check",
+  scorecard_identifier = "Quality Assurance v1.0",
+  score_identifier = "Compliance Check",
   item_id = "88ed6e27-b5ae-4641-b024-d47f4c6ba631",
   yaml = true,          -- REQUIRED: Use local YAML
   include_input = true,
@@ -369,8 +369,8 @@ return plexus.score.predict{
 
 # ✅ Test multiple items with local YAML
 return plexus.score.predict{
-  scorecard_name = "Quality Assurance v1.0",
-  score_name = "Compliance Check",
+  scorecard_identifier = "Quality Assurance v1.0",
+  score_identifier = "Compliance Check",
   item_ids = "item1,item2,item3",
   yaml = true, -- REQUIRED: Use local YAML
   output_format = "yaml",

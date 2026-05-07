@@ -26,7 +26,7 @@ def _procedures_root() -> Path:
 def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
     return {
         "name": "Console Chat Agent",
-        "version": "1.6.2",
+        "version": "1.6.3",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -79,6 +79,14 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- For status follow-up, prefer durable task_id/report_id from recent conversation over in-memory handles.\n"
                     "- For report `block_config.scorecard`, pass a resolved scorecard UUID. If the user gives a name or partial name, first call `plexus.scorecards.search`, choose the intended match, and use the returned `scorecard.id`; do not pass guessed names or display casing.\n"
                     "- Use bracket indexing for execute_tactus results, e.g. h[\"id\"], not h.id.\n\n"
+                    "PREDICTION REQUESTS (HARD RULES):\n"
+                    "- When the user asks to run a prediction on an item, use `plexus.score.predict`.\n"
+                    "- Do not use report or evaluation APIs for a single-item prediction.\n"
+                    "- Use prior turns for continuity: if the conversation already contains the item, score, and scorecard, run the prediction immediately.\n"
+                    "- If the user provides numeric scorecard or score references, resolve them first with `plexus.scorecards.info` and `plexus.score.info` as needed.\n"
+                    "- Once item_id, scorecard_identifier, and score_identifier are known, do not ask for another confirmation.\n"
+                    "- Canonical prediction call:\n"
+                    "  return plexus.score.predict({ scorecard_identifier = \"My Scorecard\", score_identifier = \"My Score\", item_id = \"item-or-external-id\" })\n\n"
                     "DOCUMENTATION (USE BEFORE ANSWERING \"HOW DOES X WORK?\" QUESTIONS):\n"
                     "  -- The agent knowledge base lives at `plexus.docs.*`. Always consult it\n"
                     "  -- before explaining Plexus runtime behavior, YAML formats, or workflows.\n"

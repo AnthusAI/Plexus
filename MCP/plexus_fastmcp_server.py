@@ -412,9 +412,9 @@ mcp = FastMCP(
     Predict on an item:
     ```
     return plexus.score.predict({
-      scorecard_name = "My Scorecard",
-      score_name     = "My Score",
-      item_id        = "abc-123"
+      scorecard_identifier = "My Scorecard",
+      score_identifier     = "My Score",
+      item_id              = "abc-123"
     })
     ```
 
