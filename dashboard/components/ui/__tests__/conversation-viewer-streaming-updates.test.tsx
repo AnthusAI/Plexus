@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import ConversationViewer from "../conversation-viewer"
 
 const mockScrollToIndex = jest.fn()
+let latestVirtuosoProps: any = null
 
 jest.mock("../evaluation-tool-output", () => ({
   __esModule: true,
@@ -17,6 +18,8 @@ jest.mock("react-virtuoso", () => {
   const Virtuoso = React.forwardRef(function MockVirtuoso(props: any, ref: any) {
     const { data = [], itemContent, components, className, atBottomStateChange } = props
     const Footer = components?.Footer
+    const Scroller = components?.Scroller || "div"
+    latestVirtuosoProps = props
 
     React.useImperativeHandle(ref, () => ({
       scrollToIndex: mockScrollToIndex,
@@ -27,14 +30,14 @@ jest.mock("react-virtuoso", () => {
     }, [atBottomStateChange, data.length])
 
     return (
-      <div data-testid="virtuoso-scroller" className={className}>
+      <Scroller data-testid="virtuoso-scroller" className={className}>
         {data.map((row: any, index: number) => (
           <div key={row?.id ?? index} data-testid="virtuoso-item">
             {itemContent ? itemContent(index, row) : null}
           </div>
         ))}
         {Footer ? <Footer /> : null}
-      </div>
+      </Scroller>
     )
   })
 
@@ -238,6 +241,7 @@ describe("ConversationViewer streaming updates", () => {
 
   beforeEach(() => {
     mockScrollToIndex.mockReset()
+    latestVirtuosoProps = null
     subscriptions.sessionUpdate = null
     subscriptions.messageCreate = null
     subscriptions.messageUpdate = null
@@ -510,6 +514,38 @@ describe("ConversationViewer streaming updates", () => {
           behavior: "auto",
         })
       )
+    })
+  })
+
+  it("pauses auto-follow after an upward user scroll and resumes at the bottom", async () => {
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    const scroller = await screen.findByTestId("virtuoso-scroller")
+    Object.defineProperties(scroller, {
+      scrollTop: { configurable: true, writable: true, value: 500 },
+      scrollHeight: { configurable: true, value: 1200 },
+      clientHeight: { configurable: true, value: 400 },
+    })
+
+    fireEvent.scroll(scroller)
+    fireEvent.wheel(scroller, { deltaY: -120 })
+    Object.defineProperty(scroller, "scrollTop", { configurable: true, writable: true, value: 300 })
+    fireEvent.scroll(scroller)
+
+    await waitFor(() => {
+      expect(latestVirtuosoProps?.followOutput(false)).toBe(false)
+    })
+
+    Object.defineProperty(scroller, "scrollTop", { configurable: true, writable: true, value: 800 })
+    fireEvent.scroll(scroller)
+
+    await waitFor(() => {
+      expect(latestVirtuosoProps?.followOutput(false)).toBe("auto")
     })
   })
 
