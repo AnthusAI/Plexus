@@ -592,6 +592,22 @@ code: |
         end
         return structured, nil
       end
+
+      -- Secondary path: done(payload="{...}") or other single-string wrappers.
+      for _, v in pairs(done_call.args) do
+        if type(v) == "string" and has_text(v) then
+          local data, err = safe_decode(v)
+          if not data then
+            local candidate = string.match(v, "%b{}")
+            if candidate ~= nil then
+              data, err = safe_decode(candidate)
+            end
+          end
+          if data and type(data) == "table" then
+            return data, nil
+          end
+        end
+      end
     end
 
     local payload = tostring(done_call.args.reason or "")
@@ -1077,11 +1093,13 @@ code: |
 
       local reviewed, reviewed_err = parse_last_done_json()
       if not reviewed then
-        for retry = 1, 2 do
+        for retry = 1, 4 do
           local repair_prompt = table.concat({
             "Your previous done() payload was invalid.",
             "Error: " .. tostring(reviewed_err),
-            "Return ONLY the reviewed score spec via done() named fields.",
+            "Return ONLY via done() NAMED FIELDS. Do NOT put JSON in reason.",
+            "Required fields: name,key,external_id,description,labels,target_class,default_class,guidance_summary,rationale,system_message,user_message.",
+            "Example: done(name='...', key='...', external_id='...', description='...', labels={'Yes','No'}, target_class='Yes', default_class='No', guidance_summary='...', rationale='...', system_message='...', user_message='...')",
             "Do not send commentary.",
           }, "\n")
           local repaired_ok = wait_for_done(Critic, 3, repair_prompt)
@@ -1091,7 +1109,8 @@ code: |
         end
       end
       if not reviewed then
-        return {success = false, status = "error", message = "Critic JSON parse failed for question " .. tostring(question.id) .. ": " .. tostring(reviewed_err)}
+        reviewed = draft
+        reviewed.rationale = trim((reviewed.rationale or "") .. " | critic_fallback: " .. tostring(reviewed_err))
       end
 
       local final_spec, final_err = validate_generated_spec(question, reviewed)
