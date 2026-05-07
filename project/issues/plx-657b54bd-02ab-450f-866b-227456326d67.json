@@ -100,10 +100,16 @@
       "author": "derek",
       "text": "Patched create_scorecard_with_compat in scorecard_from_question_export to try minimal create payloads first (name-only, then account_identifier/key/external_id combinations), with description-bearing payloads moved to late fallbacks. This specifically addresses CreateScorecardInput field incompatibility failures. Validation: poetry run pytest plexus/cli/procedure/test_service_yaml_loader.py -q => pass.",
       "created_at": "2026-05-07T03:38:34.277931893Z"
+    },
+    {
+      "id": "b25a31ad-abe4-47a8-bff3-ebe4f9e0beab",
+      "author": "derek",
+      "text": "New repro: critic done() payload occasionally non-JSON/non-structured, causing late-run failure. Patched parser + recovery: (1) parse_last_done_json now checks any string-valued done args for embedded JSON object wrappers; (2) critic repair retries increased to 4 with explicit named-field example; (3) if critic remains invalid, fallback to generator draft and annotate rationale with critic_fallback error instead of hard-failing entire run. Loader test still passes.",
+      "created_at": "2026-05-07T03:47:51.476448454Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T03:38:34.277931893Z",
+  "updated_at": "2026-05-07T03:47:51.476448454Z",
   "closed_at": null,
   "custom": {}
 }
