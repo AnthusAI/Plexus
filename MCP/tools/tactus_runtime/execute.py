@@ -4855,25 +4855,43 @@ def _default_score_create(args: dict[str, Any]) -> dict[str, Any]:
                 id
                 name
                 order
-              }
+                }
             }
             """
-            section_input = {
+            base_section_input = {
                 "scorecardId": scorecard_id,
                 "name": section_name,
                 "order": 1,
             }
-            section_input = apply_actor_attribution(
-                section_input,
-                client_context=getattr(client, "context", None),
-                source="execute_tactus",
-            )
-            section_resp = client.execute(create_section_mutation, {"input": section_input})
-            created_section = (section_resp or {}).get("createScorecardSection") or {}
-            section_id = created_section.get("id")
+            section_errors: list[str] = []
+            for use_attribution in (False, True):
+                section_input = dict(base_section_input)
+                if use_attribution:
+                    section_input = apply_actor_attribution(
+                        section_input,
+                        client_context=getattr(client, "context", None),
+                        source="execute_tactus",
+                    )
+                try:
+                    section_resp = client.execute(
+                        create_section_mutation,
+                        {"input": section_input},
+                    )
+                    created_section = (section_resp or {}).get("createScorecardSection") or {}
+                    section_id = created_section.get("id")
+                    if section_id:
+                        break
+                    section_errors.append(
+                        f"attribution={use_attribution} payload={section_input!r} -> missing id in response {section_resp!r}"
+                    )
+                except Exception as exc:
+                    section_errors.append(
+                        f"attribution={use_attribution} payload={section_input!r} -> {exc}"
+                    )
             if not section_id:
                 raise RuntimeError(
-                    f"plexus.score.create failed to create section: {section_resp!r}"
+                    "plexus.score.create failed to create section: "
+                    + " | ".join(section_errors)
                 )
 
     score_input: dict[str, Any] = {
@@ -4887,12 +4905,6 @@ def _default_score_create(args: dict[str, Any]) -> dict[str, Any]:
     }
     if description is not None and str(description).strip():
         score_input["description"] = str(description).strip()
-
-    score_input = apply_actor_attribution(
-        score_input,
-        client_context=getattr(client, "context", None),
-        source="execute_tactus",
-    )
 
     create_score_mutation = """
     mutation CreateScore($input: CreateScoreInput!) {
@@ -4908,12 +4920,34 @@ def _default_score_create(args: dict[str, Any]) -> dict[str, Any]:
       }
     }
     """
-    score_resp = client.execute(create_score_mutation, {"input": score_input})
-    created_score = (score_resp or {}).get("createScore") or {}
-    score_id = created_score.get("id")
+    score_id = None
+    created_score: dict[str, Any] = {}
+    score_errors: list[str] = []
+    for use_attribution in (False, True):
+        payload = dict(score_input)
+        if use_attribution:
+            payload = apply_actor_attribution(
+                payload,
+                client_context=getattr(client, "context", None),
+                source="execute_tactus",
+            )
+        try:
+            score_resp = client.execute(create_score_mutation, {"input": payload})
+            created_score = (score_resp or {}).get("createScore") or {}
+            score_id = created_score.get("id")
+            if score_id:
+                break
+            score_errors.append(
+                f"attribution={use_attribution} payload={payload!r} -> missing id in response {score_resp!r}"
+            )
+        except Exception as exc:
+            score_errors.append(
+                f"attribution={use_attribution} payload={payload!r} -> {exc}"
+            )
     if not score_id:
         raise RuntimeError(
-            f"plexus.score.create failed: createScore returned no id ({score_resp!r})"
+            "plexus.score.create failed after compatibility attempts: "
+            + " | ".join(score_errors)
         )
 
     return {

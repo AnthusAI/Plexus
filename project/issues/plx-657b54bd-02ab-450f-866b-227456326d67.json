@@ -148,10 +148,16 @@
       "author": "derek",
       "text": "Implemented runtime fix in execute_tactus scorecards.create (_default_scorecards_create): now performs compatibility attempts with schema-valid plain payloads first and attribution-injected payloads second, with detailed attempted payload diagnostics on failure. Also restored default account resolution via resolve_account_id_for_command(client, None) so required accountId is still included by default. Validation: python3 -m py_compile MCP/tools/tactus_runtime/execute.py and pytest plexus/cli/procedure/test_service_yaml_loader.py -q both pass.",
       "created_at": "2026-05-07T04:39:12.981980354Z"
+    },
+    {
+      "id": "cbf34c6c-ac6e-4dbe-b6fd-2028115e354c",
+      "author": "derek",
+      "text": "Confirmed live input types: CreateScorecardSectionInput = {name,order,scorecardId,id}; CreateScoreInput = {name,key,description,order,type,...,sectionId,scorecardId,externalId,id}. Patched _default_score_create runtime to attempt section/score creation with plain schema-valid payload first, then attribution-injected fallback. This addresses CreateScorecardSectionInput rejection caused by implicit attribution fields.",
+      "created_at": "2026-05-07T04:44:00.254941237Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T04:39:12.981980354Z",
+  "updated_at": "2026-05-07T04:44:00.254941237Z",
   "closed_at": null,
   "custom": {}
 }
