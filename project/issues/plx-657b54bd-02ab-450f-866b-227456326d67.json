@@ -124,10 +124,16 @@
       "author": "derek",
       "text": "Root cause confirmed from runtime logs: done tool in this environment only accepts reason/success. Previous prompts required impossible named-field done args, forcing parse failures. Patched procedure contract to done(reason=<JSON>, success=true) for generator+critic, updated repair prompts accordingly, and added parser fallback for observed key=value;... reason payloads (including labels list parsing) so current runtime output shape can still be normalized.",
       "created_at": "2026-05-07T04:18:00.009631500Z"
+    },
+    {
+      "id": "1f7bbfd1-5f5d-4ff5-b1e0-ad1d961b4934",
+      "author": "derek",
+      "text": "Patched scorecard create compatibility again to avoid CreateScorecardInput schema rejection in this account: removed all description-bearing variants and moved to strict-minimal payloads first (name, name+key, name+external_id, name+key+external_id). account_identifier variants remain only as late fallbacks and also exclude description.",
+      "created_at": "2026-05-07T04:28:18.906362651Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T04:18:00.009631500Z",
+  "updated_at": "2026-05-07T04:28:18.906362651Z",
   "closed_at": null,
   "custom": {}
 }
