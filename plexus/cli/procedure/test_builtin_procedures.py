@@ -54,6 +54,19 @@ def test_builtin_console_procedure_prompt_teaches_docs_primitives():
     assert "plexus.score.search" in system_prompt
 
 
+def test_builtin_console_procedure_prompt_teaches_report_dispatch_contract():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+
+    assert "REPORT REQUESTS (HARD RULES)" in system_prompt
+    assert "plexus.report.run" in system_prompt
+    assert "FeedbackAlignment" in system_prompt
+    assert "task_id = h[\"dispatch_result\"]" in system_prompt
+    assert "Do not use `plexus.feedback.alignment` to run a report" in system_prompt
+    assert "Do not use `plexus.procedure.optimize` to run a report" in system_prompt
+
+
 def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
