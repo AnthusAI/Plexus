@@ -244,10 +244,22 @@
       "author": "derek",
       "text": "Implemented smoke-test sampling fix and fallback source scorecard support. Changes: (1) score_version_test now queries listScoreResultByScorecardIdAndUpdatedAt (schema-valid) instead of listScoreResultByScorecardId, (2) added fallback_scorecard_identifier support for score.test and run_score_version_test to source candidate items from another scorecard when target has no history, (3) scorecard_from_question_export adds smoke_test_source_scorecard_identifier param and passes it to score.test, (4) smoke test success now requires score.test passed=true (not only success=true), (5) added regression test for fallback source scorecard sampling. Validation: poetry run pytest plexus/cli/shared/test_score_version_test.py -q and poetry run pytest plexus/cli/procedure/test_service_yaml_loader.py -q both passed.",
       "created_at": "2026-05-07T18:55:38.977881264Z"
+    },
+    {
+      "id": "4a469029-8409-48b1-abca-fd554d02ccb0",
+      "author": "derek",
+      "text": "Investigating smoke-test NA due to missing transcript context in sampled source-scorecard items. Implementing text extraction fallback from item metadata fields so score.test can pass actual transcript text to scorecard scoring path.",
+      "created_at": "2026-05-07T19:45:25.776766781Z"
+    },
+    {
+      "id": "71c2651d-0d03-4288-9ac8-a4934950d414",
+      "author": "derek",
+      "text": "Implemented transcript extraction fallback in score_version_test: smoke predictions now derive text from item metadata keys (transcript/content/body/conversation, including nested payload/input/request/data) when item.text/description is sparse. Added procedure param smoke_test_item_ids (CSV) and pass-through to score.test for deterministic smoke runs on known transcript items. Validation passed: shared score_version_test + procedure YAML loader tests.",
+      "created_at": "2026-05-07T19:46:14.660632311Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T18:55:38.977881264Z",
+  "updated_at": "2026-05-07T19:46:14.660632311Z",
   "closed_at": null,
   "custom": {}
 }
