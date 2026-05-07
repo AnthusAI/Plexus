@@ -3246,15 +3246,12 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
 
     remote = _resolve_report_dispatch_mode() == "celery"
 
-    from plexus.cli.report.utils import resolve_account_id_for_command
     from plexus.cli.shared.client_utils import create_client as create_dashboard_client
 
     client = create_dashboard_client()
     if not client:
         raise ValueError("Could not create dashboard client")
-    account_id = resolve_account_id_for_command(client, args.get("account"))
-    if not account_id:
-        raise ValueError("Could not determine default account ID")
+    account_id = _resolve_runtime_account_id(client, args, "plexus.report.run")
 
     configuration_id = args.get("configuration_id") or args.get("config_id")
     if configuration_id:
@@ -3415,16 +3412,13 @@ def _default_report_runner_sync(args: dict[str, Any]) -> dict[str, Any]:
     if not block_class:
         raise ValueError("plexus.report.run sync requires block_class")
 
-    from plexus.cli.report.utils import resolve_account_id_for_command
     from plexus.cli.shared.client_utils import create_client as create_dashboard_client
     from plexus.reports.service import run_block_cached
 
     client = create_dashboard_client()
     if not client:
         raise ValueError("Could not create dashboard client")
-    account_id = resolve_account_id_for_command(client, args.get("account"))
-    if not account_id:
-        raise ValueError("Could not determine default account ID")
+    account_id = _resolve_runtime_account_id(client, args, "plexus.report.run")
 
     cache_key = args.get("cache_key")
     ttl_hours = args.get("ttl_hours")
@@ -5532,7 +5526,7 @@ class PlexusRuntimeModule:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
-        parsed = _args(args)
+        parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
         if not parsed.get("procedure_id") and self._trace_id:
             parsed["procedure_id"] = self._trace_id
         if not bool(parsed.get("async")):
@@ -5624,7 +5618,7 @@ class PlexusRuntimeModule:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
-        parsed = _args(args)
+        parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
 
         # Convenience shorthand: plexus.report.acceptance_rate{...} pre-fills block_class.
         if method == "acceptance_rate":

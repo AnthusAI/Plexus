@@ -2661,6 +2661,31 @@ def test_report_run_async_creates_handle_and_records_budget() -> None:
     assert handles.created[0]["child_budget"] == budget
 
 
+def test_report_run_async_receives_runtime_account_context() -> None:
+    seen_args: dict = {}
+
+    def fake_runner(args: dict) -> dict:
+        seen_args.update(args)
+        return {"status": "dispatched", "task_id": "task-1"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        report_runner=fake_runner,
+        runtime_context={"account_id": "acct-from-console"},
+    )
+
+    module.report.run(
+        {
+            "block_class": "FeedbackAlignment",
+            "block_config": {"scorecard": "Suco - Home Improvement", "days": 30},
+            "async": True,
+            "budget": _child_budget(),
+        }
+    )
+
+    assert seen_args["account_id"] == "acct-from-console"
+
+
 def test_score_champion_version_timeline_convenience_maps_report_block() -> None:
     seen_args: dict = {}
     handles = _MemoryHandleStore()
@@ -2768,6 +2793,24 @@ def test_default_report_runner_uses_remote_dispatch_by_default(monkeypatch) -> N
         "background": True,
         "child_budget": budget,
     }
+
+
+def test_default_report_runner_requires_account_context_without_null_key(monkeypatch) -> None:
+    fake_client = SimpleNamespace(
+        context=SimpleNamespace(account_id=None, account_key=None)
+    )
+
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: fake_client)
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("must not resolve default account with a null key")
+        ),
+    )
+    monkeypatch.delenv("PLEXUS_DISPATCH_MODE", raising=False)
+
+    with pytest.raises(execute.AccountContextRequired, match="requires account context"):
+        execute._default_report_runner({"block_class": "FeedbackAlignment"})
 
 
 def test_default_report_runner_uses_remote_dispatch_for_celery_mode(monkeypatch) -> None:
