@@ -75,6 +75,10 @@ params:
     type: boolean
     default: true
     description: "If true, fail the procedure when a smoke test fails"
+  smoke_test_source_scorecard_identifier:
+    type: string
+    required: false
+    description: "Optional scorecard id/key/name to source smoke-test item samples when target scorecard has no history yet"
 
 outputs:
   success:
@@ -1421,6 +1425,8 @@ code: |
     local run_smoke_test = to_bool(params.run_smoke_test, true)
     local fail_on_smoke_test = to_bool(params.fail_on_smoke_test, true)
     local smoke_test_samples = tonumber(params.smoke_test_samples) or 3
+    local smoke_test_source_scorecard_identifier = has_text(params.smoke_test_source_scorecard_identifier)
+      and tostring(params.smoke_test_source_scorecard_identifier) or nil
 
     local create_scorecard_result, scorecard_create_err = create_scorecard_with_compat(
       normalized_scorecard,
@@ -1523,6 +1529,7 @@ code: |
             scorecard_identifier = created_scorecard_id,
             score_identifier = created_score_id,
             version = (type(update_score_result) == "table" and update_score_result.version_id) or nil,
+            fallback_scorecard_identifier = smoke_test_source_scorecard_identifier,
             samples = smoke_test_samples
           })
         end)
@@ -1546,9 +1553,11 @@ code: |
           end
         else
           if type(smoke_result) == "table" then
-            smoke_entry.success = smoke_result.success == true
+            smoke_entry.success = smoke_result.success == true and smoke_result.passed == true
             smoke_entry.details = smoke_result
-            smoke_entry.error = smoke_result.error
+            if not smoke_entry.success then
+              smoke_entry.error = smoke_result.error or smoke_result.message or "mechanical score test failed"
+            end
           else
             smoke_entry.success = false
             smoke_entry.error = "invalid score.test response type"
@@ -1611,7 +1620,8 @@ code: |
       require_approval = field.boolean{default = true},
       run_smoke_test = field.boolean{default = true},
       smoke_test_samples = field.number{default = 3},
-      fail_on_smoke_test = field.boolean{default = true}
+      fail_on_smoke_test = field.boolean{default = true},
+      smoke_test_source_scorecard_identifier = field.string{}
     },
 
     output = {

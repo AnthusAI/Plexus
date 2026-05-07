@@ -232,10 +232,22 @@
       "author": "derek",
       "text": "Implemented smoke-test controls in procedure input schema: run_smoke_test (default true), smoke_test_samples (default 3), fail_on_smoke_test (default true). Verified parser compatibility with .                                                                        [100%]\n1 passed in 0.72s (pass).",
       "created_at": "2026-05-07T18:34:32.686559286Z"
+    },
+    {
+      "id": "8e53d128-8f51-4f43-b9ba-efb2f372048e",
+      "author": "derek",
+      "text": "Starting fix for score.test sampling: replace unsupported listScoreResultByScorecardId query and add source-scorecard fallback sampling for new scorecards. Will wire through scorecard_from_question_export smoke-test params and run targeted tests.",
+      "created_at": "2026-05-07T18:54:09.015386473Z"
+    },
+    {
+      "id": "f8282d53-78e5-4817-aa94-4871f98bb5a1",
+      "author": "derek",
+      "text": "Implemented smoke-test sampling fix and fallback source scorecard support. Changes: (1) score_version_test now queries listScoreResultByScorecardIdAndUpdatedAt (schema-valid) instead of listScoreResultByScorecardId, (2) added fallback_scorecard_identifier support for score.test and run_score_version_test to source candidate items from another scorecard when target has no history, (3) scorecard_from_question_export adds smoke_test_source_scorecard_identifier param and passes it to score.test, (4) smoke test success now requires score.test passed=true (not only success=true), (5) added regression test for fallback source scorecard sampling. Validation: poetry run pytest plexus/cli/shared/test_score_version_test.py -q and poetry run pytest plexus/cli/procedure/test_service_yaml_loader.py -q both passed.",
+      "created_at": "2026-05-07T18:55:38.977881264Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T18:34:32.686559286Z",
+  "updated_at": "2026-05-07T18:55:38.977881264Z",
   "closed_at": null,
   "custom": {}
 }
