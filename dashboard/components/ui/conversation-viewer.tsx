@@ -1565,12 +1565,16 @@ function ConversationViewer({
   const manualScrollLockRef = React.useRef(false)
   const lastScrollerTopRef = React.useRef<number | null>(null)
   const conversationScrollerRef = React.useRef<HTMLDivElement | null>(null)
+  const autoFollowEnabledRef = React.useRef(true)
   const programmaticScrollRef = React.useRef(false)
   const programmaticScrollFrameRef = React.useRef<number | null>(null)
+  const stickyScrollFrameRef = React.useRef<number | null>(null)
+  const stickyScrollRunRef = React.useRef(0)
   const promptSubmitLockRef = React.useRef(false)
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const [atBottom, setAtBottom] = useState(true)
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
+  const [conversationScrollerElement, setConversationScrollerElement] = useState<HTMLDivElement | null>(null)
   const authFailureReportedRef = React.useRef(false)
 
   const markAuthUnavailable = React.useCallback((error: unknown, source: string): boolean => {
@@ -2569,6 +2573,18 @@ function ConversationViewer({
     return distanceFromBottom <= CONVERSATION_BOTTOM_THRESHOLD_PX
   }, [])
 
+  useEffect(() => {
+    autoFollowEnabledRef.current = autoFollowEnabled
+  }, [autoFollowEnabled])
+
+  const cancelStickyBottomScroll = React.useCallback(() => {
+    stickyScrollRunRef.current += 1
+    if (stickyScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(stickyScrollFrameRef.current)
+      stickyScrollFrameRef.current = null
+    }
+  }, [])
+
   const clearProgrammaticScrollAfterPaint = React.useCallback(() => {
     if (programmaticScrollFrameRef.current !== null) {
       window.cancelAnimationFrame(programmaticScrollFrameRef.current)
@@ -2584,36 +2600,142 @@ function ConversationViewer({
 
   useEffect(() => (
     () => {
+      cancelStickyBottomScroll()
       if (programmaticScrollFrameRef.current !== null) {
         window.cancelAnimationFrame(programmaticScrollFrameRef.current)
       }
     }
-  ), [])
+  ), [cancelStickyBottomScroll])
 
   const markConversationAtBottom = React.useCallback(() => {
     manualScrollLockRef.current = false
     lastScrollerTopRef.current = conversationScrollerRef.current?.scrollTop ?? null
     setAtBottom(true)
+    autoFollowEnabledRef.current = true
     setAutoFollowEnabled(true)
   }, [])
 
-  const scrollConversationToBottom = React.useCallback((behavior: "auto" | "smooth" = "auto") => {
-    programmaticScrollRef.current = true
-    markConversationAtBottom()
-    virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior })
+  const disableConversationAutoFollow = React.useCallback(() => {
+    manualScrollLockRef.current = true
+    autoFollowEnabledRef.current = false
+    setAutoFollowEnabled(false)
+    cancelStickyBottomScroll()
+  }, [cancelStickyBottomScroll])
 
-    const scroller = conversationScrollerRef.current
-    if (scroller) {
-      window.requestAnimationFrame(() => {
+  const scrollConversationToBottom = React.useCallback((
+    behavior: "auto" | "smooth" = "auto",
+    options: { force?: boolean } = {}
+  ) => {
+    if (options.force) {
+      markConversationAtBottom()
+    }
+
+    const scrollRun = stickyScrollRunRef.current + 1
+    stickyScrollRunRef.current = scrollRun
+
+    const scrollOnce = (remainingFrames: number) => {
+      if (scrollRun !== stickyScrollRunRef.current) {
+        return
+      }
+      if (!options.force && (manualScrollLockRef.current || !autoFollowEnabledRef.current)) {
+        clearProgrammaticScrollAfterPaint()
+        return
+      }
+
+      programmaticScrollRef.current = true
+      markConversationAtBottom()
+      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior })
+
+      const scroller = conversationScrollerRef.current
+      if (scroller) {
         scroller.scrollTop = scroller.scrollHeight
         markConversationAtBottom()
+      }
+
+      if (remainingFrames <= 0) {
+        stickyScrollFrameRef.current = null
         clearProgrammaticScrollAfterPaint()
+        return
+      }
+
+      stickyScrollFrameRef.current = window.requestAnimationFrame(() => {
+        scrollOnce(remainingFrames - 1)
       })
+    }
+
+    if (stickyScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(stickyScrollFrameRef.current)
+      stickyScrollFrameRef.current = null
+    }
+
+    scrollOnce(5)
+  }, [clearProgrammaticScrollAfterPaint, markConversationAtBottom])
+
+  useEffect(() => {
+    const scroller = conversationScrollerElement
+    if (!scroller || typeof MutationObserver === "undefined") {
       return
     }
 
-    clearProgrammaticScrollAfterPaint()
-  }, [clearProgrammaticScrollAfterPaint, markConversationAtBottom])
+    let mutationFrame: number | null = null
+    const requestStickyScroll = () => {
+      if (mutationFrame !== null) {
+        return
+      }
+      mutationFrame = window.requestAnimationFrame(() => {
+        mutationFrame = null
+        if (autoFollowEnabledRef.current && !manualScrollLockRef.current) {
+          scrollConversationToBottom("auto")
+        }
+      })
+    }
+
+    const observer = new MutationObserver(requestStickyScroll)
+    observer.observe(scroller, {
+      attributes: true,
+      characterData: true,
+      childList: true,
+      subtree: true,
+    })
+
+    return () => {
+      if (mutationFrame !== null) {
+        window.cancelAnimationFrame(mutationFrame)
+      }
+      observer.disconnect()
+    }
+  }, [conversationScrollerElement, scrollConversationToBottom])
+
+  useEffect(() => {
+    const scroller = conversationScrollerElement
+    const resizeTarget = scroller?.firstElementChild
+    if (!scroller || !resizeTarget || typeof ResizeObserver === "undefined") {
+      return
+    }
+
+    let resizeFrame: number | null = null
+    const requestStickyScroll = () => {
+      if (resizeFrame !== null) {
+        return
+      }
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null
+        if (autoFollowEnabledRef.current && !manualScrollLockRef.current) {
+          scrollConversationToBottom("auto")
+        }
+      })
+    }
+
+    const observer = new ResizeObserver(requestStickyScroll)
+    observer.observe(resizeTarget)
+
+    return () => {
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame)
+      }
+      observer.disconnect()
+    }
+  }, [conversationScrollerElement, renderRows.length, scrollConversationToBottom])
 
   const openRenameDialog = React.useCallback(() => {
     if (!selectedSession) {
@@ -2680,16 +2802,18 @@ function ConversationViewer({
       return
     }
     if (manualScrollLockRef.current) {
-      setAutoFollowEnabled(false)
+      disableConversationAutoFollow()
     }
-  }, [])
+  }, [disableConversationAutoFollow, markConversationAtBottom])
 
   useEffect(() => {
+    cancelStickyBottomScroll()
     setAutoFollowEnabled(true)
+    autoFollowEnabledRef.current = true
     setAtBottom(true)
     manualScrollLockRef.current = false
     lastScrollerTopRef.current = null
-  }, [selectedSessionId])
+  }, [cancelStickyBottomScroll, selectedSessionId])
 
   const handleScrollerScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const scroller = event.currentTarget
@@ -2704,31 +2828,30 @@ function ConversationViewer({
 
     setAtBottom(false)
     if (!programmaticScrollRef.current && previousTop !== null && currentTop < previousTop - 1) {
-      manualScrollLockRef.current = true
-      setAutoFollowEnabled(false)
+      disableConversationAutoFollow()
     }
     lastScrollerTopRef.current = currentTop
-  }, [isScrollerNearBottom, markConversationAtBottom])
+  }, [disableConversationAutoFollow, isScrollerNearBottom, markConversationAtBottom])
 
   const handleScrollerWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     if (event.deltaY < 0) {
-      manualScrollLockRef.current = true
-      setAutoFollowEnabled(false)
+      disableConversationAutoFollow()
     }
-  }, [])
+  }, [disableConversationAutoFollow])
 
   const VirtuosoScroller = React.useMemo(
     () =>
       React.forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<"div">>(
         function ConversationVirtuosoScroller({ onScroll, onWheel, ...props }, ref) {
-          const setRef = (node: HTMLDivElement | null) => {
+          const setRef = React.useCallback((node: HTMLDivElement | null) => {
             conversationScrollerRef.current = node
+            setConversationScrollerElement((current) => (current === node ? current : node))
             if (typeof ref === "function") {
               ref(node)
             } else if (ref) {
               ref.current = node
             }
-          }
+          }, [ref])
 
           return (
             <div
@@ -3410,7 +3533,7 @@ function ConversationViewer({
             <ConversationScrollButton
               isAtBottom={atBottom}
               virtuosoRef={virtuosoRef}
-              onClick={() => scrollConversationToBottom("smooth")}
+              onClick={() => scrollConversationToBottom("smooth", { force: true })}
             />
           </Conversation>
         </div>
