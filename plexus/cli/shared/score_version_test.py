@@ -366,6 +366,7 @@ async def _predict_single_item(
             "message": f"Item not found: {item_id}",
         }
 
+    metadata = _normalize_metadata(item_data.get("metadata"))
     text = _extract_item_text(item_data, metadata)
     if not text:
         return {
@@ -374,8 +375,6 @@ async def _predict_single_item(
             "error": "missing_item_text",
             "message": f"Item has no usable transcript text: {item_id}",
         }
-
-    metadata = _normalize_metadata(item_data.get("metadata"))
 
     try:
         item_obj = PlexusItem.from_dict(item_data, client)
