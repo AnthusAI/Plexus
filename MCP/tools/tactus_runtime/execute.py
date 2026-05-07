@@ -58,7 +58,12 @@ PLEXUS_PROCEDURE_RUN_LOG_DIR_DEFAULT = os.path.join(
 
 
 def _resolve_trace_dir() -> str:
-    return os.environ.get("PLEXUS_TACTUS_TRACE_DIR", PLEXUS_TACTUS_TRACE_DIR_DEFAULT)
+    configured = os.environ.get("PLEXUS_TACTUS_TRACE_DIR")
+    if configured:
+        return configured
+    if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or os.environ.get("LAMBDA_TASK_ROOT"):
+        return os.path.join("/tmp", "tactus_traces")
+    return PLEXUS_TACTUS_TRACE_DIR_DEFAULT
 
 
 def _resolve_procedure_run_log_dir() -> str:
@@ -1307,7 +1312,6 @@ def _default_feedback_alignment(args: dict[str, Any]) -> dict[str, Any]:
     """
 
     from plexus.cli.feedback.feedback_service import FeedbackService
-    from plexus.cli.report.utils import resolve_account_id_for_command
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.memoized_resolvers import (
         memoized_resolve_score_identifier,
@@ -1327,7 +1331,9 @@ def _default_feedback_alignment(args: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError(
             "plexus.feedback.alignment: could not create dashboard client"
         )
-    account_id = resolve_account_id_for_command(client, None)
+    account_id = _resolve_runtime_account_id(
+        client, args, "plexus.feedback.alignment"
+    )
     scorecard_id = memoized_resolve_scorecard_identifier(client, str(scorecard_name))
     if not scorecard_id:
         raise ValueError(
@@ -1364,7 +1370,6 @@ def _default_feedback_finder(args: dict[str, Any]) -> dict[str, Any]:
     """
 
     from plexus.cli.feedback.feedback_service import FeedbackService
-    from plexus.cli.report.utils import resolve_account_id_for_command
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.memoized_resolvers import (
         memoized_resolve_score_identifier,
@@ -1382,7 +1387,7 @@ def _default_feedback_finder(args: dict[str, Any]) -> dict[str, Any]:
     prioritize_edit_comments = bool(args.get("prioritize_edit_comments", True))
 
     client = create_client()
-    account_id = resolve_account_id_for_command(client, None)
+    account_id = _resolve_runtime_account_id(client, args, "plexus.feedback.find")
     scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_name)
     score_id = memoized_resolve_score_identifier(client, scorecard_id, score_name)
 
@@ -3983,6 +3988,8 @@ def _structured_error(
     error: dict[str, Any] = {
         "code": code,
         "message": message,
+        "type": type(exc).__name__ if exc is not None else None,
+        "retryable": False,
         "traceback": None,
         "tactus_lineno": _user_tactus_lineno(raw_lineno),
     }
@@ -4013,6 +4020,124 @@ class BudgetExceeded(RuntimeError):
 
 class ChildBudgetRequired(ValueError):
     """Raised when async work is spawned without an explicit child budget."""
+
+
+class AccountContextRequired(ValueError):
+    """Raised when a runtime API needs an account but none is bound."""
+
+
+_RUNTIME_API_ERROR_KEY = "__execute_tactus_runtime_error__"
+
+
+def _exception_error_code(exc: BaseException) -> str:
+    if isinstance(exc, AccountContextRequired):
+        return "account_context_required"
+    if isinstance(exc, BudgetExceeded):
+        return "budget_exceeded"
+    if isinstance(exc, ChildBudgetRequired):
+        return "child_budget_required"
+    if isinstance(exc, RequiresHandleProtocol):
+        return "requires_handle_protocol"
+    if isinstance(exc, ValueError):
+        return "invalid_request"
+    return "runtime_api_error"
+
+
+def _runtime_api_error_value(namespace: str, method: str, exc: BaseException) -> dict[str, Any]:
+    api_call = f"plexus.{namespace}.{method}"
+    message = str(exc) or f"{api_call} failed"
+    return {
+        _RUNTIME_API_ERROR_KEY: True,
+        "api_call": api_call,
+        "error": _structured_error(
+            _exception_error_code(exc),
+            f"{api_call} failed: {message}",
+            exc,
+        ),
+    }
+
+
+def _extract_runtime_api_error(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        try:
+            value = _jsonable(value)
+        except Exception:
+            return None
+    if isinstance(value, dict) and value.get(_RUNTIME_API_ERROR_KEY):
+        error = value.get("error")
+        return error if isinstance(error, dict) else None
+    return None
+
+
+def _context_account_id(context: dict[str, Any] | None) -> str | None:
+    if not isinstance(context, dict):
+        return None
+    account_id = context.get("account_id") or context.get("accountId")
+    if account_id is None:
+        return None
+    account_id = str(account_id).strip()
+    return account_id or None
+
+
+def _merge_runtime_context_args(
+    args: dict[str, Any], runtime_context: dict[str, Any] | None
+) -> dict[str, Any]:
+    if not isinstance(args, dict):
+        args = {}
+    merged = dict(args)
+    if not any(merged.get(key) for key in ("account", "account_id", "accountId")):
+        account_id = _context_account_id(runtime_context)
+        if account_id:
+            merged["account_id"] = account_id
+    return merged
+
+
+def _resolve_runtime_account_id(
+    client: Any,
+    args: dict[str, Any],
+    api_name: str,
+) -> str:
+    account_id = args.get("account_id") or args.get("accountId")
+    if account_id:
+        account_id = str(account_id).strip()
+        if account_id:
+            if getattr(client, "context", None) is not None:
+                try:
+                    client.context.account_id = account_id
+                except Exception as exc:
+                    logger.debug(
+                        "Unable to set client.context.account_id during runtime account resolution",
+                        exc_info=exc,
+                    )
+            return account_id
+
+    account_identifier = args.get("account")
+    if account_identifier:
+        from plexus.cli.report.utils import resolve_account_id_for_command
+
+        return resolve_account_id_for_command(client, str(account_identifier))
+
+    context = getattr(client, "context", None)
+    if context is not None:
+        existing_account_id = getattr(context, "account_id", None)
+        if existing_account_id:
+            return str(existing_account_id)
+        if not getattr(context, "account_key", None):
+            raise AccountContextRequired(
+                f"{api_name} requires account context. Console calls must pass the "
+                "triggering ChatMessage accountId into execute_tactus, or local calls "
+                "must provide account/account_id or configure PLEXUS_ACCOUNT_KEY."
+            )
+
+    from plexus.cli.report.utils import resolve_account_id_for_command
+
+    try:
+        return resolve_account_id_for_command(client, None)
+    except Exception as exc:
+        raise AccountContextRequired(
+            f"{api_name} could not resolve an account from the current runtime context. "
+            "Pass account/account_id explicitly or configure PLEXUS_ACCOUNT_KEY."
+        ) from exc
 
 
 class BudgetSpec:
@@ -4990,15 +5115,23 @@ class _Namespace:
         dispatcher: Callable[[str, str, Any], Any],
         name: str,
         methods: set[str],
+        *,
+        catch_runtime_errors: bool = False,
     ) -> None:
         self._dispatcher = dispatcher
         self._name = name
+        self._catch_runtime_errors = catch_runtime_errors
         for method_name in methods:
             setattr(self, method_name, self._make_call(method_name))
 
     def _make_call(self, method_name: str) -> Callable[[Any], Any]:
         def call(args: Any = None) -> Any:
-            return self._dispatcher(self._name, method_name, args)
+            try:
+                return self._dispatcher(self._name, method_name, args)
+            except Exception as exc:
+                if not self._catch_runtime_errors:
+                    raise
+                return _runtime_api_error_value(self._name, method_name, exc)
 
         return call
 
@@ -5047,11 +5180,15 @@ class PlexusRuntimeModule:
         procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         procedure_optimize: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         stream_handler: _MCPStreamEmitter | None = None,
+        runtime_context: dict[str, Any] | None = None,
+        catch_runtime_errors: bool = False,
     ) -> None:
         self._mcp = mcp
         self._trace_id = trace_id or str(uuid.uuid4())
         self._docs_dir = docs_dir if docs_dir is not None else PLEXUS_DOCS_DIR
         self._budget = budget if budget is not None else BudgetGate()
+        self._runtime_context = dict(runtime_context or {})
+        self._catch_runtime_errors = catch_runtime_errors
         self._handle_store = (
             handle_store if handle_store is not None else _default_handle_store()
         )
@@ -5189,9 +5326,28 @@ class PlexusRuntimeModule:
         for namespace_name, method_name in DIRECT_HANDLERS.keys():
             methods_by_namespace.setdefault(namespace_name, set()).add(method_name)
         for namespace, methods in methods_by_namespace.items():
-            setattr(self, namespace, _Namespace(self._call, namespace, methods))
-        self.docs = _Namespace(self._call_docs, "docs", {"list", "get"})
-        self.api = _Namespace(self._call_api, "api", {"list"})
+            setattr(
+                self,
+                namespace,
+                _Namespace(
+                    self._call,
+                    namespace,
+                    methods,
+                    catch_runtime_errors=self._catch_runtime_errors,
+                ),
+            )
+        self.docs = _Namespace(
+            self._call_docs,
+            "docs",
+            {"list", "get"},
+            catch_runtime_errors=self._catch_runtime_errors,
+        )
+        self.api = _Namespace(
+            self._call_api,
+            "api",
+            {"list"},
+            catch_runtime_errors=self._catch_runtime_errors,
+        )
 
     @property
     def api_calls(self) -> list[str]:
@@ -5330,7 +5486,7 @@ class PlexusRuntimeModule:
         self._budget.check_before("feedback", method)
         self._record_api_call("feedback", method)
         try:
-            parsed = _args(args)
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
             if method == "find":
                 return self._feedback_finder(parsed)
             if method == "latest_update":
@@ -5931,6 +6087,7 @@ def _run_tactus_sync(
     procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     stream_handler: _MCPStreamEmitter | None = None,
     score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     gate = budget if budget is not None else BudgetGate()
 
@@ -5967,6 +6124,8 @@ def _run_tactus_sync(
                 procedure_runner=procedure_runner,
                 stream_handler=stream_handler,
                 score_info=score_info,
+                runtime_context=runtime_context,
+                catch_runtime_errors=True,
             )
             runtime.register_python_module("plexus", plexus)
             if stream_handler is not None:
@@ -6031,16 +6190,28 @@ def _run_tactus_sync(
                 )
             else:
                 ok = bool(runtime_result.get("success"))
-                value = runtime_result.get("result")
+                value = _jsonable(runtime_result.get("result"))
                 if ok:
-                    envelope = _response_envelope(
-                        ok=True,
-                        value=value,
-                        trace_id=trace_id,
-                        api_calls=api_calls,
-                        started_at=started_mono,
-                        budget=gate,
-                    )
+                    runtime_api_error = _extract_runtime_api_error(value)
+                    if runtime_api_error is not None:
+                        envelope = _response_envelope(
+                            ok=False,
+                            value=None,
+                            trace_id=trace_id,
+                            api_calls=api_calls,
+                            started_at=started_mono,
+                            error=runtime_api_error,
+                            budget=gate,
+                        )
+                    else:
+                        envelope = _response_envelope(
+                            ok=True,
+                            value=value,
+                            trace_id=trace_id,
+                            api_calls=api_calls,
+                            started_at=started_mono,
+                            budget=gate,
+                        )
                 else:
                     message = str(
                         runtime_result.get("error") or "Tactus execution failed"
@@ -6145,6 +6316,7 @@ async def _execute_tactus_tool(
     report_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     store = trace_store if trace_store is not None else _default_trace_store()
     started_mono = time.monotonic()
@@ -6202,6 +6374,7 @@ async def _execute_tactus_tool(
                     procedure_runner=procedure_runner,
                     stream_handler=stream_handler,
                     score_info=score_info,
+                    runtime_context=runtime_context,
                 )
             )
             if stream_handler is None:
