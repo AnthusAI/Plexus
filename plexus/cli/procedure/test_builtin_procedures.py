@@ -62,6 +62,9 @@ def test_builtin_console_procedure_prompt_teaches_report_dispatch_contract():
     assert "REPORT REQUESTS (HARD RULES)" in system_prompt
     assert "plexus.report.run" in system_prompt
     assert "FeedbackAlignment" in system_prompt
+    assert "memory_analysis = false" in system_prompt
+    assert "pass a resolved scorecard UUID" in system_prompt
+    assert "use the returned `scorecard.id`" in system_prompt
     assert "task_id = h[\"dispatch_result\"]" in system_prompt
     assert "Do not use `plexus.feedback.alignment` to run a report" in system_prompt
     assert "Do not use `plexus.procedure.optimize` to run a report" in system_prompt
@@ -70,8 +73,8 @@ def test_builtin_console_procedure_prompt_teaches_report_dispatch_contract():
 def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    # Bumped when the prompt added the docs.* discovery guidance.
-    assert parsed["version"] == "1.6.0"
+    # Bumped when the report recipe changed to prefer resolved scorecard IDs.
+    assert parsed["version"] == "1.6.2"
 
 
 def test_is_builtin_procedure_id():
