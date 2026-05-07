@@ -304,10 +304,22 @@
       "author": "derek",
       "text": "Implemented strict transcript prompt contract path (no silent append): validate user_message must include Transcript section + literal {{text}} and enforce ordering before output format block. Added bounded critic rewrite loop on validation failures with explicit remediation hints; configurable via prompt_contract_rewrite_attempts (default 2). Added param in procedure schema and strengthened generator/critic instructions to require Transcript/{{text}}.",
       "created_at": "2026-05-07T21:02:31.481157284Z"
+    },
+    {
+      "id": "fdd0e323-1b32-449c-967a-bbc9cfe4fbf3",
+      "author": "derek",
+      "text": "Starting cleanup pass after root-cause fix: remove temporary smoke-test debug instrumentation and trim now-unnecessary bandaid logic while preserving core functional fixes (schema-valid score result query, strict Transcript/{{text}} contract, bounded critic rewrite).",
+      "created_at": "2026-05-07T21:13:07.447021548Z"
+    },
+    {
+      "id": "61fe634c-b344-444d-ace4-005d650d79cd",
+      "author": "derek",
+      "text": "Cleanup completed: removed temporary smoke-test debug instrumentation (logger + input_debug payload fields + verbose item extraction logs) from score_version_test while preserving functional transcript extraction and validation fixes. Re-ran targeted tests: score_version_test and procedure YAML loader passed.",
+      "created_at": "2026-05-07T21:13:54.793078788Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T21:02:31.481157284Z",
+  "updated_at": "2026-05-07T21:13:54.793078788Z",
   "closed_at": null,
   "custom": {}
 }
