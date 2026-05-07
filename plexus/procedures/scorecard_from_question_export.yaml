@@ -79,6 +79,10 @@ params:
     type: string
     required: false
     description: "Optional scorecard id/key/name to source smoke-test item samples when target scorecard has no history yet"
+  smoke_test_item_ids:
+    type: string
+    required: false
+    description: "Optional comma-separated item IDs to use for smoke tests (overrides sampling)"
 
 outputs:
   success:
@@ -1427,6 +1431,8 @@ code: |
     local smoke_test_samples = tonumber(params.smoke_test_samples) or 3
     local smoke_test_source_scorecard_identifier = has_text(params.smoke_test_source_scorecard_identifier)
       and tostring(params.smoke_test_source_scorecard_identifier) or nil
+    local smoke_test_item_ids = has_text(params.smoke_test_item_ids)
+      and tostring(params.smoke_test_item_ids) or nil
 
     local create_scorecard_result, scorecard_create_err = create_scorecard_with_compat(
       normalized_scorecard,
@@ -1530,6 +1536,7 @@ code: |
             score_identifier = created_score_id,
             version = (type(update_score_result) == "table" and update_score_result.version_id) or nil,
             fallback_scorecard_identifier = smoke_test_source_scorecard_identifier,
+            item_ids = smoke_test_item_ids,
             samples = smoke_test_samples
           })
         end)
@@ -1621,7 +1628,8 @@ code: |
       run_smoke_test = field.boolean{default = true},
       smoke_test_samples = field.number{default = 3},
       fail_on_smoke_test = field.boolean{default = true},
-      smoke_test_source_scorecard_identifier = field.string{}
+      smoke_test_source_scorecard_identifier = field.string{},
+      smoke_test_item_ids = field.string{}
     },
 
     output = {

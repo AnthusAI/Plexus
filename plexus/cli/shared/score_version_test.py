@@ -41,6 +41,79 @@ def _normalize_metadata(raw: Any) -> Dict[str, Any]:
     return {}
 
 
+def _coerce_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    if isinstance(value, list):
+        parts: List[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                # Common chat/transcript turn shapes.
+                turn = (
+                    item.get("text")
+                    or item.get("content")
+                    or item.get("message")
+                    or item.get("value")
+                )
+                turn_text = _coerce_text(turn)
+                if turn_text:
+                    parts.append(turn_text)
+            else:
+                txt = _coerce_text(item)
+                if txt:
+                    parts.append(txt)
+        return "\n".join(parts).strip()
+    if isinstance(value, dict):
+        # Prefer canonical content fields first.
+        for key in ("text", "content", "transcript", "message", "body", "value"):
+            txt = _coerce_text(value.get(key))
+            if txt:
+                return txt
+    return ""
+
+
+def _extract_item_text(item_data: Dict[str, Any], metadata: Dict[str, Any]) -> str:
+    direct_text = _coerce_text(item_data.get("text"))
+    direct_description = _coerce_text(item_data.get("description"))
+    best_text = direct_text if len(direct_text) >= len(direct_description) else direct_description
+
+    metadata_candidates = []
+    for key in (
+        "transcript",
+        "transcript_text",
+        "call_transcript",
+        "conversation",
+        "content",
+        "body",
+        "text",
+        "raw_text",
+        "input_text",
+    ):
+        candidate = _coerce_text(metadata.get(key))
+        if candidate:
+            metadata_candidates.append(candidate)
+
+    # Some payloads wrap content in nested envelopes.
+    for container_key in ("payload", "input", "request", "data"):
+        container = metadata.get(container_key)
+        if isinstance(container, dict):
+            for key in ("transcript", "text", "content", "body", "conversation"):
+                candidate = _coerce_text(container.get(key))
+                if candidate:
+                    metadata_candidates.append(candidate)
+
+    if metadata_candidates:
+        best_meta = max(metadata_candidates, key=len)
+        if len(best_meta) > len(best_text):
+            best_text = best_meta
+
+    return best_text.strip()
+
+
 def _resolve_scorecard_and_score(
     *,
     client,
@@ -293,13 +366,13 @@ async def _predict_single_item(
             "message": f"Item not found: {item_id}",
         }
 
-    text = item_data.get("text") or item_data.get("description") or ""
+    text = _extract_item_text(item_data, metadata)
     if not text:
         return {
             "item_id": item_id,
             "passed": False,
             "error": "missing_item_text",
-            "message": f"Item has no text/description: {item_id}",
+            "message": f"Item has no usable transcript text: {item_id}",
         }
 
     metadata = _normalize_metadata(item_data.get("metadata"))
