@@ -63,6 +63,18 @@ params:
     type: boolean
     default: true
     description: "If true, require Human.approve before write operations"
+  run_smoke_test:
+    type: boolean
+    default: true
+    description: "If true, run score.test after each created score version"
+  smoke_test_samples:
+    type: number
+    default: 3
+    description: "How many samples to use when running score.test"
+  fail_on_smoke_test:
+    type: boolean
+    default: true
+    description: "If true, fail the procedure when a smoke test fails"
 
 outputs:
   success:
@@ -1405,6 +1417,10 @@ code: |
 
     Stage.set("act")
     local created_score_ids = {}
+    local smoke_test_results = {}
+    local run_smoke_test = to_bool(params.run_smoke_test, true)
+    local fail_on_smoke_test = to_bool(params.fail_on_smoke_test, true)
+    local smoke_test_samples = tonumber(params.smoke_test_samples) or 3
 
     local create_scorecard_result, scorecard_create_err = create_scorecard_with_compat(
       normalized_scorecard,
@@ -1501,9 +1517,58 @@ code: |
         }
       end
 
+      if run_smoke_test then
+        local smoke_ok, smoke_result = pcall(function()
+          return call_plexus_api("score", "test", {
+            scorecard_identifier = created_scorecard_id,
+            score_identifier = created_score_id,
+            version = (type(update_score_result) == "table" and update_score_result.version_id) or nil,
+            samples = smoke_test_samples
+          })
+        end)
+
+        local smoke_entry = {
+          score_id = created_score_id,
+          score_name = score.name,
+          success = false
+        }
+
+        if not smoke_ok then
+          smoke_entry.error = tostring(smoke_result)
+          smoke_test_results[#smoke_test_results + 1] = smoke_entry
+          if fail_on_smoke_test then
+            return {
+              success = false,
+              status = "error",
+              message = "Smoke test failed for '" .. tostring(score.name) .. "': " .. tostring(smoke_result),
+              plan = plan
+            }
+          end
+        else
+          if type(smoke_result) == "table" then
+            smoke_entry.success = smoke_result.success == true
+            smoke_entry.details = smoke_result
+            smoke_entry.error = smoke_result.error
+          else
+            smoke_entry.success = false
+            smoke_entry.error = "invalid score.test response type"
+          end
+          smoke_test_results[#smoke_test_results + 1] = smoke_entry
+          if (not smoke_entry.success) and fail_on_smoke_test then
+            return {
+              success = false,
+              status = "error",
+              message = "Smoke test failed for '" .. tostring(score.name) .. "': " .. tostring(smoke_entry.error or "unknown error"),
+              plan = plan
+            }
+          end
+        end
+      end
+
       created_score_ids[#created_score_ids + 1] = created_score_id
     end
     set_stage_progress(#generated_scores, #generated_scores)
+    plan.smoke_tests = smoke_test_results
 
     Stage.set("complete")
     return {
@@ -1543,7 +1608,10 @@ code: |
       reasoning_effort = field.string{default = "medium"},
       max_scores = field.number{default = 0},
       dry_run = field.boolean{default = false},
-      require_approval = field.boolean{default = true}
+      require_approval = field.boolean{default = true},
+      run_smoke_test = field.boolean{default = true},
+      smoke_test_samples = field.number{default = 3},
+      fail_on_smoke_test = field.boolean{default = true}
     },
 
     output = {
