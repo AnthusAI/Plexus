@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "aec9a974-ed40-4aa8-8e91-b8d6fd8a621e",
+  "issue_id": "plx-4c85985c-acba-4c77-a4e1-ca80b7dad7c4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-07T13:15:30.591Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "FeedbackAlignment reports currently require exact scorecard identifiers in block_config.scorecard. In production Console testing, the agent found scorecard 'Selectquote - MEL HRA v1.0' via search but then passed display casing as 'SelectQuote - MEL HRA v1.0', causing persisted reports whose ReportBlock preview only said 'Scorecard not found'. Follow-up: make the report block scorecard resolver more tolerant and consistent with scorecard search results, preferably accepting UUID/key/externalId and reasonable exact-name casing variants through one resolver path. Do not add broad fallback behavior; define one canonical resolution path and test it.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Make FeedbackAlignment report scorecard lookup tolerant"
+  }
+}
