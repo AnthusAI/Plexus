@@ -41,7 +41,7 @@ params:
     description: "Account identifier (key/name/id)"
   model_name:
     type: string
-    default: "gpt-5"
+    default: "gpt-5-mini"
     description: "Model used in generated LangGraphScore YAML"
   model_provider:
     type: string
@@ -1026,7 +1026,7 @@ code: |
     table.insert(lines, 'description: "' .. escape_yaml(score.description or score.name) .. '"')
     table.insert(lines, 'external_id: "' .. escape_yaml(score.external_id) .. '"')
     table.insert(lines, 'class: LangGraphScore')
-    table.insert(lines, 'model_name: ' .. tostring(params.model_name or "gpt-5"))
+    table.insert(lines, 'model_name: ' .. tostring(params.model_name or "gpt-5-mini"))
     table.insert(lines, 'model_provider: ' .. tostring(params.model_provider or "ChatOpenAI"))
     table.insert(lines, 'reasoning_effort: ' .. tostring(params.reasoning_effort or "medium"))
     table.insert(lines, 'max_tokens: 3000')
@@ -1486,7 +1486,7 @@ code: |
       target_scorecard_external_id = field.string{},
       target_scorecard_description = field.string{},
       account_identifier = field.string{default = "default"},
-      model_name = field.string{default = "gpt-5"},
+      model_name = field.string{default = "gpt-5-mini"},
       model_provider = field.string{default = "ChatOpenAI"},
       reasoning_effort = field.string{default = "medium"},
       max_scores = field.number{default = 0},
