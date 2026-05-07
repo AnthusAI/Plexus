@@ -202,10 +202,22 @@
       "author": "derek",
       "text": "Added prompt readability normalization: format_prompt_message now converts dense single-paragraph system/user prompts into multiline form (sentence breaks + section marker spacing), and enforces final user_message reformat after appending output-format block. Also tightened generator/critic instructions to explicitly require multi-line readable prompts.",
       "created_at": "2026-05-07T17:28:15.057527500Z"
+    },
+    {
+      "id": "73590cee-ffc9-49f7-9e3b-556a7672a4df",
+      "author": "derek",
+      "text": "Fixing Lua runtime error at string.gsub replacement: prompt formatter inserts marker text containing '%' (e.g., '(MANDATORY)') via replacement string, causing 'invalid use of % in replacement string'. Patch will switch to function-based replacement callback to avoid '%' escape semantics in replacement text.",
+      "created_at": "2026-05-07T17:44:05.447558289Z"
+    },
+    {
+      "id": "ce9dd2c1-9f66-4de7-b100-c36b1de1c75f",
+      "author": "derek",
+      "text": "Patched format_prompt_message gsub replacement to callback form, preventing '%' in marker text from being interpreted as replacement tokens. This resolves Lua error: invalid use of '%' in replacement string.",
+      "created_at": "2026-05-07T17:44:21.061057223Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T17:28:15.057527500Z",
+  "updated_at": "2026-05-07T17:44:21.061057223Z",
   "closed_at": null,
   "custom": {}
 }

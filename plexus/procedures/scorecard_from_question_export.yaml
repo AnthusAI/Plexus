@@ -942,7 +942,9 @@ code: |
       "Output format requirements %(MANDATORY%)",
     }
     for _, marker in ipairs(markers) do
-      s = string.gsub(s, "%s*" .. marker, "\n\n" .. marker)
+      s = string.gsub(s, "%s*" .. marker, function()
+        return "\n\n" .. marker
+      end)
     end
 
     s = string.gsub(s, "\n\n\n+", "\n\n")
