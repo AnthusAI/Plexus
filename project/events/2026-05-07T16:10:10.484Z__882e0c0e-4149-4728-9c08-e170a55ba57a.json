@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "882e0c0e-4149-4728-9c08-e170a55ba57a",
+  "issue_id": "plx-d54ab8bc-1e75-4fd5-b8f6-c2047cee7f56",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-07T16:10:10.484Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Score Results Report runs predictions for specified item identifiers",
+    "description": "As a lab operator, I want a report that runs predictions for a provided list of item identifiers on one score or an entire scorecard, so that I can review current prediction outcomes quickly.\n\nFeature: Score Results Report\n\nScenario: Scorecard scope predicts all scores for all resolved identifiers\nGiven a required scorecard identifier and a list of item identifiers\nAnd the score parameter is not provided\nWhen the report runs\nThen it resolves each identifier to an item id when possible\nAnd it runs predictions for each resolved item across all scores on the scorecard\nAnd it persists prediction score results\nAnd it returns output grouped by score\n\nScenario: Single-score scope predicts one score for all resolved identifiers\nGiven a required scorecard identifier, an optional score identifier, and a list of item identifiers\nWhen the report runs\nThen it resolves the score within the scorecard\nAnd it runs predictions only for that score across resolved items\nAnd it persists prediction score results\nAnd it returns output grouped by score\n\nScenario: Unresolved identifiers are reported without failing the report\nGiven at least one provided identifier cannot be resolved to an item\nWhen the report runs\nThen it continues predicting for resolvable identifiers\nAnd it includes unresolved identifiers in diagnostics\nAnd report execution succeeds if at least one prediction succeeds\n\nScenario: CLI accepts both list styles for identifiers\nGiven a scorecard identifier\nWhen the user runs score-results-report with --ids comma-separated values\nOr the user repeats --id multiple times\nThen the report receives one normalized ids list\nAnd at least one identifier is required\n\nScenario: Detailed prediction payload is returned per item-score run\nGiven a prediction run completes for an item and score\nWhen output is generated\nThen each result includes status, score_result_id, value, explanation, cost, and trace when available\nAnd failed predictions include error details",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "labels": []
+  }
+}

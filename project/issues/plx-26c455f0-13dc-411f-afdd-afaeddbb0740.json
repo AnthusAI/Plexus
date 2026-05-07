@@ -1,0 +1,64 @@
+{
+  "id": "plx-26c455f0-13dc-411f-afdd-afaeddbb0740",
+  "title": "Build dashboard renderer for ScoreResultsReport",
+  "description": "Add dedicated dashboard block renderer grouped by score, including prediction details, expandable trace display, and diagnostics panels for unresolved identifiers and failed predictions.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bb03f4c5-53d6-4577-b128-8a6669dbe3b4",
+      "author": "ryan",
+      "text": "Implementing dashboard renderer refactor per design plan: replace table with score-grouped cards, use IdentifierDisplay, restyle diagnostics panels, and keep traces collapsed by default via structured ScoreResultTrace expansion.",
+      "created_at": "2026-05-07T18:41:28.168488Z"
+    },
+    {
+      "id": "a5d9a9e6-2334-4547-ad76-77b77a7c33e1",
+      "author": "ryan",
+      "text": "Applying follow-up UI refinement: remove score result ID from ScoreResultsReport rows and improve cost presentation from raw JSON to concise human-readable metrics (USD and token counts).",
+      "created_at": "2026-05-07T18:44:14.054532Z"
+    },
+    {
+      "id": "f34a54ec-7ed1-4644-bbe9-e1268c96b44d",
+      "author": "ryan",
+      "text": "Adjusting ScoreResultsReport explanation rendering to full-height content (no truncation/line clamp); explanations should grow naturally with content length.",
+      "created_at": "2026-05-07T18:44:48.991102Z"
+    },
+    {
+      "id": "edfee4ff-4978-4eb8-ae54-523f7036f75d",
+      "author": "ryan",
+      "text": "Refining row metadata display: show status only for non-success results, and move cost rendering to final footer line after explanation/trace content.",
+      "created_at": "2026-05-07T18:45:19.382013Z"
+    },
+    {
+      "id": "01784911-cdc5-4762-a464-ef8349a7df77",
+      "author": "ryan",
+      "text": "Adjusting value badge semantics: remove green/red success/failure color coding from score result value pills; use neutral muted styling since correctness is unknown.",
+      "created_at": "2026-05-07T18:47:48.943591Z"
+    },
+    {
+      "id": "77bb16b6-9135-425f-ad07-c9a9696b51c7",
+      "author": "ryan",
+      "text": "Removing top-level 'Failed Predictions' diagnostics panel from ScoreResultsReport UI; failures remain represented inline per result row only.",
+      "created_at": "2026-05-07T18:59:17.272707Z"
+    },
+    {
+      "id": "83cce1ce-8c1d-44b6-b06a-04ac238000dd",
+      "author": "ryan",
+      "text": "UI tweak: reverse top-row alignment in ScoreResultsReport result cards so value pill is on the left above explanation, identifiers on the right.",
+      "created_at": "2026-05-07T19:02:30.674957Z"
+    }
+  ],
+  "created_at": "2026-05-07T16:10:19.897047Z",
+  "updated_at": "2026-05-07T19:02:30.674957Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

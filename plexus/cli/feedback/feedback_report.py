@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 from contextlib import nullcontext
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import click
 import yaml
@@ -139,6 +139,31 @@ def _score_has_nonempty_champion_guidelines(
         return True, None
     except Exception as exc:
         return False, f"Skipped Feedback Contradictions: failed to resolve champion guidelines ({exc})."
+
+
+def _normalize_identifier_inputs(ids: Optional[str], id_values: Tuple[str, ...]) -> List[str]:
+    normalized: List[str] = []
+    seen: set[str] = set()
+
+    def _add(value: Optional[str]) -> None:
+        if value is None:
+            return
+        text = str(value).strip()
+        if not text:
+            return
+        if "," in text:
+            for piece in text.split(","):
+                _add(piece)
+            return
+        if text in seen:
+            return
+        seen.add(text)
+        normalized.append(text)
+
+    _add(ids)
+    for value in id_values:
+        _add(value)
+    return normalized
 
 
 @click.group(name="report")
@@ -754,6 +779,55 @@ def scorecard_history(
     )
     _print_result(
         title="ScorecardHistory",
+        result=result,
+        output_format=output_format,
+        include_log=include_log,
+    )
+
+
+@report.command(name="score-results-report")
+@click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, key, or name).")
+@click.option("--score", required=False, help="Optional score identifier (id, external id, key, or name).")
+@click.option("--ids", required=False, help="Comma-separated list of item identifiers.")
+@click.option("--id", "id_values", multiple=True, help="Item identifier (repeatable).")
+@click.option("--cache-key", required=False, help="Deterministic cache key for repeated runs.")
+@click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
+@click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
+@click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
+@click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
+@click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
+@click.option("--include-log", is_flag=True, help="Include report block log output.")
+def score_results_report(
+    scorecard: str,
+    score: Optional[str],
+    ids: Optional[str],
+    id_values: Tuple[str, ...],
+    cache_key: Optional[str],
+    ttl_hours: float,
+    fresh: bool,
+    background: bool,
+    account_identifier: Optional[str],
+    output_format: str,
+    include_log: bool,
+) -> None:
+    """Run the ScoreResultsReport block."""
+    normalized_ids = _normalize_identifier_inputs(ids, id_values)
+    if not normalized_ids:
+        raise click.ClickException("At least one item identifier is required via --ids or --id.")
+
+    result = run_feedback_report_block(
+        block_class="ScoreResultsReport",
+        scorecard=scorecard,
+        score=score,
+        account_identifier=account_identifier,
+        cache_key=cache_key,
+        ttl_hours=ttl_hours,
+        fresh=fresh,
+        background=background,
+        extra_config={"ids": normalized_ids},
+    )
+    _print_result(
+        title="ScoreResultsReport",
         result=result,
         output_format=output_format,
         include_log=include_log,

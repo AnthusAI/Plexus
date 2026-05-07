@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "event_id": "2dd189bd-9a7a-42b5-9243-302562ecece0",
+  "issue_id": "plx-040f4094-af67-4bb0-ae24-23b6345dd8b8",
+  "event_type": "state_transition",
+  "occurred_at": "2026-05-06T14:44:05.007Z",
+  "actor_id": "ryan",
+  "payload": {
+    "from_status": "in_progress",
+    "to_status": "closed"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9d57aeb3-8226-4dc2-b996-1d5da8d60204",
+  "issue_id": "plx-26c455f0-13dc-411f-afdd-afaeddbb0740",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-07T16:10:19.897Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Build dashboard renderer for ScoreResultsReport",
+    "description": "Add dedicated dashboard block renderer grouped by score, including prediction details, expandable trace display, and diagnostics panels for unresolved identifiers and failed predictions.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "labels": []
+  }
+}
