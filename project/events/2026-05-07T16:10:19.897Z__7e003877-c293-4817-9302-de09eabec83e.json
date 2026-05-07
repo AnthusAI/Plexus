@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7e003877-c293-4817-9302-de09eabec83e",
+  "issue_id": "plx-cf118293-51d1-437c-96f3-3b4f98beab29",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-07T16:10:19.897Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Implement ScoreResultsReport backend block",
+    "description": "Implement new ScoreResultsReport report block: parameter parsing, scope resolution, identifier resolution, prediction execution + ScoreResult persistence, grouped-by-score output, diagnostics, bounded concurrency, and deterministic ordering.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "labels": []
+  }
+}

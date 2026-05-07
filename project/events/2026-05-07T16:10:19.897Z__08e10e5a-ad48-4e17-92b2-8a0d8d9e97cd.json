@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "08e10e5a-ad48-4e17-92b2-8a0d8d9e97cd",
+  "issue_id": "plx-78b08ea4-dd6a-44d3-a04f-1e290da6e6fd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-07T16:10:19.897Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Add score-results-report direct CLI command",
+    "description": "Add feedback report score-results-report command with --scorecard, optional --score, and identifier inputs via --ids and repeatable --id; normalize/validate IDs and map to report block config.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "labels": []
+  }
+}
