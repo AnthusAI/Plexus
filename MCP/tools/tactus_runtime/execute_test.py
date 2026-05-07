@@ -441,11 +441,14 @@ def test_default_scorecards_search_ranks_matches(monkeypatch) -> None:
     monkeypatch.setattr(
         "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
     )
-    monkeypatch.setattr(
-        "shared.utils.get_default_account_id", lambda: "00000000-0000-0000-0000-000000000001"
-    )
 
-    result = execute._default_scorecards_search({"query": "HCS medium", "limit": 5})
+    result = execute._default_scorecards_search(
+        {
+            "query": "HCS medium",
+            "limit": 5,
+            "account_id": "00000000-0000-0000-0000-000000000001",
+        }
+    )
     assert result["success"] is True
     assert result["count"] == 1
     assert result["matches"][0]["scorecard"]["id"] == "sc-a"
@@ -3769,6 +3772,31 @@ async def test_execute_tactus_injects_runtime_account_into_feedback_handler() ->
 
     assert result["ok"] is True
     assert result["value"]["context"]["account_id"] == "acct-console"
+    assert seen_args["account_id"] == "acct-console"
+
+
+def test_plexus_facade_injects_runtime_account_into_scorecard_search() -> None:
+    class FakeMCP:
+        async def call_tool(self, name, arguments):
+            raise AssertionError(
+                "scorecards.search must not loop back through MCP; got "
+                f"{name!r} with {arguments!r}"
+            )
+
+    seen_args: dict = {}
+
+    def fake_search(args: dict) -> dict:
+        seen_args.update(args)
+        return {"success": True, "matches": [], "account_id": args.get("account_id")}
+
+    facade = execute.PlexusRuntimeModule(
+        FakeMCP(),
+        scorecards_searcher=fake_search,
+        runtime_context={"account_id": "acct-console"},
+    )
+    result = facade.scorecards.search({"query": "IA Call Center"})
+
+    assert result["account_id"] == "acct-console"
     assert seen_args["account_id"] == "acct-console"
 
 
