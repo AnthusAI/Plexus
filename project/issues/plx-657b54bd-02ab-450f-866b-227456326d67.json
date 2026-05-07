@@ -190,10 +190,22 @@
       "author": "derek",
       "text": "Aligned generated score prompt contract with Suco-style output requirements. Updated generator/critic prompt rules and validate_generated_spec to enforce appending a mandatory user_message block requiring: (1) 2-3 sentence reasoning, (2) final line exactly one allowed classification label, (3) no extra text on final line. This guarantees resulting score YAML carries explicit response-format instructions.",
       "created_at": "2026-05-07T16:53:55.841813720Z"
+    },
+    {
+      "id": "1b1b3aba-9b01-4f2f-917b-badcedecdcc9",
+      "author": "derek",
+      "text": "Addressing readability issue in generated score prompts: adding normalization/formatting pass for system_message and user_message to enforce paragraph/section line breaks, plus tightening generator/critic prompt guidance to produce structured multi-line instructions. Goal is Suco-like readability and consistent output-format section formatting.",
+      "created_at": "2026-05-07T17:27:45.894565136Z"
+    },
+    {
+      "id": "c5956227-16b1-460a-846b-6a5d80436851",
+      "author": "derek",
+      "text": "Added prompt readability normalization: format_prompt_message now converts dense single-paragraph system/user prompts into multiline form (sentence breaks + section marker spacing), and enforces final user_message reformat after appending output-format block. Also tightened generator/critic instructions to explicitly require multi-line readable prompts.",
+      "created_at": "2026-05-07T17:28:15.057527500Z"
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T16:53:55.841813720Z",
+  "updated_at": "2026-05-07T17:28:15.057527500Z",
   "closed_at": null,
   "custom": {}
 }
