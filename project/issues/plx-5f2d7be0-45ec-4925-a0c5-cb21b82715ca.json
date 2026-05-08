@@ -1,0 +1,31 @@
+{
+  "id": "plx-5f2d7be0-45ec-4925-a0c5-cb21b82715ca",
+  "title": "Skip human approval gate for dry-run export migration runs",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-14559d76-98d3-4fb4-9074-5c49bce7d2f8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "cdc25e15-1eda-4448-aeb1-2adaed2dcbe9",
+      "author": "derek",
+      "text": "Implementing behavior change: bypass approval stage when dry_run=true to avoid HITL wait states being marked FAILED by local runtime. Non-dry-run execution will still require approval.",
+      "created_at": "2026-05-06T22:28:39.705503486Z"
+    },
+    {
+      "id": "8ff747c2-213b-4bf5-b5d7-4d70471ed01f",
+      "author": "derek",
+      "text": "Implemented dry-run short-circuit before approval stage. dry_run=true now returns planned output without Human.approve, while live runs still require approval. Validated YAML parse + YAML loader test.",
+      "created_at": "2026-05-06T22:28:54.398416556Z"
+    }
+  ],
+  "created_at": "2026-05-06T22:28:37.204971814Z",
+  "updated_at": "2026-05-06T22:28:54.411901213Z",
+  "closed_at": "2026-05-06T22:28:54.411901213Z",
+  "custom": {}
+}

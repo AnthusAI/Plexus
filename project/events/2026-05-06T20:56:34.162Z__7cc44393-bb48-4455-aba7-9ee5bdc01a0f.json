@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7cc44393-bb48-4455-aba7-9ee5bdc01a0f",
+  "issue_id": "plx-e97de328-2b16-4e58-94bc-a8cb05635544",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T20:56:34.162Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "initiative",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "JSON-driven scorecard migration procedures"
+  }
+}

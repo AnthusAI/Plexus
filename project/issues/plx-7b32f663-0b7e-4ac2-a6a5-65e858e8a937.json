@@ -1,0 +1,25 @@
+{
+  "id": "plx-7b32f663-0b7e-4ac2-a6a5-65e858e8a937",
+  "title": "Fix Tactus HITL wait-state classification so resume works after Human.approve",
+  "description": "",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7895ccdc-5347-423d-a961-0b5ce8a8ccf2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ac775e27-8555-4cee-9468-5cd8719250a8",
+      "author": "derek",
+      "text": "Follow-up root-cause task filed: runtime currently marks Human.approve waits as FAILED instead of WAITING_FOR_HUMAN, which breaks procedure resume. Keep open for proper engine fix.",
+      "created_at": "2026-05-06T22:44:51.950315847Z"
+    }
+  ],
+  "created_at": "2026-05-06T22:44:48.653746762Z",
+  "updated_at": "2026-05-06T22:44:51.950315847Z",
+  "closed_at": null,
+  "custom": {}
+}
