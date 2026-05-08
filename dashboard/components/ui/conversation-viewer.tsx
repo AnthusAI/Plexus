@@ -224,6 +224,7 @@ const CONSOLE_CHAT_MODEL_OPTIONS = [
 ] as const
 
 const DEFAULT_CONSOLE_CHAT_MODEL = 'gpt-5.4-mini'
+const CONVERSATION_BOTTOM_THRESHOLD_PX = 96
 
 // Types for the conversation data
 export interface ChatMessage {
@@ -936,9 +937,9 @@ function CollapsibleText({
               }
               return <p className="mb-0 last:mb-0 leading-tight" style={{lineHeight: '1.2', margin: 0, padding: 0, display: 'block'}}>{children}</p>;
             },
-            ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-0 ml-4 list-disc leading-tight" style={{lineHeight: '1', margin: 0, padding: 0}}>{children}</ul>,
-            ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-0 ml-4 list-decimal leading-tight" style={{lineHeight: '1', margin: 0, padding: 0}}>{children}</ol>,
-            li: ({ children }: { children?: React.ReactNode }) => <li className="mb-0 leading-tight" style={{lineHeight: '1', margin: 0, padding: 0}}>{children}</li>,
+            ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-0 list-disc pl-5 leading-tight" style={{lineHeight: '1.15', marginTop: 0, marginBottom: 0}}>{children}</ul>,
+            ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-0 list-decimal pl-5 leading-tight" style={{lineHeight: '1.15', marginTop: 0, marginBottom: 0}}>{children}</ol>,
+            li: ({ children }: { children?: React.ReactNode }) => <li className="mb-0 leading-tight" style={{lineHeight: '1.15', marginTop: 0, marginBottom: 0}}>{children}</li>,
             strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold text-foreground">{children}</strong>,
             em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
             code: ({ children }: { children?: React.ReactNode }) => <code className="bg-card px-1 py-0.5 rounded-md text-xs font-mono">{children}</code>,
@@ -1221,6 +1222,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
       >
         <MessageContent className={cn(
           "max-w-full p-0 sm:max-w-[85%]",
+          row.from === "assistant" && "overflow-visible px-1",
           showAttributedUserAvatar && "max-w-[calc(100%-2.25rem)]",
         )}>
           {showMetadataBadges && (
@@ -1563,10 +1565,17 @@ function ConversationViewer({
   const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
   const manualScrollLockRef = React.useRef(false)
   const lastScrollerTopRef = React.useRef<number | null>(null)
+  const conversationScrollerRef = React.useRef<HTMLDivElement | null>(null)
+  const autoFollowEnabledRef = React.useRef(true)
+  const programmaticScrollRef = React.useRef(false)
+  const programmaticScrollFrameRef = React.useRef<number | null>(null)
+  const stickyScrollFrameRef = React.useRef<number | null>(null)
+  const stickyScrollRunRef = React.useRef(0)
   const promptSubmitLockRef = React.useRef(false)
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const [atBottom, setAtBottom] = useState(true)
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
+  const [conversationScrollerElement, setConversationScrollerElement] = useState<HTMLDivElement | null>(null)
   const authFailureReportedRef = React.useRef(false)
 
   const markAuthUnavailable = React.useCallback((error: unknown, source: string): boolean => {
@@ -2560,6 +2569,175 @@ function ConversationViewer({
   )
   const canCreateSession = Boolean(fallbackSessionAccountId && fallbackSessionProcedureId)
 
+  const isScrollerNearBottom = React.useCallback((scroller: HTMLDivElement) => {
+    const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+    return distanceFromBottom <= CONVERSATION_BOTTOM_THRESHOLD_PX
+  }, [])
+
+  useEffect(() => {
+    autoFollowEnabledRef.current = autoFollowEnabled
+  }, [autoFollowEnabled])
+
+  const cancelStickyBottomScroll = React.useCallback(() => {
+    stickyScrollRunRef.current += 1
+    if (stickyScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(stickyScrollFrameRef.current)
+      stickyScrollFrameRef.current = null
+    }
+  }, [])
+
+  const clearProgrammaticScrollAfterPaint = React.useCallback(() => {
+    if (programmaticScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(programmaticScrollFrameRef.current)
+      programmaticScrollFrameRef.current = null
+    }
+    programmaticScrollFrameRef.current = window.requestAnimationFrame(() => {
+      programmaticScrollFrameRef.current = window.requestAnimationFrame(() => {
+        programmaticScrollRef.current = false
+        programmaticScrollFrameRef.current = null
+      })
+    })
+  }, [])
+
+  useEffect(() => (
+    () => {
+      cancelStickyBottomScroll()
+      if (programmaticScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(programmaticScrollFrameRef.current)
+      }
+    }
+  ), [cancelStickyBottomScroll])
+
+  const markConversationAtBottom = React.useCallback(() => {
+    manualScrollLockRef.current = false
+    lastScrollerTopRef.current = conversationScrollerRef.current?.scrollTop ?? null
+    setAtBottom(true)
+    autoFollowEnabledRef.current = true
+    setAutoFollowEnabled(true)
+  }, [])
+
+  const disableConversationAutoFollow = React.useCallback(() => {
+    manualScrollLockRef.current = true
+    autoFollowEnabledRef.current = false
+    setAutoFollowEnabled(false)
+    cancelStickyBottomScroll()
+  }, [cancelStickyBottomScroll])
+
+  const scrollConversationToBottom = React.useCallback((
+    behavior: "auto" | "smooth" = "auto",
+    options: { force?: boolean } = {}
+  ) => {
+    if (options.force) {
+      markConversationAtBottom()
+    }
+
+    const scrollRun = stickyScrollRunRef.current + 1
+    stickyScrollRunRef.current = scrollRun
+
+    const scrollOnce = (remainingFrames: number) => {
+      if (scrollRun !== stickyScrollRunRef.current) {
+        return
+      }
+      if (!options.force && (manualScrollLockRef.current || !autoFollowEnabledRef.current)) {
+        clearProgrammaticScrollAfterPaint()
+        return
+      }
+
+      programmaticScrollRef.current = true
+      markConversationAtBottom()
+      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior })
+
+      const scroller = conversationScrollerRef.current
+      if (scroller) {
+        scroller.scrollTop = scroller.scrollHeight
+        markConversationAtBottom()
+      }
+
+      if (remainingFrames <= 0) {
+        stickyScrollFrameRef.current = null
+        clearProgrammaticScrollAfterPaint()
+        return
+      }
+
+      stickyScrollFrameRef.current = window.requestAnimationFrame(() => {
+        scrollOnce(remainingFrames - 1)
+      })
+    }
+
+    if (stickyScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(stickyScrollFrameRef.current)
+      stickyScrollFrameRef.current = null
+    }
+
+    scrollOnce(5)
+  }, [clearProgrammaticScrollAfterPaint, markConversationAtBottom])
+
+  useEffect(() => {
+    const scroller = conversationScrollerElement
+    if (!scroller || typeof MutationObserver === "undefined") {
+      return
+    }
+
+    let mutationFrame: number | null = null
+    const requestStickyScroll = () => {
+      if (mutationFrame !== null) {
+        return
+      }
+      mutationFrame = window.requestAnimationFrame(() => {
+        mutationFrame = null
+        if (autoFollowEnabledRef.current && !manualScrollLockRef.current) {
+          scrollConversationToBottom("auto")
+        }
+      })
+    }
+
+    const observer = new MutationObserver(requestStickyScroll)
+    observer.observe(scroller, {
+      attributes: true,
+      characterData: true,
+      childList: true,
+      subtree: true,
+    })
+
+    return () => {
+      if (mutationFrame !== null) {
+        window.cancelAnimationFrame(mutationFrame)
+      }
+      observer.disconnect()
+    }
+  }, [conversationScrollerElement, scrollConversationToBottom])
+
+  useEffect(() => {
+    const scroller = conversationScrollerElement
+    const resizeTarget = scroller?.firstElementChild
+    if (!scroller || !resizeTarget || typeof ResizeObserver === "undefined") {
+      return
+    }
+
+    let resizeFrame: number | null = null
+    const requestStickyScroll = () => {
+      if (resizeFrame !== null) {
+        return
+      }
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null
+        if (autoFollowEnabledRef.current && !manualScrollLockRef.current) {
+          scrollConversationToBottom("auto")
+        }
+      })
+    }
+
+    const observer = new ResizeObserver(requestStickyScroll)
+    observer.observe(resizeTarget)
+
+    return () => {
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame)
+      }
+      observer.disconnect()
+    }
+  }, [conversationScrollerElement, renderRows.length, scrollConversationToBottom])
+
   const openRenameDialog = React.useCallback(() => {
     if (!selectedSession) {
       return
@@ -2621,45 +2799,65 @@ function ConversationViewer({
   const handleAtBottomStateChange = React.useCallback((isNowAtBottom: boolean) => {
     setAtBottom(isNowAtBottom)
     if (isNowAtBottom) {
-      setAutoFollowEnabled(true)
-      manualScrollLockRef.current = false
-      lastScrollerTopRef.current = null
+      markConversationAtBottom()
       return
     }
     if (manualScrollLockRef.current) {
-      setAutoFollowEnabled(false)
+      disableConversationAutoFollow()
     }
-  }, [])
+  }, [disableConversationAutoFollow, markConversationAtBottom])
 
   useEffect(() => {
+    cancelStickyBottomScroll()
     setAutoFollowEnabled(true)
+    autoFollowEnabledRef.current = true
     setAtBottom(true)
     manualScrollLockRef.current = false
     lastScrollerTopRef.current = null
-  }, [selectedSessionId])
+  }, [cancelStickyBottomScroll, selectedSessionId])
 
   const handleScrollerScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    const currentTop = event.currentTarget.scrollTop
+    const scroller = event.currentTarget
+    const currentTop = scroller.scrollTop
     const previousTop = lastScrollerTopRef.current
-    if (previousTop !== null && currentTop < previousTop - 1) {
-      manualScrollLockRef.current = true
+    const isNearBottom = isScrollerNearBottom(scroller)
+
+    if (isNearBottom) {
+      markConversationAtBottom()
+      return
+    }
+
+    setAtBottom(false)
+    if (!programmaticScrollRef.current && previousTop !== null && currentTop < previousTop - 1) {
+      disableConversationAutoFollow()
     }
     lastScrollerTopRef.current = currentTop
-  }, [])
+  }, [disableConversationAutoFollow, isScrollerNearBottom, markConversationAtBottom])
 
   const handleScrollerWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     if (event.deltaY < 0) {
-      manualScrollLockRef.current = true
+      disableConversationAutoFollow()
     }
-  }, [])
+  }, [disableConversationAutoFollow])
 
   const VirtuosoScroller = React.useMemo(
     () =>
       React.forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<"div">>(
         function ConversationVirtuosoScroller({ onScroll, onWheel, ...props }, ref) {
+          const setRef = React.useCallback((node: HTMLDivElement | null) => {
+            conversationScrollerRef.current = node
+            setConversationScrollerElement((current) => (current === node ? current : node))
+            if (typeof ref === "function") {
+              ref(node)
+            } else if (ref) {
+              ref.current = node
+            }
+          }, [ref])
+
           return (
             <div
-              ref={ref}
+              ref={setRef}
+              data-testid="conversation-scroll-region"
               {...props}
               onScroll={(event) => {
                 handleScrollerScroll(event)
@@ -2689,14 +2887,12 @@ function ConversationViewer({
       return
     }
 
-    const rafId = window.requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" })
-    })
+    const rafId = window.requestAnimationFrame(() => scrollConversationToBottom("auto"))
 
     return () => {
       window.cancelAnimationFrame(rafId)
     }
-  }, [latestConversationRenderSignature, selectedSessionId, shouldForceFollow])
+  }, [latestConversationRenderSignature, scrollConversationToBottom, selectedSessionId, shouldForceFollow])
 
   const previousThinkingStateRef = React.useRef(false)
   const pendingInitialTailJumpSessionRef = React.useRef<string | null>(null)
@@ -2712,14 +2908,14 @@ function ConversationViewer({
     }
 
     const rafId = window.requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" })
+      scrollConversationToBottom("auto")
       pendingInitialTailJumpSessionRef.current = null
     })
 
     return () => {
       window.cancelAnimationFrame(rafId)
     }
-  }, [renderRows.length, selectedSessionId])
+  }, [renderRows.length, scrollConversationToBottom, selectedSessionId])
 
   useEffect(() => {
     const transitionedFromThinkingToMessage = previousThinkingStateRef.current && !showThinkingPlaceholder
@@ -2729,13 +2925,11 @@ function ConversationViewer({
       return
     }
 
-    const rafId = window.requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" })
-    })
+    const rafId = window.requestAnimationFrame(() => scrollConversationToBottom("auto"))
     return () => {
       window.cancelAnimationFrame(rafId)
     }
-  }, [selectedSessionId, shouldForceFollow, showThinkingPlaceholder])
+  }, [scrollConversationToBottom, selectedSessionId, shouldForceFollow, showThinkingPlaceholder])
 
   const createNewSession = React.useCallback(async (options?: { hiddenUntilNamed?: boolean }) => {
     if (!fallbackSessionAccountId || !fallbackSessionProcedureId) {
@@ -3299,7 +3493,7 @@ function ConversationViewer({
                         className="max-w-full"
                       >
                         <div className="flex items-start">
-                          <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
+                          <MessageContent className="max-w-full overflow-visible px-1 py-0 sm:max-w-[85%]">
                             <Shimmer className="text-base">Thinking</Shimmer>
                           </MessageContent>
                         </div>
@@ -3340,6 +3534,7 @@ function ConversationViewer({
             <ConversationScrollButton
               isAtBottom={atBottom}
               virtuosoRef={virtuosoRef}
+              onClick={() => scrollConversationToBottom("smooth", { force: true })}
             />
           </Conversation>
         </div>
