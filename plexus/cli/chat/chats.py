@@ -1,10 +1,13 @@
 import json
+import logging
+import time
 from typing import Any, Dict, Optional
 
 import click
 import yaml
 from rich.table import Table
 
+from plexus.console.local_worker import main as run_local_console_worker
 from plexus.chat.session_ops import (
     get_latest_chat_session,
     list_session_messages,
@@ -188,3 +191,45 @@ def chat_send(
         return
     _render(result, output)
 
+
+@chat.command("worker")
+@click.option(
+    "--response-target",
+    default=None,
+    help=(
+        "Local response target to claim, e.g. local:ryan. Defaults to "
+        "CONSOLE_RESPONSE_TARGET, NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET, or local:$USER."
+    ),
+)
+@click.option(
+    "--poll-interval-seconds",
+    default=None,
+    type=float,
+    help="Idle poll interval. Defaults to CONSOLE_LOCAL_WORKER_IDLE_POLL_SECONDS or 0.2.",
+)
+@click.option("--limit", default=5, type=int, show_default=True, help="Max messages per poll.")
+@click.option("--once", is_flag=True, help="Run one poll cycle and exit.")
+def chat_worker(
+    response_target: Optional[str],
+    poll_interval_seconds: Optional[float],
+    limit: int,
+    once: bool,
+):
+    """Run the local Console chat responder."""
+    if limit < 1:
+        raise click.ClickException("--limit must be a positive integer")
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    start = time.monotonic()
+    try:
+        run_local_console_worker(
+            response_target=response_target,
+            poll_interval_seconds=poll_interval_seconds,
+            limit=limit,
+            once=once,
+        )
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if once:
+        elapsed = time.monotonic() - start
+        console.print(f"[green]Console chat worker poll completed in {elapsed:.2f}s.[/green]")
