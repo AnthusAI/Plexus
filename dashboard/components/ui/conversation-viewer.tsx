@@ -937,9 +937,9 @@ function CollapsibleText({
               }
               return <p className="mb-0 last:mb-0 leading-tight" style={{lineHeight: '1.2', margin: 0, padding: 0, display: 'block'}}>{children}</p>;
             },
-            ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-0 ml-4 list-disc leading-tight" style={{lineHeight: '1', margin: 0, padding: 0}}>{children}</ul>,
-            ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-0 ml-4 list-decimal leading-tight" style={{lineHeight: '1', margin: 0, padding: 0}}>{children}</ol>,
-            li: ({ children }: { children?: React.ReactNode }) => <li className="mb-0 leading-tight" style={{lineHeight: '1', margin: 0, padding: 0}}>{children}</li>,
+            ul: ({ children }: { children?: React.ReactNode }) => <ul className="mb-0 list-disc pl-5 leading-tight" style={{lineHeight: '1.15', marginTop: 0, marginBottom: 0}}>{children}</ul>,
+            ol: ({ children }: { children?: React.ReactNode }) => <ol className="mb-0 list-decimal pl-5 leading-tight" style={{lineHeight: '1.15', marginTop: 0, marginBottom: 0}}>{children}</ol>,
+            li: ({ children }: { children?: React.ReactNode }) => <li className="mb-0 leading-tight" style={{lineHeight: '1.15', marginTop: 0, marginBottom: 0}}>{children}</li>,
             strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold text-foreground">{children}</strong>,
             em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
             code: ({ children }: { children?: React.ReactNode }) => <code className="bg-card px-1 py-0.5 rounded-md text-xs font-mono">{children}</code>,
@@ -1222,6 +1222,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
       >
         <MessageContent className={cn(
           "max-w-full p-0 sm:max-w-[85%]",
+          row.from === "assistant" && "overflow-visible px-1",
           showAttributedUserAvatar && "max-w-[calc(100%-2.25rem)]",
         )}>
           {showMetadataBadges && (
@@ -3492,7 +3493,7 @@ function ConversationViewer({
                         className="max-w-full"
                       >
                         <div className="flex items-start">
-                          <MessageContent className="max-w-full p-0 sm:max-w-[85%]">
+                          <MessageContent className="max-w-full overflow-visible px-1 py-0 sm:max-w-[85%]">
                             <Shimmer className="text-base">Thinking</Shimmer>
                           </MessageContent>
                         </div>
