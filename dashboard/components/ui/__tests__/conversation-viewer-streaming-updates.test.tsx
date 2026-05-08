@@ -197,7 +197,13 @@ jest.mock("@/components/ai-elements/message", () => ({
       {children}
     </div>
   ),
-  MessageContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  MessageContent: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode
+    className?: string
+  }) => <div data-testid="message-content" className={className}>{children}</div>,
 }))
 
 jest.mock("@/components/ai-elements/shimmer", () => ({
@@ -555,6 +561,46 @@ describe("ConversationViewer streaming updates", () => {
       expect(mockScrollToIndex.mock.calls.length).toBeGreaterThanOrEqual(2)
     })
     expect(latestVirtuosoProps?.followOutput(false)).toBe("auto")
+  })
+
+  it("renders assistant markdown responses with visible overflow and indented lists", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-assistant-markdown",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "Plain assistant text\n\n_Italic response_\n\n- Bullet item\n1. Numbered item",
+          createdAt: "2026-03-27T00:00:01.000Z",
+          sequenceNumber: 1,
+        },
+      ],
+      nextToken: null,
+    })
+
+    const { container } = render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    let messageContent: Element | null = null
+    await waitFor(() => {
+      messageContent = container.querySelector('[data-message-id="msg-assistant-markdown"] [data-testid="message-content"]')
+      expect(messageContent).not.toBeNull()
+    })
+    expect(messageContent).toHaveTextContent("Plain assistant text")
+    expect(messageContent).toHaveTextContent("Italic response")
+    expect(messageContent).toHaveTextContent("Bullet item")
+    expect(messageContent).toHaveTextContent("Numbered item")
+    expect(messageContent).toHaveClass("overflow-visible")
+    expect(messageContent).toHaveClass("px-1")
+    expect(messageContent).not.toHaveClass("overflow-hidden")
   })
 
   it("pauses auto-follow after an upward user scroll and resumes at the bottom", async () => {
