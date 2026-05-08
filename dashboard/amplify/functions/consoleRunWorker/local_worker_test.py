@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 
 def _load_local_worker_module():
-    worker_path = Path(__file__).with_name("local_worker.py")
+    worker_path = Path(__file__).resolve().parents[4] / "plexus" / "console" / "local_worker.py"
     spec = importlib.util.spec_from_file_location("console_chat_local_worker", worker_path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader

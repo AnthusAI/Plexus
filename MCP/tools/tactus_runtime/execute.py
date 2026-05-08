@@ -58,7 +58,12 @@ PLEXUS_PROCEDURE_RUN_LOG_DIR_DEFAULT = os.path.join(
 
 
 def _resolve_trace_dir() -> str:
-    return os.environ.get("PLEXUS_TACTUS_TRACE_DIR", PLEXUS_TACTUS_TRACE_DIR_DEFAULT)
+    configured = os.environ.get("PLEXUS_TACTUS_TRACE_DIR")
+    if configured:
+        return configured
+    if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or os.environ.get("LAMBDA_TASK_ROOT"):
+        return os.path.join("/tmp", "tactus_traces")
+    return PLEXUS_TACTUS_TRACE_DIR_DEFAULT
 
 
 def _resolve_procedure_run_log_dir() -> str:
@@ -458,7 +463,6 @@ def _default_scorecards_list(args: dict[str, Any]) -> Any:
     from plexus.cli.shared.memoized_resolvers import (
         memoized_resolve_scorecard_identifier,
     )
-    from shared.utils import get_default_account_id
 
     identifier = args.get("identifier") or args.get("name") or args.get("key")
     next_token = args.get("next_token") or args.get("nextToken")
@@ -505,9 +509,8 @@ def _default_scorecards_list(args: dict[str, Any]) -> Any:
             return items
 
     filter_parts: list[str] = []
-    default_account_id = get_default_account_id()
-    if default_account_id:
-        filter_parts.append(f'accountId: {{ eq: "{default_account_id}" }}')
+    account_id = _resolve_runtime_account_id(client, args, "plexus.scorecards.list")
+    filter_parts.append(f'accountId: {{ eq: "{account_id}" }}')
     if identifier:
         ident = str(identifier)
         if " " in ident or not ident.islower():
@@ -626,7 +629,6 @@ def _default_scorecards_search(args: dict[str, Any]) -> dict[str, Any]:
     from rapidfuzz import fuzz, process
 
     from plexus.cli.shared.client_utils import create_client
-    from shared.utils import get_default_account_id
 
     query = _search_query_string(args)
     if not query:
@@ -666,9 +668,8 @@ def _default_scorecards_search(args: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("plexus.scorecards.search: could not create dashboard client")
 
     filter_parts: list[str] = []
-    default_account_id = get_default_account_id()
-    if default_account_id:
-        filter_parts.append(f'accountId: {{ eq: "{default_account_id}" }}')
+    account_id = _resolve_runtime_account_id(client, args, "plexus.scorecards.search")
+    filter_parts.append(f'accountId: {{ eq: "{account_id}" }}')
     filter_str = ", ".join(filter_parts)
     gql = (
         "query ListScorecardsForSearch { "
@@ -942,11 +943,7 @@ def _default_score_search(args: dict[str, Any]) -> dict[str, Any]:
         if one:
             scorecards = [one]
     else:
-        account_id = resolve_account_id_for_command(client, None)
-        if not account_id:
-            raise RuntimeError(
-                "plexus.score.search: no default account — is PLEXUS_ACCOUNT_KEY set?"
-            )
+        account_id = _resolve_runtime_account_id(client, args, "plexus.score.search")
         result = client.execute(
             f"""query ListScorecardsForScoreSearch {{
                 listScorecards(filter: {{ accountId: {{ eq: "{account_id}" }} }}, limit: {scorecard_fetch_limit}) {{
@@ -1428,7 +1425,6 @@ def _default_feedback_alignment(args: dict[str, Any]) -> dict[str, Any]:
     """
 
     from plexus.cli.feedback.feedback_service import FeedbackService
-    from plexus.cli.report.utils import resolve_account_id_for_command
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.memoized_resolvers import (
         memoized_resolve_score_identifier,
@@ -1448,7 +1444,9 @@ def _default_feedback_alignment(args: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError(
             "plexus.feedback.alignment: could not create dashboard client"
         )
-    account_id = resolve_account_id_for_command(client, None)
+    account_id = _resolve_runtime_account_id(
+        client, args, "plexus.feedback.alignment"
+    )
     scorecard_id = memoized_resolve_scorecard_identifier(client, str(scorecard_name))
     if not scorecard_id:
         raise ValueError(
@@ -1485,7 +1483,6 @@ def _default_feedback_finder(args: dict[str, Any]) -> dict[str, Any]:
     """
 
     from plexus.cli.feedback.feedback_service import FeedbackService
-    from plexus.cli.report.utils import resolve_account_id_for_command
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.memoized_resolvers import (
         memoized_resolve_score_identifier,
@@ -1503,7 +1500,7 @@ def _default_feedback_finder(args: dict[str, Any]) -> dict[str, Any]:
     prioritize_edit_comments = bool(args.get("prioritize_edit_comments", True))
 
     client = create_client()
-    account_id = resolve_account_id_for_command(client, None)
+    account_id = _resolve_runtime_account_id(client, args, "plexus.feedback.find")
     scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard_name)
     score_id = memoized_resolve_score_identifier(client, scorecard_id, score_name)
 
@@ -1884,16 +1881,17 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
             return [_sanitize_dec(v) for v in obj]
         return obj
 
-    scorecard_name = args.get("scorecard_name") or args.get("scorecard")
-    score_name = args.get("score_name") or args.get("score")
-    if not scorecard_name or not score_name:
-        raise ValueError("plexus.score.predict requires scorecard_name and score_name")
+    scorecard_identifier = args.get("scorecard_identifier")
+    score_identifier = args.get("score_identifier")
+    if not scorecard_identifier or not score_identifier:
+        raise ValueError(
+            "plexus.score.predict requires scorecard_identifier and score_identifier"
+        )
 
     item_id = args.get("item_id") or args.get("id") or args.get("item")
     item_ids_raw = args.get("item_ids")
     include_input = bool(args.get("include_input", False))
     include_trace = bool(args.get("include_trace", False))
-    no_cache = bool(args.get("no_cache", False))
     yaml_mode = bool(args.get("yaml", False))
     version = args.get("version") or args.get("version_id")
     latest = bool(args.get("latest", False))
@@ -1907,17 +1905,22 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
     client = create_client()
     if not client:
         raise RuntimeError("plexus.score.predict: could not create dashboard client")
+    account_id = None if yaml_mode else _resolve_runtime_account_id(
+        client, args, "plexus.score.predict"
+    )
 
     if yaml_mode:
         scorecard_id = "yaml-mode-scorecard"
-        resolved_score: dict[str, Any] = {"id": "yaml-mode-score", "name": str(score_name),
-                                           "key": str(score_name).lower().replace(" ", "-"),
+        resolved_score: dict[str, Any] = {"id": "yaml-mode-score", "name": str(score_identifier),
+                                           "key": str(score_identifier).lower().replace(" ", "-"),
                                            "championVersionId": "yaml-mode-version"}
     else:
-        scorecard_id_resolved = resolve_scorecard_identifier(client, str(scorecard_name))
+        scorecard_id_resolved = resolve_scorecard_identifier(
+            client, str(scorecard_identifier)
+        )
         if not scorecard_id_resolved:
             raise ValueError(
-                f"plexus.score.predict: scorecard {scorecard_name!r} not found"
+                f"plexus.score.predict: scorecard {scorecard_identifier!r} not found"
             )
         scorecard_id = scorecard_id_resolved
         sc_result = client.execute(
@@ -1933,14 +1936,14 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
         scorecard_data = sc_result.get("getScorecard")
         if not scorecard_data:
             raise ValueError(
-                f"plexus.score.predict: could not load scorecard {scorecard_name!r}"
+                f"plexus.score.predict: could not load scorecard {scorecard_identifier!r}"
             )
 
         try:
             from plexus.cli.shared.identifier_resolution import (
                 resolve_score_identifier as _rsi,
             )
-            resolved_score_id = _rsi(client, scorecard_id, str(score_name))
+            resolved_score_id = _rsi(client, scorecard_id, str(score_identifier))
         except Exception:
             resolved_score_id = None
 
@@ -1949,10 +1952,10 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
             for sc in section.get("scores", {}).get("items", []):
                 if (
                     (resolved_score_id and sc.get("id") == resolved_score_id)
-                    or sc.get("id") == str(score_name)
-                    or sc.get("externalId") == str(score_name)
-                    or sc.get("key") == str(score_name)
-                    or sc.get("name") == str(score_name)
+                    or sc.get("id") == str(score_identifier)
+                    or sc.get("externalId") == str(score_identifier)
+                    or sc.get("key") == str(score_identifier)
+                    or sc.get("name") == str(score_identifier)
                 ):
                     resolved_score = sc
                     break
@@ -1960,8 +1963,8 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
                 break
         if not resolved_score:
             raise ValueError(
-                f"plexus.score.predict: score {score_name!r} not found in "
-                f"scorecard {scorecard_name!r}"
+                f"plexus.score.predict: score {score_identifier!r} not found in "
+                f"scorecard {scorecard_identifier!r}"
             )
 
     resolved_version = version if not latest else None
@@ -1981,20 +1984,9 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
 
     if not yaml_mode:
         try:
-            import os as _os
             from plexus.cli.shared.identifier_resolution import (
                 resolve_item_identifier as _rii,
             )
-            from plexus.dashboard.api.models.account import Account as _Account
-            account_id = None
-            try:
-                ak = _os.getenv("PLEXUS_ACCOUNT_KEY")
-                if ak:
-                    acc = _Account.list_by_key(key=ak, client=client)
-                    if acc:
-                        account_id = acc.id
-            except Exception:
-                pass
             resolved_ids = []
             for raw_id in target_item_ids:
                 try:
@@ -2011,27 +2003,29 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
         from plexus.scores.Scorecard import Scorecard
         with open(yaml_path, "r") as f:
             sc_cfg = _yaml.safe_load(f.read())
-        scorecard_instance = Scorecard({"name": scorecard_name, "sections": [{"name": "Custom", "scores": [sc_cfg]}]})
+        scorecard_instance = Scorecard({"name": scorecard_identifier, "sections": [{"name": "Custom", "scores": [sc_cfg]}]})
         scorecard_instance.yaml_only = True
     elif yaml_mode:
         from plexus.cli.evaluation.evaluations import load_scorecard_from_yaml_files
-        scorecard_instance = load_scorecard_from_yaml_files(str(scorecard_name), score_names=[str(score_name)])
+        scorecard_instance = load_scorecard_from_yaml_files(
+            str(scorecard_identifier), score_names=[str(score_identifier)]
+        )
         scorecard_instance.yaml_only = True
     else:
         from plexus.cli.evaluation.evaluations import load_scorecard_from_api
         scorecard_instance = load_scorecard_from_api(
-            str(scorecard_name), score_names=[str(score_name)],
-            use_cache=not no_cache, specific_version=resolved_version
+            str(scorecard_identifier), score_names=[str(score_identifier)],
+            use_cache=False, specific_version=resolved_version
         )
 
-    resolved_score_name = str(score_name)
+    resolved_score_name = str(score_identifier)
     if hasattr(scorecard_instance, "scores") and isinstance(scorecard_instance.scores, list):
         for s in scorecard_instance.scores:
             sn = s.get("name")
             if sn and (
-                sn == str(score_name) or str(s.get("id", "")) == str(score_name)
-                or str(s.get("key", "")) == str(score_name)
-                or str(s.get("externalId", "")) == str(score_name)
+                sn == str(score_identifier) or str(s.get("id", "")) == str(score_identifier)
+                or str(s.get("key", "")) == str(score_identifier)
+                or str(s.get("externalId", "")) == str(score_identifier)
             ):
                 resolved_score_name = sn
                 break
@@ -2086,7 +2080,7 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
 
                 if score_result_obj is None:
                     if results and any(isinstance(v, Score.Result) and v.value == "SKIPPED" for v in results.values()):
-                        return {"item_id": target_id, "scores": [{"name": score_name, "value": None,
+                        return {"item_id": target_id, "scores": [{"name": score_identifier, "value": None,
                                 "explanation": "Not applicable — unmet dependency conditions", "cost": {}}]}
                     return {"item_id": target_id, "error": f"No result for score {resolved_score_name!r}"}
 
@@ -2101,7 +2095,7 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
                     costs = score_result_obj.metadata.get("cost", {})
 
                 prediction_result: dict = {"item_id": target_id, "scores": [{
-                    "name": score_name, "value": score_result_obj.value,
+                    "name": score_identifier, "value": score_result_obj.value,
                     "explanation": explanation, "cost": costs
                 }]}
                 if include_trace:
@@ -2111,7 +2105,7 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
                     prediction_result["scores"][0]["trace"] = trace
             except Exception as exc:
                 prediction_result = {"item_id": target_id, "scores": [{
-                    "name": score_name, "value": "ERROR",
+                    "name": score_identifier, "value": "ERROR",
                     "explanation": f"Prediction failed: {exc}",
                     "error_details": {"error_message": str(exc), "error_type": type(exc).__name__,
                                       "traceback": _traceback.format_exc()},
@@ -2133,8 +2127,8 @@ def _default_score_predict(args: dict[str, Any]) -> dict[str, Any]:
     prediction_results_list = _run_async_from_sync(_gather_all())
     return _sanitize_dec({
         "success": True,
-        "scorecard_name": scorecard_name,
-        "score_name": score_name,
+        "scorecard_identifier": scorecard_identifier,
+        "score_identifier": score_identifier,
         "scorecard_id": scorecard_id,
         "score_id": resolved_score["id"],
         "item_count": len(target_item_ids),
@@ -2830,7 +2824,6 @@ def _default_report_configurations_list(args: dict[str, Any]) -> Any:
     """Run plexus.report.configurations_list directly via dashboard GraphQL."""
 
     from plexus.cli.shared.client_utils import create_client
-    from shared.utils import get_default_account_id
 
     client = create_client()
     if not client:
@@ -2838,12 +2831,9 @@ def _default_report_configurations_list(args: dict[str, Any]) -> Any:
             "plexus.report.configurations_list: could not create dashboard client"
         )
 
-    account_id = get_default_account_id()
-    if not account_id:
-        raise RuntimeError(
-            "plexus.report.configurations_list: PLEXUS_ACCOUNT_KEY not set or "
-            "default account could not be resolved"
-        )
+    account_id = _resolve_runtime_account_id(
+        client, args, "plexus.report.configurations_list"
+    )
 
     query = (
         "query MyQuery { "
@@ -3363,6 +3353,13 @@ def _build_report_config_command(configuration_id: str, parameters: dict[str, An
     return " ".join(shlex.quote(str(part)) for part in parts)
 
 
+def _normalize_report_block_config(block_class: Any, block_config: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(block_config or {})
+    if str(block_class) == "FeedbackAlignment" and "memory_analysis" not in normalized:
+        normalized["memory_analysis"] = False
+    return normalized
+
+
 def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
     """Dispatch report.run async.
 
@@ -3374,15 +3371,12 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
 
     remote = _resolve_report_dispatch_mode() == "celery"
 
-    from plexus.cli.report.utils import resolve_account_id_for_command
     from plexus.cli.shared.client_utils import create_client as create_dashboard_client
 
     client = create_dashboard_client()
     if not client:
         raise ValueError("Could not create dashboard client")
-    account_id = resolve_account_id_for_command(client, args.get("account"))
-    if not account_id:
-        raise ValueError("Could not determine default account ID")
+    account_id = _resolve_runtime_account_id(client, args, "plexus.report.run")
 
     configuration_id = args.get("configuration_id") or args.get("config_id")
     if configuration_id:
@@ -3440,7 +3434,7 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
 
     from plexus.reports.service import run_block_cached
 
-    block_config = args.get("block_config") or {}
+    block_config = _normalize_report_block_config(block_class, args.get("block_config") or {})
     cache_key = args.get("cache_key")
     ttl_hours = args.get("ttl_hours") if args.get("ttl_hours") is not None else 24
     fresh = bool(args.get("fresh", False))
@@ -3543,23 +3537,20 @@ def _default_report_runner_sync(args: dict[str, Any]) -> dict[str, Any]:
     if not block_class:
         raise ValueError("plexus.report.run sync requires block_class")
 
-    from plexus.cli.report.utils import resolve_account_id_for_command
     from plexus.cli.shared.client_utils import create_client as create_dashboard_client
     from plexus.reports.service import run_block_cached
 
     client = create_dashboard_client()
     if not client:
         raise ValueError("Could not create dashboard client")
-    account_id = resolve_account_id_for_command(client, args.get("account"))
-    if not account_id:
-        raise ValueError("Could not determine default account ID")
+    account_id = _resolve_runtime_account_id(client, args, "plexus.report.run")
 
     cache_key = args.get("cache_key")
     ttl_hours = args.get("ttl_hours")
 
     output_data, log_output, was_cached = run_block_cached(
         block_class=str(block_class),
-        block_config=args.get("block_config") or {},
+        block_config=_normalize_report_block_config(block_class, args.get("block_config") or {}),
         account_id=account_id,
         client=client,
         cache_key=cache_key,
@@ -3934,6 +3925,8 @@ def _public_handle(record: dict[str, Any]) -> dict[str, Any]:
     }
     if record.get("child_budget") is not None:
         public["child_budget"] = record.get("child_budget")
+    if record.get("dispatch_result") is not None:
+        public["dispatch_result"] = record.get("dispatch_result")
     return public
 
 
@@ -4104,6 +4097,8 @@ def _structured_error(
     error: dict[str, Any] = {
         "code": code,
         "message": message,
+        "type": type(exc).__name__ if exc is not None else None,
+        "retryable": False,
         "traceback": None,
         "tactus_lineno": _user_tactus_lineno(raw_lineno),
     }
@@ -4134,6 +4129,124 @@ class BudgetExceeded(RuntimeError):
 
 class ChildBudgetRequired(ValueError):
     """Raised when async work is spawned without an explicit child budget."""
+
+
+class AccountContextRequired(ValueError):
+    """Raised when a runtime API needs an account but none is bound."""
+
+
+_RUNTIME_API_ERROR_KEY = "__execute_tactus_runtime_error__"
+
+
+def _exception_error_code(exc: BaseException) -> str:
+    if isinstance(exc, AccountContextRequired):
+        return "account_context_required"
+    if isinstance(exc, BudgetExceeded):
+        return "budget_exceeded"
+    if isinstance(exc, ChildBudgetRequired):
+        return "child_budget_required"
+    if isinstance(exc, RequiresHandleProtocol):
+        return "requires_handle_protocol"
+    if isinstance(exc, ValueError):
+        return "invalid_request"
+    return "runtime_api_error"
+
+
+def _runtime_api_error_value(namespace: str, method: str, exc: BaseException) -> dict[str, Any]:
+    api_call = f"plexus.{namespace}.{method}"
+    message = str(exc) or f"{api_call} failed"
+    return {
+        _RUNTIME_API_ERROR_KEY: True,
+        "api_call": api_call,
+        "error": _structured_error(
+            _exception_error_code(exc),
+            f"{api_call} failed: {message}",
+            exc,
+        ),
+    }
+
+
+def _extract_runtime_api_error(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        try:
+            value = _jsonable(value)
+        except Exception:
+            return None
+    if isinstance(value, dict) and value.get(_RUNTIME_API_ERROR_KEY):
+        error = value.get("error")
+        return error if isinstance(error, dict) else None
+    return None
+
+
+def _context_account_id(context: dict[str, Any] | None) -> str | None:
+    if not isinstance(context, dict):
+        return None
+    account_id = context.get("account_id") or context.get("accountId")
+    if account_id is None:
+        return None
+    account_id = str(account_id).strip()
+    return account_id or None
+
+
+def _merge_runtime_context_args(
+    args: dict[str, Any], runtime_context: dict[str, Any] | None
+) -> dict[str, Any]:
+    if not isinstance(args, dict):
+        args = {}
+    merged = dict(args)
+    if not any(merged.get(key) for key in ("account", "account_id", "accountId")):
+        account_id = _context_account_id(runtime_context)
+        if account_id:
+            merged["account_id"] = account_id
+    return merged
+
+
+def _resolve_runtime_account_id(
+    client: Any,
+    args: dict[str, Any],
+    api_name: str,
+) -> str:
+    account_id = args.get("account_id") or args.get("accountId")
+    if account_id:
+        account_id = str(account_id).strip()
+        if account_id:
+            if getattr(client, "context", None) is not None:
+                try:
+                    client.context.account_id = account_id
+                except Exception as exc:
+                    logger.debug(
+                        "Unable to set client.context.account_id during runtime account resolution",
+                        exc_info=exc,
+                    )
+            return account_id
+
+    account_identifier = args.get("account")
+    if account_identifier:
+        from plexus.cli.report.utils import resolve_account_id_for_command
+
+        return resolve_account_id_for_command(client, str(account_identifier))
+
+    context = getattr(client, "context", None)
+    if context is not None:
+        existing_account_id = getattr(context, "account_id", None)
+        if existing_account_id:
+            return str(existing_account_id)
+        if not getattr(context, "account_key", None):
+            raise AccountContextRequired(
+                f"{api_name} requires account context. Console calls must pass the "
+                "triggering ChatMessage accountId into execute_tactus, or local calls "
+                "must provide account/account_id or configure PLEXUS_ACCOUNT_KEY."
+            )
+
+    from plexus.cli.report.utils import resolve_account_id_for_command
+
+    try:
+        return resolve_account_id_for_command(client, None)
+    except Exception as exc:
+        raise AccountContextRequired(
+            f"{api_name} could not resolve an account from the current runtime context. "
+            "Pass account/account_id explicitly or configure PLEXUS_ACCOUNT_KEY."
+        ) from exc
 
 
 class BudgetSpec:
@@ -5323,15 +5436,23 @@ class _Namespace:
         dispatcher: Callable[[str, str, Any], Any],
         name: str,
         methods: set[str],
+        *,
+        catch_runtime_errors: bool = False,
     ) -> None:
         self._dispatcher = dispatcher
         self._name = name
+        self._catch_runtime_errors = catch_runtime_errors
         for method_name in methods:
             setattr(self, method_name, self._make_call(method_name))
 
     def _make_call(self, method_name: str) -> Callable[[Any], Any]:
         def call(args: Any = None) -> Any:
-            return self._dispatcher(self._name, method_name, args)
+            try:
+                return self._dispatcher(self._name, method_name, args)
+            except Exception as exc:
+                if not self._catch_runtime_errors:
+                    raise
+                return _runtime_api_error_value(self._name, method_name, exc)
 
         return call
 
@@ -5382,11 +5503,15 @@ class PlexusRuntimeModule:
         procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         procedure_optimize: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         stream_handler: _MCPStreamEmitter | None = None,
+        runtime_context: dict[str, Any] | None = None,
+        catch_runtime_errors: bool = False,
     ) -> None:
         self._mcp = mcp
         self._trace_id = trace_id or str(uuid.uuid4())
         self._docs_dir = docs_dir if docs_dir is not None else PLEXUS_DOCS_DIR
         self._budget = budget if budget is not None else BudgetGate()
+        self._runtime_context = dict(runtime_context or {})
+        self._catch_runtime_errors = catch_runtime_errors
         self._handle_store = (
             handle_store if handle_store is not None else _default_handle_store()
         )
@@ -5532,9 +5657,28 @@ class PlexusRuntimeModule:
         for namespace_name, method_name in DIRECT_HANDLERS.keys():
             methods_by_namespace.setdefault(namespace_name, set()).add(method_name)
         for namespace, methods in methods_by_namespace.items():
-            setattr(self, namespace, _Namespace(self._call, namespace, methods))
-        self.docs = _Namespace(self._call_docs, "docs", {"list", "get"})
-        self.api = _Namespace(self._call_api, "api", {"list"})
+            setattr(
+                self,
+                namespace,
+                _Namespace(
+                    self._call,
+                    namespace,
+                    methods,
+                    catch_runtime_errors=self._catch_runtime_errors,
+                ),
+            )
+        self.docs = _Namespace(
+            self._call_docs,
+            "docs",
+            {"list", "get"},
+            catch_runtime_errors=self._catch_runtime_errors,
+        )
+        self.api = _Namespace(
+            self._call_api,
+            "api",
+            {"list"},
+            catch_runtime_errors=self._catch_runtime_errors,
+        )
 
     @property
     def api_calls(self) -> list[str]:
@@ -5595,7 +5739,7 @@ class PlexusRuntimeModule:
         self._budget.check_before("score", method)
         self._record_api_call("score", method)
         try:
-            parsed = _args(args)
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
             if method == "info":
                 return self._score_info(parsed)
             if method == "create":
@@ -5659,7 +5803,7 @@ class PlexusRuntimeModule:
         self._budget.check_before("scorecards", method)
         self._record_api_call("scorecards", method)
         try:
-            parsed = _args(args)
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
             if method == "list":
                 return self._scorecards_lister(parsed)
             if method == "create":
@@ -5678,7 +5822,7 @@ class PlexusRuntimeModule:
         self._budget.check_before("feedback", method)
         self._record_api_call("feedback", method)
         try:
-            parsed = _args(args)
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
             if method == "find":
                 return self._feedback_finder(parsed)
             if method == "latest_update":
@@ -5736,7 +5880,7 @@ class PlexusRuntimeModule:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
-        parsed = _args(args)
+        parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
         if not parsed.get("procedure_id") and self._trace_id:
             parsed["procedure_id"] = self._trace_id
         if not bool(parsed.get("async")):
@@ -5781,7 +5925,8 @@ class PlexusRuntimeModule:
         self._budget.check_before("report", "configurations_list")
         self._record_api_call("report", "configurations_list")
         try:
-            return self._report_configurations_list(_args(args))
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
+            return self._report_configurations_list(parsed)
         finally:
             self._budget.record_after("report", "configurations_list")
 
@@ -5827,7 +5972,7 @@ class PlexusRuntimeModule:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
-        parsed = _args(args)
+        parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
 
         # Convenience shorthand: plexus.report.acceptance_rate{...} pre-fills block_class.
         if method == "acceptance_rate":
@@ -6279,6 +6424,7 @@ def _run_tactus_sync(
     procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     stream_handler: _MCPStreamEmitter | None = None,
     score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     gate = budget if budget is not None else BudgetGate()
 
@@ -6315,6 +6461,8 @@ def _run_tactus_sync(
                 procedure_runner=procedure_runner,
                 stream_handler=stream_handler,
                 score_info=score_info,
+                runtime_context=runtime_context,
+                catch_runtime_errors=True,
             )
             runtime.register_python_module("plexus", plexus)
             if stream_handler is not None:
@@ -6379,16 +6527,28 @@ def _run_tactus_sync(
                 )
             else:
                 ok = bool(runtime_result.get("success"))
-                value = runtime_result.get("result")
+                value = _jsonable(runtime_result.get("result"))
                 if ok:
-                    envelope = _response_envelope(
-                        ok=True,
-                        value=value,
-                        trace_id=trace_id,
-                        api_calls=api_calls,
-                        started_at=started_mono,
-                        budget=gate,
-                    )
+                    runtime_api_error = _extract_runtime_api_error(value)
+                    if runtime_api_error is not None:
+                        envelope = _response_envelope(
+                            ok=False,
+                            value=None,
+                            trace_id=trace_id,
+                            api_calls=api_calls,
+                            started_at=started_mono,
+                            error=runtime_api_error,
+                            budget=gate,
+                        )
+                    else:
+                        envelope = _response_envelope(
+                            ok=True,
+                            value=value,
+                            trace_id=trace_id,
+                            api_calls=api_calls,
+                            started_at=started_mono,
+                            budget=gate,
+                        )
                 else:
                     message = str(
                         runtime_result.get("error") or "Tactus execution failed"
@@ -6493,6 +6653,7 @@ async def _execute_tactus_tool(
     report_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     store = trace_store if trace_store is not None else _default_trace_store()
     started_mono = time.monotonic()
@@ -6550,6 +6711,7 @@ async def _execute_tactus_tool(
                     procedure_runner=procedure_runner,
                     stream_handler=stream_handler,
                     score_info=score_info,
+                    runtime_context=runtime_context,
                 )
             )
             if stream_handler is None:
@@ -6652,7 +6814,11 @@ return item{ id = "item_1007" }
 
 4) Run a single prediction:
 ```tactus
-return predict{ score_id = "score_compliance_tone", item_id = "item_1007" }
+return predict{
+  scorecard_identifier = "My Scorecard",
+  score_identifier = "Compliance Tone",
+  item_id = "item_1007",
+}
 ```
 
 5) Run a bounded synchronous evaluation:

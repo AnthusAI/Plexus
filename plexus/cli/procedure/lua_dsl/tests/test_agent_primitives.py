@@ -266,6 +266,34 @@ class TestAgentTurn:
         assert result['tool_calls'][0]['name'] == 'test_tool'
         assert result['tool_calls'][0]['result'] == 'Tool result'
 
+    def test_turn_answers_after_tool_result(
+        self, agent_primitive, mock_llm
+    ):
+        """After tool use, final content must come from a follow-up turn that saw the result."""
+        mock_tool = Mock()
+        type(mock_tool).name = 'test_tool'
+        mock_tool.func = Mock(return_value={'task_id': 'task-1'})
+        agent_primitive.available_tools = [mock_tool]
+
+        first_response = Mock()
+        first_response.content = 'I will dispatch that.'
+        tool_call = Mock()
+        tool_call.name = 'test_tool'
+        tool_call.args = {'param': 'value'}
+        tool_call.id = 'call-1'
+        first_response.tool_calls = [tool_call]
+
+        final_response = Mock()
+        final_response.content = 'Report dispatched. Task ID: task-1.'
+        final_response.tool_calls = []
+        mock_llm.invoke.side_effect = [first_response, final_response]
+
+        result = agent_primitive.turn()
+
+        assert mock_llm.invoke.call_count == 2
+        assert result['content'] == 'Report dispatched. Task ID: task-1.'
+        assert agent_primitive.output == 'Report dispatched. Task ID: task-1.'
+
     def test_turn_appends_tool_result_when_tool_call_has_no_id(
         self, agent_primitive, mock_llm, mock_tool_primitive
     ):
@@ -287,9 +315,9 @@ class TestAgentTurn:
         agent_primitive.turn()
 
         mock_tool_primitive.record_call.assert_called_once_with('test_tool', {'param': 'value'}, 'Tool result')
-        # system + initial + ai response + synthetic tool result message
-        assert len(agent_primitive._conversation) == 4
-        synthetic_tool_result = agent_primitive._conversation[-1]
+        # system + initial + ai response + synthetic tool result + follow-up response
+        assert len(agent_primitive._conversation) == 5
+        synthetic_tool_result = agent_primitive._conversation[-2]
         assert getattr(synthetic_tool_result, 'content', '') == "Tool 'test_tool' result: Tool result"
 
     def test_turn_handles_multiple_tool_calls(

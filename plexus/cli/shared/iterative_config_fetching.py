@@ -36,8 +36,8 @@ def iteratively_fetch_configurations(
         scorecard_data: The scorecard data containing name and other properties
         target_scores: List of score objects to process initially
         use_cache: Whether to use local cache files instead of always fetching from API
-                  When False, will always fetch from API but still write cache files
-                  When True, will check local cache first and only fetch missing configs
+                  When False, fetch from API and keep configurations in memory only
+                  When True, check local cache first and only fetch missing configs
         specific_version: Optional specific version ID to use instead of champion version
         
     Returns:
@@ -354,4 +354,4 @@ def iteratively_fetch_configurations(
                 logging.warning(f"Could not update version in configuration: {str(e)}")
     
     # Return all configurations
-    return configurations 
+    return configurations
