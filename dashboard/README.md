@@ -35,10 +35,25 @@ PLEXUS_ACCOUNT_KEY=...
 
 For local procedure runs from the dashboard UI:
 - `npm run dev` starts only the Next.js dev server
+- `npm run dev:chat` starts the local Console chat responder
+- `npm run dev:local` starts both the Next.js dev server and local Console chat responder
 - `npm run dev:dispatch` starts the local task dispatcher (`PLEXUS_DISPATCH_MODE=local`)
 
 `PLEXUS_ACCOUNT_KEY` is required for this local auto-dispatch flow.
 Console chat now targets the built-in procedure key `builtin:console/chat` backed by source-controlled Tactus code under `plexus/procedures/console/`.
+
+Set `NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET` or `CONSOLE_RESPONSE_TARGET` to a local target such as `local:ryan` in `dashboard/.env.local`. The dashboard writes new Console `ChatMessage` rows with that target, and `plexus chat worker` claims only matching pending messages:
+
+```bash
+cd dashboard
+npm run dev:local
+```
+
+To run the responder without the web server:
+
+```bash
+CONSOLE_RESPONSE_TARGET=local:ryan python -m plexus.cli chat worker
+```
 
 ## Usage
 

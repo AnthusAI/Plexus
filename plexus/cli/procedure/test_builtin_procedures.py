@@ -61,6 +61,10 @@ def test_builtin_console_procedure_prompt_teaches_report_dispatch_contract():
 
     assert "REPORT REQUESTS (HARD RULES)" in system_prompt
     assert "plexus.report.run" in system_prompt
+    assert "reports.reports-catalog" in system_prompt
+    assert 'plexus.docs.list({ namespace = "reports" })' in system_prompt
+    assert "load the specific `reports.*` topic before constructing the report call" in system_prompt
+    assert "report_configs{}" in system_prompt
     assert "FeedbackAlignment" in system_prompt
     assert "memory_analysis = false" in system_prompt
     assert "pass a resolved scorecard UUID" in system_prompt
@@ -86,8 +90,8 @@ def test_builtin_console_procedure_prompt_teaches_prediction_contract():
 def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    # Bumped when the prediction contract changed to canonical identifiers.
-    assert parsed["version"] == "1.6.3"
+    # Bumped when report docs routing was added to the Console prompt.
+    assert parsed["version"] == "1.6.4"
 
 
 def test_is_builtin_procedure_id():
