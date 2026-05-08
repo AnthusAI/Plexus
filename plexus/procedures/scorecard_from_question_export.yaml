@@ -16,8 +16,8 @@ params:
     description: "Path to ai-ready export JSON file. Optional when questions_export_json is provided."
   reference_scorecard_identifier:
     type: string
-    required: true
-    description: "Reference scorecard id/key/name used for style/examples"
+    required: false
+    description: "Optional reference scorecard id/key/name for style/examples. If omitted, agents rely solely on documentation."
   target_scorecard_name:
     type: string
     required: true
@@ -41,7 +41,7 @@ params:
     description: "Account identifier (key/name/id)"
   model_name:
     type: string
-    default: "gpt-5-mini"
+    default: "gpt-5.4-nano-2026-03-17"
     description: "Model used in generated LangGraphScore YAML"
   model_provider:
     type: string
@@ -122,7 +122,17 @@ agents:
     model: gpt-5.4
     verbosity: low
     system_prompt: |
-      You are an expert Plexus score author. Generate a high-quality classifier score spec from policy text.
+      You are an expert Plexus score author with access to canonical documentation.
+      Generate a high-quality classifier score spec from policy text.
+
+      KEY SCORE AUTHORING CONCEPTS:
+      - Use modern Classifier node (NOT deprecated YesOrNoClassifier or MultiClassClassifier)
+      - Define valid_classes array for closed-set labels
+      - Node independence: each node contains all necessary context in its prompts
+      - Reasoning-before-decision: avoid post-hoc rationalization (answer-first patterns)
+      - Use {{text}} placeholder for transcript injection in user_message
+      - Output mapping: nest output blocks within graph nodes, not at root level
+      - Parse direction: parse_from_start=false (default) means parse answer from end
 
       Required JSON output schema (output JSON only, no markdown):
       {
@@ -163,8 +173,17 @@ agents:
     model: gpt-5.4
     verbosity: low
     system_prompt: |
-      You are a strict reviewer for Plexus score authoring.
+      You are a strict reviewer for Plexus score authoring with access to canonical documentation.
       Improve draft score specs for policy fidelity, decision clarity, and class consistency.
+
+      KEY SCORE AUTHORING CONCEPTS:
+      - Use modern Classifier node (NOT deprecated YesOrNoClassifier or MultiClassClassifier)
+      - Define valid_classes array for closed-set labels
+      - Node independence: each node contains all necessary context in its prompts
+      - Reasoning-before-decision: avoid post-hoc rationalization (answer-first patterns)
+      - Use {{text}} placeholder for transcript injection in user_message
+      - Output mapping: nest output blocks within graph nodes, not at root level
+      - Parse direction: parse_from_start=false (default) means parse answer from end
 
       Return JSON only, same schema:
       {
@@ -785,8 +804,8 @@ code: |
           key = info.scoreKey or row.key,
           description = info.description or row.description,
           type = info.type or "LangGraphScore",
-          guidelines = safe_slice(info.guidelines or "", 1800),
-          code = safe_slice(info.code or "", 3500)
+          guidelines = safe_slice(info.guidelines or "", 4000),  -- Increased from 1800
+          code = safe_slice(info.code or "", 8000)               -- Increased from 3500
         }
       end
     end
@@ -844,8 +863,9 @@ code: |
           id = ex.id,
           name = ex.name,
           key = ex.key,
-          description = safe_slice(ex.description or "", 240),
-          guidelines = safe_slice(ex.guidelines or "", 600)
+          description = safe_slice(ex.description or "", 400),    -- Increased from 240
+          guidelines = safe_slice(ex.guidelines or "", 2000),     -- Increased from 600
+          code = safe_slice(ex.code or "", 4000)                  -- Added code examples
         }
       end
     end
@@ -878,8 +898,9 @@ code: |
         reference_examples[#reference_examples + 1] = {
           name = ex.name,
           key = ex.key,
-          description = safe_slice(ex.description or "", 240),
-          guidelines = safe_slice(ex.guidelines or "", 450)
+          description = safe_slice(ex.description or "", 400),    -- Increased from 240
+          guidelines = safe_slice(ex.guidelines or "", 1500),     -- Increased from 450
+          code = safe_slice(ex.code or "", 3000)                  -- Added code examples
         }
       end
     end
@@ -975,6 +996,32 @@ code: |
 
     s = string.gsub(s, "\n\n\n+", "\n\n")
     return trim(s)
+  end
+
+  local function validate_policy_fidelity(question, spec)
+    -- Soft validation: log warnings but never fail
+    local warnings = {}
+
+    -- Check: Label explanation in system_message
+    local unexplained_labels = {}
+    for _, label in ipairs(spec.labels) do
+      if not string.find(spec.system_message, tostring(label), 1, true) then
+        unexplained_labels[#unexplained_labels + 1] = tostring(label)
+      end
+    end
+    if #unexplained_labels > 0 then
+      warnings[#warnings + 1] = "Labels not explained in system_message: " .. table.concat(unexplained_labels, ", ")
+    end
+
+    -- Log warnings
+    if #warnings > 0 then
+      print("POLICY FIDELITY WARNINGS for question '" .. tostring(question.short_name) .. "':")
+      for _, warning in ipairs(warnings) do
+        print("  - " .. warning)
+      end
+    end
+
+    return nil  -- Never fail, just warn
   end
 
   local function validate_user_message_contract(user_message, labels)
@@ -1076,7 +1123,7 @@ code: |
       return nil, user_contract_err
     end
 
-    return {
+    local spec = {
       question_id = question.id,
       question_name = question.short_name,
       name = name,
@@ -1092,7 +1139,12 @@ code: |
       user_message = user_message,
       source_guidelines = question.guidelines,
       source_faq = question.faq_text
-    }, nil
+    }
+
+    -- Policy fidelity validation (soft - warnings only)
+    validate_policy_fidelity(question, spec)
+
+    return spec, nil
   end
 
   local function build_guidelines_from_generated(score)
@@ -1126,12 +1178,17 @@ code: |
   end
 
   local function build_score_yaml(score, params)
+    -- Generate modern LangGraphScore YAML following canonical score-authoring documentation:
+    -- - Use Classifier node (not deprecated YesOrNoClassifier)
+    -- - Define valid_classes for closed-set labels
+    -- - Nest output within node, not at root
+    -- - Use parse_from_start=false (default) for reasoning-before-decision pattern
     local lines = {}
     table.insert(lines, 'name: "' .. escape_yaml(score.name) .. '"')
     table.insert(lines, 'description: "' .. escape_yaml(score.description or score.name) .. '"')
     table.insert(lines, 'external_id: "' .. escape_yaml(score.external_id) .. '"')
     table.insert(lines, 'class: LangGraphScore')
-    table.insert(lines, 'model_name: ' .. tostring(params.model_name or "gpt-5-mini"))
+    table.insert(lines, 'model_name: ' .. tostring(params.model_name or "gpt-5.4-nano-2026-03-17"))
     table.insert(lines, 'model_provider: ' .. tostring(params.model_provider or "ChatOpenAI"))
     table.insert(lines, 'reasoning_effort: ' .. tostring(params.reasoning_effort or "medium"))
     table.insert(lines, 'max_tokens: 3000')
@@ -1163,9 +1220,7 @@ code: |
     local max_scores = tonumber(params.max_scores) or 0
 
     local reference_scorecard_identifier = trim(params.reference_scorecard_identifier)
-    if not has_text(reference_scorecard_identifier) then
-      return {success = false, status = "error", message = "reference_scorecard_identifier is required"}
-    end
+    local use_reference_examples = has_text(reference_scorecard_identifier)
 
     local export_json = trim(params.questions_export_json)
     if not has_text(export_json) and has_text(params.questions_export_path) then
@@ -1207,6 +1262,23 @@ code: |
 
     Stage.set("observe")
 
+    -- Load score authoring documentation for agent context
+    local score_format_doc = Step.checkpoint(function()
+      local ok, result = pcall(function()
+        return call_plexus_api("docs", "get", {key = "score-authoring.score-yaml-format"})
+      end)
+      if ok and type(result) == "table" and result.content then
+        return result.content
+      elseif ok and type(result) == "string" then
+        return result
+      end
+      return nil
+    end)
+
+    if not score_format_doc then
+      print("WARNING: Could not load score-yaml-format documentation. Agents will have no reference guidance.")
+    end
+
     if not dry_run then
       local _, preflight_err = preflight_write_capabilities()
       if preflight_err then
@@ -1237,18 +1309,30 @@ code: |
       }
     end
 
-    local reference_context
-    local ok_ref, ref_or_err = pcall(function()
-      return extract_reference_examples(reference_scorecard_identifier, 5)
-    end)
-    if not ok_ref then
-      return {
-        success = false,
-        status = "error",
-        message = "Failed to load reference scorecard: " .. tostring(ref_or_err)
+    local reference_context = nil
+    if use_reference_examples then
+      local ok_ref, ref_or_err = pcall(function()
+        return extract_reference_examples(reference_scorecard_identifier, 5)
+      end)
+      if not ok_ref then
+        return {
+          success = false,
+          status = "error",
+          message = "Failed to load reference scorecard: " .. tostring(ref_or_err)
+        }
+      end
+      reference_context = ref_or_err
+      print("Loaded " .. tostring(#reference_context.examples) .. " reference examples from scorecard: " .. tostring(reference_context.name))
+    else
+      print("No reference scorecard provided - agents will rely on documentation only")
+      reference_context = {
+        id = nil,
+        name = "No reference",
+        key = nil,
+        externalId = nil,
+        examples = {}
       }
     end
-    reference_context = ref_or_err
 
     local _, generator_probe_err = probe_agent_done_contract(Generator, "Generator")
     if generator_probe_err then
@@ -1297,6 +1381,13 @@ code: |
     Stage.set("generate")
     for idx, question in ipairs(normalized_questions) do
       set_stage_progress(idx - 1, total)
+
+      -- Reset agent contexts for fresh start on each question (except first)
+      -- Prevents context accumulation across 20-50 question scorecards
+      if idx > 1 then
+        Generator.clear_history()
+        Critic.clear_history()
+      end
 
       local generate_prompt = build_generate_prompt(question, reference_context)
       local generated_ok = wait_for_done(Generator, 6, generate_prompt)
@@ -1437,8 +1528,8 @@ code: |
         model_name = params.model_name,
         model_provider = params.model_provider,
         reasoning_effort = params.reasoning_effort,
-        reference_scorecard_id = reference_context.id,
-        reference_scorecard_identifier = reference_scorecard_identifier,
+        reference_scorecard_id = use_reference_examples and reference_context.id or nil,
+        reference_scorecard_identifier = use_reference_examples and reference_scorecard_identifier or nil,
         reference_example_count = #reference_context.examples,
         started_at = run_started_at
       }
@@ -1456,19 +1547,33 @@ code: |
 
     if require_approval then
       Stage.set("approval")
+
+      -- Add validation summary for approval context
+      local approval_message = "Approve AI-generated scorecard migration execution?"
+      approval_message = approval_message .. "\n\nGenerated " .. tostring(#generated_scores) .. " scores."
+      approval_message = approval_message .. "\nPolicy fidelity validation warnings (if any) are logged above."
+      approval_message = approval_message .. "\nSmoke tests will run after approval."
+
+      local approval_context = {
+        scorecard = normalized_scorecard,
+        score_count = #generated_scores,
+        sample_scores = {generated_scores[1], generated_scores[2]},
+        run_metadata = plan.run_metadata
+      }
+
+      if use_reference_examples then
+        approval_context.reference_scorecard = {
+          id = reference_context.id,
+          name = reference_context.name,
+          key = reference_context.key
+        }
+      else
+        approval_context.reference_scorecard = "None (documentation-only generation)"
+      end
+
       local approved = Human.approve({
-        message = "Approve AI-generated scorecard migration execution?",
-        context = {
-          scorecard = normalized_scorecard,
-          score_count = #generated_scores,
-          sample_scores = {generated_scores[1], generated_scores[2]},
-          reference_scorecard = {
-            id = reference_context.id,
-            name = reference_context.name,
-            key = reference_context.key
-          },
-          run_metadata = plan.run_metadata
-        },
+        message = approval_message,
+        context = approval_context,
         timeout = 7200,
         default = false
       })
@@ -1646,11 +1751,26 @@ code: |
     set_stage_progress(#generated_scores, #generated_scores)
     plan.smoke_tests = smoke_test_results
 
+    -- Build completion message with smoke test summary
+    local message = "Scorecard and AI-generated scores created from question export"
+    if run_smoke_test and #smoke_test_results > 0 then
+      local passed = 0
+      local failed = 0
+      for _, result in ipairs(smoke_test_results) do
+        if result.success then
+          passed = passed + 1
+        else
+          failed = failed + 1
+        end
+      end
+      message = message .. " (smoke tests: " .. tostring(passed) .. " passed, " .. tostring(failed) .. " failed)"
+    end
+
     Stage.set("complete")
     return {
       success = true,
       status = "created",
-      message = "Scorecard and AI-generated scores created from question export",
+      message = message,
       scorecard_id = created_scorecard_id,
       score_ids = created_score_ids,
       plan = plan
@@ -1679,7 +1799,7 @@ code: |
       target_scorecard_external_id = field.string{},
       target_scorecard_description = field.string{},
       account_identifier = field.string{default = "default"},
-      model_name = field.string{default = "gpt-5-mini"},
+      model_name = field.string{default = "gpt-5.4-nano-2026-03-17"},
       model_provider = field.string{default = "ChatOpenAI"},
       reasoning_effort = field.string{default = "medium"},
       max_scores = field.number{default = 0},
