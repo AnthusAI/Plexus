@@ -163,6 +163,7 @@ const consoleRunWorkerStack = new ConsoleChatResponderStack(
         plexusApiUrl: resolvedDataApiUrl,
         workerImageUri: consoleWorkerImageUri,
         environmentName: consoleWorkerEnvironmentName,
+        reportBlockDetailsBucket: backend.reportBlockDetails.resources.bucket,
     }
 );
 
