@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c934069f-ddfb-459c-848a-f3485ee019a7",
+  "issue_id": "plx-37b7f7ac-fdd5-463a-809a-65842883b990",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T14:31:43.889Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Create records and validated guidelines for PolicyPoint sales skills",
+    "description": "Implement the setup for the PolicyPoint Sales Skills QA Scorecard.\n\nSteps:\n1. Parse workbook metadata and populated item rubrics.\n2. Create or verify the scorecard and score records.\n3. Generate classifier guidelines for each populated score.\n4. Validate guidelines with `skills/guidelines/validate_guidelines.py`.\n5. Publish validated guidelines to score versions and verify via Plexus read APIs.\n\nNotes:\n- Workbook contains populated Items 1-6 and 11-14; item numbers 7-10 are not populated in the provided workbook.\n- MCP exposes score version update but not scorecard/score create methods, so record creation may need the local GraphQL client path.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-03d93482-b49d-4d3a-a997-31dc558f9979",
+    "labels": []
+  }
+}

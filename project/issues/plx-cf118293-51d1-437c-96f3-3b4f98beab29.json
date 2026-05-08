@@ -1,0 +1,46 @@
+{
+  "id": "plx-cf118293-51d1-437c-96f3-3b4f98beab29",
+  "title": "Implement ScoreResultsReport backend block",
+  "description": "Implement new ScoreResultsReport report block: parameter parsing, scope resolution, identifier resolution, prediction execution + ScoreResult persistence, grouped-by-score output, diagnostics, bounded concurrency, and deterministic ordering.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7a5a4404-2617-490a-bde6-6b5f52e1ddef",
+      "author": "ryan",
+      "text": "Backend block implemented in plexus/reports/blocks/score_results_report.py with required parameters (scorecard, optional score/score_id, ids), identifier normalization/dedup, partial unresolved handling, bounded concurrency, prediction + persistence, grouped-by-score output, and diagnostics arrays. Added backend unit tests in score_results_report_test.py covering scope modes, ordering/grouping, unresolved handling, failure handling, and ids parsing/validation.",
+      "created_at": "2026-05-07T16:19:26.104260Z"
+    },
+    {
+      "id": "aa01d204-29b1-41f9-a7b5-2c6a3416651f",
+      "author": "ryan",
+      "text": "Adding item identifier hydration to ScoreResultsReport backend output so UI can use standard collapsed/expandable IdentifierDisplay with identifier URLs.",
+      "created_at": "2026-05-07T18:54:22.665936Z"
+    },
+    {
+      "id": "167a5799-210c-492b-9ab4-fae190173712",
+      "author": "ryan",
+      "text": "Adjusting ScoreResultsReport single-score header dedupe and standardizing score section spacing/padding to p-3.",
+      "created_at": "2026-05-07T19:04:23.373819Z"
+    },
+    {
+      "id": "44b3ea96-7bce-4176-9b25-e7cd0b7fc0a1",
+      "author": "ryan",
+      "text": "Tightening ScoreResultsReport row spacing by removing extra horizontal padding layer around score result cards; keep row-level padding only.",
+      "created_at": "2026-05-07T19:05:42.225251Z"
+    }
+  ],
+  "created_at": "2026-05-07T16:10:19.897024Z",
+  "updated_at": "2026-05-07T19:05:42.225251Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

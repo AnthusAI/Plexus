@@ -16,10 +16,22 @@
       "author": "ryan",
       "text": "Starting implementation. First priority is the urgent GraphQL schema slice: add ScoreVersion.metadata as JSON and one featured-version lookup index, with no other table/index changes. Follow-up implementation will add frontend, CLI, MCP, and champion-history promotion wiring on the same feature branch.",
       "created_at": "2026-04-27T18:14:17.839783Z"
+    },
+    {
+      "id": "ee46e617-6c5d-4911-8a1b-6e3a5bf5dd43",
+      "author": "ryan",
+      "text": "Started Score Results Report implementation on feature/score-results-report. Created story plx-d54ab8 and tasks for backend, CLI, dashboard, and tests (plx-cf1182, plx-78b08e, plx-26c455, plx-b5749b). Beginning backend block implementation first, then CLI, renderer, and tests.",
+      "created_at": "2026-05-07T16:10:24.765665Z"
+    },
+    {
+      "id": "efe5e193-5f4b-4412-a512-d6e9ce612652",
+      "author": "ryan",
+      "text": "Implemented Score Results Report on branch feature/score-results-report. Added backend block (ScoreResultsReport), direct CLI command (feedback report score-results-report), dashboard renderer, and tests.\n\nValidation:\n- python3.11 -m pytest plexus/reports/blocks/score_results_report_test.py plexus/cli/feedback/feedback_report_test.py -q -> 23 passed\n- dashboard jest ScoreResultsReport.test.tsx -> passed\n- Manual run (single-score smoke): scorecard 1562 + score 'Asks Beyond the Script' + id 311434634 returned success with persisted score_result_id and grouped-by-score payload.\n- Full 20-id scorecard-wide run was initiated and processed predictions; it is heavy/long-running due item x score fanout.",
+      "created_at": "2026-05-07T16:17:43.478641Z"
     }
   ],
   "created_at": "2026-04-27T18:14:11.621385Z",
-  "updated_at": "2026-04-27T18:14:17.839783Z",
+  "updated_at": "2026-05-07T16:17:43.478641Z",
   "closed_at": null,
   "custom": {}
 }

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "a08ed150-d6fb-4dca-b7e2-d020309070b9",
+  "issue_id": "plx-55a63c67-5265-46b9-abb9-7f8a400a82b4",
+  "event_type": "field_updated",
+  "occurred_at": "2026-05-07T12:15:03.426Z",
+  "actor_id": "ryan",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "Console report dispatch must return durable task/report identifiers and command worker must run programmatic report block commands without unsupported generic --task-id."
+      }
+    }
+  }
+}

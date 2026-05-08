@@ -331,6 +331,18 @@ class AgentPrimitive:
             if tool_calls:
                 logger.info(f"Agent '{self.name}' called {len(tool_calls)} tools")
                 executed_tools = self._execute_tool_calls(tool_calls)
+                followup_response = self.llm.invoke(self._conversation)
+                logger.debug(f"Agent '{self.name}' follow-up response after tools: {followup_response}")
+                response_content = getattr(followup_response, 'content', '') or ''
+                self.output = response_content
+                self._conversation.append(followup_response)
+                self._queue_recording({
+                    'role': 'ASSISTANT',
+                    'content': response_content,
+                    'message_type': 'MESSAGE',
+                    'human_interaction': 'INTERNAL'
+                })
+                ai_response = followup_response
 
             # Extract token usage if available
             token_usage = self._extract_token_usage(ai_response)

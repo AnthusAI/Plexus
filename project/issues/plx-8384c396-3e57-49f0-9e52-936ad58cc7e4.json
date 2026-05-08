@@ -1,0 +1,25 @@
+{
+  "id": "plx-8384c396-3e57-49f0-9e52-936ad58cc7e4",
+  "title": "Fix Console chat sticky-bottom scrolling",
+  "description": "Console chat should stay pinned to the bottom while the user is at the bottom, stop auto-scrolling when the user scrolls up, and allow reliable manual scrolling to the latest message.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6203f1a9-db51-4288-bbeb-7c99583ba62e",
+      "author": "ryan",
+      "text": "Fixed sticky-bottom scrolling behavior and added a regression test. Verified focused Jest suite and dashboard typecheck.",
+      "created_at": "2026-05-07T22:37:29.877101Z"
+    }
+  ],
+  "created_at": "2026-05-07T22:23:24.563542Z",
+  "updated_at": "2026-05-07T22:37:29.897979Z",
+  "closed_at": "2026-05-07T22:37:29.897979Z",
+  "custom": {}
+}
