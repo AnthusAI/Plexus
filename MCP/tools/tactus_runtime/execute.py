@@ -57,20 +57,32 @@ PLEXUS_PROCEDURE_RUN_LOG_DIR_DEFAULT = os.path.join(
 )
 
 
-def _resolve_trace_dir() -> str:
+def _resolve_trace_dir(request_id: Optional[str] = None) -> str:
     configured = os.environ.get("PLEXUS_TACTUS_TRACE_DIR")
     if configured:
-        return configured
-    if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or os.environ.get("LAMBDA_TASK_ROOT"):
-        return os.path.join("/tmp", "tactus_traces")
-    return PLEXUS_TACTUS_TRACE_DIR_DEFAULT
+        base_dir = configured
+    elif os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or os.environ.get("LAMBDA_TASK_ROOT"):
+        base_dir = os.path.join("/tmp", "tactus_traces")
+    else:
+        base_dir = PLEXUS_TACTUS_TRACE_DIR_DEFAULT
+
+    if request_id:
+        return os.path.join("/tmp", request_id, os.path.basename(base_dir))
+    return base_dir
 
 
-def _resolve_procedure_run_log_dir() -> str:
-    return os.environ.get(
-        "PLEXUS_PROCEDURE_RUN_LOG_DIR",
-        PLEXUS_PROCEDURE_RUN_LOG_DIR_DEFAULT,
-    )
+def _resolve_procedure_run_log_dir(request_id: Optional[str] = None) -> str:
+    configured = os.environ.get("PLEXUS_PROCEDURE_RUN_LOG_DIR")
+    if configured:
+        base_dir = configured
+    elif os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or os.environ.get("LAMBDA_TASK_ROOT"):
+        base_dir = os.path.join("/tmp", "tactus_procedure_runs")
+    else:
+        base_dir = PLEXUS_PROCEDURE_RUN_LOG_DIR_DEFAULT
+
+    if request_id:
+        return os.path.join("/tmp", request_id, os.path.basename(base_dir))
+    return base_dir
 
 
 def _register_evaluation_process(process: Any) -> None:
@@ -117,7 +129,8 @@ def _local_procedure_env() -> dict[str, str]:
 def _launch_local_procedure_subprocess(cmd: list[str], procedure_id: str) -> tuple[Any, str]:
     import subprocess
 
-    log_dir = _resolve_procedure_run_log_dir()
+    request_id = os.environ.get("PLEXUS_LAMBDA_REQUEST_ID")
+    log_dir = _resolve_procedure_run_log_dir(request_id=request_id)
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, f"{procedure_id}.log")
     with open(log_path, "ab", buffering=0) as log_file:
@@ -160,7 +173,8 @@ class FileTactusTraceStore(TactusTraceStore):
 
 
 def _default_trace_store() -> TactusTraceStore:
-    return FileTactusTraceStore(_resolve_trace_dir())
+    request_id = os.environ.get("PLEXUS_LAMBDA_REQUEST_ID")
+    return FileTactusTraceStore(_resolve_trace_dir(request_id=request_id))
 
 
 class TactusHandleStore:
@@ -256,7 +270,8 @@ class FileTactusHandleStore(TactusHandleStore):
 
 
 def _default_handle_store() -> TactusHandleStore:
-    return FileTactusHandleStore(os.path.join(_resolve_trace_dir(), "handles"))
+    request_id = os.environ.get("PLEXUS_LAMBDA_REQUEST_ID")
+    return FileTactusHandleStore(os.path.join(_resolve_trace_dir(request_id=request_id), "handles"))
 
 
 def _build_trace_record(
