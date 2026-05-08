@@ -1,0 +1,31 @@
+{
+  "id": "plx-c429542a-4ba4-41cc-809b-ed265596377b",
+  "title": "Remove token-heavy scorecard listing from export migration procedure",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-14559d76-98d3-4fb4-9074-5c49bce7d2f8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "52444055-b8b0-492d-b70c-38015526b07e",
+      "author": "derek",
+      "text": "Starting fix: remove broad scorecards_list observe stage and replace with targeted exact scorecard existence checks to reduce token usage and chatter.",
+      "created_at": "2026-05-06T21:51:57.816388275Z"
+    },
+    {
+      "id": "911a771b-30a5-40a9-ad6f-9f8bf480c10c",
+      "author": "derek",
+      "text": "Implemented targeted scorecard existence check using plexus_scorecard_info (key then name fallback). Removed broad scorecards_list lookup from execution path. Verified YAML loads and procedure YAML loader test passes.",
+      "created_at": "2026-05-06T21:52:27.431849930Z"
+    }
+  ],
+  "created_at": "2026-05-06T21:51:52.578542009Z",
+  "updated_at": "2026-05-06T21:52:27.445940443Z",
+  "closed_at": "2026-05-06T21:52:27.445940443Z",
+  "custom": {}
+}

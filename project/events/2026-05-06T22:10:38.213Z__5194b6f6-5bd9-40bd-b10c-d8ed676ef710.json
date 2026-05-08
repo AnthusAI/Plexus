@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5194b6f6-5bd9-40bd-b10c-d8ed676ef710",
+  "issue_id": "plx-6c2cf098-59ee-4192-b383-b950830b2237",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T22:10:38.213Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-14559d76-98d3-4fb4-9074-5c49bce7d2f8",
+    "priority": 1,
+    "status": "open",
+    "title": "Handle scorecard_info not-found as non-fatal in export migration procedure"
+  }
+}
