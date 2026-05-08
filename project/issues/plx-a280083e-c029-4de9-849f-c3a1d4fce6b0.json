@@ -1,0 +1,31 @@
+{
+  "id": "plx-a280083e-c029-4de9-849f-c3a1d4fce6b0",
+  "title": "Specify deterministic mapping from question export to Plexus score configs",
+  "description": "",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-14559d76-98d3-4fb4-9074-5c49bce7d2f8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4927d745-011b-4774-b2e5-9740f25cfd7b",
+      "author": "derek",
+      "text": "As a migration engineer, I want a procedure that consumes ai-ready question exports and creates one Plexus score per question, so that scorecard migration is deterministic and scalable.\n\nFeature: JSON-native scorecard creation\nScenario: Build a new scorecard from ai-ready export\nGiven an ai-ready export JSON with questions, answers, guidelines, and optional faqs\nWhen I run the migration procedure with target scorecard metadata\nThen the procedure creates the scorecard\nAnd creates one score per question\nAnd updates each score with YAML code and guidelines\n\nScenario: Dry run planning\nGiven dry_run is true\nWhen the procedure is run\nThen it returns a plan and no write tools are called\n\nScenario: Human approval gate\nGiven dry_run is false\nWhen planning and drafting complete\nThen the procedure requires explicit human approval before create/update calls",
+      "created_at": "2026-05-06T20:56:39.058742690Z"
+    },
+    {
+      "id": "887bc309-7302-481a-b68d-ae96e260326e",
+      "author": "derek",
+      "text": "Story complete: JSON-native deterministic mapping behavior implemented with dry-run and approval gate.",
+      "created_at": "2026-05-06T20:58:37.929637249Z"
+    }
+  ],
+  "created_at": "2026-05-06T20:56:34.214393829Z",
+  "updated_at": "2026-05-06T20:58:37.944153112Z",
+  "closed_at": "2026-05-06T20:58:37.944153112Z",
+  "custom": {}
+}

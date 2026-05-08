@@ -1,0 +1,31 @@
+{
+  "id": "plx-6c2cf098-59ee-4192-b383-b950830b2237",
+  "title": "Handle scorecard_info not-found as non-fatal in export migration procedure",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-14559d76-98d3-4fb4-9074-5c49bce7d2f8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7e2db56a-83db-426b-b137-d5b28f861e10",
+      "author": "derek",
+      "text": "Starting fix for not-found fatal error. Replacing observer+tool-call-count existence probe with direct pcall-wrapped plexus_scorecard_info invocation and explicit 'not found' handling.",
+      "created_at": "2026-05-06T22:10:43.340693172Z"
+    },
+    {
+      "id": "af4c2ac2-866a-4b3f-a238-b007c4ede75b",
+      "author": "derek",
+      "text": "Implemented robust existence probe: direct pcall-wrapped plexus_scorecard_info call with explicit 'not found' handling. This prevents runtime failure when target scorecard does not exist yet. Validated YAML parse and YAML loader test.",
+      "created_at": "2026-05-06T22:11:04.125714161Z"
+    }
+  ],
+  "created_at": "2026-05-06T22:10:38.213745754Z",
+  "updated_at": "2026-05-06T22:11:04.138979430Z",
+  "closed_at": "2026-05-06T22:11:04.138979430Z",
+  "custom": {}
+}
