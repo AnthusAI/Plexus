@@ -71,6 +71,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         os.getenv("CONSOLE_RESPONSE_TARGET") or PRODUCTION_RESPONSE_TARGET
     )
     request_id = getattr(context, "aws_request_id", None)
+    if request_id:
+        os.environ["PLEXUS_LAMBDA_REQUEST_ID"] = request_id
     owner = build_response_owner(expected_target, request_id=request_id)
     _load_provider_credentials()
     client = _resolve_client()
