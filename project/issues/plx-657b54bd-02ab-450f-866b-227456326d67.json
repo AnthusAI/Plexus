@@ -3,7 +3,7 @@
   "title": "Fix scorecard_from_question_export write path to use supported scorecard/score tool calls",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -343,7 +343,7 @@
     }
   ],
   "created_at": "2026-05-06T22:50:04.924875855Z",
-  "updated_at": "2026-05-07T21:33:09.706698758Z",
-  "closed_at": null,
+  "updated_at": "2026-05-08T16:48:46.329368581Z",
+  "closed_at": "2026-05-08T16:48:46.329368581Z",
   "custom": {}
 }
