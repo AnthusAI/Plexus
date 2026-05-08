@@ -3708,6 +3708,7 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
             "plexus.procedure.optimize: PLEXUS_ACCOUNT_KEY environment variable is required"
         )
 
+    dispatch_mode = _resolve_report_dispatch_mode()
     result = service.create_procedure(
         account_identifier=account,
         scorecard_identifier=str(scorecard_identifier),
@@ -3715,36 +3716,49 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
         yaml_config=yaml_text,
         featured=False,
         name=f"Optimizer: {scorecard_identifier}",
-        dispatch_mode="local",
+        dispatch_mode=dispatch_mode,
     )
     if not result.success:
         raise RuntimeError(f"plexus.procedure.optimize: failed to create procedure — {result.message}")
 
     procedure_id = result.procedure.id
+    dashboard_url = f"https://lab.callcriteria.com/lab/procedures/{procedure_id}"
 
-    import sys
+    if dispatch_mode == "celery":
+        # Remote dispatch: procedure will be picked up by worker from task queue
+        return {
+            "procedure_id": procedure_id,
+            "status": "dispatched",
+            "message": "Optimizer procedure dispatched to remote worker queue.",
+            "scorecard": str(scorecard_identifier),
+            "score": str(score_identifier),
+            "dashboard_url": dashboard_url,
+        }
+    else:
+        # Local dispatch: launch subprocess
+        import sys
 
-    cmd = [
-        sys.executable, "-m", "plexus", "procedure", "run",
-        procedure_id,
-    ]
-    if args.get("max_iterations") is not None:
-        cmd += ["--max-iterations", str(int(args["max_iterations"]))]
-    if args.get("dry_run"):
-        cmd.append("--dry-run")
+        cmd = [
+            sys.executable, "-m", "plexus", "procedure", "run",
+            procedure_id,
+        ]
+        if args.get("max_iterations") is not None:
+            cmd += ["--max-iterations", str(int(args["max_iterations"]))]
+        if args.get("dry_run"):
+            cmd.append("--dry-run")
 
-    proc, log_path = _launch_local_procedure_subprocess(cmd, procedure_id)
+        proc, log_path = _launch_local_procedure_subprocess(cmd, procedure_id)
 
-    return {
-        "procedure_id": procedure_id,
-        "status": "running",
-        "pid": proc.pid,
-        "log_path": log_path,
-        "message": "Optimizer procedure dispatched — running as independent subprocess.",
-        "scorecard": str(scorecard_identifier),
-        "score": str(score_identifier),
-        "dashboard_url": f"https://lab.callcriteria.com/lab/procedures/{procedure_id}",
-    }
+        return {
+            "procedure_id": procedure_id,
+            "status": "running",
+            "pid": proc.pid,
+            "log_path": log_path,
+            "message": "Optimizer procedure dispatched — running as independent subprocess.",
+            "scorecard": str(scorecard_identifier),
+            "score": str(score_identifier),
+            "dashboard_url": dashboard_url,
+        }
 
 
 def _default_procedure_continue(args: dict[str, Any]) -> dict[str, Any]:
