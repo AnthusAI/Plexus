@@ -69,7 +69,7 @@ docker run --rm \
 
 **What's tested:**
 - All dependencies importable (langchain, tactus, boto3, etc.)
-- Pinned package versions match requirements.txt
+- Installed dependency versions satisfy `plexus` package requirements
 - Plexus modules load correctly
 - Handler can initialize
 - NLTK data available
@@ -98,7 +98,7 @@ make build-and-test
 This ensures:
 1. Image builds successfully
 2. All dependencies install correctly
-3. Pinned versions are correct (avoiding dependency resolution issues)
+3. Installed versions satisfy `plexus` package requirements
 4. Handler can initialize
 5. All imports work in the Lambda environment
 
@@ -178,7 +178,7 @@ make clean             # Remove local images
 
 **Local development workflow:**
 ```bash
-# 1. Make changes to code or requirements
+# 1. Make changes to code
 vim handler.py
 
 # 2. Build and test locally
@@ -337,7 +337,7 @@ aws lambda get-function \
 
 1. Ensure Docker buildx is installed: `docker buildx version`
 2. Make sure you're in the Plexus project root directory
-3. Verify all source files exist: `plexus/` directory and `handler.py`
+3. Verify all source files exist and `pyproject.toml` is present in the Docker build context
 
 ### Lambda manifest error
 
@@ -363,7 +363,6 @@ If you get "image manifest, config or layer media type... is not supported":
 
 - `Dockerfile` - Container image definition
 - `handler.py` - Lambda entry point and job processing logic
-- `requirements.txt` - Python dependencies
 - `README.md` - This file
 
 ## Dependencies
@@ -373,4 +372,4 @@ Major dependencies include:
 - LangChain/LangGraph stack for AI scoring
 - `boto3` - AWS SDK
 - Data science libraries: numpy, pandas, matplotlib, scikit-learn, xgboost
-- Plexus codebase (copied from `plexus/` directory)
+- Plexus package and dependencies (installed from repository `pyproject.toml`)

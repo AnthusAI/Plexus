@@ -83,13 +83,24 @@ def test_imports(self):
 
 @suite.test("Verify pinned LangChain versions")
 def test_langchain_versions(self):
-    """Verify LangChain packages have expected versions"""
+    """Verify LangChain packages satisfy Plexus package requirements"""
+    from importlib.metadata import distribution
+    from packaging.requirements import Requirement
+    from packaging.version import Version
     import langchain
     import langchain_core
 
-    assert langchain.__version__ == "0.3.27", f"Expected langchain 0.3.27, got {langchain.__version__}"
-    assert langchain_core.__version__ == "0.3.78", f"Expected langchain-core 0.3.78, got {langchain_core.__version__}"
-    print(f"    - All versions match requirements.txt")
+    requirements = distribution("plexus").requires or []
+    for package_name, actual in (
+        ("langchain", langchain.__version__),
+        ("langchain-core", langchain_core.__version__),
+    ):
+        match = next((req for req in requirements if req.lower().startswith(f"{package_name.lower()} ")), None)
+        assert match, f"Could not find {package_name} requirement in installed plexus metadata"
+        spec = Requirement(match).specifier
+        assert Version(actual) in spec, \
+            f"{package_name} {actual} does not satisfy plexus requirement {spec}"
+        print(f"    - {package_name}: {actual} satisfies {spec}")
 
 
 @suite.test("Import Plexus modules")
@@ -152,21 +163,20 @@ def test_writable_dirs(self):
 
 @suite.test("Verify tactus version")
 def test_tactus_version(self):
-    """Verify installed tactus version matches the pinned version in requirements.txt"""
-    import re
-    from importlib.metadata import version as pkg_version
+    """Verify installed tactus version satisfies Plexus package requirement"""
+    from importlib.metadata import distribution, version as pkg_version
+    from packaging.requirements import Requirement
+    from packaging.version import Version
 
-    req_file = "/tmp/requirements.txt"
-    with open(req_file) as f:
-        content = f.read()
-    match = re.search(r"^tactus==(.+)$", content, re.MULTILINE)
-    assert match, f"Could not find tactus pin in {req_file}"
-    expected_version = match.group(1).strip()
+    requirements = distribution("plexus").requires or []
+    match = next((req for req in requirements if req.lower().startswith("tactus ")), None)
+    assert match, "Could not find tactus requirement in installed plexus metadata"
+    spec = Requirement(match).specifier
 
     actual_version = pkg_version("tactus")
-    assert actual_version == expected_version, \
-        f"Expected tactus {expected_version}, got {actual_version}"
-    print(f"    - tactus version matches: {actual_version}")
+    assert Version(actual_version) in spec, \
+        f"tactus {actual_version} does not satisfy plexus requirement {spec}"
+    print(f"    - tactus version satisfies plexus requirement: {actual_version} in {spec}")
 
 
 @suite.test("Instantiate TactusRuntime and MemoryStorage")
