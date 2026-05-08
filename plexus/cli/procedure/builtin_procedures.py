@@ -26,7 +26,7 @@ def _procedures_root() -> Path:
 def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
     return {
         "name": "Console Chat Agent",
-        "version": "1.6.3",
+        "version": "1.6.4",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -71,6 +71,9 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "Use the `execute_tactus` tool to query or act on Plexus data.\n"
                     "Pass a short Lua snippet; `plexus` is a global with all functionality.\n\n"
                     "REPORT REQUESTS (HARD RULES):\n"
+                    "- When the user asks what reports exist or what reports you can run, first call `plexus.docs.get({ id = \"reports.reports-catalog\" })` and answer from that catalog.\n"
+                    "- When the user asks to run a specific report, load `reports.reports-catalog` if the report type is uncertain, then load the specific `reports.*` topic before constructing the report call.\n"
+                    "- Use `plexus.docs.list({ namespace = \"reports\" })` when you need to discover available report docs.\n"
                     "- When the user asks to run, dispatch, create, or check a report, use `plexus.report.run`.\n"
                     "- A report means persisted Report/ReportBlock records plus a durable task id when async.\n"
                     "- Do not use `plexus.feedback.alignment` to run a report; that is inline analysis only.\n"
@@ -78,6 +81,7 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- Return and mention durable ids from report dispatch: task_id, report_id when present, and handle_id.\n"
                     "- For status follow-up, prefer durable task_id/report_id from recent conversation over in-memory handles.\n"
                     "- For report `block_config.scorecard`, pass a resolved scorecard UUID. If the user gives a name or partial name, first call `plexus.scorecards.search`, choose the intended match, and use the returned `scorecard.id`; do not pass guessed names or display casing.\n"
+                    "- If the user asks for a named account-specific report configuration, inspect `report_configs{}` before running it with `configuration_id`.\n"
                     "- Use bracket indexing for execute_tactus results, e.g. h[\"id\"], not h.id.\n\n"
                     "PREDICTION REQUESTS (HARD RULES):\n"
                     "- When the user asks to run a prediction on an item, use `plexus.score.predict`.\n"
@@ -119,7 +123,8 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "  -- Inline feedback alignment analysis for one score. This is NOT a persisted report:\n"
                     "  return plexus.feedback.alignment({ scorecard_name = \"My Scorecard\", score_name = \"My Score\", days = 30 })\n\n"
                     "WRITE / TRIGGER OPERATIONS:\n"
-                    "  -- Run a persisted Feedback Alignment report for a whole scorecard (async):\n"
+                    "  -- Run a persisted Feedback Alignment report for a whole scorecard (async).\n"
+                    "  -- This is an example only; load `reports.reports-catalog` and the specific report doc for other report types.\n"
                     "  -- If the user gave a scorecard name, first resolve it with `plexus.scorecards.search`, then use the returned scorecard.id below.\n"
                     "  local h = plexus.report.run({\n"
                     "    block_class = \"FeedbackAlignment\",\n"
@@ -189,7 +194,7 @@ _BUILTINS: Dict[str, BuiltinProcedureSpec] = {
         procedure_id=CONSOLE_CHAT_BUILTIN_ID,
         name="Console Chat Agent",
         description="Built-in general-purpose chat procedure for Plexus Console.",
-        version="1.2.0",
+        version="1.6.4",
         tac_path=_procedures_root() / "console" / "chat_agent.tac",
     ),
 }
