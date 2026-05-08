@@ -1809,6 +1809,9 @@ def test_plexus_docs_repository_layout_exposes_themed_keys() -> None:
     assert "mcp.long-running-apis" in ids
     assert "mcp.handles-and-budgets" in ids
     assert "evaluation-feedback.feedback-alignment" in ids
+    assert "reports.reports-catalog" in ids
+    assert "reports.feedback-alignment" in ids
+    assert "reports.score-champion-version-timeline" in ids
     assert "score-authoring.score-yaml-format" in ids
     for entry in entries:
         assert not entry["id"].endswith("._index")
@@ -1822,6 +1825,11 @@ def test_plexus_docs_repository_layout_exposes_themed_keys() -> None:
     assert "execute_tactus" in overview_body
     assert "docs.list" in overview_body or "docs_list" in overview_body
     assert overview_meta["namespace"] == "mcp"
+
+    reports_meta, reports_body = module._docs_read("reports.reports-catalog")
+    assert "Feedback Alignment" in reports_body
+    assert "Score Champion Version Timeline" in reports_body
+    assert reports_meta["namespace"] == "reports"
 
 
 @pytest.mark.asyncio

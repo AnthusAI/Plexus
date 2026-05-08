@@ -9,6 +9,8 @@ audience: agent
 tags: [reports, scorecard-history, score-versions, champion]
 related:
   - reports._index
+  - reports.reports-catalog
+  - reports.score-champion-version-timeline
 ---
 # Scorecard History Report
 
@@ -17,6 +19,15 @@ related:
 - one score on that scorecard.
 
 It is designed for stakeholder-ready change reporting, with expandable guidelines/code diffs and optional evaluation gauge context.
+
+## Likely User Wording
+
+- "scorecard history"
+- "version history"
+- "change report"
+- "what changed on this scorecard?"
+- "show the changes from recent versions"
+- "compare score versions"
 
 ## Parameters
 
@@ -137,9 +148,25 @@ plexus feedback report scorecard-history \
 
 Tactus:
 ```tactus
-return plexus.report.scorecard_history{
-  scorecard = "Customer Service QA",
-  days = 10,
-  sync = true
-}
+local h = plexus.report.run({
+  block_class = "ScorecardHistory",
+  block_config = {
+    scorecard = "<resolved-scorecard-id>",
+    score = "<optional-resolved-score-id>",
+    days = 30,
+  },
+  cache_key = "scorecard-history:<scope>:30d",
+  ttl_hours = 24,
+  async = true,
+  budget = { usd = 1.0, wallclock_seconds = 900, depth = 1, tool_calls = 3 },
+})
+return { handle_id = h["id"], task_id = h["dispatch_result"] and h["dispatch_result"]["task_id"] }
 ```
+
+## Interpretation Notes
+
+Use this report when the user wants narrative version-change context. Use Score
+Champion Version Timeline instead when they mainly want promotion chronology.
+Scorecard History only includes featured versions in the requested window, so a
+quiet report can mean no featured versions changed, not that no score versions
+exist.
