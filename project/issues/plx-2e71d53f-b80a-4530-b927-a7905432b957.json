@@ -1,0 +1,25 @@
+{
+  "id": "plx-2e71d53f-b80a-4530-b927-a7905432b957",
+  "title": "Add Console report documentation routing",
+  "description": "Add agent-facing report catalog and per-report docs, then update the Console assistant prompt so report questions and report runs consult the report docs before selecting plexus.report.run.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9d4485d1-ac23-48f0-a8e5-b20876b2194b",
+      "author": "ryan",
+      "text": "Added report catalog/per-report docs, Console report-routing prompt rules, documentation indexing tests, prompt tests, and local smoke coverage.",
+      "created_at": "2026-05-08T12:19:40.924674Z"
+    }
+  ],
+  "created_at": "2026-05-08T12:00:24.333445Z",
+  "updated_at": "2026-05-08T12:19:40.941555Z",
+  "closed_at": "2026-05-08T12:19:40.941555Z",
+  "custom": {}
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-7f21fdb3-55b5-4796-8419-416e7f9bc223",
+  "title": "Fix Console response text cropping",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "033ea675-3131-409b-9485-3e726f2689fe",
+      "author": "ryan",
+      "text": "Fixed assistant response cropping by making assistant message overflow visible, preserving user bubble clipping, and restoring Markdown list indentation. Verified focused Jest tests and dashboard typecheck.",
+      "created_at": "2026-05-08T12:18:26.571715Z"
+    }
+  ],
+  "created_at": "2026-05-08T12:04:10.661132Z",
+  "updated_at": "2026-05-08T12:18:26.587046Z",
+  "closed_at": "2026-05-08T12:18:26.587046Z",
+  "custom": {}
+}
