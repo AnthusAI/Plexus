@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
@@ -18,7 +18,90 @@ class ResolvedScoreRef:
     external_id: Optional[str] = None
 
 
-async def resolve_scorecard(api_client, scorecard_identifier: str) -> Scorecard:
+def _casefold_identifier(value: str) -> str:
+    return str(value or "").strip().casefold()
+
+
+def _client_account_id(api_client: Any) -> Optional[str]:
+    context = getattr(api_client, "context", None)
+    account_id = getattr(context, "account_id", None)
+    if isinstance(account_id, str) and account_id.strip():
+        return account_id.strip()
+    account_key = getattr(context, "account_key", None)
+    if isinstance(account_key, str) and account_key.strip() and hasattr(api_client, "_resolve_account_id"):
+        try:
+            return str(api_client._resolve_account_id())
+        except Exception:
+            return None
+    return None
+
+
+async def _find_scorecard_by_case_insensitive_name(
+    api_client,
+    scorecard_name: str,
+    *,
+    account_id: Optional[str] = None,
+) -> Optional[Scorecard]:
+    normalized_name = _casefold_identifier(scorecard_name)
+    if not normalized_name:
+        return None
+
+    filter_arg = {}
+    scoped_account_id = account_id or _client_account_id(api_client)
+    if scoped_account_id:
+        filter_arg = {"accountId": {"eq": scoped_account_id}}
+
+    query = """
+    query ListScorecardsForCaseInsensitiveName(
+        $filter: ModelScorecardFilterInput
+        $limit: Int
+        $nextToken: String
+    ) {
+        listScorecards(filter: $filter, limit: $limit, nextToken: $nextToken) {
+            items {
+                id
+                name
+                key
+                externalId
+                accountId
+                description
+            }
+            nextToken
+        }
+    }
+    """
+    matches: List[Scorecard] = []
+    next_token = None
+    while True:
+        result = await asyncio.to_thread(
+            api_client.execute,
+            query,
+            {"filter": filter_arg or None, "limit": 1000, "nextToken": next_token},
+        )
+        page = result.get("listScorecards") or {}
+        for row in page.get("items") or []:
+            if _casefold_identifier(row.get("name")) == normalized_name:
+                matches.append(Scorecard.from_dict(row, api_client))
+        next_token = page.get("nextToken")
+        if not next_token:
+            break
+
+    if not matches:
+        return None
+    if len(matches) > 1:
+        match_ids = ", ".join(f"{match.name} ({match.id})" for match in matches)
+        raise ValueError(
+            f"Scorecard name '{scorecard_name}' matched multiple scorecards case-insensitively: {match_ids}."
+        )
+    return matches[0]
+
+
+async def resolve_scorecard(
+    api_client,
+    scorecard_identifier: str,
+    *,
+    account_id: Optional[str] = None,
+) -> Scorecard:
     scorecard = None
     if looks_like_uuid(scorecard_identifier):
         try:
@@ -41,6 +124,12 @@ async def resolve_scorecard(api_client, scorecard_identifier: str) -> Scorecard:
                     break
             except Exception:
                 continue
+    if not scorecard:
+        scorecard = await _find_scorecard_by_case_insensitive_name(
+            api_client,
+            scorecard_identifier,
+            account_id=account_id,
+        )
     if not scorecard:
         raise ValueError(f"Scorecard not found for identifier '{scorecard_identifier}'.")
     return scorecard

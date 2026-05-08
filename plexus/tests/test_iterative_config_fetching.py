@@ -151,6 +151,35 @@ model: test-model
         # Verify fetch_score_configurations was called twice (once per iteration)
         assert mock_fetch_configurations.call_count == 2
 
+    def test_api_only_mode_propagates_to_configuration_fetches(self, mock_client, mock_check_cache):
+        """use_cache=False must keep the whole dependency fetch path API-only."""
+
+        with patch(
+            'plexus.cli.shared.iterative_config_fetching.fetch_score_configurations'
+        ) as mock_fetch:
+            def side_effect(client, scorecard_data, scores, cache_status, use_cache=False):
+                configs = {}
+                for score in scores:
+                    score_id = score.get('id')
+                    if score_id == 'score-with-deps-id':
+                        configs[score_id] = self.mock_score_config_with_deps
+                    elif score_id == 'dependency-score-id':
+                        configs[score_id] = self.mock_dependency_config
+                return configs
+
+            mock_fetch.side_effect = side_effect
+
+            result = iteratively_fetch_configurations(
+                mock_client,
+                self.mock_scorecard_data,
+                self.mock_target_scores,
+                use_cache=False
+            )
+
+        assert len(result) == 2
+        assert mock_fetch.call_count == 2
+        assert all(call.kwargs["use_cache"] is False for call in mock_fetch.call_args_list)
+
     def test_complete_structure_fetching(self, mock_client, mock_fetch_configurations, mock_check_cache):
         """Test that complete scorecard structure is fetched for dependency resolution."""
         

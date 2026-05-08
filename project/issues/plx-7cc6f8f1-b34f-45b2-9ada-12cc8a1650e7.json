@@ -1,0 +1,37 @@
+{
+  "id": "plx-7cc6f8f1-b34f-45b2-9ada-12cc8a1650e7",
+  "title": "Sync PolicyPoint classifier code classes with guidelines",
+  "description": "Compare PolicyPoint classifier champion guidelines against score code classes and update code where the class labels diverge.\n\nScope:\n- Inspect champion versions for PolicyPoint - Non-Sales.\n- Identify scores whose guidelines define classes that differ from `valid_classes` or `ClassifyProcedure` classes in code.\n- Publish corrected score versions preserving existing guidelines.\n- Promote corrected versions and verify by read-back.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-03d93482-b49d-4d3a-a997-31dc558f9979",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9ee5843d-e19e-41bd-95c5-984aea9534d3",
+      "author": "ryan",
+      "text": "Started code/class reconciliation for PolicyPoint - Non-Sales. Next step: compare champion guideline class metadata against YAML `valid_classes` and Tactus `ClassifyProcedure.classes`, then publish corrected code versions only where mismatched.",
+      "created_at": "2026-05-06T14:53:19.297978Z"
+    },
+    {
+      "id": "7ba23682-d17b-4f82-be31-2ff2bfdd4760",
+      "author": "ryan",
+      "text": "Verification found no code/class mismatch. Checked champion and draft version history for PolicyPoint - Non-Sales: four-class scores already have matching guideline, YAML `valid_classes`, and Tactus `ClassifyProcedure.classes` values: `Yes`, `No`, `Partially Met`, `NA`. The four pending records 48852-48855 have no versions/guidelines/code yet.",
+      "created_at": "2026-05-06T14:55:03.285341Z"
+    },
+    {
+      "id": "4cc02a66-b30c-4913-8e24-f022469e4157",
+      "author": "ryan",
+      "text": "Final validation passed: all 10 champion-backed PolicyPoint scores lint cleanly, guidelines validate, and guideline classes match both YAML `valid_classes` and Tactus `ClassifyProcedure.classes`. No new score versions were published because there was no code mismatch to correct.",
+      "created_at": "2026-05-06T14:55:12.767124Z"
+    }
+  ],
+  "created_at": "2026-05-06T14:53:06.934346Z",
+  "updated_at": "2026-05-06T14:55:12.780159Z",
+  "closed_at": "2026-05-06T14:55:12.780159Z",
+  "custom": {}
+}

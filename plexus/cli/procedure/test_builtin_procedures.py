@@ -54,11 +54,44 @@ def test_builtin_console_procedure_prompt_teaches_docs_primitives():
     assert "plexus.score.search" in system_prompt
 
 
+def test_builtin_console_procedure_prompt_teaches_report_dispatch_contract():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+
+    assert "REPORT REQUESTS (HARD RULES)" in system_prompt
+    assert "plexus.report.run" in system_prompt
+    assert "reports.reports-catalog" in system_prompt
+    assert 'plexus.docs.list({ namespace = "reports" })' in system_prompt
+    assert "load the specific `reports.*` topic before constructing the report call" in system_prompt
+    assert "report_configs{}" in system_prompt
+    assert "FeedbackAlignment" in system_prompt
+    assert "memory_analysis = false" in system_prompt
+    assert "pass a resolved scorecard UUID" in system_prompt
+    assert "use the returned `scorecard.id`" in system_prompt
+    assert "task_id = h[\"dispatch_result\"]" in system_prompt
+    assert "Do not use `plexus.feedback.alignment` to run a report" in system_prompt
+    assert "Do not use `plexus.procedure.optimize` to run a report" in system_prompt
+
+
+def test_builtin_console_procedure_prompt_teaches_prediction_contract():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+
+    assert "PREDICTION REQUESTS (HARD RULES)" in system_prompt
+    assert "use `plexus.score.predict`" in system_prompt
+    assert "Do not use report or evaluation APIs for a single-item prediction" in system_prompt
+    assert "scorecard_identifier = \"My Scorecard\"" in system_prompt
+    assert "score_identifier = \"My Score\"" in system_prompt
+    assert "do not ask for another confirmation" in system_prompt
+
+
 def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    # Bumped when the prompt added the docs.* discovery guidance.
-    assert parsed["version"] == "1.6.0"
+    # Bumped when report docs routing was added to the Console prompt.
+    assert parsed["version"] == "1.6.4"
 
 
 def test_is_builtin_procedure_id():

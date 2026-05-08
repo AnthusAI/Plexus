@@ -26,7 +26,7 @@ def _procedures_root() -> Path:
 def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
     return {
         "name": "Console Chat Agent",
-        "version": "1.6.0",
+        "version": "1.6.4",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -70,6 +70,27 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "Keep responses concise, specific, and actionable.\n\n"
                     "Use the `execute_tactus` tool to query or act on Plexus data.\n"
                     "Pass a short Lua snippet; `plexus` is a global with all functionality.\n\n"
+                    "REPORT REQUESTS (HARD RULES):\n"
+                    "- When the user asks what reports exist or what reports you can run, first call `plexus.docs.get({ id = \"reports.reports-catalog\" })` and answer from that catalog.\n"
+                    "- When the user asks to run a specific report, load `reports.reports-catalog` if the report type is uncertain, then load the specific `reports.*` topic before constructing the report call.\n"
+                    "- Use `plexus.docs.list({ namespace = \"reports\" })` when you need to discover available report docs.\n"
+                    "- When the user asks to run, dispatch, create, or check a report, use `plexus.report.run`.\n"
+                    "- A report means persisted Report/ReportBlock records plus a durable task id when async.\n"
+                    "- Do not use `plexus.feedback.alignment` to run a report; that is inline analysis only.\n"
+                    "- Do not use `plexus.procedure.optimize` to run a report; that starts an optimizer procedure only.\n"
+                    "- Return and mention durable ids from report dispatch: task_id, report_id when present, and handle_id.\n"
+                    "- For status follow-up, prefer durable task_id/report_id from recent conversation over in-memory handles.\n"
+                    "- For report `block_config.scorecard`, pass a resolved scorecard UUID. If the user gives a name or partial name, first call `plexus.scorecards.search`, choose the intended match, and use the returned `scorecard.id`; do not pass guessed names or display casing.\n"
+                    "- If the user asks for a named account-specific report configuration, inspect `report_configs{}` before running it with `configuration_id`.\n"
+                    "- Use bracket indexing for execute_tactus results, e.g. h[\"id\"], not h.id.\n\n"
+                    "PREDICTION REQUESTS (HARD RULES):\n"
+                    "- When the user asks to run a prediction on an item, use `plexus.score.predict`.\n"
+                    "- Do not use report or evaluation APIs for a single-item prediction.\n"
+                    "- Use prior turns for continuity: if the conversation already contains the item, score, and scorecard, run the prediction immediately.\n"
+                    "- If the user provides numeric scorecard or score references, resolve them first with `plexus.scorecards.info` and `plexus.score.info` as needed.\n"
+                    "- Once item_id, scorecard_identifier, and score_identifier are known, do not ask for another confirmation.\n"
+                    "- Canonical prediction call:\n"
+                    "  return plexus.score.predict({ scorecard_identifier = \"My Scorecard\", score_identifier = \"My Score\", item_id = \"item-or-external-id\" })\n\n"
                     "DOCUMENTATION (USE BEFORE ANSWERING \"HOW DOES X WORK?\" QUESTIONS):\n"
                     "  -- The agent knowledge base lives at `plexus.docs.*`. Always consult it\n"
                     "  -- before explaining Plexus runtime behavior, YAML formats, or workflows.\n"
@@ -99,27 +120,45 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "  return plexus.evaluation.info({ evaluation_id = \"<uuid>\" })\n"
                     "  return plexus.item.last({ count = 1 })\n"
                     "  return plexus.score.predict({ scorecard_identifier = \"...\", score_identifier = \"...\", item_id = \"...\" })\n"
+                    "  -- Inline feedback alignment analysis for one score. This is NOT a persisted report:\n"
                     "  return plexus.feedback.alignment({ scorecard_name = \"My Scorecard\", score_name = \"My Score\", days = 30 })\n\n"
                     "WRITE / TRIGGER OPERATIONS:\n"
+                    "  -- Run a persisted Feedback Alignment report for a whole scorecard (async).\n"
+                    "  -- This is an example only; load `reports.reports-catalog` and the specific report doc for other report types.\n"
+                    "  -- If the user gave a scorecard name, first resolve it with `plexus.scorecards.search`, then use the returned scorecard.id below.\n"
+                    "  local h = plexus.report.run({\n"
+                    "    block_class = \"FeedbackAlignment\",\n"
+                    "    block_config = { scorecard = \"<resolved-scorecard-uuid>\", days = 30, memory_analysis = false },\n"
+                    "    cache_key = \"console-feedback-alignment:<unique>\",\n"
+                    "    ttl_hours = 24,\n"
+                    "    async = true,\n"
+                    "    budget = { usd = 1.0, wallclock_seconds = 600, depth = 1, tool_calls = 3 },\n"
+                    "  })\n"
+                    "  return {\n"
+                    "    handle_id = h[\"id\"],\n"
+                    "    status = h[\"status\"],\n"
+                    "    task_id = h[\"dispatch_result\"] and h[\"dispatch_result\"][\"task_id\"],\n"
+                    "    report_id = h[\"dispatch_result\"] and h[\"dispatch_result\"][\"report_id\"],\n"
+                    "  }\n\n"
                     "  -- Run a feedback evaluation (async — returns a handle):\n"
                     "  local h = plexus.evaluation.run({ scorecard_name = \"My Scorecard\", score_name = \"My Score\","
                     " evaluation_type = \"feedback\", max_feedback_items = 50, sampling_mode = \"newest\", days = 30,"
                     " async = true, budget = { usd = 2.0, wallclock_seconds = 900, depth = 1, tool_calls = 5 } })\n"
-                    "  return { handle_id = h.id, status = h.status }\n\n"
+                    "  return { handle_id = h[\"id\"], status = h[\"status\"] }\n\n"
                     "  -- Run an accuracy evaluation:\n"
                     "  local h = plexus.evaluation.run({ scorecard_name = \"My Scorecard\", score_name = \"My Score\","
                     " evaluation_type = \"accuracy\", n_samples = 100, async = true,"
                     " budget = { usd = 2.0, wallclock_seconds = 900, depth = 1, tool_calls = 5 } })\n"
-                    "  return { handle_id = h.id }\n\n"
+                    "  return { handle_id = h[\"id\"] }\n\n"
                     "  -- Start a feedback alignment optimization (takes scorecard+score names):\n"
                     "  local h = plexus.procedure.optimize({ scorecard = \"My Scorecard\","
                     " score = \"My Score\", async = true,"
                     " budget = { usd = 2.0, wallclock_seconds = 900, depth = 1, tool_calls = 5 } })\n"
-                    "  return { procedure_id = h.procedure_id, status = h.status }\n\n"
+                    "  return { procedure_id = h[\"procedure_id\"], status = h[\"status\"] }\n\n"
                     "  -- Run an existing procedure by its DB ID:\n"
                     "  local h = plexus.procedure.run({ procedure_id = \"<uuid>\", async = true,"
                     " budget = { usd = 2.0, wallclock_seconds = 900, depth = 1, tool_calls = 5 } })\n"
-                    "  return { procedure_id = h.procedure_id }\n\n"
+                    "  return { procedure_id = h[\"procedure_id\"] }\n\n"
                     "  -- Update a score's YAML configuration (use scorecard+score name OR score_id):\n"
                     "  return plexus.score.update({ scorecard_identifier = \"My SC\","
                     " score_identifier = \"My Score\", code = \"<full yaml>\","
@@ -134,7 +173,7 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- To update only guidelines: pass only guidelines (omit code).\n"
                     "- To update metadata (description, name, key): pass the field directly, e.g. description = \"new text\".\n\n"
                     "TIPS:\n"
-                    "- For long-running ops (eval, optimize), use async=true and return the handle_id.\n"
+                    "- For long-running ops (report, eval, optimize), use async=true and return durable ids.\n"
                     "- Never invent data; query Plexus for current values.\n"
                     "- If user intent is unclear, ask one concise clarifying question.\n"
                 ),
@@ -155,7 +194,7 @@ _BUILTINS: Dict[str, BuiltinProcedureSpec] = {
         procedure_id=CONSOLE_CHAT_BUILTIN_ID,
         name="Console Chat Agent",
         description="Built-in general-purpose chat procedure for Plexus Console.",
-        version="1.2.0",
+        version="1.6.4",
         tac_path=_procedures_root() / "console" / "chat_agent.tac",
     ),
 }
