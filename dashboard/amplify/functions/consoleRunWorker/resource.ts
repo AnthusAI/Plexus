@@ -5,6 +5,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import { StartingPosition } from "aws-cdk-lib/aws-lambda";
 import { DynamoEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import { ITable } from "aws-cdk-lib/aws-dynamodb";
+import { IBucket } from "aws-cdk-lib/aws-s3";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
 
@@ -13,6 +14,7 @@ interface ConsoleChatResponderStackProps extends NestedStackProps {
   plexusApiUrl?: string;
   workerImageUri?: string;
   environmentName?: string;
+  reportBlockDetailsBucket?: IBucket;
 }
 
 interface ParsedEcrImageUri {
@@ -78,23 +80,33 @@ export class ConsoleChatResponderStack extends NestedStack {
       "ConsoleRunWorkerImageRepository",
       workerImage.repositoryName,
     );
+    const lambdaEnvironment: Record<string, string> = {
+      PLEXUS_API_URL: props.plexusApiUrl || process.env.PLEXUS_API_URL || "",
+      PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT: "false",
+      PLEXUS_GRAPHQL_AUTH_MODE: "iam",
+      PLEXUS_CONFIG_SECRET_NAME: configSecretName,
+      PYTHONUNBUFFERED: "1",
+      CONSOLE_RESPONSE_TARGET: "cloud",
+    };
+
+    if (props.reportBlockDetailsBucket) {
+      lambdaEnvironment.AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME = props.reportBlockDetailsBucket.bucketName;
+    }
+
     this.responderFunction = new lambda.DockerImageFunction(this, "ConsoleChatResponderFunction", {
       code: lambda.DockerImageCode.fromEcr(workerImageRepository, {
         tagOrDigest: workerImage.tagOrDigest,
       }),
       timeout: Duration.minutes(15),
       memorySize: 2048,
-      environment: {
-        PLEXUS_API_URL: props.plexusApiUrl || process.env.PLEXUS_API_URL || "",
-        PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT: "false",
-        PLEXUS_GRAPHQL_AUTH_MODE: "iam",
-        PLEXUS_CONFIG_SECRET_NAME: configSecretName,
-        PYTHONUNBUFFERED: "1",
-        CONSOLE_RESPONSE_TARGET: "cloud",
-      },
+      environment: lambdaEnvironment,
     });
 
     configSecret.grantRead(this.responderFunction);
+
+    if (props.reportBlockDetailsBucket) {
+      props.reportBlockDetailsBucket.grantReadWrite(this.responderFunction);
+    }
 
     this.responderFunction.addEventSource(new DynamoEventSource(props.chatMessageTable, {
       startingPosition: StartingPosition.LATEST,
