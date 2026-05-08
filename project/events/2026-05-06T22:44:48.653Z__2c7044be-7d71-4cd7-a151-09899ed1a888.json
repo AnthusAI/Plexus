@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2c7044be-7d71-4cd7-a151-09899ed1a888",
+  "issue_id": "plx-7b32f663-0b7e-4ac2-a6a5-65e858e8a937",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-06T22:44:48.653Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-7895ccdc-5347-423d-a961-0b5ce8a8ccf2",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix Tactus HITL wait-state classification so resume works after Human.approve"
+  }
+}

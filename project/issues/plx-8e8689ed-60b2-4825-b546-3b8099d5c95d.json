@@ -1,0 +1,31 @@
+{
+  "id": "plx-8e8689ed-60b2-4825-b546-3b8099d5c95d",
+  "title": "Fix scorecard_from_question_export runtime errors (Observer.reset + File.read determinism)",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-14559d76-98d3-4fb4-9074-5c49bce7d2f8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2b40940d-7538-467e-94ab-c565f0fa55fb",
+      "author": "derek",
+      "text": "Starting hotfix for runtime failure. Plan: remove Observer.reset() (unsupported DSPy handle method) and wrap File.read in Step.checkpoint for deterministic replay compliance.",
+      "created_at": "2026-05-06T22:01:36.406847023Z"
+    },
+    {
+      "id": "a2b08723-1bab-4f47-a874-3c15bdf54571",
+      "author": "derek",
+      "text": "Fix implemented: removed unsupported Observer.reset() call and wrapped questions_export_path File.read in Step.checkpoint for deterministic replay. Validation passed: YAML parse + pytest plexus/cli/procedure/test_service_yaml_loader.py.",
+      "created_at": "2026-05-06T22:01:49.149233697Z"
+    }
+  ],
+  "created_at": "2026-05-06T22:01:33.185643268Z",
+  "updated_at": "2026-05-06T22:01:49.163512019Z",
+  "closed_at": "2026-05-06T22:01:49.163512019Z",
+  "custom": {}
+}

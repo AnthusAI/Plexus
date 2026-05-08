@@ -1,0 +1,349 @@
+{
+  "id": "plx-657b54bd-02ab-450f-866b-227456326d67",
+  "title": "Fix scorecard_from_question_export write path to use supported scorecard/score tool calls",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-7895ccdc-5347-423d-a961-0b5ce8a8ccf2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5a275b70-2c7c-4e91-9b51-1887625b7441",
+      "author": "derek",
+      "text": "Implementing runtime and procedure fixes for real-run stability: (1) add execute_tactus support for plexus.scorecards.create and plexus.score.create, (2) replace actor-driven act stage in scorecard_from_question_export with deterministic Lua tool calls, (3) validate with procedure loader tests and a dry-run/real-run smoke path.",
+      "created_at": "2026-05-06T22:53:48.771414945Z"
+    },
+    {
+      "id": "b43cff2a-b965-4926-836e-2f39c49b28f8",
+      "author": "derek",
+      "text": "Reworked scorecard_from_question_export to remove actor execution in act stage and route all scorecard/score writes through execute_tactus (The One Tool path). Added deterministic call_plexus_api helper using execute_tactus envelope parsing, explicit error surfacing, and stage progress updates per score. Also removed obsolete agent loop helpers and bumped procedure version to 1.0.1. Validation: pytest plexus/cli/procedure/test_service_yaml_loader.py -q passed.",
+      "created_at": "2026-05-06T23:26:29.731628219Z"
+    },
+    {
+      "id": "91dde05f-fb77-4d31-b710-777f4b7bce99",
+      "author": "derek",
+      "text": "Implemented and pushed: scorecard_from_question_export now uses execute_tactus for all scorecard/score writes, removes actor-loop dependency in act stage, and includes runtime support for plexus.scorecards.create and plexus.score.create in execute_tactus. Verified with python3 -m py_compile MCP/tools/tactus_runtime/execute.py and pytest plexus/cli/procedure/test_service_yaml_loader.py -q.",
+      "created_at": "2026-05-06T23:27:56.310876287Z"
+    },
+    {
+      "id": "9a5f35cb-1380-48e2-bb03-6c84373bdd1d",
+      "author": "derek",
+      "text": "Regression identified from local run: Tactus runtime rejects procedures without agents (error: 'At least one agent must be defined'). Action: restore a minimal agent block for runtime compatibility while keeping execution path deterministic via execute_tactus-only API calls in Lua. This preserves One-Tool architecture and avoids actor follow-up loops.",
+      "created_at": "2026-05-06T23:33:47.071850319Z"
+    },
+    {
+      "id": "e7ddc6ef-4619-4f70-8076-45f73809e9bd",
+      "author": "derek",
+      "text": "Root cause from local run: execute_tactus nested snippet failed at parse-time because the child snippet referenced global Json (nil in that parse path). Fix: call_plexus_api now serializes args to native Lua table literals and builds snippets without Json.encode/decode dependency.",
+      "created_at": "2026-05-06T23:36:50.754110835Z"
+    },
+    {
+      "id": "393a603d-447a-486a-ac56-458805f0e609",
+      "author": "derek",
+      "text": "Implementing full two-pass AI generation architecture now: add required reference_scorecard_identifier, add generator+critic agents, deterministic worklist ordering, strict JSON handoff via done() schema, execute_tactus-only reads/writes, single approval gate, enriched plan output metadata/generated_scores.",
+      "created_at": "2026-05-06T23:48:30.881063805Z"
+    },
+    {
+      "id": "5886e2d0-ea5c-44e4-a5e7-71937c8dfc76",
+      "author": "derek",
+      "text": "Implementation complete in code; runtime validation in this agent environment is blocked by split-brained Python env (conda vs Poetry), so local user validation in canonical Poetry env is required for dry-run/apply smoke tests.",
+      "created_at": "2026-05-06T23:51:36.531977535Z"
+    },
+    {
+      "id": "4f6568fc-22c1-4d82-879b-3a868f2ca2d8",
+      "author": "derek",
+      "text": "Local repro shows generator calls done(reason='Completed ...') instead of schema JSON, causing parse failure. Implementing robustness: require done() named-field payload, salvage JSON object from noisy reason text, and add corrective retry loop for generator/critic invalid outputs before failing.",
+      "created_at": "2026-05-06T23:58:18.416361637Z"
+    },
+    {
+      "id": "a8922b6a-3294-4088-a356-e1868a193df2",
+      "author": "derek",
+      "text": "Added early write-path preflight in observe stage (non-destructive execute_tactus capability probe for scorecards.create/score.create/score.update) so failures happen before expensive generation. Also now return plan on act-stage failures to preserve generated output for recovery/debug.",
+      "created_at": "2026-05-07T01:40:27.669015017Z"
+    },
+    {
+      "id": "54ae969e-21db-4490-94bd-48cb0cfc5858",
+      "author": "derek",
+      "text": "Fixed YAML parse regression introduced by multiline nested tactus literal in preflight_write_capabilities. Replaced block literal with single-line concatenated tactus string to preserve YAML block indentation safety.",
+      "created_at": "2026-05-07T01:42:01.401859825Z"
+    },
+    {
+      "id": "62b535f6-1779-4e53-955c-f54d22d4e360",
+      "author": "derek",
+      "text": "Observed runtime type mismatch in preflight: execute_tactus reports callable Plexus methods as Lua 'userdata' (not 'function'). Updating preflight check to treat both function and userdata as callable capabilities.",
+      "created_at": "2026-05-07T01:47:29.850443587Z"
+    },
+    {
+      "id": "aef874b3-b5b6-4e30-9075-ef5fbc6c6b0e",
+      "author": "derek",
+      "text": "Implementing compatibility retries for act-stage create operations: scorecards.create and score.create will attempt multiple payload shapes (with/without key/external/account_identifier and score_type vs type) to handle schema/adapter differences without long-run hard failures.",
+      "created_at": "2026-05-07T03:12:11.213528849Z"
+    },
+    {
+      "id": "dabbb07c-1064-41c5-8603-324343a8d286",
+      "author": "derek",
+      "text": "New failure indicates CreateScorecardInput field incompatibility persists across all variants. Root-cause likely shared field carried by every variant (description). Implementing additional minimal create payload variants without description (and other optional fields) so schema-incompatible fields are avoided.",
+      "created_at": "2026-05-07T03:37:14.940663543Z"
+    },
+    {
+      "id": "5f717284-6277-45f0-80d7-f027209df89f",
+      "author": "derek",
+      "text": "Working this failure now. Next patch will reorder scorecard create compatibility variants to try strict-minimal payloads first (name-only, then account_identifier/key/external_id combos) and move description-bearing variants to the end so CreateScorecardInput schema mismatches fail fast without wasting full generation runs. Then I’ll run procedure loader tests and push.",
+      "created_at": "2026-05-07T03:38:13.347244284Z"
+    },
+    {
+      "id": "1a4a191d-8202-49f5-8cd2-6ceaa2aebcd7",
+      "author": "derek",
+      "text": "Patched create_scorecard_with_compat in scorecard_from_question_export to try minimal create payloads first (name-only, then account_identifier/key/external_id combinations), with description-bearing payloads moved to late fallbacks. This specifically addresses CreateScorecardInput field incompatibility failures. Validation: poetry run pytest plexus/cli/procedure/test_service_yaml_loader.py -q => pass.",
+      "created_at": "2026-05-07T03:38:34.277931893Z"
+    },
+    {
+      "id": "b25a31ad-abe4-47a8-bff3-ebe4f9e0beab",
+      "author": "derek",
+      "text": "New repro: critic done() payload occasionally non-JSON/non-structured, causing late-run failure. Patched parser + recovery: (1) parse_last_done_json now checks any string-valued done args for embedded JSON object wrappers; (2) critic repair retries increased to 4 with explicit named-field example; (3) if critic remains invalid, fallback to generator draft and annotate rationale with critic_fallback error instead of hard-failing entire run. Loader test still passes.",
+      "created_at": "2026-05-07T03:47:51.476448454Z"
+    },
+    {
+      "id": "d774024f-d88c-4e0a-ba1d-06094ef8c526",
+      "author": "derek",
+      "text": "Per user direction, removed critic->draft fallback. Procedure is strict again: critic parse still hard-fails, but retains improved done() parser and expanded repair retries/prompt to reduce invalid payloads. Loader test passes.",
+      "created_at": "2026-05-07T03:48:16.342290868Z"
+    },
+    {
+      "id": "29afc0e9-9ac1-4a37-8e15-198cf1ba6cb9",
+      "author": "derek",
+      "text": "Implemented anti-guess hardening for repeated critic parse failures: (1) drastically reduced prompt payload size by sending compact reference context (no full reference score code blobs) to generator/critic prompts; (2) added early generator/critic done() contract probes in observe stage so invalid done payload behavior fails fast before expensive generation. Loader test passes.",
+      "created_at": "2026-05-07T04:09:16.616467393Z"
+    },
+    {
+      "id": "f01f984d-2a4c-4896-af2f-efeff9894c56",
+      "author": "derek",
+      "text": "Root cause confirmed from runtime logs: done tool in this environment only accepts reason/success. Previous prompts required impossible named-field done args, forcing parse failures. Patched procedure contract to done(reason=<JSON>, success=true) for generator+critic, updated repair prompts accordingly, and added parser fallback for observed key=value;... reason payloads (including labels list parsing) so current runtime output shape can still be normalized.",
+      "created_at": "2026-05-07T04:18:00.009631500Z"
+    },
+    {
+      "id": "1f7bbfd1-5f5d-4ff5-b1e0-ad1d961b4934",
+      "author": "derek",
+      "text": "Patched scorecard create compatibility again to avoid CreateScorecardInput schema rejection in this account: removed all description-bearing variants and moved to strict-minimal payloads first (name, name+key, name+external_id, name+key+external_id). account_identifier variants remain only as late fallbacks and also exclude description.",
+      "created_at": "2026-05-07T04:28:18.906362651Z"
+    },
+    {
+      "id": "6ee0aaee-d036-4ae7-b4f1-5defdcba07c9",
+      "author": "derek",
+      "text": "Identified root cause for persistent CreateScorecardInput failures: execute_tactus scorecards.create always applies actor attribution (createdByUserId + metadata) before mutation, which appears unsupported in this account/schema and causes every variant to fail regardless of procedure payload. Implementing runtime fix in MCP/tools/tactus_runtime/execute.py: attempt plain input variants first (no attribution), with attribution only as fallback.",
+      "created_at": "2026-05-07T04:36:35.803049820Z"
+    },
+    {
+      "id": "90502847-57aa-435e-ac9e-b59aaaf3b727",
+      "author": "derek",
+      "text": "Verified live GraphQL schema via introspection: CreateScorecardInput fields are name,key,description,guidelines,accountId,externalId,id. Proceeding with runtime-side fix in MCP/tools/tactus_runtime/execute.py to avoid injecting non-schema attribution fields in default scorecards.create path and use schema-valid payloads first.",
+      "created_at": "2026-05-07T04:38:54.284033047Z"
+    },
+    {
+      "id": "eed6ef6c-a478-4c76-bda6-3c1195481acb",
+      "author": "derek",
+      "text": "Implemented runtime fix in execute_tactus scorecards.create (_default_scorecards_create): now performs compatibility attempts with schema-valid plain payloads first and attribution-injected payloads second, with detailed attempted payload diagnostics on failure. Also restored default account resolution via resolve_account_id_for_command(client, None) so required accountId is still included by default. Validation: python3 -m py_compile MCP/tools/tactus_runtime/execute.py and pytest plexus/cli/procedure/test_service_yaml_loader.py -q both pass.",
+      "created_at": "2026-05-07T04:39:12.981980354Z"
+    },
+    {
+      "id": "cbf34c6c-ac6e-4dbe-b6fd-2028115e354c",
+      "author": "derek",
+      "text": "Confirmed live input types: CreateScorecardSectionInput = {name,order,scorecardId,id}; CreateScoreInput = {name,key,description,order,type,...,sectionId,scorecardId,externalId,id}. Patched _default_score_create runtime to attempt section/score creation with plain schema-valid payload first, then attribution-injected fallback. This addresses CreateScorecardSectionInput rejection caused by implicit attribution fields.",
+      "created_at": "2026-05-07T04:44:00.254941237Z"
+    },
+    {
+      "id": "698e29b4-f8e2-4d91-8d14-27ab7b10eb90",
+      "author": "derek",
+      "text": "New failure mode: ToolHandle UTF-8 decode crash during execute_tactus args normalization in score.update path ('invalid continuation byte'). Implementing transport hardening in scorecard_from_question_export: recursively sanitize outbound execute_tactus argument strings to ASCII-safe bytes before tool invocation to prevent Lua->Python decode exceptions.",
+      "created_at": "2026-05-07T04:50:52.068313040Z"
+    },
+    {
+      "id": "8488fe16-7176-45cc-ad74-e7c95a457b36",
+      "author": "derek",
+      "text": "Latest failure moved to score.update/createScoreVersion: GraphQL rejects variable metadata (invalid value). Implementing same compatibility pattern in _default_score_update: attempt createScoreVersion with plain schema-valid input first; only retry with apply_actor_attribution if needed.",
+      "created_at": "2026-05-07T04:56:13.586161328Z"
+    },
+    {
+      "id": "906258a5-67df-4c63-a9d9-79c789ec74c0",
+      "author": "derek",
+      "text": "Patched _default_score_update createScoreVersion path: removed unconditional apply_actor_attribution and added compatibility attempts (plain payload first, attribution payload second) with detailed failure diagnostics. This addresses GraphQL 'Variable metadata has an invalid value' errors seen during score update.",
+      "created_at": "2026-05-07T04:56:30.268420398Z"
+    },
+    {
+      "id": "0536a6c5-870b-4fbd-a249-59dad6c68406",
+      "author": "derek",
+      "text": "User requirement update: resulting generated score versions should default to model_name=gpt-5-mini (not gpt-5). Updating scorecard_from_question_export procedure defaults and YAML fallback accordingly, then validating and pushing.",
+      "created_at": "2026-05-07T05:04:37.319348656Z"
+    },
+    {
+      "id": "209220b0-6547-43b1-8a03-67d6e5e8f0aa",
+      "author": "derek",
+      "text": "Updated scorecard_from_question_export defaults for resulting score YAML: model_name now defaults to gpt-5-mini in params, build_score_yaml fallback, and field schema declaration. This affects generated score version configs, not agent runtime model overrides.",
+      "created_at": "2026-05-07T05:04:53.344389159Z"
+    },
+    {
+      "id": "33610f6d-d3eb-4d48-abce-1fd89fd6d7cd",
+      "author": "derek",
+      "text": "Aligned generated score prompt contract with Suco-style output requirements. Updated generator/critic prompt rules and validate_generated_spec to enforce appending a mandatory user_message block requiring: (1) 2-3 sentence reasoning, (2) final line exactly one allowed classification label, (3) no extra text on final line. This guarantees resulting score YAML carries explicit response-format instructions.",
+      "created_at": "2026-05-07T16:53:55.841813720Z"
+    },
+    {
+      "id": "1b1b3aba-9b01-4f2f-917b-badcedecdcc9",
+      "author": "derek",
+      "text": "Addressing readability issue in generated score prompts: adding normalization/formatting pass for system_message and user_message to enforce paragraph/section line breaks, plus tightening generator/critic prompt guidance to produce structured multi-line instructions. Goal is Suco-like readability and consistent output-format section formatting.",
+      "created_at": "2026-05-07T17:27:45.894565136Z"
+    },
+    {
+      "id": "c5956227-16b1-460a-846b-6a5d80436851",
+      "author": "derek",
+      "text": "Added prompt readability normalization: format_prompt_message now converts dense single-paragraph system/user prompts into multiline form (sentence breaks + section marker spacing), and enforces final user_message reformat after appending output-format block. Also tightened generator/critic instructions to explicitly require multi-line readable prompts.",
+      "created_at": "2026-05-07T17:28:15.057527500Z"
+    },
+    {
+      "id": "73590cee-ffc9-49f7-9e3b-556a7672a4df",
+      "author": "derek",
+      "text": "Fixing Lua runtime error at string.gsub replacement: prompt formatter inserts marker text containing '%' (e.g., '(MANDATORY)') via replacement string, causing 'invalid use of % in replacement string'. Patch will switch to function-based replacement callback to avoid '%' escape semantics in replacement text.",
+      "created_at": "2026-05-07T17:44:05.447558289Z"
+    },
+    {
+      "id": "ce9dd2c1-9f66-4de7-b100-c36b1de1c75f",
+      "author": "derek",
+      "text": "Patched format_prompt_message gsub replacement to callback form, preventing '%' in marker text from being interpreted as replacement tokens. This resolves Lua error: invalid use of '%' in replacement string.",
+      "created_at": "2026-05-07T17:44:21.061057223Z"
+    },
+    {
+      "id": "1acaf37d-e30c-404a-b82e-adb42fa06d73",
+      "author": "derek",
+      "text": "Adding optimizer-style smoke test to scorecard_from_question_export apply path: after each score.update/createScoreVersion, run score.test via execute_tactus, record result, and fail (configurable) when mechanical test fails. Will add params for enable/disable, sample size, and fail_on_smoke_test.",
+      "created_at": "2026-05-07T18:32:22.222891075Z"
+    },
+    {
+      "id": "d52c837a-c11c-40a9-97ad-5d2eeaee8168",
+      "author": "derek",
+      "text": "Implementing optimizer-style smoke prediction checks in scorecard_from_question_export procedure. Next steps: add new input schema fields (run_smoke_test, smoke_test_samples, fail_on_smoke_test), run loader tests, and verify git status before push.",
+      "created_at": "2026-05-07T18:34:08.524019423Z"
+    },
+    {
+      "id": "37d2bd1a-1d0d-4ed9-8ede-85ccecc85b0d",
+      "author": "derek",
+      "text": "Implemented smoke-test controls in procedure input schema: run_smoke_test (default true), smoke_test_samples (default 3), fail_on_smoke_test (default true). Verified parser compatibility with .                                                                        [100%]\n1 passed in 0.72s (pass).",
+      "created_at": "2026-05-07T18:34:32.686559286Z"
+    },
+    {
+      "id": "8e53d128-8f51-4f43-b9ba-efb2f372048e",
+      "author": "derek",
+      "text": "Starting fix for score.test sampling: replace unsupported listScoreResultByScorecardId query and add source-scorecard fallback sampling for new scorecards. Will wire through scorecard_from_question_export smoke-test params and run targeted tests.",
+      "created_at": "2026-05-07T18:54:09.015386473Z"
+    },
+    {
+      "id": "f8282d53-78e5-4817-aa94-4871f98bb5a1",
+      "author": "derek",
+      "text": "Implemented smoke-test sampling fix and fallback source scorecard support. Changes: (1) score_version_test now queries listScoreResultByScorecardIdAndUpdatedAt (schema-valid) instead of listScoreResultByScorecardId, (2) added fallback_scorecard_identifier support for score.test and run_score_version_test to source candidate items from another scorecard when target has no history, (3) scorecard_from_question_export adds smoke_test_source_scorecard_identifier param and passes it to score.test, (4) smoke test success now requires score.test passed=true (not only success=true), (5) added regression test for fallback source scorecard sampling. Validation: poetry run pytest plexus/cli/shared/test_score_version_test.py -q and poetry run pytest plexus/cli/procedure/test_service_yaml_loader.py -q both passed.",
+      "created_at": "2026-05-07T18:55:38.977881264Z"
+    },
+    {
+      "id": "4a469029-8409-48b1-abca-fd554d02ccb0",
+      "author": "derek",
+      "text": "Investigating smoke-test NA due to missing transcript context in sampled source-scorecard items. Implementing text extraction fallback from item metadata fields so score.test can pass actual transcript text to scorecard scoring path.",
+      "created_at": "2026-05-07T19:45:25.776766781Z"
+    },
+    {
+      "id": "71c2651d-0d03-4288-9ac8-a4934950d414",
+      "author": "derek",
+      "text": "Implemented transcript extraction fallback in score_version_test: smoke predictions now derive text from item metadata keys (transcript/content/body/conversation, including nested payload/input/request/data) when item.text/description is sparse. Added procedure param smoke_test_item_ids (CSV) and pass-through to score.test for deterministic smoke runs on known transcript items. Validation passed: shared score_version_test + procedure YAML loader tests.",
+      "created_at": "2026-05-07T19:46:14.660632311Z"
+    },
+    {
+      "id": "e9a0e17d-e454-45cc-a292-696b513e75a9",
+      "author": "derek",
+      "text": "Regression fix in progress: smoke-test failure due to Python local variable initialization bug ( referenced before assignment) in score_version_test._predict_single_item. Applying minimal fix and rerunning targeted tests.",
+      "created_at": "2026-05-07T19:57:59.360636516Z"
+    },
+    {
+      "id": "58bfd803-8890-4bfe-9666-006825991ea6",
+      "author": "derek",
+      "text": "Fixed regression: in score_version_test._predict_single_item metadata normalization now occurs before _extract_item_text call, resolving runtime error 'cannot access local variable metadata where it is not associated with a value'. Re-ran targeted tests (score_version_test + service_yaml_loader) and both passed.",
+      "created_at": "2026-05-07T19:58:25.878743180Z"
+    },
+    {
+      "id": "db4fc100-8432-4bdb-8397-f681d42cf4e1",
+      "author": "derek",
+      "text": "Adding deterministic smoke-test diagnostics (input text source, text length, preview, metadata keys, attached-file count) in score_version_test prediction path so failures can be root-caused from one run output instead of iterative guessing.",
+      "created_at": "2026-05-07T20:15:48.654129335Z"
+    },
+    {
+      "id": "21f3fe3a-766f-448b-8923-6280f9271197",
+      "author": "derek",
+      "text": "Added deterministic smoke-test diagnostics to score_version_test prediction path. Each prediction now records/logs input_debug: text_source, text_length, text_preview (first 240 chars), metadata_keys, attached_files_count, item_id. This allows root-cause analysis of NA/no-transcript outcomes from one run. Targeted tests still passing.",
+      "created_at": "2026-05-07T20:16:16.825031082Z"
+    },
+    {
+      "id": "1c7b7688-64d5-4e05-af85-dcffaaad5057",
+      "author": "derek",
+      "text": "Investigating prompt payload gap: verify generated score YAML includes transcript placeholder usage ({{text}}) consistent with Suco score patterns; patch generator to enforce transcript injection in user prompt template if missing.",
+      "created_at": "2026-05-07T20:56:20.681307109Z"
+    },
+    {
+      "id": "9ef15ab8-cee7-4826-a8d5-dcb7d3f6a803",
+      "author": "derek",
+      "text": "Root-cause patch: scorecard_from_question_export now enforces transcript placeholder presence in generated user prompts. If {{text}} is missing, normalization appends a Transcript section with {{text}} before YAML assembly. Verified YAML loader test passes.",
+      "created_at": "2026-05-07T20:56:40.372276612Z"
+    },
+    {
+      "id": "c899fa24-d042-4442-9572-2a88ce1ae9ad",
+      "author": "derek",
+      "text": "Implementing strict prompt-contract enforcement (no auto-append): validate transcript placeholder/section/order, then allow bounded critic rewrites. Plan: default max rewrite attempts = 2 to balance quality and runtime.",
+      "created_at": "2026-05-07T21:01:13.364026128Z"
+    },
+    {
+      "id": "115ebd57-7c3d-4455-9ad3-390678c10a2b",
+      "author": "derek",
+      "text": "Implemented strict transcript prompt contract path (no silent append): validate user_message must include Transcript section + literal {{text}} and enforce ordering before output format block. Added bounded critic rewrite loop on validation failures with explicit remediation hints; configurable via prompt_contract_rewrite_attempts (default 2). Added param in procedure schema and strengthened generator/critic instructions to require Transcript/{{text}}.",
+      "created_at": "2026-05-07T21:02:31.481157284Z"
+    },
+    {
+      "id": "fdd0e323-1b32-449c-967a-bbc9cfe4fbf3",
+      "author": "derek",
+      "text": "Starting cleanup pass after root-cause fix: remove temporary smoke-test debug instrumentation and trim now-unnecessary bandaid logic while preserving core functional fixes (schema-valid score result query, strict Transcript/{{text}} contract, bounded critic rewrite).",
+      "created_at": "2026-05-07T21:13:07.447021548Z"
+    },
+    {
+      "id": "61fe634c-b344-444d-ace4-005d650d79cd",
+      "author": "derek",
+      "text": "Cleanup completed: removed temporary smoke-test debug instrumentation (logger + input_debug payload fields + verbose item extraction logs) from score_version_test while preserving functional transcript extraction and validation fixes. Re-ran targeted tests: score_version_test and procedure YAML loader passed.",
+      "created_at": "2026-05-07T21:13:54.793078788Z"
+    },
+    {
+      "id": "2f89fb63-bd1a-4603-a1ef-bdcde6d78a2c",
+      "author": "derek",
+      "text": "Refinement pass from Suco comparison: normalize generated output-format header text to plain '(MANDATORY)' (remove stray '%(' artifact) and align prompt contract checks to same literal. This keeps generated prompts closer to existing scorecard style.",
+      "created_at": "2026-05-07T21:25:04.538612795Z"
+    },
+    {
+      "id": "4b0e82b1-85ad-4f9a-8bca-666f0134b0ac",
+      "author": "derek",
+      "text": "Applied prompt text normalization: all generated/validated output-format header checks now use literal 'Output format requirements (MANDATORY):' (removed legacy '%(' artifact). YAML loader test still passes.",
+      "created_at": "2026-05-07T21:25:27.594490806Z"
+    },
+    {
+      "id": "033ddfd4-261f-43fb-897a-412ff1f1a9ff",
+      "author": "derek",
+      "text": "Implementing minimal invariant prompt contract: keep model-authored prompts flexible, remove output-format auto-append, and enforce required blocks via validation+critic rewrite only.",
+      "created_at": "2026-05-07T21:32:30.438049981Z"
+    },
+    {
+      "id": "01643d28-83e3-4a00-9fa1-d08990aeb69a",
+      "author": "derek",
+      "text": "Implemented non-templated invariant mode: removed output-format auto-append in validate_generated_spec. user_message now must already include Output format requirements (MANDATORY) and reference all allowed labels; violations are handled through existing bounded critic rewrite loop. YAML loader test passes.",
+      "created_at": "2026-05-07T21:33:09.706698758Z"
+    }
+  ],
+  "created_at": "2026-05-06T22:50:04.924875855Z",
+  "updated_at": "2026-05-08T16:48:46.329368581Z",
+  "closed_at": "2026-05-08T16:48:46.329368581Z",
+  "custom": {}
+}
