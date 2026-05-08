@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -156,3 +157,32 @@ def test_list_returns_empty_when_root_missing(tmp_path) -> None:
 
     assert result.entries == []
     assert result.invalid == []
+
+
+def test_real_reports_namespace_exposes_user_facing_report_docs() -> None:
+    docs_root = Path(__file__).resolve().parents[2] / "documentation" / "agent"
+    repo = DocumentationRepository(str(docs_root))
+
+    result = repo.list_docs(namespace="reports")
+    ids = {entry["id"] for entry in result.entries}
+    expected_ids = {
+        "reports.reports-catalog",
+        "reports.feedback-overview",
+        "reports.feedback-alignment",
+        "reports.feedback-alignment-timeline",
+        "reports.feedback-volume-timeline",
+        "reports.feedback-contradictions",
+        "reports.acceptance-rate",
+        "reports.acceptance-rate-timeline",
+        "reports.correction-rate",
+        "reports.recent-feedback",
+        "reports.score-champion-version-timeline",
+        "reports.scorecard-history",
+        "reports.score-results-report",
+    }
+
+    assert expected_ids.issubset(ids)
+    for doc_id in expected_ids:
+        doc = repo.get_doc(doc_id)
+        assert doc.metadata["namespace"] == "reports"
+        assert "plexus.report.run" in doc.body or doc_id == "reports.reports-catalog"
