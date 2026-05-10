@@ -1,0 +1,25 @@
+{
+  "id": "plx-b26101d1-1621-4e58-b60e-c4cb213d72bf",
+  "title": "Reduce local Console worker network error noise",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1d152bce-a4bb-4e72-a48f-6ba85b1c2282",
+      "author": "ryan",
+      "text": "Changed the continuous local Console worker to log compact poll-failure warnings with a 5s default error backoff, while preserving full traceback behavior for --once. Added focused unit tests.",
+      "created_at": "2026-05-10T12:30:09.055560Z"
+    }
+  ],
+  "created_at": "2026-05-10T12:28:44.668124Z",
+  "updated_at": "2026-05-10T12:30:09.074186Z",
+  "closed_at": "2026-05-10T12:30:09.074186Z",
+  "custom": {}
+}
