@@ -17,6 +17,9 @@ from plexus.dashboard.api.client import PlexusDashboardClient
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_ERROR_BACKOFF_SECONDS = 5.0
+MAX_ERROR_SUMMARY_LENGTH = 500
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
@@ -89,6 +92,28 @@ def _resolve_poll_interval_seconds(explicit_interval: Optional[float]) -> float:
     return interval
 
 
+def _resolve_error_backoff_seconds() -> float:
+    value = os.getenv("CONSOLE_LOCAL_WORKER_ERROR_BACKOFF_SECONDS") or str(
+        DEFAULT_ERROR_BACKOFF_SECONDS
+    )
+    try:
+        interval = float(value)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Invalid CONSOLE_LOCAL_WORKER_ERROR_BACKOFF_SECONDS={value!r}"
+        ) from exc
+    if interval < 0:
+        raise RuntimeError("CONSOLE_LOCAL_WORKER_ERROR_BACKOFF_SECONDS must be non-negative")
+    return interval
+
+
+def _summarize_exception(exc: BaseException) -> str:
+    message = " ".join(str(exc).strip().split()) or exc.__class__.__name__
+    if len(message) > MAX_ERROR_SUMMARY_LENGTH:
+        return f"{message[:MAX_ERROR_SUMMARY_LENGTH - 1]}…"
+    return message
+
+
 def main(
     *,
     response_target: Optional[str] = None,
@@ -100,6 +125,7 @@ def main(
     resolved_target = _resolve_response_target(response_target)
     owner = build_response_owner(resolved_target)
     idle_poll_interval_seconds = _resolve_poll_interval_seconds(poll_interval_seconds)
+    error_backoff_seconds = _resolve_error_backoff_seconds()
     client = _resolve_client()
 
     logger.info(
@@ -120,10 +146,23 @@ def main(
                 if once:
                     return
                 continue
-        except Exception:
-            logger.exception("Local Console chat worker poll failed")
+        except Exception as exc:
             if once:
+                logger.exception("Local Console chat worker poll failed")
                 raise
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.exception(
+                    "Local Console chat worker poll failed; backing off for %.1fs",
+                    error_backoff_seconds,
+                )
+            else:
+                logger.warning(
+                    "Local Console chat worker poll failed: %s; backing off for %.1fs",
+                    _summarize_exception(exc),
+                    error_backoff_seconds,
+                )
+            time.sleep(error_backoff_seconds)
+            continue
 
         if once:
             return
