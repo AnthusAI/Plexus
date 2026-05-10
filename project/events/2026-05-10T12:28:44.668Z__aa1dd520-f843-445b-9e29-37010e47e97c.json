@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "aa1dd520-f843-445b-9e29-37010e47e97c",
+  "issue_id": "plx-b26101d1-1621-4e58-b60e-c4cb213d72bf",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-10T12:28:44.668Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Reduce local Console worker network error noise"
+  }
+}
