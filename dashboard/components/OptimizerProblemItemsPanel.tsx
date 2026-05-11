@@ -10,7 +10,7 @@ import { CheckCircle2, XCircle, AlertTriangle, Link as LinkIcon } from 'lucide-r
 
 // --- Types ---
 
-type RecurrencePattern = 'PERSISTENT' | 'OSCILLATING' | 'FLIP_FLOP' | 'LATE_EMERGING'
+type RecurrencePattern = 'PERSISTENT' | 'OSCILLATING' | 'FLIP_FLOP' | 'LATE_EMERGING' | 'EMERGING'
 
 interface RecurrenceCycleEntry {
   cycle: number
@@ -27,7 +27,8 @@ interface ProblemItem {
   correct_count: number
   segment: string
   segment_stable: boolean
-  feedback_label: string
+  feedback_label?: string
+  recent_label?: string
   model_prediction: string
   pattern: RecurrencePattern
   per_cycle: RecurrenceCycleEntry[]
@@ -66,6 +67,12 @@ const PATTERN_CONFIG: Record<
     labelClass: 'text-info',
     pillClass: 'bg-info text-primary-foreground',
     description: 'Appeared correctly early, regressed in later cycles',
+  },
+  EMERGING: {
+    label: 'Emerging',
+    labelClass: 'text-muted-foreground',
+    pillClass: 'bg-muted text-muted-foreground',
+    description: 'Repeat-active item that has not yet become persistent or oscillating',
   },
 }
 
@@ -119,6 +126,8 @@ function ProblemItemRow({ itemId, item }: { itemId: string; item: ProblemItem })
   const totalCycles = item.wrong_count + item.correct_count
   const cfg = PATTERN_CONFIG[item.pattern]
   const itemUrl = `/lab/items/${itemId}`
+  const label = item.feedback_label ?? item.recent_label ?? '?'
+  const displayId = itemId.includes('--') ? itemId.split('--').pop() || itemId : itemId
 
   return (
     <div className="border border-border/50 rounded-md overflow-hidden">
@@ -132,7 +141,7 @@ function ProblemItemRow({ itemId, item }: { itemId: string; item: ProblemItem })
               onClick={(e) => e.stopPropagation()}
               title={`Open item ${itemId}`}
             >
-              {itemId.slice(0, 8)}…
+              {displayId}
               <LinkIcon className="h-2.5 w-2.5 opacity-50" />
             </a>
 
@@ -149,7 +158,7 @@ function ProblemItemRow({ itemId, item }: { itemId: string; item: ProblemItem })
 
             {/* Label vs prediction */}
             <span className="ml-auto flex-shrink-0 text-muted-foreground/50">
-              label <span className="text-foreground/70">{item.feedback_label}</span>
+              label <span className="text-foreground/70">{label}</span>
               {' → '}
               model <span className="text-foreground/70">{item.model_prediction}</span>
             </span>
@@ -215,9 +224,9 @@ export function OptimizerProblemItemsPanel({
   if (!notableItems || Object.keys(notableItems).length === 0) return null
 
   // Group by pattern in display priority order.
-  const patternOrder: RecurrencePattern[] = ['PERSISTENT', 'OSCILLATING', 'FLIP_FLOP', 'LATE_EMERGING']
+  const patternOrder: RecurrencePattern[] = ['OSCILLATING', 'PERSISTENT', 'FLIP_FLOP', 'LATE_EMERGING', 'EMERGING']
   const grouped: Record<RecurrencePattern, Array<[string, ProblemItem]>> = {
-    PERSISTENT: [], OSCILLATING: [], FLIP_FLOP: [], LATE_EMERGING: [],
+    PERSISTENT: [], OSCILLATING: [], FLIP_FLOP: [], LATE_EMERGING: [], EMERGING: [],
   }
   for (const [itemId, item] of Object.entries(notableItems)) {
     if (item.pattern in grouped) {
@@ -232,6 +241,7 @@ export function OptimizerProblemItemsPanel({
   const totalCount = Object.keys(notableItems).length
   const persistentCount = grouped.PERSISTENT.length
   const oscillatingCount = grouped.OSCILLATING.length
+  const emergingCount = grouped.EMERGING.length
 
   return (
     <div className="mt-6">
@@ -255,6 +265,11 @@ export function OptimizerProblemItemsPanel({
               {oscillatingCount} oscillating
             </Badge>
           )}
+          {emergingCount > 0 && (
+            <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal">
+              {emergingCount} emerging
+            </Badge>
+          )}
         </div>
         <button
           onClick={() => setVisible(v => !v)}
@@ -267,9 +282,9 @@ export function OptimizerProblemItemsPanel({
       {visible && (
         <div className="rounded-lg border border-border/50 bg-card p-4">
           <p className="text-xs text-muted-foreground/60 mb-4">
-            Items that repeatedly appear in the same confusion cells across cycles.
-            Persistent and oscillating items likely represent mislabels, ambiguous policy, or
-            an inherent accuracy ceiling — not a prompt gap.
+            Items that are recurring across optimizer cycles. Emerging items show early repeat
+            history; persistent and oscillating items are stronger signals for mislabels,
+            ambiguous policy, contradictory rules, or an inherent accuracy ceiling.
           </p>
           {patternOrder.map(pattern => (
             <PatternGroup key={pattern} pattern={pattern} items={grouped[pattern]} />

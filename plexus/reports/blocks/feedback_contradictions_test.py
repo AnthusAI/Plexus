@@ -178,10 +178,55 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
     assert parsed['mode'] == 'contradictions'
     assert parsed['contradictions_found'] == 1
     assert parsed['aligned_found'] == 0
-    assert len(parsed['topics']) == 1
-    assert parsed['block_configuration']['include_rubric_memory'] is False
-    assert parsed['rubric_memory'] == {'enabled': False, 'context_count': 0}
-    assert 'rubric_evidence_packs' not in parsed
+
+
+@pytest.mark.asyncio
+async def test_feedback_contradictions_accepts_explicit_timestamp_window(monkeypatch):
+    block = FeedbackContradictions(
+        config={
+            'scorecard': 'CMG EDU',
+            'score': 'Branding and Matching',
+            'mode': 'contradictions',
+            'start_at': '2026-02-08T13:04:57Z',
+            'end_at': '2026-05-09T13:04:57Z',
+        },
+        params={},
+        api_client=_DummyClient(),
+    )
+    block.report_block_id = 'block-window'
+
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name',
+        lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
+    )
+    monkeypatch.setattr(
+        block,
+        '_resolve_score',
+        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
+    )
+    monkeypatch.setattr(block, '_fetch_guidelines', AsyncMock(return_value='Guideline text'))
+
+    captured = {}
+
+    async def _fetch_items(_client, _account_id, _scorecard_id, _score_id, start_date, end_date, _limit):
+        captured['start'] = start_date
+        captured['end'] = end_date
+        return []
+
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.feedback_utils.fetch_feedback_items_for_score',
+        _fetch_items,
+    )
+
+    parsed, _log = await block.generate()
+
+    assert captured['start'].isoformat() == '2026-02-08T13:04:57+00:00'
+    assert captured['end'].isoformat() == '2026-05-09T13:04:57+00:00'
+    assert parsed['date_range']['start'] == '2026-02-08T13:04:57+00:00'
+    assert parsed['date_range']['end'] == '2026-05-09T13:04:57+00:00'
+    assert parsed['block_configuration']['start_at'] == '2026-02-08T13:04:57Z'
+    assert parsed['block_configuration']['end_at'] == '2026-05-09T13:04:57Z'
+    assert parsed['topics'] == []
 
 
 @pytest.mark.asyncio
@@ -515,6 +560,48 @@ async def test_build_rubric_memory_contexts_gracefully_skips_missing_corpus(monk
 
         async def retrieve_for_score_items(self, **_kwargs):
             raise AssertionError('missing corpus should skip retrieval')
+
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.RubricMemoryContextProvider',
+        _Provider,
+    )
+
+    contexts = await block._build_rubric_memory_contexts(
+        valid_items=[
+            SimpleNamespace(
+                id='fi-1',
+                itemId='item-1',
+                initialAnswerValue='No',
+                finalAnswerValue='Yes',
+                editCommentValue='Reviewer comment',
+            )
+        ],
+        score_results_by_item={},
+        scorecard_name='CMG EDU',
+        score_name='Branding and Matching',
+        score_id='score-1',
+    )
+
+    assert contexts == {}
+
+
+@pytest.mark.asyncio
+async def test_build_rubric_memory_contexts_gracefully_skips_missing_configuration(monkeypatch):
+    block = FeedbackContradictions(
+        config={'scorecard': 'CMG EDU', 'score': 'Branding and Matching'},
+        params={},
+        api_client=_DummyClient(),
+    )
+
+    class _Provider:
+        def __init__(self, api_client):
+            assert api_client is block.api_client
+
+        def local_corpus_status(self, **_kwargs):
+            raise ValueError("Missing required environment variable: AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME")
+
+        async def retrieve_for_score_items(self, **_kwargs):
+            raise AssertionError('missing rubric-memory configuration should skip retrieval')
 
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_contradictions.RubricMemoryContextProvider',

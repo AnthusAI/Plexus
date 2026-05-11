@@ -3234,6 +3234,8 @@ class FeedbackEvaluation(Evaluation):
         self,
         *,
         days: Optional[int] = None,
+        feedback_start_at: Optional[datetime | str] = None,
+        feedback_end_at: Optional[datetime | str] = None,
         scorecard_id: Optional[str] = None,
         score_id: Optional[str] = None,
         evaluation_id: Optional[str] = None,
@@ -3251,6 +3253,8 @@ class FeedbackEvaluation(Evaluation):
         
         Args:
             days: Number of days to look back for feedback items (default: None = all-time)
+            feedback_start_at: Optional explicit editedAt lower bound for frozen windows
+            feedback_end_at: Optional explicit editedAt upper bound for frozen windows
             scorecard_id: ID of the scorecard to evaluate
             score_id: Optional ID of specific score to evaluate (if None, evaluates all scores)
             evaluation_id: ID of the evaluation record
@@ -3284,6 +3288,12 @@ class FeedbackEvaluation(Evaluation):
         if days is not None and int(days) <= 0:
             raise ValueError("days must be a positive integer when provided.")
         self.days = int(days) if days is not None else None
+        self.feedback_start_at = self._parse_feedback_window_datetime(feedback_start_at)
+        self.feedback_end_at = self._parse_feedback_window_datetime(feedback_end_at)
+        if (self.feedback_start_at is None) != (self.feedback_end_at is None):
+            raise ValueError("feedback_start_at and feedback_end_at must be provided together.")
+        if self.feedback_start_at and self.feedback_end_at and self.feedback_end_at <= self.feedback_start_at:
+            raise ValueError("feedback_end_at must be after feedback_start_at.")
         self.scorecard_id = scorecard_id
         self.score_id = score_id
         self.evaluation_id = evaluation_id
@@ -3292,6 +3302,18 @@ class FeedbackEvaluation(Evaluation):
         self.logger = logging.getLogger('plexus/evaluation')
         self.shadow_invalid_feedback_item_ids: List[str] = []
         self.feedback_target_hash: Optional[str] = None
+
+    @staticmethod
+    def _parse_feedback_window_datetime(value: Optional[datetime | str]) -> Optional[datetime]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            parsed = value
+        else:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
 
     @staticmethod
     def _has_usable_root_cause(root_cause_payload) -> bool:
@@ -3529,11 +3551,14 @@ class FeedbackEvaluation(Evaluation):
                 # Keep this lookup explicit so identifier-resolution failures surface early.
                 DashboardScorecard.get_by_id(self.scorecard_id, self.api_client)
 
-            if self.days is None:
+            if self.feedback_start_at and self.feedback_end_at:
+                start_date = self.feedback_start_at
+                end_date = self.feedback_end_at
+            elif self.days is None:
                 start_date = datetime(1970, 1, 1, tzinfo=timezone.utc)
             else:
                 start_date = datetime.now(timezone.utc) - timedelta(days=self.days)
-            end_date = datetime.now(timezone.utc)
+                end_date = datetime.now(timezone.utc)
 
             shadow_invalidation = {
                 "optimizer_shadow_invalid_feedback_item_ids": [],
@@ -3627,6 +3652,8 @@ class FeedbackEvaluation(Evaluation):
             parameters_payload = self.apply_root_cause_contract_to_parameters(
                 existing_parameters={
                     "days": self.days,
+                    "feedback_start_at": self.feedback_start_at.isoformat().replace("+00:00", "Z") if self.feedback_start_at else None,
+                    "feedback_end_at": self.feedback_end_at.isoformat().replace("+00:00", "Z") if self.feedback_end_at else None,
                     "max_items": self.max_items,
                     "max_feedback_items": self.max_items,
                     "sampling_mode": self.sampling_mode,
@@ -3978,26 +4005,7 @@ class FeedbackEvaluation(Evaluation):
         or an empty list if there is not enough data or analysis fails (non-fatal).
         """
         try:
-            import tempfile
             from datetime import datetime, timezone as _tz
-            from biblicus.analysis.reinforcement_memory import (
-                ReinforcementMemory, LocalVectorStore,
-                sentence_transformer_embedder,
-                bedrock_labeler, bedrock_causal, bedrock_synthesizer,
-                TimestampedText,
-            )
-            from plexus.rca_analysis import (
-                build_misclassification_classification_contract,
-                build_misclassification_analysis_summary,
-                build_misclassification_item_context,
-                build_rca_analysis_failure_classification,
-                build_rca_analysis_failure_details,
-                classify_misclassification_item,
-                extract_misclassification_evidence_flags,
-                explain_misclassification_item_classification,
-                rubric_memory_state_from_item_context,
-                resolve_final_output_classes_from_yaml_text,
-            )
 
             def _update_status(msg: str):
                 """Update tracker status message and log RCA progress."""
@@ -4031,6 +4039,44 @@ class FeedbackEvaluation(Evaluation):
                     max_category_summary_items=max_category_summary_items,
                     tracker=tracker,
                 )
+
+            import tempfile
+            try:
+                from biblicus.analysis.reinforcement_memory import (
+                    ReinforcementMemory, LocalVectorStore,
+                    sentence_transformer_embedder,
+                    bedrock_labeler, bedrock_causal, bedrock_synthesizer,
+                    TimestampedText,
+                )
+            except ModuleNotFoundError as exc:
+                self.logger.warning(
+                    "Biblicus reinforcement-memory RCA backend is unavailable; "
+                    "falling back to small-set RCA summarization for %d item(s): %s",
+                    len(candidate_items),
+                    exc,
+                )
+                return await self._run_small_set_root_cause_analysis(
+                    candidate_items=candidate_items,
+                    score_result_map=score_result_map,
+                    original_explanations=original_explanations or {},
+                    max_report_exemplars=max_report_exemplars,
+                    max_summarization_exemplars=max_summarization_exemplars,
+                    max_category_summary_items=max_category_summary_items,
+                    tracker=tracker,
+                )
+
+            from plexus.rca_analysis import (
+                build_misclassification_classification_contract,
+                build_misclassification_analysis_summary,
+                build_misclassification_item_context,
+                build_rca_analysis_failure_classification,
+                build_rca_analysis_failure_details,
+                classify_misclassification_item,
+                extract_misclassification_evidence_flags,
+                explain_misclassification_item_classification,
+                rubric_memory_state_from_item_context,
+                resolve_final_output_classes_from_yaml_text,
+            )
 
             # Fetch score context once so item-level misclassification classification can be
             # included in pre-clustering text and reused for post-cluster synthesis.
