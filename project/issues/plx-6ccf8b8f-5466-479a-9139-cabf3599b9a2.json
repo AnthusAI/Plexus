@@ -1,0 +1,37 @@
+{
+  "id": "plx-6ccf8b8f-5466-479a-9139-cabf3599b9a2",
+  "title": "Fix async score-processor dependency backfill handling",
+  "description": "Async score-processor-lambda does not consistently surface dependency-backed metadata/results for parent score extraction, diverging from sync API behavior.\n\nScope:\n- Add shared dependency-aware single-target extraction helper in plexus.utils.scoring\n- Use it in score-processor-lambda handler\n- Treat dependency-unmet as terminal FAILED (no retry) using ScoringJob status\n- Preserve success queue payload contract\n- Add focused tests for subset selection, dependency-unmet terminal handling, fallback extraction, and retry semantics for true failures",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-360d2b02-2fe8-4480-ba5e-066730487675",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3b3baad3-3609-42f3-b6d8-f38a6d5f04fb",
+      "author": "derek",
+      "text": "Implementation started.\n\nPlan of action:\n1) Add shared helper in plexus.utils.scoring to run single-target scoring with dependency backfill and robust target extraction.\n2) Integrate helper into score-processor-lambda/handler.py process_job path.\n3) Map dependency-unmet outcomes to terminal FAILED without re-raise/retry.\n4) Add/extend unit tests for subset_of_score_names usage, fallback extraction, dependency-unmet handling, and non-dependency error retry behavior.\n5) Run targeted test suites and record outcomes.",
+      "created_at": "2026-05-11T21:40:03.951159389Z"
+    },
+    {
+      "id": "e76dc9a7-f43b-4c96-a490-854b9ceb704e",
+      "author": "derek",
+      "text": "Implemented remediation on branch bugfix/async-dependent-score-metadata.\n\nCode changes:\n- Added dependency-aware single-target scoring helper in plexus/utils/scoring.py:\n  - SingleScoreExecutionOutcome dataclass\n  - score_single_target_with_dependencies(...) with subset_of_score_names targeting, robust target extraction (id -> parameter name/key fallback), list normalization, and dependency-unmet classification for SKIPPED outcomes.\n  - Added DEPENDENCY_UNMET_MESSAGE constant for canonical terminal handling.\n- Updated score-processor-lambda/handler.py process_job path to:\n  - Resolve target score name from resolve_score_id response\n  - Use score_single_target_with_dependencies(...)\n  - Mark dependency-unmet outcomes as terminal FAILED without retry/re-raise\n  - Avoid ScoreResult creation + response queue publish for dependency-unmet\n  - Preserve existing retry behavior for non-dependency failures\n- Added focused tests:\n  - tests/test_scoring_single_target_helper.py (subset targeting, fallback extraction, skipped/dependency-unmet handling)\n  - tests/lambda/test_score_processor_item.py (helper integration, dependency-unmet terminal path, non-dependency re-raise)\n\nValidation:\n- PASS: pytest -q tests/lambda/test_score_processor_item.py tests/test_scoring_single_target_helper.py\n- NOTE: Existing score-processor-lambda/tests/test_handler.py fails in this environment due missing runtime deps (boto3/gql/botocore), unrelated to the new logic.",
+      "created_at": "2026-05-11T21:43:11.034823003Z"
+    },
+    {
+      "id": "ababe264-5f3f-49e7-9c3b-f46a7a5e3b28",
+      "author": "derek",
+      "text": "Final: implemented and validated async dependency-aware scoring extraction in score-processor-lambda. Dependency-unmet now maps to terminal FAILED without retry, with no ScoreResult/response queue emit. Added focused tests for helper behavior and lambda integration; targeted test suite passed.",
+      "created_at": "2026-05-11T22:25:53.331125667Z"
+    }
+  ],
+  "created_at": "2026-05-11T21:40:01.096041815Z",
+  "updated_at": "2026-05-11T22:25:53.351295750Z",
+  "closed_at": "2026-05-11T22:25:53.351295750Z",
+  "custom": {}
+}
