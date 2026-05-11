@@ -737,6 +737,92 @@ async def run_procedure_with_task_tracking(
         )
         return failure_payload
 
+    def _finalize_interrupted(
+        *,
+        kind: str,
+        message: str,
+        signal_name: Optional[str] = None,
+        exception_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        nonlocal failure_finalized
+        if failure_finalized:
+            return {}
+        failure_finalized = True
+
+        from plexus.cli.procedure.procedure_executor import _cancel_all_task_stages
+
+        terminated_at = datetime.now(timezone.utc).isoformat()
+        phase = _current_task_phase(task_ref)
+        interruption_payload = {
+            "kind": kind,
+            "signal": signal_name,
+            "exception_type": exception_type,
+            "message": str(message),
+            "phase": phase,
+            "terminated_at": terminated_at,
+            "pid": runtime_identity.get("pid"),
+            "host": runtime_identity.get("host"),
+        }
+
+        if task_ref:
+            try:
+                _cancel_all_task_stages(client, task_ref.id, str(message))
+            except Exception as stage_exc:
+                logger.warning("Could not cancel task stages for %s: %s", task_ref.id, stage_exc, exc_info=True)
+
+            try:
+                task_metadata = _merge_task_metadata(task_ref, {"runtime": runtime_identity})
+                if local_dispatch:
+                    task_metadata = _with_local_dispatch_metadata(task_metadata)
+                update_payload = {
+                    "accountId": task_ref.accountId,
+                    "type": task_ref.type,
+                    "status": "CANCELLED",
+                    "target": task_ref.target,
+                    "command": task_ref.command,
+                    "metadata": _json_dumps(task_metadata),
+                    "updatedAt": terminated_at,
+                    "completedAt": terminated_at,
+                    "errorMessage": None,
+                    "errorDetails": _json_dumps(interruption_payload),
+                }
+                if local_dispatch:
+                    update_payload["dispatchStatus"] = LOCAL_DISPATCH_STATUS
+                    update_payload["workerNodeId"] = None
+                task_ref.update(**update_payload)
+            except Exception as task_exc:
+                logger.warning("Could not persist CANCELLED task state for %s: %s", task_ref.id, task_exc, exc_info=True)
+
+        if not is_builtin_procedure_id(procedure_id):
+            try:
+                _update_procedure_status_and_metadata(
+                    client,
+                    procedure_id,
+                    status="CANCELLED",
+                    metadata_patch={
+                        "runtime": runtime_identity,
+                        "last_interruption": interruption_payload,
+                    },
+                    remove_metadata_keys=["last_failure"],
+                )
+            except Exception as proc_exc:
+                logger.warning(
+                    "Could not persist CANCELLED procedure state for %s: %s",
+                    procedure_id,
+                    proc_exc,
+                    exc_info=True,
+                )
+
+        result.update(
+            {
+                "status": "CANCELLED",
+                "error": None,
+                "message": str(message),
+                "interruption": interruption_payload,
+            }
+        )
+        return interruption_payload
+
     _install_signal_guards()
 
     try:
@@ -853,7 +939,7 @@ async def run_procedure_with_task_tracking(
 
     except ProcedureRunTermination as exc:
         logger.warning("Procedure %s interrupted by %s", procedure_id, exc.signal_name)
-        _finalize_failed(
+        _finalize_interrupted(
             kind="signal",
             signal_name=exc.signal_name,
             message=f"Procedure run interrupted by {exc.signal_name}",
@@ -861,7 +947,7 @@ async def run_procedure_with_task_tracking(
         raise SystemExit(128 + exc.signum) from None
     except KeyboardInterrupt:
         logger.warning("Procedure %s interrupted by keyboard", procedure_id)
-        _finalize_failed(
+        _finalize_interrupted(
             kind="signal",
             signal_name="SIGINT",
             message="Procedure run interrupted by SIGINT",
