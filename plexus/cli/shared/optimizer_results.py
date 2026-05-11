@@ -244,6 +244,14 @@ def _find_iteration_by_version_id(iterations: List[Dict[str, Any]], version_id: 
 def _candidate_summary(candidate: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "index": candidate.get("index"),
+        "slot": candidate.get("slot"),
+        "hypothesis_name": (
+            (candidate.get("hypothesis") or {}).get("name")
+            if isinstance(candidate.get("hypothesis"), dict)
+            else candidate.get("hypothesis_name")
+        ),
+        "succeeded": candidate.get("succeeded"),
+        "harmful_repeat_warning": candidate.get("harmful_repeat_warning"),
         "version_id": candidate.get("version_id") or candidate.get("score_version_id"),
         "feedback_evaluation_id": candidate.get("fb_eval_id") or candidate.get("recent_evaluation_id"),
         "accuracy_evaluation_id": candidate.get("acc_eval_id") or candidate.get("regression_evaluation_id"),
@@ -267,6 +275,7 @@ def _cycle_summary(iteration: Dict[str, Any]) -> Dict[str, Any]:
         "done_reason": iteration.get("done_reason"),
         "synthesis_strategy": iteration.get("synthesis_strategy"),
         "synthesis_reasoning": iteration.get("synthesis_reasoning"),
+        "dual_synthesis": deepcopy(iteration.get("dual_synthesis")),
         "feedback_evaluation_id": iteration.get("recent_evaluation_id"),
         "accuracy_evaluation_id": iteration.get("regression_evaluation_id"),
         "feedback_metrics": deepcopy(iteration.get("recent_metrics")),
@@ -532,6 +541,11 @@ class OptimizerResultsService:
         best_accuracy_eval_id = state.get("last_accepted_acc_eval_id") or current_regression_baseline_id
         end_of_run_report = deepcopy(state.get("end_of_run_report"))
         run_summary = _parse_json_dict((end_of_run_report or {}).get("run_summary"))
+        stop_reason = (
+            run_summary.get("stop_reason")
+            or state.get("stop_reason")
+            or ("skipped_no_feedback" if state.get("skip_reason") else None)
+        )
 
         manifest = {
             "schema_version": OPTIMIZER_ARTIFACT_SCHEMA_VERSION,
@@ -587,10 +601,12 @@ class OptimizerResultsService:
                 "completed_cycles": len(iterations),
                 "configured_max_iterations": (
                     (((state.get("params") or {}).get("max_iterations")) if isinstance(state.get("params"), dict) else None)
+                    or run_summary.get("configured_max_iterations")
+                    or state.get("configured_max_iterations")
                     or run_summary.get("cycles")
                     or None
                 ),
-                "stop_reason": run_summary.get("stop_reason") or state.get("stop_reason"),
+                "stop_reason": stop_reason,
                 "procedure_summary": deepcopy(state.get("procedure_summary")),
                 "end_of_run_report": end_of_run_report,
                 "optimization_diagnostic": deepcopy(state.get("optimization_diagnostic")),
@@ -1163,6 +1179,11 @@ class OptimizerResultsService:
         baseline_accuracy_metrics = raw_baseline.get("accuracy_metrics") or {}
         winning_feedback_metrics = raw_best.get("winning_feedback_metrics") or {}
         winning_accuracy_metrics = raw_best.get("winning_accuracy_metrics") or {}
+        raw_status = (manifest.get("procedure") or {}).get("status")
+        stop_reason = raw_summary.get("stop_reason")
+        effective_status = raw_status
+        if stop_reason and str(raw_status or "").upper() == "RUNNING":
+            effective_status = "COMPLETED"
         payload: Dict[str, Any] = {
             "procedure_id": procedure_id,
             "procedure": manifest.get("procedure"),
@@ -1170,7 +1191,8 @@ class OptimizerResultsService:
                 "current_cycle": raw_summary.get("current_cycle"),
                 "completed_cycles": raw_summary.get("completed_cycles"),
                 "configured_max_iterations": raw_summary.get("configured_max_iterations"),
-                "stop_reason": raw_summary.get("stop_reason"),
+                "stop_reason": stop_reason,
+                "effective_status": effective_status,
                 "procedure_summary": raw_summary.get("procedure_summary"),
             },
             "baseline": {
