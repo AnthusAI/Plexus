@@ -44,6 +44,10 @@ class ConsoleMessage:
     response_status: str
     created_at: str
     selected_model: Optional[str] = None
+    tool_access_mode: Optional[str] = None
+    private: bool = False
+    privacy_owner_user_id: Optional[str] = None
+    privacy_span_id: Optional[str] = None
 
 
 def utc_now() -> str:
@@ -88,6 +92,63 @@ def _extract_selected_model(raw_metadata: Any) -> Optional[str]:
         return None
     normalized = model_id.strip()
     return normalized or None
+
+
+def _normalize_console_mode(value: Any) -> Optional[str]:
+    mode = str(value or "").strip().lower()
+    if mode in {"plan", "planning"}:
+        return "planning"
+    if mode in {"execute", "execution"}:
+        return "execution"
+    return None
+
+
+def _extract_console_metadata(raw_metadata: Any) -> Dict[str, Any]:
+    metadata = _parse_metadata_object(raw_metadata)
+    console_metadata = metadata.get("console")
+    return console_metadata if isinstance(console_metadata, dict) else {}
+
+
+def _extract_tool_access_mode(raw_metadata: Any) -> Optional[str]:
+    return _normalize_console_mode(_extract_console_metadata(raw_metadata).get("mode"))
+
+
+def _extract_private(raw_metadata: Any) -> bool:
+    return bool(_extract_console_metadata(raw_metadata).get("private"))
+
+
+def _extract_privacy_owner_user_id(raw_metadata: Any) -> Optional[str]:
+    owner = _extract_console_metadata(raw_metadata).get("privacy_owner_user_id")
+    if not isinstance(owner, str):
+        return None
+    owner = owner.strip()
+    return owner or None
+
+
+def _extract_privacy_span_id(raw_metadata: Any) -> Optional[str]:
+    span_id = _extract_console_metadata(raw_metadata).get("privacy_span_id")
+    if not isinstance(span_id, str):
+        return None
+    span_id = span_id.strip()
+    return span_id or None
+
+
+def _is_private_metadata(raw_metadata: Any) -> bool:
+    return bool(_extract_console_metadata(raw_metadata).get("private"))
+
+
+def resolve_console_tool_access_mode(
+    client: PlexusDashboardClient,
+    message: ConsoleMessage,
+) -> str:
+    if message.tool_access_mode:
+        return message.tool_access_mode
+    session = fetch_chat_session(client, message.session_id)
+    if session:
+        mode = _extract_tool_access_mode(session.get("metadata"))
+        if mode:
+            return mode
+    return "execution"
 
 
 def _normalize_session_title(raw_title: str) -> Optional[str]:
@@ -184,6 +245,7 @@ def fetch_recent_user_chat_turns(
           humanInteraction
           messageType
           content
+          metadata
           createdAt
         }
         nextToken
@@ -208,6 +270,8 @@ def fetch_recent_user_chat_turns(
             human_interaction = str(item.get("humanInteraction") or "").upper()
             message_type = str(item.get("messageType") or "").upper()
             content = str(item.get("content") or "").strip()
+            if _is_private_metadata(item.get("metadata")):
+                continue
             if (
                 role == "USER"
                 and human_interaction == "CHAT"
@@ -251,6 +315,7 @@ def fetch_assistant_chat_messages_between(
           humanInteraction
           messageType
           content
+          metadata
           createdAt
         }
         nextToken
@@ -276,6 +341,8 @@ def fetch_assistant_chat_messages_between(
             message_type = str(item.get("messageType") or "").upper()
             created_at = str(item.get("createdAt") or "").strip()
             content = str(item.get("content") or "").strip()
+            if _is_private_metadata(item.get("metadata")):
+                continue
             if not created_at or not content:
                 continue
             if created_at <= start_created_at or created_at >= end_created_at:
@@ -473,6 +540,10 @@ def parse_chat_message(raw: Dict[str, Any]) -> Optional[ConsoleMessage]:
         response_status=str(raw.get("responseStatus") or "").strip().upper(),
         created_at=str(raw.get("createdAt") or "").strip(),
         selected_model=_extract_selected_model(raw.get("metadata")),
+        tool_access_mode=_extract_tool_access_mode(raw.get("metadata")),
+        private=_extract_private(raw.get("metadata")),
+        privacy_owner_user_id=_extract_privacy_owner_user_id(raw.get("metadata")),
+        privacy_span_id=_extract_privacy_span_id(raw.get("metadata")),
     )
 
 
@@ -653,6 +724,7 @@ def fetch_session_history(
     session_id: str,
     *,
     limit: int = CONSOLE_HISTORY_LIMIT,
+    include_private_for_owner_user_id: Optional[str] = None,
 ) -> List[Dict[str, str]]:
     query = """
     query ListConsoleSessionHistory($sessionId: String!, $limit: Int, $nextToken: String) {
@@ -693,6 +765,10 @@ def fetch_session_history(
 
     normalized: List[Dict[str, str]] = []
     for item in sorted(items, key=lambda value: str(value.get("createdAt") or "")):
+        if _is_private_metadata(item.get("metadata")):
+            private_owner = _extract_privacy_owner_user_id(item.get("metadata"))
+            if not include_private_for_owner_user_id or private_owner != include_private_for_owner_user_id:
+                continue
         role = str(item.get("role") or "").upper()
         if role not in {"USER", "ASSISTANT"}:
             continue
@@ -798,7 +874,11 @@ async def run_console_chat_response_async(
     owner: str,
     latency_trace: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    history = fetch_session_history(client, message.session_id)
+    history = fetch_session_history(
+        client,
+        message.session_id,
+        include_private_for_owner_user_id=message.privacy_owner_user_id if message.private else None,
+    )
     if latency_trace is not None:
         latency_trace["t_history_loaded"] = utc_now()
     if not history or history[-1].get("content") != message.content:
@@ -807,15 +887,24 @@ async def run_console_chat_response_async(
     run_started = utc_now()
     if latency_trace is not None:
         latency_trace["t_run_started"] = run_started
+    tool_access_mode = resolve_console_tool_access_mode(client, message)
+    if latency_trace is not None:
+        latency_trace["tool_access_mode"] = tool_access_mode
     context: Dict[str, Any] = {
         "account_id": message.account_id,
         "chat_session_id": message.session_id,
         "console_trigger_message_id": message.id,
         "console_response_owner": owner,
+        "tool_access_mode": tool_access_mode,
+        "console_tool_access_mode": tool_access_mode,
+        "console_private": message.private,
         # Console stream dispatch does not create a Task record, so task-metadata
         # lookup adds avoidable latency in chat tracing without adding signal.
         "disable_console_dispatch_metadata_lookup": True,
     }
+    if message.private:
+        context["console_privacy_owner_user_id"] = message.privacy_owner_user_id
+        context["console_privacy_span_id"] = message.privacy_span_id
     if message.selected_model:
         context["agent_models"] = {"assistant": message.selected_model}
 
@@ -824,6 +913,7 @@ async def run_console_chat_response_async(
         account_id=message.account_id,
         console_user_message=message.content,
         console_session_history=history,
+        console_tool_access_mode=tool_access_mode,
         enable_mcp=True,
         context=context,
     )

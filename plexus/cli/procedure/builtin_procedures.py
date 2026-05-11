@@ -26,7 +26,7 @@ def _procedures_root() -> Path:
 def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
     return {
         "name": "Console Chat Agent",
-        "version": "1.6.4",
+        "version": "1.6.6",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -49,6 +49,12 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                 "default": [],
                 "description": "Recent USER/ASSISTANT turns for continuity in detached runs.",
             },
+            "console_tool_access_mode": {
+                "type": "string",
+                "required": False,
+                "default": "execution",
+                "description": "Console tool access mode for this turn: execution or planning.",
+            },
         },
         "outputs": {
             "success": {"type": "boolean", "required": True},
@@ -70,6 +76,15 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "Keep responses concise, specific, and actionable.\n\n"
                     "Use the `execute_tactus` tool to query or act on Plexus data.\n"
                     "Pass a short Lua snippet; `plexus` is a global with all functionality.\n\n"
+                    "TOOL ACCESS MODE:\n"
+                    "- The current turn includes `console_tool_access_mode`, either `execution` or `planning`.\n"
+                    "- In planning mode, you can inspect Plexus data, run safe analysis, and propose exact next actions.\n"
+                    "- `plexus.api.list` and helper aliases still show the full tool surface in planning mode so you can plan what would be available after switching modes.\n"
+                    "- Planning mode may inspect existing procedure runs with `plexus.procedure.list`, `plexus.procedure.info`, `plexus.procedure.chat_sessions`, `plexus.procedure.chat_messages`, and `plexus.procedure.steering_messages`; do not ask the user to switch modes for procedure status/history lookup.\n"
+                    "- Planning mode may run predictions, evaluations, reports, `plexus.score.contradictions`, `plexus.report.acceptance_rate`, and `plexus.report.score_champion_version_timeline`.\n"
+                    "- Planning mode blocks significant mutations: creating/updating score versions with `plexus.score.update`, promoting champions with `plexus.score.set_champion`, and starting/continuing/branching/optimizing procedures with `plexus.procedure.run`, `plexus.procedure.continue`, `plexus.procedure.branch`, or `plexus.procedure.optimize`.\n"
+                    "- If a method returns `tool_not_allowed_in_planning_mode`, explain the blocked mutation and ask the user to switch the chat to Execute mode before retrying.\n"
+                    "- Private mode is soft UI privacy: private turns are stored, marked private, hidden from other users in the workspace UI, and excluded from future public-agent context; do not promise hard privacy semantics.\n\n"
                     "REPORT REQUESTS (HARD RULES):\n"
                     "- When the user asks what reports exist or what reports you can run, first call `plexus.docs.get({ id = \"reports.reports-catalog\" })` and answer from that catalog.\n"
                     "- When the user asks to run a specific report, load `reports.reports-catalog` if the report type is uncertain, then load the specific `reports.*` topic before constructing the report call.\n"
@@ -118,6 +133,12 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "  -- find recent evaluations (prefer score_version_id when available):\n"
                     "  return plexus.evaluation.find_recent({ score_version_id = \"<uuid>\", evaluation_type = \"accuracy\", max_age_hours = 24 })\n"
                     "  return plexus.evaluation.info({ evaluation_id = \"<uuid>\" })\n"
+                    "  -- inspect procedure runs and what happened during them:\n"
+                    "  return plexus.procedure.list({ limit = 10 })\n"
+                    "  return plexus.procedure.info({ id = \"<procedure-uuid>\" })\n"
+                    "  return plexus.procedure.chat_sessions({ id = \"<procedure-uuid>\", limit = 5 })\n"
+                    "  return plexus.procedure.chat_messages({ id = \"<procedure-uuid>\", limit = 50 })\n"
+                    "  return plexus.procedure.steering_messages({ id = \"<procedure-uuid>\" })\n"
                     "  return plexus.item.last({ count = 1 })\n"
                     "  return plexus.score.predict({ scorecard_identifier = \"...\", score_identifier = \"...\", item_id = \"...\" })\n"
                     "  -- Inline feedback alignment analysis for one score. This is NOT a persisted report:\n"
@@ -194,7 +215,7 @@ _BUILTINS: Dict[str, BuiltinProcedureSpec] = {
         procedure_id=CONSOLE_CHAT_BUILTIN_ID,
         name="Console Chat Agent",
         description="Built-in general-purpose chat procedure for Plexus Console.",
-        version="1.6.4",
+        version="1.6.5",
         tac_path=_procedures_root() / "console" / "chat_agent.tac",
     ),
 }

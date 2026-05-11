@@ -233,6 +233,33 @@ class ProcedureChatRecorder:
         next_metadata["attribution"] = bot_attribution
         return next_metadata
 
+    def _enrich_console_private_metadata(
+        self,
+        metadata: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """Mark runtime-emitted Console messages as part of the triggering private turn."""
+        if not self._session_context.get("console_private"):
+            return metadata
+
+        next_metadata: Dict[str, Any] = dict(metadata) if isinstance(metadata, dict) else {}
+        console_metadata = next_metadata.get("console")
+        if not isinstance(console_metadata, dict):
+            console_metadata = {}
+
+        console_metadata = {
+            **console_metadata,
+            "private": True,
+        }
+        owner_user_id = self._session_context.get("console_privacy_owner_user_id")
+        if isinstance(owner_user_id, str) and owner_user_id.strip():
+            console_metadata["privacy_owner_user_id"] = owner_user_id.strip()
+        span_id = self._session_context.get("console_privacy_span_id")
+        if isinstance(span_id, str) and span_id.strip():
+            console_metadata["privacy_span_id"] = span_id.strip()
+
+        next_metadata["console"] = console_metadata
+        return next_metadata
+
     def _get_resume_session_id(self) -> Optional[str]:
         """Return existing session id when procedure is waiting for human input."""
         try:
@@ -1067,6 +1094,18 @@ class ProcedureChatRecorder:
                 'category': session_category,
                 'status': 'ACTIVE'
             }
+            if isinstance(context, dict) and context.get("console_private"):
+                console_metadata: Dict[str, Any] = {
+                    "private": True,
+                    "private_only": True,
+                }
+                owner_user_id = context.get("console_privacy_owner_user_id")
+                if isinstance(owner_user_id, str) and owner_user_id.strip():
+                    console_metadata["private_owner_user_id"] = owner_user_id.strip()
+                span_id = context.get("console_privacy_span_id")
+                if isinstance(span_id, str) and span_id.strip():
+                    console_metadata["current_privacy_span_id"] = span_id.strip()
+                session_data["metadata"] = json.dumps({"console": console_metadata})
             
             # Add scorecard/score IDs if they are present
             if scorecard_id and str(scorecard_id).strip():
@@ -1178,6 +1217,7 @@ class ProcedureChatRecorder:
                     human_interaction = 'INTERNAL'
 
             metadata = self._enrich_optimizer_user_message_metadata(role, human_interaction, metadata)
+            metadata = self._enrich_console_private_metadata(metadata)
 
             message_data = {
                 'sessionId': self.session_id,
@@ -1294,6 +1334,7 @@ class ProcedureChatRecorder:
                 )
             update_input["content"] = normalized_content
 
+        metadata = self._enrich_console_private_metadata(metadata)
         if metadata is not None:
             update_input["metadata"] = json.dumps(metadata)
 
