@@ -29,6 +29,7 @@ jest.mock('@/components/OptimizerMetricsChart', () => ({
   __esModule: true,
   default: ({ onDatasetViewChange }: any) => (
     <div data-testid="optimizer-chart">
+      <div>Optimizer Chart</div>
       <button type="button" onClick={() => onDatasetViewChange?.('overall')}>set-overall</button>
       <button type="button" onClick={() => onDatasetViewChange?.('recent')}>set-recent</button>
       <button type="button" onClick={() => onDatasetViewChange?.('regression')}>set-regression</button>
@@ -36,7 +37,7 @@ jest.mock('@/components/OptimizerMetricsChart', () => ({
   ),
 }))
 jest.mock('@/components/OptimizationInsightsPanel', () => ({
-  EndOfRunReport: () => null,
+  EndOfRunReport: () => <div data-testid="end-of-run-report">End-of-Run Report</div>,
   ReportSection: () => null,
 }))
 jest.mock('@/components/loading-skeleton', () => ({
@@ -235,6 +236,58 @@ describe('ProcedureTask optimizer auth flow', () => {
       expect(metadataCall.authMode).toBeUndefined()
       expect((global as any).fetch).not.toHaveBeenCalled()
     })
+  })
+
+  it('renders end-of-run reporting above tactical progress and next steps', async () => {
+    const metadataState = {
+      state: {
+        baseline_version_id: 'v0',
+        iterations: [
+          {
+            iteration: 1,
+            score_version_id: 'v1',
+            accepted: true,
+            recent_metrics: { alignment: 0.7, accuracy: 82, precision: 81, recall: 80 },
+            recent_deltas: { alignment: 0.1, accuracy: 2, precision: 2, recall: 2 },
+            regression_metrics: { alignment: 0.68, accuracy: 78, precision: 77, recall: 76 },
+            regression_deltas: { alignment: 0.08, accuracy: 1, precision: 1, recall: 1 },
+          },
+        ],
+        procedure_summary: {
+          progress: 'Tactical progress content',
+          next_steps: 'Tactical next steps content',
+        },
+        end_of_run_report: {
+          run_summary: { stop_reason: 'max_iterations', cycles: 1 },
+          executive_summary: { text: 'Executive summary content' },
+        },
+      },
+    }
+
+    mockGraphql.mockImplementation(async ({ query }: any) => {
+      const queryText = String(query)
+      if (queryText.includes('GetProcedureMetadata')) {
+        return { data: { getProcedure: { metadata: JSON.stringify(metadataState) } } }
+      }
+      if (queryText.includes('query GetProcedure($id: ID!)')) {
+        return { data: { getProcedure: { id: 'proc-1', code: 'class: BeamSearch' } } }
+      }
+      return { data: {} }
+    })
+
+    render(<ProcedureTask variant="detail" procedure={baseProcedure} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('optimizer-chart')).toBeInTheDocument()
+      expect(screen.getByTestId('end-of-run-report')).toBeInTheDocument()
+      expect(screen.getByText('Progress')).toBeInTheDocument()
+      expect(screen.getByText('Next Steps')).toBeInTheDocument()
+    })
+
+    const content = document.body.textContent || ''
+    expect(content.indexOf('Optimizer Chart')).toBeLessThan(content.indexOf('End-of-Run Report'))
+    expect(content.indexOf('End-of-Run Report')).toBeLessThan(content.indexOf('Progress'))
+    expect(content.indexOf('Progress')).toBeLessThan(content.indexOf('Next Steps'))
   })
 
   it('renders grid notes above status and shows feedback accuracy performance', () => {

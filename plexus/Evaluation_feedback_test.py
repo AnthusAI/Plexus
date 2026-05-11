@@ -4,6 +4,8 @@ Tests for FeedbackEvaluation class.
 
 import pytest
 import json
+import sys
+import types
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
@@ -86,6 +88,23 @@ class TestFeedbackEvaluation:
         assert evaluation.evaluation_id == "eval-789"
         assert evaluation.account_id == "account-123"
         assert evaluation.task_id == "task-999"
+
+    def test_initialization_accepts_frozen_feedback_window(self, mock_api_client):
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            feedback_start_at="2026-02-01T00:00:00Z",
+            feedback_end_at="2026-05-01T00:00:00Z",
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+        )
+
+        assert evaluation.feedback_start_at.isoformat() == "2026-02-01T00:00:00+00:00"
+        assert evaluation.feedback_end_at.isoformat() == "2026-05-01T00:00:00+00:00"
 
     @pytest.mark.asyncio
     async def test_rca_rubric_memory_context_uses_retrieval_only_provider(
@@ -938,7 +957,8 @@ class TestFeedbackEvaluation:
                 "explanation": f"Explanation {i}",
             }
 
-        import biblicus.analysis.reinforcement_memory as rm_mod
+        rm_mod = types.ModuleType("biblicus.analysis.reinforcement_memory")
+        monkeypatch.setitem(sys.modules, "biblicus.analysis.reinforcement_memory", rm_mod)
         captured = {}
 
         class FakeReinforcementMemory:
@@ -963,16 +983,27 @@ class TestFeedbackEvaluation:
             def analyze(self, group_id, min_topic_size=3):
                 return SimpleNamespace(topics=[])
 
-        monkeypatch.setattr(rm_mod, "ReinforcementMemory", FakeReinforcementMemory)
-        monkeypatch.setattr(rm_mod, "LocalVectorStore", lambda store_dir: object())
+        monkeypatch.setattr(rm_mod, "ReinforcementMemory", FakeReinforcementMemory, raising=False)
+        monkeypatch.setattr(rm_mod, "LocalVectorStore", lambda store_dir: object(), raising=False)
         monkeypatch.setattr(
             rm_mod,
             "sentence_transformer_embedder",
             lambda model_id: (lambda texts: [[0.0] * 384 for _ in texts]),
+            raising=False,
         )
-        monkeypatch.setattr(rm_mod, "bedrock_labeler", lambda: None)
-        monkeypatch.setattr(rm_mod, "bedrock_causal", lambda: None)
-        monkeypatch.setattr(rm_mod, "bedrock_synthesizer", lambda: None)
+        monkeypatch.setattr(rm_mod, "bedrock_labeler", lambda: None, raising=False)
+        monkeypatch.setattr(rm_mod, "bedrock_causal", lambda: None, raising=False)
+        monkeypatch.setattr(rm_mod, "bedrock_synthesizer", lambda: None, raising=False)
+        monkeypatch.setattr(
+            rm_mod,
+            "TimestampedText",
+            lambda text, timestamp=None, metadata=None: SimpleNamespace(
+                text=text,
+                timestamp=timestamp,
+                metadata=metadata or {},
+            ),
+            raising=False,
+        )
         import plexus.rca_analysis as rca_mod
         monkeypatch.setattr(
             rca_mod,

@@ -379,7 +379,11 @@ async def predict_impl(
                     
                     # Use centralized Scorecard path for dependency-aware predictions
                     scorecard_instance, predictions, costs = await predict_score_with_individual_loading(
-                        scorecard_identifier, score_name, sample_row, used_item_id, no_cache=no_cache, yaml_only=yaml_only, specific_version=resolved_version
+                        scorecard_identifier, score_name, sample_row, used_item_id,
+                        no_cache=no_cache,
+                        yaml_only=yaml_only,
+                        specific_version=resolved_version,
+                        capture_rendered_messages=include_trace,
                     )
                     
                     if predictions:
@@ -597,7 +601,11 @@ async def predict_impl(
                                 tracker.update(current_items=current_prediction)
                             
                             scorecard_instance, predictions, costs = await predict_score_with_individual_loading(
-                                scorecard_identifier, score_name, sample_row, used_item_id, no_cache=no_cache, yaml_only=yaml_only, specific_version=resolved_version
+                                scorecard_identifier, score_name, sample_row, used_item_id,
+                                no_cache=no_cache,
+                                yaml_only=yaml_only,
+                                specific_version=resolved_version,
+                                capture_rendered_messages=include_trace,
                             )
                             
                             if predictions:
@@ -1345,7 +1353,16 @@ def select_sample(scorecard_identifier, score_name, item_identifier, fresh, comp
         return sample_row, item.id
 
 
-async def predict_score_with_individual_loading(scorecard_identifier, score_name, sample_row, used_item_id, no_cache=False, yaml_only=False, specific_version=None):
+async def predict_score_with_individual_loading(
+    scorecard_identifier,
+    score_name,
+    sample_row,
+    used_item_id,
+    no_cache=False,
+    yaml_only=False,
+    specific_version=None,
+    capture_rendered_messages=False,
+):
     """
     Predict a single score using Scorecard.score_entire_text with dependency backfilling.
     """
@@ -1428,6 +1445,10 @@ async def predict_score_with_individual_loading(scorecard_identifier, score_name
         for key, value in row_dict.items():
             if key not in ['text', 'metadata'] and key not in metadata:
                 metadata[key] = value
+
+        if capture_rendered_messages:
+            from plexus.scores.prompt_trace import CAPTURE_RENDERED_MESSAGES_METADATA_KEY
+            metadata[CAPTURE_RENDERED_MESSAGES_METADATA_KEY] = True
 
         # Create Score.Input object
         score_input = Score.Input(
