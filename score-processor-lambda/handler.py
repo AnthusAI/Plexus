@@ -55,6 +55,28 @@ from plexus.dashboard.api.models.item import Item
 from plexus.utils.request_log_capture import capture_request_logs
 
 
+def configure_lambda_logging():
+    """Configure deterministic root logging for Lambda runtime."""
+    log_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level_name, logging.INFO)
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    # Lambda may preconfigure handlers. Keep them aligned to our selected level.
+    if root_logger.handlers:
+        for handler in root_logger.handlers:
+            handler.setLevel(log_level)
+    else:
+        logging.basicConfig(level=log_level)
+
+    for noisy_logger in ("urllib3", "botocore", "boto3", "gql.transport", "gql.dsl"):
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+
+
+configure_lambda_logging()
+
+
 class LambdaJobProcessor:
     """Processes a single scoring job for Lambda execution"""
 
