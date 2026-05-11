@@ -1,0 +1,18 @@
+{
+  "id": "plx-f72a32d5-74e3-4aa7-a898-c1eb57b68a67",
+  "title": "Implement Console private mode soft privacy",
+  "description": "Implement metadata-based soft privacy for Console private mode: owner-visible private spans, non-owner collapsed placeholders, private metadata propagation through chat runtime, and public-context exclusion.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-11T18:00:15.975891Z",
+  "updated_at": "2026-05-11T18:36:04.617700Z",
+  "closed_at": "2026-05-11T18:36:04.617700Z",
+  "custom": {}
+}
