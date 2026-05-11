@@ -755,8 +755,8 @@ def build_associated_dataset_from_vetted_feedback_items(
             dataset_stats={
                 "row_count": int(len(dataframe)),
                 "requested_max_items": max_items,
-                "qualifying_found": len(all_qualifying_items),
-                "source_exhausted": len(all_qualifying_items) < max_items,
+                "qualifying_found": len(all_vetted_items),
+                "source_exhausted": len(all_vetted_items) < max_items,
                 "label_distribution": class_distribution_after,
                 "class_list_used": class_list_used,
                 "class_resolution_source": class_resolution_source,
