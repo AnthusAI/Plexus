@@ -26,7 +26,7 @@ def test_continuous_worker_logs_compact_warning_and_backs_off(monkeypatch):
     exception_calls = []
 
     monkeypatch.setattr(local_worker, "_load_local_env", lambda: None)
-    monkeypatch.setattr(local_worker, "_resolve_client", lambda: object())
+    monkeypatch.setattr(local_worker, "_resolve_client", object)
     monkeypatch.setattr(local_worker, "build_response_owner", lambda _target: "local:test")
     monkeypatch.setenv("CONSOLE_LOCAL_WORKER_ERROR_BACKOFF_SECONDS", "2.5")
     monkeypatch.setattr(local_worker.logger, "warning", lambda *args: warning_calls.append(args))
@@ -58,7 +58,7 @@ def test_once_worker_preserves_exception_traceback_behavior(monkeypatch):
     exception_calls = []
 
     monkeypatch.setattr(local_worker, "_load_local_env", lambda: None)
-    monkeypatch.setattr(local_worker, "_resolve_client", lambda: object())
+    monkeypatch.setattr(local_worker, "_resolve_client", object)
     monkeypatch.setattr(local_worker, "build_response_owner", lambda _target: "local:test")
     monkeypatch.setattr(local_worker.logger, "exception", lambda *args: exception_calls.append(args))
 
