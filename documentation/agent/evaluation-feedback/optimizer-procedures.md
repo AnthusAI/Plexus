@@ -174,10 +174,11 @@ After acceptance: State updated (baselines, RCA, item recurrence tracker).
 
 ### Finalize
 
-Three LLM outputs are generated for different audiences:
-- **Executive Summary** (4-6 sentences, plain English): Copy-pasteable update for anyone. What improved, main blocker, what decisions stakeholders need to make.
-- **Lab Report** (technical): What happened, why it stalled, error patterns, ceiling analysis, next lab actions. Feeds `prior_run_prescription` for the next run.
-- **SME Agenda** (meeting agenda format): Each item is a *decision to make* — phrased as a question with examples, options, and count of items it would resolve. For subject-matter experts who don't know what AC1 is.
+The optimizer records `optimization_complete`, `optimization_completed_at`, and
+`optimizer_result_summary` before any long-form reporting. End-of-run narrative
+LLM reports are not generated inline with the parent optimizer run; the stored
+`end_of_run_report` contains deterministic, non-blocking placeholders and points
+operators to the persisted optimizer state for follow-up reporting.
 - If improved and not dry_run: promote last accepted version to champion
 
 ---
@@ -262,20 +263,27 @@ Each cycle record contains:
 
 ### End-of-Run Outputs
 
-The optimizer produces three outputs at the end of each run, stored in `end_of_run_report` State:
+The optimizer stores deterministic end-of-run outputs in `end_of_run_report`
+State and a machine-readable `optimizer_result_summary`. These are written
+before final narrative reporting so the procedure can complete without waiting
+on report writer agents.
 
 **Executive Summary** (`end_of_run_report.executive_summary.text`)
-Plain-English prose (4-6 sentences). Suitable for any audience. Covers: what improved, how many cycles, main blocker, what SME decisions are needed. No markdown.
+Compact deterministic completion summary: status, cycle count, feedback AC1
+change, and regression AC1 change.
 
 **Lab Report** (`end_of_run_report.lab_report.text`)
-Technical analysis for operators and the next optimizer run. Sections:
-- **SUMMARY**: 5-7 bullets (metrics, trajectory, blocking factor, ceiling)
-- **ANALYSIS**: What happened / Why it stalled / Error patterns / Ceiling
-- **NEXT ACTIONS (LAB ONLY)**: Up to 5 actions under lab control (prompt, model, architecture)
-- **SUSPECTED LOW-QUALITY FEEDBACK LABELS**: Specific items to review for invalidation
+Compact deterministic operator note. Use `optimizer_result_summary`,
+`iterations`, `notable_item_recurrence`, and `last_recurrence_context_audit`
+for detailed follow-up analysis.
 
 **SME Agenda** (`end_of_run_report.sme_agenda.text`)
-Meeting agenda format for subject-matter experts. Each item is a question-to-answer (not a finding-to-read), with plain-language impact, concrete examples, and options to choose from.
+Deferred placeholder. Generate long-form stakeholder reporting from the
+completed procedure state as a separate bounded job when needed.
+
+**SME Worksheet** (`end_of_run_report.sme_worksheet.text`)
+Deferred placeholder. Recurrence/problem-item state remains available in the
+completed procedure state.
 
 ### Item Recurrence Patterns
 

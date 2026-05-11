@@ -3,7 +3,7 @@
   "title": "score-processor-lambda/Dockerfile",
   "description": "Snyk vulnerabilities found in `score-processor-lambda/Dockerfile`.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 3,
   "assignee": null,
   "creator": null,
@@ -13,10 +13,41 @@
     "snyk"
   ],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "a97dd2eb-0e30-4a7e-be0c-1bf4c06fc3da",
+      "author": "derek.norrbom",
+      "text": "Investigating whether score-processor-lambda can now install the full Plexus package (Poetry metadata) instead of maintaining a separate requirements.txt subset. Comparing with dashboard consoleRunWorker Dockerfile, validating dependency/runtime needs, and testing image build feasibility.",
+      "created_at": "2026-05-08T19:38:11.633666Z"
+    },
+    {
+      "id": "670f0d95-8ea7-435b-a746-c08b58058a20",
+      "author": "derek.norrbom",
+      "text": "Implemented and validated direct Plexus install for score-processor-lambda.\n\nChanges made:\n- Updated  to install from repository () using  dependency metadata.\n- Removed dedicated  from the build path and deleted the file.\n- Updated  to validate LangChain/Tactus versions against installed Usage: plexus [OPTIONS] COMMAND [ARGS]...\n\n  Plexus CLI for managing scorecards, scores, and evaluations.\n\nOptions:\n  --debug  Enable debug logging.\n  --help   Show this message and exit.\n\nCommands:\n  scores         Commands for managing scores.\n  score          Commands for managing scores.\n  tasks          Manage task records in the dashboard\n  task           Manage task records in the dashboard (alias for 'tasks')\n  items          Manage item records in the dashboard\n  item           Manage item records in the dashboard (alias for 'items')\n  command        Commands for remote command dispatch and worker management.\n  batch          Commands for batch processing with OpenAI models.\n  evaluate       Evaluating current scorecard configurations against...\n  predict        Predict a scorecard or specific score(s) within a...\n  analyze        Analysis commands for evaluating scorecard...\n  tuning         Commands for fine-tuning models.\n  train          Train and evaluate a scorecard or specific score within...\n  score-results  Manage score result records in the dashboard\n  score-result   Manage score result records in the dashboard (alias for...\n  result         Manage score result records in the dashboard (alias for...\n  results        Manage score result records in the dashboard (alias for...\n  report         Commands for managing and running reports.\n  data           Profiling the data available for each score in the...\n  score-chat     Commands for working with the Plexus score chat feature.\n  lake           Sub-group for data lake operations.\n  feedback       Commands for managing feedback data.\n  scorecards     Commands for managing scorecards.\n  scorecard      Manage individual scorecards (alias for 'scorecards')\n  evaluations    Manage evaluation records in the dashboard\n  count          Count items and score results with various time-based...\n  metrics-group  Metrics aggregation commands.\n  dataset        Commands for managing datasets.\n  procedure      Manage procedures for AI system optimization.\n  rubric-memory  Commands for syncing and preparing rubric memory.\n  chat           Inspect and send chat messages.\n  execute        Execute a Tactus snippet through the Plexus runtime. package requirements metadata rather than .\n- Updated  references accordingly.\n\nValidation:\n-  => 6 passed.\n-  => Docker image build succeeded; smoke suite 10 passed, 0 failed.\n\nOutcome: score processor container now uses single-source dependency management via /Poetry package metadata, eliminating dual maintenance with a lambda-specific requirements file.",
+      "created_at": "2026-05-08T19:45:28.294648Z"
+    },
+    {
+      "id": "52b421f5-1e96-4559-9f5d-a03203d47f8a",
+      "author": "derek.norrbom",
+      "text": "Implemented and validated direct Plexus install for score-processor-lambda.\n\nChanges made:\n- Updated score-processor-lambda/Dockerfile to install from repository (pip install -e /workspace) using pyproject.toml dependency metadata.\n- Removed dedicated score-processor-lambda/requirements.txt from the build path and deleted the file.\n- Updated score-processor-lambda/tests/smoke_test.py to validate LangChain/Tactus versions against installed plexus package requirements metadata rather than /tmp/requirements.txt.\n- Updated score-processor-lambda/README.md references accordingly.\n\nValidation:\n- make test-unit => 6 passed.\n- make test-smoke => Docker image build succeeded; smoke suite 10 passed, 0 failed.\n\nOutcome: score processor container now uses single-source dependency management via pyproject.toml/Poetry package metadata, eliminating dual maintenance with a lambda-specific requirements file.",
+      "created_at": "2026-05-08T19:45:29.967527Z"
+    },
+    {
+      "id": "dc0d6b21-9b37-42fc-8dda-d25f8ec216c5",
+      "author": "derek.norrbom",
+      "text": "Post-edit verification complete after smoke test cleanup: reran container smoke test against updated test file; 10 passed, 0 failed.",
+      "created_at": "2026-05-08T19:45:57.622481Z"
+    },
+    {
+      "id": "49388f2c-ce8c-4c61-a5fe-b3055d1bad25",
+      "author": "derek.norrbom",
+      "text": "Completed: score-processor-lambda now installs Plexus directly from repository pyproject metadata (single dependency source), removed lambda-specific requirements file, and updated smoke tests/docs. Validation: make test-unit (6 passed), make test-smoke (10 passed).",
+      "created_at": "2026-05-08T19:50:54.039077Z"
+    }
+  ],
   "created_at": "2026-02-26T00:13:56.243338722Z",
-  "updated_at": "2026-03-11T20:41:39.708471Z",
-  "closed_at": null,
+  "updated_at": "2026-05-08T19:50:54.039077Z",
+  "closed_at": "2026-05-08T19:50:54.024911Z",
   "custom": {
     "snyk_category": "dependency",
     "snyk_target_file": "score-processor-lambda/Dockerfile"

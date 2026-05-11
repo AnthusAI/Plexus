@@ -385,7 +385,7 @@ export default function ProcedureTask({
         if (state.optimization_diagnostic) setOptimizationDiagnostic(state.optimization_diagnostic)
         if (state.end_of_run_report) setEndOfRunReport(state.end_of_run_report)
         if (state.procedure_summary) setProcedureSummary(state.procedure_summary)
-        if (state.notable_item_recurrence) setNotableItemRecurrence(state.notable_item_recurrence)
+        setNotableItemRecurrence(state.notable_item_recurrence ?? null)
         const details = new Map<number, any>()
         for (const it of cycleIterations) {
           if (it.exploration_results || it.done_reason || it.synthesis_reasoning || it.dual_synthesis) {
@@ -1396,6 +1396,9 @@ export default function ProcedureTask({
             />
           ) : null}
 
+          {/* End-of-run executive/lab/SME reporting belongs above tactical cycle notes. */}
+          {endOfRunReport && <EndOfRunReport report={endOfRunReport} />}
+
           {/* Procedure-level summary — updated after each cycle */}
           {procedureSummary && (() => {
             const progressText = procedureSummary.progress || procedureSummary.diagnosis || ''
@@ -1743,18 +1746,22 @@ export default function ProcedureTask({
                                   <div>
                                     <span className="text-muted-foreground/70 text-xs block mb-1">Hypotheses tested:</span>
                                     <div className="space-y-1">
-                                      {details.exploration_results.map((er: any, j: number) => {
-                                        const hypDesc = er.done_reason || er.hypothesis?.description || er.agent_reasoning || ''
-                                        return (
-                                          <details key={j} className="rounded bg-background">
-                                            <summary className="flex items-center gap-2 text-xs px-2 py-1 cursor-pointer hover:bg-accent/30">
-                                              <span className="text-muted-foreground truncate flex-1" title={er.hypothesis?.name || `Hyp ${er.index}`}>
-                                                {er.hypothesis?.name || `Hypothesis ${er.index}`}
-                                              </span>
-                                              {er.succeeded ? (
-                                                <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-true text-primary-foreground">Pass</Badge>
-                                              ) : (
-                                                <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-false text-primary-foreground">Fail</Badge>
+	                                      {details.exploration_results.map((er: any, j: number) => {
+	                                        const hypDesc = er.done_reason || er.hypothesis?.description || er.agent_reasoning || ''
+	                                        const laneName = er.slot || er.hypothesis?.slot
+	                                        return (
+	                                          <details key={j} className="rounded bg-background">
+	                                            <summary className="flex items-center gap-2 text-xs px-2 py-1 cursor-pointer hover:bg-accent/30">
+	                                              <span className="text-muted-foreground truncate flex-1" title={er.hypothesis?.name || `Hyp ${er.index}`}>
+	                                                {laneName ? `[${laneName}] ` : ''}{er.hypothesis?.name || `Hypothesis ${er.index}`}
+	                                              </span>
+	                                              {er.harmful_repeat_warning && (
+	                                                <Badge variant="outline" className="text-xs px-1 py-0 font-normal flex-shrink-0 border-amber-500/50 text-amber-600">Repeat risk</Badge>
+	                                              )}
+	                                              {er.succeeded ? (
+	                                                <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-true text-primary-foreground">Pass</Badge>
+	                                              ) : (
+	                                                <Badge variant="pill" className="text-xs px-1 py-0 font-normal flex-shrink-0 bg-false text-primary-foreground">Fail</Badge>
                                               )}
                                               <span className="whitespace-nowrap flex-shrink-0">
                                                 <span className="text-muted-foreground/60 mr-1">Recent</span>
@@ -1773,14 +1780,21 @@ export default function ProcedureTask({
                                                 ) : '—'}
                                               </span>
                                             </summary>
-                                            {hypDesc && (
-                                              <div className="px-2 py-1.5 border-t border-border/30">
-                                                <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground [&_p]:text-xs [&_li]:text-xs">
-                                                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{hypDesc}</ReactMarkdown>
-                                                </div>
-                                              </div>
-                                            )}
-                                          </details>
+	                                            {(er.harmful_repeat_warning || hypDesc) && (
+	                                              <div className="px-2 py-1.5 border-t border-border/30">
+	                                                {er.harmful_repeat_warning && (
+	                                                  <div className="mb-1 rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-xs text-amber-700">
+	                                                    Harmful-repeat warning: {er.harmful_repeat_warning}
+	                                                  </div>
+	                                                )}
+	                                                {hypDesc && (
+	                                                  <div className="prose prose-sm max-w-none text-muted-foreground prose-p:text-muted-foreground prose-strong:text-muted-foreground prose-headings:text-muted-foreground prose-li:text-muted-foreground [&_p]:text-xs [&_li]:text-xs">
+	                                                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{hypDesc}</ReactMarkdown>
+	                                                  </div>
+	                                                )}
+	                                              </div>
+	                                            )}
+	                                          </details>
                                         )
                                       })}
                                     </div>
@@ -1788,36 +1802,52 @@ export default function ProcedureTask({
                                 )}
                                 {details.dual_synthesis && (
                                   <div>
-                                    <span className="text-muted-foreground/70 text-xs block mb-1">
-                                      Dual synthesis{details.synthesis_strategy ? ` — selected Strategy ${details.synthesis_strategy}` : ''}:
-                                    </span>
-                                    <div className="flex gap-3 text-xs">
-                                      {details.dual_synthesis.strategy_a && (
-                                        <div className={`border rounded px-2 py-1 ${details.synthesis_strategy === 'A' ? 'border-primary/50 bg-primary/5' : 'border-border/50'}`}>
-                                          <span className="font-medium">A (cycle-focused)</span>
-                                          <span className="ml-2 text-muted-foreground">
-                                            Recent <span className={details.dual_synthesis.strategy_a.recent_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                              {details.dual_synthesis.strategy_a.recent_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_a.recent_delta?.toFixed(3)}
-                                            </span>
-                                            {' '}Regression <span className={details.dual_synthesis.strategy_a.regression_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                              {details.dual_synthesis.strategy_a.regression_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_a.regression_delta?.toFixed(3)}
-                                            </span>
-                                          </span>
-                                        </div>
-                                      )}
-                                      {details.dual_synthesis.strategy_b && (
-                                        <div className={`border rounded px-2 py-1 ${details.synthesis_strategy === 'B' ? 'border-primary/50 bg-primary/5' : 'border-border/50'}`}>
-                                          <span className="font-medium">B (arc-focused)</span>
-                                          <span className="ml-2 text-muted-foreground">
-                                            Recent <span className={details.dual_synthesis.strategy_b.recent_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                              {details.dual_synthesis.strategy_b.recent_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_b.recent_delta?.toFixed(3)}
-                                            </span>
-                                            {' '}Regression <span className={details.dual_synthesis.strategy_b.regression_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                              {details.dual_synthesis.strategy_b.regression_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_b.regression_delta?.toFixed(3)}
-                                            </span>
-                                          </span>
-                                        </div>
-                                      )}
+	                                    <span className="text-muted-foreground/70 text-xs block mb-1">
+	                                      Synthesis{details.synthesis_strategy ? ` — selected Strategy ${details.synthesis_strategy}` : ''}:
+	                                    </span>
+	                                    {details.dual_synthesis.status && (
+	                                      <div className="mb-1 text-xs text-muted-foreground">
+	                                        Status: <span className="font-medium">{details.dual_synthesis.status}</span>
+	                                        {details.dual_synthesis.reason ? ` — ${details.dual_synthesis.reason}` : ''}
+	                                      </div>
+	                                    )}
+	                                    <div className="flex flex-wrap gap-3 text-xs">
+	                                      {details.dual_synthesis.strategy_a && (
+	                                        <div className={`border rounded px-2 py-1 ${details.synthesis_strategy === 'A' ? 'border-primary/50 bg-primary/5' : 'border-border/50'}`}>
+	                                          <span className="font-medium">A (cycle-focused)</span>
+	                                          <span className="ml-2 text-muted-foreground">
+	                                            {details.dual_synthesis.strategy_a.status && `${details.dual_synthesis.strategy_a.status} `}
+	                                            {details.dual_synthesis.strategy_a.recent_delta != null && (
+	                                              <>Recent <span className={details.dual_synthesis.strategy_a.recent_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
+	                                                {details.dual_synthesis.strategy_a.recent_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_a.recent_delta.toFixed(3)}
+	                                              </span></>
+	                                            )}
+	                                            {details.dual_synthesis.strategy_a.regression_delta != null && (
+	                                              <> Regression <span className={details.dual_synthesis.strategy_a.regression_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
+	                                                {details.dual_synthesis.strategy_a.regression_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_a.regression_delta.toFixed(3)}
+	                                              </span></>
+	                                            )}
+	                                          </span>
+	                                        </div>
+	                                      )}
+	                                      {details.dual_synthesis.strategy_b && (
+	                                        <div className={`border rounded px-2 py-1 ${details.synthesis_strategy === 'B' ? 'border-primary/50 bg-primary/5' : 'border-border/50'}`}>
+	                                          <span className="font-medium">B (arc-focused)</span>
+	                                          <span className="ml-2 text-muted-foreground">
+	                                            {details.dual_synthesis.strategy_b.status && `${details.dual_synthesis.strategy_b.status} `}
+	                                            {details.dual_synthesis.strategy_b.recent_delta != null && (
+	                                              <>Recent <span className={details.dual_synthesis.strategy_b.recent_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
+	                                                {details.dual_synthesis.strategy_b.recent_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_b.recent_delta.toFixed(3)}
+	                                              </span></>
+	                                            )}
+	                                            {details.dual_synthesis.strategy_b.regression_delta != null && (
+	                                              <> Regression <span className={details.dual_synthesis.strategy_b.regression_delta >= 0 ? 'text-green-500' : 'text-red-500'}>
+	                                                {details.dual_synthesis.strategy_b.regression_delta >= 0 ? '+' : ''}{details.dual_synthesis.strategy_b.regression_delta.toFixed(3)}
+	                                              </span></>
+	                                            )}
+	                                          </span>
+	                                        </div>
+	                                      )}
                                     </div>
                                     {details.dual_synthesis.selection_reason && (
                                       <div className="prose prose-sm max-w-none mt-1 text-muted-foreground/60 prose-p:text-muted-foreground/60 [&_p]:text-xs">
@@ -1976,9 +2006,6 @@ export default function ProcedureTask({
           {notableItemRecurrence && (
             <OptimizerProblemItemsPanel notableItems={notableItemRecurrence} />
           )}
-
-          {/* End-of-run diagnosis and prescription */}
-          {endOfRunReport && <EndOfRunReport report={endOfRunReport} />}
 
           {/* Procedure Conversation section */}
           <div className="mt-6">
