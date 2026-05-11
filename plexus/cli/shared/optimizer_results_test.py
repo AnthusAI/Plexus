@@ -59,6 +59,11 @@ def _sample_state():
                 "regression_metrics": {"alignment": 0.57, "accuracy": 79.0},
                 "recent_deltas": {"alignment": 0.04},
                 "regression_deltas": {"alignment": 0.08},
+                "dual_synthesis": {
+                    "status": "not_evaluated",
+                    "reason": "no_synthesis_version_and_no_successful_hypothesis",
+                    "strategy_a": {"status": "no_version"},
+                },
                 "exploration_results": [
                     {
                         "index": 2,
@@ -67,6 +72,8 @@ def _sample_state():
                         "acc_eval_id": "eval-acc-candidate",
                         "fb_metrics": {"alignment": 0.61, "accuracy": 82.0},
                         "acc_metrics": {"alignment": 0.63, "accuracy": 83.0},
+                        "slot": "structural",
+                        "harmful_repeat_warning": "overlaps strongly harmful cycle 1",
                     }
                 ],
             },
@@ -105,10 +112,12 @@ def _sample_procedure(metadata=None):
 
 def test_build_manifest_extracts_best_versions_and_cycles():
     service = OptimizerResultsService(_FakeClient())
+    state = _sample_state()
+    state["end_of_run_report"]["run_summary"]["configured_max_iterations"] = 10
     manifest = service.build_manifest(
         procedure=_sample_procedure(),
         task=_FakeTask(),
-        state=_sample_state(),
+        state=state,
     )
 
     assert manifest["procedure"]["id"] == "proc-123"
@@ -116,9 +125,35 @@ def test_build_manifest_extracts_best_versions_and_cycles():
     assert manifest["best"]["winning_version_id"] == "version-accepted"
     assert manifest["best"]["best_feedback_evaluation_id"] == "eval-fb-best"
     assert manifest["summary"]["completed_cycles"] == 2
+    assert manifest["summary"]["configured_max_iterations"] == 10
     assert manifest["summary"]["stop_reason"] == "max_iterations"
     assert manifest["cycles"][0]["candidates"][0]["version_id"] == "version-candidate"
+    assert manifest["cycles"][0]["candidates"][0]["slot"] == "structural"
+    assert manifest["cycles"][0]["candidates"][0]["harmful_repeat_warning"] == "overlaps strongly harmful cycle 1"
+    assert manifest["cycles"][0]["dual_synthesis"]["status"] == "not_evaluated"
     assert manifest["cycles"][1]["status"] == "accepted"
+
+
+def test_build_manifest_marks_no_feedback_skip_terminal():
+    service = OptimizerResultsService(_FakeClient())
+    state = {
+        "baseline_version_id": "version-baseline",
+        "scorecard_name": "SelectQuote HCS Medium-Risk",
+        "score_name": "Information Accuracy: Copay Guarantees",
+        "configured_max_iterations": 10,
+        "skip_reason": "No qualifying recent feedback is available; skipping optimization.",
+        "iterations": [],
+    }
+
+    manifest = service.build_manifest(
+        procedure=_sample_procedure(),
+        task=_FakeTask(),
+        state=state,
+    )
+
+    assert manifest["summary"]["completed_cycles"] == 0
+    assert manifest["summary"]["configured_max_iterations"] == 10
+    assert manifest["summary"]["stop_reason"] == "skipped_no_feedback"
 
 
 def test_index_optimizer_run_persists_manifest_and_pointer(monkeypatch):
@@ -228,6 +263,31 @@ def test_optimizer_summaries_are_compact_and_url_ready(monkeypatch):
     assert run_summary["winning_version_id"] == "version-accepted"
     assert run_summary["best_feedback_evaluation_url"].endswith("/eval-fb-best")
     assert "end_of_run_report" not in run_summary
+
+
+def test_optimizer_summary_uses_effective_completed_status_for_terminal_running_manifest(monkeypatch):
+    service = OptimizerResultsService(_FakeClient())
+    manifest = service.build_manifest(
+        procedure=_sample_procedure(),
+        task=_FakeTask(),
+        state=_sample_state(),
+    )
+    indexed_procedure = _sample_procedure(
+        {
+            OPTIMIZER_ARTIFACTS_METADATA_KEY: {
+                "manifest": "tasks/task-123/optimizer/manifest.json"
+            }
+        }
+    )
+
+    monkeypatch.setattr(service, "_load_procedure_record", lambda _procedure_id: indexed_procedure)
+    monkeypatch.setattr(service, "load_indexed_manifest_for_procedure", lambda _procedure: manifest)
+
+    payload = service.summarize_optimizer_procedure("proc-123")
+
+    assert payload["procedure"]["status"] == "RUNNING"
+    assert payload["summary"]["stop_reason"] == "max_iterations"
+    assert payload["summary"]["effective_status"] == "COMPLETED"
 
     candidate = {
         "version_id": "version-accepted",
