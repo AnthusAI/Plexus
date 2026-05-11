@@ -6,7 +6,7 @@ and dispatch status based on dispatch mode.
 """
 
 import json
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 import pytest
 
 from plexus.cli.procedure.service import ProcedureService
