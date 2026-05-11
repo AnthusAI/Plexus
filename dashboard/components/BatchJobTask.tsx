@@ -12,9 +12,8 @@ import { BatchJobProgressBar, BatchJobStatus } from "@/components/ui/batch-job-p
 import { getClient, listFromModel, getFromModel } from '@/utils/data-operations'
 import type { Schema } from "@/amplify/data/resource"
 import { 
-  createBatchJobScoringJobSubscription,
   createScoringJobSubscription,
-  BatchJobScoringJobSubscriptionData,
+  createBatchJobScoringJobSubscription,
   ScoringJobSubscriptionData
 } from '@/utils/subscriptions'
 import { BaseTaskData } from '@/types/base'
@@ -32,6 +31,11 @@ interface ScoringJobData {
   scoreId?: string | null
   batchJobId: string
   createdAt: string | null | undefined
+}
+
+interface BatchJobScoringJobLink {
+  batchJobId: string
+  scoringJobId: string
 }
 
 export interface BatchJobTaskData {
@@ -104,12 +108,12 @@ export default function BatchJobTask({
       try {
         console.log('Loading scoring jobs for batch:', taskData.id);
         
-        // Use listFromModel helper instead of direct dataClient access
-        const linksResult = await listFromModel<Schema['BatchJobScoringJob']['type']>('BatchJobScoringJob', {
+        // This model is removed from the typed schema; query dynamically for legacy records when present.
+        const linksResult = await (listFromModel as any)('BatchJobScoringJob', {
           filter: {
             batchJobId: { eq: taskData.id }
           }
-        });
+        }) as { data?: BatchJobScoringJobLink[] };
         
         console.log('BatchJobScoringJob links loaded:', {
           count: linksResult.data?.length || 0,
@@ -128,7 +132,7 @@ export default function BatchJobTask({
         }
 
         // Get all scoring jobs in one query using IN filter
-        const scoringJobIds = linksResult.data.map(link => link.scoringJobId);
+        const scoringJobIds = linksResult.data.map((link) => link.scoringJobId);
         
         console.log('Fetching scoring jobs:', {
           ids: scoringJobIds
@@ -177,9 +181,10 @@ export default function BatchJobTask({
         
         // Set up subscriptions with proper types
         const client = getClient();
-        if (client.models.BatchJobScoringJob) {
+        const batchJobScoringJobModel = (client.models as Record<string, unknown>).BatchJobScoringJob;
+        if (batchJobScoringJobModel) {
           // Use the subscription helper for BatchJobScoringJob
-          const handleBatchJobData = async (data: BatchJobScoringJobSubscriptionData) => {
+          const handleBatchJobData = async (data: BatchJobScoringJobLink) => {
             if (!data?.batchJobId || !data?.scoringJobId) return;
             
             if (data.batchJobId === taskData.id) {
