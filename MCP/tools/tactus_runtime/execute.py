@@ -2633,9 +2633,15 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
     dataset = None
     row_count: Any = None
     stored_feedback_target_hash: str | None = None
+    stored_requested_max_items: Any = None
+    stored_qualifying_found: Any = None
+    stored_source_exhausted: Any = None
     for candidate in datasets:
         candidate_row_count: Any = None
         candidate_feedback_target_hash: str | None = None
+        candidate_requested_max_items: Any = None
+        candidate_qualifying_found: Any = None
+        candidate_source_exhausted: Any = None
         if candidate.get("dataSourceVersionId"):
             try:
                 dsv_result = client.execute(
@@ -2654,6 +2660,9 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
                     if isinstance(config, dict):
                         stats = config.get("dataset_stats", {}) or {}
                         candidate_row_count = stats.get("row_count")
+                        candidate_requested_max_items = stats.get("requested_max_items")
+                        candidate_qualifying_found = stats.get("qualifying_found")
+                        candidate_source_exhausted = stats.get("source_exhausted")
                         candidate_feedback_target_hash = stats.get(
                             "feedback_target_hash"
                         )
@@ -2669,6 +2678,9 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
         dataset = candidate
         row_count = candidate_row_count
         stored_feedback_target_hash = candidate_feedback_target_hash
+        stored_requested_max_items = candidate_requested_max_items
+        stored_qualifying_found = candidate_qualifying_found
+        stored_source_exhausted = candidate_source_exhausted
         break
 
     if not dataset:
@@ -2691,6 +2703,9 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
         "dataset_name": dataset.get("name"),
         "created_at": dataset.get("createdAt"),
         "row_count": row_count,
+        "requested_max_items": stored_requested_max_items,
+        "qualifying_found": stored_qualifying_found,
+        "source_exhausted": stored_source_exhausted,
         "is_materialized": bool(readiness.get("is_materialized")),
         "dataset_file": readiness.get("dataset_file"),
         "materialization_error": readiness.get("materialization_error"),
@@ -2883,6 +2898,8 @@ def _default_evaluation_find_recent(args: dict[str, Any]) -> dict[str, Any]:
     max_feedback_items = args.get("max_feedback_items")
     sampling_mode = args.get("sampling_mode")
     latest_feedback_updated_at = args.get("latest_feedback_updated_at")
+    feedback_start_at = args.get("feedback_start_at")
+    feedback_end_at = args.get("feedback_end_at")
 
     client = PlexusDashboardClient()
     query = """
@@ -3010,6 +3027,12 @@ def _default_evaluation_find_recent(args: dict[str, Any]) -> dict[str, Any]:
                     continue
                 if created_dt < latest_feedback_dt:
                     continue
+            if feedback_start_at is not None:
+                if str(parameters.get("feedback_start_at") or "") != str(feedback_start_at):
+                    continue
+            if feedback_end_at is not None:
+                if str(parameters.get("feedback_end_at") or "") != str(feedback_end_at):
+                    continue
 
         return {
             "_from_cache": True,
@@ -3098,6 +3121,8 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
         _append_optional_cli_arg(cmd, "--days", args.get("days"))
         _append_optional_cli_arg(cmd, "--version", args.get("version"))
         _append_optional_cli_arg(cmd, "--sample-seed", args.get("sample_seed"))
+        _append_optional_cli_arg(cmd, "--feedback-start-at", args.get("feedback_start_at"))
+        _append_optional_cli_arg(cmd, "--feedback-end-at", args.get("feedback_end_at"))
         _append_optional_cli_arg(
             cmd, "--max-category-summary-items", args.get("max_category_summary_items")
         )
@@ -4749,6 +4774,8 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
             client_context=getattr(client, "context", None),
             source="execute_tactus",
         )
+        if isinstance(input_obj.get("metadata"), (dict, list)):
+            input_obj["metadata"] = json.dumps(input_obj["metadata"])
 
         resp = client.execute(version_mutation, {"input": input_obj})
         new_version = (resp or {}).get("createScoreVersion") or {}

@@ -609,6 +609,57 @@ def test_default_score_set_champion_serializes_champion_history_metadata(
     assert metadata["championHistory"][0]["exitedAt"] is None
 
 
+def test_default_score_update_serializes_attribution_metadata(monkeypatch) -> None:
+    captured_inputs: list[dict] = []
+
+    class FakeClient:
+        context = SimpleNamespace(account_id="account-1")
+
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "GetScoreChampionId" in query:
+                return {"getScore": {"championVersionId": "version-1"}}
+            if "CreateScoreVersion" in query:
+                captured_inputs.append(variables["input"])
+                return {
+                    "createScoreVersion": {
+                        "id": "version-2",
+                        "createdAt": "2026-05-08T00:00:00.000Z",
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setenv("PLEXUS_ACTOR_USER_ID", "user-1")
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: FakeClient(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.direct_identifier_resolution.direct_resolve_scorecard_identifier",
+        lambda _client, _identifier: "scorecard-1",
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.direct_identifier_resolution.direct_resolve_score_identifier",
+        lambda _client, _scorecard_id, _identifier: "score-1",
+    )
+
+    result = execute._default_score_update(
+        {
+            "scorecard_identifier": "Scorecard",
+            "score_identifier": "Score",
+            "guidelines": "Guidelines",
+            "version_note": "Test version",
+        }
+    )
+
+    assert result["success"] is True
+    assert result["version_id"] == "version-2"
+    metadata = captured_inputs[0]["metadata"]
+    assert isinstance(metadata, str)
+    parsed = json.loads(metadata)
+    assert parsed["attribution"]["requestUserId"] == "user-1"
+    assert parsed["attribution"]["source"] == "execute_tactus"
+
+
 def test_default_score_set_champion_does_not_duplicate_open_history_entry(
     monkeypatch,
 ) -> None:
@@ -2431,6 +2482,43 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     assert json.loads(captured["kwargs"]["env"]["PLEXUS_CHILD_BUDGET"]) == _child_budget()
     assert json.loads(captured["kwargs"]["env"]["PLEXUS_ACTOR_CONTEXT_JSON"])["actor_user_id"] == "user-ctx-123"
     assert result["child_budget"] == _child_budget()
+
+
+def test_default_evaluation_runner_passes_frozen_feedback_window(monkeypatch) -> None:
+    captured: dict = {}
+
+    class FakeProcess:
+        pid = 4242
+
+        def poll(self) -> int:
+            return 1
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return FakeProcess()
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/plexus")
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    execute._default_evaluation_runner(
+        {
+            "evaluation_type": "feedback",
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+            "max_feedback_items": 25,
+            "days": 30,
+            "feedback_start_at": "2026-02-01T00:00:00Z",
+            "feedback_end_at": "2026-05-01T00:00:00Z",
+            "budget": _child_budget(),
+        },
+        None,
+    )
+
+    assert "--feedback-start-at" in captured["cmd"]
+    assert captured["cmd"][captured["cmd"].index("--feedback-start-at") + 1] == "2026-02-01T00:00:00Z"
+    assert "--feedback-end-at" in captured["cmd"]
+    assert captured["cmd"][captured["cmd"].index("--feedback-end-at") + 1] == "2026-05-01T00:00:00Z"
 
 
 def test_handle_peek_refreshes_evaluation_status() -> None:

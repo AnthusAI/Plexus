@@ -468,6 +468,63 @@ def _fail_all_task_stages(client: Any, task_id: str, error_message: str = "") ->
             logger.info(f"[STAGE_FAIL] Stage {stage_id} already {stage_status}, skipping")
 
 
+def _cancel_all_task_stages(client: Any, task_id: str, status_message: str = "") -> None:
+    """
+    Mark all PENDING or RUNNING task stages as CANCELLED.
+
+    Called after an operator interruption so the dashboard distinguishes a
+    cancelled run from an optimizer logic failure.
+    """
+    from datetime import datetime, timezone
+
+    stage_query = """
+    query GetTask($id: ID!) {
+        getTask(id: $id) {
+            stages {
+                items {
+                    id
+                    order
+                    status
+                }
+            }
+        }
+    }
+    """
+    result = client.execute(stage_query, {"id": task_id})
+    stages = result.get("getTask", {}).get("stages", {}).get("items", [])
+    logger.info(f"[STAGE_CANCEL] Task {task_id}: found {len(stages)} stages")
+    if not stages:
+        logger.warning(f"[STAGE_CANCEL] No stages found for task {task_id}")
+        return
+
+    update_mutation = """
+    mutation UpdateTaskStage($input: UpdateTaskStageInput!) {
+        updateTaskStage(input: $input) {
+            id
+            status
+        }
+    }
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    short_message = status_message[:500] if status_message else ""
+    for stage in stages:
+        stage_status = stage.get("status")
+        stage_id = stage.get("id")
+        if stage_status in ("PENDING", "RUNNING"):
+            logger.info(f"[STAGE_CANCEL] Marking stage {stage_id} (order {stage.get('order')}) CANCELLED")
+            client.execute(update_mutation, {
+                "input": {
+                    "id": stage_id,
+                    "status": "CANCELLED",
+                    "completedAt": now,
+                    "statusMessage": short_message,
+                }
+            })
+            logger.info(f"[STAGE_CANCEL] Stage {stage_id} marked CANCELLED")
+        else:
+            logger.info(f"[STAGE_CANCEL] Stage {stage_id} already {stage_status}, skipping")
+
+
 def _advance_task_to_running_stage(client: Any, task_id: str, target_order: int) -> None:
     """
     Advance a task's stages so that stages before target_order are COMPLETED
