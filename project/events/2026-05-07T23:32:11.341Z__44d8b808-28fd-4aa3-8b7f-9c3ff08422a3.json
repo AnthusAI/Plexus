@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "44d8b808-28fd-4aa3-8b7f-9c3ff08422a3",
+  "issue_id": "plx-65a165aa-1301-4d1c-a223-f31bd6ca6688",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-07T23:32:11.341Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Console chat can stream a response correctly but drift upward after the final completion update, leaving the completed response below the viewport. Sticky-bottom behavior must survive late layout and measurement changes at the end of streaming.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix Console chat final-response scroll drift"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-14559d76-98d3-4fb4-9074-5c49bce7d2f8",
+  "title": "Create procedure to build scorecard from ai-ready question export",
+  "description": "",
+  "type": "epic",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e97de328-2b16-4e58-94bc-a8cb05635544",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c5cea104-bf37-4d20-899e-faa215291fc6",
+      "author": "derek",
+      "text": "Epic complete: new scorecard migration procedure from ai-ready exports implemented and documented.",
+      "created_at": "2026-05-06T20:58:37.929631913Z"
+    }
+  ],
+  "created_at": "2026-05-06T20:56:34.188226110Z",
+  "updated_at": "2026-05-06T20:58:37.943672321Z",
+  "closed_at": "2026-05-06T20:58:37.943672321Z",
+  "custom": {}
+}
