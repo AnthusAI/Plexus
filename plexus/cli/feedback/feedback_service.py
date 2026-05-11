@@ -506,6 +506,8 @@ class FeedbackService:
         score_id: str,
         account_id: str,
         days: Optional[int],
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
         initial_value: Optional[str] = None,
         final_value: Optional[str] = None,
         limit: Optional[int] = None,
@@ -521,6 +523,8 @@ class FeedbackService:
             score_id: The score ID to filter by  
             account_id: The account ID to filter by
             days: Number of days back to search (None = all time)
+            start_date: Optional explicit UTC lower editedAt bound
+            end_date: Optional explicit UTC upper editedAt bound
             initial_value: Optional filter for initial answer value
             final_value: Optional filter for final answer value
             limit: Optional limit on number of items to return
@@ -530,12 +534,29 @@ class FeedbackService:
         Returns:
             List of FeedbackItem objects matching the criteria
         """
-        days_str = f"last {days} days" if days is not None else "all time"
+        if isinstance(start_date, str):
+            start_date = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+        if isinstance(end_date, str):
+            end_date = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+        if start_date and start_date.tzinfo is None:
+            start_date = start_date.replace(tzinfo=timezone.utc)
+        if end_date and end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=timezone.utc)
+        if (start_date is None) != (end_date is None):
+            raise ValueError("start_date and end_date must be provided together")
+        if start_date and end_date and end_date <= start_date:
+            raise ValueError("end_date must be after start_date")
+
+        days_str = (
+            f"{start_date.isoformat()} to {end_date.isoformat()}"
+            if start_date and end_date
+            else f"last {days} days" if days is not None else "all time"
+        )
         logger.info(f"Finding feedback items for scorecard {scorecard_id}, score {score_id}, {days_str}")
         
         # When days is None, we can't use the GSI query (which requires editedAt in composite key)
         # so we go straight to the fallback query without date filtering
-        if days is None:
+        if days is None and not (start_date and end_date):
             logger.info("No date filter specified, using standard query for all feedback items")
             filter_condition = {
                 "and": [
@@ -558,9 +579,10 @@ class FeedbackService:
             # Use the GSI query with date filtering for better performance
             try:
                 # Calculate date range
-                start_date = datetime.now(timezone.utc) - timedelta(days=days)
-                # Add a small buffer to end_date to catch items created very recently
-                end_date = datetime.now(timezone.utc) + timedelta(minutes=5)
+                if not (start_date and end_date):
+                    start_date = datetime.now(timezone.utc) - timedelta(days=days)
+                    # Add a small buffer to end_date to catch items created very recently
+                    end_date = datetime.now(timezone.utc) + timedelta(minutes=5)
                 
                 # Use the GSI query for efficient retrieval (same as reporting system)
                 query = """
@@ -674,13 +696,16 @@ class FeedbackService:
             except Exception as e:
                 logger.warning("GSI query failed, falling back to standard query: %s", str(e))
 
-                cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+                if not (start_date and end_date):
+                    start_date = datetime.now(timezone.utc) - timedelta(days=days)
+                    end_date = datetime.now(timezone.utc) + timedelta(minutes=5)
                 filter_condition = {
                     "and": [
                         {"accountId": {"eq": account_id}},
                         {"scorecardId": {"eq": scorecard_id}},
                         {"scoreId": {"eq": score_id}},
-                        {"editedAt": {"ge": cutoff_date}}
+                        {"editedAt": {"ge": start_date.isoformat()}},
+                        {"editedAt": {"le": end_date.isoformat()}},
                     ]
                 }
 
