@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "d331f8d5-0e12-421a-9c89-eb47e01e9957",
+  "issue_id": "plx-360d2b02-2fe8-4480-ba5e-066730487675",
+  "event_type": "field_updated",
+  "occurred_at": "2026-05-11T20:50:01.421Z",
+  "actor_id": "derek",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Purpose: restore actionable CloudWatch/Lambda logs for score-processing runs so LLM execution paths can be debugged in production.\n\nDefinition of Done:\n- Production score-processor Lambda emits INFO-level runtime scoring logs in CloudWatch (including score orchestration and LangGraph execution markers).\n- Per-request  attachment includes the expected runtime scoring breadcrumbs for investigation.\n- Logging behavior is deterministic from Lambda startup (not dependent on incidental import order).",
+        "to": "Purpose: restore actionable CloudWatch/Lambda logs for score-processing runs so LLM execution paths can be debugged in production.\n\nDefinition of Done:\n- Production score-processor Lambda emits INFO-level runtime scoring logs in CloudWatch (including score orchestration and LangGraph execution markers).\n- Per-request log.txt attachment includes the expected runtime scoring breadcrumbs for investigation.\n- Logging behavior is deterministic from Lambda startup (not dependent on incidental import order)."
+      }
+    }
+  }
+}
