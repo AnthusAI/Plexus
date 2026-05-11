@@ -3442,7 +3442,7 @@ function ConversationViewer({
                 current_privacy_span_id: isConsolePrivate ? privacySpanId : undefined,
               },
             }
-        if (nextSessionMetadata && targetSessionId) {
+        if (nextSessionMetadata) {
           const updatedAt = nowIso
           try {
             const client = getClient()
