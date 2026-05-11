@@ -1,0 +1,43 @@
+{
+  "id": "plx-78b907a7-30e5-4ccd-8c37-5e081a0b9346",
+  "title": "Fix score-processor Lambda root logger level so runtime INFO logs are emitted",
+  "description": "Observed behavior:\n- Runtime/LangGraph INFO breadcrumbs are absent from `/aws/lambda/plexus-lambda-production-score-processor`.\n- Error/WARNING lines still appear, indicating execution occurs but INFO is filtered.\n\nExpected behavior:\n- INFO-level runtime scoring logs are visible in CloudWatch and request-captured log artifacts.\n\nPlan:\n- Set deterministic startup logging configuration in score-processor Lambda handler so root logger level follows LOG_LEVEL (default INFO).\n- Keep noisy dependency loggers at WARNING.\n- Validate with local runtime simulation and test/lint pass.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-360d2b02-2fe8-4480-ba5e-066730487675",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "924c88bf-1bc2-4d68-a1c4-16c15fc87896",
+      "author": "derek",
+      "text": "Starting implementation. Verified previously that runtime INFO logs are suppressed because root logger stays at WARNING in the Lambda image while scoring code emits many module-level logging.info() lines. Next: create feature branch from develop, patch handler startup logging to deterministic LOG_LEVEL-root behavior, and run local validation.",
+      "created_at": "2026-05-11T20:50:13.365326618Z"
+    },
+    {
+      "id": "561d26ef-f915-42d0-bad7-ec2994eb3b40",
+      "author": "derek",
+      "text": "Implemented fix in score-processor-lambda/handler.py: added configure_lambda_logging() and called it at module load to set root logger level from LOG_LEVEL (default INFO), align existing root handlers to that level, and keep noisy libs (urllib3/botocore/boto3/gql.*) at WARNING.\n\nValidation:\n- python3 -m py_compile score-processor-lambda/handler.py passed.\n- Runtime simulation in current production Lambda image (sha256:32f2e25...) with local patched file mounted:\n  - LOG_LEVEL unset => root effective level 20 (INFO).\n  - LOG_LEVEL=DEBUG => root effective level 10 (DEBUG).\n\nThis restores deterministic INFO emission for module-level logging.info() calls used across scoring code paths.",
+      "created_at": "2026-05-11T20:50:52.592754187Z"
+    },
+    {
+      "id": "a1ac733a-581a-48ab-9511-a0a168f30b07",
+      "author": "derek",
+      "text": "Implemented and pushed on branch .\n\nCommits:\n- d80d2e08 fix(score-processor-lambda): restore INFO runtime logs via deterministic root logger config\n- 6065f2f8 chore(kanbus): sync issue/event artifacts for plx-360d2b and plx-78b907\n\nPR opened against develop: https://github.com/AnthusAI/Plexus/pull/341",
+      "created_at": "2026-05-11T21:05:21.112883269Z"
+    },
+    {
+      "id": "00df1219-c372-4b66-8ca6-5511f3da8437",
+      "author": "derek",
+      "text": "Implemented and pushed on branch feature/plx-78b907-score-processor-logging.\n\nCommits:\n- d80d2e08 fix(score-processor-lambda): restore INFO runtime logs via deterministic root logger config\n- 6065f2f8 chore(kanbus): sync issue/event artifacts for plx-360d2b and plx-78b907\n\nPR opened against develop: https://github.com/AnthusAI/Plexus/pull/341",
+      "created_at": "2026-05-11T21:05:26.720882100Z"
+    }
+  ],
+  "created_at": "2026-05-11T20:50:05.526183479Z",
+  "updated_at": "2026-05-11T21:05:26.720882100Z",
+  "closed_at": null,
+  "custom": {}
+}
