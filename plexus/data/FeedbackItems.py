@@ -71,6 +71,8 @@ class FeedbackItems(DataCache):
         scorecard: Union[str, int] = Field(..., description="Scorecard identifier (name, key, ID, or external ID)")
         score: Union[str, int] = Field(..., description="Score identifier (name, key, ID, or external ID)")  
         days: Optional[int] = Field(None, description="Number of days back to search for feedback items (None = all time)")
+        feedback_start_at: Optional[str] = Field(None, description="Explicit editedAt lower bound for a frozen feedback window")
+        feedback_end_at: Optional[str] = Field(None, description="Explicit editedAt upper bound for a frozen feedback window")
         max_items: Optional[int] = Field(None, description="Maximum number of feedback items to include using explicit newest/random selection")
         sampling_mode: str = Field("newest", description="Selection mode when max_items is set: newest or random")
         sample_seed: Optional[int] = Field(None, description="Optional random seed for random selection mode")
@@ -439,6 +441,8 @@ class FeedbackItems(DataCache):
             'scorecard_id': scorecard_id,
             'score_id': score_id,
             'days': self.parameters.days,
+            'feedback_start_at': self.parameters.feedback_start_at,
+            'feedback_end_at': self.parameters.feedback_end_at,
             'max_items': self.parameters.max_items,
             'sampling_mode': self.parameters.sampling_mode,
             'sample_seed': self.parameters.sample_seed,
@@ -832,6 +836,8 @@ class FeedbackItems(DataCache):
                 score_id=score_id,
                 account_id=self.account_id,
                 days=self.parameters.days,
+                start_date=self.parameters.feedback_start_at,
+                end_date=self.parameters.feedback_end_at,
                 initial_value=None,  # Don't filter at service level
                 final_value=None,    # Don't filter at service level
                 limit=None,  # We'll apply limits after sampling
