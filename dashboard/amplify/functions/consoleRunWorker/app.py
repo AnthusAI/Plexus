@@ -46,6 +46,10 @@ def _load_provider_credentials() -> None:
     if anthropic_api_key:
         os.environ["ANTHROPIC_API_KEY"] = anthropic_api_key
 
+    account_key = str(config.get("account-key") or "").strip()
+    if account_key:
+        os.environ["PLEXUS_ACCOUNT_KEY"] = account_key
+
 
 def _deserialize_dynamo_item(raw: Dict[str, Any]) -> Dict[str, Any]:
     return {key: deserializer.deserialize(value) for key, value in raw.items()}
