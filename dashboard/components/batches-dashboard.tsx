@@ -242,62 +242,6 @@ function formatTimeAgo(dateStr?: string | null): string {
   }
 }
 
-const mapBatchJob = async (job: SimpleBatchJob): Promise<BatchJobWithCount> => {
-  let scorecardData: ScorecardType | null = null;
-  let scoreData: ScoreType | null = null;
-
-  if (job.scorecardId) {
-    try {
-      const scorecardResult = await getScorecard(job.scorecardId);
-      if (scorecardResult?.data) {
-        scorecardData = scorecardResult.data;
-      }
-    } catch (err) {
-      console.error('Error fetching scorecard:', err);
-    }
-  }
-
-  if (job.scoreId) {
-    try {
-      const scoreResult = await getScore(job.scoreId);
-      if (scoreResult?.data) {
-        scoreData = scoreResult.data;
-      }
-    } catch (err) {
-      console.error('Error fetching score:', err);
-    }
-  }
-
-  return {
-    id: job.id,
-    type: job.type,
-    status: job.status,
-    startedAt: job.startedAt || null,
-    estimatedEndAt: job.estimatedEndAt || null,
-    completedAt: job.completedAt || null,
-    completedRequests: job.completedRequests || 0,
-    failedRequests: job.failedRequests || null,
-    errorMessage: job.errorMessage || null,
-    errorDetails: typeof job.errorDetails === 'object' ? 
-      job.errorDetails as Record<string, unknown> : 
-      {},
-    accountId: job.accountId,
-    scorecardId: job.scorecardId || null,
-    scoreId: job.scoreId || null,
-    modelProvider: job.modelProvider,
-    modelName: job.modelName,
-    scoringJobCountCache: job.scoringJobCountCache || null,
-    createdAt: job.createdAt,
-    updatedAt: job.updatedAt,
-    scorecard: scorecardData,
-    score: scoreData,
-    scoringJobsCount: job.scoringJobCountCache || 0,
-    scoringJobs: [],
-    account: {} as Schema['Account']['type'],
-    batchId: job.id
-  };
-};
-
 const BATCH_JOB_SUBSCRIPTION = `
   subscription OnBatchJobChange($accountId: String!) {
     onBatchJobChange(accountId: $accountId) {
