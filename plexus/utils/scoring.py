@@ -3,14 +3,31 @@ import logging
 import traceback
 import json
 import os
-import boto3
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, Optional, TYPE_CHECKING
-from plexus.dashboard.api.models.scorecard import Scorecard as ScorecardModel
-from plexus.dashboard.api.models.score import Score as ScoreModel
-from plexus.dashboard.api.models.account import Account
-from plexus.dashboard.api.models.score_result import ScoreResult
-from plexus.utils.score_result_s3_utils import upload_score_result_log_file, upload_score_result_trace_file
+from typing import Any, Dict, Optional, TYPE_CHECKING
+
+try:
+    import boto3
+except ModuleNotFoundError:
+    boto3 = None
+
+try:
+    from plexus.dashboard.api.models.scorecard import Scorecard as ScorecardModel
+    from plexus.dashboard.api.models.score import Score as ScoreModel
+    from plexus.dashboard.api.models.account import Account
+    from plexus.dashboard.api.models.score_result import ScoreResult
+except Exception:
+    ScorecardModel = None
+    ScoreModel = None
+    Account = None
+    ScoreResult = None
+
+try:
+    from plexus.utils.score_result_s3_utils import upload_score_result_log_file, upload_score_result_trace_file
+except Exception:
+    upload_score_result_log_file = None
+    upload_score_result_trace_file = None
 
 if TYPE_CHECKING:
     from plexus.dashboard.api.client import PlexusDashboardClient
@@ -20,10 +37,29 @@ try:
     PLEXUS_ITEM_AVAILABLE = True
 except ImportError:
     PLEXUS_ITEM_AVAILABLE = False
-from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
+try:
+    from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
+except Exception:
+    class CloudWatchLogger:  # type: ignore[override]
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def log_metric(self, *args, **kwargs):
+            pass
 
 # Initialize CloudWatch logger for metrics
 cloudwatch_logger = CloudWatchLogger(namespace="CallCriteria/API")
+
+DEPENDENCY_UNMET_MESSAGE = "Question is not applicable due to unmet dependency conditions"
+
+
+@dataclass
+class SingleScoreExecutionOutcome:
+    """Result envelope for single-score execution with dependency handling."""
+
+    result: Optional[Any]
+    dependency_unmet: bool
+    score_results: Dict[str, Any]
 
 async def get_plexus_client():
     """Get the Plexus Dashboard client for API operations."""
@@ -34,6 +70,8 @@ async def get_plexus_client():
 async def send_message_to_standard_scoring_request_queue(scoring_job_id: str):
     """Send message to AWS SQS queue with scoring_job_id"""
     try:
+        if boto3 is None:
+            raise RuntimeError("boto3 is required for SQS operations")
         client = boto3.client('sqs')
         await asyncio.to_thread(client.send_message,
             QueueUrl=os.getenv('PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL'),
@@ -244,6 +282,84 @@ async def create_scorecard_instance_for_single_score(scorecard_identifier: str, 
         logging.error(f"Stack trace: {traceback.format_exc()}")
         return None
 
+
+def _unwrap_score_result_entry(entry: Any) -> Optional[Any]:
+    """Normalize score entries so callers always handle a single result object."""
+    if isinstance(entry, list):
+        return entry[0] if entry else None
+    return entry
+
+
+async def score_single_target_with_dependencies(
+    scorecard_instance,
+    *,
+    text: str,
+    metadata: dict,
+    modality: str,
+    item: Any,
+    target_score_id: str,
+    target_score_name: str,
+) -> SingleScoreExecutionOutcome:
+    """
+    Execute a single target score while preserving Scorecard dependency backfill behavior.
+
+    Returns a structured outcome so callers can distinguish dependency-unmet from hard failures.
+    """
+
+    try:
+        score_results = await scorecard_instance.score_entire_text(
+            text=text or "",
+            metadata=metadata or {},
+            modality=modality,
+            subset_of_score_names=[target_score_name],
+            item=item,
+        )
+    except Exception as exc:
+        if exc.__class__.__name__ == "SkippedScoreException":
+            return SingleScoreExecutionOutcome(
+                result=None,
+                dependency_unmet=True,
+                score_results={},
+            )
+        raise
+
+    score_results = score_results or {}
+    dependency_unmet = False
+
+    raw_entry = score_results.get(target_score_id)
+    result = _unwrap_score_result_entry(raw_entry)
+    if result == "SKIPPED":
+        result = None
+        dependency_unmet = True
+
+    if result is None:
+        for entry in score_results.values():
+            normalized_entry = _unwrap_score_result_entry(entry)
+            if normalized_entry == "SKIPPED":
+                dependency_unmet = True
+                continue
+
+            parameters = getattr(normalized_entry, "parameters", None)
+            if not parameters:
+                continue
+
+            candidate_name = getattr(parameters, "name", None)
+            candidate_key = getattr(parameters, "key", None)
+            if candidate_name == target_score_name or candidate_key == target_score_name:
+                result = normalized_entry
+                break
+
+    if result is None and any(
+        _unwrap_score_result_entry(entry) == "SKIPPED" for entry in score_results.values()
+    ):
+        dependency_unmet = True
+
+    return SingleScoreExecutionOutcome(
+        result=result,
+        dependency_unmet=dependency_unmet,
+        score_results=score_results,
+    )
+
 async def resolve_scorecard_id(external_id: str, account_id: str, client) -> Optional[str]:
     """
     Resolve a scorecard external ID to its DynamoDB ID using the GSI, scoped by accountId.
@@ -257,6 +373,8 @@ async def resolve_scorecard_id(external_id: str, account_id: str, client) -> Opt
         The DynamoDB ID of the scorecard if found, None otherwise
     """
     try:
+        if ScorecardModel is None:
+            raise RuntimeError("Scorecard model is unavailable")
         # Use the Scorecard SDK method for lookup
         scorecard = await asyncio.to_thread(
             ScorecardModel.get_by_account_and_external_id,
@@ -289,6 +407,8 @@ async def resolve_score_id(external_id: str, scorecard_dynamo_id: str, client) -
         A dictionary with 'id' (DynamoDB ID) and 'name' of the score if found, None otherwise
     """
     try:
+        if ScoreModel is None:
+            raise RuntimeError("Score model is unavailable")
         # Use the Score SDK method for lookup
         score_data = await asyncio.to_thread(
             ScoreModel.get_by_scorecard_and_external_id,
@@ -340,6 +460,8 @@ async def create_score_result(
         client: The PlexusDashboardClient instance
     """
     try:
+        if ScoreResult is None:
+            raise RuntimeError("ScoreResult model is unavailable")
         now = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
         score_result_metadata = {
@@ -393,6 +515,8 @@ async def create_score_result(
         # Upload trace data if available
         if trace_data:
             try:
+                if upload_score_result_trace_file is None:
+                    raise RuntimeError("Trace upload utility is unavailable")
                 logging.info(f"🔄 Starting trace data upload to S3 for ScoreResult {score_result_id}")
                 s3_path = await asyncio.to_thread(upload_score_result_trace_file, score_result_id, trace_data)
                 if s3_path:
@@ -410,6 +534,8 @@ async def create_score_result(
         # Upload log content if available
         if log_content:
             try:
+                if upload_score_result_log_file is None:
+                    raise RuntimeError("Log upload utility is unavailable")
                 logging.info(f"🔄 Starting log content upload to S3 for ScoreResult {score_result_id}")
                 s3_path = await asyncio.to_thread(upload_score_result_log_file, score_result_id, log_content)
                 if s3_path:
@@ -481,6 +607,8 @@ async def get_existing_score_result(report_id: str, scorecard_id: str, score_id:
         A dictionary with the cached result if found, None otherwise
     """
     try:
+        if ScoreResult is None:
+            raise RuntimeError("ScoreResult model is unavailable")
         client = await get_plexus_client()
         
         # Use Item.find_by_identifier to get the item (consistent with cache creation)
