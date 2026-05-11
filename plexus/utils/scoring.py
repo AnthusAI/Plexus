@@ -15,12 +15,10 @@ except ModuleNotFoundError:
 try:
     from plexus.dashboard.api.models.scorecard import Scorecard as ScorecardModel
     from plexus.dashboard.api.models.score import Score as ScoreModel
-    from plexus.dashboard.api.models.account import Account
     from plexus.dashboard.api.models.score_result import ScoreResult
 except Exception:
     ScorecardModel = None
     ScoreModel = None
-    Account = None
     ScoreResult = None
 
 try:
