@@ -8,6 +8,11 @@ from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, System
 from plexus.scores.nodes.BaseNode import BaseNode
 from plexus.CustomLogging import logging
 from plexus.scores.LangGraphScore import BatchProcessingPause
+from plexus.scores.prompt_trace import (
+    build_prompt_diagnostics,
+    rendered_messages_from_langchain,
+    should_capture_rendered_messages,
+)
 import traceback
 import os
 import asyncio
@@ -694,6 +699,16 @@ class Classifier(BaseNode):
             logging.info(f"  - Output state has classification attr: {hasattr(new_state, 'classification')}")
             
             # Also log to trace for debugging
+            input_state = {}
+            if should_capture_rendered_messages(getattr(state, "metadata", None)):
+                rendered_messages = rendered_messages_from_langchain(state.messages)
+                input_state["rendered_messages"] = rendered_messages
+                input_state["prompt_diagnostics"] = build_prompt_diagnostics(
+                    rendered_messages,
+                    node_name=self.node_name,
+                    metadata=getattr(state, "metadata", None),
+                )
+
             output_state = {
                 "classification": result['classification'],
                 "explanation": result['explanation']
@@ -704,7 +719,7 @@ class Classifier(BaseNode):
                 output_state["reasoning"] = state.reasoning
             
             # Log the state and get a new state object with updated node_results
-            final_state = self.log_state(new_state, None, output_state)
+            final_state = self.log_state(new_state, input_state, output_state)
             
             logging.info(f"  - Final state classification: {final_state.classification!r}")
             logging.info(f"  - Final state type: {type(final_state)}")

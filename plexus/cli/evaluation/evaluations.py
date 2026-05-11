@@ -1221,6 +1221,8 @@ async def _run_shared_feedback_root_cause_orchestration(
     sample_seed: Optional[int],
     max_category_summary_items: int,
     days: Optional[int],
+    feedback_start_at: Optional[str] = None,
+    feedback_end_at: Optional[str] = None,
     tracker=None,
     apply_feedback_window_selection: bool = False,
 ) -> Dict[str, Any]:
@@ -1236,6 +1238,8 @@ async def _run_shared_feedback_root_cause_orchestration(
         scorecard=None,
         account_key=account_key,
         days=days,
+        feedback_start_at=feedback_start_at,
+        feedback_end_at=feedback_end_at,
         scorecard_id=scorecard_id,
         score_id=score_id,
         evaluation_id=evaluation_id,
@@ -1318,11 +1322,14 @@ async def _run_shared_feedback_root_cause_orchestration(
     selection_metadata: Dict[str, Any] = {}
     if apply_feedback_window_selection:
         # Preserve explicit selection metadata from the shared selector contract.
-        if days is None:
+        if feedback_start_at and feedback_end_at:
+            start_date = FeedbackEvaluation._parse_feedback_window_datetime(feedback_start_at)
+            end_date = FeedbackEvaluation._parse_feedback_window_datetime(feedback_end_at)
+        elif days is None:
             start_date = datetime(1970, 1, 1, tzinfo=timezone.utc)
         else:
             start_date = datetime.now(timezone.utc) - timedelta(days=days)
-        end_date = datetime.now(timezone.utc)
+            end_date = datetime.now(timezone.utc)
         feedback_items_for_selection = await fe._fetch_feedback_items(
             scorecard_id=scorecard_id,
             score_id=score_id,
@@ -4218,6 +4225,8 @@ def last(account_key: str, type: Optional[str]):
 @click.option('--max-items', default=200, type=int, show_default=True, help='Maximum number of feedback items to evaluate.')
 @click.option('--sampling-mode', type=click.Choice(['newest', 'random'], case_sensitive=False), default='newest', show_default=True, help='Feedback item selection mode.')
 @click.option('--sample-seed', default=None, type=int, help='Optional random seed (only valid when --sampling-mode random).')
+@click.option('--feedback-start-at', default=None, type=str, help='Explicit editedAt lower bound for frozen optimizer feedback windows.')
+@click.option('--feedback-end-at', default=None, type=str, help='Explicit editedAt upper bound for frozen optimizer feedback windows.')
 @click.option('--max-category-summary-items', default=20, type=int, help='Maximum misclassification items per category used in aggregate triage summaries (default: 20).')
 @click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for dashboard before/after metric comparison.')
 @click.option('--current-baseline', default=None, type=str, help='Current baseline evaluation ID (latest accepted version) for dual baseline dashboard display.')
@@ -4240,6 +4249,8 @@ def feedback(
     max_items: int,
     sampling_mode: str,
     sample_seed: Optional[int],
+    feedback_start_at: Optional[str],
+    feedback_end_at: Optional[str],
     max_category_summary_items: int,
     baseline: Optional[str],
     current_baseline: Optional[str],
@@ -4313,6 +4324,9 @@ def feedback(
         return
     if normalized_sampling_mode != "random" and sample_seed is not None:
         console.print("[bold red]Error: --sample-seed is only valid when --sampling-mode random[/bold red]")
+        return
+    if bool(feedback_start_at) != bool(feedback_end_at):
+        console.print("[bold red]Error: --feedback-start-at and --feedback-end-at must be provided together[/bold red]")
         return
     if max_category_summary_items <= 0:
         console.print("[bold red]Error: --max-category-summary-items must be a positive integer[/bold red]")
@@ -4395,6 +4409,9 @@ def feedback(
             }
             if days is not None:
                 dataset_config["days"] = days
+            if feedback_start_at and feedback_end_at:
+                dataset_config["feedback_start_at"] = feedback_start_at
+                dataset_config["feedback_end_at"] = feedback_end_at
 
             # Load scorecard based on --yaml flag
             if use_yaml:
@@ -4580,6 +4597,8 @@ def feedback(
                         "max_items": max_items,
                         "sampling_mode": normalized_sampling_mode,
                         "sample_seed": sample_seed,
+                        "feedback_start_at": feedback_start_at,
+                        "feedback_end_at": feedback_end_at,
                         "max_category_summary_items": max_category_summary_items,
                         "mode": "accuracy_with_feedback_dataset",
                         "score_rubric_consistency_check_requested": bool(score_rubric_consistency_check),
@@ -4737,6 +4756,8 @@ def feedback(
                             max_items=max_items,
                             sampling_mode=normalized_sampling_mode,
                             sample_seed=sample_seed,
+                            feedback_start_at=feedback_start_at,
+                            feedback_end_at=feedback_end_at,
                             max_category_summary_items=max_category_summary_items,
                             days=days,
                             tracker=tracker,
