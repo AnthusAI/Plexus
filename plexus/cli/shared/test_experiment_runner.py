@@ -258,16 +258,16 @@ async def test_run_procedure_persists_compacted_task_output_attachment(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_run_procedure_persists_sigterm_telemetry_and_reraises(monkeypatch):
+async def test_run_procedure_persists_sigterm_as_cancelled_and_reraises(monkeypatch):
     fake_task = _FakeTask()
     fake_client = _FakeClient()
-    stage_fail_calls = []
+    stage_cancel_calls = []
     handlers = {}
 
     _patch_tracker(monkeypatch, fake_task)
     monkeypatch.setattr(
-        "plexus.cli.procedure.procedure_executor._fail_all_task_stages",
-        lambda client, task_id, error_message="": stage_fail_calls.append((client, task_id, error_message)),
+        "plexus.cli.procedure.procedure_executor._cancel_all_task_stages",
+        lambda client, task_id, status_message="": stage_cancel_calls.append((client, task_id, status_message)),
     )
     monkeypatch.setattr("signal.getsignal", lambda _sig: signal.SIG_DFL)
     monkeypatch.setattr("signal.signal", lambda sig, handler: handlers.setdefault(sig, handler))
@@ -286,10 +286,14 @@ async def test_run_procedure_persists_sigterm_telemetry_and_reraises(monkeypatch
         )
 
     assert excinfo.value.code == 128 + signal.SIGTERM
-    assert fake_client.procedure_status == "FAILED"
-    assert fake_client.procedure_metadata["last_failure"]["kind"] == "signal"
-    assert fake_client.procedure_metadata["last_failure"]["signal"] == "SIGTERM"
-    assert stage_fail_calls == [(fake_client, "task-123", "Procedure run interrupted by SIGTERM")]
+    assert fake_client.procedure_status == "CANCELLED"
+    assert "last_failure" not in fake_client.procedure_metadata
+    assert fake_client.procedure_metadata["last_interruption"]["kind"] == "signal"
+    assert fake_client.procedure_metadata["last_interruption"]["signal"] == "SIGTERM"
+    assert stage_cancel_calls == [(fake_client, "task-123", "Procedure run interrupted by SIGTERM")]
+    assert fake_task.update_calls[-1]["status"] == "CANCELLED"
+    assert fake_task.update_calls[-1]["errorMessage"] is None
+    assert json.loads(fake_task.update_calls[-1]["errorDetails"])["kind"] == "signal"
 
 
 @pytest.mark.asyncio
