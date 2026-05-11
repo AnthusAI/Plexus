@@ -1,4 +1,20 @@
 import '@testing-library/jest-dom'
+import { webcrypto as nodeWebCrypto } from 'node:crypto'
+
+if (typeof globalThis.crypto === 'undefined') {
+  Object.defineProperty(globalThis, 'crypto', {
+    value: nodeWebCrypto,
+    configurable: true,
+  })
+}
+
+if (typeof globalThis.crypto.randomUUID !== 'function') {
+  Object.defineProperty(globalThis.crypto, 'randomUUID', {
+    value: () => nodeWebCrypto.randomUUID(),
+    configurable: true,
+    writable: true,
+  })
+}
 
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
