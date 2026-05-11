@@ -386,12 +386,20 @@ export const amplifyClient = {
   },
   BatchJob: {
     list: async (params: any) => {
-      const response = await (getClient().models.BatchJob as any).list(params)
-      return response as AmplifyResponse<Schema['BatchJob']['type'][]>
+      const batchJobModel = (getClient().models as Record<string, any>).BatchJob
+      if (!batchJobModel?.list) {
+        return { data: [] } as AmplifyResponse<any[]>
+      }
+      const response = await batchJobModel.list(params)
+      return response as AmplifyResponse<any[]>
     },
     get: async (params: any) => {
-      const response = await (getClient().models.BatchJob as any).get(params)
-      return { data: response.data as Schema['BatchJob']['type'] | null }
+      const batchJobModel = (getClient().models as Record<string, any>).BatchJob
+      if (!batchJobModel?.get) {
+        return { data: null as any | null }
+      }
+      const response = await batchJobModel.get(params)
+      return { data: response.data as any | null }
     }
   },
   Item: {
