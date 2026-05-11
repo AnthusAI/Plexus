@@ -1854,7 +1854,7 @@ Based on this data, you should prioritize examining error types with the highest
                 type="Procedure",
                 status="PENDING",  # Initial status
                 target=f"procedure/{procedure_id}",
-                command=f"procedure {procedure_id}",
+                command=f"procedure run {procedure_id}",
                 description=f"Procedure workflow for {procedure_id}",
                 dispatchStatus=initial_dispatch_status,
                 metadata=json.dumps(metadata)
