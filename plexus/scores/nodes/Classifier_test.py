@@ -3,11 +3,39 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from plexus.scores.nodes.Classifier import Classifier
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from plexus.scores.LangGraphScore import BatchProcessingPause, LangGraphScore, END
+from plexus.scores.prompt_trace import CAPTURE_RENDERED_MESSAGES_METADATA_KEY
 from langgraph.graph import StateGraph
 import logging
 
 pytest.asyncio_fixture_scope = "function"
 pytest_plugins = ('pytest_asyncio',)
+
+
+async def _run_classifier_for_trace(config, text, metadata, completion):
+    mock_model = AsyncMock()
+    mock_model.ainvoke = AsyncMock(return_value=AIMessage(content=completion))
+
+    with patch(
+        'plexus.LangChainUser.LangChainUser._initialize_model',
+        return_value=mock_model,
+    ):
+        classifier = Classifier(**config)
+        classifier.model = mock_model
+        state = classifier.GraphState(
+            text=text,
+            metadata=metadata,
+            results={},
+            retry_count=0,
+            is_not_empty=True,
+            value=None,
+            reasoning=None,
+            classification=None,
+            chat_history=[],
+            completion=None,
+        )
+        state_after_prompt = await classifier.get_llm_prompt_node()(state)
+        state_after_llm = await classifier.get_llm_call_node()(state_after_prompt)
+        return await classifier.get_parser_node()(state_after_llm)
 
 @pytest.fixture(autouse=True)
 def disable_batch_mode(monkeypatch):
@@ -25,6 +53,64 @@ def basic_config():
         "model_name": "gpt-40-mini",
         "temperature": 0.0
     }
+
+
+@pytest.mark.asyncio
+async def test_classifier_trace_includes_rendered_messages_when_requested():
+    config = {
+        "name": "metadata_classifier",
+        "valid_classes": ["Yes", "No"],
+        "system_message": "Disposition: {xcc: disposition}",
+        "user_message": "Call type: {{ metadata.call_type }}\nTranscript: {{ text }}",
+        "model_provider": "AzureChatOpenAI",
+        "model_name": "gpt-4",
+        "temperature": 0.0,
+    }
+
+    final_state = await _run_classifier_for_trace(
+        config,
+        "hello",
+        {
+            "call_type": "Outbound",
+            CAPTURE_RENDERED_MESSAGES_METADATA_KEY: True,
+        },
+        "No",
+    )
+
+    node_result = final_state.metadata["trace"]["node_results"][0]
+    rendered_messages = node_result["input"]["rendered_messages"]
+    diagnostics = node_result["input"]["prompt_diagnostics"]
+
+    assert rendered_messages[0]["role"] == "system"
+    assert rendered_messages[0]["content"] == "Disposition: {xcc: disposition}"
+    assert "Call type: Outbound" in rendered_messages[1]["content"]
+    assert diagnostics["unresolved_placeholders"][0]["placeholder"] == "{xcc: disposition}"
+    assert diagnostics["unresolved_placeholders"][0]["node_name"] == "metadata_classifier"
+
+
+@pytest.mark.asyncio
+async def test_classifier_trace_omits_rendered_messages_without_debug_flag():
+    config = {
+        "name": "metadata_classifier",
+        "valid_classes": ["Yes", "No"],
+        "system_message": "Disposition: {xcc: disposition}",
+        "user_message": "Call type: {{ metadata.call_type }}",
+        "model_provider": "AzureChatOpenAI",
+        "model_name": "gpt-4",
+        "temperature": 0.0,
+    }
+
+    final_state = await _run_classifier_for_trace(
+        config,
+        "hello",
+        {"call_type": "Outbound"},
+        "No",
+    )
+
+    node_result = final_state.metadata["trace"]["node_results"][0]
+
+    assert "rendered_messages" not in node_result["input"]
+    assert "prompt_diagnostics" not in node_result["input"]
 
 @pytest.fixture
 def turnip_classifier_config():

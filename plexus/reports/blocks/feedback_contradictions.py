@@ -49,6 +49,8 @@ class FeedbackContradictions(BaseReportBlock):
             raise ValueError("'mode' must be either 'contradictions' or 'aligned'.")
 
         days = int(self.config.get("days", 360))
+        start_at_str = self.config.get("start_at")
+        end_at_str = self.config.get("end_at")
         start_date_str = self.config.get("start_date")
         end_date_str = self.config.get("end_date")
         max_concurrent = int(self.config.get("max_concurrent", 20))
@@ -63,12 +65,19 @@ class FeedbackContradictions(BaseReportBlock):
         if max_feedback_items < 0:
             raise ValueError("'max_feedback_items' must be >= 0.")
 
-        if start_date_str:
+        if bool(start_at_str) != bool(end_at_str):
+            raise ValueError("'start_at' and 'end_at' must be provided together.")
+
+        if start_at_str and end_at_str:
+            start_date = self._parse_iso_datetime(str(start_at_str), "start_at")
+        elif start_date_str:
             start_date = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         else:
             start_date = datetime.now(tz=timezone.utc) - timedelta(days=days)
 
-        if end_date_str:
+        if start_at_str and end_at_str:
+            end_date = self._parse_iso_datetime(str(end_at_str), "end_at")
+        elif end_date_str:
             end_date = datetime.strptime(end_date_str, "%Y-%m-%d").replace(
                 hour=23,
                 minute=59,
@@ -83,6 +92,9 @@ class FeedbackContradictions(BaseReportBlock):
                 second=59,
                 microsecond=999999,
             )
+
+        if end_date <= start_date:
+            raise ValueError("'end_at'/'end_date' must be after 'start_at'/'start_date'.")
 
         self._log(f"Date range: {start_date.date()} to {end_date.date()}")
         self._log(f"Mode: {mode}")
@@ -192,6 +204,19 @@ class FeedbackContradictions(BaseReportBlock):
                 "selected_items_count": 0,
                 "block_title": self.DEFAULT_NAME,
                 "block_description": block_description,
+                "block_configuration": {
+                    "scorecard": scorecard_param,
+                    "score": score_param,
+                    "mode": mode,
+                    "days": days,
+                    "start_at": start_at_str,
+                    "end_at": end_at_str,
+                    "max_feedback_items": max_feedback_items if max_feedback_items > 0 else None,
+                    "max_concurrent": max_concurrent,
+                    "num_topics": num_topics,
+                    "include_rubric_memory": include_rubric_memory,
+                    "score_version_id": score_version_id,
+                },
                 "topics": [],
             }
             if mode == "aligned":
@@ -290,6 +315,8 @@ class FeedbackContradictions(BaseReportBlock):
                 "score": score_param,
                 "mode": mode,
                 "days": days,
+                "start_at": start_at_str,
+                "end_at": end_at_str,
                 "max_feedback_items": max_feedback_items if max_feedback_items > 0 else None,
                 "max_concurrent": max_concurrent,
                 "num_topics": num_topics,
@@ -344,6 +371,16 @@ class FeedbackContradictions(BaseReportBlock):
         )
         formatted_output = context_header + json.dumps(output, indent=2, ensure_ascii=False)
         return formatted_output, "\n".join(self._orm.log_messages)
+
+    @staticmethod
+    def _parse_iso_datetime(value: str, field_name: str) -> datetime:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(f"'{field_name}' must be an ISO-8601 datetime.") from exc
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
 
     async def _resolve_scorecard(self, scorecard_param: str) -> Any:
         return await resolve_scorecard(self.api_client, scorecard_param)
@@ -422,11 +459,18 @@ class FeedbackContradictions(BaseReportBlock):
         score_id: str,
         score_version_id: Optional[str] = None,
     ) -> Dict[str, Dict[str, Any]]:
-        provider = RubricMemoryContextProvider(api_client=self.api_client)
-        status = provider.local_corpus_status(
-            scorecard_identifier=scorecard_name,
-            score_identifier=score_name,
-        )
+        try:
+            provider = RubricMemoryContextProvider(api_client=self.api_client)
+            status = provider.local_corpus_status(
+                scorecard_identifier=scorecard_name,
+                score_identifier=score_name,
+            )
+        except Exception as exc:
+            self._log(
+                f"Rubric memory not available for feedback contradictions: {exc}",
+                level="WARNING",
+            )
+            return {}
         if not status["available"]:
             missing = [
                 root["path"]

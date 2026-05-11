@@ -23,7 +23,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 from rich.json import JSON
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 
 def _json_safe(obj: Any) -> Any:
@@ -95,6 +95,24 @@ def _has_contiguous_one_based_integer_keys(items):
     if not all(isinstance(key, builtins.int) and not isinstance(key, builtins.bool) for key in keys):
         return False
     return sorted(keys) == builtins.list(builtins.range(1, len(keys) + 1))
+
+
+def _optimizer_feedback_window(days: int, now: Optional[datetime] = None) -> tuple[str, str]:
+    """Return a frozen UTC feedback window for optimizer procedure runs."""
+    if days <= 0:
+        raise ValueError("days must be greater than zero")
+
+    end_at = now or datetime.now(timezone.utc)
+    if end_at.tzinfo is None:
+        end_at = end_at.replace(tzinfo=timezone.utc)
+    else:
+        end_at = end_at.astimezone(timezone.utc)
+    start_at = end_at - timedelta(days=days)
+
+    def _iso_z(value: datetime) -> str:
+        return value.isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    return _iso_z(start_at), _iso_z(end_at)
 
 
 @click.group()
@@ -1160,10 +1178,17 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         console.print("[yellow]Hint: This command requires the procedure YAML to be in plexus/procedures/[/yellow]")
         return
 
+    try:
+        feedback_window_start_at, feedback_window_end_at = _optimizer_feedback_window(days)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        return
+
     console.print(f"[cyan]Starting feedback alignment optimization...[/cyan]")
     console.print(f"  Scorecard: {scorecard}")
     console.print(f"  Score: {score}")
     console.print(f"  Feedback window: {days} days")
+    console.print(f"  Frozen feedback range: {feedback_window_start_at} to {feedback_window_end_at}")
     console.print(f"  Max iterations: {max_iterations}")
     console.print(f"  Improvement threshold: {improvement_threshold:.2%}")
     console.print(f"  Dry run: {'Yes' if dry_run else 'No'}")
@@ -1176,6 +1201,8 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         "scorecard": scorecard,
         "score": score,
         "days": days,
+        "feedback_window_start_at": feedback_window_start_at,
+        "feedback_window_end_at": feedback_window_end_at,
         "max_iterations": max_iterations,
         "improvement_threshold": improvement_threshold,
         "dry_run": dry_run
@@ -1701,7 +1728,7 @@ def optimizer_summary(procedure_id: str, runtime_log: bool, events: bool, log_li
     table = Table(title=f"Optimizer Summary {procedure_id}")
     table.add_column("Field", style="cyan")
     table.add_column("Value", style="white")
-    table.add_row("Status", str((payload.get("procedure") or {}).get("status") or "—"))
+    table.add_row("Status", str(summary.get("effective_status") or (payload.get("procedure") or {}).get("status") or "—"))
     table.add_row("Cycles", f"{summary.get('completed_cycles') or '—'}/{summary.get('configured_max_iterations') or '—'}")
     table.add_row("Stop reason", summary.get("stop_reason") or "—")
     table.add_row("Winning version", best.get("winning_version_id") or "—")

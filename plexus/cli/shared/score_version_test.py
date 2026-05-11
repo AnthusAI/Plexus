@@ -11,6 +11,10 @@ from plexus.cli.shared.identifier_resolution import (
     resolve_scorecard_identifier,
 )
 from plexus.dashboard.api.models.item import Item as PlexusItem
+from plexus.scores.prompt_trace import (
+    CAPTURE_RENDERED_MESSAGES_METADATA_KEY,
+    extract_unresolved_placeholders_from_trace,
+)
 
 
 def _utc_now() -> datetime:
@@ -31,7 +35,7 @@ def _parse_iso_timestamp(value: Optional[str]) -> Optional[datetime]:
 
 def _normalize_metadata(raw: Any) -> Dict[str, Any]:
     if isinstance(raw, dict):
-        return raw
+        return dict(raw)
     if isinstance(raw, str):
         try:
             parsed = json.loads(raw)
@@ -39,6 +43,31 @@ def _normalize_metadata(raw: Any) -> Dict[str, Any]:
         except json.JSONDecodeError:
             return {}
     return {}
+
+def _truncate_diagnostic_value(value: Any, *, limit: int = 1000) -> Any:
+    if isinstance(value, str):
+        return value if len(value) <= limit else f"{value[:limit]}... [truncated]"
+    if isinstance(value, dict):
+        return {
+            str(key): _truncate_diagnostic_value(child, limit=limit)
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [_truncate_diagnostic_value(child, limit=limit) for child in value[:25]]
+    return value
+
+
+def _score_input_diagnostics(text: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    visible_metadata = {
+        str(key): _truncate_diagnostic_value(value)
+        for key, value in metadata.items()
+        if key != CAPTURE_RENDERED_MESSAGES_METADATA_KEY
+    }
+    return {
+        "text_excerpt": _truncate_diagnostic_value(text, limit=2000),
+        "metadata": visible_metadata,
+        "metadata_keys": sorted(visible_metadata.keys()),
+    }
 
 
 def _coerce_text(value: Any) -> str:
@@ -375,7 +404,7 @@ async def _predict_single_item(
             "error": "missing_item_text",
             "message": f"Item has no usable transcript text: {item_id}",
         }
-
+    metadata[CAPTURE_RENDERED_MESSAGES_METADATA_KEY] = True
     try:
         item_obj = PlexusItem.from_dict(item_data, client)
     except Exception:
@@ -444,7 +473,12 @@ async def _predict_single_item(
         else None
     )
 
-    passed = value is not None and str(value).upper() != "ERROR"
+    unresolved_placeholders = extract_unresolved_placeholders_from_trace(trace)
+    passed = (
+        value is not None
+        and str(value).upper() != "ERROR"
+        and not unresolved_placeholders
+    )
     payload: Dict[str, Any] = {
         "item_id": item_id,
         "passed": passed,
@@ -459,9 +493,21 @@ async def _predict_single_item(
         payload["score"]["trace"] = trace
     if getattr(score_result, "metadata", None):
         payload["score"]["metadata"] = score_result.metadata
+    if unresolved_placeholders:
+        score_input = _score_input_diagnostics(text, metadata)
+        payload["failure_code"] = "unresolved_prompt_placeholders"
+        payload["error"] = "unresolved_prompt_placeholders"
+        payload["message"] = (
+            "Rendered LLM prompt still contains unresolved template placeholders."
+        )
+        payload["prompt_diagnostics"] = {
+            "unresolved_placeholders": unresolved_placeholders,
+            "metadata_keys": score_input["metadata_keys"],
+        }
+        payload["score_input"] = score_input
     if not passed:
-        payload["error"] = "invalid_score_result"
-        payload["message"] = f"Prediction failed mechanically with value={value}"
+        payload.setdefault("error", "invalid_score_result")
+        payload.setdefault("message", f"Prediction failed mechanically with value={value}")
     return payload
 
 
@@ -612,9 +658,19 @@ async def run_score_version_test(
     else:
         failed_predictions = [p for p in prediction_results if not p.get("passed")]
         if failed_predictions:
-            failure_code = "prediction_failure"
+            placeholder_failures = [
+                p for p in failed_predictions
+                if p.get("failure_code") == "unresolved_prompt_placeholders"
+            ]
+            failure_code = (
+                "unresolved_prompt_placeholders"
+                if placeholder_failures
+                else "prediction_failure"
+            )
             message = (
-                f"{len(failed_predictions)} of {len(prediction_results)} predictions failed."
+                "Rendered LLM prompt contains unresolved template placeholders."
+                if placeholder_failures
+                else f"{len(failed_predictions)} of {len(prediction_results)} predictions failed."
             )
         else:
             passed = True

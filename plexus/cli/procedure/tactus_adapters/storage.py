@@ -79,19 +79,29 @@ _DASHBOARD_DROP_TOPLEVEL = frozenset({
     'item_recurrence', 'known_contradictions',
 })
 
-# Recurrence patterns that are surfaced in the dashboard projection.
-# "EMERGING" is excluded — it's noise at this stage.
+# Recurrence patterns always surfaced in the dashboard projection.
 _NOTABLE_RECURRENCE_PATTERNS = frozenset({
     'PERSISTENT', 'OSCILLATING', 'FLIP_FLOP', 'LATE_EMERGING',
 })
 
 
+def _has_repeat_recurrence_history(entry: Dict[str, Any]) -> bool:
+    """Return True when an EMERGING item has enough history to help operators."""
+    per_cycle = entry.get('per_cycle') or []
+    if not isinstance(per_cycle, list):
+        per_cycle = []
+    wrong_count = entry.get('wrong_count') or 0
+    correct_count = entry.get('correct_count') or 0
+    return len(per_cycle) >= 2 or wrong_count >= 2 or (wrong_count >= 1 and correct_count >= 1)
+
+
 def _build_notable_item_recurrence(tracker: Any) -> Optional[Dict[str, Any]]:
     """Return a compact subset of item_recurrence for the dashboard projection.
 
-    Filters to notable patterns only (not EMERGING), caps per_cycle history
-    to the 5 most recent entries, and caps the total to 30 items sorted by
-    wrong_count descending.  Returns None if there are no notable items.
+    Keeps notable patterns plus repeat-active EMERGING items, caps per_cycle
+    history to the 5 most recent entries, and caps the total to 30 items sorted
+    by pattern priority and wrong_count descending. Returns None if there are
+    no useful recurrence items yet.
     """
     if not isinstance(tracker, dict) or not tracker:
         return None
@@ -100,21 +110,41 @@ def _build_notable_item_recurrence(tracker: Any) -> Optional[Dict[str, Any]]:
     for item_id, entry in tracker.items():
         if not isinstance(entry, dict):
             continue
-        if entry.get('pattern') not in _NOTABLE_RECURRENCE_PATTERNS:
+        pattern = entry.get('pattern') or 'EMERGING'
+        if pattern not in _NOTABLE_RECURRENCE_PATTERNS and not (
+            pattern == 'EMERGING' and _has_repeat_recurrence_history(entry)
+        ):
             continue
         # Keep only the 5 most recent per_cycle entries.
         per_cycle = entry.get('per_cycle') or []
         if isinstance(per_cycle, list) and len(per_cycle) > 5:
             per_cycle = per_cycle[-5:]
         trimmed = {**entry, 'per_cycle': per_cycle}
-        notable.append((item_id, trimmed, entry.get('wrong_count', 0)))
+        if 'feedback_label' not in trimmed and 'recent_label' in trimmed:
+            trimmed['feedback_label'] = trimmed.get('recent_label')
+        notable.append((item_id, trimmed, pattern, entry.get('wrong_count', 0), entry.get('correct_count', 0)))
 
     if not notable:
         return None
 
-    # Sort by wrong_count descending, cap at 30.
-    notable.sort(key=lambda t: t[2], reverse=True)
-    return {item_id: entry for item_id, entry, _ in notable[:30]}
+    pattern_priority = {
+        'OSCILLATING': 0,
+        'PERSISTENT': 1,
+        'FLIP_FLOP': 2,
+        'LATE_EMERGING': 3,
+        'EMERGING': 4,
+    }
+
+    # Sort by pattern priority, then activity volume, cap at 30.
+    notable.sort(
+        key=lambda t: (
+            pattern_priority.get(t[2], 9),
+            -(t[3] + t[4]),
+            -t[3],
+            str(t[0]),
+        )
+    )
+    return {item_id: entry for item_id, entry, _, _, _ in notable[:30]}
 
 
 def _build_dashboard_state(full_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -141,7 +171,7 @@ def _build_dashboard_state(full_state: Dict[str, Any]) -> Dict[str, Any]:
         else:
             out[key] = value
 
-    # Add filtered notable item recurrence (PERSISTENT/OSCILLATING/FLIP_FLOP/LATE_EMERGING).
+    # Add compact item recurrence for the problem-item tracker.
     notable = _build_notable_item_recurrence(full_state.get('item_recurrence') or {})
     if notable:
         out['notable_item_recurrence'] = notable
