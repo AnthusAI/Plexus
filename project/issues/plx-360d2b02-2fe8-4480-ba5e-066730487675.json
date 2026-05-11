@@ -1,0 +1,18 @@
+{
+  "id": "plx-360d2b02-2fe8-4480-ba5e-066730487675",
+  "title": "Restore score-processor Lambda observability logging",
+  "description": "Purpose: restore actionable CloudWatch/Lambda logs for score-processing runs so LLM execution paths can be debugged in production.\n\nDefinition of Done:\n- Production score-processor Lambda emits INFO-level runtime scoring logs in CloudWatch (including score orchestration and LangGraph execution markers).\n- Per-request log.txt attachment includes the expected runtime scoring breadcrumbs for investigation.\n- Logging behavior is deterministic from Lambda startup (not dependent on incidental import order).",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-11T20:49:55.206740308Z",
+  "updated_at": "2026-05-11T20:50:01.421381192Z",
+  "closed_at": null,
+  "custom": {}
+}
