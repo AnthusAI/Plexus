@@ -44,7 +44,6 @@ def _normalize_metadata(raw: Any) -> Dict[str, Any]:
             return {}
     return {}
 
-
 def _truncate_diagnostic_value(value: Any, *, limit: int = 1000) -> Any:
     if isinstance(value, str):
         return value if len(value) <= limit else f"{value[:limit]}... [truncated]"
@@ -69,6 +68,79 @@ def _score_input_diagnostics(text: str, metadata: Dict[str, Any]) -> Dict[str, A
         "metadata": visible_metadata,
         "metadata_keys": sorted(visible_metadata.keys()),
     }
+
+
+def _coerce_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    if isinstance(value, list):
+        parts: List[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                # Common chat/transcript turn shapes.
+                turn = (
+                    item.get("text")
+                    or item.get("content")
+                    or item.get("message")
+                    or item.get("value")
+                )
+                turn_text = _coerce_text(turn)
+                if turn_text:
+                    parts.append(turn_text)
+            else:
+                txt = _coerce_text(item)
+                if txt:
+                    parts.append(txt)
+        return "\n".join(parts).strip()
+    if isinstance(value, dict):
+        # Prefer canonical content fields first.
+        for key in ("text", "content", "transcript", "message", "body", "value"):
+            txt = _coerce_text(value.get(key))
+            if txt:
+                return txt
+    return ""
+
+
+def _extract_item_text(item_data: Dict[str, Any], metadata: Dict[str, Any]) -> str:
+    direct_text = _coerce_text(item_data.get("text"))
+    direct_description = _coerce_text(item_data.get("description"))
+    best_text = direct_text if len(direct_text) >= len(direct_description) else direct_description
+
+    metadata_candidates = []
+    for key in (
+        "transcript",
+        "transcript_text",
+        "call_transcript",
+        "conversation",
+        "content",
+        "body",
+        "text",
+        "raw_text",
+        "input_text",
+    ):
+        candidate = _coerce_text(metadata.get(key))
+        if candidate:
+            metadata_candidates.append(candidate)
+
+    # Some payloads wrap content in nested envelopes.
+    for container_key in ("payload", "input", "request", "data"):
+        container = metadata.get(container_key)
+        if isinstance(container, dict):
+            for key in ("transcript", "text", "content", "body", "conversation"):
+                candidate = _coerce_text(container.get(key))
+                if candidate:
+                    metadata_candidates.append(candidate)
+
+    if metadata_candidates:
+        best_meta = max(metadata_candidates, key=len)
+        if len(best_meta) > len(best_text):
+            best_text = best_meta
+
+    return best_text.strip()
 
 
 def _resolve_scorecard_and_score(
@@ -224,20 +296,25 @@ def _sample_recent_scorecard_item_ids(
     desired_count: int,
 ) -> List[str]:
     cutoff = _utc_now() - timedelta(days=days)
+    now = _utc_now()
     query = """
-    query ListScoreResultByScorecardId(
+    query ListScoreResultByScorecardIdAndUpdatedAt(
       $scorecardId: String!,
+      $startTime: String!,
+      $endTime: String!,
       $limit: Int,
       $nextToken: String
     ) {
-      listScoreResultByScorecardId(
+      listScoreResultByScorecardIdAndUpdatedAt(
         scorecardId: $scorecardId,
+        sortDirection: DESC,
+        updatedAt: { between: [$startTime, $endTime] },
         limit: $limit,
         nextToken: $nextToken
       ) {
         items {
           itemId
-          createdAt
+          updatedAt
         }
         nextToken
       }
@@ -251,15 +328,18 @@ def _sample_recent_scorecard_item_ids(
     for _ in range(20):
         response = client.execute(
             query,
-            {"scorecardId": scorecard_id, "limit": 500, "nextToken": next_token},
+            {
+                "scorecardId": scorecard_id,
+                "startTime": cutoff.isoformat(),
+                "endTime": now.isoformat(),
+                "limit": 500,
+                "nextToken": next_token,
+            },
         ) or {}
-        payload = response.get("listScoreResultByScorecardId") or {}
+        payload = response.get("listScoreResultByScorecardIdAndUpdatedAt") or {}
         items = payload.get("items", []) or []
 
         for result in items:
-            created_at = _parse_iso_timestamp(result.get("createdAt"))
-            if created_at and created_at < cutoff:
-                continue
             item_id = result.get("itemId")
             if item_id and item_id not in seen:
                 seen.add(item_id)
@@ -315,18 +395,16 @@ async def _predict_single_item(
             "message": f"Item not found: {item_id}",
         }
 
-    text = item_data.get("text") or item_data.get("description") or ""
+    metadata = _normalize_metadata(item_data.get("metadata"))
+    text = _extract_item_text(item_data, metadata)
     if not text:
         return {
             "item_id": item_id,
             "passed": False,
             "error": "missing_item_text",
-            "message": f"Item has no text/description: {item_id}",
+            "message": f"Item has no usable transcript text: {item_id}",
         }
-
-    metadata = _normalize_metadata(item_data.get("metadata"))
     metadata[CAPTURE_RENDERED_MESSAGES_METADATA_KEY] = True
-
     try:
         item_obj = PlexusItem.from_dict(item_data, client)
     except Exception:
@@ -441,6 +519,7 @@ async def run_score_version_test(
     version: Optional[str] = None,
     samples: int = 3,
     item_identifiers: Optional[Sequence[str]] = None,
+    fallback_scorecard_identifier: Optional[str] = None,
     days: int = 90,
 ) -> Dict[str, Any]:
     if samples <= 0:
@@ -497,8 +576,25 @@ async def run_score_version_test(
                 days=days,
                 desired_count=desired,
             )
+        if (not resolved_items) and fallback_scorecard_identifier:
+            fallback_scorecard_id = resolve_scorecard_identifier(
+                client, fallback_scorecard_identifier
+            )
+            if not fallback_scorecard_id:
+                selection_error = (
+                    "invalid_fallback_scorecard",
+                    f"Unable to resolve fallback_scorecard_identifier: {fallback_scorecard_identifier}",
+                )
+            else:
+                selection_source = "fallback_scorecard_items"
+                resolved_items = _sample_recent_scorecard_item_ids(
+                    client=client,
+                    scorecard_id=fallback_scorecard_id,
+                    days=days,
+                    desired_count=desired,
+                )
 
-        if len(resolved_items) < desired:
+        if (not selection_error) and len(resolved_items) < desired:
             if len(resolved_items) == 0:
                 selection_error = (
                     "no_samples_found",

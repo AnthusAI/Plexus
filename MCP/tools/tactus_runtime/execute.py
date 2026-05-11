@@ -14,7 +14,7 @@ import threading
 import time
 import traceback
 import uuid
-from typing import Annotated, Any, Callable
+from typing import Annotated, Any, Callable, Optional
 
 from fastmcp import Context, FastMCP
 from pydantic import Field
@@ -57,20 +57,32 @@ PLEXUS_PROCEDURE_RUN_LOG_DIR_DEFAULT = os.path.join(
 )
 
 
-def _resolve_trace_dir() -> str:
+def _resolve_trace_dir(request_id: Optional[str] = None) -> str:
     configured = os.environ.get("PLEXUS_TACTUS_TRACE_DIR")
     if configured:
-        return configured
-    if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or os.environ.get("LAMBDA_TASK_ROOT"):
-        return os.path.join("/tmp", "tactus_traces")
-    return PLEXUS_TACTUS_TRACE_DIR_DEFAULT
+        base_dir = configured
+    elif os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or os.environ.get("LAMBDA_TASK_ROOT"):
+        base_dir = os.path.join("/tmp", "tactus_traces")
+    else:
+        base_dir = PLEXUS_TACTUS_TRACE_DIR_DEFAULT
+
+    if request_id:
+        return os.path.join("/tmp", request_id, os.path.basename(base_dir))
+    return base_dir
 
 
-def _resolve_procedure_run_log_dir() -> str:
-    return os.environ.get(
-        "PLEXUS_PROCEDURE_RUN_LOG_DIR",
-        PLEXUS_PROCEDURE_RUN_LOG_DIR_DEFAULT,
-    )
+def _resolve_procedure_run_log_dir(request_id: Optional[str] = None) -> str:
+    configured = os.environ.get("PLEXUS_PROCEDURE_RUN_LOG_DIR")
+    if configured:
+        base_dir = configured
+    elif os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or os.environ.get("LAMBDA_TASK_ROOT"):
+        base_dir = os.path.join("/tmp", "tactus_procedure_runs")
+    else:
+        base_dir = PLEXUS_PROCEDURE_RUN_LOG_DIR_DEFAULT
+
+    if request_id:
+        return os.path.join("/tmp", request_id, os.path.basename(base_dir))
+    return base_dir
 
 
 def _register_evaluation_process(process: Any) -> None:
@@ -117,7 +129,8 @@ def _local_procedure_env() -> dict[str, str]:
 def _launch_local_procedure_subprocess(cmd: list[str], procedure_id: str) -> tuple[Any, str]:
     import subprocess
 
-    log_dir = _resolve_procedure_run_log_dir()
+    request_id = os.environ.get("PLEXUS_LAMBDA_REQUEST_ID")
+    log_dir = _resolve_procedure_run_log_dir(request_id=request_id)
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, f"{procedure_id}.log")
     with open(log_path, "ab", buffering=0) as log_file:
@@ -160,7 +173,8 @@ class FileTactusTraceStore(TactusTraceStore):
 
 
 def _default_trace_store() -> TactusTraceStore:
-    return FileTactusTraceStore(_resolve_trace_dir())
+    request_id = os.environ.get("PLEXUS_LAMBDA_REQUEST_ID")
+    return FileTactusTraceStore(_resolve_trace_dir(request_id=request_id))
 
 
 class TactusHandleStore:
@@ -256,7 +270,8 @@ class FileTactusHandleStore(TactusHandleStore):
 
 
 def _default_handle_store() -> TactusHandleStore:
-    return FileTactusHandleStore(os.path.join(_resolve_trace_dir(), "handles"))
+    request_id = os.environ.get("PLEXUS_LAMBDA_REQUEST_ID")
+    return FileTactusHandleStore(os.path.join(_resolve_trace_dir(request_id=request_id), "handles"))
 
 
 def _build_trace_record(
@@ -305,7 +320,9 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("scorecards_list", "scorecards", "list"),
     ("scorecards_info", "scorecards", "info"),
     ("scorecards_search", "scorecards", "search"),
+    ("scorecards_create", "scorecards", "create"),
     ("score_info", "score", "info"),
+    ("score_create", "score", "create"),
     ("score_search", "score", "search"),
     ("score_evaluations", "score", "evaluations"),
     ("score_predict", "score", "predict"),
@@ -403,7 +420,9 @@ DIRECT_HANDLERS: dict[tuple[str, str], str] = {
     ("scorecards", "list"): "_call_scorecards",
     ("scorecards", "info"): "_call_scorecards",
     ("scorecards", "search"): "_call_scorecards",
+    ("scorecards", "create"): "_call_scorecards",
     ("score", "info"): "_call_score",
+    ("score", "create"): "_call_score",
     ("score", "search"): "_call_score",
     ("score", "evaluations"): "_call_score",
     ("score", "predict"): "_call_score",
@@ -738,6 +757,123 @@ def _default_scorecards_search(args: dict[str, Any]) -> dict[str, Any]:
         "count": len(hits),
         "matches": hits,
     }
+
+
+def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
+    """Create a scorecard directly in Plexus."""
+    from plexus.attribution.actor_context import apply_actor_attribution
+    from plexus.cli.report.utils import resolve_account_id_for_command
+    from plexus.cli.shared.client_utils import create_client
+
+    def _slugify(value: str) -> str:
+        cleaned = re.sub(r"[^a-z0-9]+", "-", str(value).strip().lower())
+        return cleaned.strip("-") or "scorecard"
+
+    name = str(args.get("name") or "").strip()
+    if not name:
+        raise ValueError("plexus.scorecards.create requires name")
+
+    key = str(args.get("key") or "").strip() or _slugify(name)
+    external_id = str(args.get("external_id") or args.get("externalId") or "").strip() or key
+    description = str(args.get("description") or "").strip() or None
+    account_identifier = args.get("account_identifier") or args.get("account") or args.get("account_id") or None
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.scorecards.create: could not create dashboard client")
+
+    account_id = resolve_account_id_for_command(
+        client,
+        str(account_identifier) if account_identifier is not None else None,
+    )
+
+    mutation = """
+    mutation CreateScorecard($input: CreateScorecardInput!) {
+      createScorecard(input: $input) {
+        id
+        name
+        key
+        externalId
+      }
+    }
+    """
+
+    # Compatibility strategy:
+    # 1) Try plain CreateScorecardInput variants first (older schemas often reject attribution fields).
+    # 2) If plain variants fail, retry with actor attribution for newer schemas that support it.
+    base_variants: list[dict[str, Any]] = [{"name": name}]
+    if key:
+        base_variants.append({"name": name, "key": key})
+    if external_id:
+        base_variants.append({"name": name, "externalId": external_id})
+    if key and external_id:
+        base_variants.append({"name": name, "key": key, "externalId": external_id})
+    if description:
+        base_variants.append({"name": name, "description": description})
+    if key and description:
+        base_variants.append({"name": name, "key": key, "description": description})
+    if external_id and description:
+        base_variants.append({"name": name, "externalId": external_id, "description": description})
+    if key and external_id and description:
+        base_variants.append(
+            {
+                "name": name,
+                "key": key,
+                "externalId": external_id,
+                "description": description,
+            }
+        )
+
+    if account_id:
+        account_variants: list[dict[str, Any]] = []
+        for variant in base_variants:
+            with_account = dict(variant)
+            with_account["accountId"] = account_id
+            account_variants.append(with_account)
+        base_variants.extend(account_variants)
+
+    attempted_errors: list[str] = []
+    seen_payloads: set[str] = set()
+
+    for use_attribution in (False, True):
+        for variant in base_variants:
+            input_obj = dict(variant)
+            if use_attribution:
+                input_obj = apply_actor_attribution(
+                    input_obj,
+                    client_context=getattr(client, "context", None),
+                    source="execute_tactus",
+                )
+
+            payload_key = json.dumps(input_obj, sort_keys=True, default=str)
+            if payload_key in seen_payloads:
+                continue
+            seen_payloads.add(payload_key)
+
+            try:
+                response = client.execute(mutation, {"input": input_obj})
+                created = (response or {}).get("createScorecard") or {}
+                created_id = created.get("id")
+                if created_id:
+                    return {
+                        "success": True,
+                        "id": created_id,
+                        "name": created.get("name"),
+                        "key": created.get("key"),
+                        "externalId": created.get("externalId"),
+                    }
+                attempted_errors.append(
+                    f"attribution={use_attribution} payload={input_obj!r} -> missing id in response {response!r}"
+                )
+            except Exception as exc:
+                attempted_errors.append(
+                    f"attribution={use_attribution} payload={input_obj!r} -> {exc}"
+                )
+
+    raise RuntimeError(
+        "plexus.scorecards.create failed after compatibility attempts: "
+        + " | ".join(attempted_errors)
+    )
 
 
 def _default_score_search(args: dict[str, Any]) -> dict[str, Any]:
@@ -3597,6 +3733,7 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
             "plexus.procedure.optimize: PLEXUS_ACCOUNT_KEY environment variable is required"
         )
 
+    dispatch_mode = _resolve_report_dispatch_mode()
     result = service.create_procedure(
         account_identifier=account,
         scorecard_identifier=str(scorecard_identifier),
@@ -3604,36 +3741,49 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
         yaml_config=yaml_text,
         featured=False,
         name=f"Optimizer: {scorecard_identifier}",
-        dispatch_mode="local",
+        dispatch_mode=dispatch_mode,
     )
     if not result.success:
         raise RuntimeError(f"plexus.procedure.optimize: failed to create procedure — {result.message}")
 
     procedure_id = result.procedure.id
+    dashboard_url = f"https://lab.callcriteria.com/lab/procedures/{procedure_id}"
 
-    import sys
+    if dispatch_mode == "celery":
+        # Remote dispatch: procedure will be picked up by worker from task queue
+        return {
+            "procedure_id": procedure_id,
+            "status": "dispatched",
+            "message": "Optimizer procedure dispatched to remote worker queue.",
+            "scorecard": str(scorecard_identifier),
+            "score": str(score_identifier),
+            "dashboard_url": dashboard_url,
+        }
+    else:
+        # Local dispatch: launch subprocess
+        import sys
 
-    cmd = [
-        sys.executable, "-m", "plexus", "procedure", "run",
-        procedure_id,
-    ]
-    if args.get("max_iterations") is not None:
-        cmd += ["--max-iterations", str(int(args["max_iterations"]))]
-    if args.get("dry_run"):
-        cmd.append("--dry-run")
+        cmd = [
+            sys.executable, "-m", "plexus", "procedure", "run",
+            procedure_id,
+        ]
+        if args.get("max_iterations") is not None:
+            cmd += ["--max-iterations", str(int(args["max_iterations"]))]
+        if args.get("dry_run"):
+            cmd.append("--dry-run")
 
-    proc, log_path = _launch_local_procedure_subprocess(cmd, procedure_id)
+        proc, log_path = _launch_local_procedure_subprocess(cmd, procedure_id)
 
-    return {
-        "procedure_id": procedure_id,
-        "status": "running",
-        "pid": proc.pid,
-        "log_path": log_path,
-        "message": "Optimizer procedure dispatched — running as independent subprocess.",
-        "scorecard": str(scorecard_identifier),
-        "score": str(score_identifier),
-        "dashboard_url": f"https://lab.callcriteria.com/lab/procedures/{procedure_id}",
-    }
+        return {
+            "procedure_id": procedure_id,
+            "status": "running",
+            "pid": proc.pid,
+            "log_path": log_path,
+            "message": "Optimizer procedure dispatched — running as independent subprocess.",
+            "scorecard": str(scorecard_identifier),
+            "score": str(score_identifier),
+            "dashboard_url": dashboard_url,
+        }
 
 
 def _default_procedure_continue(args: dict[str, Any]) -> dict[str, Any]:
@@ -4769,22 +4919,40 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
             input_obj["guidelines"] = guidelines
         if parent_version_id:
             input_obj["parentVersionId"] = parent_version_id
-        input_obj = apply_actor_attribution(
-            input_obj,
-            client_context=getattr(client, "context", None),
-            source="execute_tactus",
-        )
-        if isinstance(input_obj.get("metadata"), (dict, list)):
-            input_obj["metadata"] = json.dumps(input_obj["metadata"])
-
-        resp = client.execute(version_mutation, {"input": input_obj})
-        new_version = (resp or {}).get("createScoreVersion") or {}
-        new_version_id = new_version.get("id")
+        new_version_id = None
+        version_errors: list[str] = []
+        for use_attribution in (True, False):
+            payload = dict(input_obj)
+            if use_attribution:
+                payload = apply_actor_attribution(
+                    payload,
+                    client_context=getattr(client, "context", None),
+                    source="execute_tactus",
+                )
+            if isinstance(payload.get("metadata"), (dict, list)):
+                payload["metadata"] = json.dumps(payload["metadata"])
+            try:
+                resp = client.execute(version_mutation, {"input": payload})
+                new_version = (resp or {}).get("createScoreVersion") or {}
+                new_version_id = new_version.get("id")
+                if new_version_id:
+                    result["created_at"] = new_version.get("createdAt") or ""
+                    break
+                version_errors.append(
+                    f"attribution={use_attribution} payload={payload!r} -> missing id in response {resp!r}"
+                )
+            except Exception as exc:
+                version_errors.append(
+                    f"attribution={use_attribution} payload={payload!r} -> {exc}"
+                )
         if not new_version_id:
-            return {"success": False, "error": f"createScoreVersion returned no id: {resp!r}"}
+            return {
+                "success": False,
+                "error": "createScoreVersion failed after compatibility attempts: "
+                + " | ".join(version_errors),
+            }
         result["version_id"] = new_version_id
         result["parent_version_id"] = parent_version_id
-        result["created_at"] = new_version.get("createdAt") or ""
         result["version_created"] = True
 
     result["message"] = (
@@ -4792,6 +4960,195 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
         else f"Score metadata updated: {list(metadata_updates.keys())}"
     )
     return result
+
+
+def _default_score_create(args: dict[str, Any]) -> dict[str, Any]:
+    """Create a score under a scorecard section."""
+    from plexus.attribution.actor_context import apply_actor_attribution
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.direct_identifier_resolution import (
+        direct_resolve_scorecard_identifier,
+    )
+
+    def _slugify(value: str) -> str:
+        cleaned = re.sub(r"[^a-z0-9]+", "-", str(value).strip().lower())
+        return cleaned.strip("-") or "score"
+
+    scorecard_identifier = (
+        args.get("scorecard_identifier") or args.get("scorecard") or args.get("scorecard_id")
+    )
+    if not scorecard_identifier:
+        raise ValueError("plexus.score.create requires scorecard_identifier")
+
+    name = str(args.get("name") or "").strip()
+    if not name:
+        raise ValueError("plexus.score.create requires name")
+
+    key = str(args.get("key") or "").strip() or _slugify(name)
+    external_id = (
+        str(args.get("external_id") or args.get("externalId") or "").strip() or key
+    )
+    score_type = str(args.get("score_type") or args.get("type") or "LangGraphScore").strip()
+    description = args.get("description")
+
+    try:
+        order = int(args.get("order") or 1)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("plexus.score.create order must be an integer") from exc
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.score.create: could not create dashboard client")
+
+    scorecard_id = direct_resolve_scorecard_identifier(client, scorecard_identifier)
+    if not scorecard_id:
+        raise ValueError(f"Scorecard not found: {scorecard_identifier!r}")
+
+    section_id = args.get("section_id") or args.get("sectionId")
+    if not section_id:
+        section_identifier = args.get("section_identifier") or args.get("section")
+        sections_query = """
+        query ListScorecardSections($scorecardId: String!, $limit: Int) {
+          listScorecardSections(filter: { scorecardId: { eq: $scorecardId } }, limit: $limit) {
+            items {
+              id
+              name
+              order
+            }
+          }
+        }
+        """
+        sections_resp = client.execute(sections_query, {"scorecardId": scorecard_id, "limit": 200})
+        sections = (sections_resp.get("listScorecardSections") or {}).get("items") or []
+
+        if section_identifier:
+            wanted = str(section_identifier).strip().lower()
+            for section in sections:
+                if (
+                    str(section.get("id") or "").lower() == wanted
+                    or str(section.get("name") or "").strip().lower() == wanted
+                ):
+                    section_id = section.get("id")
+                    break
+
+        if not section_id and sections:
+            section_id = sections[0].get("id")
+
+        if not section_id:
+            section_name = str(args.get("section_name") or "General").strip() or "General"
+            create_section_mutation = """
+            mutation CreateScorecardSection($input: CreateScorecardSectionInput!) {
+              createScorecardSection(input: $input) {
+                id
+                name
+                order
+                }
+            }
+            """
+            base_section_input = {
+                "scorecardId": scorecard_id,
+                "name": section_name,
+                "order": 1,
+            }
+            section_errors: list[str] = []
+            for use_attribution in (False, True):
+                section_input = dict(base_section_input)
+                if use_attribution:
+                    section_input = apply_actor_attribution(
+                        section_input,
+                        client_context=getattr(client, "context", None),
+                        source="execute_tactus",
+                    )
+                try:
+                    section_resp = client.execute(
+                        create_section_mutation,
+                        {"input": section_input},
+                    )
+                    created_section = (section_resp or {}).get("createScorecardSection") or {}
+                    section_id = created_section.get("id")
+                    if section_id:
+                        break
+                    section_errors.append(
+                        f"attribution={use_attribution} payload={section_input!r} -> missing id in response {section_resp!r}"
+                    )
+                except Exception as exc:
+                    section_errors.append(
+                        f"attribution={use_attribution} payload={section_input!r} -> {exc}"
+                    )
+            if not section_id:
+                raise RuntimeError(
+                    "plexus.score.create failed to create section: "
+                    + " | ".join(section_errors)
+                )
+
+    score_input: dict[str, Any] = {
+        "scorecardId": scorecard_id,
+        "sectionId": section_id,
+        "name": name,
+        "key": key,
+        "externalId": external_id,
+        "type": score_type,
+        "order": order,
+    }
+    if description is not None and str(description).strip():
+        score_input["description"] = str(description).strip()
+
+    create_score_mutation = """
+    mutation CreateScore($input: CreateScoreInput!) {
+      createScore(input: $input) {
+        id
+        name
+        key
+        externalId
+        description
+        type
+        order
+        sectionId
+      }
+    }
+    """
+    score_id = None
+    created_score: dict[str, Any] = {}
+    score_errors: list[str] = []
+    for use_attribution in (False, True):
+        payload = dict(score_input)
+        if use_attribution:
+            payload = apply_actor_attribution(
+                payload,
+                client_context=getattr(client, "context", None),
+                source="execute_tactus",
+            )
+        try:
+            score_resp = client.execute(create_score_mutation, {"input": payload})
+            created_score = (score_resp or {}).get("createScore") or {}
+            score_id = created_score.get("id")
+            if score_id:
+                break
+            score_errors.append(
+                f"attribution={use_attribution} payload={payload!r} -> missing id in response {score_resp!r}"
+            )
+        except Exception as exc:
+            score_errors.append(
+                f"attribution={use_attribution} payload={payload!r} -> {exc}"
+            )
+    if not score_id:
+        raise RuntimeError(
+            "plexus.score.create failed after compatibility attempts: "
+            + " | ".join(score_errors)
+        )
+
+    return {
+        "success": True,
+        "id": score_id,
+        "scorecard_id": scorecard_id,
+        "section_id": created_score.get("sectionId") or section_id,
+        "name": created_score.get("name"),
+        "key": created_score.get("key"),
+        "externalId": created_score.get("externalId"),
+        "type": created_score.get("type"),
+        "order": created_score.get("order"),
+        "description": created_score.get("description"),
+    }
 
 
 def _default_score_test(args: dict[str, Any]) -> dict[str, Any]:
@@ -4804,6 +5161,11 @@ def _default_score_test(args: dict[str, Any]) -> dict[str, Any]:
     version = args.get("version")
     samples = int(args.get("samples") or 3)
     item_ids = args.get("item_ids")
+    fallback_scorecard_identifier = (
+        args.get("fallback_scorecard_identifier")
+        or args.get("source_scorecard_identifier")
+        or args.get("item_source_scorecard_identifier")
+    )
     days = int(args.get("days") or 90)
 
     if not scorecard_identifier:
@@ -4827,6 +5189,7 @@ def _default_score_test(args: dict[str, Any]) -> dict[str, Any]:
             version=version,
             samples=samples,
             item_identifiers=parsed_item_ids,
+            fallback_scorecard_identifier=fallback_scorecard_identifier,
             days=days,
         )
     )
@@ -5167,7 +5530,9 @@ class PlexusRuntimeModule:
         scorecards_lister: Callable[[dict[str, Any]], Any] | None = None,
         scorecards_infoer: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         scorecards_searcher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        scorecards_creator: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_create: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_searcher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_evaluations: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_predict: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
@@ -5222,7 +5587,15 @@ class PlexusRuntimeModule:
             if scorecards_searcher is not None
             else _default_scorecards_search
         )
+        self._scorecards_creator = (
+            scorecards_creator
+            if scorecards_creator is not None
+            else _default_scorecards_create
+        )
         self._score_info = score_info if score_info is not None else _default_score_info
+        self._score_create = (
+            score_create if score_create is not None else _default_score_create
+        )
         self._score_searcher = (
             score_searcher if score_searcher is not None else _default_score_search
         )
@@ -5407,6 +5780,7 @@ class PlexusRuntimeModule:
     def _call_score(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "score" or method not in {
             "info",
+            "create",
             "search",
             "evaluations",
             "predict",
@@ -5425,6 +5799,8 @@ class PlexusRuntimeModule:
             parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
             if method == "info":
                 return self._score_info(parsed)
+            if method == "create":
+                return self._score_create(parsed)
             if method == "search":
                 return self._score_searcher(parsed)
             if method == "evaluations":
@@ -5477,7 +5853,7 @@ class PlexusRuntimeModule:
             self._budget.record_after("procedure", method)
 
     def _call_scorecards(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "scorecards" or method not in {"list", "info", "search"}:
+        if namespace != "scorecards" or method not in {"list", "info", "search", "create"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -5487,6 +5863,8 @@ class PlexusRuntimeModule:
             parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
             if method == "list":
                 return self._scorecards_lister(parsed)
+            if method == "create":
+                return self._scorecards_creator(parsed)
             if method == "search":
                 return self._scorecards_searcher(parsed)
             return self._scorecards_infoer(parsed)

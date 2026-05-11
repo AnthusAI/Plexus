@@ -1847,7 +1847,7 @@ Based on this data, you should prioritize examining error types with the highest
 
             # Create the Task
             logger.info(f"Creating Task for procedure {procedure_id}")
-            initial_dispatch_status = "LOCAL" if normalized_dispatch_mode == "local" else "ANNOUNCED"
+            initial_dispatch_status = "LOCAL" if normalized_dispatch_mode == "local" else "PENDING"
             task = Task.create(
                 client=self.client,
                 accountId=account_id,
