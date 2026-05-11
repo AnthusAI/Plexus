@@ -465,7 +465,7 @@ const canViewSessionForCurrentUser = (
 }
 
 const generatePrivacySpanId = (sessionId: string): string => (
-  `private-${sessionId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  `private-${sessionId}-${Date.now()}-${crypto.randomUUID()}`
 )
 
 const createPrivateConsoleMetadata = ({
