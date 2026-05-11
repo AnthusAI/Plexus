@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "35554b23-c446-49fa-8e99-7c190798f337",
+  "issue_id": "plx-f72a32d5-74e3-4aa7-a898-c1eb57b68a67",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-11T18:00:15.976Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Implement metadata-based soft privacy for Console private mode: owner-visible private spans, non-owner collapsed placeholders, private metadata propagation through chat runtime, and public-context exclusion.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Implement Console private mode soft privacy"
+  }
+}
