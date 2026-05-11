@@ -388,7 +388,7 @@ export const amplifyClient = {
     list: async (params: any) => {
       const batchJobModel = (getClient().models as Record<string, any>).BatchJob
       if (!batchJobModel?.list) {
-        return { data: [] } as AmplifyResponse<any[]>
+        return { data: [], nextToken: null }
       }
       const response = await batchJobModel.list(params)
       return response as AmplifyResponse<any[]>
