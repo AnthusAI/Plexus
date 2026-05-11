@@ -24,14 +24,11 @@ type EvaluationIndexFields = "accountId" | "scorecardId" | "type" | "accuracy" |
     "scoreId" | "status" | "updatedAt" | "createdAt" | "startedAt" | "elapsedSeconds" | 
     "estimatedRemainingSeconds" | "totalItems" | "processedItems" | "errorMessage" | 
     "scoreGoal" | "metricsExplanation" | "inferences" | "cost" | "createdByUserId";
-type BatchJobIndexFields = "accountId" | "scorecardId" | "type" | "scoreId" | 
-    "status" | "modelProvider" | "modelName";
 type ItemIndexFields = "name" | "description" | "accountId" | "evaluationId" | "updatedAt" | "createdAt" | "isEvaluation" | "createdByType";
 type ScoringJobIndexFields = "accountId" | "scorecardId" | "itemId" | "status" | 
     "scoreId" | "evaluationId" | "startedAt" | "completedAt" | "errorMessage" | "updatedAt" | "createdAt";
 type ScoreResultIndexFields = "accountId" | "scorecardId" | "itemId" | 
     "scoringJobId" | "evaluationId" | "scoreVersionId" | "updatedAt" | "createdAt" | "scoreId" | "code" | "type" | "feedbackItemId";
-type BatchJobScoringJobIndexFields = "batchJobId" | "scoringJobId";
 type TaskIndexFields = "accountId" | "type" | "status" | "target" | 
     "currentStageId" | "updatedAt" | "scorecardId" | "scoreId";
 type TaskStageIndexFields = "taskId" | "name" | "order" | "status";
@@ -66,7 +63,6 @@ const schema = a.schema({
             settings: a.json(),
             scorecards: a.hasMany('Scorecard', 'accountId'),
             evaluations: a.hasMany('Evaluation', 'accountId'),
-            batchJobs: a.hasMany('BatchJob', 'accountId'),
             items: a.hasMany('Item', 'accountId'),
             scoringJobs: a.hasMany('ScoringJob', 'accountId'),
             scoreResults: a.hasMany('ScoreResult', 'accountId'),
@@ -116,7 +112,6 @@ const schema = a.schema({
             sections: a.hasMany('ScorecardSection', 'scorecardId'),
             scores: a.hasMany('Score', 'scorecardId'),
             evaluations: a.hasMany('Evaluation', 'scorecardId'),
-            batchJobs: a.hasMany('BatchJob', 'scorecardId'),
             scoringJobs: a.hasMany('ScoringJob', 'scorecardId'),
             scoreResults: a.hasMany('ScoreResult', 'scorecardId'),
             tasks: a.hasMany('Task', 'scorecardId'),
@@ -174,7 +169,6 @@ const schema = a.schema({
             scorecardId: a.string().required(),
             scorecard: a.belongsTo('Scorecard', 'scorecardId'),
             evaluations: a.hasMany('Evaluation', 'scoreId'),
-            batchJobs: a.hasMany('BatchJob', 'scoreId'),
             scoringJobs: a.hasMany('ScoringJob', 'scoreId'),
             tasks: a.hasMany('Task', 'scoreId'),
             versions: a.hasMany('ScoreVersion', 'scoreId'),
@@ -293,40 +287,6 @@ const schema = a.schema({
             idx("createdByUserId" as EvaluationIndexFields)
         ]),
 
-    BatchJob: a
-        .model({
-            type: a.string().required(),
-            batchId: a.string().required(),
-            status: a.string().required(),
-            startedAt: a.datetime(),
-            estimatedEndAt: a.datetime(),
-            completedAt: a.datetime(),
-            totalRequests: a.integer(),
-            completedRequests: a.integer(),
-            failedRequests: a.integer(),
-            errorMessage: a.string(),
-            errorDetails: a.json(),
-            accountId: a.string().required(),
-            account: a.belongsTo('Account', 'accountId'),
-            scorecardId: a.string(),
-            scorecard: a.belongsTo('Scorecard', 'scorecardId'),
-            scoreId: a.string(),
-            score: a.belongsTo('Score', 'scoreId'),
-            scoringJobs: a.hasMany('BatchJobScoringJob', 'batchJobId'),
-            scoringJobCountCache: a.integer(),
-            modelProvider: a.string().required(),
-            modelName: a.string().required(),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx) => [
-            idx("accountId" as BatchJobIndexFields),
-            idx("scorecardId" as BatchJobIndexFields),
-            idx("scoreId" as BatchJobIndexFields)
-        ]),
-
     Item: a
         .model({
             externalId: a.string(),
@@ -409,7 +369,6 @@ const schema = a.schema({
             evaluation: a.belongsTo('Evaluation', 'evaluationId'),
             scoreId: a.string(),
             score: a.belongsTo('Score', 'scoreId'),
-            batchJobLinks: a.hasMany('BatchJobScoringJob', 'scoringJobId'),
             scoreResults: a.hasMany('ScoreResult', 'scoringJobId'),
             updatedAt: a.datetime(),
             createdAt: a.datetime(),
@@ -475,21 +434,6 @@ const schema = a.schema({
             index("itemId").sortKeys(["scorecardId", "scoreId"]).name("byItemScorecardScore"),
             index("type").sortKeys(["status", "updatedAt"]).name("byTypeStatusUpdated"),
             index("itemId").sortKeys(["type", "scoreId", "updatedAt"]).name("byItemIdAndTypeAndScoreIdAndUpdatedAt")
-        ]),
-
-    BatchJobScoringJob: a
-        .model({
-            batchJobId: a.string().required(),
-            scoringJobId: a.string().required(),
-            batchJob: a.belongsTo('BatchJob', 'batchJobId'),
-            scoringJob: a.belongsTo('ScoringJob', 'scoringJobId'),
-        })
-        .authorization((allow) => [
-            allow.publicApiKey(),
-            allow.authenticated()
-        ])
-        .secondaryIndexes((idx) => [
-            idx("batchJobId")
         ]),
 
     Task: a
