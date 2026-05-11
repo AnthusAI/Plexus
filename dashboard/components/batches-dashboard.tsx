@@ -42,7 +42,6 @@ const ACCOUNT_KEY = 'call-criteria'
 
 type ScorecardType = Schema['Scorecard']['type']
 type ScoreType = Schema['Score']['type']
-type BatchJobType = Schema['BatchJob']['type']
 
 interface SimpleResponse<T> {
   data: T | null
@@ -97,11 +96,11 @@ async function listAccounts(): Promise<SimpleResponse<SimpleAccount[]>> {
 
 async function listBatchJobs(accountId: string): Promise<SimpleResponse<SimpleBatchJob[]>> {
   try {
-    const result = await listFromModel<Schema['BatchJob']['type']>('BatchJob', {
+    const result = await (listFromModel as any)('BatchJob', {
       filter: {
         accountId: { eq: accountId }
       }
-    });
+    }) as { data?: SimpleBatchJob[] | null };
 
     if (!result.data) {
       return { data: null };
@@ -243,7 +242,7 @@ function formatTimeAgo(dateStr?: string | null): string {
   }
 }
 
-const mapBatchJob = async (job: BatchJobType): Promise<BatchJobWithCount> => {
+const mapBatchJob = async (job: SimpleBatchJob): Promise<BatchJobWithCount> => {
   let scorecardData: ScorecardType | null = null;
   let scoreData: ScoreType | null = null;
 
@@ -326,7 +325,7 @@ const BATCH_JOB_SUBSCRIPTION = `
 `;
 
 interface SubscriptionResponse {
-  items: Schema['BatchJob']['type'][];
+  items: SimpleBatchJob[];
 }
 
 interface BatchJobWithRelatedData extends BatchJobWithCount {
@@ -527,8 +526,9 @@ export default function BatchesDashboard({
     if (!accountId) return;
 
     try {
-      if (getClient().models.BatchJob) {
-        const handleBatchUpdate = async (data: Schema['BatchJob']['type']) => {
+      const batchJobModel = (getClient().models as Record<string, any>).BatchJob;
+      if (batchJobModel?.onCreate && batchJobModel?.onUpdate) {
+        const handleBatchUpdate = async (data: { id: string }) => {
           if (!accountId) return;
           
           const { data: updatedBatchJobs } = await listBatchJobs(accountId);
@@ -556,14 +556,12 @@ export default function BatchesDashboard({
           setError(error instanceof Error ? error : new Error(String(error)));
         };
 
-        // @ts-ignore - Amplify Gen2 typing issue
-        const createSub = getClient().models.BatchJob.onCreate().subscribe({
+        const createSub = batchJobModel.onCreate().subscribe({
           next: handleBatchUpdate,
           error: handleError
         });
 
-        // @ts-ignore - Amplify Gen2 typing issue
-        const updateSub = getClient().models.BatchJob.onUpdate().subscribe({
+        const updateSub = batchJobModel.onUpdate().subscribe({
           next: handleBatchUpdate,
           error: handleError
         });
