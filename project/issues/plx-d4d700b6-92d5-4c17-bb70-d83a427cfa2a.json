@@ -1,0 +1,31 @@
+{
+  "id": "plx-d4d700b6-92d5-4c17-bb70-d83a427cfa2a",
+  "title": "Use canonical plexus.scorecards.info in export migration existence check",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-14559d76-98d3-4fb4-9074-5c49bce7d2f8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2353fe23-1cee-437c-837b-627f2d4d74a5",
+      "author": "derek",
+      "text": "Hotfixing runtime compatibility: replace unavailable global alias plexus_scorecard_info with canonical namespaced call plexus.scorecards.info, and adjust observer metadata accordingly.",
+      "created_at": "2026-05-06T22:17:46.584261220Z"
+    },
+    {
+      "id": "162bfc39-12e4-4892-8602-fbb41bcae3c1",
+      "author": "derek",
+      "text": "Implemented runtime compatibility hotfix: switched existence probe from missing global alias plexus_scorecard_info to canonical plexus.scorecards.info call. Updated observer metadata accordingly. Validation passed (YAML parse + yaml loader test).",
+      "created_at": "2026-05-06T22:17:57.283522406Z"
+    }
+  ],
+  "created_at": "2026-05-06T22:17:43.283971484Z",
+  "updated_at": "2026-05-06T22:17:57.296707539Z",
+  "closed_at": "2026-05-06T22:17:57.296707539Z",
+  "custom": {}
+}

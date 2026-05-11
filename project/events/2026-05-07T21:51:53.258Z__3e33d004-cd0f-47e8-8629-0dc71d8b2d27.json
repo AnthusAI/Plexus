@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3e33d004-cd0f-47e8-8629-0dc71d8b2d27",
+  "issue_id": "plx-daf10618-7602-4d52-a8e3-a28ba3d71a9c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-07T21:51:53.258Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Set up local development so the dashboard web app can send Console chat messages to a local chat responder instead of the cloud responder, and document/run the local responder workflow.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Route local Console chat to local responder"
+  }
+}

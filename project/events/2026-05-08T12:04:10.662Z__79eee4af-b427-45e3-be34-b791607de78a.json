@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "79eee4af-b427-45e3-be34-b791607de78a",
+  "issue_id": "plx-7f21fdb3-55b5-4796-8419-416e7f9bc223",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-08T12:04:10.662Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix Console response text cropping"
+  }
+}
