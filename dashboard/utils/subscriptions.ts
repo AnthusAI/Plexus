@@ -73,7 +73,11 @@ export function createBatchJobScoringJobSubscription(
   onError: ErrorCallback
 ) {
   const client = getClient();
-  const subscription = (client.models.BatchJobScoringJob as any).onCreate() as AmplifySubscription;
+  const batchJobScoringJobModel = (client.models as Record<string, any>).BatchJobScoringJob;
+  if (!batchJobScoringJobModel?.onCreate) {
+    return { unsubscribe: () => {} };
+  }
+  const subscription = batchJobScoringJobModel.onCreate() as AmplifySubscription;
   return subscription.subscribe({
     next: onData,
     error: onError

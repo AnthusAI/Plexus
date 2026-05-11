@@ -48,18 +48,23 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Switch } from "@/components/ui/switch"
 import {
+  createLucideIcon,
+  List,
   MessageSquare,
   PanelLeftOpen,
   PanelLeftClose,
   ChevronDownIcon,
   MoreHorizontal,
+  Paperclip,
   Pencil,
   Trash2,
   AlertCircle,
-  Plus
+  Plus,
 } from "lucide-react"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -277,7 +282,15 @@ type ThinkingConversationRow = {
   kind: 'thinking'
 }
 
-type ConversationRow = MessageConversationRow | ThinkingConversationRow
+type PrivateConversationRow = {
+  id: string
+  from: 'assistant'
+  kind: 'private-span'
+  spanId: string
+  count: number
+}
+
+type ConversationRow = MessageConversationRow | ThinkingConversationRow | PrivateConversationRow
 
 type PendingAssistantState = {
   requestedAt: string
@@ -381,6 +394,95 @@ const serializeSessionMetadata = (value: unknown): string | undefined => {
   }
   return undefined
 }
+
+type ConsoleToolAccessMode = "execution" | "planning"
+
+const DEFAULT_CONSOLE_TOOL_ACCESS_MODE: ConsoleToolAccessMode = "execution"
+
+const HatGlasses = createLucideIcon("hat-glasses", [
+  ["path", { d: "M14 18a2 2 0 0 0-4 0", key: "1v8fkw" }],
+  [
+    "path",
+    {
+      d: "m19 11-2.11-6.657a2 2 0 0 0-2.752-1.148l-1.276.61A2 2 0 0 1 12 4H8.5a2 2 0 0 0-1.925 1.456L5 11",
+      key: "1fkr7p",
+    },
+  ],
+  ["path", { d: "M2 11h20", key: "3eubbj" }],
+  ["circle", { cx: "17", cy: "18", r: "3", key: "82mm0e" }],
+  ["circle", { cx: "7", cy: "18", r: "3", key: "lvkj7j" }],
+] satisfies Parameters<typeof createLucideIcon>[1])
+
+const normalizeConsoleToolAccessMode = (value: unknown): ConsoleToolAccessMode => {
+  const normalized = String(value || "").trim().toLowerCase()
+  if (normalized === "planning" || normalized === "plan") {
+    return "planning"
+  }
+  return DEFAULT_CONSOLE_TOOL_ACCESS_MODE
+}
+
+const getConsoleMetadata = (metadata: unknown): Record<string, any> => {
+  const parsed = parseSessionMetadata(metadata)
+  return parsed.console && typeof parsed.console === "object" && !Array.isArray(parsed.console)
+    ? parsed.console as Record<string, any>
+    : {}
+}
+
+const isPrivateConsoleMetadata = (metadata: unknown): boolean => (
+  Boolean(getConsoleMetadata(metadata).private)
+)
+
+const getPrivacyOwnerUserId = (metadata: unknown): string | null => {
+  const owner = getConsoleMetadata(metadata).privacy_owner_user_id
+  return typeof owner === "string" && owner.trim() ? owner.trim() : null
+}
+
+const getPrivacySpanId = (metadata: unknown): string | null => {
+  const spanId = getConsoleMetadata(metadata).privacy_span_id
+  return typeof spanId === "string" && spanId.trim() ? spanId.trim() : null
+}
+
+const canViewPrivateConsoleMetadata = (metadata: unknown, currentUserId: string | null): boolean => {
+  if (!isPrivateConsoleMetadata(metadata)) {
+    return true
+  }
+  const ownerUserId = getPrivacyOwnerUserId(metadata)
+  return Boolean(ownerUserId && currentUserId && ownerUserId === currentUserId)
+}
+
+const canViewSessionForCurrentUser = (
+  session: Pick<ChatSession, "metadata">,
+  currentUserId: string | null,
+): boolean => {
+  const consoleMetadata = getConsoleMetadata(session.metadata)
+  if (!Boolean(consoleMetadata.private_only)) {
+    return true
+  }
+  const ownerUserId = typeof consoleMetadata.private_owner_user_id === "string"
+    ? consoleMetadata.private_owner_user_id.trim()
+    : ""
+  return Boolean(ownerUserId && currentUserId && ownerUserId === currentUserId)
+}
+
+const generatePrivacySpanId = (sessionId: string): string => (
+  `private-${sessionId}-${Date.now()}-${crypto.randomUUID()}`
+)
+
+const createPrivateConsoleMetadata = ({
+  base,
+  ownerUserId,
+  spanId,
+}: {
+  base?: Record<string, any>
+  ownerUserId: string
+  spanId: string
+}) => ({
+  ...(base || {}),
+  mode: "planning" as ConsoleToolAccessMode,
+  private: true,
+  privacy_owner_user_id: ownerUserId,
+  privacy_span_id: spanId,
+})
 
 const getSessionExplicitName = (session: Pick<ChatSession, "name">): string => {
   const explicitName = String(session.name || "").trim()
@@ -753,12 +855,17 @@ const isSnapshotReadyAssistantMessage = (message: ChatMessage): boolean => {
 const buildClientHistorySnapshot = (
   allMessages: ChatMessage[],
   sessionId: string,
-  pendingUserMessage?: string,
+  options?: {
+    pendingUserMessage?: string
+    includePrivateForOwnerUserId?: string | null
+  },
 ): Array<{ role: 'USER' | 'ASSISTANT'; content: string }> => {
   if (!sessionId) {
     return []
   }
 
+  const pendingUserMessage = options?.pendingUserMessage
+  const includePrivateForOwnerUserId = options?.includePrivateForOwnerUserId || null
   const sessionMessages = sortChatMessages(
     allMessages.filter((message) => (
       message.sessionId === sessionId
@@ -767,6 +874,13 @@ const buildClientHistorySnapshot = (
       && typeof message.content === 'string'
       && message.content.trim().length > 0
       && isSnapshotReadyAssistantMessage(message)
+      && (
+        !isPrivateConsoleMetadata(message.metadata)
+        || (
+          includePrivateForOwnerUserId
+          && getPrivacyOwnerUserId(message.metadata) === includePrivateForOwnerUserId
+        )
+      )
     )),
   )
 
@@ -800,6 +914,39 @@ const buildClientHistorySnapshot = (
     return snapshot.slice(snapshot.length - CLIENT_HISTORY_SNAPSHOT_LIMIT)
   }
   return snapshot
+}
+
+const buildConversationRowsForViewer = (
+  sortedMessages: ChatMessage[],
+  currentUserId: string | null,
+): ConversationRow[] => {
+  const rows: ConversationRow[] = []
+  let activePrivateSpan: PrivateConversationRow | null = null
+
+  for (const message of sortedMessages) {
+    if (!isPrivateConsoleMetadata(message.metadata) || canViewPrivateConsoleMetadata(message.metadata, currentUserId)) {
+      activePrivateSpan = null
+      rows.push(getRowFromMessage(message))
+      continue
+    }
+
+    const spanId = getPrivacySpanId(message.metadata) || `message-${message.id}`
+    if (activePrivateSpan && activePrivateSpan.spanId === spanId) {
+      activePrivateSpan.count += 1
+      continue
+    }
+
+    activePrivateSpan = {
+      id: `private-span-${spanId}`,
+      from: 'assistant',
+      kind: 'private-span',
+      spanId,
+      count: 1,
+    }
+    rows.push(activePrivateSpan)
+  }
+
+  return rows
 }
 
 const getLatestAssistantCreatedAtForSession = (messages: ChatMessage[], sessionId: string): string | null => {
@@ -1556,6 +1703,9 @@ function ConversationViewer({
   const [hitlSubmitErrors, setHitlSubmitErrors] = useState<Record<string, string>>({})
   const [promptValue, setPromptValue] = useState("")
   const [selectedModel, setSelectedModel] = useState(DEFAULT_CONSOLE_CHAT_MODEL)
+  const [consoleToolAccessMode, setConsoleToolAccessMode] = useState<ConsoleToolAccessMode>(DEFAULT_CONSOLE_TOOL_ACCESS_MODE)
+  const [isConsolePrivate, setIsConsolePrivate] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [isPromptSubmitting, setIsPromptSubmitting] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
@@ -1600,6 +1750,25 @@ function ConversationViewer({
     const observer = new ResizeObserver(update)
     observer.observe(node)
     return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    let isCancelled = false
+    getCurrentUserAttribution()
+      .then((attribution) => {
+        if (isCancelled) {
+          return
+        }
+        setCurrentUserId(attribution.createdByUserId || null)
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setCurrentUserId(null)
+        }
+      })
+    return () => {
+      isCancelled = true
+    }
   }, [])
 
   const maxSidebarWidth = React.useMemo(() => {
@@ -2435,7 +2604,10 @@ function ConversationViewer({
     const bTime = new Date(b.updatedAt || b.createdAt).getTime()
     return bTime - aTime
   })
-  const visibleSessions = sortedSessions.filter((session) => !isHiddenUntilNamedSession(session))
+  const visibleSessions = sortedSessions.filter((session) => (
+    !isHiddenUntilNamedSession(session)
+    && canViewSessionForCurrentUser(session, currentUserId)
+  ))
 
   // Filter messages for selected session
   const filteredMessages = selectedSessionId
@@ -2475,6 +2647,21 @@ function ConversationViewer({
   // Get the current selected session
   const selectedSession = selectedSessionId ? sessions.find(s => s.id === selectedSessionId) : null
   const selectedSessionMissing = Boolean(selectedSessionId && !selectedSession)
+  const selectedSessionKey = selectedSession?.id
+  const selectedSessionMetadata = selectedSession?.metadata
+  useEffect(() => {
+    if (!selectedSession) {
+      return
+    }
+    const consoleMetadata = getConsoleMetadata(selectedSession.metadata)
+    const nextPrivate = Boolean(consoleMetadata.private)
+    setConsoleToolAccessMode(
+      nextPrivate
+        ? "planning"
+        : normalizeConsoleToolAccessMode(consoleMetadata.mode)
+    )
+    setIsConsolePrivate(nextPrivate)
+  }, [selectedSession, selectedSessionKey, selectedSessionMetadata])
   const pendingAssistantState = selectedSessionId ? pendingAssistantBySession[selectedSessionId] : undefined
   const showThinkingPlaceholder = React.useMemo(() => {
     if (!selectedSession || !pendingAssistantState) {
@@ -2496,7 +2683,10 @@ function ConversationViewer({
     return !hasAssistantSincePending
   }, [pendingAssistantState, selectedSession, sortedMessages])
   const isPromptDisabled = !selectedSession || isAuthUnavailable
-  const conversationRows = sortedMessages.map(getRowFromMessage)
+  const conversationRows = React.useMemo(
+    () => buildConversationRowsForViewer(sortedMessages, currentUserId),
+    [currentUserId, sortedMessages],
+  )
   const renderRows = React.useMemo<ConversationRow[]>(() => {
     if (!showThinkingPlaceholder || !selectedSessionId) {
       return conversationRows
@@ -2568,6 +2758,99 @@ function ConversationViewer({
     [dispatchProcedureId, effectiveId, messages, selectedSessionProcedureId, sessions]
   )
   const canCreateSession = Boolean(fallbackSessionAccountId && fallbackSessionProcedureId)
+
+  const persistConsoleMode = React.useCallback(async (
+    requestedMode: ConsoleToolAccessMode,
+    requestedPrivate: boolean,
+  ) => {
+    const nextPrivate = Boolean(requestedPrivate)
+    const nextMode: ConsoleToolAccessMode = nextPrivate
+      ? "planning"
+      : requestedMode
+    const normalizedPrivate = nextMode === "planning" ? nextPrivate : false
+
+    setConsoleToolAccessMode(nextMode)
+    setIsConsolePrivate(normalizedPrivate)
+
+    if (!selectedSession) {
+      return
+    }
+
+    const currentMetadata = parseSessionMetadata(selectedSession.metadata)
+    const currentConsoleMetadata = getConsoleMetadata(selectedSession.metadata)
+    let privacyOwnerUserId = typeof currentConsoleMetadata.private_owner_user_id === "string"
+      ? currentConsoleMetadata.private_owner_user_id.trim()
+      : ""
+    if (normalizedPrivate && !privacyOwnerUserId) {
+      privacyOwnerUserId = currentUserId || ""
+      if (!privacyOwnerUserId) {
+        try {
+          const attribution = await getCurrentUserAttribution()
+          privacyOwnerUserId = attribution.createdByUserId || ""
+          setCurrentUserId(privacyOwnerUserId || null)
+        } catch {
+          privacyOwnerUserId = ""
+        }
+      }
+    }
+    const existingSpanId = typeof currentConsoleMetadata.current_privacy_span_id === "string"
+      ? currentConsoleMetadata.current_privacy_span_id.trim()
+      : ""
+    const nextSpanId = normalizedPrivate
+      ? existingSpanId || generatePrivacySpanId(selectedSession.id)
+      : undefined
+    const hasPublicMessages = messages.some((message) => (
+      message.sessionId === selectedSession.id
+      && !isPrivateConsoleMetadata(message.metadata)
+    ))
+    const nextMetadata = {
+      ...currentMetadata,
+      console: {
+        ...currentConsoleMetadata,
+        mode: nextMode,
+        private: normalizedPrivate,
+        private_owner_user_id: normalizedPrivate && privacyOwnerUserId
+          ? privacyOwnerUserId
+          : currentConsoleMetadata.private_owner_user_id,
+        private_only: normalizedPrivate ? !hasPublicMessages : false,
+        current_privacy_span_id: normalizedPrivate ? nextSpanId : undefined,
+      },
+    }
+    const updatedAt = new Date().toISOString()
+
+    try {
+      const client = getClient()
+      await (client.models.ChatSession.update as any)({
+        id: selectedSession.id,
+        metadata: serializeSessionMetadata(nextMetadata),
+        updatedAt,
+      })
+      setInternalSessions(prev => prev.map(session => (
+        session.id === selectedSession.id
+          ? { ...session, metadata: nextMetadata, updatedAt }
+          : session
+      )))
+      setSessionOverridesById(prev => ({
+        ...prev,
+        [selectedSession.id]: {
+          ...(prev[selectedSession.id] || {}),
+          metadata: nextMetadata,
+          updatedAt,
+        },
+      }))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update Console mode"
+      toast.error(message)
+    }
+  }, [currentUserId, messages, selectedSession])
+
+  const handlePlanModeChange = React.useCallback((checked: boolean) => {
+    persistConsoleMode(checked ? "planning" : "execution", checked ? isConsolePrivate : false)
+  }, [isConsolePrivate, persistConsoleMode])
+
+  const handlePrivateModeChange = React.useCallback((checked: boolean) => {
+    persistConsoleMode(checked ? "planning" : consoleToolAccessMode, checked)
+  }, [consoleToolAccessMode, persistConsoleMode])
 
   const isScrollerNearBottom = React.useCallback((scroller: HTMLDivElement) => {
     const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
@@ -2939,7 +3222,30 @@ function ConversationViewer({
     const client = getClient()
     const createdAt = new Date().toISOString()
     const hiddenUntilNamed = Boolean(options?.hiddenUntilNamed)
-    const sessionMetadata = hiddenUntilNamed ? { console: { hidden_until_named: true } } : undefined
+    const sessionMode: ConsoleToolAccessMode = isConsolePrivate ? "planning" : consoleToolAccessMode
+    let privacyOwnerUserId = currentUserId || ""
+    if (isConsolePrivate && !privacyOwnerUserId) {
+      try {
+        const attribution = await getCurrentUserAttribution()
+        privacyOwnerUserId = attribution.createdByUserId || ""
+        setCurrentUserId(privacyOwnerUserId || null)
+      } catch {
+        privacyOwnerUserId = ""
+      }
+    }
+    const privacySpanId = isConsolePrivate
+      ? generatePrivacySpanId("new")
+      : undefined
+    const sessionMetadata = {
+      console: {
+        mode: sessionMode,
+        private: isConsolePrivate,
+        ...(isConsolePrivate && privacyOwnerUserId ? { private_owner_user_id: privacyOwnerUserId } : {}),
+        ...(isConsolePrivate ? { private_only: true } : {}),
+        ...(isConsolePrivate && privacySpanId ? { current_privacy_span_id: privacySpanId } : {}),
+        ...(hiddenUntilNamed ? { hidden_until_named: true } : {}),
+      },
+    }
     const created = await (client.models.ChatSession.create as any)({
       accountId: fallbackSessionAccountId,
       procedureId: fallbackSessionProcedureId,
@@ -2988,7 +3294,7 @@ function ConversationViewer({
     }
 
     return createdSession
-  }, [fallbackSessionAccountId, fallbackSessionProcedureId, onSessionSelect])
+  }, [consoleToolAccessMode, currentUserId, fallbackSessionAccountId, fallbackSessionProcedureId, isConsolePrivate, onSessionSelect])
 
   const handleCreateSession = React.useCallback(async () => {
     if (isAuthUnavailable) {
@@ -3035,6 +3341,7 @@ function ConversationViewer({
         let targetSessionId = selectedSessionId
         let targetSessionAccountId = selectedSessionAccountId
         let targetSessionProcedureId = selectedSessionProcedureId
+        let targetSessionMetadata = selectedSession?.metadata
 
         if (!selectedSession && targetSessionId) {
           toast.info('Select a valid chat session first')
@@ -3047,6 +3354,7 @@ function ConversationViewer({
             targetSessionId = newSession.id
             targetSessionAccountId = newSession.accountId
             targetSessionProcedureId = newSession.procedureId
+            targetSessionMetadata = newSession.metadata
           } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to create a fresh session before send'
             toast.error(message)
@@ -3082,6 +3390,84 @@ function ConversationViewer({
           ? targetSessionProcedureId
           : getConsoleResponseTarget()
         const optimisticMessageId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        const messageMode: ConsoleToolAccessMode = isConsolePrivate ? "planning" : consoleToolAccessMode
+        const targetConsoleMetadata = getConsoleMetadata(targetSessionMetadata)
+        let privacyOwnerUserId = isConsolePrivate
+          ? getPrivacyOwnerUserId(targetSessionMetadata) || currentUserId || ""
+          : ""
+        if (isConsolePrivate && !privacyOwnerUserId) {
+          try {
+            const attribution = await getCurrentUserAttribution()
+            privacyOwnerUserId = attribution.createdByUserId || ""
+            setCurrentUserId(privacyOwnerUserId || null)
+          } catch {
+            privacyOwnerUserId = ""
+          }
+        }
+        if (isConsolePrivate && !privacyOwnerUserId) {
+          toast.error("Unable to enable Private mode until your user identity is available")
+          return
+        }
+        const privacySpanId = isConsolePrivate
+          ? getPrivacySpanId({ console: { privacy_span_id: targetConsoleMetadata.current_privacy_span_id } })
+            || generatePrivacySpanId(targetSessionId)
+          : ""
+        const messageConsoleMetadata = isConsolePrivate
+          ? createPrivateConsoleMetadata({
+              base: { mode: messageMode },
+              ownerUserId: privacyOwnerUserId,
+              spanId: privacySpanId,
+            })
+          : {
+              mode: messageMode,
+              private: false,
+            }
+        const hasPublicMessages = messages.some((message) => (
+          message.sessionId === targetSessionId
+          && !isPrivateConsoleMetadata(message.metadata)
+        ))
+        const targetSessionParsedMetadata = parseSessionMetadata(targetSessionMetadata)
+        const nextSessionMetadata = enableProcedureSteering
+          ? undefined
+          : {
+              ...targetSessionParsedMetadata,
+              console: {
+                ...targetConsoleMetadata,
+                mode: messageMode,
+                private: isConsolePrivate,
+                private_owner_user_id: isConsolePrivate
+                  ? privacyOwnerUserId
+                  : targetConsoleMetadata.private_owner_user_id,
+                private_only: isConsolePrivate ? !hasPublicMessages : false,
+                current_privacy_span_id: isConsolePrivate ? privacySpanId : undefined,
+              },
+            }
+        if (nextSessionMetadata) {
+          const updatedAt = nowIso
+          try {
+            const client = getClient()
+            await (client.models.ChatSession.update as any)({
+              id: targetSessionId,
+              metadata: serializeSessionMetadata(nextSessionMetadata),
+              updatedAt,
+            })
+            setInternalSessions(prev => prev.map(session => (
+              session.id === targetSessionId
+                ? { ...session, metadata: nextSessionMetadata, updatedAt }
+                : session
+            )))
+            setSessionOverridesById(prev => ({
+              ...prev,
+              [targetSessionId]: {
+                ...(prev[targetSessionId] || {}),
+                metadata: nextSessionMetadata,
+                updatedAt,
+              },
+            }))
+          } catch (error) {
+            console.warn('[ConsoleChat] failed to update Console session metadata before send', error)
+          }
+        }
         const optimisticMessage: ChatMessage = {
           id: optimisticMessageId,
           accountId: targetSessionAccountId,
@@ -3094,6 +3480,7 @@ function ConversationViewer({
           responseTarget,
           responseStatus: enableProcedureSteering ? 'COMPLETED' : 'PENDING',
           createdAt: nowIso,
+          metadata: enableProcedureSteering ? undefined : { console: messageConsoleMetadata },
         }
 
         setIsPromptSubmitting(true)
@@ -3110,6 +3497,7 @@ function ConversationViewer({
           const client = getClient()
           const attribution = await getCurrentUserAttribution()
           if (attribution.createdByUserId) {
+            setCurrentUserId(attribution.createdByUserId)
             setInternalMessages(prev => prev.map(message => (
               message.id === optimisticMessageId
                 ? { ...message, createdByUserId: attribution.createdByUserId }
@@ -3127,20 +3515,27 @@ function ConversationViewer({
                 ...getMessageAttributionMetadata(attribution.createdByUserId),
                 source: 'console-prompt-input',
                 sent_at: nowIso,
+                console: messageConsoleMetadata,
                 model: {
                   id: getConsoleSelectedModel(),
                 },
                 instrumentation: {
                   client_send_started_at: clientSendStartedAt,
                   client_prompt_length_chars: nextValue.length,
-                  client_user_message_text: nextValue.length > 4000
-                    ? `${nextValue.slice(0, 4000)}…`
-                    : nextValue,
+                  ...(!isConsolePrivate
+                    ? {
+                        client_user_message_text: nextValue.length > 4000
+                          ? `${nextValue.slice(0, 4000)}…`
+                          : nextValue,
+                      }
+                    : {}),
                   client_selected_model: getConsoleSelectedModel(),
                   client_history_snapshot: buildClientHistorySnapshot(
                     messages,
                     targetSessionId,
-                    nextValue,
+                    isConsolePrivate
+                      ? undefined
+                      : { pendingUserMessage: nextValue },
                   ),
                 },
               }
@@ -3226,7 +3621,10 @@ function ConversationViewer({
       clearPendingAssistant,
       getConsoleResponseTarget,
       getConsoleSelectedModel,
+      consoleToolAccessMode,
+      currentUserId,
       enableProcedureSteering,
+      isConsolePrivate,
       markAuthUnavailable,
       markPendingAssistant,
       submitHitlResponse,
@@ -3243,10 +3641,10 @@ function ConversationViewer({
   }
 
   return (
-    <div ref={containerRef} className={`flex h-full bg-background min-w-0 ${className}`}>
+    <div ref={containerRef} className={`flex h-full min-w-0 items-stretch bg-background ${className}`}>
       {/* Left Sidebar - Session List */}
       <div
-        className={`${isSidebarCollapsed ? 'w-12' : 'shrink-0'} transition-all duration-200 border-r border-border flex flex-col`}
+        className={`${isSidebarCollapsed ? 'w-12' : 'shrink-0'} h-full transition-all duration-200 border-r border-border flex flex-col`}
         style={!isSidebarCollapsed ? { width: sidebarWidth } : undefined}
       >
         {/* Sidebar Header */}
@@ -3336,7 +3734,7 @@ function ConversationViewer({
 
       {!isSidebarCollapsed && enableSidebarResize && (
         <div
-          className="w-[12px] relative cursor-col-resize flex-shrink-0 group"
+          className="relative h-full w-[12px] cursor-col-resize flex-shrink-0 group"
           onMouseDown={handleSidebarResizeStart}
         >
           <div className="absolute inset-0 rounded-full transition-colors duration-150 group-hover:bg-accent" />
@@ -3344,7 +3742,7 @@ function ConversationViewer({
       )}
 
       {/* Main Content - Messages */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex h-full min-w-0 flex-1 flex-col">
         {/* Session Header */}
         {selectedSession && (
           <div data-testid="conversation-main-header" className="h-12 border-b border-border px-3 pt-0.5">
@@ -3364,6 +3762,16 @@ function ConversationViewer({
                   <span className="text-xs text-muted-foreground truncate">
                     {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
                   </span>
+                  {isConsolePrivate && (
+                    <Badge
+                      variant="secondary"
+                      className="shrink-0 gap-1 px-1.5 py-0 text-[11px] font-normal"
+                      title="Hidden from other users in this workspace UI."
+                    >
+                      <HatGlasses className="h-3 w-3" />
+                      Private
+                    </Badge>
+                  )}
                 </div>
               </div>
               
@@ -3502,6 +3910,20 @@ function ConversationViewer({
                     )
                   }
 
+                  if (row.kind === 'private-span') {
+                    return (
+                      <div className="px-3 py-2">
+                        <div
+                          data-testid="private-conversation-span"
+                          className="mx-auto flex max-w-md items-center justify-center gap-2 rounded-md border border-dashed border-muted-foreground/30 bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+                        >
+                          <HatGlasses className="h-4 w-4" />
+                          <span>Private conversation</span>
+                        </div>
+                      </div>
+                    )
+                  }
+
                   const rowAttribution = resolveMessageAttribution(row.message)
                   const rowAttributedUser = rowAttribution.kind === 'user'
                     ? attributedUsersById[rowAttribution.userId] ?? null
@@ -3559,22 +3981,70 @@ function ConversationViewer({
             </PromptInputBody>
             <PromptInputFooter className="justify-between gap-2">
               {!enableProcedureSteering && (
-                <PromptInputSelect
-                  value={selectedModel}
-                  onValueChange={setSelectedModel}
-                  disabled={isPromptDisabled || isPromptSubmitting}
-                >
-                  <PromptInputSelectTrigger className="h-8 w-40 text-xs">
-                    <PromptInputSelectValue placeholder="Model" />
-                  </PromptInputSelectTrigger>
-                  <PromptInputSelectContent>
-                    {CONSOLE_CHAT_MODEL_OPTIONS.map((option) => (
-                      <PromptInputSelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </PromptInputSelectItem>
-                    ))}
-                  </PromptInputSelectContent>
-                </PromptInputSelect>
+                <div className="flex items-center gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled={isAuthUnavailable || isPromptSubmitting}
+                        aria-label="Conversation actions"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-56">
+                      <DropdownMenuItem disabled className="gap-2">
+                        <Paperclip className="h-4 w-4" />
+                        <span>Add photos & files</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
+                        <List className="h-4 w-4" />
+                        <span className="flex-1">Plan mode</span>
+                        <Switch
+                          checked={consoleToolAccessMode === "planning"}
+                          onCheckedChange={handlePlanModeChange}
+                          disabled={isAuthUnavailable}
+                          aria-label="Plan mode"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm">
+                        <HatGlasses className="h-4 w-4" />
+                        <span
+                          className="flex-1"
+                          title="Hidden from other users in this workspace UI."
+                        >
+                          Private
+                        </span>
+                        <Switch
+                          checked={isConsolePrivate}
+                          onCheckedChange={handlePrivateModeChange}
+                          disabled={isAuthUnavailable}
+                          aria-label="Private"
+                        />
+                      </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <PromptInputSelect
+                    value={selectedModel}
+                    onValueChange={setSelectedModel}
+                    disabled={isPromptDisabled || isPromptSubmitting}
+                  >
+                    <PromptInputSelectTrigger className="h-8 w-40 text-xs">
+                      <PromptInputSelectValue placeholder="Model" />
+                    </PromptInputSelectTrigger>
+                    <PromptInputSelectContent>
+                      {CONSOLE_CHAT_MODEL_OPTIONS.map((option) => (
+                        <PromptInputSelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </PromptInputSelectItem>
+                      ))}
+                    </PromptInputSelectContent>
+                  </PromptInputSelect>
+                </div>
               )}
               <PromptInputSubmit disabled={isPromptDisabled || !promptValue.trim() || isPromptSubmitting} />
             </PromptInputFooter>

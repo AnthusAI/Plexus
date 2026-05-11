@@ -43,16 +43,40 @@ from plexus.dashboard.api.models.account import Account
 from plexus.dashboard.api.models.scorecard import Scorecard
 from plexus.dashboard.api.models.score import Score
 from plexus.utils.scoring import (
+    DEPENDENCY_UNMET_MESSAGE,
     create_scorecard_instance_for_single_score,
     resolve_scorecard_id,
     resolve_score_id,
     get_text_from_item,
     get_metadata_from_item,
     get_external_id_from_item,
-    create_score_result
+    create_score_result,
+    score_single_target_with_dependencies,
 )
 from plexus.dashboard.api.models.item import Item
 from plexus.utils.request_log_capture import capture_request_logs
+
+
+def configure_lambda_logging():
+    """Configure deterministic root logging for Lambda runtime."""
+    log_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level_name, logging.INFO)
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    # Lambda may preconfigure handlers. Keep them aligned to our selected level.
+    if root_logger.handlers:
+        for handler in root_logger.handlers:
+            handler.setLevel(log_level)
+    else:
+        logging.basicConfig(level=log_level)
+
+    for noisy_logger in ("urllib3", "botocore", "boto3", "gql.transport", "gql.dsl"):
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+
+
+configure_lambda_logging()
 
 
 class LambdaJobProcessor:
@@ -191,6 +215,9 @@ class LambdaJobProcessor:
                     raise Exception(f"Could not resolve score ID: {score_id}")
 
                 dynamo_score_id = resolved_score_info['id']
+                target_score_name = resolved_score_info.get('name')
+                if not target_score_name:
+                    raise Exception(f"Could not resolve score name for score ID: {score_id}")
 
                 # Get data from Item
                 logging.info("🔄 Fetching Item, transcript and metadata")
@@ -239,22 +266,47 @@ class LambdaJobProcessor:
                 if not scorecard_instance:
                     raise Exception(f"Failed to create scorecard instance for {scorecard_id}")
 
-                # Perform scoring
+                # Perform scoring with dependency-aware target extraction
                 logging.info("🎯 Performing scoring")
-                score_results = await scorecard_instance.score_entire_text(
+                scoring_outcome = await score_single_target_with_dependencies(
+                    scorecard_instance,
                     text=transcript_text or "",
                     metadata=metadata,
                     modality="API",
                     item=item,
+                    target_score_id=dynamo_score_id,
+                    target_score_name=target_score_name,
                 )
 
-                result = score_results.get(dynamo_score_id)
+                if scoring_outcome.dependency_unmet:
+                    logging.warning(
+                        f"Dependency conditions not met for score '{target_score_name}' ({dynamo_score_id}); "
+                        "marking ScoringJob as terminal FAILED without retry."
+                    )
+                    await asyncio.to_thread(
+                        scoring_job.update,
+                        status='FAILED',
+                        errorMessage=DEPENDENCY_UNMET_MESSAGE[:255],
+                        completedAt=datetime.now(timezone.utc).isoformat(),
+                    )
+
+                    # For manual/fan-out paths, delete message so this terminal case is not retried.
+                    if receipt_handle:
+                        await asyncio.to_thread(
+                            self.sqs_client.delete_message,
+                            QueueUrl=self.request_queue_url,
+                            ReceiptHandle=receipt_handle
+                        )
+                    return
+
+                result = scoring_outcome.result
                 if not result:
                     raise Exception(f"No result returned for score {dynamo_score_id}")
 
                 value = str(result.value) if result.value is not None else None
+                result_metadata = result.metadata if isinstance(getattr(result, "metadata", None), dict) else {}
                 explanation = (getattr(result, 'explanation', None) or
-                              (result.metadata.get('explanation', '') if result.metadata else ''))
+                              result_metadata.get('explanation', ''))
 
                 # Check for ERROR result
                 if value and value.upper() == "ERROR":
@@ -270,15 +322,15 @@ class LambdaJobProcessor:
 
                 # Extract trace data
                 trace_data = None
-                if "trace" in result.metadata:
-                    trace_data = result.metadata["trace"]
-                elif "metadata" in result.metadata and isinstance(result.metadata["metadata"], dict):
-                    nested_metadata = result.metadata["metadata"]
+                if "trace" in result_metadata:
+                    trace_data = result_metadata["trace"]
+                elif "metadata" in result_metadata and isinstance(result_metadata["metadata"], dict):
+                    nested_metadata = result_metadata["metadata"]
                     if "trace" in nested_metadata:
                         trace_data = nested_metadata["trace"]
 
                 # Extract cost
-                cost = result.metadata.get('cost') if result.metadata else None
+                cost = result_metadata.get('cost')
 
                 # Get logs
                 current_logs = get_logs()

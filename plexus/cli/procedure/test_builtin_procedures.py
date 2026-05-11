@@ -87,11 +87,32 @@ def test_builtin_console_procedure_prompt_teaches_prediction_contract():
     assert "do not ask for another confirmation" in system_prompt
 
 
+def test_builtin_console_procedure_prompt_teaches_planning_mode_contract():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+
+    assert "TOOL ACCESS MODE" in system_prompt
+    assert "console_tool_access_mode" in parsed["input"]
+    assert "tool_not_allowed_in_planning_mode" in system_prompt
+    assert "full tool surface" in system_prompt
+    assert "inspect existing procedure runs" in system_prompt
+    assert "plexus.procedure.chat_messages" in system_prompt
+    assert "Planning mode may run predictions, evaluations, reports" in system_prompt
+    assert "promoting champions with `plexus.score.set_champion`" in system_prompt
+    assert "plexus.procedure.run" in system_prompt
+    assert "plexus.score.contradictions" in system_prompt
+    assert "plexus.report.acceptance_rate" in system_prompt
+    assert "plexus.report.score_champion_version_timeline" in system_prompt
+    assert "Private mode is soft UI privacy" in system_prompt
+    assert "hidden from other users in the workspace UI" in system_prompt
+
+
 def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    # Bumped when report docs routing was added to the Console prompt.
-    assert parsed["version"] == "1.6.4"
+    # Bumped when planning mode's blocked-action boundary changes.
+    assert parsed["version"] == "1.6.6"
 
 
 def test_is_builtin_procedure_id():
