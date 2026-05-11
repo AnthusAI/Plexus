@@ -75,6 +75,25 @@ class FakeRaisingClaimClient(FakeClient):
         return super().execute(query, variables, **_kwargs)
 
 
+class FakeSessionMetadataClient(FakeClient):
+    def __init__(self, *, session_metadata=None):
+        super().__init__()
+        self.session_metadata = session_metadata
+
+    def execute(self, query, variables=None, **_kwargs):
+        if "GetConsoleChatSession" in query:
+            return {
+                "data": {
+                    "getChatSession": {
+                        "id": "sess-1",
+                        "name": "Session",
+                        "metadata": self.session_metadata,
+                    }
+                }
+            }
+        return super().execute(query, variables, **_kwargs)
+
+
 class FakePendingClient(FakeClient):
     def __init__(self, pages):
         super().__init__()
@@ -134,6 +153,7 @@ class FakeSessionTitleClient(FakeClient):
                         "humanInteraction": "CHAT",
                         "messageType": "MESSAGE",
                         "content": turn["content"],
+                        "metadata": turn.get("metadata"),
                         "createdAt": turn.get("createdAt", f"2026-04-27T00:00:0{index}.000Z"),
                     }
                 )
@@ -155,6 +175,7 @@ class FakeSessionTitleClient(FakeClient):
                         "humanInteraction": "CHAT_ASSISTANT",
                         "messageType": "MESSAGE",
                         "content": text,
+                        "metadata": None,
                         "createdAt": f"2026-04-27T00:00:0{index + 1}.500Z",
                     }
                 )
@@ -213,6 +234,26 @@ def test_parse_chat_message_extracts_selected_model_from_metadata():
 
     assert message is not None
     assert message.selected_model == "gpt-5.3"
+
+
+def test_parse_chat_message_extracts_private_owner_and_span_metadata():
+    message = chat_runtime.parse_chat_message(
+        _raw_message(
+            metadata=json.dumps({
+                "console": {
+                    "mode": "planning",
+                    "private": True,
+                    "privacy_owner_user_id": "user-1",
+                    "privacy_span_id": "span-1",
+                }
+            })
+        )
+    )
+
+    assert message is not None
+    assert message.private is True
+    assert message.privacy_owner_user_id == "user-1"
+    assert message.privacy_span_id == "span-1"
 
 
 def test_parse_chat_message_ignores_non_object_metadata():
@@ -564,14 +605,79 @@ def test_run_console_chat_response_passes_console_context_to_builtin(monkeypatch
         "role": "USER",
         "content": "Multiply 6 by 7",
     }
+    assert kwargs["console_tool_access_mode"] == "execution"
     assert kwargs["enable_mcp"] is True
     assert kwargs["context"] == {
         "account_id": "acct-1",
         "chat_session_id": "sess-1",
         "console_trigger_message_id": "msg-1",
         "console_response_owner": "local:ryan:test",
+        "tool_access_mode": "execution",
+        "console_tool_access_mode": "execution",
+        "console_private": False,
         "disable_console_dispatch_metadata_lookup": True,
     }
+
+
+def test_console_message_metadata_snapshots_tool_mode_and_private():
+    message = chat_runtime.parse_chat_message(
+        _raw_message(metadata='{"console":{"mode":"planning","private":true}}')
+    )
+
+    assert message is not None
+    assert message.tool_access_mode == "planning"
+    assert message.private is True
+
+
+def test_console_tool_mode_message_snapshot_overrides_session(monkeypatch):
+    client = FakeSessionMetadataClient(
+        session_metadata='{"console":{"mode":"execution","private":false}}'
+    )
+    message = chat_runtime.parse_chat_message(
+        _raw_message(metadata='{"console":{"mode":"planning","private":true}}')
+    )
+    calls = []
+
+    class FakeProcedureService:
+        def __init__(self, service_client):
+            self.service_client = service_client
+
+        async def run_procedure(self, procedure_id, **kwargs):
+            calls.append((procedure_id, kwargs, self.service_client))
+            return {"success": True, "response": "ok"}
+
+    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+
+    assert message is not None
+    chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
+
+    context = calls[0][1]["context"]
+    assert context["tool_access_mode"] == "planning"
+    assert context["console_tool_access_mode"] == "planning"
+    assert context["console_private"] is True
+
+
+def test_console_tool_mode_uses_session_metadata_when_message_has_no_snapshot(monkeypatch):
+    client = FakeSessionMetadataClient(
+        session_metadata='{"console":{"mode":"planning","private":false}}'
+    )
+    message = chat_runtime.parse_chat_message(_raw_message())
+    calls = []
+
+    class FakeProcedureService:
+        def __init__(self, service_client):
+            self.service_client = service_client
+
+        async def run_procedure(self, procedure_id, **kwargs):
+            calls.append((procedure_id, kwargs, self.service_client))
+            return {"success": True, "response": "ok"}
+
+    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+
+    assert message is not None
+    chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
+
+    assert calls[0][1]["context"]["tool_access_mode"] == "planning"
 
 
 def test_run_console_chat_response_passes_selected_model_override(monkeypatch):
@@ -625,6 +731,38 @@ def test_maybe_auto_title_session_sets_title_on_first_user_turn(monkeypatch):
     assert metadata["auto_title_turn"] == 1
     assert metadata["auto_title_message_id"] == "msg-1"
     assert metadata["console"]["hidden_until_named"] is False
+
+
+def test_maybe_auto_title_session_ignores_private_user_turns(monkeypatch):
+    client = FakeSessionTitleClient(
+        turns=[
+            {
+                "id": "msg-1",
+                "content": "Private acquisition target",
+                "metadata": json.dumps({
+                    "console": {
+                        "private": True,
+                        "privacy_owner_user_id": "user-1",
+                        "privacy_span_id": "span-1",
+                    }
+                }),
+            }
+        ]
+    )
+    message = chat_runtime.parse_chat_message(_raw_message(id="msg-1"))
+    assert message is not None
+
+    generator_calls = []
+    monkeypatch.setattr(
+        chat_runtime,
+        "_generate_session_title_with_llm",
+        lambda **kwargs: generator_calls.append(kwargs) or "Should Not Be Used",
+    )
+
+    chat_runtime.maybe_auto_title_session(client, message=message)
+
+    assert client.updated_title_payloads == []
+    assert generator_calls == []
 
 
 def test_maybe_auto_title_session_replaces_title_on_second_user_turn(monkeypatch):
@@ -758,4 +896,106 @@ def test_fetch_session_history_filters_and_sorts_messages():
     assert history == [
         {"role": "USER", "content": "first"},
         {"role": "ASSISTANT", "content": "third"},
+    ]
+
+
+def test_fetch_session_history_excludes_private_messages_from_public_context():
+    private_metadata = json.dumps({
+        "console": {
+            "private": True,
+            "privacy_owner_user_id": "user-1",
+            "privacy_span_id": "span-1",
+        }
+    })
+    client = FakeHistoryClient([
+        {
+            "items": [
+                {
+                    "id": "msg-public",
+                    "role": "USER",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "public",
+                    "metadata": None,
+                    "createdAt": "2026-04-27T00:00:01.000Z",
+                },
+                {
+                    "id": "msg-private",
+                    "role": "USER",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "private",
+                    "metadata": private_metadata,
+                    "createdAt": "2026-04-27T00:00:02.000Z",
+                },
+            ],
+            "nextToken": None,
+        },
+    ])
+
+    history = chat_runtime.fetch_session_history(client, "sess-1", limit=10)
+
+    assert history == [{"role": "USER", "content": "public"}]
+
+
+def test_fetch_session_history_includes_same_owner_private_context():
+    private_metadata = json.dumps({
+        "console": {
+            "private": True,
+            "privacy_owner_user_id": "user-1",
+            "privacy_span_id": "span-1",
+        }
+    })
+    other_private_metadata = json.dumps({
+        "console": {
+            "private": True,
+            "privacy_owner_user_id": "user-2",
+            "privacy_span_id": "span-2",
+        }
+    })
+    client = FakeHistoryClient([
+        {
+            "items": [
+                {
+                    "id": "msg-public",
+                    "role": "USER",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "public",
+                    "metadata": None,
+                    "createdAt": "2026-04-27T00:00:01.000Z",
+                },
+                {
+                    "id": "msg-private",
+                    "role": "USER",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "private same owner",
+                    "metadata": private_metadata,
+                    "createdAt": "2026-04-27T00:00:02.000Z",
+                },
+                {
+                    "id": "msg-other-private",
+                    "role": "USER",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "private other owner",
+                    "metadata": other_private_metadata,
+                    "createdAt": "2026-04-27T00:00:03.000Z",
+                },
+            ],
+            "nextToken": None,
+        },
+    ])
+
+    history = chat_runtime.fetch_session_history(
+        client,
+        "sess-1",
+        limit=10,
+        include_private_for_owner_user_id="user-1",
+    )
+
+    assert history == [
+        {"role": "USER", "content": "public"},
+        {"role": "USER", "content": "private same owner"},
     ]

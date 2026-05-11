@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 
 import ConversationViewer, { type ChatMessage, type ChatSession } from "../conversation-viewer"
 import { getClient } from "@/utils/data-operations"
+import { getCurrentUserAttribution } from "@/utils/user-profile"
 
 jest.mock("react-virtuoso", () => {
   const React = require("react")
@@ -168,6 +169,7 @@ jest.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuSeparator: () => <hr />,
   DropdownMenuItem: ({
     children,
     onSelect,
@@ -181,6 +183,29 @@ jest.mock("@/components/ui/dropdown-menu", () => ({
     >
       {children}
     </button>
+  ),
+}))
+
+jest.mock("@/components/ui/switch", () => ({
+  Switch: ({
+    checked,
+    onCheckedChange,
+    disabled,
+    "aria-label": ariaLabel,
+  }: {
+    checked?: boolean
+    onCheckedChange?: (checked: boolean) => void
+    disabled?: boolean
+    "aria-label"?: string
+  }) => (
+    <button
+      type="button"
+      role="switch"
+      aria-label={ariaLabel}
+      aria-checked={Boolean(checked)}
+      disabled={disabled}
+      onClick={() => onCheckedChange?.(!checked)}
+    />
   ),
 }))
 
@@ -210,9 +235,11 @@ if (typeof window !== "undefined" && !("ResizeObserver" in window)) {
 
 describe("ConversationViewer session-routing states", () => {
   const mockedGetClient = getClient as jest.MockedFunction<typeof getClient>
+  const mockedGetCurrentUserAttribution = getCurrentUserAttribution as jest.MockedFunction<typeof getCurrentUserAttribution>
 
   beforeEach(() => {
     mockedGetClient.mockReset()
+    mockedGetCurrentUserAttribution.mockResolvedValue({ createdByUserId: "user-1" })
   })
 
   const sessions: ChatSession[] = [
@@ -528,6 +555,270 @@ describe("ConversationViewer session-routing states", () => {
     })
 
     expect(screen.getAllByText("My Renamed Session")).not.toHaveLength(0)
+  })
+
+  it("shows a private mode indicator in the session header", () => {
+    render(
+      <ConversationViewer
+        sessions={[
+          {
+            ...sessions[0],
+            metadata: {
+              console: {
+                mode: "planning",
+                private: true,
+              },
+            },
+          },
+        ]}
+        messages={messages}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    const header = screen.getByTestId("conversation-main-header")
+    expect(within(header).getByText("Private")).toBeInTheDocument()
+  })
+
+  it("snapshots planning and private mode into submitted Console messages", async () => {
+    const updateMock = jest.fn().mockResolvedValue({ data: { id: "session-1" } })
+    const createMessageMock = jest.fn().mockResolvedValue({
+      data: {
+        id: "msg-new",
+        createdAt: "2026-03-27T00:10:00.000Z",
+      },
+    })
+
+    mockedGetClient.mockReturnValue({
+      models: {
+        ChatSession: {
+          update: updateMock,
+        },
+        ChatMessage: {
+          create: createMessageMock,
+        },
+      },
+    } as any)
+
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={messages}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    fireEvent.click(screen.getByRole("switch", { name: "Private" }))
+
+    await waitFor(() => {
+      const metadataArg = updateMock.mock.calls[0]?.[0]?.metadata
+      const parsedMetadata = typeof metadataArg === "string" ? JSON.parse(metadataArg) : metadataArg
+      expect(parsedMetadata.console).toEqual(
+        expect.objectContaining({
+          mode: "planning",
+          private: true,
+          private_owner_user_id: "user-1",
+          private_only: false,
+          current_privacy_span_id: expect.any(String),
+        })
+      )
+    })
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Plan this safely" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      const metadataArg = createMessageMock.mock.calls[0]?.[0]?.metadata
+      const parsedMetadata = typeof metadataArg === "string" ? JSON.parse(metadataArg) : metadataArg
+      expect(parsedMetadata.console).toEqual(
+        expect.objectContaining({
+          mode: "planning",
+          private: true,
+          privacy_owner_user_id: "user-1",
+          privacy_span_id: expect.any(String),
+        })
+      )
+      expect(parsedMetadata.instrumentation.client_user_message_text).toBeUndefined()
+      expect(JSON.stringify(parsedMetadata.instrumentation.client_history_snapshot)).not.toContain("Plan this safely")
+    })
+  })
+
+  it("turning Plan mode off clears Private mode", async () => {
+    const updateMock = jest.fn().mockResolvedValue({ data: { id: "session-1" } })
+
+    mockedGetClient.mockReturnValue({
+      models: {
+        ChatSession: {
+          update: updateMock,
+        },
+      },
+    } as any)
+
+    render(
+      <ConversationViewer
+        sessions={[
+          {
+            ...sessions[0],
+            metadata: {
+              console: {
+                mode: "planning",
+                private: true,
+              },
+            },
+          },
+        ]}
+        messages={messages}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    fireEvent.click(screen.getByRole("switch", { name: "Plan mode" }))
+
+    await waitFor(() => {
+      const lastCall = updateMock.mock.calls.at(-1)?.[0] || {}
+      const parsedMetadata = typeof lastCall.metadata === "string"
+        ? JSON.parse(lastCall.metadata)
+        : lastCall.metadata
+      expect(parsedMetadata.console).toEqual(
+        expect.objectContaining({
+          mode: "execution",
+          private: false,
+        })
+      )
+    })
+  })
+
+  it("hides private-only sessions from non-owners", async () => {
+    mockedGetCurrentUserAttribution.mockResolvedValue({ createdByUserId: "user-1" })
+
+    render(
+      <ConversationViewer
+        sessions={[
+          {
+            ...sessions[0],
+            metadata: {
+              console: {
+                private_only: true,
+                private_owner_user_id: "user-2",
+              },
+            },
+          },
+        ]}
+        messages={[]}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("Chat Sessions (0)")).toBeInTheDocument()
+    })
+    const sidebar = screen.getByTestId("conversation-sidebar-header").parentElement as HTMLElement
+    expect(within(sidebar).queryByText("Console Chat")).not.toBeInTheDocument()
+  })
+
+  it("collapses private message spans and tool rows for non-owners", async () => {
+    mockedGetCurrentUserAttribution.mockResolvedValue({ createdByUserId: "user-1" })
+    const privateConsoleMetadata = {
+      console: {
+        private: true,
+        privacy_owner_user_id: "user-2",
+        privacy_span_id: "span-1",
+      },
+    }
+
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={[
+          ...messages,
+          {
+            id: "msg-private-user",
+            sessionId: "session-1",
+            accountId: "acct-1",
+            procedureId: "builtin:console/chat",
+            role: "USER",
+            messageType: "MESSAGE",
+            humanInteraction: "CHAT",
+            content: "private user text",
+            metadata: privateConsoleMetadata,
+            createdAt: "2026-03-27T00:00:01.000Z",
+          },
+          {
+            id: "msg-private-tool",
+            sessionId: "session-1",
+            accountId: "acct-1",
+            procedureId: "builtin:console/chat",
+            role: "ASSISTANT",
+            messageType: "TOOL_CALL",
+            humanInteraction: "INTERNAL",
+            content: "secret tool call",
+            toolName: "execute_tactus",
+            toolParameters: JSON.stringify({ secret: "tool parameter" }),
+            metadata: privateConsoleMetadata,
+            createdAt: "2026-03-27T00:00:02.000Z",
+          },
+          {
+            id: "msg-private-assistant",
+            sessionId: "session-1",
+            accountId: "acct-1",
+            procedureId: "builtin:console/chat",
+            role: "ASSISTANT",
+            messageType: "MESSAGE",
+            humanInteraction: "CHAT_ASSISTANT",
+            content: "private assistant text",
+            metadata: privateConsoleMetadata,
+            createdAt: "2026-03-27T00:00:03.000Z",
+          },
+        ]}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId("private-conversation-span")).toBeInTheDocument()
+    })
+    expect(screen.getByText("hello")).toBeInTheDocument()
+    expect(screen.getByText("Private conversation")).toBeInTheDocument()
+    expect(screen.queryByText("private user text")).not.toBeInTheDocument()
+    expect(screen.queryByText("private assistant text")).not.toBeInTheDocument()
+    expect(screen.queryByText(/execute_tactus/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/tool parameter/)).not.toBeInTheDocument()
+    expect(screen.getAllByTestId("private-conversation-span")).toHaveLength(1)
+  })
+
+  it("renders private messages normally for the owner", async () => {
+    mockedGetCurrentUserAttribution.mockResolvedValue({ createdByUserId: "user-1" })
+
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={[
+          {
+            ...messages[0],
+            content: "private owner text",
+            metadata: {
+              console: {
+                private: true,
+                privacy_owner_user_id: "user-1",
+                privacy_span_id: "span-1",
+              },
+            },
+          },
+        ]}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    expect(await screen.findByText("private owner text")).toBeInTheDocument()
+    expect(screen.queryByTestId("private-conversation-span")).not.toBeInTheDocument()
   })
 
   it("shows the attributed user avatar with the user email on user messages", async () => {
