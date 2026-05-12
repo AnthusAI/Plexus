@@ -3532,6 +3532,7 @@ class FeedbackEvaluation(Evaluation):
         """Shared parameter shaping for feedback-backed RCA contract."""
         params = dict(existing_parameters) if existing_parameters else {}
         params["root_cause_required"] = root_cause_required
+        params["has_usable_root_cause"] = has_usable_root_cause
         if has_usable_root_cause:
             params["root_cause"] = root_cause_payload
         return params
