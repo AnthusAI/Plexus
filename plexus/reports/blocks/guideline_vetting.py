@@ -49,6 +49,7 @@ class GuidelineVettingService:
         item: Any,
         guidelines: Optional[str],
         score_explanation: str,
+        feedback_item_explanation: str = "",
         rubric_memory_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """Build classifier prompt for a feedback item; return None when item should be skipped."""
@@ -65,6 +66,8 @@ class GuidelineVettingService:
         ]
         if score_explanation:
             situation_lines.append(f"- AI reasoning: {score_explanation}")
+        if feedback_item_explanation:
+            situation_lines.append(f"- Cached feedback ground-truth explanation: {feedback_item_explanation}")
         if initial != final:
             situation_lines.append(f"- A human reviewer then changed the score to '{final}'.")
         else:
@@ -225,6 +228,9 @@ class GuidelineVettingService:
         best_result: Dict[str, Any],
         votes_meta: List[Dict[str, Any]],
         score_explanation: str,
+        feedback_item_explanation: str,
+        feedback_item_explanation_provider: str,
+        feedback_item_explanation_model: str,
         confidence: str,
         verdict: str,
         associated_dataset_eligible: bool,
@@ -268,6 +274,9 @@ class GuidelineVettingService:
             "initial_value": getattr(item, "initialAnswerValue", "") or "",
             "final_value": getattr(item, "finalAnswerValue", "") or "",
             "score_result_explanation": score_explanation,
+            "feedback_item_explanation": feedback_item_explanation,
+            "feedback_item_explanation_provider": feedback_item_explanation_provider,
+            "feedback_item_explanation_model": feedback_item_explanation_model,
             "edit_comment": getattr(item, "editCommentValue", "") or "",
             "editor_name": getattr(item, "editorName", None),
             "edited_at": edited_at,
@@ -293,6 +302,7 @@ class GuidelineVettingService:
         max_concurrent: int,
         score_results_by_item: Dict[str, Any],
         rubric_memory_contexts_by_item: Optional[Dict[str, Dict[str, Any]]] = None,
+        feedback_item_explanations_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Analyze items via shared voting and return both contradiction and aligned results.
@@ -307,6 +317,16 @@ class GuidelineVettingService:
                 item_id = getattr(item, "itemId", None)
                 score_result = score_results_by_item.get(item_id) if item_id else None
                 score_explanation = (score_result.get("explanation") or "") if score_result else ""
+                explanation_payload = (feedback_item_explanations_by_id or {}).get(
+                    getattr(item, "id", "")
+                ) or {}
+                feedback_item_explanation = explanation_payload.get("explanation", "") or ""
+                feedback_item_explanation_provider = (
+                    explanation_payload.get("provider", "") or ""
+                )
+                feedback_item_explanation_model = (
+                    explanation_payload.get("model", "") or ""
+                )
                 rubric_memory_context = (
                     (rubric_memory_contexts_by_item or {}).get(item_id)
                     or (rubric_memory_contexts_by_item or {}).get(getattr(item, "id", ""))
@@ -316,6 +336,7 @@ class GuidelineVettingService:
                     item,
                     guidelines,
                     score_explanation,
+                    feedback_item_explanation=feedback_item_explanation,
                     rubric_memory_context=rubric_memory_context,
                 )
                 if prompt is None:
@@ -416,6 +437,9 @@ class GuidelineVettingService:
                     best_result=best_result,
                     votes_meta=votes_meta,
                     score_explanation=score_explanation,
+                    feedback_item_explanation=feedback_item_explanation,
+                    feedback_item_explanation_provider=feedback_item_explanation_provider,
+                    feedback_item_explanation_model=feedback_item_explanation_model,
                     confidence=confidence,
                     verdict=verdict,
                     associated_dataset_eligible=associated_dataset_eligible,

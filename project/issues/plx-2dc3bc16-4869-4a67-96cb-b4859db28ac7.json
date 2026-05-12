@@ -28,10 +28,16 @@
       "author": "ryan",
       "text": "Implemented Score Results Report on branch feature/score-results-report. Added backend block (ScoreResultsReport), direct CLI command (feedback report score-results-report), dashboard renderer, and tests.\n\nValidation:\n- python3.11 -m pytest plexus/reports/blocks/score_results_report_test.py plexus/cli/feedback/feedback_report_test.py -q -> 23 passed\n- dashboard jest ScoreResultsReport.test.tsx -> passed\n- Manual run (single-score smoke): scorecard 1562 + score 'Asks Beyond the Script' + id 311434634 returned success with persisted score_result_id and grouped-by-score payload.\n- Full 20-id scorecard-wide run was initiated and processed predictions; it is heavy/long-running due item x score fanout.",
       "created_at": "2026-05-07T16:17:43.478641Z"
+    },
+    {
+      "id": "74932127-89b2-4a29-a41c-4d237ed31f78",
+      "author": "derek.norrbom",
+      "text": "Investigating score-version actions menu in dashboard: closing dialog after DropdownMenu interactions can leave body pointer-events:none, freezing UI until refresh.",
+      "created_at": "2026-05-12T20:19:42.048010Z"
     }
   ],
   "created_at": "2026-04-27T18:14:11.621385Z",
-  "updated_at": "2026-05-07T16:17:43.478641Z",
+  "updated_at": "2026-05-12T20:19:42.048010Z",
   "closed_at": null,
   "custom": {}
 }

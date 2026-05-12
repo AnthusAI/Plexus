@@ -1268,6 +1268,34 @@ class TestCompactRootCauseForParameters:
         assert result["overall_explanation"] == "explanation text"
         assert result["overall_improvement_suggestion"] == "suggestion text"
 
+    def test_topic_exemplar_feedback_explanation_metadata_preserved(self):
+        payload = self._make_full_payload(
+            topics=[
+                {
+                    "topic_id": "t1",
+                    "label": "Topic A",
+                    "member_count": 1,
+                    "exemplars": [
+                        {
+                            "feedback_item_id": "feedback-1",
+                            "item_id": "item-1",
+                            "initial_answer_value": "No",
+                            "final_answer_value": "Yes",
+                            "feedback_item_explanation_provider": "openai",
+                            "feedback_item_explanation_model": "gpt-5.4-mini",
+                            "feedback_item_explanation_cache_hit": True,
+                        }
+                    ],
+                }
+            ]
+        )
+        result = FeedbackEvaluation._compact_root_cause_for_parameters(payload, self.ATTACHMENT)
+        exemplar = result["topics"][0]["exemplars"][0]
+        assert exemplar["feedback_item_id"] == "feedback-1"
+        assert exemplar["feedback_item_explanation_provider"] == "openai"
+        assert exemplar["feedback_item_explanation_model"] == "gpt-5.4-mini"
+        assert exemplar["feedback_item_explanation_cache_hit"] is True
+
     def test_misclassification_analysis_included(self):
         result = FeedbackEvaluation._compact_root_cause_for_parameters(
             self._make_full_payload(), self.ATTACHMENT

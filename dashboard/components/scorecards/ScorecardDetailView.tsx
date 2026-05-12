@@ -1,9 +1,14 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { MoreHorizontal, Pencil, Database } from 'lucide-react'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { ScoreComponent, type ScoreData } from '@/components/ui/score-component'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export interface ScorecardDetailData {
   id: string
@@ -178,8 +183,8 @@ export default function ScorecardDetailView({
           )}
         </div>
         {!maximizedScoreId && (
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
+          <DropdownMenu>
+            <DropdownMenuTrigger>
               <button
                 type="button"
                 className="inline-flex items-center justify-center h-8 w-8 rounded-md bg-border hover:bg-accent hover:text-accent-foreground"
@@ -187,30 +192,28 @@ export default function ScorecardDetailView({
               >
                 <MoreHorizontal className="h-4 w-4" />
               </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+            </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
                 {onEdit && (
-                  <DropdownMenu.Item 
+                  <DropdownMenuItem
                     className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                     onSelect={onEdit}
                   >
                     <Pencil className="mr-2 h-4 w-4" />
                     Edit
-                  </DropdownMenu.Item>
+                  </DropdownMenuItem>
                 )}
                 {onViewData && (
-                  <DropdownMenu.Item 
+                  <DropdownMenuItem
                     className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                     onSelect={onViewData}
                   >
                     <Database className="mr-2 h-4 w-4" />
                     View Data
-                  </DropdownMenu.Item>
+                  </DropdownMenuItem>
                 )}
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
+              </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
     </Card>
