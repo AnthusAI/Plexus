@@ -5,6 +5,7 @@ This module handles counting records into multiple time buckets efficiently
 by iterating through the data once and assigning each record to all relevant buckets.
 """
 
+import json
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
@@ -321,11 +322,11 @@ def count_feedback_records_efficiently(
                 'number_of_minutes': bucket_minutes,
                 'count': bucket['count'],
                 'complete': bucket_end <= now,
-                'metadata': {
+                'metadata': json.dumps({
                     'changedCount': bucket['changed_count'],
                     'unchangedCount': bucket['unchanged_count'],
                     'invalidCount': bucket['invalid_count'],
-                },
+                }),
             })
 
     print(f"  Processed: {processed} feedback items ({skipped} skipped - no effective timestamp)")
