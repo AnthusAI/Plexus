@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6f6dcd9f-2bd1-4ecc-a0cb-81433d58a7bf",
+  "issue_id": "plx-bcfd9b9b-0a13-448b-a41e-d3e8b0ca0810",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-12T20:19:42.094Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix stuck body pointer-events after closing score-version action dialogs"
+  }
+}
