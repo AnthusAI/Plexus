@@ -37,6 +37,7 @@ from plexus.cli.shared.optimizer_shadow_invalidation import (
     resolve_score_version_shadow_invalidation_metadata,
 )
 from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
+from plexus.feedback_item_explanations import get_or_generate_feedback_item_explanation
 
 from plexus.scores.LangGraphScore import LangGraphScore
 import inspect
@@ -3747,6 +3748,7 @@ class FeedbackEvaluation(Evaluation):
                     editCommentValue
                     isAgreement
                     isInvalid
+                    metadata
                     editedAt
                     createdAt
                     updatedAt
@@ -4235,45 +4237,60 @@ class FeedbackEvaluation(Evaluation):
                     if fi.itemId:
                         metadata["item_id"] = fi.itemId
 
-                    # Build the text that will be clustered and analysed.
-                    # Goal: text explaining WHY the ground-truth label is correct —
-                    # not what our model said (which describes the wrong reasoning).
-                    #
-                    # Source depends on whether the reviewer agreed or disagreed:
-                    #   Agreed   → original production explanation describes the correct answer
-                    #   Disagreed → edit comment explains why the reviewer changed the label
-                    if score_result_map is not None:
-                        sr = score_result_map.get(fi.id, {})
-                        new_pred = (sr.get('value') or '')
-                        correct_label = (sr.get('human_label') or fi.finalAnswerValue or '')
-                        our_explanation = sr.get('explanation', '')
-                        orig_explanation = (original_explanations or {}).get(fi.id, '')
-                        reviewer_agreed = (fi.initialAnswerValue or '') == (fi.finalAnswerValue or '')
+                    sr = score_result_map.get(fi.id, {}) if score_result_map is not None else {}
+                    predicted_value = (
+                        (sr.get("value") or "")
+                        or (fi.initialAnswerValue or "")
+                    )
+                    correct_value = (
+                        (sr.get("human_label") or "")
+                        or (fi.finalAnswerValue or "")
+                    )
+                    score_explanation = sr.get("explanation", "")
+                    original_explanation = (original_explanations or {}).get(fi.id, "")
 
-                        if reviewer_agreed:
-                            text = orig_explanation or fi.editCommentValue or our_explanation
-                        else:
-                            text = fi.editCommentValue or orig_explanation or our_explanation
-
-                        if not text:
-                            text = f"Predicted '{new_pred}' but correct answer is '{correct_label}'."
-
-                        metadata["initial_answer_value"] = new_pred
-                        metadata["final_answer_value"] = correct_label
-                        if our_explanation:
-                            metadata["score_explanation"] = our_explanation
-                    else:
-                        if fi.initialAnswerValue:
-                            metadata["initial_answer_value"] = fi.initialAnswerValue
-                        if fi.finalAnswerValue:
-                            metadata["final_answer_value"] = fi.finalAnswerValue
-                        text = fi.editCommentValue
+                    if predicted_value:
+                        metadata["initial_answer_value"] = predicted_value
+                    if correct_value:
+                        metadata["final_answer_value"] = correct_value
+                    if score_explanation:
+                        metadata["score_explanation"] = score_explanation
 
                     item_context_record = item_context_cache.get(fi.itemId or "", {})
                     primary_input_text = item_context_record.get("primary_input", "")
                     metadata_snapshot = item_context_record.get("metadata_snapshot", "")
                     primary_input_modality = item_context_record.get("primary_input_modality", "unknown")
                     primary_input_fetch_error = bool(item_context_record.get("primary_input_fetch_error"))
+
+                    feedback_explanation_payload = await get_or_generate_feedback_item_explanation(
+                        feedback_item=fi,
+                        api_client=getattr(self, "api_client", None),
+                        predicted_value=predicted_value,
+                        correct_value=correct_value,
+                        score_explanation=score_explanation,
+                        original_explanation=original_explanation,
+                        score_guidelines_text=score_guidelines,
+                        scorecard_guidance_text=scorecard_guidance_text,
+                        transcript_text=primary_input_text,
+                        item_metadata_snapshot=metadata_snapshot,
+                        initial_comment=metadata.get("initial_comment", ""),
+                        final_comment=metadata.get("final_comment", ""),
+                        provider="auto",
+                        model=None,
+                    )
+                    text = feedback_explanation_payload.get("explanation", "") or ""
+                    if feedback_explanation_payload.get("ground_truth_value"):
+                        metadata["final_answer_value"] = feedback_explanation_payload["ground_truth_value"]
+                    metadata["ground_truth_explanation"] = text
+                    metadata["feedback_item_explanation_provider"] = feedback_explanation_payload.get(
+                        "provider", ""
+                    )
+                    metadata["feedback_item_explanation_model"] = feedback_explanation_payload.get(
+                        "model", ""
+                    )
+                    metadata["feedback_item_explanation_cache_hit"] = bool(
+                        feedback_explanation_payload.get("cache_hit", False)
+                    )
 
                     # Run the preprocessor pipeline on the raw text so the RCA sub-agent
                     # can compare what the LLM actually saw vs. the original input.
@@ -5051,20 +5068,6 @@ class FeedbackEvaluation(Evaluation):
             if tracker and hasattr(tracker, "current_stage") and tracker.current_stage:
                 tracker.current_stage.status_message = msg
 
-        def _build_item_text(fi, sr: dict) -> str:
-            new_pred = (sr.get("value") or "")
-            correct_label = (sr.get("human_label") or fi.finalAnswerValue or "")
-            our_explanation = sr.get("explanation", "")
-            orig_explanation = (original_explanations or {}).get(fi.id, "")
-            reviewer_agreed = (fi.initialAnswerValue or "") == (fi.finalAnswerValue or "")
-            if reviewer_agreed:
-                text = orig_explanation or fi.editCommentValue or our_explanation
-            else:
-                text = fi.editCommentValue or orig_explanation or our_explanation
-            if not text:
-                text = f"Predicted '{new_pred}' but correct answer is '{correct_label}'."
-            return text
-
         now_iso = datetime.now(_tz.utc).isoformat()
         score_guidelines = ""
         score_yaml_code = ""
@@ -5126,13 +5129,32 @@ class FeedbackEvaluation(Evaluation):
             predicted = (sr.get("value") or fi.initialAnswerValue or "")
             correct = (sr.get("human_label") or fi.finalAnswerValue or "")
             score_explanation = sr.get("explanation", "")
+            feedback_explanation_payload = await get_or_generate_feedback_item_explanation(
+                feedback_item=fi,
+                api_client=getattr(self, "api_client", None),
+                predicted_value=predicted,
+                correct_value=correct,
+                score_explanation=score_explanation,
+                original_explanation=(original_explanations or {}).get(fi.id, ""),
+                score_guidelines_text=score_guidelines,
+                scorecard_guidance_text=scorecard_guidance_text,
+                transcript_text="",
+                item_metadata_snapshot="",
+                initial_comment=getattr(fi, "initialCommentValue", "") or "",
+                final_comment=getattr(fi, "finalCommentValue", "") or "",
+                provider="auto",
+                model=None,
+            )
+            explanation_text = feedback_explanation_payload.get("explanation", "") or ""
+            if feedback_explanation_payload.get("ground_truth_value"):
+                correct = feedback_explanation_payload["ground_truth_value"]
             ts = fi.editedAt or getattr(fi, "updatedAt", None) or getattr(fi, "createdAt", None)
             ts_str = (
                 (ts if ts.tzinfo else ts.replace(tzinfo=_tz.utc)).isoformat()
                 if ts else now_iso
             )
             exemplars.append({
-                "text": _build_item_text(fi, sr),
+                "text": explanation_text,
                 "feedback_item_id": fi.id,
                 "item_id": fi.itemId,
                 "initial_answer_value": predicted,
@@ -5143,6 +5165,11 @@ class FeedbackEvaluation(Evaluation):
                 "initial_comment": getattr(fi, "initialCommentValue", "") or "",
                 "final_comment": getattr(fi, "finalCommentValue", "") or "",
                 "label_provenance_source": "feedback_final_answer_value",
+                "feedback_item_explanation_provider": feedback_explanation_payload.get("provider", ""),
+                "feedback_item_explanation_model": feedback_explanation_payload.get("model", ""),
+                "feedback_item_explanation_cache_hit": bool(
+                    feedback_explanation_payload.get("cache_hit", False)
+                ),
                 **({"score_explanation": score_explanation} if score_explanation else {}),
             })
 

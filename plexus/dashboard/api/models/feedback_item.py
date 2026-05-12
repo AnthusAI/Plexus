@@ -36,6 +36,7 @@ class FeedbackItem(BaseModel):
     editorName: Optional[str] = None
     isAgreement: Optional[bool] = None
     isInvalid: Optional[bool] = None
+    metadata: Optional[Dict[str, Any]] = None
     createdAt: Optional[datetime] = None
     updatedAt: Optional[datetime] = None
 
@@ -52,7 +53,8 @@ class FeedbackItem(BaseModel):
     GRAPHQL_BASE_FIELDS = [
         'id', 'accountId', 'scorecardId', 'cacheKey', 'scoreId', 'itemId',
         'initialAnswerValue', 'finalAnswerValue', 'initialCommentValue',
-        'finalCommentValue', 'editCommentValue', 'editedAt', 'editorName', 'isAgreement', 'isInvalid', 'createdAt', 'updatedAt'
+        'finalCommentValue', 'editCommentValue', 'editedAt', 'editorName',
+        'isAgreement', 'isInvalid', 'metadata', 'createdAt', 'updatedAt'
     ]
     GRAPHQL_ITEM_FIELDS = [
         'id', 'identifiers', 'externalId', 'description', 'text', 'metadata'
@@ -98,6 +100,7 @@ class FeedbackItem(BaseModel):
             editorName=data.get('editorName'),
             isAgreement=data.get('isAgreement'),
             isInvalid=data.get('isInvalid'),
+            metadata=data.get('metadata'),
             createdAt=data.get('createdAt'),
             updatedAt=data.get('updatedAt')
         )
@@ -621,6 +624,7 @@ class FeedbackItem(BaseModel):
                     finalCommentValue
                     editCommentValue
                     isAgreement
+                    metadata
                     createdAt
                     updatedAt
                 }
@@ -865,6 +869,7 @@ class FeedbackItem(BaseModel):
                         editedAt
                         editorName
                         itemId
+                        metadata
                         createdAt
                         updatedAt
                     }
@@ -1006,6 +1011,7 @@ class FeedbackItem(BaseModel):
                     editedAt
                     editorName
                     itemId
+                    metadata
                     createdAt
                     updatedAt
                 }
