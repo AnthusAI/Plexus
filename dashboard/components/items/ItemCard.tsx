@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { MoreHorizontal, X, Square, Columns2, StickyNote, Info, ChevronDown, ChevronRight, ChevronUp, Loader2, Box, ListChecks, FileText, Tag } from 'lucide-react'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +22,12 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 // Interface for scorecard results
 interface ScorecardResult {
@@ -305,29 +310,27 @@ const ItemCard = React.forwardRef<HTMLDivElement, ItemCardProps>(({
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <CardButton
                 icon={MoreHorizontal}
                 onClick={() => {}}
                 aria-label="More options"
                 skeletonMode={skeletonMode}
               />
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+            </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
                 {onViewData && (
-                  <DropdownMenu.Item 
+                  <DropdownMenuItem
                     className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                     onSelect={onViewData}
                   >
                     <Info className="mr-2 h-4 w-4" />
                     View Details
-                  </DropdownMenu.Item>
+                  </DropdownMenuItem>
                 )}
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
+              </DropdownMenuContent>
+          </DropdownMenu>
           {!isNarrowViewport && onToggleFullWidth && (
             <CardButton
               icon={isFullWidth ? Columns2 : Square}

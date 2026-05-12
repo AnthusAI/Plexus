@@ -1,0 +1,37 @@
+{
+  "id": "plx-bcfd9b9b-0a13-448b-a41e-d3e8b0ca0810",
+  "title": "Fix stuck body pointer-events after closing score-version action dialogs",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2dc3bc16-4869-4a67-96cb-b4859db28ac7",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1ccd7911-1654-47d7-9c10-0af0c9251ba8",
+      "author": "derek.norrbom",
+      "text": "Root-cause hypothesis: Radix DropdownMenu (modal default true) + launching Dialog from menu item can leave body style pointer-events:none when layers teardown out of order. Investigating shared dropdown wrapper to disable modal behavior for these menus.",
+      "created_at": "2026-05-12T20:19:45.397261Z"
+    },
+    {
+      "id": "e4305f78-4305-4d56-bc25-3a2a6f8051d7",
+      "author": "derek.norrbom",
+      "text": "Refactored dashboard dropdown usage to shared wrapper for consistency and centralized defaults. Migrated raw Radix dropdowns in ItemCard, ScorecardDetailView, ScoreResultCard, ScorecardComponent, and FileAttachments to @/components/ui/dropdown-menu; removed leftover raw dropdown imports in score-component and item-component. Validation: npm run typecheck (dashboard) passes.",
+      "created_at": "2026-05-12T20:23:46.171588Z"
+    },
+    {
+      "id": "0b90f3f5-aef2-407c-b327-9ddf11205a61",
+      "author": "derek.norrbom",
+      "text": "Manual validation complete: score/version actions and other modal-opening buttons no longer leave the page non-interactable after close. Preparing commit + PR to develop.",
+      "created_at": "2026-05-12T20:34:25.453501Z"
+    }
+  ],
+  "created_at": "2026-05-12T20:19:42.094499Z",
+  "updated_at": "2026-05-12T20:34:29.269393Z",
+  "closed_at": "2026-05-12T20:34:29.269393Z",
+  "custom": {}
+}
