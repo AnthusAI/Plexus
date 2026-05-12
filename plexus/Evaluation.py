@@ -3361,11 +3361,20 @@ class FeedbackEvaluation(Evaluation):
         if not isinstance(exemplar, dict):
             return {}
         keep_keys = (
+            "feedback_item_id",
             "item_id",
             "identifiers",
             "initial_answer_value",
             "final_answer_value",
             "score_explanation",
+            "text",
+            "edit_comment",
+            "initial_comment",
+            "final_comment",
+            "label_provenance_source",
+            "feedback_item_explanation_provider",
+            "feedback_item_explanation_model",
+            "feedback_item_explanation_cache_hit",
             "timestamp",
             "above_fold",
             "detailed_cause",
