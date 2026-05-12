@@ -21,6 +21,7 @@ from .guideline_vetting import GuidelineVettingService
 from .feedback_scope_resolver import resolve_scorecard
 from .score_resolution import resolve_score_for_scorecard
 from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
+from plexus.feedback_item_explanations import hydrate_feedback_item_explanations
 from plexus.rubric_memory import RubricMemoryContextProvider
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,10 @@ class FeedbackContradictions(BaseReportBlock):
         max_feedback_items = int(self.config.get("max_feedback_items", 400))
         num_topics = int(self.config.get("num_topics", 8))
         include_rubric_memory = bool(self.config.get("include_rubric_memory", False))
+        feedback_explanation_provider = str(
+            self.config.get("feedback_explanation_provider", "auto")
+        ).strip().lower()
+        feedback_explanation_model = self.config.get("feedback_explanation_model")
         score_version_param = (
             self.config.get("score_version_id")
             or self.config.get("score_version")
@@ -215,6 +220,8 @@ class FeedbackContradictions(BaseReportBlock):
                     "max_concurrent": max_concurrent,
                     "num_topics": num_topics,
                     "include_rubric_memory": include_rubric_memory,
+                    "feedback_explanation_provider": feedback_explanation_provider,
+                    "feedback_explanation_model": feedback_explanation_model,
                     "score_version_id": score_version_id,
                 },
                 "topics": [],
@@ -252,6 +259,38 @@ class FeedbackContradictions(BaseReportBlock):
                 f"Loaded rubric-memory citation context for {len(rubric_memory_contexts_by_item)} feedback items."
             )
 
+        self._log(
+            "Hydrating feedback-item explanation cache "
+            f"(provider={feedback_explanation_provider}, model={feedback_explanation_model or 'default'})..."
+        )
+        transcript_by_item_id = {
+            getattr(item, "itemId", ""): (getattr(getattr(item, "item", None), "text", "") or "")
+            for item in valid_items
+            if getattr(item, "itemId", None)
+        }
+        feedback_item_explanations_by_id = await hydrate_feedback_item_explanations(
+            feedback_items=valid_items,
+            api_client=self.api_client,
+            score_results_by_item_id=score_results_by_item,
+            transcript_by_item_id=transcript_by_item_id,
+            score_guidelines_text=guidelines or "",
+            scorecard_guidance_text=getattr(scorecard_obj, "guidelines", "") or "",
+            provider=feedback_explanation_provider,
+            model=feedback_explanation_model,
+            max_concurrent=max_concurrent,
+        )
+        explanation_cache_hits = sum(
+            1
+            for payload in feedback_item_explanations_by_id.values()
+            if payload.get("cache_hit") is True
+        )
+        self._log(
+            "Feedback explanations ready for "
+            f"{len(feedback_item_explanations_by_id)} items "
+            f"({explanation_cache_hits} cache hits, "
+            f"{len(feedback_item_explanations_by_id) - explanation_cache_hits} generated)."
+        )
+
         self._log(f"Running guideline-vetting analysis (max_concurrent={max_concurrent})...")
         vetting_service = GuidelineVettingService()
         analyzed_items = await vetting_service.analyze_items(
@@ -260,6 +299,7 @@ class FeedbackContradictions(BaseReportBlock):
             max_concurrent,
             score_results_by_item,
             rubric_memory_contexts_by_item=rubric_memory_contexts_by_item,
+            feedback_item_explanations_by_id=feedback_item_explanations_by_id,
         )
 
         contradictions = [item for item in analyzed_items if item.get("verdict") == "contradiction"]
@@ -321,6 +361,8 @@ class FeedbackContradictions(BaseReportBlock):
                 "max_concurrent": max_concurrent,
                 "num_topics": num_topics,
                 "include_rubric_memory": include_rubric_memory,
+                "feedback_explanation_provider": feedback_explanation_provider,
+                "feedback_explanation_model": feedback_explanation_model,
                 "score_version_id": score_version_id,
             },
             "rubric_memory": {
