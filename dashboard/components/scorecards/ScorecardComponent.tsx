@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { Card } from '@/components/ui/card'
 import { MoreHorizontal, Pencil, Database, ListChecks, X, Square, Columns2, Plus, ChevronUp, ChevronDown, ListCheck, ChevronRight, FileText, Key, StickyNote, Edit, IdCard, TestTube, MessageCircleMore, Coins, Expand } from 'lucide-react'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { cn } from '@/lib/utils'
 import { CardButton } from '@/components/CardButton'
 import { Input } from '@/components/ui/input'
@@ -33,6 +32,12 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { GuidelinesEditor, FullscreenGuidelinesEditor } from '@/components/ui/guidelines-editor'
 import { ScoreHeaderInfo, type ScoreHeaderData } from '@/components/ui/score-header-info'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export interface ScorecardData {
   id: string
@@ -576,8 +581,8 @@ export const DetailContent = React.memo(function DetailContent({
           <span className="text-lg font-semibold">Scorecard</span>
         </div>
         <div className="flex gap-2">
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <div onClick={(e) => e.stopPropagation()}>
                 <CardButton
                   icon={MoreHorizontal}
@@ -585,15 +590,14 @@ export const DetailContent = React.memo(function DetailContent({
                   aria-label="More options"
                 />
               </div>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content 
+            </DropdownMenuTrigger>
+              <DropdownMenuContent
                 align="end" 
                 className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md z-50"
                 onClick={(e) => e.stopPropagation()}
               >
                 {onViewData && (
-                  <DropdownMenu.Item 
+                  <DropdownMenuItem
                     className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                     onSelect={() => {
                       onViewData();
@@ -601,10 +605,10 @@ export const DetailContent = React.memo(function DetailContent({
                   >
                     <Database className="mr-2 h-4 w-4" />
                     View Data
-                  </DropdownMenu.Item>
+                  </DropdownMenuItem>
                 )}
                 {onFeedbackAlignment && (
-                  <DropdownMenu.Item 
+                  <DropdownMenuItem
                     className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                     onSelect={() => {
                       onFeedbackAlignment();
@@ -612,10 +616,10 @@ export const DetailContent = React.memo(function DetailContent({
                   >
                     <MessageCircleMore className="mr-2 h-4 w-4" />
                     Analyze Feedback
-                  </DropdownMenu.Item>
+                  </DropdownMenuItem>
                 )}
                 {onCostAnalysis && (
-                  <DropdownMenu.Item 
+                  <DropdownMenuItem
                     className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                     onSelect={() => {
                       onCostAnalysis();
@@ -623,11 +627,10 @@ export const DetailContent = React.memo(function DetailContent({
                   >
                     <Coins className="mr-2 h-4 w-4" />
                     Analyze Cost
-                  </DropdownMenu.Item>
+                  </DropdownMenuItem>
                 )}
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
+              </DropdownMenuContent>
+          </DropdownMenu>
           {onToggleFullWidth && (
             <CardButton
               icon={isFullWidth ? Columns2 : Square}
@@ -708,8 +711,8 @@ export const DetailContent = React.memo(function DetailContent({
                   )}
                 </h3>
               </div>
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger asChild>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                   <div>
                     <CardButton
                       icon={Plus}
@@ -717,10 +720,9 @@ export const DetailContent = React.memo(function DetailContent({
                       onClick={() => {}}
                     />
                   </div>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content align="end" className="min-w-[300px] overflow-hidden rounded-md border bg-popover p-2 text-popover-foreground shadow-md z-50">
-                    <DropdownMenu.Item 
+                </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[300px] overflow-hidden rounded-md border bg-popover p-2 text-popover-foreground shadow-md z-50">
+                    <DropdownMenuItem
                       className="relative flex cursor-default select-none items-center rounded-sm px-3 py-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                       onSelect={() => {
                         setIsExamplesExpanded(true);
@@ -732,8 +734,8 @@ export const DetailContent = React.memo(function DetailContent({
                         <div>Add by External ID</div>
                         <div className="text-xs text-muted-foreground">Reference an existing item by its external ID</div>
                       </div>
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item 
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
                       className="relative flex cursor-default select-none items-center rounded-sm px-3 py-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                       onSelect={() => {
                         // Immediately trigger item creation without showing inline form
@@ -745,10 +747,9 @@ export const DetailContent = React.memo(function DetailContent({
                         <div>Add by Content</div>
                         <div className="text-xs text-muted-foreground">Create a new example with specific content</div>
                       </div>
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Root>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+              </DropdownMenu>
             </div>
             
             {isExamplesExpanded && (
