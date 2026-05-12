@@ -10,7 +10,12 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import ParquetViewer from '@/components/ui/ParquetViewer'
 import FileContentViewer from '@/components/ui/FileContentViewer'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export interface FileAttachmentsProps {
   attachedFiles?: string[]
@@ -273,37 +278,35 @@ export const FileAttachments = React.forwardRef<HTMLDivElement, FileAttachmentsP
                             </div>
                             <div className="flex gap-2">
                               {(canView || isUrl) && (
-                                <DropdownMenu.Root>
-                                  <DropdownMenu.Trigger asChild>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
                                     <CardButton
                                       icon={MoreHorizontal}
                                       onClick={() => {}}
                                       aria-label="More options"
                                     />
-                                  </DropdownMenu.Trigger>
-                                  <DropdownMenu.Portal>
-                                    <DropdownMenu.Content align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+                                  </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
                                       {canView && (
-                                        <DropdownMenu.Item 
+                                        <DropdownMenuItem
                                           className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                                           onSelect={() => handleViewFile(file.path, fileName)}
                                         >
                                           <Eye className="mr-2 h-4 w-4" />
                                           View File
-                                        </DropdownMenu.Item>
+                                        </DropdownMenuItem>
                                       )}
                                       {isUrl && (
-                                        <DropdownMenu.Item 
+                                        <DropdownMenuItem
                                           className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                                           onSelect={() => window.open(file.path, '_blank')}
                                         >
                                           <LinkIcon className="mr-2 h-4 w-4" />
                                           Open Link
-                                        </DropdownMenu.Item>
+                                        </DropdownMenuItem>
                                       )}
-                                    </DropdownMenu.Content>
-                                  </DropdownMenu.Portal>
-                                </DropdownMenu.Root>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                               )}
                             </div>
                           </div>
