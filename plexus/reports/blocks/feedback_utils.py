@@ -253,12 +253,15 @@ async def fetch_feedback_items_for_score(
                     editorName
                     isAgreement
                     isInvalid
+                    metadata
                     createdAt
                     updatedAt
                     item {
                         id
                         identifiers
                         externalId
+                        text
+                        metadata
                         itemIdentifiers {
                             items {
                                 name

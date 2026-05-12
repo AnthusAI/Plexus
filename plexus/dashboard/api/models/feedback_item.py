@@ -1,4 +1,5 @@
 import logging
+import json
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, TYPE_CHECKING, Tuple
 from dataclasses import dataclass, field
@@ -36,6 +37,7 @@ class FeedbackItem(BaseModel):
     editorName: Optional[str] = None
     isAgreement: Optional[bool] = None
     isInvalid: Optional[bool] = None
+    metadata: Optional[Dict[str, Any]] = None
     createdAt: Optional[datetime] = None
     updatedAt: Optional[datetime] = None
 
@@ -52,7 +54,8 @@ class FeedbackItem(BaseModel):
     GRAPHQL_BASE_FIELDS = [
         'id', 'accountId', 'scorecardId', 'cacheKey', 'scoreId', 'itemId',
         'initialAnswerValue', 'finalAnswerValue', 'initialCommentValue',
-        'finalCommentValue', 'editCommentValue', 'editedAt', 'editorName', 'isAgreement', 'isInvalid', 'createdAt', 'updatedAt'
+        'finalCommentValue', 'editCommentValue', 'editedAt', 'editorName',
+        'isAgreement', 'isInvalid', 'metadata', 'createdAt', 'updatedAt'
     ]
     GRAPHQL_ITEM_FIELDS = [
         'id', 'identifiers', 'externalId', 'description', 'text', 'metadata'
@@ -80,6 +83,13 @@ class FeedbackItem(BaseModel):
             data['updatedAt'] = datetime.fromisoformat(data['updatedAt'].replace('Z', '+00:00'))
         if 'editedAt' in data and data['editedAt'] and isinstance(data['editedAt'], str):
             data['editedAt'] = datetime.fromisoformat(data['editedAt'].replace('Z', '+00:00'))
+        if 'metadata' in data and isinstance(data['metadata'], str):
+            try:
+                parsed_metadata = json.loads(data['metadata'])
+                data['metadata'] = parsed_metadata if isinstance(parsed_metadata, dict) else None
+            except Exception:
+                logger.warning("Failed to parse FeedbackItem.metadata JSON for item %s", data.get("id"))
+                data['metadata'] = None
             
         # Create instance with data
         instance = cls(
@@ -98,6 +108,7 @@ class FeedbackItem(BaseModel):
             editorName=data.get('editorName'),
             isAgreement=data.get('isAgreement'),
             isInvalid=data.get('isInvalid'),
+            metadata=data.get('metadata'),
             createdAt=data.get('createdAt'),
             updatedAt=data.get('updatedAt')
         )
@@ -335,7 +346,9 @@ class FeedbackItem(BaseModel):
         mutation_name = "createFeedbackItem"
         input_variable_name = "input"
         input_type = "CreateFeedbackItemInput!" # Assuming standard Amplify input type
-        input_data = data # Assume data is already formatted correctly
+        input_data = data.copy()
+        if 'metadata' in input_data and isinstance(input_data['metadata'], dict):
+            input_data['metadata'] = json.dumps(input_data['metadata'])
         
         return_fields = cls.GRAPHQL_BASE_FIELDS 
         mutation_body = cls._build_query(return_fields) # Just get base fields back for now
@@ -621,6 +634,7 @@ class FeedbackItem(BaseModel):
                     finalCommentValue
                     editCommentValue
                     isAgreement
+                    metadata
                     createdAt
                     updatedAt
                 }
@@ -865,6 +879,7 @@ class FeedbackItem(BaseModel):
                         editedAt
                         editorName
                         itemId
+                        metadata
                         createdAt
                         updatedAt
                     }
@@ -960,6 +975,8 @@ class FeedbackItem(BaseModel):
             # Add the ID to the data for update
             update_data = feedback_data.copy()
             update_data["id"] = feedback_item_id
+            if isinstance(update_data.get("metadata"), dict):
+                update_data["metadata"] = json.dumps(update_data["metadata"])
 
             # AppSync requires the full composite key when an update touches a model that
             # participates in the byAccountScorecardScoreUpdatedAt index. Hydrate those
@@ -1006,6 +1023,7 @@ class FeedbackItem(BaseModel):
                     editedAt
                     editorName
                     itemId
+                    metadata
                     createdAt
                     updatedAt
                 }
