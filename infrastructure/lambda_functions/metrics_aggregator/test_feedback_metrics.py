@@ -1,3 +1,4 @@
+import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -93,9 +94,10 @@ def test_count_feedback_records_efficiently_writes_scoped_buckets_and_metadata()
 
     assert len(account_one_min) == 3
     assert sum(bucket["count"] for bucket in account_one_min) == 3
-    assert sum(bucket["metadata"]["changedCount"] for bucket in account_one_min) == 1
-    assert sum(bucket["metadata"]["unchangedCount"] for bucket in account_one_min) == 1
-    assert sum(bucket["metadata"]["invalidCount"] for bucket in account_one_min) == 1
+    # Metadata is now a JSON string, need to parse it
+    assert sum(json.loads(bucket["metadata"])["changedCount"] for bucket in account_one_min) == 1
+    assert sum(json.loads(bucket["metadata"])["unchangedCount"] for bucket in account_one_min) == 1
+    assert sum(json.loads(bucket["metadata"])["invalidCount"] for bucket in account_one_min) == 1
 
     assert len(scorecard_one_min) == 3
     assert {bucket["scorecard_id"] for bucket in scorecard_one_min} == {"scorecard-1"}
@@ -140,6 +142,12 @@ def test_update_buckets_passes_scope_and_metadata_to_graphql_client():
             self.calls.append(kwargs)
 
     graphql_client = FakeGraphQLClient()
+    # Metadata is now a JSON string (as produced by bucket_counter.py)
+    metadata_json = json.dumps({
+        "changedCount": 1,
+        "unchangedCount": 0,
+        "invalidCount": 0,
+    })
     buckets = [
         {
             "account_id": "account-1",
@@ -151,11 +159,7 @@ def test_update_buckets_passes_scope_and_metadata_to_graphql_client():
             "number_of_minutes": 1,
             "count": 1,
             "complete": True,
-            "metadata": {
-                "changedCount": 1,
-                "unchangedCount": 0,
-                "invalidCount": 0,
-            },
+            "metadata": metadata_json,
         }
     ]
 
@@ -174,11 +178,7 @@ def test_update_buckets_passes_scope_and_metadata_to_graphql_client():
             "complete": True,
             "scorecard_id": "scorecard-1",
             "score_id": "score-1",
-            "metadata": {
-                "changedCount": 1,
-                "unchangedCount": 0,
-                "invalidCount": 0,
-            },
+            "metadata": metadata_json,
         }
     ]
 
