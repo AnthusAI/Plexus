@@ -1,0 +1,31 @@
+{
+  "id": "plx-4883f860-ceb6-4f77-9c41-adc3996d1661",
+  "title": "Fix CodeQL unused imports after async dependency remediation",
+  "description": "Remove unused imports reported by GitHub code quality in recently touched files: Account import in plexus/utils/scoring.py and pytest import in tests/test_scoring_single_target_helper.py.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-360d2b02-2fe8-4480-ba5e-066730487675",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "75a88e3b-b1c6-46ac-840b-ee2d1434e201",
+      "author": "derek",
+      "text": "Starting fix: remove unused Account import in plexus/utils/scoring.py and unused pytest import in tests/test_scoring_single_target_helper.py; run focused tests; then close issue.",
+      "created_at": "2026-05-11T22:37:41.493719879Z"
+    },
+    {
+      "id": "ef956378-973a-4b31-aaeb-aa61073de3d0",
+      "author": "derek",
+      "text": "Implemented fixes and validated.\n- Removed unused Account import/fallback in plexus/utils/scoring.py\n- Removed unused pytest import in tests/test_scoring_single_target_helper.py\n- Validation: pytest -q tests/test_scoring_single_target_helper.py tests/lambda/test_score_processor_item.py (7 passed)",
+      "created_at": "2026-05-11T22:38:00.681103109Z"
+    }
+  ],
+  "created_at": "2026-05-11T22:37:38.593982211Z",
+  "updated_at": "2026-05-11T22:38:00.696298457Z",
+  "closed_at": "2026-05-11T22:38:00.696298457Z",
+  "custom": {}
+}
