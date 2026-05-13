@@ -81,6 +81,7 @@ export const EVALUATION_CARD_FIELDS = `
   id
   type
   status
+  metadata
   updatedAt
   createdAt
   parameters
@@ -321,6 +322,7 @@ export type ScoreEvaluationView = {
   id: string
   type?: string | null
   parameters?: unknown
+  metadataText?: string | null
   status?: string | null
   updatedAt?: string | null
   createdAt?: string | null
@@ -368,6 +370,158 @@ export type ScoreEvaluationView = {
       }>
     } | null
   } | null
+}
+
+export const ARCHIVED_STATUS = 'ARCHIVED'
+
+type ArchiveMutationResult = {
+  id: string
+  status: string | null
+  metadataText: string | null
+  updatedAt: string | null
+}
+
+type ArchiveMetadataOptions = {
+  previousStatus?: string | null
+  reason?: string | null
+  archivedBy?: string | null
+  archivedAt?: string
+}
+
+export function isArchivedStatus(status: string | null | undefined): boolean {
+  return String(status ?? '').toUpperCase() === ARCHIVED_STATUS
+}
+
+export function buildArchivedMetadata(
+  existingMetadata: unknown,
+  options: ArchiveMetadataOptions = {}
+): Record<string, unknown> {
+  const parsedMetadata = safeJsonParse<Record<string, unknown>>(existingMetadata)
+  const metadata =
+    parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata)
+      ? { ...parsedMetadata }
+      : {}
+  const archivedAt = options.archivedAt ?? new Date().toISOString()
+  const archiveEntry =
+    metadata.archive && typeof metadata.archive === 'object' && !Array.isArray(metadata.archive)
+      ? { ...(metadata.archive as Record<string, unknown>) }
+      : {}
+  archiveEntry.archived = true
+  archiveEntry.archivedAt = archivedAt
+  archiveEntry.previousStatus = options.previousStatus ?? null
+  if (options.reason) {
+    archiveEntry.reason = options.reason
+  }
+  if (options.archivedBy) {
+    archiveEntry.archivedBy = options.archivedBy
+  }
+
+  return {
+    ...metadata,
+    archive: archiveEntry,
+  }
+}
+
+async function archiveRecord(
+  entity: 'evaluation' | 'procedure',
+  input: { id: string; status?: string | null; metadataText?: string | null; reason?: string | null }
+): Promise<ArchiveMutationResult> {
+  const previousStatus = input.status ?? null
+  const metadata = buildArchivedMetadata(input.metadataText, {
+    previousStatus,
+    reason: input.reason ?? null,
+  })
+  const metadataText = JSON.stringify(metadata)
+
+  if (entity === 'evaluation') {
+    const response = (await getAmplifyClient().graphql({
+      query: `
+        mutation UpdateEvaluationForArchive($input: UpdateEvaluationInput!) {
+          updateEvaluation(input: $input) {
+            id
+            status
+            metadata
+            updatedAt
+          }
+        }
+      `,
+      variables: {
+        input: {
+          id: input.id,
+          status: ARCHIVED_STATUS,
+          metadata: metadataText,
+        },
+      },
+    })) as any
+    const updated = response?.data?.updateEvaluation
+    if (!updated?.id) {
+      throw new Error(`Failed to archive evaluation ${input.id}`)
+    }
+    return {
+      id: updated.id,
+      status: updated.status ?? ARCHIVED_STATUS,
+      metadataText:
+        typeof updated.metadata === 'string'
+          ? updated.metadata
+          : updated.metadata != null
+            ? JSON.stringify(updated.metadata)
+            : metadataText,
+      updatedAt: updated.updatedAt ?? null,
+    }
+  }
+
+  const response = (await getAmplifyClient().graphql({
+    query: `
+      mutation UpdateProcedureForArchive($input: UpdateProcedureInput!) {
+        updateProcedure(input: $input) {
+          id
+          status
+          metadata
+          updatedAt
+        }
+      }
+    `,
+    variables: {
+      input: {
+        id: input.id,
+        status: ARCHIVED_STATUS,
+        metadata: metadataText,
+      },
+    },
+  })) as any
+  const updated = response?.data?.updateProcedure
+  if (!updated?.id) {
+    throw new Error(`Failed to archive procedure ${input.id}`)
+  }
+  return {
+    id: updated.id,
+    status: updated.status ?? ARCHIVED_STATUS,
+    metadataText:
+      typeof updated.metadata === 'string'
+        ? updated.metadata
+        : updated.metadata != null
+          ? JSON.stringify(updated.metadata)
+          : metadataText,
+    updatedAt: updated.updatedAt ?? null,
+  }
+}
+
+export async function archiveEvaluationRecord(input: {
+  id: string
+  status?: string | null
+  metadataText?: string | null
+  reason?: string | null
+}): Promise<ArchiveMutationResult> {
+  return archiveRecord('evaluation', input)
+}
+
+export async function archiveProcedureRecord(input: {
+  id: string
+  status?: string | null
+  metadataText?: string | null
+  reason?: string | null
+}): Promise<ArchiveMutationResult> {
+  return archiveRecord('procedure', input)
 }
 
 function parseJsonMaybeDeep(value: unknown): unknown {
@@ -1295,6 +1449,12 @@ export function evaluationToScoreEvaluationView(item: any): ScoreEvaluationView 
     id: item.id,
     type: item.type ?? null,
     parameters: item.parameters ?? null,
+    metadataText:
+      typeof item.metadata === 'string'
+        ? item.metadata
+        : item.metadata != null
+          ? JSON.stringify(item.metadata)
+          : null,
     status: item.status ?? null,
     updatedAt: item.updatedAt ?? null,
     createdAt: item.createdAt ?? null,
