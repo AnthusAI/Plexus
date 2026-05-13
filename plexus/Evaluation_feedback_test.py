@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
 from plexus.Evaluation import FeedbackEvaluation, _sanitize_rca_generated_prose
+from plexus.feedback_item_explanations import FeedbackItemExplanationTimeoutError
 
 
 @pytest.fixture
@@ -647,6 +648,57 @@ class TestFeedbackEvaluation:
                     for call in update_calls
                 )
                 assert failed_call
+
+    @pytest.mark.asyncio
+    async def test_run_evaluation_fails_hard_on_feedback_explanation_timeout(
+        self,
+        mock_api_client,
+        mock_feedback_items,
+    ):
+        """Feedback evaluation must fail when shared explanation generation exhausts retry budget."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key",
+        )
+
+        mock_eval_record = MagicMock()
+        mock_eval_record.id = "eval-789"
+        mock_eval_record.update = MagicMock()
+        mock_scorecard = MagicMock()
+        mock_scorecard.id = "scorecard-123"
+
+        timeout_error = FeedbackItemExplanationTimeoutError(
+            provider="openai",
+            model="gpt-5.4-mini",
+            attempt_count=5,
+            elapsed_seconds=86400.0,
+            last_error_type="TimeoutError",
+            last_error_message="provider timeout",
+            feedback_item_id="fi-timeout",
+        )
+
+        with patch('plexus.dashboard.api.models.evaluation.Evaluation.get_by_id', return_value=mock_eval_record):
+            with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
+                with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
+                    with patch.object(
+                        evaluation,
+                        '_run_root_cause_analysis',
+                        new_callable=AsyncMock,
+                        side_effect=timeout_error,
+                    ):
+                        with pytest.raises(FeedbackItemExplanationTimeoutError):
+                            await evaluation.run()
+
+        failed_updates = [call for call in mock_eval_record.update.call_args_list if call.kwargs.get("status") == "FAILED"]
+        assert failed_updates
+        assert "Feedback explanation generation timed out" in str(failed_updates[-1].kwargs.get("errorMessage", ""))
     
     @pytest.mark.asyncio
     async def test_create_score_results_from_feedback(self, mock_api_client):
