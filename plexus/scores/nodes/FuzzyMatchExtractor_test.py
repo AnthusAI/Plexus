@@ -6,27 +6,36 @@ from plexus.scores.shared.fuzzy_matching import FuzzyTarget, FuzzyTargetGroup
 from plexus.scores.nodes.BaseNode import BaseNode # For GraphState inheritance
 import unittest.mock as mock
 import os
+from types import SimpleNamespace
 
-@pytest.fixture(autouse=True, scope="module")
-def _azure_openai_test_environment():
-    # Keep Azure/OpenAI env + constructor mocks scoped to this module only.
-    with mock.patch.dict(
-        os.environ,
-        {
-            "AZURE_OPENAI_API_KEY": "test_api_key",
-            "AZURE_OPENAI_ENDPOINT": "https://test-openai.openai.azure.com/",
-            "OPENAI_API_VERSION": "2023-03-15-preview",
-            "AZURE_OPENAI_DEPLOYMENT": "gpt-35-turbo",
-        },
-        clear=False,
-    ):
-        with mock.patch('openai.OpenAI'):
-            with mock.patch('openai.AzureOpenAI'):
-                with mock.patch(
-                    'langchain_community.chat_models.azure_openai.AzureChatOpenAI.__init__',
-                    return_value=None,
-                ):
-                    yield
+# Keep test-safe defaults for Azure/OpenAI across the suite.
+os.environ["AZURE_OPENAI_API_KEY"] = "test_api_key"
+os.environ["AZURE_OPENAI_ENDPOINT"] = "https://test-openai.openai.azure.com/"
+os.environ["OPENAI_API_VERSION"] = "2023-03-15-preview"
+os.environ["AZURE_OPENAI_DEPLOYMENT"] = "gpt-35-turbo"
+
+_MODULE_PATCHERS = [
+    mock.patch('openai.OpenAI'),
+    mock.patch('openai.AzureOpenAI'),
+    mock.patch(
+        'langchain_community.chat_models.azure_openai.AzureChatOpenAI.__init__',
+        return_value=None,
+    ),
+]
+_openai_constructor = _MODULE_PATCHERS[0].start()
+for _patcher in _MODULE_PATCHERS[1:]:
+    _patcher.start()
+
+# Ensure default OpenAI Responses mocks return JSON text, not nested MagicMocks.
+_openai_client = _openai_constructor.return_value
+_openai_client.responses.create.return_value = SimpleNamespace(
+    output_text='{"ground_truth_value":"Yes","explanation":"Mock explanation.","key_evidence":[]}'
+)
+
+
+def teardown_module(_module):
+    for _patcher in reversed(_MODULE_PATCHERS):
+        _patcher.stop()
 
 # Define a compatible GraphState for testing if not directly importable/usable
 # Or ideally, import the actual GraphState if FuzzyMatchExtractor defines it
