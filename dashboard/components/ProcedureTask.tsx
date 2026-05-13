@@ -4,7 +4,7 @@ import { TaskStatus } from '@/components/ui/task-status'
 import { BaseTaskData } from '@/types/base'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, Link as LinkIcon, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users, Coins, Repeat, ConciergeBell, Hand, SquareTerminal, Radio } from 'lucide-react'
+import { Waypoints, MoreHorizontal, Square, X, Trash2, Columns2, Edit, Copy, FileText, ChevronRight, ChevronDown, FileJson, Expand, BookOpenCheck, Link as LinkIcon, Stethoscope, ClipboardList, PlayCircle, FlaskConical, Users, Coins, Repeat, ConciergeBell, Hand, SquareTerminal, Radio, Archive } from 'lucide-react'
 import Link from 'next/link'
 
 import { Timestamp } from './ui/timestamp'
@@ -52,7 +52,7 @@ import { defineCustomMonacoThemes, applyMonacoTheme, setupMonacoThemeWatcher, ge
 import ProcedureConversationViewer from "./procedure-conversation-viewer"
 import { ParametersDisplay } from "./ui/ParametersDisplay"
 import { parseParametersFromYaml } from "@/lib/parameter-parser"
-import { PROCEDURE_CARD_FIELDS, type ProcedureFeedbackEvaluationSummary } from "@/components/ui/optimizer-results-utils"
+import { isArchivedStatus, PROCEDURE_CARD_FIELDS, type ProcedureFeedbackEvaluationSummary } from "@/components/ui/optimizer-results-utils"
 import type { ParameterDefinition, ParameterValue } from "@/types/parameters"
 import * as yaml from 'js-yaml'
 import ReactMarkdown from "react-markdown"
@@ -168,6 +168,7 @@ export interface ProcedureTaskProps {
   onClose?: () => void
   isSelected?: boolean
   onDelete?: (procedureId: string) => void
+  onArchive?: (procedureId: string) => void
   onEdit?: (procedureId: string) => void
   onDuplicate?: (procedureId: string) => void
   onConversationFullscreenChange?: (isFullscreen: boolean) => void
@@ -183,6 +184,7 @@ export default function ProcedureTask({
   onClose,
   isSelected,
   onDelete,
+  onArchive,
   onEdit,
   onDuplicate,
   onConversationFullscreenChange
@@ -595,8 +597,9 @@ export default function ProcedureTask({
 
   // How many completed optimizer cycles the procedure has run
   const completedCycleCount = optimizerIterations.filter(it => it.iteration > 0).length
+  const isArchivedProcedure = isArchivedStatus(procedure.status)
   const canContinueOptimization =
-    completedCycleCount > 0 && procedure.task?.status !== 'RUNNING'
+    completedCycleCount > 0 && procedure.task?.status !== 'RUNNING' && !isArchivedProcedure
 
   const formatMetricValue = (value?: number | null) =>
     value != null ? value.toFixed(3) : '—'
@@ -913,9 +916,12 @@ export default function ProcedureTask({
 
   const procedureStatus = procedure.status?.toUpperCase()
   const taskStatus = procedure.task?.status?.toUpperCase()
+  const hasArchivedStatus = procedureStatus === 'ARCHIVED'
   const hasFailureStatus = taskStatus === 'FAILED' || procedureStatus === 'FAILED' || procedureStatus === 'ERROR'
   const hasStalledStatus = taskStatus === 'STALLED' || procedureStatus === 'STALLED'
-  const effectiveTaskStatus: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED' = hasFailureStatus
+  const effectiveTaskStatus: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'STALLED' = hasArchivedStatus
+    ? 'COMPLETED'
+    : hasFailureStatus
     ? 'FAILED'
     : hasStalledStatus
       ? 'STALLED'
@@ -962,6 +968,7 @@ export default function ProcedureTask({
     : undefined
 
   const taskStatusMessage = (() => {
+    if (hasArchivedStatus) return 'Archived'
     const stageItems = procedure.task?.stages?.items ?? []
     if (!stageItems.length) return undefined
     if (effectiveTaskStatus === 'FAILED') {
@@ -1106,6 +1113,15 @@ export default function ProcedureTask({
           >
             <Trash2 className="mr-2 h-4 w-4" />
             Delete
+          </DropdownMenuItem>
+        )}
+        {onArchive && (
+          <DropdownMenuItem
+            disabled={isArchivedProcedure}
+            onClick={() => onArchive(procedure.id)}
+          >
+            <Archive className="mr-2 h-4 w-4" />
+            Archive procedure
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

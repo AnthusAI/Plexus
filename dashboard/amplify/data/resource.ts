@@ -862,6 +862,7 @@ const schema = a.schema({
         ])
         .secondaryIndexes((idx: (field: ProcedureIndexFields) => any) => [
             idx("accountId").sortKeys(["updatedAt"]),
+            idx("accountId").sortKeys(["createdAt"]),
             idx("scorecardId").sortKeys(["updatedAt"]),
             idx("scoreId").sortKeys(["updatedAt"]),
             idx("scoreVersionId").sortKeys(["updatedAt"]),

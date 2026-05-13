@@ -347,6 +347,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("evaluation_info", "evaluation", "info"),
     ("evaluation_find_recent", "evaluation", "find_recent"),
     ("evaluation_compare", "evaluation", "compare"),
+    ("evaluation_archive", "evaluation", "archive"),
     ("evaluation_run", "evaluation", "run"),
     ("dataset_build_from_feedback_window", "dataset", "build_from_feedback_window"),
     ("dataset_check_associated", "dataset", "check_associated"),
@@ -357,6 +358,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("report_run", "report", "run"),
     ("procedure_info", "procedure", "info"),
     ("procedure_list", "procedure", "list"),
+    ("procedure_archive", "procedure", "archive"),
     ("procedure_chat_sessions", "procedure", "chat_sessions"),
     ("procedure_chat_messages", "procedure", "chat_messages"),
     ("procedure_steering_messages", "procedure", "steering_messages"),
@@ -465,6 +467,7 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("evaluation", "info"): _method_spec("_call_evaluation_read", planning_allowed=True),
     ("evaluation", "find_recent"): _method_spec("_call_evaluation_read", planning_allowed=True),
     ("evaluation", "compare"): _method_spec("_call_evaluation_read", planning_allowed=True),
+    ("evaluation", "archive"): _method_spec("_call_evaluation_write", planning_allowed=False),
     ("evaluation", "run"): _method_spec("_call_evaluation_run", planning_allowed=True),
     ("report", "run"): _method_spec("_call_report_run", planning_allowed=True),
     ("report", "acceptance_rate"): _method_spec("_call_report_run", planning_allowed=True),
@@ -480,6 +483,7 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("procedure", "chat_sessions"): _method_spec("_call_procedure_read", planning_allowed=True),
     ("procedure", "chat_messages"): _method_spec("_call_procedure_read", planning_allowed=True),
     ("procedure", "steering_messages"): _method_spec("_call_procedure_read", planning_allowed=True),
+    ("procedure", "archive"): _method_spec("_call_procedure_write", planning_allowed=False),
     ("procedure", "run"): _method_spec("_call_procedure_run", planning_allowed=False),
     ("procedure", "optimize"): _method_spec("_call_procedure_run", planning_allowed=False),
     ("procedure", "continue"): _method_spec("_call_procedure_run", planning_allowed=False),
@@ -1100,6 +1104,43 @@ def _make_procedure_service():
     return ProcedureService(client)
 
 
+def _metadata_object(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return {}
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            return {}
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
+
+
+def _build_archived_metadata(
+    existing_metadata: Any,
+    *,
+    previous_status: str | None,
+    reason: str | None = None,
+    archived_by: str | None = None,
+) -> tuple[dict[str, Any], str]:
+    archived_at = _iso(time.time())
+    metadata = _metadata_object(existing_metadata)
+    archive_entry = _metadata_object(metadata.get("archive"))
+    archive_entry["archived"] = True
+    archive_entry["archivedAt"] = archived_at
+    archive_entry["previousStatus"] = previous_status
+    if reason:
+        archive_entry["reason"] = reason
+    if archived_by:
+        archive_entry["archivedBy"] = archived_by
+    metadata["archive"] = archive_entry
+    return metadata, archived_at
+
+
 def _default_procedure_list(args: dict[str, Any]) -> dict[str, Any]:
     """Run plexus.procedure.list directly via ProcedureService."""
 
@@ -1182,6 +1223,81 @@ def _default_procedure_info(args: dict[str, Any]) -> dict[str, Any]:
         if yaml_config:
             result["yaml_config"] = yaml_config
     return result
+
+
+def _default_procedure_archive(args: dict[str, Any]) -> dict[str, Any]:
+    """Archive a procedure by setting status=ARCHIVED and recording archive metadata."""
+
+    from plexus.cli.shared.client_utils import create_client
+
+    procedure_id = args.get("procedure_id") or args.get("id")
+    if not procedure_id:
+        raise ValueError("plexus.procedure.archive requires id or procedure_id")
+
+    reason = args.get("reason")
+    archived_by = args.get("archived_by") or args.get("archivedBy")
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.procedure.archive: could not create dashboard client")
+
+    query = """
+    query GetProcedureForArchive($id: ID!) {
+      getProcedure(id: $id) {
+        id
+        status
+        metadata
+      }
+    }
+    """
+    fetched = client.execute(query, {"id": str(procedure_id)})
+    procedure = (fetched or {}).get("getProcedure")
+    if not procedure:
+        raise ValueError(f"Procedure not found: {procedure_id}")
+
+    previous_status = procedure.get("status")
+    merged_metadata, archived_at = _build_archived_metadata(
+        procedure.get("metadata"),
+        previous_status=previous_status,
+        reason=str(reason) if reason is not None else None,
+        archived_by=str(archived_by) if archived_by is not None else None,
+    )
+
+    mutation = """
+    mutation UpdateProcedureArchive($input: UpdateProcedureInput!) {
+      updateProcedure(input: $input) {
+        id
+        status
+        metadata
+        updatedAt
+      }
+    }
+    """
+    result = client.execute(
+        mutation,
+        {
+            "input": {
+                "id": str(procedure_id),
+                "status": "ARCHIVED",
+                "metadata": json.dumps(merged_metadata),
+            }
+        },
+    )
+    updated = (result or {}).get("updateProcedure")
+    if not updated:
+        raise RuntimeError(
+            f"Failed to archive procedure {procedure_id}: missing updateProcedure payload"
+        )
+
+    return {
+        "success": True,
+        "procedure_id": str(procedure_id),
+        "status": updated.get("status") or "ARCHIVED",
+        "previous_status": previous_status,
+        "archived_at": archived_at,
+        "metadata": merged_metadata,
+        "updated_at": updated.get("updatedAt"),
+    }
 
 
 def _default_procedure_chat_sessions(args: dict[str, Any]) -> dict[str, Any]:
@@ -1620,6 +1736,83 @@ def _default_evaluation_info(args: dict[str, Any]) -> dict[str, Any]:
         return Evaluation.get_latest_evaluation(account_key, evaluation_type)
 
     return Evaluation.get_evaluation_info(evaluation_id, include_score_results)
+
+
+def _default_evaluation_archive(args: dict[str, Any]) -> dict[str, Any]:
+    """Archive an evaluation by setting status=ARCHIVED and recording archive metadata."""
+
+    from plexus.cli.shared.client_utils import create_client
+
+    evaluation_id = args.get("evaluation_id") or args.get("id")
+    if not evaluation_id:
+        raise ValueError("plexus.evaluation.archive requires id or evaluation_id")
+
+    reason = args.get("reason")
+    archived_by = args.get("archived_by") or args.get("archivedBy")
+
+    client = create_client()
+    if not client:
+        raise RuntimeError(
+            "plexus.evaluation.archive: could not create dashboard client"
+        )
+
+    query = """
+    query GetEvaluationForArchive($id: ID!) {
+      getEvaluation(id: $id) {
+        id
+        status
+        metadata
+      }
+    }
+    """
+    fetched = client.execute(query, {"id": str(evaluation_id)})
+    evaluation = (fetched or {}).get("getEvaluation")
+    if not evaluation:
+        raise ValueError(f"Evaluation not found: {evaluation_id}")
+
+    previous_status = evaluation.get("status")
+    merged_metadata, archived_at = _build_archived_metadata(
+        evaluation.get("metadata"),
+        previous_status=previous_status,
+        reason=str(reason) if reason is not None else None,
+        archived_by=str(archived_by) if archived_by is not None else None,
+    )
+
+    mutation = """
+    mutation UpdateEvaluationArchive($input: UpdateEvaluationInput!) {
+      updateEvaluation(input: $input) {
+        id
+        status
+        metadata
+        updatedAt
+      }
+    }
+    """
+    result = client.execute(
+        mutation,
+        {
+            "input": {
+                "id": str(evaluation_id),
+                "status": "ARCHIVED",
+                "metadata": json.dumps(merged_metadata),
+            }
+        },
+    )
+    updated = (result or {}).get("updateEvaluation")
+    if not updated:
+        raise RuntimeError(
+            f"Failed to archive evaluation {evaluation_id}: missing updateEvaluation payload"
+        )
+
+    return {
+        "success": True,
+        "evaluation_id": str(evaluation_id),
+        "status": updated.get("status") or "ARCHIVED",
+        "previous_status": previous_status,
+        "archived_at": archived_at,
+        "metadata": merged_metadata,
+        "updated_at": updated.get("updatedAt"),
+    }
 
 
 def _default_score_info(args: dict[str, Any]) -> dict[str, Any]:
@@ -5749,6 +5942,7 @@ class PlexusRuntimeModule:
         evaluation_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         evaluation_compare: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         evaluation_find_recent: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        evaluation_archive: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         evaluation_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         report_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         report_configurations_list: Callable[[dict[str, Any]], Any] | None = None,
@@ -5756,6 +5950,7 @@ class PlexusRuntimeModule:
         dataset_handlers: dict[str, Callable[[dict[str, Any]], Any]] | None = None,
         procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         procedure_optimize: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        procedure_archive: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         stream_handler: _MCPStreamEmitter | None = None,
         runtime_context: dict[str, Any] | None = None,
         catch_runtime_errors: bool = False,
@@ -5873,6 +6068,11 @@ class PlexusRuntimeModule:
             if evaluation_find_recent is not None
             else _default_evaluation_find_recent
         )
+        self._evaluation_archive = (
+            evaluation_archive
+            if evaluation_archive is not None
+            else _default_evaluation_archive
+        )
         self._evaluation_runner = (
             evaluation_runner
             if evaluation_runner is not None
@@ -5913,6 +6113,11 @@ class PlexusRuntimeModule:
             procedure_optimize
             if procedure_optimize is not None
             else _default_procedure_optimize
+        )
+        self._procedure_archive = (
+            procedure_archive
+            if procedure_archive is not None
+            else _default_procedure_archive
         )
         self._procedure_continue = _default_procedure_continue
         self._procedure_branch = _default_procedure_branch
@@ -6073,6 +6278,21 @@ class PlexusRuntimeModule:
         finally:
             self._budget.record_after("procedure", method)
 
+    def _call_procedure_write(
+        self, namespace: str, method: str, args: Any = None
+    ) -> Any:
+        if (namespace, method) != ("procedure", "archive"):
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("procedure", method)
+        self._record_api_call("procedure", method)
+        try:
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
+            return self._procedure_archive(parsed)
+        finally:
+            self._budget.record_after("procedure", method)
+
     def _call_scorecards(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "scorecards" or method not in {"list", "info", "search", "create"}:
             raise ValueError(
@@ -6148,6 +6368,21 @@ class PlexusRuntimeModule:
             if method == "compare":
                 return self._evaluation_compare(parsed)
             return self._evaluation_find_recent(parsed)
+        finally:
+            self._budget.record_after("evaluation", method)
+
+    def _call_evaluation_write(
+        self, namespace: str, method: str, args: Any = None
+    ) -> Any:
+        if (namespace, method) != ("evaluation", "archive"):
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("evaluation", method)
+        self._record_api_call("evaluation", method)
+        try:
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
+            return self._evaluation_archive(parsed)
         finally:
             self._budget.record_after("evaluation", method)
 
