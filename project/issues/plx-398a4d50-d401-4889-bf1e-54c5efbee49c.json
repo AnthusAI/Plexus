@@ -3,7 +3,7 @@
   "title": "Triage and apply non-breaking dashboard dependency upgrades",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,16 @@
       "author": "derek",
       "text": "Starting step 2 (option 1): categorize remaining audit findings into non-breaking vs breaking paths, then apply safe upgrades and re-audit.",
       "created_at": "2026-05-13T22:51:18.328005790Z"
+    },
+    {
+      "id": "2145ec6a-9a67-4e92-9f8c-4060eb7e3541",
+      "author": "derek",
+      "text": "Completed option-1 non-breaking remediation pass. Updated vulnerable override pins and aligned Tailwind/PostCSS stack plus safe transitive overrides. Vulnerabilities reduced from 66 -> 52 (low 17->15, moderate 32->23, high 15->12, critical unchanged at 2). Remaining issues are primarily Amplify backend toolchain transitive chains (fast-xml-parser/handlebars), Next.js advisory requiring major upgrade to next 16.x, jest-environment-jsdom major bump, and @excalidraw path requiring version move judged major by audit.",
+      "created_at": "2026-05-13T22:55:18.568136673Z"
     }
   ],
   "created_at": "2026-05-13T22:51:15.577748751Z",
-  "updated_at": "2026-05-13T22:51:18.328005790Z",
-  "closed_at": null,
+  "updated_at": "2026-05-13T22:55:18.568136673Z",
+  "closed_at": "2026-05-13T22:55:18.566185673Z",
   "custom": {}
 }
