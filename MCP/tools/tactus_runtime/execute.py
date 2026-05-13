@@ -5319,7 +5319,7 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
                     source="execute_tactus",
                 )
             if isinstance(payload.get("metadata"), (dict, list)):
-                payload["metadata"] = json.dumps(payload["metadata"])
+                payload["metadata"] = json.dumps(payload["metadata"], default=str)
             try:
                 resp = client.execute(version_mutation, {"input": payload})
                 new_version = (resp or {}).get("createScoreVersion") or {}

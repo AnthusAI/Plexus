@@ -708,6 +708,7 @@ def test_explainer_compacts_wordy_rationale(monkeypatch):
 
 def test_invoke_rca_openai_text_captures_context(tmp_path, monkeypatch):
     calls = []
+    client_kwargs = []
 
     class FakeResponses:
         def create(self, **kwargs):
@@ -715,7 +716,8 @@ def test_invoke_rca_openai_text_captures_context(tmp_path, monkeypatch):
             return types.SimpleNamespace(output_text="ok")
 
     class FakeOpenAI:
-        def __init__(self):
+        def __init__(self, **kwargs):
+            client_kwargs.append(kwargs)
             self.responses = FakeResponses()
 
     monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
@@ -729,6 +731,7 @@ def test_invoke_rca_openai_text_captures_context(tmp_path, monkeypatch):
     )
 
     assert result == "ok"
+    assert client_kwargs == [{"timeout": 60.0, "max_retries": 1}]
     assert calls[0]["reasoning"] == {"effort": "low"}
     assert calls[0]["max_output_tokens"] == 1000
     json_files = list(tmp_path.glob("*.json"))
@@ -749,7 +752,7 @@ def test_invoke_rca_openai_text_retries_empty_response(tmp_path, monkeypatch):
             return types.SimpleNamespace(output_text=outputs.pop(0))
 
     class FakeOpenAI:
-        def __init__(self):
+        def __init__(self, **_kwargs):
             self.responses = FakeResponses()
 
     monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
