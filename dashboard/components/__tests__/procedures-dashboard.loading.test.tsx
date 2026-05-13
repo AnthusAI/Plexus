@@ -134,7 +134,7 @@ describe('Procedures dashboard loading UX', () => {
       if (text.includes('onCreateProcedure') || text.includes('onUpdateProcedure')) {
         return createSubscriptionResult()
       }
-      if (text.includes('listProcedureByAccountIdAndUpdatedAt')) {
+      if (text.includes('listProcedureByAccountIdAndCreatedAt')) {
         return deferredProcedures.promise
       }
       if (text.includes('listTaskByAccountIdAndUpdatedAt')) {
@@ -169,10 +169,10 @@ describe('Procedures dashboard loading UX', () => {
       if (text.includes('onCreateProcedure') || text.includes('onUpdateProcedure')) {
         return createSubscriptionResult()
       }
-      if (text.includes('listProcedureByAccountIdAndUpdatedAt')) {
+      if (text.includes('listProcedureByAccountIdAndCreatedAt')) {
         return Promise.resolve({
           data: {
-            listProcedureByAccountIdAndUpdatedAt: {
+            listProcedureByAccountIdAndCreatedAt: {
               items: [
                 {
                   id: 'proc-1',
@@ -242,10 +242,10 @@ describe('Procedures dashboard loading UX', () => {
       if (text.includes('onCreateProcedure') || text.includes('onUpdateProcedure')) {
         return createSubscriptionResult()
       }
-      if (text.includes('listProcedureByAccountIdAndUpdatedAt')) {
+      if (text.includes('listProcedureByAccountIdAndCreatedAt')) {
         return Promise.resolve({
           data: {
-            listProcedureByAccountIdAndUpdatedAt: {
+            listProcedureByAccountIdAndCreatedAt: {
               items: [
                 {
                   id: 'proc-active',
@@ -308,10 +308,10 @@ describe('Procedures dashboard loading UX', () => {
       if (text.includes('onCreateProcedure') || text.includes('onUpdateProcedure')) {
         return createSubscriptionResult()
       }
-      if (text.includes('listProcedureByAccountIdAndUpdatedAt')) {
+      if (text.includes('listProcedureByAccountIdAndCreatedAt')) {
         return Promise.resolve({
           data: {
-            listProcedureByAccountIdAndUpdatedAt: {
+            listProcedureByAccountIdAndCreatedAt: {
               items: [],
               nextToken: null,
             },
@@ -348,10 +348,10 @@ describe('Procedures dashboard loading UX', () => {
       if (text.includes('onUpdateProcedure')) {
         return createSubscriptionResult()
       }
-      if (text.includes('listProcedureByAccountIdAndUpdatedAt')) {
+      if (text.includes('listProcedureByAccountIdAndCreatedAt')) {
         return Promise.resolve({
           data: {
-            listProcedureByAccountIdAndUpdatedAt: {
+            listProcedureByAccountIdAndCreatedAt: {
               items: [],
               nextToken: null,
             },
@@ -411,10 +411,10 @@ describe('Procedures dashboard loading UX', () => {
           },
         }
       }
-      if (text.includes('listProcedureByAccountIdAndUpdatedAt')) {
+      if (text.includes('listProcedureByAccountIdAndCreatedAt')) {
         return Promise.resolve({
           data: {
-            listProcedureByAccountIdAndUpdatedAt: {
+            listProcedureByAccountIdAndCreatedAt: {
               items: [
                 {
                   id: 'proc-subtitle',
@@ -492,10 +492,10 @@ describe('Procedures dashboard loading UX', () => {
       if (text.includes('onCreateProcedure') || text.includes('onUpdateProcedure')) {
         return createSubscriptionResult()
       }
-      if (text.includes('listProcedureByAccountIdAndUpdatedAt')) {
+      if (text.includes('listProcedureByAccountIdAndCreatedAt')) {
         return Promise.resolve({
           data: {
-            listProcedureByAccountIdAndUpdatedAt: {
+            listProcedureByAccountIdAndCreatedAt: {
               items: [
                 {
                   id: 'proc-err',
