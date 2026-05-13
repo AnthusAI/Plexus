@@ -890,13 +890,15 @@ def test_dispatch_routes_scorecards_to_direct_handlers() -> None:
     assert execute.DIRECT_HANDLERS[("scorecards", "list")] == "_call_scorecards"
     assert execute.DIRECT_HANDLERS[("scorecards", "info")] == "_call_scorecards"
     assert execute.DIRECT_HANDLERS[("scorecards", "search")] == "_call_scorecards"
+    assert execute.DIRECT_HANDLERS[("scorecards", "create")] == "_call_scorecards"
     assert ("scorecards", "list") not in execute.MCP_TOOL_MAP
     assert ("scorecards", "info") not in execute.MCP_TOOL_MAP
     assert ("scorecards", "search") not in execute.MCP_TOOL_MAP
+    assert ("scorecards", "create") not in execute.MCP_TOOL_MAP
 
 
 def test_dispatch_routes_score_to_direct_handlers() -> None:
-    for method in ("info", "search", "evaluations", "predict", "set_champion"):
+    for method in ("info", "create", "search", "evaluations", "predict", "set_champion"):
         assert execute.DIRECT_HANDLERS[("score", method)] == "_call_score"
         assert ("score", method) not in execute.MCP_TOOL_MAP
 
@@ -1684,6 +1686,9 @@ def test_plexus_api_list_advertises_known_namespaces() -> None:
     assert "plexus.api" in catalog
     assert "plexus.score" in catalog
     assert "info" in catalog["plexus.score"]
+    assert "create" in catalog["plexus.score"]
+    assert "plexus.scorecards" in catalog
+    assert "create" in catalog["plexus.scorecards"]
     assert facade.api_calls == ["plexus.api.list"]
 
 
@@ -1811,6 +1816,48 @@ def test_planning_mode_blocks_champion_promotion() -> None:
         module.score.set_champion({"score_id": "score-1", "version_id": "version-1"})
 
     assert "plexus.score.set_champion" in str(exc_info.value)
+    assert called is False
+
+
+def test_planning_mode_blocks_score_create() -> None:
+    called = False
+
+    def fake_score_create(_args: dict) -> dict:
+        nonlocal called
+        called = True
+        return {"success": True, "id": "score-1"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-planning-mode-blocks-score-create"),
+        score_create=fake_score_create,
+        runtime_context={"tool_access_mode": "planning"},
+    )
+
+    with pytest.raises(execute.PlanningModeToolNotAllowed) as exc_info:
+        module.score.create({"scorecard_identifier": "card-1", "name": "New Score"})
+
+    assert "plexus.score.create" in str(exc_info.value)
+    assert called is False
+
+
+def test_planning_mode_blocks_scorecards_create() -> None:
+    called = False
+
+    def fake_scorecards_create(_args: dict) -> dict:
+        nonlocal called
+        called = True
+        return {"success": True, "id": "scorecard-1"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-planning-mode-blocks-scorecards-create"),
+        scorecards_creator=fake_scorecards_create,
+        runtime_context={"tool_access_mode": "planning"},
+    )
+
+    with pytest.raises(execute.PlanningModeToolNotAllowed) as exc_info:
+        module.scorecards.create({"name": "New Scorecard"})
+
+    assert "plexus.scorecards.create" in str(exc_info.value)
     assert called is False
 
 
