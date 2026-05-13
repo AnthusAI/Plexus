@@ -7,27 +7,26 @@ from plexus.scores.nodes.BaseNode import BaseNode # For GraphState inheritance
 import unittest.mock as mock
 import os
 
-# Set environment variables for Azure OpenAI
-os.environ["AZURE_OPENAI_API_KEY"] = "test_api_key"
-os.environ["AZURE_OPENAI_ENDPOINT"] = "https://test-openai.openai.azure.com/"
-os.environ["OPENAI_API_VERSION"] = "2023-03-15-preview"
-os.environ["AZURE_OPENAI_DEPLOYMENT"] = "gpt-35-turbo"
-
-# Mock OpenAI API to prevent credential errors.
-# Keep explicit patcher handles so they can be stopped at module teardown and
-# do not leak into unrelated tests.
-_MODULE_PATCHERS = [
-    mock.patch('openai.OpenAI'),
-    mock.patch('openai.AzureOpenAI'),
-    mock.patch('langchain_community.chat_models.azure_openai.AzureChatOpenAI.__init__', return_value=None),
-]
-for _patcher in _MODULE_PATCHERS:
-    _patcher.start()
-
-
-def teardown_module(_module):
-    for _patcher in reversed(_MODULE_PATCHERS):
-        _patcher.stop()
+@pytest.fixture(autouse=True, scope="module")
+def _azure_openai_test_environment():
+    # Keep Azure/OpenAI env + constructor mocks scoped to this module only.
+    with mock.patch.dict(
+        os.environ,
+        {
+            "AZURE_OPENAI_API_KEY": "test_api_key",
+            "AZURE_OPENAI_ENDPOINT": "https://test-openai.openai.azure.com/",
+            "OPENAI_API_VERSION": "2023-03-15-preview",
+            "AZURE_OPENAI_DEPLOYMENT": "gpt-35-turbo",
+        },
+        clear=False,
+    ):
+        with mock.patch('openai.OpenAI'):
+            with mock.patch('openai.AzureOpenAI'):
+                with mock.patch(
+                    'langchain_community.chat_models.azure_openai.AzureChatOpenAI.__init__',
+                    return_value=None,
+                ):
+                    yield
 
 # Define a compatible GraphState for testing if not directly importable/usable
 # Or ideally, import the actual GraphState if FuzzyMatchExtractor defines it
