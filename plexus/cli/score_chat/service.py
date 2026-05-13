@@ -547,15 +547,17 @@ Then ask the user what they would like to change about the scorecard."""
             }
             """
             
-            result = self.client.execute(mutation, {
-                'input': apply_actor_attribution({
+            version_input = apply_actor_attribution({
                     'scoreId': score_id,
                     'configuration': yaml_content,
                     'parentVersionId': score_data.get('championVersionId'),
                     'note': 'Updated via API chat command',
                     'isFeatured': "true"
                 }, client_context=getattr(self.client, "context", None), source="agent")
-            })
+            if isinstance(version_input.get("metadata"), dict):
+                version_input["metadata"] = json.dumps(version_input["metadata"], default=str)
+
+            result = self.client.execute(mutation, {'input': version_input})
             
             if result.get('createScoreVersion'):
                 success_msg = (
