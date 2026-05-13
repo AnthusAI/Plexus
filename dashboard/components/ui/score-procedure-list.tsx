@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { generateClient } from 'aws-amplify/api'
-import { Copy, Link as LinkIcon, MoreHorizontal } from 'lucide-react'
+import { Archive, Copy, Link as LinkIcon, MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import {
+  archiveProcedureRecord,
   copyText,
   currentProcedureFeedbackEvaluationId,
   EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS,
@@ -44,6 +45,7 @@ import {
   optimizerMetricLabel,
   compareOptimizerMetricValues,
   openArtifactText,
+  isArchivedStatus,
   procedureIdFromTaskTarget,
   procedureRunMatchesTask,
   procedureToOptimizerRunView,
@@ -228,6 +230,8 @@ export function ScoreProcedureList({
   const [bestEvaluationDataset, setBestEvaluationDataset] = React.useState<OptimizerDatasetKey>('feedback')
   const [bestEvaluationMetric, setBestEvaluationMetric] = React.useState<OptimizerMetricKey>('alignment')
   const [sortBy, setSortBy] = React.useState<ProcedureSort>('updated')
+  const [includeArchived, setIncludeArchived] = React.useState(false)
+  const [archivingProcedureId, setArchivingProcedureId] = React.useState<string | null>(null)
   const runsRef = React.useRef<OptimizerRunView[]>([])
   const manifestRefreshTimersRef = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
@@ -509,8 +513,42 @@ export function ScoreProcedureList({
   }, [])
 
   const visibleRuns = React.useMemo(() => {
-    return sortProcedureRuns(runs, sortBy)
-  }, [runs, sortBy])
+    const filtered = includeArchived
+      ? runs
+      : runs.filter((run) => !isArchivedStatus(run.status))
+    return sortProcedureRuns(filtered, sortBy)
+  }, [runs, sortBy, includeArchived])
+
+  const handleArchiveProcedure = React.useCallback(async (run: OptimizerRunView) => {
+    if (!run.procedureId || isArchivedStatus(run.status)) return
+    setArchivingProcedureId(run.procedureId)
+    try {
+      const archived = await archiveProcedureRecord({
+        id: run.procedureId,
+        status: run.status ?? null,
+        metadataText: run.metadataText ?? null,
+        reason: 'archived_from_score_procedure_list',
+      })
+      setRuns((previous) =>
+        previous.map((item) =>
+          item.procedureId === archived.id
+            ? {
+                ...item,
+                status: archived.status,
+                metadataText: archived.metadataText,
+                updatedAt: archived.updatedAt ?? item.updatedAt,
+              }
+            : item
+        )
+      )
+      toast.success(`Archived procedure ${run.procedureId}`)
+    } catch (error) {
+      console.error('Failed to archive procedure:', error)
+      toast.error('Failed to archive procedure')
+    } finally {
+      setArchivingProcedureId((current) => (current === run.procedureId ? null : current))
+    }
+  }, [])
 
   const title = scope === 'score' ? 'Procedures' : 'Version Procedures'
   const description =
@@ -584,6 +622,23 @@ export function ScoreProcedureList({
               </option>
             ))}
           </select>
+
+          <label
+            className="ml-auto inline-flex items-center gap-2 text-sm text-muted-foreground"
+            htmlFor={`procedure-include-archived-${scope}`}
+          >
+            <input
+              id={`procedure-include-archived-${scope}`}
+              type="checkbox"
+              checked={includeArchived}
+              onChange={(event) => {
+                setIsApplyingControls(true)
+                setIncludeArchived(event.target.checked)
+                requestAnimationFrame(() => setIsApplyingControls(false))
+              }}
+            />
+            Include archived
+          </label>
         </div>
 
         {shouldShowListSkeleton ? (
@@ -685,6 +740,13 @@ export function ScoreProcedureList({
                             Find best evaluation…
                           </DropdownMenuItem>
                         )}
+                        <DropdownMenuItem
+                          disabled={isArchivedStatus(run.status) || archivingProcedureId === run.procedureId}
+                          onSelect={() => void handleArchiveProcedure(run)}
+                        >
+                          <Archive className="mr-2 h-3.5 w-3.5" />
+                          Archive procedure
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   }

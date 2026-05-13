@@ -1,5 +1,6 @@
 import React from 'react'
 import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom'
 import ProceduresDashboard from '@/components/procedures-dashboard'
 import { ProceduresDashboardSkeleton } from '@/components/loading-skeleton'
@@ -233,6 +234,72 @@ describe('Procedures dashboard loading UX', () => {
     })
 
     expect(screen.queryByTestId('procedures-dashboard-skeleton')).not.toBeInTheDocument()
+  })
+
+  it('hides archived procedures by default and shows them when Include archived is enabled', async () => {
+    mockGraphql.mockImplementation(({ query }: { query: string }) => {
+      const text = String(query)
+      if (text.includes('onCreateProcedure') || text.includes('onUpdateProcedure')) {
+        return createSubscriptionResult()
+      }
+      if (text.includes('listProcedureByAccountIdAndUpdatedAt')) {
+        return Promise.resolve({
+          data: {
+            listProcedureByAccountIdAndUpdatedAt: {
+              items: [
+                {
+                  id: 'proc-active',
+                  name: 'Procedure Active',
+                  status: 'RUNNING',
+                  featured: false,
+                  code: null,
+                  createdAt: '2026-04-20T00:00:00.000Z',
+                  updatedAt: '2026-04-20T00:00:00.000Z',
+                  accountId: 'account-1',
+                  scorecardId: null,
+                  scorecard: null,
+                  scoreId: null,
+                  score: null,
+                },
+                {
+                  id: 'proc-archived',
+                  name: 'Procedure Archived',
+                  status: 'ARCHIVED',
+                  featured: false,
+                  code: null,
+                  createdAt: '2026-04-19T00:00:00.000Z',
+                  updatedAt: '2026-04-19T00:00:00.000Z',
+                  accountId: 'account-1',
+                  scorecardId: null,
+                  scorecard: null,
+                  scoreId: null,
+                  score: null,
+                },
+              ],
+              nextToken: null,
+            },
+          },
+        })
+      }
+      if (text.includes('listTaskByAccountIdAndUpdatedAt')) {
+        return Promise.resolve({ data: { listTaskByAccountIdAndUpdatedAt: { items: [] } } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<ProceduresDashboard />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('procedure-card-proc-active')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('procedure-card-proc-archived')).not.toBeInTheDocument()
+
+    const includeArchived = screen.getByLabelText('Include archived')
+    await userEvent.click(includeArchived)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('procedure-card-proc-archived')).toBeInTheDocument()
+    })
   })
 
   it('shows empty state after initial load when no procedures exist', async () => {

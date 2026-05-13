@@ -59,7 +59,7 @@ describe('ScoreProcedureList', () => {
     jest.clearAllMocks()
     for (const key of Object.keys(subscriptionHandlers)) delete subscriptionHandlers[key]
 
-    mockGraphql.mockImplementation(({ query }: { query: string; variables?: Record<string, any> }) => {
+    mockGraphql.mockImplementation(({ query, variables }: { query: string; variables?: Record<string, any> }) => {
       if (query.includes('onCreateProcedure')) return subscriptionResult('createProcedure')
       if (query.includes('onUpdateProcedure')) return subscriptionResult('updateProcedure')
       if (query.includes('onDeleteProcedure')) return subscriptionResult('deleteProcedure')
@@ -68,6 +68,18 @@ describe('ScoreProcedureList', () => {
       if (query.includes('onDeleteEvaluation')) return subscriptionResult('deleteEvaluation')
       if (query.includes('onUpdateTaskStage')) return subscriptionResult('updateTaskStage')
       if (query.includes('onUpdateTask')) return subscriptionResult('updateTask')
+      if (query.includes('mutation UpdateProcedureForArchive')) {
+        return {
+          data: {
+            updateProcedure: {
+              id: variables?.input?.id,
+              status: variables?.input?.status,
+              metadata: variables?.input?.metadata,
+              updatedAt: '2026-04-27T00:00:00Z',
+            },
+          },
+        }
+      }
       if (query.includes('GetEvaluationForProcedurePerformance')) {
         return {
           data: {
@@ -193,6 +205,16 @@ describe('ScoreProcedureList', () => {
                 metadata: null,
                 updatedAt: '2026-04-24T00:00:00Z',
                 scoreVersionId: 'version-x',
+                accountId: 'account-1',
+              },
+              {
+                id: 'proc-archived',
+                name: 'Archived Run',
+                description: 'Archived procedure note',
+                status: 'ARCHIVED',
+                metadata: null,
+                updatedAt: '2026-04-23T00:00:00Z',
+                scoreVersionId: 'version-z',
                 accountId: 'account-1',
               },
             ],
@@ -432,5 +454,63 @@ describe('ScoreProcedureList', () => {
     await waitFor(() => {
       expect(screen.getByTestId('procedure-feedback-proc-1')).toHaveTextContent('eval-feedback-1:94:47/50')
     })
+  })
+
+  it('hides archived procedures by default and can include them', async () => {
+    const user = userEvent.setup()
+    render(
+      <ScoreProcedureList
+        scoreId="score-1"
+        scorecardId="scorecard-1"
+        scoreName="Medication Review: Prescriber"
+        scorecardName="SelectQuote HCS Medium-Risk"
+        scope="score"
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Optimizer Run 1')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('Archived Run')).not.toBeInTheDocument()
+    await user.click(screen.getByLabelText(/include archived/i))
+    await waitFor(() => {
+      expect(screen.getByText('Archived Run')).toBeInTheDocument()
+    })
+  })
+
+  it('archives a procedure from the action menu', async () => {
+    const user = userEvent.setup()
+    render(
+      <ScoreProcedureList
+        scoreId="score-1"
+        scorecardId="scorecard-1"
+        scoreName="Medication Review: Prescriber"
+        scorecardName="SelectQuote HCS Medium-Risk"
+        scope="score"
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Optimizer Run 1')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getAllByRole('button', { name: /more options/i })[0])
+    await user.click(screen.getByRole('menuitem', { name: /archive procedure/i }))
+    await waitFor(() => {
+      expect(screen.queryByText('Optimizer Run 1')).not.toBeInTheDocument()
+    })
+
+    expect(mockGraphql).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.stringContaining('mutation UpdateProcedureForArchive'),
+        variables: expect.objectContaining({
+          input: expect.objectContaining({
+            id: 'proc-1',
+            status: 'ARCHIVED',
+          }),
+        }),
+      })
+    )
   })
 })
