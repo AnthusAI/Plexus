@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "4659a408-c67f-4f0d-b209-b630a6e3d689",
+  "issue_id": "plx-edb76339-9f51-4a75-8747-25e482c7947c",
+  "event_type": "field_updated",
+  "occurred_at": "2026-05-12T23:48:42.969Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "## Problem\nIn , auto-follow/lock-to-bottom can pull the viewport back down after the user scrolls up in shorter conversations where the scrollable range is small.\n\n## Expected behavior\n- When user is effectively at the bottom, new messages auto-follow.\n- As soon as user scrolls up any amount, auto-follow disables and does not fight manual scrolling.\n- If user returns to bottom, auto-follow re-enables.\n\n## Done when\n- Scroll state is derived from a robust near-bottom check instead of a fixed-distance lock heuristic.\n- Incoming messages only trigger scroll-to-bottom when follow mode is enabled.\n- Manual upward scroll is respected immediately in both short and long conversations.",
+        "to": "## Problem\nIn `dashboard/components/ui/conversation-viewer.tsx`, auto-follow/lock-to-bottom can pull the viewport back down after the user scrolls up in shorter conversations where the scrollable range is small.\n\n## Expected behavior\n- When user is effectively at the bottom, new messages auto-follow.\n- As soon as user scrolls up any amount, auto-follow disables and does not fight manual scrolling.\n- If user returns to bottom, auto-follow re-enables.\n\n## Done when\n- Scroll state is derived from a robust near-bottom check instead of a fixed-distance lock heuristic.\n- Incoming messages only trigger scroll-to-bottom when follow mode is enabled.\n- Manual upward scroll is respected immediately in both short and long conversations."
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "id": "plx-edb76339-9f51-4a75-8747-25e482c7947c",
+  "title": "Conversation viewer auto-scroll fights user on small overflow",
+  "description": "## Problem\nIn `dashboard/components/ui/conversation-viewer.tsx`, auto-follow/lock-to-bottom can pull the viewport back down after the user scrolls up in shorter conversations where the scrollable range is small.\n\n## Expected behavior\n- When user is effectively at the bottom, new messages auto-follow.\n- As soon as user scrolls up any amount, auto-follow disables and does not fight manual scrolling.\n- If user returns to bottom, auto-follow re-enables.\n\n## Done when\n- Scroll state is derived from a robust near-bottom check instead of a fixed-distance lock heuristic.\n- Incoming messages only trigger scroll-to-bottom when follow mode is enabled.\n- Manual upward scroll is respected immediately in both short and long conversations.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7030f92-0508-4982-a1f3-3c67781a8a72",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "399c014b-836c-4f28-b9f8-6e872ce0a9f4",
+      "author": "derek.norrbom",
+      "text": "Starting implementation.\n\nPlan:\n1. Inspect current scroll-lock state transitions in conversation viewer.\n2. Replace distance-threshold lock behavior with deterministic near-bottom follow state.\n3. Validate behavior against small and large scroll ranges and summarize changes.",
+      "created_at": "2026-05-12T23:48:42.987815Z"
+    },
+    {
+      "id": "7137f668-283c-4c2a-8af4-c17f8c7ca765",
+      "author": "derek.norrbom",
+      "text": "Implemented fix in `dashboard/components/ui/conversation-viewer.tsx`.\n\nChanges made:\n- Removed permissive near-bottom heuristic (96px) and switched to strict bottom epsilon (2px).\n- Removed delayed settle-based auto-follow re-enable path that could re-lock after minor upward scrolls.\n- Updated scroll handler so any upward user scroll immediately disables auto-follow.\n- Auto-follow now re-enables only when the scroller is actually back at bottom.\n- Tightened Virtuoso `atBottomThreshold` from 50 to 2 for consistency.\n\nValidation:\n- Ran `cd dashboard && npm run typecheck` (pass).",
+      "created_at": "2026-05-12T23:53:13.654251Z"
+    },
+    {
+      "id": "cab554bb-8be6-4fb9-b7df-67ea9cc1e1b5",
+      "author": "derek.norrbom",
+      "text": "Refining scroll behavior based on QA feedback: very slow upward scroll can still be resisted.\n\nNext adjustment:\n- Remove minimum upward-delta requirement.\n- Disable auto-follow on any non-programmatic movement away from bottom (sub-pixel included).\n- Keep re-enable behavior only when truly back at bottom.",
+      "created_at": "2026-05-12T23:57:59.099566Z"
+    },
+    {
+      "id": "43daf003-c287-477f-8864-638fbc46e8d0",
+      "author": "derek.norrbom",
+      "text": "Applied follow-up fix for slow-scroll friction.\n\nCode change in `dashboard/components/ui/conversation-viewer.tsx`:\n- Added `SCROLL_DELTA_EPSILON_PX = 0.1` for sub-pixel movement handling.\n- Updated `handleScrollerScroll` to disable auto-follow on any non-programmatic movement away from bottom (`!isAtBottomNow`) or upward movement (`movedUp`).\n\nResult:\n- Very slow upward scrolling now unlocks immediately instead of requiring larger/faster input.\n\nValidation:\n- `cd dashboard && npm run typecheck` (pass).",
+      "created_at": "2026-05-13T00:01:39.182408Z"
+    },
+    {
+      "id": "7a212822-8f35-476c-a449-99ccca13028d",
+      "author": "derek.norrbom",
+      "text": "Completed conversation viewer auto-follow fix.\n\nDelivered:\n- Immediate unlock of auto-follow when user scrolls up or otherwise moves away from bottom.\n- Re-enable only when scroller is truly back at bottom.\n- Tightened bottom detection thresholds and removed settle-timer behavior that caused scroll fighting in short chats.\n\nValidation:\n- `cd dashboard && npm run typecheck` passed.\n- Manual UX verification confirms slow and fast upward scrolling no longer get pulled back to latest.",
+      "created_at": "2026-05-13T00:03:27.446923Z"
+    }
+  ],
+  "created_at": "2026-05-12T23:48:38.582549Z",
+  "updated_at": "2026-05-13T00:03:27.645100Z",
+  "closed_at": "2026-05-13T00:03:27.645100Z",
+  "custom": {}
+}
