@@ -242,6 +242,70 @@ def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> 
     ]
 
 
+def test_default_score_update_applies_actor_attribution(monkeypatch) -> None:
+    from plexus.cli.shared import client_utils, direct_identifier_resolution
+    from plexus.linting import schemas
+
+    mutation_inputs: list[dict[str, Any]] = []
+
+    class FakeClient:
+        context = SimpleNamespace(
+            actor_user_id="user-123",
+            actor_type="agent",
+            actor_key="optimizer-agent",
+            actor_source="agent",
+        )
+
+        def execute(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
+            if "createScoreVersion" in query:
+                mutation_inputs.append(variables["input"])
+                return {"createScoreVersion": {"id": "version-123", "createdAt": "now"}}
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        direct_identifier_resolution,
+        "direct_resolve_scorecard_identifier",
+        lambda client, identifier: "scorecard-123",
+    )
+    monkeypatch.setattr(
+        direct_identifier_resolution,
+        "direct_resolve_score_identifier",
+        lambda client, scorecard_id, identifier: "score-123",
+    )
+    monkeypatch.setattr(
+        schemas,
+        "create_score_linter",
+        lambda: SimpleNamespace(
+            lint=lambda code: SimpleNamespace(is_valid=True, messages=[])
+        ),
+    )
+
+    result = execute._default_score_update(
+        {
+            "scorecard_identifier": "SelectQuote HCS Medium-Risk",
+            "score_identifier": "Medication Review: Dosage",
+            "code": "name: Test\nkey: test\nclass: LangGraphScore\n",
+            "parent_version_id": "parent-123",
+            "version_note": "candidate",
+        }
+    )
+
+    assert result["success"] is True
+    assert result["version_id"] == "version-123"
+    assert mutation_inputs
+    created = mutation_inputs[0]
+    assert created["createdByUserId"] == "user-123"
+    assert isinstance(created["metadata"], str)
+    metadata = json.loads(created["metadata"])
+    assert metadata["attribution"] == {
+        "actorType": "agent",
+        "actorKey": "optimizer-agent",
+        "source": "agent",
+        "requestUserId": "user-123",
+    }
+
+
 def test_default_rubric_memory_recent_entries_runs_provider_awaitable(monkeypatch) -> None:
     class FakeCitation:
         def model_dump(self, mode: str = "json") -> dict:
