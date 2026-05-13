@@ -1121,7 +1121,7 @@ export default function ProcedureTask({
             onClick={() => onArchive(procedure.id)}
           >
             <Archive className="mr-2 h-4 w-4" />
-            Archive procedure
+            Archive
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

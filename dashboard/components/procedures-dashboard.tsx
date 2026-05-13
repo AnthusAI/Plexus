@@ -232,14 +232,14 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       lastLoadTimeRef.current = Date.now()
       // Phase A: fetch first procedure page and render immediately without task hydration
       const proceduresResult: any = await getAmplifyClient().graphql({
-        query: `
-          query ListProcedureByAccountIdAndUpdatedAt(
+          query: `
+          query ListProcedureByAccountIdAndCreatedAt(
             $accountId: String!
             $sortDirection: ModelSortDirection
             $limit: Int
             $nextToken: String
           ) {
-            listProcedureByAccountIdAndUpdatedAt(
+            listProcedureByAccountIdAndCreatedAt(
               accountId: $accountId
               sortDirection: $sortDirection
               limit: $limit
@@ -262,7 +262,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
       if (requestId !== loadRequestIdRef.current) return
 
-      const procedureResponse: any = proceduresResult.data?.listProcedureByAccountIdAndUpdatedAt
+      const procedureResponse: any = proceduresResult.data?.listProcedureByAccountIdAndCreatedAt
       const firstPageItems: Procedure[] = procedureResponse?.items || []
       const newNextToken: string | null = procedureResponse?.nextToken ?? null
       const firstPageWithoutTasks = sortProceduresByCreatedTime(
@@ -328,7 +328,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
         procedureTaskMapRef.current = procedureTaskMap
 
-        const proceduresWithTasks = proceduresResult.data?.listProcedureByAccountIdAndUpdatedAt?.items
+        const proceduresWithTasks = proceduresResult.data?.listProcedureByAccountIdAndCreatedAt?.items
           ? firstPageItems.map((procedure: Procedure) => ({
               ...procedure,
               task: procedureTaskMap.get(procedure.id) || null,
@@ -377,13 +377,13 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     try {
       const moreResult = await getAmplifyClient().graphql({
         query: `
-          query ListProcedureByAccountIdAndUpdatedAt(
+          query ListProcedureByAccountIdAndCreatedAt(
             $accountId: String!
             $sortDirection: ModelSortDirection
             $limit: Int
             $nextToken: String
           ) {
-            listProcedureByAccountIdAndUpdatedAt(
+            listProcedureByAccountIdAndCreatedAt(
               accountId: $accountId
               sortDirection: $sortDirection
               limit: $limit
@@ -403,7 +403,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           nextToken
         }
       })
-      const moreResponse = (moreResult as any).data?.listProcedureByAccountIdAndUpdatedAt
+      const moreResponse = (moreResult as any).data?.listProcedureByAccountIdAndCreatedAt
       const moreItems: Procedure[] = moreResponse?.items || []
       const newNextToken: string | null = moreResponse?.nextToken ?? null
 
