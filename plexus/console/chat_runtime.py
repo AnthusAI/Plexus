@@ -638,6 +638,37 @@ def claim_message(
     return isinstance(claimed, dict) and claimed.get("id") == message.id
 
 
+def record_audit_keys_on_message(
+    client: PlexusDashboardClient,
+    message_id: str,
+    *,
+    created_at: Optional[str],
+    s3_keys: List[str],
+    existing_metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Merge contextArtifacts S3 keys into the trigger ChatMessage metadata."""
+    mutation = """
+    mutation RecordAuditKeysOnChatMessage($input: UpdateChatMessageInput!) {
+      updateChatMessage(input: $input) {
+        id
+        metadata
+      }
+    }
+    """
+    metadata = dict(existing_metadata or {})
+    metadata["contextArtifacts"] = s3_keys
+    client.execute(
+        mutation,
+        {
+            "input": {
+                "id": message_id,
+                "createdAt": created_at,
+                "metadata": json.dumps(metadata),
+            }
+        },
+    )
+
+
 def mark_message_completed(
     client: PlexusDashboardClient,
     message_id: str,
