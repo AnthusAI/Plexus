@@ -65,6 +65,42 @@ _RCA_HEADING_RE = re.compile(
 )
 
 
+def _rca_llm_timeout_seconds() -> float:
+    value = os.getenv("PLEXUS_RCA_LLM_TIMEOUT_SECONDS", "").strip()
+    if not value:
+        return 60.0
+    try:
+        timeout = float(value)
+    except ValueError:
+        logging.warning(
+            "Invalid PLEXUS_RCA_LLM_TIMEOUT_SECONDS=%r; using default 60s",
+            value,
+        )
+        return 60.0
+    if timeout <= 0:
+        logging.warning(
+            "Invalid non-positive PLEXUS_RCA_LLM_TIMEOUT_SECONDS=%r; using default 60s",
+            value,
+        )
+        return 60.0
+    return timeout
+
+
+def _bedrock_runtime_client_for_rca():
+    import boto3 as _boto3
+    from botocore.config import Config as _BotocoreConfig
+
+    return _boto3.client(
+        "bedrock-runtime",
+        region_name="us-east-1",
+        config=_BotocoreConfig(
+            connect_timeout=10,
+            read_timeout=_rca_llm_timeout_seconds(),
+            retries={"max_attempts": 2, "mode": "standard"},
+        ),
+    )
+
+
 def _sanitize_rca_generated_prose(text: str, *, max_sentences: int = 3, max_chars: int = 900) -> str:
     """Keep RCA generated prose concise and remove headings supplied by the UI."""
     if not text:
@@ -4678,9 +4714,8 @@ class FeedbackEvaluation(Evaluation):
             def _bedrock_converse(system: str, messages: list, max_tokens: int = 1000) -> str:
                 """Run a Bedrock Claude conversation and return the assistant response."""
                 import json as _json
-                import boto3 as _boto3
                 try:
-                    brt = _boto3.client("bedrock-runtime", region_name="us-east-1")
+                    brt = _bedrock_runtime_client_for_rca()
                     body = _json.dumps({
                         "anthropic_version": "bedrock-2023-05-31",
                         "max_tokens": max_tokens,
@@ -5440,10 +5475,9 @@ class FeedbackEvaluation(Evaluation):
             rca_item_failures.extend(item_failure_diagnostics)
 
         def _bedrock_converse(system: str, prompt: str, max_tokens: int = 500) -> str:
-            import boto3 as _boto3
             import json as _json
 
-            brt = _boto3.client("bedrock-runtime", region_name="us-east-1")
+            brt = _bedrock_runtime_client_for_rca()
             body = _json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": max_tokens,
