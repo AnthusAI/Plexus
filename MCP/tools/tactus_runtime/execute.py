@@ -14,6 +14,7 @@ import threading
 import time
 import traceback
 import uuid
+from dataclasses import dataclass
 from typing import Annotated, Any, Callable, Optional
 
 from fastmcp import Context, FastMCP
@@ -346,13 +347,18 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("evaluation_info", "evaluation", "info"),
     ("evaluation_find_recent", "evaluation", "find_recent"),
     ("evaluation_compare", "evaluation", "compare"),
+    ("evaluation_archive", "evaluation", "archive"),
     ("evaluation_run", "evaluation", "run"),
     ("dataset_build_from_feedback_window", "dataset", "build_from_feedback_window"),
     ("dataset_check_associated", "dataset", "check_associated"),
     ("report_configurations_list", "report", "configurations_list"),
+    ("report_list", "report", "list"),
+    ("report_info", "report", "info"),
+    ("report_blocks", "report", "blocks"),
     ("report_run", "report", "run"),
     ("procedure_info", "procedure", "info"),
     ("procedure_list", "procedure", "list"),
+    ("procedure_archive", "procedure", "archive"),
     ("procedure_chat_sessions", "procedure", "chat_sessions"),
     ("procedure_chat_messages", "procedure", "chat_messages"),
     ("procedure_steering_messages", "procedure", "steering_messages"),
@@ -410,58 +416,90 @@ class RequiresHandleProtocol(RuntimeError):
         self.method = method
 
 
+class PlanningModeToolNotAllowed(PermissionError):
+    """Raised when planning mode blocks a significant mutation."""
+
+    def __init__(self, namespace: str, method: str) -> None:
+        super().__init__(
+            f"plexus.{namespace}.{method} is visible for planning, but cannot run "
+            "while Console is in planning mode because it can create or mutate "
+            "score versions, promote champions, or start/continue procedure runs. "
+            "Switch the chat to Execute mode before calling this method."
+        )
+        self.namespace = namespace
+        self.method = method
+
+
+@dataclass(frozen=True)
+class RuntimeMethodSpec:
+    handler: str
+    planning_allowed: bool
+
+
 MCP_TOOL_MAP: dict[tuple[str, str], str] = {}
+
+
+def _method_spec(handler: str, *, planning_allowed: bool) -> RuntimeMethodSpec:
+    return RuntimeMethodSpec(handler=handler, planning_allowed=planning_allowed)
 
 
 # Per-method handlers implemented directly on PlexusRuntimeModule (no MCP loopback).
 # Each (namespace, method) here MUST NOT also appear in MCP_TOOL_MAP — every
-# method has exactly one dispatcher.
+# method has exactly one dispatcher and one planning-mode policy.
+RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
+    ("scorecards", "list"): _method_spec("_call_scorecards", planning_allowed=True),
+    ("scorecards", "info"): _method_spec("_call_scorecards", planning_allowed=True),
+    ("scorecards", "search"): _method_spec("_call_scorecards", planning_allowed=True),
+    ("score", "info"): _method_spec("_call_score", planning_allowed=True),
+    ("score", "search"): _method_spec("_call_score", planning_allowed=True),
+    ("score", "evaluations"): _method_spec("_call_score", planning_allowed=True),
+    ("score", "predict"): _method_spec("_call_score", planning_allowed=True),
+    ("score", "contradictions"): _method_spec("_call_score", planning_allowed=True),
+    ("score", "pull"): _method_spec("_call_score", planning_allowed=True),
+    ("score", "update"): _method_spec("_call_score", planning_allowed=False),
+    ("score", "test"): _method_spec("_call_score", planning_allowed=True),
+    ("score", "set_champion"): _method_spec("_call_score", planning_allowed=False),
+    ("item", "info"): _method_spec("_call_item", planning_allowed=True),
+    ("item", "last"): _method_spec("_call_item", planning_allowed=True),
+    ("feedback", "find"): _method_spec("_call_feedback", planning_allowed=True),
+    ("feedback", "alignment"): _method_spec("_call_feedback", planning_allowed=True),
+    ("feedback", "latest_update"): _method_spec("_call_feedback", planning_allowed=True),
+    ("evaluation", "info"): _method_spec("_call_evaluation_read", planning_allowed=True),
+    ("evaluation", "find_recent"): _method_spec("_call_evaluation_read", planning_allowed=True),
+    ("evaluation", "compare"): _method_spec("_call_evaluation_read", planning_allowed=True),
+    ("evaluation", "archive"): _method_spec("_call_evaluation_write", planning_allowed=False),
+    ("evaluation", "run"): _method_spec("_call_evaluation_run", planning_allowed=True),
+    ("report", "run"): _method_spec("_call_report_run", planning_allowed=True),
+    ("report", "acceptance_rate"): _method_spec("_call_report_run", planning_allowed=True),
+    ("report", "score_champion_version_timeline"): _method_spec("_call_report_run", planning_allowed=True),
+    ("report", "configurations_list"): _method_spec("_call_report_read", planning_allowed=True),
+    ("report", "list"): _method_spec("_call_report_read", planning_allowed=True),
+    ("report", "info"): _method_spec("_call_report_read", planning_allowed=True),
+    ("report", "blocks"): _method_spec("_call_report_read", planning_allowed=True),
+    ("dataset", "build_from_feedback_window"): _method_spec("_call_dataset", planning_allowed=True),
+    ("dataset", "check_associated"): _method_spec("_call_dataset", planning_allowed=True),
+    ("procedure", "list"): _method_spec("_call_procedure_read", planning_allowed=True),
+    ("procedure", "info"): _method_spec("_call_procedure_read", planning_allowed=True),
+    ("procedure", "chat_sessions"): _method_spec("_call_procedure_read", planning_allowed=True),
+    ("procedure", "chat_messages"): _method_spec("_call_procedure_read", planning_allowed=True),
+    ("procedure", "steering_messages"): _method_spec("_call_procedure_read", planning_allowed=True),
+    ("procedure", "archive"): _method_spec("_call_procedure_write", planning_allowed=False),
+    ("procedure", "run"): _method_spec("_call_procedure_run", planning_allowed=False),
+    ("procedure", "optimize"): _method_spec("_call_procedure_run", planning_allowed=False),
+    ("procedure", "continue"): _method_spec("_call_procedure_run", planning_allowed=False),
+    ("procedure", "branch"): _method_spec("_call_procedure_run", planning_allowed=False),
+    ("handle", "peek"): _method_spec("_call_handle", planning_allowed=True),
+    ("handle", "status"): _method_spec("_call_handle", planning_allowed=True),
+    ("handle", "await"): _method_spec("_call_handle", planning_allowed=True),
+    ("handle", "cancel"): _method_spec("_call_handle", planning_allowed=False),
+    ("rubric_memory", "recent_entries"): _method_spec("_call_rubric_memory", planning_allowed=True),
+    ("rubric_memory", "evidence_pack"): _method_spec("_call_rubric_memory", planning_allowed=True),
+    ("rubric_memory", "sme_question_gate"): _method_spec("_call_rubric_memory", planning_allowed=True),
+}
+
+
 DIRECT_HANDLERS: dict[tuple[str, str], str] = {
-    ("scorecards", "list"): "_call_scorecards",
-    ("scorecards", "info"): "_call_scorecards",
-    ("scorecards", "search"): "_call_scorecards",
-    ("scorecards", "create"): "_call_scorecards",
-    ("score", "info"): "_call_score",
-    ("score", "create"): "_call_score",
-    ("score", "search"): "_call_score",
-    ("score", "evaluations"): "_call_score",
-    ("score", "predict"): "_call_score",
-    ("score", "contradictions"): "_call_score",
-    ("score", "pull"): "_call_score",
-    ("score", "update"): "_call_score",
-    ("score", "test"): "_call_score",
-    ("score", "set_champion"): "_call_score",
-    ("item", "info"): "_call_item",
-    ("item", "last"): "_call_item",
-    ("feedback", "find"): "_call_feedback",
-    ("feedback", "alignment"): "_call_feedback",
-    ("feedback", "latest_update"): "_call_feedback",
-    ("evaluation", "info"): "_call_evaluation_read",
-    ("evaluation", "find_recent"): "_call_evaluation_read",
-    ("evaluation", "compare"): "_call_evaluation_read",
-    ("evaluation", "run"): "_call_evaluation_run",
-    ("report", "run"): "_call_report_run",
-    ("report", "acceptance_rate"): "_call_report_run",
-    ("report", "score_champion_version_timeline"): "_call_report_run",
-    ("report", "configurations_list"): "_call_report_read",
-    ("dataset", "build_from_feedback_window"): "_call_dataset",
-    ("dataset", "check_associated"): "_call_dataset",
-    ("procedure", "list"): "_call_procedure_read",
-    ("procedure", "info"): "_call_procedure_read",
-    ("procedure", "chat_sessions"): "_call_procedure_read",
-    ("procedure", "chat_messages"): "_call_procedure_read",
-    ("procedure", "steering_messages"): "_call_procedure_read",
-    ("procedure", "run"): "_call_procedure_run",
-    ("procedure", "optimize"): "_call_procedure_run",
-    ("procedure", "continue"): "_call_procedure_run",
-    ("procedure", "branch"): "_call_procedure_run",
-    ("handle", "peek"): "_call_handle",
-    ("handle", "status"): "_call_handle",
-    ("handle", "await"): "_call_handle",
-    ("handle", "cancel"): "_call_handle",
-    ("rubric_memory", "recent_entries"): "_call_rubric_memory",
-    ("rubric_memory", "evidence_pack"): "_call_rubric_memory",
-    ("rubric_memory", "sme_question_gate"): "_call_rubric_memory",
+    key: spec.handler for key, spec in RUNTIME_METHOD_SPECS.items()
 }
 
 
@@ -1066,12 +1104,51 @@ def _make_procedure_service():
     return ProcedureService(client)
 
 
+def _metadata_object(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return {}
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            return {}
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
+
+
+def _build_archived_metadata(
+    existing_metadata: Any,
+    *,
+    previous_status: str | None,
+    reason: str | None = None,
+    archived_by: str | None = None,
+) -> tuple[dict[str, Any], str]:
+    archived_at = _iso(time.time())
+    metadata = _metadata_object(existing_metadata)
+    archive_entry = _metadata_object(metadata.get("archive"))
+    archive_entry["archived"] = True
+    archive_entry["archivedAt"] = archived_at
+    archive_entry["previousStatus"] = previous_status
+    if reason:
+        archive_entry["reason"] = reason
+    if archived_by:
+        archive_entry["archivedBy"] = archived_by
+    metadata["archive"] = archive_entry
+    return metadata, archived_at
+
+
 def _default_procedure_list(args: dict[str, Any]) -> dict[str, Any]:
     """Run plexus.procedure.list directly via ProcedureService."""
 
     account_identifier = (
         args.get("account_identifier")
         or args.get("account")
+        or args.get("account_id")
+        or args.get("accountId")
         or os.environ.get("PLEXUS_ACCOUNT_KEY")
     )
     if not account_identifier:
@@ -1146,6 +1223,81 @@ def _default_procedure_info(args: dict[str, Any]) -> dict[str, Any]:
         if yaml_config:
             result["yaml_config"] = yaml_config
     return result
+
+
+def _default_procedure_archive(args: dict[str, Any]) -> dict[str, Any]:
+    """Archive a procedure by setting status=ARCHIVED and recording archive metadata."""
+
+    from plexus.cli.shared.client_utils import create_client
+
+    procedure_id = args.get("procedure_id") or args.get("id")
+    if not procedure_id:
+        raise ValueError("plexus.procedure.archive requires id or procedure_id")
+
+    reason = args.get("reason")
+    archived_by = args.get("archived_by") or args.get("archivedBy")
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.procedure.archive: could not create dashboard client")
+
+    query = """
+    query GetProcedureForArchive($id: ID!) {
+      getProcedure(id: $id) {
+        id
+        status
+        metadata
+      }
+    }
+    """
+    fetched = client.execute(query, {"id": str(procedure_id)})
+    procedure = (fetched or {}).get("getProcedure")
+    if not procedure:
+        raise ValueError(f"Procedure not found: {procedure_id}")
+
+    previous_status = procedure.get("status")
+    merged_metadata, archived_at = _build_archived_metadata(
+        procedure.get("metadata"),
+        previous_status=previous_status,
+        reason=str(reason) if reason is not None else None,
+        archived_by=str(archived_by) if archived_by is not None else None,
+    )
+
+    mutation = """
+    mutation UpdateProcedureArchive($input: UpdateProcedureInput!) {
+      updateProcedure(input: $input) {
+        id
+        status
+        metadata
+        updatedAt
+      }
+    }
+    """
+    result = client.execute(
+        mutation,
+        {
+            "input": {
+                "id": str(procedure_id),
+                "status": "ARCHIVED",
+                "metadata": json.dumps(merged_metadata),
+            }
+        },
+    )
+    updated = (result or {}).get("updateProcedure")
+    if not updated:
+        raise RuntimeError(
+            f"Failed to archive procedure {procedure_id}: missing updateProcedure payload"
+        )
+
+    return {
+        "success": True,
+        "procedure_id": str(procedure_id),
+        "status": updated.get("status") or "ARCHIVED",
+        "previous_status": previous_status,
+        "archived_at": archived_at,
+        "metadata": merged_metadata,
+        "updated_at": updated.get("updatedAt"),
+    }
 
 
 def _default_procedure_chat_sessions(args: dict[str, Any]) -> dict[str, Any]:
@@ -1584,6 +1736,83 @@ def _default_evaluation_info(args: dict[str, Any]) -> dict[str, Any]:
         return Evaluation.get_latest_evaluation(account_key, evaluation_type)
 
     return Evaluation.get_evaluation_info(evaluation_id, include_score_results)
+
+
+def _default_evaluation_archive(args: dict[str, Any]) -> dict[str, Any]:
+    """Archive an evaluation by setting status=ARCHIVED and recording archive metadata."""
+
+    from plexus.cli.shared.client_utils import create_client
+
+    evaluation_id = args.get("evaluation_id") or args.get("id")
+    if not evaluation_id:
+        raise ValueError("plexus.evaluation.archive requires id or evaluation_id")
+
+    reason = args.get("reason")
+    archived_by = args.get("archived_by") or args.get("archivedBy")
+
+    client = create_client()
+    if not client:
+        raise RuntimeError(
+            "plexus.evaluation.archive: could not create dashboard client"
+        )
+
+    query = """
+    query GetEvaluationForArchive($id: ID!) {
+      getEvaluation(id: $id) {
+        id
+        status
+        metadata
+      }
+    }
+    """
+    fetched = client.execute(query, {"id": str(evaluation_id)})
+    evaluation = (fetched or {}).get("getEvaluation")
+    if not evaluation:
+        raise ValueError(f"Evaluation not found: {evaluation_id}")
+
+    previous_status = evaluation.get("status")
+    merged_metadata, archived_at = _build_archived_metadata(
+        evaluation.get("metadata"),
+        previous_status=previous_status,
+        reason=str(reason) if reason is not None else None,
+        archived_by=str(archived_by) if archived_by is not None else None,
+    )
+
+    mutation = """
+    mutation UpdateEvaluationArchive($input: UpdateEvaluationInput!) {
+      updateEvaluation(input: $input) {
+        id
+        status
+        metadata
+        updatedAt
+      }
+    }
+    """
+    result = client.execute(
+        mutation,
+        {
+            "input": {
+                "id": str(evaluation_id),
+                "status": "ARCHIVED",
+                "metadata": json.dumps(merged_metadata),
+            }
+        },
+    )
+    updated = (result or {}).get("updateEvaluation")
+    if not updated:
+        raise RuntimeError(
+            f"Failed to archive evaluation {evaluation_id}: missing updateEvaluation payload"
+        )
+
+    return {
+        "success": True,
+        "evaluation_id": str(evaluation_id),
+        "status": updated.get("status") or "ARCHIVED",
+        "previous_status": previous_status,
+        "archived_at": archived_at,
+        "metadata": merged_metadata,
+        "updated_at": updated.get("updatedAt"),
+    }
 
 
 def _default_score_info(args: dict[str, Any]) -> dict[str, Any]:
@@ -2903,6 +3132,153 @@ def _default_report_configurations_list(args: dict[str, Any]) -> Any:
     ]
 
 
+def _serialize_datetime(value: Any) -> Any:
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
+        return isoformat()
+    return value
+
+
+def _serialize_report_model(report: Any) -> dict[str, Any]:
+    return {
+        "id": getattr(report, "id", None),
+        "accountId": getattr(report, "accountId", None),
+        "name": getattr(report, "name", None),
+        "taskId": getattr(report, "taskId", None),
+        "reportConfigurationId": getattr(report, "reportConfigurationId", None),
+        "parameters": getattr(report, "parameters", None) or {},
+        "output": getattr(report, "output", None),
+        "createdAt": _serialize_datetime(getattr(report, "createdAt", None)),
+        "updatedAt": _serialize_datetime(getattr(report, "updatedAt", None)),
+        "createdByUserId": getattr(report, "createdByUserId", None),
+    }
+
+
+def _serialize_report_block_model(block: Any, *, include_output: bool) -> dict[str, Any]:
+    result = {
+        "id": getattr(block, "id", None),
+        "reportId": getattr(block, "reportId", None),
+        "position": getattr(block, "position", None),
+        "type": getattr(block, "type", None),
+        "name": getattr(block, "name", None),
+        "log": getattr(block, "log", None),
+        "attachedFiles": getattr(block, "attachedFiles", None),
+        "dataSetId": getattr(block, "dataSetId", None),
+        "createdAt": _serialize_datetime(getattr(block, "createdAt", None)),
+        "updatedAt": _serialize_datetime(getattr(block, "updatedAt", None)),
+    }
+    if include_output:
+        result["output"] = getattr(block, "output", None)
+    return result
+
+
+def _coerce_positive_int(value: Any, *, default: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(1, min(parsed, maximum))
+
+
+def _default_report_list(args: dict[str, Any]) -> dict[str, Any]:
+    """List persisted reports for the runtime account."""
+
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.dashboard.api.models.report import Report
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.report.list: could not create dashboard client")
+
+    account_id = _resolve_runtime_account_id(client, args, "plexus.report.list")
+    limit = _coerce_positive_int(args.get("limit"), default=20, maximum=100)
+    name_filter = str(args.get("name") or "").strip()
+    configuration_id = str(
+        args.get("configuration_id") or args.get("reportConfigurationId") or ""
+    ).strip()
+    fetch_limit = limit if not (name_filter or configuration_id) else max(limit, 100)
+    reports = Report.list_by_account_id(
+        account_id,
+        client,
+        limit=min(fetch_limit, 100),
+        max_items=fetch_limit,
+    )
+    items: list[dict[str, Any]] = []
+    for report in reports:
+        if name_filter and name_filter.lower() not in str(report.name or "").lower():
+            continue
+        if configuration_id and getattr(report, "reportConfigurationId", None) != configuration_id:
+            continue
+        items.append(_serialize_report_model(report))
+        if len(items) >= limit:
+            break
+    return {"account_id": account_id, "count": len(items), "items": items}
+
+
+def _default_report_info(args: dict[str, Any]) -> dict[str, Any]:
+    """Fetch one persisted report by id for the runtime account."""
+
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.dashboard.api.models.report import Report
+
+    report_id = str(args.get("id") or args.get("report_id") or "").strip()
+    if not report_id:
+        raise ValueError("plexus.report.info requires id or report_id")
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.report.info: could not create dashboard client")
+
+    account_id = _resolve_runtime_account_id(client, args, "plexus.report.info")
+    report = Report.get_by_id(report_id, client)
+    if report is None:
+        raise ValueError(f"Report not found: {report_id}")
+    if getattr(report, "accountId", None) != account_id:
+        raise PermissionError(
+            f"Report {report_id} does not belong to the current runtime account"
+        )
+    return _serialize_report_model(report)
+
+
+def _default_report_blocks(args: dict[str, Any]) -> dict[str, Any]:
+    """List persisted blocks for one report after account ownership validation."""
+
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.dashboard.api.models.report import Report
+    from plexus.dashboard.api.models.report_block import ReportBlock
+
+    report_id = str(args.get("report_id") or args.get("id") or "").strip()
+    if not report_id:
+        raise ValueError("plexus.report.blocks requires report_id or id")
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.report.blocks: could not create dashboard client")
+
+    account_id = _resolve_runtime_account_id(client, args, "plexus.report.blocks")
+    report = Report.get_by_id(report_id, client)
+    if report is None:
+        raise ValueError(f"Report not found: {report_id}")
+    if getattr(report, "accountId", None) != account_id:
+        raise PermissionError(
+            f"Report {report_id} does not belong to the current runtime account"
+        )
+
+    limit = _coerce_positive_int(args.get("limit"), default=100, maximum=500)
+    include_output = bool(args.get("include_output", True))
+    blocks = ReportBlock.list_by_report_id(
+        report_id,
+        client,
+        limit=min(limit, 100),
+        max_items=limit,
+    )
+    items = [
+        _serialize_report_block_model(block, include_output=include_output)
+        for block in blocks
+    ]
+    return {"report_id": report_id, "count": len(items), "blocks": items}
+
+
 def _default_evaluation_compare(args: dict[str, Any]) -> dict[str, Any]:
     """Run plexus.evaluation.compare directly via Evaluation.get_evaluation_info."""
 
@@ -4195,6 +4571,8 @@ _RUNTIME_API_ERROR_KEY = "__execute_tactus_runtime_error__"
 def _exception_error_code(exc: BaseException) -> str:
     if isinstance(exc, AccountContextRequired):
         return "account_context_required"
+    if isinstance(exc, PlanningModeToolNotAllowed):
+        return "tool_not_allowed_in_planning_mode"
     if isinstance(exc, BudgetExceeded):
         return "budget_exceeded"
     if isinstance(exc, ChildBudgetRequired):
@@ -4240,6 +4618,17 @@ def _context_account_id(context: dict[str, Any] | None) -> str | None:
         return None
     account_id = str(account_id).strip()
     return account_id or None
+
+
+def _normalize_tool_access_mode(value: Any) -> str:
+    mode = str(value or "execution").strip().lower()
+    if mode in {"plan", "planning"}:
+        return "planning"
+    if mode in {"execute", "execution", ""}:
+        return "execution"
+    raise ValueError(
+        "tool_access_mode must be 'planning' or 'execution'"
+    )
 
 
 def _merge_runtime_context_args(
@@ -4930,7 +5319,7 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
                     source="execute_tactus",
                 )
             if isinstance(payload.get("metadata"), (dict, list)):
-                payload["metadata"] = json.dumps(payload["metadata"])
+                payload["metadata"] = json.dumps(payload["metadata"], default=str)
             try:
                 resp = client.execute(version_mutation, {"input": payload})
                 new_version = (resp or {}).get("createScoreVersion") or {}
@@ -5553,12 +5942,15 @@ class PlexusRuntimeModule:
         evaluation_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         evaluation_compare: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         evaluation_find_recent: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        evaluation_archive: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         evaluation_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         report_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         report_configurations_list: Callable[[dict[str, Any]], Any] | None = None,
+        report_readers: dict[str, Callable[[dict[str, Any]], Any]] | None = None,
         dataset_handlers: dict[str, Callable[[dict[str, Any]], Any]] | None = None,
         procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         procedure_optimize: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        procedure_archive: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         stream_handler: _MCPStreamEmitter | None = None,
         runtime_context: dict[str, Any] | None = None,
         catch_runtime_errors: bool = False,
@@ -5568,6 +5960,9 @@ class PlexusRuntimeModule:
         self._docs_dir = docs_dir if docs_dir is not None else PLEXUS_DOCS_DIR
         self._budget = budget if budget is not None else BudgetGate()
         self._runtime_context = dict(runtime_context or {})
+        self._tool_access_mode = _normalize_tool_access_mode(
+            self._runtime_context.get("tool_access_mode")
+        )
         self._catch_runtime_errors = catch_runtime_errors
         self._handle_store = (
             handle_store if handle_store is not None else _default_handle_store()
@@ -5673,6 +6068,11 @@ class PlexusRuntimeModule:
             if evaluation_find_recent is not None
             else _default_evaluation_find_recent
         )
+        self._evaluation_archive = (
+            evaluation_archive
+            if evaluation_archive is not None
+            else _default_evaluation_archive
+        )
         self._evaluation_runner = (
             evaluation_runner
             if evaluation_runner is not None
@@ -5685,6 +6085,17 @@ class PlexusRuntimeModule:
             report_configurations_list
             if report_configurations_list is not None
             else _default_report_configurations_list
+        )
+        default_report_readers = {
+            "configurations_list": self._report_configurations_list,
+            "list": _default_report_list,
+            "info": _default_report_info,
+            "blocks": _default_report_blocks,
+        }
+        if report_readers:
+            default_report_readers.update(report_readers)
+        self._report_readers: dict[str, Callable[[dict[str, Any]], Any]] = (
+            default_report_readers
         )
         default_dataset_handlers: dict[str, Callable[[dict[str, Any]], Any]] = {
             "build_from_feedback_window": _default_dataset_build_from_feedback_window,
@@ -5702,6 +6113,11 @@ class PlexusRuntimeModule:
             procedure_optimize
             if procedure_optimize is not None
             else _default_procedure_optimize
+        )
+        self._procedure_archive = (
+            procedure_archive
+            if procedure_archive is not None
+            else _default_procedure_archive
         )
         self._procedure_continue = _default_procedure_continue
         self._procedure_branch = _default_procedure_branch
@@ -5751,7 +6167,16 @@ class PlexusRuntimeModule:
         if self._stream_handler is not None:
             self._stream_handler.api_call(api_call)
 
+    def _enforce_tool_access(self, namespace: str, method: str) -> None:
+        if self._tool_access_mode != "planning":
+            return
+        spec = RUNTIME_METHOD_SPECS.get((namespace, method))
+        if spec is not None and spec.planning_allowed:
+            return
+        raise PlanningModeToolNotAllowed(namespace, method)
+
     def _call(self, namespace: str, method: str, args: Any = None) -> Any:
+        self._enforce_tool_access(namespace, method)
         direct_handler = DIRECT_HANDLERS.get((namespace, method))
         if direct_handler is not None:
             return getattr(self, direct_handler)(namespace, method, args)
@@ -5831,7 +6256,7 @@ class PlexusRuntimeModule:
         self._budget.check_before("item", method)
         self._record_api_call("item", method)
         try:
-            parsed = _args(args)
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
             if method == "info":
                 return self._item_info(parsed)
             return self._item_last(parsed)
@@ -5848,7 +6273,23 @@ class PlexusRuntimeModule:
         self._budget.check_before("procedure", method)
         self._record_api_call("procedure", method)
         try:
-            return self._procedure_readers[method](_args(args))
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
+            return self._procedure_readers[method](parsed)
+        finally:
+            self._budget.record_after("procedure", method)
+
+    def _call_procedure_write(
+        self, namespace: str, method: str, args: Any = None
+    ) -> Any:
+        if (namespace, method) != ("procedure", "archive"):
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("procedure", method)
+        self._record_api_call("procedure", method)
+        try:
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
+            return self._procedure_archive(parsed)
         finally:
             self._budget.record_after("procedure", method)
 
@@ -5921,12 +6362,27 @@ class PlexusRuntimeModule:
         self._budget.check_before("evaluation", method)
         self._record_api_call("evaluation", method)
         try:
-            parsed = _args(args)
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
             if method == "info":
                 return self._evaluation_info(parsed)
             if method == "compare":
                 return self._evaluation_compare(parsed)
             return self._evaluation_find_recent(parsed)
+        finally:
+            self._budget.record_after("evaluation", method)
+
+    def _call_evaluation_write(
+        self, namespace: str, method: str, args: Any = None
+    ) -> Any:
+        if (namespace, method) != ("evaluation", "archive"):
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("evaluation", method)
+        self._record_api_call("evaluation", method)
+        try:
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
+            return self._evaluation_archive(parsed)
         finally:
             self._budget.record_after("evaluation", method)
 
@@ -5975,17 +6431,17 @@ class PlexusRuntimeModule:
     def _call_report_read(
         self, namespace: str, method: str, args: Any = None
     ) -> Any:
-        if (namespace, method) != ("report", "configurations_list"):
+        if namespace != "report" or method not in self._report_readers:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
-        self._budget.check_before("report", "configurations_list")
-        self._record_api_call("report", "configurations_list")
+        self._budget.check_before("report", method)
+        self._record_api_call("report", method)
         try:
             parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
-            return self._report_configurations_list(parsed)
+            return self._report_readers[method](parsed)
         finally:
-            self._budget.record_after("report", "configurations_list")
+            self._budget.record_after("report", method)
 
     @staticmethod
     def _parse_acceptance_rate_result(raw: Any, *, include_items: bool = False) -> dict:

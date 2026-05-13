@@ -1128,15 +1128,17 @@ You can also just ask me questions or tell me what you'd like to do in plain Eng
             }
             """
             
-            result = self.client.execute(mutation, {
-                'input': apply_actor_attribution({
+            version_input = apply_actor_attribution({
                     'scoreId': score_id,
                     'configuration': yaml_content,
                     'parentVersionId': score_data.get('championVersionId'),
                     'note': 'Updated via CLI push command',
                     'isFeatured': "true"
                 }, client_context=getattr(self.client, "context", None), source="agent")
-            })
+            if isinstance(version_input.get("metadata"), dict):
+                version_input["metadata"] = json.dumps(version_input["metadata"], default=str)
+
+            result = self.client.execute(mutation, {'input': version_input})
             
             if result.get('createScoreVersion'):
                 self.console.print(f"[green]Successfully created new version for score: {score_data['name']}[/green]")

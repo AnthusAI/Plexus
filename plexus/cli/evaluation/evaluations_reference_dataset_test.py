@@ -363,6 +363,7 @@ def test_apply_feedback_rca_outcome_to_parameters_sets_coverage_and_warnings():
 
     assert params["keep"] == "value"
     assert params["root_cause_required"] is True
+    assert params["has_usable_root_cause"] is True
     assert params["root_cause"] == {"topics": [{"label": "Topic A"}]}
     assert params["incorrect_items_total"] == 10
     assert params["incorrect_items_with_feedback_link"] == 8
@@ -388,6 +389,7 @@ def test_apply_feedback_rca_outcome_to_parameters_clears_warnings_when_empty():
 
     params = _apply_feedback_rca_outcome_to_parameters(existing, outcome)
     assert params["root_cause_required"] is False
+    assert params["has_usable_root_cause"] is False
     assert params["incorrect_items_total"] == 0
     assert params["rca_coverage_status"] == "none"
     assert "rca_warnings" not in params

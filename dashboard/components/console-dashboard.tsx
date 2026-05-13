@@ -306,7 +306,10 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
         </div>
       </div>
 
-      <div ref={workspaceRef} className="flex w-full max-w-full min-h-0 flex-1 overflow-hidden rounded-md bg-background">
+      <div
+        ref={workspaceRef}
+        className="-mx-3 -mb-3 flex w-auto min-h-0 flex-1 overflow-hidden rounded-b-lg bg-background"
+      >
         <div className="w-0 min-w-0 flex-1 overflow-hidden">
           <ConsoleChatElementsAdapter
             procedureId={selectedProcedureId}
