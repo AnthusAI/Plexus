@@ -50,13 +50,25 @@ describe('ScoreEvaluationList', () => {
     jest.clearAllMocks()
     for (const key of Object.keys(subscriptionHandlers)) delete subscriptionHandlers[key]
 
-    mockGraphql.mockImplementation(({ query }: { query: string; variables?: Record<string, any> }) => {
+    mockGraphql.mockImplementation(({ query, variables }: { query: string; variables?: Record<string, any> }) => {
       const text = String(query)
       if (text.includes('onCreateEvaluation')) return subscriptionResult('createEvaluation')
       if (text.includes('onUpdateEvaluation')) return subscriptionResult('updateEvaluation')
       if (text.includes('onDeleteEvaluation')) return subscriptionResult('deleteEvaluation')
       if (text.includes('onUpdateTaskStage')) return subscriptionResult('updateTaskStage')
       if (text.includes('onUpdateTask')) return subscriptionResult('updateTask')
+      if (text.includes('mutation UpdateEvaluationForArchive')) {
+        return Promise.resolve({
+          data: {
+            updateEvaluation: {
+              id: variables?.input?.id,
+              status: variables?.input?.status,
+              metadata: variables?.input?.metadata,
+              updatedAt: '2026-04-27T00:00:00Z',
+            },
+          },
+        })
+      }
 
       if (text.includes('listEvaluationByScoreVersionIdAndCreatedAt')) {
         return Promise.resolve({
@@ -130,6 +142,19 @@ describe('ScoreEvaluationList', () => {
               accuracy: 80.0,
               cost: null,
               metrics: JSON.stringify({ alignment: 0.70, recall: 0.93 }),
+            },
+            {
+              id: 'eval-archived',
+              type: 'feedback',
+              status: 'ARCHIVED',
+              updatedAt: '2026-04-22T00:00:00Z',
+              createdAt: '2026-04-22T00:00:00Z',
+              scoreId: 'score-1',
+              scoreVersionId: 'version-0',
+              parameters: JSON.stringify({ notes: 'Archived note' }),
+              accuracy: 55.0,
+              cost: 0.15,
+              metrics: JSON.stringify({ alignment: 0.31 }),
             },
           ],
         },
@@ -274,5 +299,47 @@ describe('ScoreEvaluationList', () => {
       expect(screen.getByTestId('status-eval-1')).toHaveTextContent('RUNNING')
     })
     expect(screen.getByTestId('stages-eval-1')).toHaveTextContent('Score items:RUNNING')
+  })
+
+  it('hides archived evaluations by default and can include them', async () => {
+    const user = userEvent.setup()
+    render(<ScoreEvaluationList scoreId="score-1" scope="score" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('eval-1')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('eval-archived')).not.toBeInTheDocument()
+    await user.click(screen.getByLabelText(/include archived/i))
+    await waitFor(() => {
+      expect(screen.getByText('eval-archived')).toBeInTheDocument()
+    })
+  })
+
+  it('archives an evaluation from the action menu', async () => {
+    const user = userEvent.setup()
+    render(<ScoreEvaluationList scoreId="score-1" scope="score" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('eval-1')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getAllByRole('button', { name: /more options/i })[0])
+    await user.click(screen.getByRole('menuitem', { name: /archive evaluation/i }))
+    await waitFor(() => {
+      expect(screen.queryByText('eval-1')).not.toBeInTheDocument()
+    })
+
+    expect(mockGraphql).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.stringContaining('mutation UpdateEvaluationForArchive'),
+        variables: expect.objectContaining({
+          input: expect.objectContaining({
+            id: 'eval-1',
+            status: 'ARCHIVED',
+          }),
+        }),
+      })
+    )
   })
 })

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
+from plexus.feedback_item_explanations import FeedbackItemExplanationTimeoutError
 from plexus.reports.blocks.feedback_contradictions import FeedbackContradictions
 from plexus.reports.blocks.guideline_vetting import GuidelineVettingService
 
@@ -178,6 +179,53 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
     assert parsed['mode'] == 'contradictions'
     assert parsed['contradictions_found'] == 1
     assert parsed['aligned_found'] == 0
+
+
+@pytest.mark.asyncio
+async def test_feedback_contradictions_propagates_feedback_explanation_timeout(monkeypatch):
+    block = FeedbackContradictions(
+        config={'scorecard': 'CMG EDU', 'score': 'Branding and Matching', 'mode': 'contradictions'},
+        params={},
+        api_client=_DummyClient(),
+    )
+    block.report_block_id = 'block-timeout'
+
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name',
+        lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
+    )
+    monkeypatch.setattr(
+        block,
+        '_resolve_score',
+        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
+    )
+    monkeypatch.setattr(block, '_fetch_guidelines', AsyncMock(return_value='Guideline text'))
+
+    async def _fetch_items(*_args, **_kwargs):
+        return [SimpleNamespace(id='fi-timeout', itemId='item-1', isInvalid=False)]
+
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.feedback_utils.fetch_feedback_items_for_score',
+        _fetch_items,
+    )
+    monkeypatch.setattr(block, '_fetch_score_results_by_item_ids', AsyncMock(return_value={}))
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.hydrate_feedback_item_explanations',
+        AsyncMock(
+            side_effect=FeedbackItemExplanationTimeoutError(
+                provider='openai',
+                model='gpt-5.4-mini',
+                attempt_count=5,
+                elapsed_seconds=86400.0,
+                last_error_type='TimeoutError',
+                last_error_message='provider timeout',
+                feedback_item_id='fi-timeout',
+            )
+        ),
+    )
+
+    with pytest.raises(FeedbackItemExplanationTimeoutError):
+        await block.generate()
 
 
 @pytest.mark.asyncio

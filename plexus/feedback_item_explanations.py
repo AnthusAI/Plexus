@@ -6,7 +6,10 @@ import asyncio
 import json
 import logging
 import os
+import random
 import re
+import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,6 +22,191 @@ EXPLANATION_PROMPT_VERSION = "v1"
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 DEFAULT_BEDROCK_MODEL = CLAUDE_HAIKU_45_MODEL_ID
 DEFAULT_HEURISTIC_MODEL = "feedback-item-explainer-v1"
+DEFAULT_EXPLANATION_TOTAL_TIMEOUT_SECONDS = 24 * 60 * 60
+DEFAULT_EXPLANATION_ATTEMPT_TIMEOUT_SECONDS = 300.0
+DEFAULT_EXPLANATION_RETRY_INITIAL_BACKOFF_SECONDS = 2.0
+DEFAULT_EXPLANATION_RETRY_MAX_BACKOFF_SECONDS = 60.0
+_RETRYABLE_HTTP_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
+_NON_RETRYABLE_HTTP_STATUS_CODES = {400, 401, 403, 404, 422}
+_RETRYABLE_ERROR_CODE_TOKENS = {
+    "throttling",
+    "toomanyrequests",
+    "ratelimit",
+    "requesttimeout",
+    "timeout",
+    "serviceunavailable",
+    "internalserver",
+    "temporarilyunavailable",
+    "modeltimeout",
+    "modelnotready",
+}
+_NON_RETRYABLE_ERROR_CODE_TOKENS = {
+    "accessdenied",
+    "authentication",
+    "unauthorized",
+    "forbidden",
+    "invalidapi",
+    "invalidrequest",
+    "validation",
+    "modelnotfound",
+}
+_RETRYABLE_EXCEPTION_NAME_TOKENS = (
+    "timeout",
+    "connection",
+    "connect",
+    "temporar",
+    "serviceunavailable",
+    "ratelimit",
+    "throttl",
+)
+_NON_RETRYABLE_MESSAGE_TOKENS = (
+    "invalid api key",
+    "incorrect api key",
+    "authentication",
+    "unauthorized",
+    "forbidden",
+    "access denied",
+    "model not found",
+    "unknown model",
+    "invalid model",
+)
+_RETRYABLE_PARSE_MESSAGE_TOKENS = (
+    "json",
+    "parse",
+    "decode",
+    "schema",
+    "missing explanation",
+    "must be a json object",
+    "no usable response",
+    "empty response",
+)
+
+
+@dataclass
+class FeedbackItemExplanationTimeoutError(RuntimeError):
+    provider: str
+    model: str
+    attempt_count: int
+    elapsed_seconds: float
+    last_error_type: str
+    last_error_message: str
+    feedback_item_id: Optional[str] = None
+
+    @property
+    def diagnostics(self) -> Dict[str, Any]:
+        return {
+            "provider": self.provider,
+            "model": self.model,
+            "attempt_count": self.attempt_count,
+            "elapsed_seconds": self.elapsed_seconds,
+            "last_error_type": self.last_error_type,
+            "last_error_message": self.last_error_message,
+            "feedback_item_id": self.feedback_item_id,
+        }
+
+    def __str__(self) -> str:
+        details = (
+            f"provider={self.provider} model={self.model} attempts={self.attempt_count} "
+            f"elapsed_seconds={self.elapsed_seconds:.3f} last_error_type={self.last_error_type}"
+        )
+        if self.feedback_item_id:
+            details += f" feedback_item_id={self.feedback_item_id}"
+        return f"Feedback explanation generation timed out after retries ({details})."
+
+
+def _load_float_env(name: str, default: float, *, minimum: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning("Invalid %s=%r; using default %s.", name, raw, default)
+        return default
+    if value < minimum:
+        logger.warning("%s=%s is below minimum %s; using default %s.", name, value, minimum, default)
+        return default
+    return value
+
+
+def _get_status_code(exc: BaseException) -> Optional[int]:
+    status_code = getattr(exc, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+
+    response = getattr(exc, "response", None)
+    if response is not None:
+        response_status = getattr(response, "status_code", None)
+        if isinstance(response_status, int):
+            return response_status
+        if isinstance(response, dict):
+            metadata = response.get("ResponseMetadata", {}) or {}
+            metadata_status = metadata.get("HTTPStatusCode")
+            if isinstance(metadata_status, int):
+                return metadata_status
+    return None
+
+
+def _extract_error_code(exc: BaseException) -> str:
+    response = getattr(exc, "response", None)
+    if isinstance(response, dict):
+        error = response.get("Error", {}) or {}
+        code = error.get("Code")
+        if code:
+            return str(code).strip()
+    code_attr = getattr(exc, "code", None)
+    if code_attr:
+        return str(code_attr).strip()
+    return ""
+
+
+def _is_retryable_parse_error(exc: BaseException) -> bool:
+    if isinstance(exc, json.JSONDecodeError):
+        return True
+    if not isinstance(exc, ValueError):
+        return False
+    message = str(exc).lower()
+    return any(token in message for token in _RETRYABLE_PARSE_MESSAGE_TOKENS)
+
+
+def _is_non_retryable_message(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    if not message:
+        return False
+    return any(token in message for token in _NON_RETRYABLE_MESSAGE_TOKENS)
+
+
+def _is_retryable_generation_error(exc: BaseException) -> bool:
+    if isinstance(exc, asyncio.TimeoutError):
+        return True
+    if isinstance(exc, TimeoutError):
+        return True
+    if isinstance(exc, ConnectionError):
+        return True
+    if _is_retryable_parse_error(exc):
+        return True
+
+    status_code = _get_status_code(exc)
+    if status_code in _RETRYABLE_HTTP_STATUS_CODES:
+        return True
+    if status_code in _NON_RETRYABLE_HTTP_STATUS_CODES:
+        return False
+
+    error_code = _extract_error_code(exc).replace(" ", "").lower()
+    if error_code:
+        if any(token in error_code for token in _NON_RETRYABLE_ERROR_CODE_TOKENS):
+            return False
+        if any(token in error_code for token in _RETRYABLE_ERROR_CODE_TOKENS):
+            return True
+
+    if _is_non_retryable_message(exc):
+        return False
+
+    type_name = type(exc).__name__.lower()
+    if any(token in type_name for token in _RETRYABLE_EXCEPTION_NAME_TOKENS):
+        return True
+
+    return False
 
 
 def _coerce_metadata_dict(raw_metadata: Any) -> Dict[str, Any]:
@@ -118,7 +306,7 @@ def _build_heuristic_explanation(context: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _resolve_provider_and_model(provider: Optional[str], model: Optional[str]) -> Tuple[str, str, bool]:
+def _resolve_provider_and_model(provider: Optional[str], model: Optional[str]) -> Tuple[str, str]:
     requested = (provider or "auto").strip().lower()
     if requested not in {"auto", "openai", "bedrock", "heuristic", "local"}:
         raise ValueError(
@@ -127,19 +315,23 @@ def _resolve_provider_and_model(provider: Optional[str], model: Optional[str]) -
 
     if requested == "auto":
         if os.getenv("OPENAI_API_KEY"):
-            return "openai", model or DEFAULT_OPENAI_MODEL, True
+            return "openai", model or DEFAULT_OPENAI_MODEL
         if os.getenv("AWS_ACCESS_KEY_ID") or os.getenv("AWS_PROFILE") or os.getenv("AWS_WEB_IDENTITY_TOKEN_FILE"):
-            return "bedrock", model or DEFAULT_BEDROCK_MODEL, True
-        return "heuristic", model or DEFAULT_HEURISTIC_MODEL, True
+            return "bedrock", model or DEFAULT_BEDROCK_MODEL
+        return "heuristic", model or DEFAULT_HEURISTIC_MODEL
 
     if requested in {"heuristic", "local"}:
-        return "heuristic", model or DEFAULT_HEURISTIC_MODEL, False
+        return "heuristic", model or DEFAULT_HEURISTIC_MODEL
     if requested == "openai":
-        return "openai", model or DEFAULT_OPENAI_MODEL, False
-    return "bedrock", model or DEFAULT_BEDROCK_MODEL, False
+        return "openai", model or DEFAULT_OPENAI_MODEL
+    return "bedrock", model or DEFAULT_BEDROCK_MODEL
 
 
-def _invoke_openai_explanation_model(prompt: str, model: str) -> Dict[str, Any]:
+def _invoke_openai_explanation_model(
+    prompt: str,
+    model: str,
+    timeout_seconds: Optional[float] = None,
+) -> Dict[str, Any]:
     from openai import OpenAI
 
     api_key = os.getenv("OPENAI_API_KEY")
@@ -152,14 +344,28 @@ def _invoke_openai_explanation_model(prompt: str, model: str) -> Dict[str, Any]:
         reasoning={"effort": "low"},
         input=[{"role": "user", "content": prompt}],
         max_output_tokens=900,
+        timeout=timeout_seconds,
     )
     return _parse_json_object(response.output_text)
 
 
-def _invoke_bedrock_explanation_model(prompt: str, model: str) -> Dict[str, Any]:
+def _invoke_bedrock_explanation_model(
+    prompt: str,
+    model: str,
+    timeout_seconds: Optional[float] = None,
+) -> Dict[str, Any]:
     import boto3
+    from botocore.config import Config as BotoConfig
 
-    bedrock = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION") or "us-east-1")
+    client_kwargs: Dict[str, Any] = {"region_name": os.getenv("AWS_REGION") or "us-east-1"}
+    if timeout_seconds is not None:
+        bounded_timeout = max(1.0, float(timeout_seconds))
+        client_kwargs["config"] = BotoConfig(
+            connect_timeout=min(10.0, bounded_timeout),
+            read_timeout=bounded_timeout,
+        )
+
+    bedrock = boto3.client("bedrock-runtime", **client_kwargs)
     payload = {
         "anthropic_version": "bedrock-2023-05-31",
         "messages": [{"role": "user", "content": prompt}],
@@ -211,6 +417,161 @@ def _store_cache_entry(metadata: Dict[str, Any], entry: Dict[str, Any]) -> Dict[
     return merged
 
 
+def _build_feedback_explanation_timeout_error(
+    *,
+    provider: str,
+    model: str,
+    attempt_count: int,
+    started_at: float,
+    last_error: BaseException,
+    feedback_item_id: Optional[str],
+) -> FeedbackItemExplanationTimeoutError:
+    elapsed = max(0.0, time.monotonic() - started_at)
+    return FeedbackItemExplanationTimeoutError(
+        provider=provider,
+        model=model,
+        attempt_count=attempt_count,
+        elapsed_seconds=elapsed,
+        last_error_type=type(last_error).__name__,
+        last_error_message=str(last_error),
+        feedback_item_id=feedback_item_id,
+    )
+
+
+async def _invoke_model_explanation_with_retry(
+    *,
+    provider: str,
+    model: str,
+    prompt: str,
+    feedback_item_id: Optional[str],
+) -> Dict[str, Any]:
+    total_timeout_seconds = _load_float_env(
+        "PLEXUS_FEEDBACK_EXPLANATION_TOTAL_TIMEOUT_SECONDS",
+        float(DEFAULT_EXPLANATION_TOTAL_TIMEOUT_SECONDS),
+        minimum=1e-3,
+    )
+    attempt_timeout_seconds = _load_float_env(
+        "PLEXUS_FEEDBACK_EXPLANATION_ATTEMPT_TIMEOUT_SECONDS",
+        DEFAULT_EXPLANATION_ATTEMPT_TIMEOUT_SECONDS,
+        minimum=1e-3,
+    )
+    initial_backoff_seconds = _load_float_env(
+        "PLEXUS_FEEDBACK_EXPLANATION_RETRY_INITIAL_BACKOFF_SECONDS",
+        DEFAULT_EXPLANATION_RETRY_INITIAL_BACKOFF_SECONDS,
+        minimum=0.0,
+    )
+    max_backoff_seconds = _load_float_env(
+        "PLEXUS_FEEDBACK_EXPLANATION_RETRY_MAX_BACKOFF_SECONDS",
+        DEFAULT_EXPLANATION_RETRY_MAX_BACKOFF_SECONDS,
+        minimum=0.0,
+    )
+    if max_backoff_seconds < initial_backoff_seconds:
+        max_backoff_seconds = initial_backoff_seconds
+
+    started_at = time.monotonic()
+    deadline = started_at + total_timeout_seconds
+    attempt_count = 0
+    sleep_seconds = initial_backoff_seconds
+    last_error: Optional[BaseException] = None
+
+    while True:
+        now = time.monotonic()
+        remaining_budget = deadline - now
+        if remaining_budget <= 0 and last_error is not None:
+            raise _build_feedback_explanation_timeout_error(
+                provider=provider,
+                model=model,
+                attempt_count=attempt_count,
+                started_at=started_at,
+                last_error=last_error,
+                feedback_item_id=feedback_item_id,
+            ) from last_error
+        if remaining_budget <= 0:
+            raise FeedbackItemExplanationTimeoutError(
+                provider=provider,
+                model=model,
+                attempt_count=attempt_count,
+                elapsed_seconds=max(0.0, time.monotonic() - started_at),
+                last_error_type="TimeoutError",
+                last_error_message="Deadline exceeded before any provider attempts completed.",
+                feedback_item_id=feedback_item_id,
+            )
+
+        attempt_count += 1
+        per_attempt_timeout = min(attempt_timeout_seconds, max(1e-3, remaining_budget))
+        try:
+            if provider == "openai":
+                payload = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        _invoke_openai_explanation_model,
+                        prompt,
+                        model,
+                        per_attempt_timeout,
+                    ),
+                    timeout=per_attempt_timeout + 1.0,
+                )
+            else:
+                payload = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        _invoke_bedrock_explanation_model,
+                        prompt,
+                        model,
+                        per_attempt_timeout,
+                    ),
+                    timeout=per_attempt_timeout + 1.0,
+                )
+            explanation = str(payload.get("explanation") or "").strip()
+            if not explanation:
+                raise ValueError("Model response missing explanation text")
+            return payload
+        except Exception as exc:
+            last_error = exc
+            retryable = _is_retryable_generation_error(exc)
+            if not retryable:
+                logger.error(
+                    "Feedback explanation generation failed with a non-retryable error for "
+                    "feedback_item_id=%s provider=%s model=%s attempt=%s: %s: %s",
+                    feedback_item_id,
+                    provider,
+                    model,
+                    attempt_count,
+                    type(exc).__name__,
+                    exc,
+                )
+                raise
+
+            remaining_budget = deadline - time.monotonic()
+            if remaining_budget <= 0:
+                raise _build_feedback_explanation_timeout_error(
+                    provider=provider,
+                    model=model,
+                    attempt_count=attempt_count,
+                    started_at=started_at,
+                    last_error=exc,
+                    feedback_item_id=feedback_item_id,
+                ) from exc
+
+            jitter = 0.0
+            if sleep_seconds > 0:
+                jitter = random.uniform(0.0, min(1.0, sleep_seconds * 0.2))
+            wait_seconds = min(remaining_budget, sleep_seconds + jitter)
+            logger.warning(
+                "Feedback explanation generation retryable failure for feedback_item_id=%s provider=%s model=%s "
+                "(attempt %s, remaining %.1fs): %s: %s. Retrying in %.2fs.",
+                feedback_item_id,
+                provider,
+                model,
+                attempt_count,
+                max(0.0, remaining_budget),
+                type(exc).__name__,
+                exc,
+                max(0.0, wait_seconds),
+            )
+            if wait_seconds > 0:
+                await asyncio.sleep(wait_seconds)
+            sleep_seconds = min(max_backoff_seconds, max(initial_backoff_seconds, sleep_seconds * 2))
+
+
 async def get_or_generate_feedback_item_explanation(
     *,
     feedback_item: Any,
@@ -230,7 +591,7 @@ async def get_or_generate_feedback_item_explanation(
     force_refresh: bool = False,
 ) -> Dict[str, Any]:
     """Get cached feedback-item explanation or generate and persist it."""
-    resolved_provider, resolved_model, provider_was_auto = _resolve_provider_and_model(provider, model)
+    resolved_provider, resolved_model = _resolve_provider_and_model(provider, model)
 
     metadata = _coerce_metadata_dict(getattr(feedback_item, "metadata", None))
     if not force_refresh:
@@ -273,43 +634,16 @@ async def get_or_generate_feedback_item_explanation(
         generation_mode = "heuristic"
     else:
         prompt = _build_feedback_item_explanation_prompt(context)
-        try:
-            if resolved_provider == "openai":
-                generated_payload = await asyncio.to_thread(
-                    _invoke_openai_explanation_model,
-                    prompt,
-                    resolved_model,
-                )
-            else:
-                generated_payload = await asyncio.to_thread(
-                    _invoke_bedrock_explanation_model,
-                    prompt,
-                    resolved_model,
-                )
-        except Exception as exc:
-            if not provider_was_auto:
-                raise
-            logger.warning(
-                "Feedback explanation model call failed for feedback_item_id=%s (%s:%s): %s. "
-                "Using heuristic generation for this item.",
-                getattr(feedback_item, "id", "unknown"),
-                resolved_provider,
-                resolved_model,
-                exc,
-            )
-            generated_payload = _build_heuristic_explanation(context)
-            provider_used = "heuristic"
-            model_used = DEFAULT_HEURISTIC_MODEL
-            generation_mode = "heuristic"
+        generated_payload = await _invoke_model_explanation_with_retry(
+            provider=resolved_provider,
+            model=resolved_model,
+            prompt=prompt,
+            feedback_item_id=getattr(feedback_item, "id", None),
+        )
 
     explanation = str(generated_payload.get("explanation") or "").strip()
     if not explanation:
-        generated_payload = _build_heuristic_explanation(context)
-        explanation = generated_payload["explanation"]
-        if provider_used != "heuristic":
-            generation_mode = "heuristic"
-            provider_used = "heuristic"
-            model_used = DEFAULT_HEURISTIC_MODEL
+        raise ValueError("Generated feedback explanation payload is missing explanation text")
 
     ground_truth_value = (
         str(generated_payload.get("ground_truth_value") or "").strip()

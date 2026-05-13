@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { generateClient } from 'aws-amplify/api'
-import { Copy, Link as LinkIcon, MoreHorizontal } from 'lucide-react'
+import { Archive, Copy, Link as LinkIcon, MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -10,11 +10,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import EvaluationTask, { type EvaluationTaskData } from '@/components/EvaluationTask'
 import { cn } from '@/lib/utils'
 import {
+  ARCHIVED_STATUS,
+  archiveEvaluationRecord,
   copyText,
   EVALUATION_CREATE_SUBSCRIPTION_FOR_CARDS,
   EVALUATION_DELETE_SUBSCRIPTION_FOR_CARDS,
   EVALUATION_UPDATE_SUBSCRIPTION_FOR_CARDS,
   evaluationToScoreEvaluationView,
+  isArchivedStatus,
   loadScoreEvaluations,
   loadScoreVersionEvaluations,
   mergeTaskIntoEvaluation,
@@ -210,6 +213,8 @@ export function ScoreEvaluationList({
   const [sortBy, setSortBy] = React.useState<EvaluationSort>('updated')
   const [statusFilter, setStatusFilter] = React.useState('all')
   const [typeFilter, setTypeFilter] = React.useState('all')
+  const [includeArchived, setIncludeArchived] = React.useState(false)
+  const [archivingEvaluationId, setArchivingEvaluationId] = React.useState<string | null>(null)
   const controlLoadingTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   React.useEffect(() => {
@@ -391,21 +396,63 @@ export function ScoreEvaluationList({
 
   const visibleEvaluations = React.useMemo(() => {
     const filtered = evaluations.filter((evaluation) => {
+      if (!includeArchived && isArchivedStatus(evaluation.status)) return false
       if (statusFilter !== 'all' && (evaluation.status ?? 'unknown') !== statusFilter) return false
       if (typeFilter !== 'all' && (evaluation.type ?? 'unknown') !== typeFilter) return false
       return true
     })
 
     return sortEvaluations(filtered, sortBy)
-  }, [evaluations, sortBy, statusFilter, typeFilter])
+  }, [evaluations, sortBy, statusFilter, typeFilter, includeArchived])
 
-  const statuses = React.useMemo(
-    () => ['all', ...new Set(evaluations.map((evaluation) => evaluation.status ?? 'unknown'))],
-    [evaluations]
-  )
+  const statuses = React.useMemo(() => {
+    const values = new Set(evaluations.map((evaluation) => evaluation.status ?? 'unknown'))
+    if (!includeArchived) values.delete(ARCHIVED_STATUS)
+    return ['all', ...values]
+  }, [evaluations, includeArchived])
   const types = React.useMemo(
     () => ['all', ...new Set(evaluations.map((evaluation) => evaluation.type ?? 'unknown'))],
     [evaluations]
+  )
+
+  React.useEffect(() => {
+    if (!includeArchived && statusFilter === ARCHIVED_STATUS) {
+      setStatusFilter('all')
+    }
+  }, [includeArchived, statusFilter])
+
+  const handleArchiveEvaluation = React.useCallback(
+    async (evaluation: ScoreEvaluationView) => {
+      if (!evaluation.id || isArchivedStatus(evaluation.status)) return
+      setArchivingEvaluationId(evaluation.id)
+      try {
+        const archived = await archiveEvaluationRecord({
+          id: evaluation.id,
+          status: evaluation.status ?? null,
+          metadataText: evaluation.metadataText ?? null,
+          reason: 'archived_from_score_evaluation_list',
+        })
+        setEvaluations((previous) =>
+          previous.map((item) =>
+            item.id === archived.id
+              ? {
+                  ...item,
+                  status: archived.status,
+                  metadataText: archived.metadataText,
+                  updatedAt: archived.updatedAt ?? item.updatedAt,
+                }
+              : item
+          )
+        )
+        toast.success(`Archived evaluation ${evaluation.id}`)
+      } catch (error) {
+        console.error('Failed to archive evaluation:', error)
+        toast.error('Failed to archive evaluation')
+      } finally {
+        setArchivingEvaluationId((current) => (current === evaluation.id ? null : current))
+      }
+    },
+    []
   )
 
   const title = scope === 'score' ? 'Evaluations' : 'Version Evaluations'
@@ -488,6 +535,19 @@ export function ScoreEvaluationList({
               </option>
             ))}
           </select>
+
+          <label
+            className="ml-auto inline-flex items-center gap-2 text-sm text-muted-foreground"
+            htmlFor={`evaluation-include-archived-${scope}`}
+          >
+            <input
+              id={`evaluation-include-archived-${scope}`}
+              type="checkbox"
+              checked={includeArchived}
+              onChange={(event) => applyControlChange(() => setIncludeArchived(event.target.checked))}
+            />
+            Include archived
+          </label>
         </div>
 
         {shouldShowListSkeleton ? (
@@ -555,6 +615,13 @@ export function ScoreEvaluationList({
                       >
                         <Copy className="mr-2 h-3.5 w-3.5" />
                         Copy evaluation ID
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={isArchivedStatus(evaluation.status) || archivingEvaluationId === evaluation.id}
+                        onSelect={() => void handleArchiveEvaluation(evaluation)}
+                      >
+                        <Archive className="mr-2 h-3.5 w-3.5" />
+                        Archive evaluation
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
