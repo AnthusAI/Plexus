@@ -1016,7 +1016,7 @@ def optimize(scorecard: str, score: str, output: Optional[str], model: str, debu
 
 score.add_command(optimize)
 
-@score.command()
+@scores.command()
 @click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
 @click.option('--score', required=False, help='Score to pull (accepts ID, name, key, or external ID). If not specified, pulls all scores in the scorecard.')
 @click.option('--use-cache', is_flag=True, help='Use cached file if available (default: always fetch fresh from API)')

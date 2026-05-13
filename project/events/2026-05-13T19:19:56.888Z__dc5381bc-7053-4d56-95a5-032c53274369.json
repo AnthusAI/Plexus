@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dc5381bc-7053-4d56-95a5-032c53274369",
+  "issue_id": "plx-83e2e59c-1c49-42d7-8b7a-78c14e8b7556",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-13T19:19:56.888Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "## Problem\n`plexus score pull` is not registered on the correct Click group in `plexus/cli/score/scores.py`.\n\nThe decorator is currently:\n- `@score.command()`\n\nbut the module registers commands on the `scores` group (e.g., `@scores.command()`). This prevents expected pull command behavior/discovery.\n\n## Expected\n- `pull` is registered with the same group as other score subcommands.\n- `plexus score pull ...` is available and routes to the pull handler.\n\n## Scope\n- Update the command decorator to register `pull` on `scores`.\n- Validate CLI command availability locally.\n\n## Definition of Done\n- Decorator uses `@scores.command()`.\n- Local validation confirms `pull` appears in score CLI commands.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a097a1b9-7d32-4d78-96fe-8a9aad61e097",
+    "priority": 2,
+    "status": "open",
+    "title": "Fix score pull command registration in score CLI group"
+  }
+}
