@@ -23,6 +23,14 @@ if type(input) == "table" then
   end
 end
 
+local tool_access_mode = "execution"
+if type(input) == "table" then
+  local provided_mode = input.console_tool_access_mode or input.tool_access_mode
+  if type(provided_mode) == "string" and provided_mode ~= "" then
+    tool_access_mode = provided_mode
+  end
+end
+
 local previous_user_prompt = nil
 if #history > 0 then
   local found_latest = false
@@ -190,6 +198,9 @@ State.set("stage", "responding")
 local assistant_prompt = "You are the Plexus Console assistant in an ongoing engineering chat.\n" ..
                          "Use prior turns for continuity and respond concisely with concrete help.\n" ..
                          "Ask one short clarifying question only if context is insufficient.\n\n" ..
+                         "Current tool access mode: " .. tool_access_mode .. "\n" ..
+                         "In planning mode, inspect existing data and procedure runs, run safe analysis, and propose exact next actions. " ..
+                         "Planning blocks significant mutations: score version changes, champion promotion, and starting/continuing/branching/optimizing procedures.\n\n" ..
                          "Latest user message:\n" .. latest_user_prompt .. "\n\n" ..
                          "Previous user message before latest (if any):\n" .. (previous_user_prompt or "") .. "\n\n" ..
                          "Recent conversation context (oldest to newest):\n" .. history_context .. "\n\n" ..
