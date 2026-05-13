@@ -843,6 +843,11 @@ def test_dispatch_routes_procedure_reads_to_direct_handlers() -> None:
         assert ("procedure", method) not in execute.MCP_TOOL_MAP
 
 
+def test_dispatch_routes_procedure_archive_to_direct_handler() -> None:
+    assert execute.DIRECT_HANDLERS[("procedure", "archive")] == "_call_procedure_write"
+    assert ("procedure", "archive") not in execute.MCP_TOOL_MAP
+
+
 def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
     monkeypatch,
 ) -> None:
@@ -896,6 +901,32 @@ def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
         "plexus.procedure.chat_messages",
         "plexus.procedure.steering_messages",
     ]
+
+
+def test_plexus_facade_uses_direct_procedure_archive_handler_without_mcp_loopback() -> None:
+    received_args: dict[str, Any] = {}
+
+    def fake_archive(args: dict[str, Any]) -> dict[str, Any]:
+        received_args.update(args)
+        return {"success": True, "procedure_id": args["id"], "status": "ARCHIVED"}
+
+    class FakeMCP:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        async def call_tool(self, name, arguments):
+            self.calls.append((name, arguments))
+            raise AssertionError("plexus.procedure.archive must not call MCP tools")
+
+    fake_mcp = FakeMCP()
+    module = execute.PlexusRuntimeModule(fake_mcp, procedure_archive=fake_archive)
+
+    value = module.procedure.archive({"id": "proc-1", "reason": "noise cleanup"})
+
+    assert value == {"success": True, "procedure_id": "proc-1", "status": "ARCHIVED"}
+    assert received_args == {"id": "proc-1", "reason": "noise cleanup"}
+    assert module.api_calls == ["plexus.procedure.archive"]
+    assert fake_mcp.calls == []
 
 
 def test_extract_tool_value_parses_structured_json_string() -> None:
@@ -1716,6 +1747,27 @@ def test_planning_mode_blocks_champion_promotion() -> None:
         module.score.set_champion({"score_id": "score-1", "version_id": "version-1"})
 
     assert "plexus.score.set_champion" in str(exc_info.value)
+    assert called is False
+
+
+def test_planning_mode_blocks_procedure_archive() -> None:
+    called = False
+
+    def fake_archive(_args: dict) -> dict:
+        nonlocal called
+        called = True
+        return {"success": True}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-planning-mode-blocks-procedure-archive"),
+        procedure_archive=fake_archive,
+        runtime_context={"tool_access_mode": "planning"},
+    )
+
+    with pytest.raises(execute.PlanningModeToolNotAllowed) as exc_info:
+        module.procedure.archive({"id": "proc-1"})
+
+    assert "plexus.procedure.archive" in str(exc_info.value)
     assert called is False
 
 
@@ -3989,6 +4041,11 @@ def test_evaluation_info_no_longer_in_mcp_tool_map() -> None:
     assert ("evaluation", "info") in execute.DIRECT_HANDLERS
 
 
+def test_evaluation_archive_no_longer_in_mcp_tool_map() -> None:
+    assert ("evaluation", "archive") not in execute.MCP_TOOL_MAP
+    assert ("evaluation", "archive") in execute.DIRECT_HANDLERS
+
+
 def test_evaluation_info_is_listed_in_plexus_api_list() -> None:
     module = execute.PlexusRuntimeModule(FastMCP("test"))
 
@@ -3997,6 +4054,7 @@ def test_evaluation_info_is_listed_in_plexus_api_list() -> None:
     assert "info" in catalog["plexus.evaluation"]
     assert "compare" in catalog["plexus.evaluation"]
     assert "find_recent" in catalog["plexus.evaluation"]
+    assert "archive" in catalog["plexus.evaluation"]
 
 
 def test_evaluation_info_uses_injected_function_and_skips_mcp_loopback() -> None:
@@ -4045,6 +4103,32 @@ def test_evaluation_info_records_one_tool_call_against_budget() -> None:
     assert gate.tool_calls == 1
     assert gate.exceeded is False
     assert module.api_calls == ["plexus.evaluation.info"]
+
+
+def test_plexus_facade_uses_direct_evaluation_archive_handler_without_mcp_loopback() -> None:
+    received_args: dict[str, Any] = {}
+
+    def fake_archive(args: dict[str, Any]) -> dict[str, Any]:
+        received_args.update(args)
+        return {"success": True, "evaluation_id": args["id"], "status": "ARCHIVED"}
+
+    class FakeMCP:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        async def call_tool(self, name, arguments):
+            self.calls.append((name, arguments))
+            raise AssertionError("plexus.evaluation.archive must not call MCP tools")
+
+    fake_mcp = FakeMCP()
+    module = execute.PlexusRuntimeModule(fake_mcp, evaluation_archive=fake_archive)
+
+    value = module.evaluation.archive({"id": "eval-1", "reason": "duplicate run"})
+
+    assert value == {"success": True, "evaluation_id": "eval-1", "status": "ARCHIVED"}
+    assert received_args == {"id": "eval-1", "reason": "duplicate run"}
+    assert module.api_calls == ["plexus.evaluation.archive"]
+    assert fake_mcp.calls == []
 
 
 def test_default_evaluation_info_gets_by_id(monkeypatch) -> None:
@@ -4112,6 +4196,100 @@ def test_default_evaluation_info_validates_lookup_mode() -> None:
         execute._default_evaluation_info(
             {"evaluation_id": "eval-1", "include_examples": True}
         )
+
+
+def test_default_evaluation_archive_sets_archived_status_and_metadata(
+    monkeypatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+            if "query GetEvaluationForArchive" in query:
+                return {
+                    "getEvaluation": {
+                        "id": "eval-1",
+                        "status": "COMPLETED",
+                        "metadata": json.dumps({"source": "test"}),
+                    }
+                }
+            if "mutation UpdateEvaluationArchive" in query:
+                captured["update_input"] = (variables or {}).get("input")
+                return {
+                    "updateEvaluation": {
+                        "id": "eval-1",
+                        "status": "ARCHIVED",
+                        "metadata": captured["update_input"]["metadata"],
+                        "updatedAt": "2026-05-13T12:00:00Z",
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: FakeClient())
+
+    result = execute._default_evaluation_archive(
+        {"id": "eval-1", "reason": "noise cleanup", "archived_by": "agent"}
+    )
+
+    assert result["success"] is True
+    assert result["evaluation_id"] == "eval-1"
+    assert result["status"] == "ARCHIVED"
+    assert result["previous_status"] == "COMPLETED"
+    assert captured["update_input"]["id"] == "eval-1"
+    assert captured["update_input"]["status"] == "ARCHIVED"
+    metadata = json.loads(captured["update_input"]["metadata"])
+    assert metadata["source"] == "test"
+    assert metadata["archive"]["archived"] is True
+    assert metadata["archive"]["reason"] == "noise cleanup"
+    assert metadata["archive"]["archivedBy"] == "agent"
+    assert metadata["archive"]["previousStatus"] == "COMPLETED"
+
+
+def test_default_procedure_archive_sets_archived_status_and_metadata(
+    monkeypatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+            if "query GetProcedureForArchive" in query:
+                return {
+                    "getProcedure": {
+                        "id": "proc-1",
+                        "status": "RUNNING",
+                        "metadata": {"source": "test"},
+                    }
+                }
+            if "mutation UpdateProcedureArchive" in query:
+                captured["update_input"] = (variables or {}).get("input")
+                return {
+                    "updateProcedure": {
+                        "id": "proc-1",
+                        "status": "ARCHIVED",
+                        "metadata": captured["update_input"]["metadata"],
+                        "updatedAt": "2026-05-13T12:00:00Z",
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: FakeClient())
+
+    result = execute._default_procedure_archive(
+        {"id": "proc-1", "reason": "noise cleanup", "archivedBy": "agent"}
+    )
+
+    assert result["success"] is True
+    assert result["procedure_id"] == "proc-1"
+    assert result["status"] == "ARCHIVED"
+    assert result["previous_status"] == "RUNNING"
+    assert captured["update_input"]["id"] == "proc-1"
+    assert captured["update_input"]["status"] == "ARCHIVED"
+    metadata = json.loads(captured["update_input"]["metadata"])
+    assert metadata["source"] == "test"
+    assert metadata["archive"]["archived"] is True
+    assert metadata["archive"]["reason"] == "noise cleanup"
+    assert metadata["archive"]["archivedBy"] == "agent"
+    assert metadata["archive"]["previousStatus"] == "RUNNING"
 
 
 def test_default_feedback_finder_chains_through_resolvers_and_service(
