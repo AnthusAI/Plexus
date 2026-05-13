@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "34c72201-0c56-423d-aa46-d0b88dd15282",
+  "issue_id": "plx-08760f66-0ae8-41cd-b690-193ad09fa9b7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-10T13:32:55.342Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Allow planning-mode agents to inspect existing procedure/task/history state while continuing to block significant mutations such as creating score versions or starting new procedures.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Loosen Console planning inspection policy"
+  }
+}

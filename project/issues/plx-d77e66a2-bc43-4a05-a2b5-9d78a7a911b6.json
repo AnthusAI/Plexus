@@ -1,0 +1,18 @@
+{
+  "id": "plx-d77e66a2-bc43-4a05-a2b5-9d78a7a911b6",
+  "title": "Adjust Console planning menu icons",
+  "description": "Update the Console composer action menu to use the requested planning and incognito icons, and separate file upload from mode controls.",
+  "type": "task",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-10T12:41:46.104224Z",
+  "updated_at": "2026-05-10T12:41:46.104224Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,31 @@
+{
+  "id": "plx-9d69ce5d-7f39-4123-b1b1-39e9368a8269",
+  "title": "Add Console planning-mode Plexus tool policy",
+  "description": "Add a hard planning-mode allowlist for execute_tactus, persist Console mode on sessions/messages, and add report read APIs plus planning-mode exceptions for score contradictions and named report helpers.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d709b68f-1416-4967-9c5d-2aeb3356834c",
+      "author": "ryan",
+      "text": "Started implementation. Backend first: central execute_tactus policy gate in MCP/tools/tactus_runtime/execute.py, then console mode propagation from session/message metadata, then narrow frontend toggle wiring. Planning mode will be a hard per-method allowlist, with explicit allowances for plexus.score.contradictions, plexus.report.acceptance_rate, and plexus.report.score_champion_version_timeline while keeping generic plexus.report.run blocked.",
+      "created_at": "2026-05-08T18:47:33.190916Z"
+    },
+    {
+      "id": "fe079c1b-c730-4aef-9ffc-d7abf60a7b5b",
+      "author": "ryan",
+      "text": "Implemented planning-mode tool policy and Console action menu. Runtime now enforces planning access at the Plexus dispatcher, keeps api.list/helpers fully visible, adds report.list/info/blocks read APIs, propagates Console message/session mode into execute_tactus, and adds the composer + menu with Plan and Private switches. Validation passed: execute_tactus runtime tests, Console chat runtime tests, builtin procedure/MCP transport tests, targeted conversation-viewer Jest test, and dashboard typecheck.",
+      "created_at": "2026-05-10T12:29:38.150230Z"
+    }
+  ],
+  "created_at": "2026-05-08T18:41:06.137939Z",
+  "updated_at": "2026-05-10T12:29:43.403046Z",
+  "closed_at": "2026-05-10T12:29:43.403046Z",
+  "custom": {}
+}

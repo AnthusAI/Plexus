@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d89df76f-0255-4d0c-b312-01513a30e115",
+  "issue_id": "plx-7163b55c-729d-431f-9c05-8d16ea8ea232",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-08T12:53:55.300Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Adjust console chat edge-fill without removing dashboard frame"
+  }
+}

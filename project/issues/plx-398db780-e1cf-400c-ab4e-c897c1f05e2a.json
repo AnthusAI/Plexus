@@ -1,0 +1,25 @@
+{
+  "id": "plx-398db780-e1cf-400c-ab4e-c897c1f05e2a",
+  "title": "Make console chat fill dashboard width and bottom",
+  "description": "",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "31da60c3-fd38-453d-8576-fe5852ed62c7",
+      "author": "ryan",
+      "text": "Updated Console dashboard layout so chat fills side and bottom edges: removed outer side/bottom padding and workspace rounding while preserving top/header spacing. Validated with console dashboard Jest test and dashboard typecheck.",
+      "created_at": "2026-05-08T12:52:27.470950Z"
+    }
+  ],
+  "created_at": "2026-05-08T12:51:31.279070Z",
+  "updated_at": "2026-05-08T12:53:55.317770Z",
+  "closed_at": null,
+  "custom": {}
+}

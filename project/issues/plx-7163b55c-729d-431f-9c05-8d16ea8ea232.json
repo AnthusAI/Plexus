@@ -1,0 +1,31 @@
+{
+  "id": "plx-7163b55c-729d-431f-9c05-8d16ea8ea232",
+  "title": "Adjust console chat edge-fill without removing dashboard frame",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7972afcc-bca3-4726-93c4-9b5588002afb",
+      "author": "ryan",
+      "text": "Restored dashboard frame padding and made only the workspace bleed to side/bottom edges using negative margins so chat touches frame bottom while preserving outer frame spacing. Verified with console-dashboard Jest test and dashboard typecheck.",
+      "created_at": "2026-05-08T12:54:16.890513Z"
+    },
+    {
+      "id": "c1f9c5a7-8dff-498b-8d63-d90bf2354773",
+      "author": "ryan",
+      "text": "Adjusted console workspace to match evaluations frame behavior: removed negative workspace bleed margins so bottom frame remains visible, while keeping workspace non-rounded and full-height within the frame.",
+      "created_at": "2026-05-08T12:56:59.116815Z"
+    }
+  ],
+  "created_at": "2026-05-08T12:53:55.299678Z",
+  "updated_at": "2026-05-08T12:56:59.116815Z",
+  "closed_at": "2026-05-08T12:54:16.905551Z",
+  "custom": {}
+}
