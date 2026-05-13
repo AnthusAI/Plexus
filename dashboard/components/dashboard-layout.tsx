@@ -3,8 +3,8 @@
 import * as React from "react"
 import { useState, useEffect, useRef } from "react"
 import { StickyNote, FileBarChart, FlaskConical, ListChecks, LogOut, Menu, PanelLeft, PanelRight, Settings, Siren, Database, Sun, Moon, Send, Mic, Headphones, MessageCircleMore, MessageSquare, Inbox, X, ArrowLeftRight, Layers3, Monitor, CircleHelp, Gauge, Waypoints, SquareTerminal } from "lucide-react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { Link, usePathname } from "@/i18n/navigation"
+import { pathWithoutLocale } from "@/utils/locale-path"
 import { useTheme } from "next-themes"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -111,6 +111,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
   const { accounts, selectedAccount, isLoadingAccounts, visibleMenuItems, setSelectedAccount, refetchAccounts } = useAccount()
   const { profile: currentUserProfile, isLoading: isLoadingUserProfile } = useCurrentUserProfile()
   const pathname = usePathname()
+  const path = pathWithoutLocale(pathname)
   const currentUserDisplayName = currentUserProfile?.displayName || currentUserProfile?.email || "User"
   const currentUserInitials = currentUserProfile?.initials || "U"
 
@@ -130,9 +131,9 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
     setLoadingRoute(null)
   }, [pathname])
 
-  const handleNavClick = (path: string) => {
-    if (path !== pathname) {
-      setLoadingRoute(path)
+  const handleNavClick = (targetPath: string) => {
+    if (targetPath !== path) {
+      setLoadingRoute(targetPath)
       setIsNavigating(true)
       
       // Auto-hide left sidebar on mobile after navigation
@@ -170,7 +171,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
 
   // Keyboard shortcut for dashboard drawer (.) - only on /lab/ paths
   useEffect(() => {
-    const isLabPath = pathname.startsWith('/lab/')
+    const isLabPath = path.startsWith('/lab/')
     if (!isLabPath) return
 
     const handleKeydown = (event: KeyboardEvent) => {
@@ -214,19 +215,19 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         <div className="flex-grow">
           <div className={`${isLeftSidebarOpen ? 'pl-2' : 'px-3 w-16'} ${isMobile ? 'space-y-2' : 'space-y-1'}`}>
             {visibleMenuItems.map((item) => {
-              const isCurrentPage = (pathname === item.path ||
+              const isCurrentPage = (path === item.path ||
                 (item.name === "Feedback" &&
-                  (pathname === "/feedback"
-                    || pathname === "/lab/feedback-queues"
-                    || pathname.startsWith("/lab/feedback"))) ||
-                (item.name === "Items" && pathname.startsWith(item.path)) ||
-                (item.name === "Evaluations" && pathname.startsWith(item.path)) ||
-                (item.name === "Procedures" && pathname.startsWith(item.path)) ||
-                (item.name === "Templates" && pathname.startsWith(item.path)) ||
-                (item.name === "Scorecards" && pathname.startsWith(item.path)) ||
-                (item.name === "Reports" && pathname.startsWith(item.path)) ||
-                (item.name === "Sources" && pathname.startsWith(item.path)) ||
-                (item.name === "Console" && pathname.startsWith(item.path)))
+                  (path === "/feedback"
+                    || path === "/lab/feedback-queues"
+                    || path.startsWith("/lab/feedback"))) ||
+                (item.name === "Items" && path.startsWith(item.path)) ||
+                (item.name === "Evaluations" && path.startsWith(item.path)) ||
+                (item.name === "Procedures" && path.startsWith(item.path)) ||
+                (item.name === "Templates" && path.startsWith(item.path)) ||
+                (item.name === "Scorecards" && path.startsWith(item.path)) ||
+                (item.name === "Reports" && path.startsWith(item.path)) ||
+                (item.name === "Sources" && path.startsWith(item.path)) ||
+                (item.name === "Console" && path.startsWith(item.path)))
               
               const isLoading = loadingRoute === item.path
               
@@ -297,8 +298,8 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[200px] z-[9999]">
               <DropdownMenuItem 
-                className={`cursor-pointer ${!pathname.startsWith('/lab/') ? 'opacity-50' : ''}`} 
-                onClick={pathname.startsWith('/lab/') ? toggleDashboardDrawer : undefined}
+                className={`cursor-pointer ${!path.startsWith('/lab/') ? 'opacity-50' : ''}`} 
+                onClick={path.startsWith('/lab/') ? toggleDashboardDrawer : undefined}
               >
                 <Gauge className="mr-2 h-4 w-4 text-navigation-icon" />
                 Dashboard
@@ -600,7 +601,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
         >
           <div className={`flex-1 flex flex-col bg-background min-h-0 overflow-visible relative ${isMobile ? 'mobile-compact' : 'rounded-lg'}`}>
             {/* Dashboard activation button - bottom center, height of 4 (1rem) */}
-            {pathname.startsWith('/lab/') && (
+            {path.startsWith('/lab/') && (
               <button
                 onClick={toggleDashboardDrawer}
                 className="absolute bottom-0 left-1/3 right-1/3 h-4 z-10 bg-transparent border-none cursor-default opacity-0 hover:opacity-0 focus:outline-none"
@@ -655,7 +656,7 @@ const DashboardLayout = ({ children, signOut }: { children: React.ReactNode; sig
       </div>
       
       {/* Dashboard Drawer - only enabled on /lab/ paths */}
-      {pathname.startsWith('/lab/') && (
+      {path.startsWith('/lab/') && (
         <DashboardDrawer 
           open={isDashboardDrawerOpen} 
           onOpenChange={setIsDashboardDrawerOpen} 

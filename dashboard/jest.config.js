@@ -3,6 +3,8 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   moduleNameMapper: {
     '^@/components/(.*)$': '<rootDir>/components/$1',
+    '^@/i18n/navigation$': '<rootDir>/__mocks__/i18n-navigation.tsx',
+    '^@/i18n/routing$': '<rootDir>/__mocks__/i18n-routing.ts',
     '^@/(.*)$': '<rootDir>/$1',
     // Mock problematic ESM modules
     '^react-markdown$': '<rootDir>/__mocks__/react-markdown.js',
