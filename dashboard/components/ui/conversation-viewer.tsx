@@ -229,7 +229,8 @@ const CONSOLE_CHAT_MODEL_OPTIONS = [
 ] as const
 
 const DEFAULT_CONSOLE_CHAT_MODEL = 'gpt-5.4-mini'
-const CONVERSATION_BOTTOM_THRESHOLD_PX = 96
+const CONVERSATION_BOTTOM_EPSILON_PX = 2
+const SCROLL_DELTA_EPSILON_PX = 0.1
 
 // Types for the conversation data
 export interface ChatMessage {
@@ -2852,9 +2853,9 @@ function ConversationViewer({
     persistConsoleMode(checked ? "planning" : consoleToolAccessMode, checked)
   }, [consoleToolAccessMode, persistConsoleMode])
 
-  const isScrollerNearBottom = React.useCallback((scroller: HTMLDivElement) => {
+  const isScrollerAtBottom = React.useCallback((scroller: HTMLDivElement) => {
     const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
-    return distanceFromBottom <= CONVERSATION_BOTTOM_THRESHOLD_PX
+    return distanceFromBottom <= CONVERSATION_BOTTOM_EPSILON_PX
   }, [])
 
   useEffect(() => {
@@ -3083,12 +3084,8 @@ function ConversationViewer({
     setAtBottom(isNowAtBottom)
     if (isNowAtBottom) {
       markConversationAtBottom()
-      return
     }
-    if (manualScrollLockRef.current) {
-      disableConversationAutoFollow()
-    }
-  }, [disableConversationAutoFollow, markConversationAtBottom])
+  }, [markConversationAtBottom])
 
   useEffect(() => {
     cancelStickyBottomScroll()
@@ -3103,19 +3100,22 @@ function ConversationViewer({
     const scroller = event.currentTarget
     const currentTop = scroller.scrollTop
     const previousTop = lastScrollerTopRef.current
-    const isNearBottom = isScrollerNearBottom(scroller)
+    const isAtBottomNow = isScrollerAtBottom(scroller)
+    const movedUp = previousTop !== null && currentTop < previousTop - SCROLL_DELTA_EPSILON_PX
+    setAtBottom(isAtBottomNow)
 
-    if (isNearBottom) {
-      markConversationAtBottom()
+    if (!programmaticScrollRef.current && (movedUp || !isAtBottomNow)) {
+      disableConversationAutoFollow()
+      lastScrollerTopRef.current = currentTop
       return
     }
 
-    setAtBottom(false)
-    if (!programmaticScrollRef.current && previousTop !== null && currentTop < previousTop - 1) {
-      disableConversationAutoFollow()
+    if (isAtBottomNow) {
+      markConversationAtBottom()
     }
+
     lastScrollerTopRef.current = currentTop
-  }, [disableConversationAutoFollow, isScrollerNearBottom, markConversationAtBottom])
+  }, [disableConversationAutoFollow, isScrollerAtBottom, markConversationAtBottom])
 
   const handleScrollerWheel = React.useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     if (event.deltaY < 0) {
@@ -3123,10 +3123,17 @@ function ConversationViewer({
     }
   }, [disableConversationAutoFollow])
 
+  const handleScrollerKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    // Disable auto-follow on any upward keyboard navigation
+    if (['ArrowUp', 'PageUp', 'Home'].includes(event.key)) {
+      disableConversationAutoFollow()
+    }
+  }, [disableConversationAutoFollow])
+
   const VirtuosoScroller = React.useMemo(
     () =>
       React.forwardRef<HTMLDivElement, React.ComponentPropsWithoutRef<"div">>(
-        function ConversationVirtuosoScroller({ onScroll, onWheel, ...props }, ref) {
+        function ConversationVirtuosoScroller({ onScroll, onWheel, onKeyDown, ...props }, ref) {
           const setRef = React.useCallback((node: HTMLDivElement | null) => {
             conversationScrollerRef.current = node
             setConversationScrollerElement((current) => (current === node ? current : node))
@@ -3150,11 +3157,15 @@ function ConversationViewer({
                 handleScrollerWheel(event)
                 onWheel?.(event)
               }}
+              onKeyDown={(event) => {
+                handleScrollerKeyDown(event)
+                onKeyDown?.(event)
+              }}
             />
           )
         }
       ),
-    [handleScrollerScroll, handleScrollerWheel]
+    [handleScrollerScroll, handleScrollerWheel, handleScrollerKeyDown]
   )
 
   useEffect(() => {
@@ -3887,7 +3898,7 @@ function ConversationViewer({
                 followOutput={(isAtBottom) => (shouldForceFollow || isAtBottom ? "auto" : false)}
                 initialTopMostItemIndex={Math.max(0, renderRows.length - 1)}
                 atBottomStateChange={handleAtBottomStateChange}
-                atBottomThreshold={50}
+                atBottomThreshold={2}
                 overscan={600}
                 increaseViewportBy={{ top: 400, bottom: 400 }}
                 itemContent={(_index, row) => {
