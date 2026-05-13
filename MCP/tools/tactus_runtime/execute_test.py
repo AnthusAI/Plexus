@@ -1592,6 +1592,133 @@ def test_plexus_api_list_advertises_known_namespaces() -> None:
     assert facade.api_calls == ["plexus.api.list"]
 
 
+def test_plexus_api_list_stays_complete_in_planning_mode() -> None:
+    facade = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        runtime_context={"tool_access_mode": "planning"},
+    )
+
+    catalog = facade.api.list()
+
+    assert "run" in catalog["plexus.report"]
+    assert "run" in catalog["plexus.evaluation"]
+    assert "optimize" in catalog["plexus.procedure"]
+    assert facade.api_calls == ["plexus.api.list"]
+
+
+def test_planning_mode_allows_safe_analysis_and_procedure_inspection() -> None:
+    seen: dict[str, dict] = {}
+
+    def fake_score_contradictions(args: dict) -> dict:
+        seen["contradictions"] = args
+        return {"ok": True}
+
+    def fake_score_predict(args: dict) -> dict:
+        seen["predict"] = args
+        return {"prediction": "Yes"}
+
+    def fake_evaluation_runner(args: dict) -> dict:
+        seen["evaluation_run"] = args
+        return {"evaluation_id": "eval-1"}
+
+    def fake_report_runner(args: dict) -> dict:
+        seen["report_run"] = args
+        return {"task_id": "task-1", "report_id": "report-1"}
+
+    def fake_report_reader(args: dict) -> dict:
+        seen["report_list"] = args
+        return {"items": []}
+
+    def fake_procedure_reader(args: dict) -> dict:
+        seen["procedure_list"] = args
+        return {"procedures": []}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        runtime_context={"tool_access_mode": "planning", "account_id": "acct-1"},
+        score_predict=fake_score_predict,
+        score_contradictions=fake_score_contradictions,
+        evaluation_runner=fake_evaluation_runner,
+        report_runner=fake_report_runner,
+        report_readers={"list": fake_report_reader},
+        procedure_listers={"list": fake_procedure_reader},
+    )
+
+    assert module.score.contradictions({"score_id": "score-1"}) == {"ok": True}
+    assert module.score.predict({
+        "scorecard_identifier": "card",
+        "score_identifier": "score",
+        "item_id": "item-1",
+    }) == {"prediction": "Yes"}
+    assert module.evaluation.run({
+        "scorecard_name": "card",
+        "score_name": "score",
+        "evaluation_type": "accuracy",
+        "async": True,
+        "budget": {"usd": 0.01, "wallclock_seconds": 10, "depth": 1, "tool_calls": 1},
+    })["kind"] == "evaluation"
+    assert module.report.run({
+        "block_class": "FeedbackAlignment",
+        "async": True,
+        "budget": {"usd": 0.01, "wallclock_seconds": 10, "depth": 1, "tool_calls": 1},
+    })["kind"] == "report"
+    assert module.report.list({}) == {"items": []}
+    assert module.procedure.list({"limit": 5}) == {"procedures": []}
+    assert seen["contradictions"]["account_id"] == "acct-1"
+    assert seen["predict"]["account_id"] == "acct-1"
+    assert seen["evaluation_run"]["account_id"] == "acct-1"
+    assert seen["report_run"]["account_id"] == "acct-1"
+    assert seen["report_list"]["account_id"] == "acct-1"
+    assert seen["procedure_list"]["account_id"] == "acct-1"
+
+
+@pytest.mark.asyncio
+async def test_planning_mode_blocks_procedure_start() -> None:
+    called = False
+
+    def fake_procedure_runner(_args: dict) -> dict:
+        nonlocal called
+        called = True
+        return {"status": "dispatched"}
+
+    result = await execute._execute_tactus_tool(
+        (
+            'return plexus.procedure.run({ procedure_id = "proc-1", '
+            'async = true, budget = { usd = 0.01, wallclock_seconds = 10, '
+            'depth = 1, tool_calls = 1 } })'
+        ),
+        FastMCP("test-planning-mode-blocks-procedure-run"),
+        procedure_runner=fake_procedure_runner,
+        runtime_context={"tool_access_mode": "planning"},
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "tool_not_allowed_in_planning_mode"
+    assert "plexus.procedure.run" in result["error"]["message"]
+    assert called is False
+
+
+def test_planning_mode_blocks_champion_promotion() -> None:
+    called = False
+
+    def fake_set_champion(_args: dict) -> dict:
+        nonlocal called
+        called = True
+        return {"success": True}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-planning-mode-blocks-set-champion"),
+        score_set_champion=fake_set_champion,
+        runtime_context={"tool_access_mode": "planning"},
+    )
+
+    with pytest.raises(execute.PlanningModeToolNotAllowed) as exc_info:
+        module.score.set_champion({"score_id": "score-1", "version_id": "version-1"})
+
+    assert "plexus.score.set_champion" in str(exc_info.value)
+    assert called is False
+
+
 _FRONTMATTER_TEMPLATE = (
     "---\n"
     "id: {doc_id}\n"
@@ -3023,6 +3150,7 @@ def test_score_champion_version_timeline_convenience_maps_report_block() -> None
         trace_id="trace-1",
         handle_store=handles,
         report_runner=fake_runner,
+        runtime_context={"tool_access_mode": "planning"},
     )
 
     budget = _child_budget()

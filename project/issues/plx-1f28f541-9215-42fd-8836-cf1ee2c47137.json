@@ -1,0 +1,21 @@
+{
+  "id": "plx-1f28f541-9215-42fd-8836-cf1ee2c47137",
+  "title": "Adjust Console action menu icons",
+  "description": "Use List for planning mode, HatGlasses for private/incognito, and add a separator after the files option in the Console composer action menu.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-10T12:42:28.630747Z",
+  "updated_at": "2026-05-10T12:49:16.318564Z",
+  "closed_at": "2026-05-10T12:49:16.318564Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

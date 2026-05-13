@@ -1,0 +1,21 @@
+{
+  "id": "plx-08760f66-0ae8-41cd-b690-193ad09fa9b7",
+  "title": "Loosen Console planning inspection policy",
+  "description": "Allow planning-mode agents to inspect existing procedure/task/history state while continuing to block significant mutations such as creating score versions or starting new procedures.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-10T13:32:55.342502Z",
+  "updated_at": "2026-05-10T13:36:33.487415Z",
+  "closed_at": "2026-05-10T13:36:33.487415Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}
