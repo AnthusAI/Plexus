@@ -13,10 +13,21 @@ os.environ["AZURE_OPENAI_ENDPOINT"] = "https://test-openai.openai.azure.com/"
 os.environ["OPENAI_API_VERSION"] = "2023-03-15-preview"
 os.environ["AZURE_OPENAI_DEPLOYMENT"] = "gpt-35-turbo"
 
-# Mock OpenAI API to prevent credential errors
-mock.patch('openai.OpenAI').start()
-mock.patch('openai.AzureOpenAI').start()
-mock.patch('langchain_community.chat_models.azure_openai.AzureChatOpenAI.__init__', return_value=None).start()
+# Mock OpenAI API to prevent credential errors.
+# Keep explicit patcher handles so they can be stopped at module teardown and
+# do not leak into unrelated tests.
+_MODULE_PATCHERS = [
+    mock.patch('openai.OpenAI'),
+    mock.patch('openai.AzureOpenAI'),
+    mock.patch('langchain_community.chat_models.azure_openai.AzureChatOpenAI.__init__', return_value=None),
+]
+for _patcher in _MODULE_PATCHERS:
+    _patcher.start()
+
+
+def teardown_module(_module):
+    for _patcher in reversed(_MODULE_PATCHERS):
+        _patcher.stop()
 
 # Define a compatible GraphState for testing if not directly importable/usable
 # Or ideally, import the actual GraphState if FuzzyMatchExtractor defines it
