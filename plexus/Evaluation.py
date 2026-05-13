@@ -37,7 +37,10 @@ from plexus.cli.shared.optimizer_shadow_invalidation import (
     resolve_score_version_shadow_invalidation_metadata,
 )
 from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
-from plexus.feedback_item_explanations import get_or_generate_feedback_item_explanation
+from plexus.feedback_item_explanations import (
+    FeedbackItemExplanationTimeoutError,
+    get_or_generate_feedback_item_explanation,
+)
 
 from plexus.scores.LangGraphScore import LangGraphScore
 import inspect
@@ -4571,6 +4574,12 @@ class FeedbackEvaluation(Evaluation):
             rca_errors = 0
             for result in rca_results:
                 if isinstance(result, Exception):
+                    if isinstance(result, FeedbackItemExplanationTimeoutError):
+                        self.logger.error(
+                            "RCA explanation generation exceeded retry deadline; failing evaluation. diagnostics=%s",
+                            result.diagnostics,
+                        )
+                        raise result
                     rca_errors += 1
                     self.logger.warning(
                         "RCA item failed before fallback preservation: %s: %s",
