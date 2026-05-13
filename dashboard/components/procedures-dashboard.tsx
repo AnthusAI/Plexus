@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect, useCallback, useRef } from "react"
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useRouter, usePathname, useParams } from "next/navigation"
 import { generateClient } from "aws-amplify/data"
 import type { Schema } from "@/amplify/data/resource"
@@ -26,6 +26,8 @@ import {
   evaluationToScoreEvaluationView,
   feedbackEvaluationSummaryFromView,
   hydrateProcedureRunsFeedbackEvaluations,
+  archiveProcedureRecord,
+  isArchivedStatus,
   PROCEDURE_CARD_FIELDS,
   PROCEDURE_CREATE_SUBSCRIPTION_FOR_CARDS,
   PROCEDURE_UPDATE_SUBSCRIPTION_FOR_CARDS,
@@ -46,18 +48,17 @@ type ProcedureWithTask = Procedure & {
 
 const PROCEDURE_PAGE_SIZE = 25
 
-const getProcedureStartTimeMs = (procedure: ProcedureWithTask): number => {
-  const startCandidate =
-    procedure.task?.startedAt ||
-    procedure.task?.createdAt ||
+const getProcedureCreatedTimeMs = (procedure: ProcedureWithTask): number => {
+  const createdCandidate =
     procedure.createdAt ||
+    procedure.task?.createdAt ||
     procedure.updatedAt
-  const timestamp = startCandidate ? new Date(startCandidate).getTime() : 0
+  const timestamp = createdCandidate ? new Date(createdCandidate).getTime() : 0
   return Number.isFinite(timestamp) ? timestamp : 0
 }
 
-const sortProceduresByStartTime = (procedures: ProcedureWithTask[]): ProcedureWithTask[] =>
-  [...procedures].sort((a, b) => getProcedureStartTimeMs(b) - getProcedureStartTimeMs(a))
+const sortProceduresByCreatedTime = (procedures: ProcedureWithTask[]): ProcedureWithTask[] =>
+  [...procedures].sort((a, b) => getProcedureCreatedTimeMs(b) - getProcedureCreatedTimeMs(a))
 
 const mergeProcedureTaskRealtimeUpdate = (
   existing: Task | null | undefined,
@@ -133,6 +134,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedProcedureId, setSelectedProcedureId] = useState<string | null>(finalInitialProcedureId)
+  const [includeArchived, setIncludeArchived] = useState(false)
   const [isFullWidth, setIsFullWidth] = useState(false)
   const [leftPanelWidth, setLeftPanelWidth] = useState(50)
   const [selectedScorecard, setSelectedScorecard] = useState<string | null>(null)
@@ -146,6 +148,13 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   const hasLoadedProceduresOnceRef = useRef(false)
   const procedureTaskMapRef = useRef<Map<string, Task>>(new Map())
   const { ref: sentinelRef, inView } = useInView({ threshold: 0 })
+  const visibleProcedures = useMemo(
+    () =>
+      includeArchived
+        ? procedures
+        : procedures.filter((procedure) => !isArchivedStatus(procedure.status)),
+    [includeArchived, procedures]
+  )
 
   const hydrateProcedurePerformanceSummaries = useCallback(async (
     procedureItems: ProcedureWithTask[]
@@ -256,7 +265,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       const procedureResponse: any = proceduresResult.data?.listProcedureByAccountIdAndUpdatedAt
       const firstPageItems: Procedure[] = procedureResponse?.items || []
       const newNextToken: string | null = procedureResponse?.nextToken ?? null
-      const firstPageWithoutTasks = sortProceduresByStartTime(
+      const firstPageWithoutTasks = sortProceduresByCreatedTime(
         firstPageItems.map((procedure: Procedure) => ({ ...procedure, task: null }))
       )
 
@@ -269,7 +278,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       void hydrateProcedurePerformanceSummaries(firstPageWithoutTasks).then((hydrated) => {
         if (requestId !== loadRequestIdRef.current) return
         setProcedures((previous) =>
-          sortProceduresByStartTime(
+          sortProceduresByCreatedTime(
             previous.map((procedure) => {
               const hydratedProcedure = hydrated.find((item) => item.id === procedure.id)
               return hydratedProcedure
@@ -328,7 +337,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         const hydratedProceduresWithTasks = await hydrateProcedurePerformanceSummaries(proceduresWithTasks)
 
         setProcedures(prev =>
-          sortProceduresByStartTime(
+          sortProceduresByCreatedTime(
             prev.map(procedure => {
               const hydratedProcedure = hydratedProceduresWithTasks.find((item) => item.id === procedure.id)
               return {
@@ -405,7 +414,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       }))
       const hydratedMerged = await hydrateProcedurePerformanceSummaries(merged)
 
-      setProcedures(prev => sortProceduresByStartTime([...prev, ...hydratedMerged]))
+      setProcedures(prev => sortProceduresByCreatedTime([...prev, ...hydratedMerged]))
       setNextToken(newNextToken)
       setHasMore(!!newNextToken)
     } catch (err) {
@@ -437,7 +446,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
 
           // Update the procedures list with new task data, preserving stages
           setProcedures(prevProcedures =>
-            sortProceduresByStartTime(prevProcedures.map(procedure => {
+            sortProceduresByCreatedTime(prevProcedures.map(procedure => {
               if (procedure.id === procedureId) {
                 // Merge new task data with existing task, preserving stages
                 const updatedTask = mergeProcedureTaskRealtimeUpdate(procedure.task, data);
@@ -460,7 +469,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         if (data?.taskId) {
           // Update the procedures list with new stage data
           setProcedures(prevProcedures =>
-            sortProceduresByStartTime(prevProcedures.map((procedure: ProcedureWithTask) => {
+            sortProceduresByCreatedTime(prevProcedures.map((procedure: ProcedureWithTask) => {
               if (procedure.task?.id === data.taskId) {
                 console.log(`Updating procedure ${procedure.id} stages with:`, data);
                 
@@ -531,12 +540,12 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             const procedureWithTask = { ...full, task: null } as ProcedureWithTask
             setProcedures(prev => {
               if (prev.some(p => p.id === full.id)) return prev;
-              return sortProceduresByStartTime([procedureWithTask, ...prev]);
+              return sortProceduresByCreatedTime([procedureWithTask, ...prev]);
             });
             void hydrateProcedurePerformanceSummaries([procedureWithTask]).then(([hydratedProcedure]) => {
               if (!hydratedProcedure) return
               setProcedures(prev =>
-                sortProceduresByStartTime(
+                sortProceduresByCreatedTime(
                   prev.map(p => p.id === hydratedProcedure.id ? { ...p, ...hydratedProcedure, task: p.task ?? hydratedProcedure.task } : p)
                 )
               )
@@ -546,7 +555,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             const procedureWithTask = { ...procedure, task: null } as ProcedureWithTask
             setProcedures(prev => {
               if (prev.some(p => p.id === procedure.id)) return prev;
-              return sortProceduresByStartTime([procedureWithTask, ...prev]);
+              return sortProceduresByCreatedTime([procedureWithTask, ...prev]);
             });
           })
         },
@@ -568,7 +577,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           // scorecard/score/metadata from the stored record so they don't get wiped.
           let existingTask: Task | null | undefined = null
           setProcedures(prev =>
-            sortProceduresByStartTime(
+            sortProceduresByCreatedTime(
               prev.map(p => {
                 if (p.id !== updated.id) return p
                 existingTask = p.task
@@ -579,7 +588,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
           void hydrateProcedurePerformanceSummaries([{ ...updated, task: existingTask ?? null } as ProcedureWithTask]).then(([hydratedProcedure]) => {
             if (!hydratedProcedure) return
             setProcedures(prev =>
-              sortProceduresByStartTime(
+              sortProceduresByCreatedTime(
                 prev.map(p => p.id === hydratedProcedure.id ? mergeProcedureRealtimeUpdate(p, hydratedProcedure) : p)
               )
             )
@@ -729,6 +738,14 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     window.addEventListener('popstate', syncFromUrl)
     return () => window.removeEventListener('popstate', syncFromUrl)
   }, [])
+
+  useEffect(() => {
+    if (includeArchived || !selectedProcedureId) return
+    const selected = procedures.find((procedure) => procedure.id === selectedProcedureId)
+    if (selected && isArchivedStatus(selected.status)) {
+      handleCloseProcedure()
+    }
+  }, [includeArchived, procedures, selectedProcedureId, handleCloseProcedure])
 
   // Focus handler disabled to prevent unwanted reloads when returning to browser
   // Data will refresh naturally through other user interactions or manual refresh
@@ -1002,6 +1019,45 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
     }
   }
 
+  const handleArchive = useCallback(async (procedureId: string) => {
+    const existing = procedures.find((procedure) => procedure.id === procedureId)
+    if (!existing || isArchivedStatus(existing.status)) return
+
+    try {
+      const archived = await archiveProcedureRecord({
+        id: procedureId,
+        status: existing.status ?? null,
+        metadataText:
+          typeof existing.metadata === 'string'
+            ? existing.metadata
+            : existing.metadata != null
+              ? JSON.stringify(existing.metadata)
+              : null,
+      })
+
+      setProcedures((prev) =>
+        prev.map((procedure) =>
+          procedure.id === procedureId
+            ? {
+                ...procedure,
+                status: archived.status,
+                metadata: archived.metadataText,
+                updatedAt: archived.updatedAt ?? procedure.updatedAt,
+              }
+            : procedure
+        )
+      )
+
+      if (!includeArchived && selectedProcedureId === procedureId) {
+        handleCloseProcedure()
+      }
+      toast.success(`Archived procedure ${procedureId}`)
+    } catch (error) {
+      console.error('Error archiving procedure:', error)
+      toast.error('Failed to archive procedure')
+    }
+  }, [includeArchived, procedures, selectedProcedureId, handleCloseProcedure])
+
   // Transform procedures to ProcedureTaskData - memoized to prevent unnecessary re-renders
   const transformProcedure = useCallback((procedure: ProcedureWithTask): ProcedureTaskData => {
     let procedureType = 'Procedure'
@@ -1029,6 +1085,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
       : null,
     score: procedure.score ? { name: procedure.score.name } : null,
     procedureType: procedureType,
+    status: procedure.status || undefined,
     description: procedure.description || undefined,
     createdByUserId: resolveCreatedByUserId({
       createdByUserId: procedure.createdByUserId,
@@ -1069,7 +1126,8 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
   const renderSelectedProcedure = () => {
     if (!selectedProcedureId) return null
     const procedure = procedures.find(proc => proc.id === selectedProcedureId)
-    if (!procedure) return null
+    const visibleProcedure = visibleProcedures.find(proc => proc.id === selectedProcedureId)
+    if (!procedure || !visibleProcedure) return null
 
     // If in edit mode, render the edit form instead of the detail view
     if (isEditMode) {
@@ -1099,6 +1157,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
         onToggleFullWidth={() => setIsFullWidth(!isFullWidth)}
         onClose={handleCloseProcedure}
         onDelete={handleDelete}
+        onArchive={handleArchive}
         onEdit={handleEditProcedure}
         onDuplicate={handleDuplicateProcedure}
         onConversationFullscreenChange={setIsConversationFullscreen}
@@ -1118,7 +1177,16 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
             setSelectedScore={setSelectedScore}
           />
         </div>
-        <div className="flex-shrink-0">
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <label className="inline-flex items-center gap-2 text-sm text-muted-foreground" htmlFor="procedures-include-archived">
+            <input
+              id="procedures-include-archived"
+              type="checkbox"
+              checked={includeArchived}
+              onChange={(event) => setIncludeArchived(event.target.checked)}
+            />
+            Include archived
+          </label>
           <Button onClick={handleCreateProcedure}>
             <Plus className="h-4 w-4 mr-2" />
             Create
@@ -1173,7 +1241,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                 {!(selectedProcedureId && isNarrowViewport) && (
                   <ProceduresGauges />
                 )}
-                {procedures.length === 0 &&
+                {visibleProcedures.length === 0 &&
                 !!selectedAccount?.id &&
                 !isLoadingAccounts &&
                 !isInitialLoading &&
@@ -1182,12 +1250,12 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                   <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
                     No procedures found
                   </div>
-                ) : procedures.length > 0 ? (
+                ) : visibleProcedures.length > 0 ? (
                   <div className={`
                     grid gap-3
                     ${selectedProcedureId && !isNarrowViewport && !isFullWidth ? 'grid-cols-1' : 'grid-cols-1 @[640px]:grid-cols-2'}
                   `}>
-                    {procedures.map((procedure) => {
+                    {visibleProcedures.map((procedure) => {
                       const clickHandler = getProcedureClickHandler(procedure.id)
 
                       return (
@@ -1211,6 +1279,7 @@ function ProceduresDashboard({ initialSelectedProcedureId }: ProceduresDashboard
                             onClick={clickHandler}
                             isSelected={procedure.id === selectedProcedureId}
                             onDelete={handleDelete}
+                            onArchive={handleArchive}
                             onEdit={handleEditProcedure}
                             onDuplicate={handleDuplicateProcedure}
                           />
