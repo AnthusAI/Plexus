@@ -8,6 +8,7 @@ This module implements the Plexus tool protocol for Claude to:
 4. Push score version updates from YAML
 """
 
+import json
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 import yaml
@@ -346,6 +347,8 @@ class PlexusTool:
                     client_context=getattr(self.client, "context", None),
                     source="agent",
                 )
+                if isinstance(version_input.get("metadata"), dict):
+                    version_input["metadata"] = json.dumps(version_input["metadata"], default=str)
                 
                 result = self.client.execute(mutation, {'input': version_input})
                 new_version = result.get('createScoreVersion')

@@ -1379,6 +1379,11 @@ def push(scorecard: str, score: str, note: str):
             client_context=getattr(client, "context", None),
             source="cli",
         )
+        if isinstance(mutation_input["input"].get("metadata"), dict):
+            mutation_input["input"]["metadata"] = json.dumps(
+                mutation_input["input"]["metadata"],
+                default=str,
+            )
 
         with client as session:
             result = session.execute(gql(mutation), mutation_input)

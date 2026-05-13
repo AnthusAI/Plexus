@@ -7,6 +7,7 @@ and the on-demand plexus_score_result_investigate MCP tool.
 """
 import json
 import logging
+import os
 import re
 from collections import Counter
 from datetime import datetime
@@ -20,6 +21,30 @@ logger = logging.getLogger(__name__)
 RCA_OPENAI_MODEL = "gpt-5-mini"
 RCA_OPENAI_REASONING_EFFORT = "low"
 RCA_MIN_OUTPUT_TOKENS = 1000
+RCA_LLM_TIMEOUT_SECONDS = 60
+
+
+def _rca_llm_timeout_seconds() -> float:
+    value = os.getenv("PLEXUS_RCA_LLM_TIMEOUT_SECONDS", "").strip()
+    if not value:
+        return float(RCA_LLM_TIMEOUT_SECONDS)
+    try:
+        timeout = float(value)
+    except ValueError:
+        logger.warning(
+            "Invalid PLEXUS_RCA_LLM_TIMEOUT_SECONDS=%r; using default %ss",
+            value,
+            RCA_LLM_TIMEOUT_SECONDS,
+        )
+        return float(RCA_LLM_TIMEOUT_SECONDS)
+    if timeout <= 0:
+        logger.warning(
+            "Invalid non-positive PLEXUS_RCA_LLM_TIMEOUT_SECONDS=%r; using default %ss",
+            value,
+            RCA_LLM_TIMEOUT_SECONDS,
+        )
+        return float(RCA_LLM_TIMEOUT_SECONDS)
+    return timeout
 
 
 def _invoke_rca_openai_text(
@@ -35,7 +60,7 @@ def _invoke_rca_openai_text(
     from plexus.cli.procedure.logging_utils import capture_llm_context_for_agent
 
     load_dotenv(override=False)
-    client = OpenAI()
+    client = OpenAI(timeout=_rca_llm_timeout_seconds(), max_retries=1)
     current_messages = list(messages)
     last_empty = False
     for attempt in range(2):

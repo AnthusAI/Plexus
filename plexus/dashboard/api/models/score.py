@@ -8,6 +8,7 @@ Represents a scoring method within a scorecard section, tracking:
 - Version history
 """
 
+import json
 import logging
 import yaml
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
@@ -1028,6 +1029,8 @@ class Score(BaseModel):
                 client_context=getattr(self._client, "context", None),
                 source="agent",
             )
+            if isinstance(version_input.get("metadata"), dict):
+                version_input["metadata"] = json.dumps(version_input["metadata"], default=str)
             
             result = self._client.execute(mutation, {'input': version_input})
             
