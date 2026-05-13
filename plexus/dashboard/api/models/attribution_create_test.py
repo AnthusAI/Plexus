@@ -185,4 +185,7 @@ def test_score_create_version_injects_actor_attribution():
     assert result["success"] is True
     mutation_input = client.execute.call_args_list[1][0][1]["input"]
     assert mutation_input["createdByUserId"] == "user-123"
-    assert mutation_input["metadata"]["attribution"]["actorType"] == "agent"
+    metadata = mutation_input["metadata"]
+    if isinstance(metadata, str):
+        metadata = json.loads(metadata)
+    assert metadata["attribution"]["actorType"] == "agent"
