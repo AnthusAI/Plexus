@@ -1,0 +1,31 @@
+{
+  "id": "plx-38dfa5d0-e418-4766-aa27-2a0e3eaee39d",
+  "title": "Fix dashboard breakage after npm audit fix --force trial",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b6dfeebd-d847-4035-8f16-3f1358a568c0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3d84f4d7-d82b-40d6-bd4f-967bc6152604",
+      "author": "derek",
+      "text": "Investigating dashboard load failure after force audit trial. Reproduce missing module path for Excalidraw CSS, apply minimal fix, then validate build starts.",
+      "created_at": "2026-05-13T23:02:51.530936629Z"
+    },
+    {
+      "id": "f1208925-b36c-4308-abb9-21ce706dbc0a",
+      "author": "derek",
+      "text": "Superseded: user discarded force-trial changes and requested full prod-first remediation strategy implementation.",
+      "created_at": "2026-05-13T23:11:53.546221825Z"
+    }
+  ],
+  "created_at": "2026-05-13T23:02:49.288261073Z",
+  "updated_at": "2026-05-13T23:11:53.631420845Z",
+  "closed_at": "2026-05-13T23:11:53.631420845Z",
+  "custom": {}
+}
