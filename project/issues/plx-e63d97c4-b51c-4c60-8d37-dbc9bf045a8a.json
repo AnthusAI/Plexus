@@ -1,0 +1,31 @@
+{
+  "id": "plx-e63d97c4-b51c-4c60-8d37-dbc9bf045a8a",
+  "title": "Stabilize dashboard dependency baseline and capture audit snapshots",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b6dfeebd-d847-4035-8f16-3f1358a568c0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "42a43763-2a52-4786-8754-12d30859d271",
+      "author": "derek",
+      "text": "Starting phase 1: restore lock/install consistency, then capture baseline full and prod-only audit snapshots plus top-level dependency versions.",
+      "created_at": "2026-05-13T23:11:57.375438657Z"
+    },
+    {
+      "id": "81d072d5-b7cb-4d1d-a5f1-288cb2a72902",
+      "author": "derek",
+      "text": "Phase 1 completed: lockfile reconciled with npm install --package-lock-only; npm ci now succeeds. Baseline audits: full 52 (15 low,23 moderate,12 high,2 critical); prod-only 4 moderate and 0 high/critical. Key versions confirmed: next 15.6.0-canary.61, @excalidraw/excalidraw 0.18.1, @aws-amplify/backend 1.22.0, @aws-amplify/backend-cli 1.8.2.",
+      "created_at": "2026-05-13T23:21:27.958479635Z"
+    }
+  ],
+  "created_at": "2026-05-13T23:11:53.637106152Z",
+  "updated_at": "2026-05-13T23:21:27.958479635Z",
+  "closed_at": "2026-05-13T23:21:27.949316632Z",
+  "custom": {}
+}

@@ -1,0 +1,37 @@
+{
+  "id": "plx-96eb151f-9bf2-427d-87b7-c8fbce37a1f3",
+  "title": "Add vulnerability exception governance and CI prod-audit gate",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b6dfeebd-d847-4035-8f16-3f1358a568c0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b7112e93-65e0-4f19-a3ba-2980e3dd66c6",
+      "author": "derek",
+      "text": "Starting phase 3: add vulnerability exception documentation, enforce production-only high/critical audit gate in CI, and keep full audit visible as non-blocking output.",
+      "created_at": "2026-05-13T23:22:04.739107219Z"
+    },
+    {
+      "id": "33fa6a99-b83a-4ae1-b36d-04c0dcbab758",
+      "author": "derek",
+      "text": "Phase 3 completed: added dashboard/docs/security-vulnerability-exceptions.md documenting active dev-toolchain high/critical exception and review cadence (next review June 13, 2026). Added dashboard package scripts ci:security and audit:full:report. Updated .github/workflows/ci.yaml with new dashboard-security-audit job: blocking prod-only high/critical gate via npm run ci:security, plus non-blocking full audit artifact upload.",
+      "created_at": "2026-05-13T23:30:06.842388909Z"
+    },
+    {
+      "id": "bc34990f-bc2c-485f-b39f-3ca9dfdce5b2",
+      "author": "derek",
+      "text": "Validation summary: npm ci succeeds from clean install state; ci:security (npm audit --omit=dev --audit-level=high) passes with 0 high/critical in production graph; full audit remains 52 total (15 low, 23 moderate, 12 high, 2 critical). App health checks passed: npm run build:fast and npm test (82 suites, 606 tests).",
+      "created_at": "2026-05-13T23:34:45.841320698Z"
+    }
+  ],
+  "created_at": "2026-05-13T23:11:53.640873566Z",
+  "updated_at": "2026-05-13T23:34:45.841320698Z",
+  "closed_at": "2026-05-13T23:30:06.851166701Z",
+  "custom": {}
+}
