@@ -52,8 +52,8 @@ if #history > 0 then
 end
 
 -- Apply token-budgeted history management using MessageHistory primitives
--- Target: ~8000 tokens for history (leaves room for system prompt + response)
-local MAX_HISTORY_TOKENS = 8000
+-- Target: 100K tokens for history (models have 128K+ windows; leave room for system prompt + response)
+local MAX_HISTORY_TOKENS = 100000
 MessageHistory.replace(history)
 local filtered_history = MessageHistory.tail_tokens(MAX_HISTORY_TOKENS)
 
