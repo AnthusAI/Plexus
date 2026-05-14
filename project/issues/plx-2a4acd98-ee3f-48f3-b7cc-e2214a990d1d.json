@@ -3,7 +3,7 @@
   "title": "Fix PR #366 CI regressions (storybook account context + npm ci flake)",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,16 @@
       "author": "derek",
       "text": "Investigating failing PR run 25890423127: Storybook tests fail with useAccount outside provider; dashboard unit job failed npm ci with transient ECONNRESET.",
       "created_at": "2026-05-14T23:05:28.647564266Z"
+    },
+    {
+      "id": "c385f540-76f4-4fff-b7d3-a8e0182d74a9",
+      "author": "derek",
+      "text": "Applied fix: Storybook webpack alias now maps '@/app/contexts/AccountContext' to dashboard/__mocks__/AccountContext.ts so useAccount resolves to mock in stories; CI npm install steps now include fetch retry flags to reduce transient ECONNRESET failures. Changes pushed in commit bbad79aa.",
+      "created_at": "2026-05-14T23:07:30.569493766Z"
     }
   ],
   "created_at": "2026-05-14T23:05:25.614547982Z",
-  "updated_at": "2026-05-14T23:05:28.647564266Z",
-  "closed_at": null,
+  "updated_at": "2026-05-14T23:07:30.578157588Z",
+  "closed_at": "2026-05-14T23:07:30.578157588Z",
   "custom": {}
 }
