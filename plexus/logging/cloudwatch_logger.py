@@ -28,6 +28,58 @@ def _epoch_ms() -> int:
     return int(time.time() * 1000)
 
 
+def _get_data_protection_policy() -> str:
+    """
+    Get CloudWatch Logs data protection policy for PII/PHI masking.
+
+    Uses AWS managed data identifiers to automatically detect and mask:
+    - PII (emails, phone numbers, SSNs, addresses)
+    - PHI (medical records, health plan IDs)
+    - Financial data (credit cards, bank accounts)
+    - Credentials (API keys, AWS secrets)
+
+    Returns:
+        JSON string of data protection policy
+    """
+    policy = {
+        "Name": "PlexusLogDataProtection",
+        "Description": "Mask PII/PHI/credentials in Plexus CloudWatch logs",
+        "Version": "2021-06-01",
+        "Statement": [
+            {
+                "Sid": "AuditAndRedact",
+                "DataIdentifier": [
+                    # PII - Contact Information
+                    "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
+                    "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-US",
+                    "arn:aws:dataprotection::aws:data-identifier/Address",
+                    # PII - National IDs
+                    "arn:aws:dataprotection::aws:data-identifier/SsnUs",
+                    "arn:aws:dataprotection::aws:data-identifier/DriversLicenseUs",
+                    "arn:aws:dataprotection::aws:data-identifier/PassportNumberUs",
+                    # Financial
+                    "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+                    "arn:aws:dataprotection::aws:data-identifier/BankAccountNumberUs",
+                    # PHI
+                    "arn:aws:dataprotection::aws:data-identifier/HealthInsuranceClaimNumberUs",
+                    "arn:aws:dataprotection::aws:data-identifier/MedicareId",
+                    # Credentials
+                    "arn:aws:dataprotection::aws:data-identifier/AwsSecretKey",
+                ],
+                "Operation": {
+                    "Audit": {
+                        "FindingsDestination": {}
+                    },
+                    "Deidentify": {
+                        "MaskConfig": {}
+                    }
+                }
+            }
+        ]
+    }
+    return json.dumps(policy)
+
+
 class PlexusCloudWatchLogger:
     """Streams Plexus component execution events to two CloudWatch log streams."""
 
@@ -86,10 +138,27 @@ class PlexusCloudWatchLogger:
         if not self._logs_client:
             return
         try:
+            # Create log group
+            log_group_created = False
             try:
                 self._logs_client.create_log_group(logGroupName=self.log_group)
+                log_group_created = True
             except self._logs_client.exceptions.ResourceAlreadyExistsException:
                 pass
+
+            # Apply data protection policy for PII/PHI masking
+            if log_group_created:
+                try:
+                    self._logs_client.put_data_protection_policy(
+                        logGroupIdentifier=self.log_group,
+                        policyDocument=_get_data_protection_policy()
+                    )
+                    logger.debug("Applied data protection policy to %s", self.log_group)
+                except Exception as exc:
+                    # Non-fatal: log group is still usable, just without PII protection
+                    logger.warning("Could not apply data protection policy to %s: %s", self.log_group, exc)
+
+            # Create log streams
             for stream in (self._run_stream, self._llm_stream):
                 try:
                     self._logs_client.create_log_stream(
@@ -97,6 +166,8 @@ class PlexusCloudWatchLogger:
                     )
                 except self._logs_client.exceptions.ResourceAlreadyExistsException:
                     pass
+
+            # Log initial event
             self._put(self._run_stream, json.dumps({
                 "event": "component_started",
                 "component_name": self._component_name,
