@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5882b2a5-32a1-4633-aa4a-67fad8b55c10",
+  "issue_id": "plx-96eb151f-9bf2-427d-87b7-c8fbce37a1f3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-13T23:11:53.640Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-b6dfeebd-d847-4035-8f16-3f1358a568c0",
+    "priority": 2,
+    "status": "open",
+    "title": "Add vulnerability exception governance and CI prod-audit gate"
+  }
+}

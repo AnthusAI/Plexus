@@ -1,0 +1,31 @@
+{
+  "id": "plx-edc1ff25-2a9b-4309-99a1-25370e45fd59",
+  "title": "Fix Storybook CI failure after dashboard audit lock sync",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b6dfeebd-d847-4035-8f16-3f1358a568c0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "604d07f3-ea10-4bba-9407-a6a40393ce67",
+      "author": "derek",
+      "text": "Investigating SB_BUILDER-WEBPACK5_0002: Cannot read properties of undefined (reading 'tap') in Storybook preview build on PR #366.",
+      "created_at": "2026-05-14T22:13:36.357843523Z"
+    },
+    {
+      "id": "6b61df0d-ec33-4c68-b970-21be9ea700fd",
+      "author": "derek",
+      "text": "Root cause isolated: dashboard CI ran Node 18.x while next@15.6.0-canary.61 requires Node >=20.9.0; Storybook build failures were downstream compatibility errors. Implemented fixes: set dashboard CI jobs to Node 20.x, aligned dashboard engines.node to >=20.9.0, added explicit webpack devDependency (5.101.2) required by @storybook/nextjs, and verified storybook build succeeds on Node 20 with npm ci.",
+      "created_at": "2026-05-14T22:56:41.692601260Z"
+    }
+  ],
+  "created_at": "2026-05-14T22:13:34.771459731Z",
+  "updated_at": "2026-05-14T22:56:48.615008925Z",
+  "closed_at": "2026-05-14T22:56:48.615008925Z",
+  "custom": {}
+}
