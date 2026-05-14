@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5b279465-97f8-4247-91ac-cfc0de6fc307",
+  "issue_id": "plx-60f1d232-182b-44f3-965c-0760f055bdde",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-14T18:09:04.130Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+    "priority": 0,
+    "status": "open",
+    "title": "Implement PII protection for CloudWatch logs"
+  }
+}
