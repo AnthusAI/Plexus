@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b1ee00e3-39f4-4162-b843-5b3cb7db6860",
+  "issue_id": "plx-2a4acd98-ee3f-48f3-b7cc-e2214a990d1d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-14T23:05:25.615Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-b6dfeebd-d847-4035-8f16-3f1358a568c0",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix PR #366 CI regressions (storybook account context + npm ci flake)"
+  }
+}

@@ -31,6 +31,7 @@ const config: StorybookConfig = {
         ...config.resolve.alias,
         '@': path.resolve(currentDir, '../'),
         '@number-flow/react': path.resolve(currentDir, '../components/ui/number-flow-dev.tsx'),
+        '@/app/contexts/AccountContext$': path.resolve(currentDir, '../__mocks__/AccountContext.ts'),
         'aws-amplify/data$': path.resolve(currentDir, '../__mocks__/aws-amplify-data.ts'),
       };
     }

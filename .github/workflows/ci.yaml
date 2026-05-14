@@ -145,7 +145,7 @@ jobs:
         
     - name: Install Node dependencies
       working-directory: ./dashboard
-      run: npm ci --include=optional
+      run: npm ci --include=optional --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 
     - name: Install Tailwind native binding
       working-directory: ./dashboard
@@ -175,7 +175,7 @@ jobs:
 
     - name: Install Node dependencies
       working-directory: ./dashboard
-      run: npm ci --include=optional
+      run: npm ci --include=optional --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 
     - name: Install Tailwind native binding
       working-directory: ./dashboard
