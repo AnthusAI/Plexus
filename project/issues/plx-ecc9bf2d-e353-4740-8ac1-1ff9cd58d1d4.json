@@ -1,0 +1,25 @@
+{
+  "id": "plx-ecc9bf2d-e353-4740-8ac1-1ff9cd58d1d4",
+  "title": "Refactor ProcedureCloudWatchLogger to general-purpose PlexusCloudWatchLogger",
+  "description": "",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "565884c3-804a-4e64-83ef-a6ce5afcedc9",
+      "author": "derek.norrbom",
+      "text": "## Scope\n\nGeneralize ProcedureCloudWatchLogger for use beyond procedures (console chat, optimizer, reports, etc.) without breaking existing procedure logging.\n\n## Implementation Plan\n\n**Step 1: Create new general-purpose logger**\n- New file: `plexus/logging/cloudwatch_logger.py`\n- Class: `PlexusCloudWatchLogger` (exact same implementation as ProcedureCloudWatchLogger)\n- Parameters: `account_key`, `component_name`, `invocation_id` (renamed from procedure_id/invocation_run_id)\n- Log streams: `{component_name}/run/{invocation_id}` and `{component_name}/llm-context/{invocation_id}`\n\n**Step 2: Add backward-compatible wrapper**\n- In `plexus/cli/procedure/cloudwatch_logger.py`:\n  ```python\n  from plexus.logging.cloudwatch_logger import PlexusCloudWatchLogger\n  \n  class ProcedureCloudWatchLogger(PlexusCloudWatchLogger):\n      \"\"\"Backward-compatible wrapper for procedures.\"\"\"\n      def __init__(self, account_key: str, procedure_id: str, invocation_run_id: str):\n          super().__init__(\n              account_key=account_key,\n              component_name=procedure_id,\n              invocation_id=invocation_run_id\n          )\n  ```\n\n**Step 3: Update console chat to use PlexusCloudWatchLogger**\n- Import from `plexus.logging.cloudwatch_logger`\n- Pass `component_name=\"console/chat\"`, `invocation_id=message.id`\n\n**Step 4: Test existing procedure logging**\n- Run a procedure and verify logs still appear in correct streams\n- Verify backward compatibility\n\n## Testing\n\n- [ ] Existing procedure logging still works (same log group/stream paths)\n- [ ] Console chat logging works with new structure\n- [ ] No imports broken in existing code\n\n## Notes\n\nThis is a pure refactor - no functional changes to logging behavior, just making it reusable across Plexus components.",
+      "created_at": "2026-05-14T17:51:25.045798Z"
+    }
+  ],
+  "created_at": "2026-05-14T17:51:13.996588Z",
+  "updated_at": "2026-05-14T17:51:25.045798Z",
+  "closed_at": null,
+  "custom": {}
+}

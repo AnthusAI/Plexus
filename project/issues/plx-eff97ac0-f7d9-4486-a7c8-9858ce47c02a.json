@@ -1,0 +1,25 @@
+{
+  "id": "plx-eff97ac0-f7d9-4486-a7c8-9858ce47c02a",
+  "title": "Console chat maintains conversational context across long sessions",
+  "description": "",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bed1afc0-5a1f-429a-b598-89e386685508",
+      "author": "derek.norrbom",
+      "text": "**As a** Plexus console user  \n**I want** the assistant to remember context from earlier in long conversations  \n**So that** I can say \"do that again\" or reference prior actions without repeating details\n\n## Gherkin Specification\n\n```gherkin\nFeature: Console chat conversational continuity\n  The console assistant must maintain context across long conversations\n  so users can reference prior actions without repeating parameters.\n\n  Scenario: User asks to repeat a prior action after 20+ turns\n    Given I have a console chat session\n    And I have had 20+ conversational turns with the assistant\n    And I previously asked \"Run evaluation on items A, B, C with score X\"\n    And the assistant completed that evaluation\n    When I send the message \"Do that again with items D, E, F\"\n    Then the assistant recognizes \"that\" refers to the prior evaluation\n    And the assistant runs evaluation on items D, E, F with score X\n    And the assistant does not ask me to clarify what \"that\" means\n\n  Scenario: Context preserved across tool-heavy exchanges\n    Given I have a console chat session\n    And I execute several commands that generate large tool responses\n    And the total conversation exceeds 50 messages\n    When I reference a decision made 30 messages ago\n    Then the assistant recalls the decision correctly\n    And provides a response consistent with that prior context\n\n  Scenario: Recent context takes precedence in compacted history\n    Given I have a console chat session with 60+ messages\n    And message history has been compacted with rolling summary\n    When I reference something from the recent 10 messages\n    Then the assistant recalls it with full detail\n    And does not rely solely on the summary\n```",
+      "created_at": "2026-05-13T21:09:54.513732Z"
+    }
+  ],
+  "created_at": "2026-05-13T21:09:40.159406Z",
+  "updated_at": "2026-05-13T21:09:54.513732Z",
+  "closed_at": null,
+  "custom": {}
+}
