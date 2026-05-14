@@ -42,41 +42,232 @@ def _get_data_protection_policy() -> str:
         JSON string of data protection policy
     """
     policy = {
-        "Name": "PlexusLogDataProtection",
-        "Description": "Mask PII/PHI/credentials in Plexus CloudWatch logs",
+        "Name": "data-protection-policy",
+        "Description": "",
         "Version": "2021-06-01",
         "Statement": [
             {
-                "Sid": "AuditAndRedact",
-                "DataIdentifier": [
-                    # PII - Contact Information
-                    "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
-                    "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-US",
-                    "arn:aws:dataprotection::aws:data-identifier/Address",
-                    # PII - National IDs
-                    "arn:aws:dataprotection::aws:data-identifier/SsnUs",
-                    "arn:aws:dataprotection::aws:data-identifier/DriversLicenseUs",
-                    "arn:aws:dataprotection::aws:data-identifier/PassportNumberUs",
-                    # Financial
-                    "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
-                    "arn:aws:dataprotection::aws:data-identifier/BankAccountNumberUs",
-                    # PHI
-                    "arn:aws:dataprotection::aws:data-identifier/HealthInsuranceClaimNumberUs",
-                    "arn:aws:dataprotection::aws:data-identifier/MedicareId",
-                    # Credentials
-                    "arn:aws:dataprotection::aws:data-identifier/AwsSecretKey",
-                ],
-                "Operation": {
-                    "Audit": {
-                        "FindingsDestination": {}
-                    },
-                    "Deidentify": {
-                        "MaskConfig": {}
-                    }
+            "Sid": "audit-policy",
+            "DataIdentifier": [
+                "arn:aws:dataprotection::aws:data-identifier/Address",
+                "arn:aws:dataprotection::aws:data-identifier/AwsSecretKey",
+                "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-DE",
+                "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-ES",
+                "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-FR",
+                "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-GB",
+                "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-IT",
+                "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/CepCode-BR",
+                "arn:aws:dataprotection::aws:data-identifier/Cnpj-BR",
+                "arn:aws:dataprotection::aws:data-identifier/CpfCode-BR",
+                "arn:aws:dataprotection::aws:data-identifier/CreditCardExpiration",
+                "arn:aws:dataprotection::aws:data-identifier/CreditCardMagneticStripe",
+                "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+                "arn:aws:dataprotection::aws:data-identifier/CreditCardSecurityCode",
+                "arn:aws:dataprotection::aws:data-identifier/DateOfBirth",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-AT",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-AU",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-BE",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-BG",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-CA",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-CY",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-CZ",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-DE",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-DK",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-EE",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-ES",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-FI",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-FR",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-GB",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-GR",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-HR",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-HU",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-IE",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-IT",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-LT",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-LU",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-LV",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-MT",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-NL",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-PL",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-PT",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-RO",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-SE",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-SI",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-SK",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-US",
+                "arn:aws:dataprotection::aws:data-identifier/DrugEnforcementAgencyNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/ElectoralRollNumber-GB",
+                "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
+                "arn:aws:dataprotection::aws:data-identifier/HealthInsuranceCardNumber-EU",
+                "arn:aws:dataprotection::aws:data-identifier/HealthInsuranceClaimNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/HealthInsuranceNumber-FR",
+                "arn:aws:dataprotection::aws:data-identifier/HealthcareProcedureCode-US",
+                "arn:aws:dataprotection::aws:data-identifier/IndividualTaxIdentificationNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/InseeCode-FR",
+                "arn:aws:dataprotection::aws:data-identifier/IpAddress",
+                "arn:aws:dataprotection::aws:data-identifier/LatLong",
+                "arn:aws:dataprotection::aws:data-identifier/MedicareBeneficiaryNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/Name",
+                "arn:aws:dataprotection::aws:data-identifier/NationalDrugCode-US",
+                "arn:aws:dataprotection::aws:data-identifier/NationalIdentificationNumber-DE",
+                "arn:aws:dataprotection::aws:data-identifier/NationalIdentificationNumber-ES",
+                "arn:aws:dataprotection::aws:data-identifier/NationalIdentificationNumber-IT",
+                "arn:aws:dataprotection::aws:data-identifier/NationalInsuranceNumber-GB",
+                "arn:aws:dataprotection::aws:data-identifier/NationalProviderId-US",
+                "arn:aws:dataprotection::aws:data-identifier/NhsNumber-GB",
+                "arn:aws:dataprotection::aws:data-identifier/NieNumber-ES",
+                "arn:aws:dataprotection::aws:data-identifier/NifNumber-ES",
+                "arn:aws:dataprotection::aws:data-identifier/OpenSshPrivateKey",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-CA",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-DE",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-ES",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-FR",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-GB",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-IT",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/PermanentResidenceNumber-CA",
+                "arn:aws:dataprotection::aws:data-identifier/PersonalHealthNumber-CA",
+                "arn:aws:dataprotection::aws:data-identifier/PgpPrivateKey",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-BR",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-DE",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-ES",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-FR",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-GB",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-IT",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/PkcsPrivateKey",
+                "arn:aws:dataprotection::aws:data-identifier/PostalCode-CA",
+                "arn:aws:dataprotection::aws:data-identifier/PuttyPrivateKey",
+                "arn:aws:dataprotection::aws:data-identifier/RgNumber-BR",
+                "arn:aws:dataprotection::aws:data-identifier/SocialInsuranceNumber-CA",
+                "arn:aws:dataprotection::aws:data-identifier/Ssn-ES",
+                "arn:aws:dataprotection::aws:data-identifier/Ssn-US",
+                "arn:aws:dataprotection::aws:data-identifier/TaxId-DE",
+                "arn:aws:dataprotection::aws:data-identifier/TaxId-ES",
+                "arn:aws:dataprotection::aws:data-identifier/TaxId-FR",
+                "arn:aws:dataprotection::aws:data-identifier/TaxId-GB",
+                "arn:aws:dataprotection::aws:data-identifier/VehicleIdentificationNumber",
+                "arn:aws:dataprotection::aws:data-identifier/ZipCode-US"
+            ],
+            "Operation": {
+                "Audit": {
+                "FindingsDestination": {}
                 }
             }
+            },
+            {
+            "Sid": "redact-policy",
+            "DataIdentifier": [
+                "arn:aws:dataprotection::aws:data-identifier/Address",
+                "arn:aws:dataprotection::aws:data-identifier/AwsSecretKey",
+                "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-DE",
+                "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-ES",
+                "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-FR",
+                "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-GB",
+                "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-IT",
+                "arn:aws:dataprotection::aws:data-identifier/BankAccountNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/CepCode-BR",
+                "arn:aws:dataprotection::aws:data-identifier/Cnpj-BR",
+                "arn:aws:dataprotection::aws:data-identifier/CpfCode-BR",
+                "arn:aws:dataprotection::aws:data-identifier/CreditCardExpiration",
+                "arn:aws:dataprotection::aws:data-identifier/CreditCardMagneticStripe",
+                "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+                "arn:aws:dataprotection::aws:data-identifier/CreditCardSecurityCode",
+                "arn:aws:dataprotection::aws:data-identifier/DateOfBirth",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-AT",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-AU",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-BE",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-BG",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-CA",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-CY",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-CZ",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-DE",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-DK",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-EE",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-ES",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-FI",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-FR",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-GB",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-GR",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-HR",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-HU",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-IE",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-IT",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-LT",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-LU",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-LV",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-MT",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-NL",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-PL",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-PT",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-RO",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-SE",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-SI",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-SK",
+                "arn:aws:dataprotection::aws:data-identifier/DriversLicense-US",
+                "arn:aws:dataprotection::aws:data-identifier/DrugEnforcementAgencyNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/ElectoralRollNumber-GB",
+                "arn:aws:dataprotection::aws:data-identifier/EmailAddress",
+                "arn:aws:dataprotection::aws:data-identifier/HealthInsuranceCardNumber-EU",
+                "arn:aws:dataprotection::aws:data-identifier/HealthInsuranceClaimNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/HealthInsuranceNumber-FR",
+                "arn:aws:dataprotection::aws:data-identifier/HealthcareProcedureCode-US",
+                "arn:aws:dataprotection::aws:data-identifier/IndividualTaxIdentificationNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/InseeCode-FR",
+                "arn:aws:dataprotection::aws:data-identifier/IpAddress",
+                "arn:aws:dataprotection::aws:data-identifier/LatLong",
+                "arn:aws:dataprotection::aws:data-identifier/MedicareBeneficiaryNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/Name",
+                "arn:aws:dataprotection::aws:data-identifier/NationalDrugCode-US",
+                "arn:aws:dataprotection::aws:data-identifier/NationalIdentificationNumber-DE",
+                "arn:aws:dataprotection::aws:data-identifier/NationalIdentificationNumber-ES",
+                "arn:aws:dataprotection::aws:data-identifier/NationalIdentificationNumber-IT",
+                "arn:aws:dataprotection::aws:data-identifier/NationalInsuranceNumber-GB",
+                "arn:aws:dataprotection::aws:data-identifier/NationalProviderId-US",
+                "arn:aws:dataprotection::aws:data-identifier/NhsNumber-GB",
+                "arn:aws:dataprotection::aws:data-identifier/NieNumber-ES",
+                "arn:aws:dataprotection::aws:data-identifier/NifNumber-ES",
+                "arn:aws:dataprotection::aws:data-identifier/OpenSshPrivateKey",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-CA",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-DE",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-ES",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-FR",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-GB",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-IT",
+                "arn:aws:dataprotection::aws:data-identifier/PassportNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/PermanentResidenceNumber-CA",
+                "arn:aws:dataprotection::aws:data-identifier/PersonalHealthNumber-CA",
+                "arn:aws:dataprotection::aws:data-identifier/PgpPrivateKey",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-BR",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-DE",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-ES",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-FR",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-GB",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-IT",
+                "arn:aws:dataprotection::aws:data-identifier/PhoneNumber-US",
+                "arn:aws:dataprotection::aws:data-identifier/PkcsPrivateKey",
+                "arn:aws:dataprotection::aws:data-identifier/PostalCode-CA",
+                "arn:aws:dataprotection::aws:data-identifier/PuttyPrivateKey",
+                "arn:aws:dataprotection::aws:data-identifier/RgNumber-BR",
+                "arn:aws:dataprotection::aws:data-identifier/SocialInsuranceNumber-CA",
+                "arn:aws:dataprotection::aws:data-identifier/Ssn-ES",
+                "arn:aws:dataprotection::aws:data-identifier/Ssn-US",
+                "arn:aws:dataprotection::aws:data-identifier/TaxId-DE",
+                "arn:aws:dataprotection::aws:data-identifier/TaxId-ES",
+                "arn:aws:dataprotection::aws:data-identifier/TaxId-FR",
+                "arn:aws:dataprotection::aws:data-identifier/TaxId-GB",
+                "arn:aws:dataprotection::aws:data-identifier/VehicleIdentificationNumber",
+                "arn:aws:dataprotection::aws:data-identifier/ZipCode-US"
+            ],
+            "Operation": {
+                "Deidentify": {
+                "MaskConfig": {}
+                }
+            }
+            }
         ]
-    }
+        }
     return json.dumps(policy)
 
 
@@ -139,24 +330,22 @@ class PlexusCloudWatchLogger:
             return
         try:
             # Create log group
-            log_group_created = False
             try:
                 self._logs_client.create_log_group(logGroupName=self.log_group)
-                log_group_created = True
             except self._logs_client.exceptions.ResourceAlreadyExistsException:
                 pass
 
             # Apply data protection policy for PII/PHI masking
-            if log_group_created:
-                try:
-                    self._logs_client.put_data_protection_policy(
-                        logGroupIdentifier=self.log_group,
-                        policyDocument=_get_data_protection_policy()
-                    )
-                    logger.debug("Applied data protection policy to %s", self.log_group)
-                except Exception as exc:
-                    # Non-fatal: log group is still usable, just without PII protection
-                    logger.warning("Could not apply data protection policy to %s: %s", self.log_group, exc)
+            # Note: Always try to apply, even if log group already existed
+            try:
+                response = self._logs_client.put_data_protection_policy(
+                    logGroupIdentifier=self.log_group,
+                    policyDocument=_get_data_protection_policy()
+                )
+                logger.info("Applied data protection policy to %s: %s", self.log_group, response)
+            except Exception as exc:
+                # Non-fatal: log group is still usable, just without PII protection
+                logger.error("Could not apply data protection policy to %s: %s", self.log_group, exc, exc_info=True)
 
             # Create log streams
             for stream in (self._run_stream, self._llm_stream):
