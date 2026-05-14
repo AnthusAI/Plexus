@@ -16,10 +16,16 @@
       "author": "derek.norrbom",
       "text": "## Scope\n\nGeneralize ProcedureCloudWatchLogger for use beyond procedures (console chat, optimizer, reports, etc.) without breaking existing procedure logging.\n\n## Implementation Plan\n\n**Step 1: Create new general-purpose logger**\n- New file: `plexus/logging/cloudwatch_logger.py`\n- Class: `PlexusCloudWatchLogger` (exact same implementation as ProcedureCloudWatchLogger)\n- Parameters: `account_key`, `component_name`, `invocation_id` (renamed from procedure_id/invocation_run_id)\n- Log streams: `{component_name}/run/{invocation_id}` and `{component_name}/llm-context/{invocation_id}`\n\n**Step 2: Add backward-compatible wrapper**\n- In `plexus/cli/procedure/cloudwatch_logger.py`:\n  ```python\n  from plexus.logging.cloudwatch_logger import PlexusCloudWatchLogger\n  \n  class ProcedureCloudWatchLogger(PlexusCloudWatchLogger):\n      \"\"\"Backward-compatible wrapper for procedures.\"\"\"\n      def __init__(self, account_key: str, procedure_id: str, invocation_run_id: str):\n          super().__init__(\n              account_key=account_key,\n              component_name=procedure_id,\n              invocation_id=invocation_run_id\n          )\n  ```\n\n**Step 3: Update console chat to use PlexusCloudWatchLogger**\n- Import from `plexus.logging.cloudwatch_logger`\n- Pass `component_name=\"console/chat\"`, `invocation_id=message.id`\n\n**Step 4: Test existing procedure logging**\n- Run a procedure and verify logs still appear in correct streams\n- Verify backward compatibility\n\n## Testing\n\n- [ ] Existing procedure logging still works (same log group/stream paths)\n- [ ] Console chat logging works with new structure\n- [ ] No imports broken in existing code\n\n## Notes\n\nThis is a pure refactor - no functional changes to logging behavior, just making it reusable across Plexus components.",
       "created_at": "2026-05-14T17:51:25.045798Z"
+    },
+    {
+      "id": "d5fdbd76-40d3-4a49-9712-af012b069cb1",
+      "author": "derek.norrbom",
+      "text": "## Blocker: PII Protection\n\n**IMPORTANT**: Console chat logging should NOT be deployed to production until plx-60f1d2 (PII protection) is complete.\n\nThe llm-context stream will contain full conversation history including potential PII, credentials, and PHI. AWS CloudWatch data protection policies must be in place before enabling this logging in production.\n\n**Safe to proceed with**:\n- Refactoring the logger (this task)\n- Testing in staging/dev environments\n- Structural implementation\n\n**Block production deployment until**:\n- CloudWatch data protection policy configured\n- PII masking tested and verified\n- Compliance review complete",
+      "created_at": "2026-05-14T18:09:31.032438Z"
     }
   ],
   "created_at": "2026-05-14T17:51:13.996588Z",
-  "updated_at": "2026-05-14T17:51:25.045798Z",
+  "updated_at": "2026-05-14T18:09:31.032438Z",
   "closed_at": null,
   "custom": {}
 }
