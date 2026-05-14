@@ -1,0 +1,25 @@
+{
+  "id": "plx-2a4acd98-ee3f-48f3-b7cc-e2214a990d1d",
+  "title": "Fix PR #366 CI regressions (storybook account context + npm ci flake)",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b6dfeebd-d847-4035-8f16-3f1358a568c0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5ebbef0a-2e6d-4951-8b4f-e9ac13fcafd4",
+      "author": "derek",
+      "text": "Investigating failing PR run 25890423127: Storybook tests fail with useAccount outside provider; dashboard unit job failed npm ci with transient ECONNRESET.",
+      "created_at": "2026-05-14T23:05:28.647564266Z"
+    }
+  ],
+  "created_at": "2026-05-14T23:05:25.614547982Z",
+  "updated_at": "2026-05-14T23:05:28.647564266Z",
+  "closed_at": null,
+  "custom": {}
+}
