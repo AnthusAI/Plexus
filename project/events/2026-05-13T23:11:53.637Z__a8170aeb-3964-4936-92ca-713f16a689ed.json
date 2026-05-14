@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a8170aeb-3964-4936-92ca-713f16a689ed",
+  "issue_id": "plx-e63d97c4-b51c-4c60-8d37-dbc9bf045a8a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-13T23:11:53.637Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-b6dfeebd-d847-4035-8f16-3f1358a568c0",
+    "priority": 2,
+    "status": "open",
+    "title": "Stabilize dashboard dependency baseline and capture audit snapshots"
+  }
+}

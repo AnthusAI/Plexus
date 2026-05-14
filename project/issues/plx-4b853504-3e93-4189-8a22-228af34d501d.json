@@ -1,0 +1,43 @@
+{
+  "id": "plx-4b853504-3e93-4189-8a22-228af34d501d",
+  "title": "Run npm audit fix in dashboard and capture remaining vulnerabilities",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b6dfeebd-d847-4035-8f16-3f1358a568c0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9fe03b9a-dbda-4e15-9980-b7057fadb484",
+      "author": "derek",
+      "text": "Starting remediation workflow: create branch from develop, run npm audit fix in dashboard, then report what was auto-resolved vs what remains.",
+      "created_at": "2026-05-13T22:42:48.718136816Z"
+    },
+    {
+      "id": "0dd1c248-b504-4a92-a150-791182eb44f1",
+      "author": "derek",
+      "text": "Executed first remediation step on branch chore/dashboard-audit-remediation: ran npm audit (baseline 106 vulnerabilities: 18 low, 61 moderate, 22 high, 5 critical), then npm audit fix. Result after fix: 66 vulnerabilities (17 low, 32 moderate, 15 high, 2 critical). Auto-fix modified dashboard/package-lock.json only; remaining findings are primarily transitive Amplify/AWS SDK, Next/PostCSS major-upgrade paths, and a few Storybook/JSDOM chains requiring reviewed version bumps.",
+      "created_at": "2026-05-13T22:47:11.191007618Z"
+    },
+    {
+      "id": "86481a47-f3c1-4616-a65d-54ab153d6abb",
+      "author": "derek",
+      "text": "Re-ran npm audit fix to confirm no further non-breaking auto-remediation remained. Vulnerability counts are unchanged at 66 total (17 low, 32 moderate, 15 high, 2 critical). Current code delta is limited to dashboard/package-lock.json.",
+      "created_at": "2026-05-13T22:47:48.121951462Z"
+    },
+    {
+      "id": "82337495-a53f-4121-818b-eb6196a82e8d",
+      "author": "derek",
+      "text": "Completed step 1: npm audit fix baseline pass and remaining-vulnerability capture.",
+      "created_at": "2026-05-13T22:51:18.245761606Z"
+    }
+  ],
+  "created_at": "2026-05-13T22:42:46.788106512Z",
+  "updated_at": "2026-05-13T22:51:18.248128937Z",
+  "closed_at": "2026-05-13T22:51:18.248128937Z",
+  "custom": {}
+}

@@ -141,11 +141,11 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18.x'
+        node-version: '20.x'
         
     - name: Install Node dependencies
       working-directory: ./dashboard
-      run: npm ci --include=optional
+      run: npm ci --include=optional --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 
     - name: Install Tailwind native binding
       working-directory: ./dashboard
@@ -171,11 +171,11 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18.x'
+        node-version: '20.x'
 
     - name: Install Node dependencies
       working-directory: ./dashboard
-      run: npm ci --include=optional
+      run: npm ci --include=optional --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 
     - name: Install Tailwind native binding
       working-directory: ./dashboard
