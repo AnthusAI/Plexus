@@ -22,10 +22,16 @@
       "author": "derek",
       "text": "Applied fix: Storybook webpack alias now maps '@/app/contexts/AccountContext' to dashboard/__mocks__/AccountContext.ts so useAccount resolves to mock in stories; CI npm install steps now include fetch retry flags to reduce transient ECONNRESET failures. Changes pushed in commit bbad79aa.",
       "created_at": "2026-05-14T23:07:30.569493766Z"
+    },
+    {
+      "id": "1109d567-8af3-4a20-b41d-4bf07cf3d1e1",
+      "author": "derek",
+      "text": "Validated locally with Node 20 and full storybook test pipeline: npm run test-storybook:ci passes (89/89 suites, 700/700 tests). Root fix was restoring regex-based NormalModuleReplacement for AccountContext in .storybook/main.ts so all import forms are mocked.",
+      "created_at": "2026-05-14T23:23:08.651351224Z"
     }
   ],
   "created_at": "2026-05-14T23:05:25.614547982Z",
-  "updated_at": "2026-05-14T23:07:30.578157588Z",
+  "updated_at": "2026-05-14T23:23:08.651351224Z",
   "closed_at": "2026-05-14T23:07:30.578157588Z",
   "custom": {}
 }

@@ -1,6 +1,7 @@
 import type { StorybookConfig } from "@storybook/nextjs";
 import path from 'path';
 import { fileURLToPath } from 'url';
+import webpack from 'webpack';
 
 // ESM module equivalent for __dirname
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,14 @@ const config: StorybookConfig = {
   },
   staticDirs: ['../public'],
   webpackFinal: async (config) => {
+    config.plugins = config.plugins || [];
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /(^@\/app\/contexts\/AccountContext$|(^|.*\/)app\/contexts\/AccountContext$)/,
+        path.resolve(currentDir, '../__mocks__/AccountContext.ts')
+      )
+    );
+
     if (config.resolve) {
       config.resolve.alias = {
         ...config.resolve.alias,
