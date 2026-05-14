@@ -1,0 +1,31 @@
+{
+  "id": "plx-280f5bbb-bd3c-4a24-9800-afac31cee44c",
+  "title": "Migrate chat_runtime.py to use ConsoleAgent instead of TAC procedure",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3e418d1b-62e8-4853-b800-cac411cb3882",
+      "author": "derek.norrbom",
+      "text": "## Scope\n\nReplace TAC-based procedure invocation with direct ConsoleAgent usage.\n\n## Implementation\n\n**Modify**: `plexus/console/chat_runtime.py`\n- Remove `CONSOLE_HISTORY_LIMIT = 16` hard cap\n- Update `fetch_session_history()`:\n  - Add `sortDirection: DESC` to GraphQL query\n  - Remove default limit of 16, load full session\n  - Reverse results to oldest→newest order\n  - Keep privacy filtering intact\n- Replace procedure service invocation with:\n  - Initialize ConsoleAgent with session, model config\n  - Call `agent.execute_turn()` with user message and history\n  - Store returned artifact keys in ChatMessage.metadata\n- Preserve existing features:\n  - Response status tracking (PENDING → RUNNING → COMPLETED)\n  - Streaming support\n  - Private message filtering by owner user ID\n\n**Deprecate**: `plexus/procedures/console/chat_agent.tac`\n- Add deprecation comment at top of file\n- Keep file for backward compatibility during transition\n- Remove 8-turn window and 180-char truncation logic\n\n## Dependencies\n\n- Requires `plx-068711` (ConsoleAgent) to be complete\n\n## Testing\n\nIntegration tests for:\n- Full session history loading\n- ConsoleAgent invocation and response\n- Audit artifact keys in ChatMessage metadata\n- Privacy filtering still works\n- Tool access modes preserved\n- Streaming still works",
+      "created_at": "2026-05-13T21:12:59.391313Z"
+    },
+    {
+      "id": "31899d0b-ff24-461e-a465-d2a068c57377",
+      "author": "derek.norrbom",
+      "text": "Not needed with revised approach. The console chat already uses Tactus Agent primitives. The fix was to replace manual truncation with MessageHistory token budgeting in the TAC procedure (completed in plx-068711), not create a Python wrapper.",
+      "created_at": "2026-05-13T23:30:03.333199Z"
+    }
+  ],
+  "created_at": "2026-05-13T21:12:48.962061Z",
+  "updated_at": "2026-05-13T23:30:03.333199Z",
+  "closed_at": "2026-05-13T23:29:58.968350Z",
+  "custom": {}
+}

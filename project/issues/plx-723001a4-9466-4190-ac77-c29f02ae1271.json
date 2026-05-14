@@ -1,0 +1,37 @@
+{
+  "id": "plx-723001a4-9466-4190-ac77-c29f02ae1271",
+  "title": "Implement LLM context audit record schema and S3 upload",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7a77f6c5-33f2-4193-8981-538973246366",
+      "author": "derek.norrbom",
+      "text": "## Scope\n\nCreate Plexus infrastructure for capturing and storing LLM context audit records.\n\n## Implementation\n\n**New file**: `plexus/console/llm_context_audit.py`\n- `LLMContextAuditRecord` dataclass with fields:\n  - procedure_id, session_id, trigger_message_id, run_id\n  - agent_name, turn_index, call_index, call_type\n  - messages (exact list sent to model)\n  - model_config, tool_config, token_stats\n  - timestamps, latency_ms\n  - compaction_metadata (optional)\n\n**Extend**: `plexus/reports/s3_utils.py`\n- `upload_llm_context_audit()` function\n- S3 key pattern: `console-contexts/{session_id}/turn_{turn_index}_call_{call_index}.json`\n- Add 14-day lifecycle policy for `console-contexts/` prefix\n\n**Extend**: `plexus/console/chat_runtime.py`\n- Update ChatMessage creation to accept `context_artifact_keys: List[str]`\n- Merge keys into metadata.contextArtifacts array\n- Add `fetch_llm_context_audit(s3_key)` helper\n\n## Dependencies\n\nNone - foundational infrastructure.\n\n## Testing\n\nUnit tests for:\n- LLMContextAuditRecord serialization to JSON\n- S3 upload returns correct key format\n- ChatMessage metadata merge preserves existing fields\n- Artifact retrieval and parsing",
+      "created_at": "2026-05-13T21:11:13.063934Z"
+    },
+    {
+      "id": "797d4155-a683-4a55-8feb-0499fc26f3ca",
+      "author": "derek.norrbom",
+      "text": "## Completed\n\nImplemented LLM context audit infrastructure in three locations:\n\n**New file: `plexus/console/llm_context_audit.py`**\n- `LLMContextAuditRecord` dataclass with full invocation metadata\n- `upload_llm_context_audit()` \u2014 uploads to `console-contexts/{session_id}/turn_{n}_call_{n}.json`\n- `fetch_llm_context_audit()` \u2014 downloads and parses for debugging\n- `_s3_key()` sanitizes colons and slashes in session IDs to avoid unintended S3 path nesting\n\n**Modified: `plexus/console/chat_runtime.py`**\n- Added `record_audit_keys_on_message()` \u2014 merges `contextArtifacts` into ChatMessage metadata via `updateChatMessage` mutation\n\n**New file: `plexus/console/test_llm_context_audit.py`**\n- 11 tests covering serialization, round-trip, key sanitization, upload/fetch, and metadata merge\n\nAll 41 console tests green. Committed as `8b26b483`.",
+      "created_at": "2026-05-13T21:47:30.917117Z"
+    },
+    {
+      "id": "25362053-0aeb-456d-aa20-5fed0556c738",
+      "author": "derek.norrbom",
+      "text": "## Reverted\n\nReverted commit 8b26b483 in favor of CloudWatch structured logs approach.\n\n**Rationale**: S3 audit artifacts introduced sensitive data persistence concerns (PII, API keys, internal system details) with 14-day retention window. CloudWatch provides observability without long-term storage of potentially sensitive context.\n\n**Revert commit**: 4cd909fa\n\n**Next steps**: Will implement CloudWatch structured logging in plx-068711 (ConsoleAgent wrapper) as part of the core fix. S3 artifacts can be added later if needed after validating the CloudWatch approach.",
+      "created_at": "2026-05-13T23:22:10.580474Z"
+    }
+  ],
+  "created_at": "2026-05-13T21:10:47.431348Z",
+  "updated_at": "2026-05-13T23:22:10.580474Z",
+  "closed_at": "2026-05-13T21:47:30.492144Z",
+  "custom": {}
+}

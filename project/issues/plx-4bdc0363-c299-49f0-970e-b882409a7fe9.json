@@ -1,0 +1,31 @@
+{
+  "id": "plx-4bdc0363-c299-49f0-970e-b882409a7fe9",
+  "title": "Implement CompactionStrategy interface in Tactus",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "900f921f-0a3d-4680-97fb-1b860acba018",
+      "author": "derek.norrbom",
+      "text": "## Scope\n\nAdd pluggable compaction strategy interface to Tactus for memory management.\n\n## Implementation\n\n**New file**: `tactus/core/compaction_strategies.py`\n- `CompactionStrategy` ABC with methods:\n  - `should_compact(messages, estimated_tokens, max_tokens) -> bool`\n  - `compact(messages, max_tokens) -> Tuple[List[Dict], Dict[str, Any]]`\n- `RollingSummaryStrategy` implementation:\n  - Constructor params: `llm_backend`, `recent_window`, `summary_prompt_template`\n  - Compaction logic: preserve system messages + rolling summary + recent N messages\n  - LLM-generated summary of middle messages\n  - Returns compacted messages + metadata (summary, tokens_saved, etc)\n\n**Constants**:\n- `DEFAULT_SUMMARY_PROMPT`: Generic template for conversation summarization\n\n## Repository\n\nThis work happens in **Tactus** repository at `~/Projects/Tactus`\n\n## Dependencies\n\nNone - foundational interface.\n\n## Testing\n\nUnit tests for:\n- CompactionStrategy interface contract\n- RollingSummaryStrategy.should_compact() logic\n- Summary generation and insertion\n- Token estimation accuracy\n- Metadata correctness (counts, tokens_before/after)",
+      "created_at": "2026-05-13T21:12:21.317057Z"
+    },
+    {
+      "id": "b9010914-c99a-4292-8e22-5df608322676",
+      "author": "derek.norrbom",
+      "text": "Completed in Tactus repository as tcts-4bdc03. CompactionStrategy ABC and RollingSummaryStrategy implemented with LLM-based summarization.",
+      "created_at": "2026-05-13T23:29:52.758163Z"
+    }
+  ],
+  "created_at": "2026-05-13T21:11:16.165170Z",
+  "updated_at": "2026-05-13T23:29:52.758163Z",
+  "closed_at": "2026-05-13T23:29:39.496659Z",
+  "custom": {}
+}
