@@ -3,7 +3,7 @@
   "title": "Plan major-upgrade campaign for remaining moderate findings",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -46,10 +46,16 @@
       "author": "derek",
       "text": "Checkpoint ready for commit: remediation-only changes include Next migration from 15.6.0 canary to stable 15.5.18 (plus aligned eslint packages) and script compatibility updates for Next CLI flags (dev:web, build:fast). Audit delta: 52 -> 51; no high/critical reduction due upstream Amplify transitive blockers already documented.",
       "created_at": "2026-05-14T21:57:19.781837213Z"
+    },
+    {
+      "id": "90581386-c905-47bb-b7af-3fc0220e5958",
+      "author": "derek",
+      "text": "Completed this remediation tranche and prepared branch for PR: safe, non-breaking fixes applied; Next canary moved to stable 15.5.18 with script compatibility updates; audit reduced from 52 to 51 while retaining documented Amplify upstream blockers.",
+      "created_at": "2026-05-14T21:59:23.019159904Z"
     }
   ],
   "created_at": "2026-05-13T23:11:53.645382822Z",
-  "updated_at": "2026-05-14T21:57:19.781837213Z",
-  "closed_at": null,
+  "updated_at": "2026-05-14T21:59:23.027794503Z",
+  "closed_at": "2026-05-14T21:59:23.027794503Z",
   "custom": {}
 }
