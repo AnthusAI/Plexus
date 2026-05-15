@@ -7,11 +7,6 @@ const nextConfig = {
         swcTraceProfiling: false,
         forceSwcTransforms: true,
     },
-    eslint: {
-        ignoreDuringBuilds: process.env.NEXT_TYPESCRIPT_CHECK === '0',
-        dirs: ['app', 'components', 'utils'],
-        // Exclude stories from ESLint during builds
-    },
     typescript: {
         // Catch TypeScript errors in all environments to match production, unless fast build
         ignoreBuildErrors: process.env.NEXT_TYPESCRIPT_CHECK === '0',
