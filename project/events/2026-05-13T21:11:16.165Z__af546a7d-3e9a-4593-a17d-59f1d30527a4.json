@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "af546a7d-3e9a-4593-a17d-59f1d30527a4",
+  "issue_id": "plx-4bdc0363-c299-49f0-970e-b882409a7fe9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-13T21:11:16.165Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "title": "Implement CompactionStrategy interface in Tactus",
+    "description": "",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+    "labels": []
+  }
+}

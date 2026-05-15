@@ -1,0 +1,55 @@
+{
+  "id": "plx-06871186-136e-40c6-b9fe-9cee491af827",
+  "title": "Create Plexus ConsoleAgent wrapper for Tactus DSPyAgentHandle",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "78a5a16f-0748-4656-8dfb-0db3c2406f2f",
+      "author": "derek.norrbom",
+      "text": "## Scope\n\nCreate Plexus wrapper for Tactus agent with console-specific configuration.\n\n## Implementation\n\n**New file**: `plexus/console/chat_agent.py`\n- `ConsoleAgent` class wrapping Tactus DSPyAgentHandle\n- Constructor:\n  - Initialize `MessageHistoryManager` with `RollingSummaryStrategy`\n  - Configure auto-compaction with console-specific summary prompt\n  - Configure `max_tokens` budget (e.g., 8000)\n  - Initialize `DSPyAgentHandle` with module, history_manager\n- `execute_turn()` method:\n  - Load session history into MessageHistoryManager\n  - Execute turn via DSPyAgentHandle\n  - Capture audit records at each LLM invocation\n  - Upload audit artifacts to S3\n  - Return assistant response + artifact keys\n- `_get_console_summary_prompt()`: Console-specific summary template\n- `_create_summary_llm()`: LLM backend for summary generation\n- Preserve tool access mode (planning vs execution)\n\n## Dependencies\n\n- Requires `plx-723001` (audit infrastructure)\n- Requires `plx-35cab2` (Tactus auto-compaction)\n\n## Testing\n\nUnit tests for:\n- ConsoleAgent initialization with compaction config\n- execute_turn() loads history correctly\n- Audit artifacts captured and uploaded\n- Tool access mode enforcement\n- Privacy filtering integration",
+      "created_at": "2026-05-13T21:12:45.792778Z"
+    },
+    {
+      "id": "343a2c63-af73-44ce-ae53-2f7e48fe44aa",
+      "author": "derek.norrbom",
+      "text": "## Revised Approach\n\nAfter investigating the current implementation, the console chat *already* uses a Tactus Agent (`assistant`) defined in the TAC procedure configuration. The issue is that the TAC code manually constructs a flattened `history_context` string with aggressive truncation instead of using Tactus MessageHistory primitives.\n\n**Correct fix**: Modify the TAC procedure to use Tactus MessageHistory and configure the assistant agent with auto-compaction, not create a Python wrapper.\n\n**New scope**:\n1. Remove manual history flattening in chat_agent.tac (lines 55-70)\n2. Use MessageHistory primitive to load session history\n3. Configure assistant agent with MessageHistoryConfiguration including:\n   - Token budget filter\n   - Auto-compaction with RollingSummaryStrategy\n4. Pass agent message_history instead of flat history_context string\n\nThis keeps everything in Tactus primitives as intended, no Python wrapper needed.",
+      "created_at": "2026-05-13T23:24:46.420916Z"
+    },
+    {
+      "id": "50cc4ba2-5dfd-4ca3-bc73-72106b5f10bf",
+      "author": "derek.norrbom",
+      "text": "## Simplified Implementation Plan\n\nGiven the current Tactus architecture, the correct approach is:\n\n**Phase 1 (this task)**: Replace manual truncation with MessageHistory token budgeting\n- Remove manual history flattening (lines 55-70 in chat_agent.tac)\n- Load session history into MessageHistory primitive using `replace()`\n- Use `tail_tokens()` to apply token budget (e.g., 8000 tokens)\n- Pass filtered history to agent via structured messages, not flat string\n\n**Phase 2 (future)**: Wire MessageHistoryManager into DSPyAgentHandle execution\n- Integrate auto-compaction into agent's LLM invocation flow\n- This requires deeper Tactus changes to agent execution\n\nThis approach:\n- Fixes the core \"do that again\" bug (token budgeting vs hard 16-message cap)\n- Uses Tactus primitives as intended\n- Keeps role structure intact (no string flattening)\n- Defers full compaction until proper integration point",
+      "created_at": "2026-05-13T23:26:28.111338Z"
+    },
+    {
+      "id": "caa0dc54-31e3-440d-8893-efa0221d06ba",
+      "author": "derek.norrbom",
+      "text": "## Completed\n\nImplemented token-budgeted history management for console chat using Tactus MessageHistory primitives.\n\n**Implementation**:\n\nModified `chat_agent.tac`:\n- Replaced hard-coded 8-message window with `MessageHistory.tail_tokens(8000)`\n- Removed 180-character truncation that was breaking continuity\n- Load session history into MessageHistory, apply token budget, format for prompt\n- Preserves full message content and role structure\n\nModified `chat_runtime.py`:\n- Increased `CONSOLE_HISTORY_LIMIT` from 16 to 100 messages\n- Allows fetching enough history to fill token budget even with short messages\n\n**Token budget**: 8000 tokens (~32K characters) for history, leaving room for system prompt and response.\n\n**Result**: Console chat now maintains conversational context properly. \"Do that again\" requests will work reliably because the agent can reference earlier turns that were previously truncated.\n\n**Commit**: 3d18294b\n\n**Note**: Full auto-compaction with rolling summaries is deferred until MessageHistoryManager is properly integrated into DSPyAgentHandle's execution flow. This implementation solves the core bug while staying within current Tactus architecture.",
+      "created_at": "2026-05-13T23:28:32.019692Z"
+    },
+    {
+      "id": "dbff30ba-6718-41f2-ab59-cbffafd8ec11",
+      "author": "derek.norrbom",
+      "text": "## Additional Changes - Context Window Utilization\n\nAfter initial implementation, identified that token budget was too conservative for modern 128K+ context models.\n\n**Updated limits** (commit e0d331e7):\n- `CONSOLE_HISTORY_LIMIT`: 100 → 500 messages (DynamoDB fetch)\n- `MAX_HISTORY_TOKENS`: 8,000 → 100,000 tokens (TAC filtering)\n\n**Added debug logging** (pending commit):\n- Python layer: Log history stats after DynamoDB fetch (session_id, message count, chars, tokens)\n- TAC layer: Log filtering results after tail_tokens() (input/output messages, chars, tokens)\n- Enables CloudWatch debugging of context truncation without S3 infrastructure\n\n**Rationale**: GPT-5.4-mini and similar models have 128K context windows. Previous 8K limit was causing premature context loss. With 100K token budget, models can maintain full conversational context for extended sessions.",
+      "created_at": "2026-05-14T17:13:55.296511Z"
+    },
+    {
+      "id": "91e30927-1c7f-422b-9098-addfe7c402b6",
+      "author": "derek.norrbom",
+      "text": "## CloudWatch Logging - Pending Refactor\n\nAdded CloudWatch structured logging but **NOT YET COMMITTED** - waiting on refactor task plx-ecc9bf.\n\n**Current state**: \n- Code changes ready in working directory\n- Uses ProcedureCloudWatchLogger directly (wrong abstraction)\n- Need to refactor to PlexusCloudWatchLogger first\n\n**Will commit after**:\n- plx-ecc9bf completes (generalize logger)\n- Backward compatibility verified\n- Console chat uses proper PlexusCloudWatchLogger\n\n**Changes waiting**:\n- Python: Use CloudWatch logger for two-stream logging (run + llm-context)\n- TAC: Emit structured JSON for filtering stats\n- Full history captured in llm-context stream",
+      "created_at": "2026-05-14T17:51:32.409047Z"
+    }
+  ],
+  "created_at": "2026-05-13T21:12:35.796581Z",
+  "updated_at": "2026-05-14T17:51:32.409047Z",
+  "closed_at": "2026-05-13T23:28:35.456518Z",
+  "custom": {}
+}

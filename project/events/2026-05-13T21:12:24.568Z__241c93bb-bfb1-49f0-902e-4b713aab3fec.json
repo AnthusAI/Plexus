@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "241c93bb-bfb1-49f0-902e-4b713aab3fec",
+  "issue_id": "plx-35cab2f8-512d-45a9-a91c-8d0465a50a70",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-13T21:12:24.568Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "title": "Extend Tactus MessageHistoryManager with auto-compaction",
+    "description": "",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+    "labels": []
+  }
+}

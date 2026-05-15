@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c638da89-94cf-4748-a873-667a5b7a9738",
+  "issue_id": "plx-875c0c20-af79-4983-9790-83f4f6d8d051",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-13T21:09:58.285Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "title": "Every LLM invocation has auditable context artifact",
+    "description": "",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+    "labels": []
+  }
+}

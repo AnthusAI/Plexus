@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b0901ad9-798d-40dc-8ef3-313817dfd28f",
+  "issue_id": "plx-d1afedc4-42d1-4cc4-bd8b-17eae726f5f5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-13T21:13:02.765Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "title": "Add S3 lifecycle policy for console-contexts prefix",
+    "description": "",
+    "issue_type": "chore",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+    "labels": []
+  }
+}
