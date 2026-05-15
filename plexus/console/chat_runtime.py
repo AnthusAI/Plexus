@@ -913,8 +913,8 @@ async def run_console_chat_response_async(
             history_stats["history_total_tokens"] = sum(
                 len(enc.encode(str(msg.get("content", "")))) for msg in history
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Skipped session history token counting: %s", exc, exc_info=True)
         cw_logger.log_llm_context({
             "event": "session_history_loaded",
             "stats": history_stats,
