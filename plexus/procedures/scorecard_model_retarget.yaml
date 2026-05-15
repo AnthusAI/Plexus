@@ -1,0 +1,361 @@
+name: Scorecard Model Retarget
+version: 1.0.0
+class: Tactus
+procedure_type: Scorecard Maintenance Procedure
+description: "Create non-champion ScoreVersions for selected scores on a scorecard using a new model configuration. This procedure does not evaluate, promote, or choose winners."
+
+params:
+  scorecard:
+    type: string
+    required: true
+    description: "Scorecard identifier (name, key, ID, or external ID)"
+
+  model_name:
+    type: string
+    required: true
+    description: "Target model name, for example gpt-5.4-nano"
+
+  model_provider:
+    type: string
+    required: false
+    description: "Optional provider applied to both supported classes. Prefer class-specific provider params for mixed scorecards."
+
+  langgraph_model_provider:
+    type: string
+    default: ChatOpenAI
+    required: false
+    description: "Provider value for LangGraphScore root model_provider"
+
+  tactus_model_provider:
+    type: string
+    default: openai
+    required: false
+    description: "Provider value for TactusScore default_model provider prefix"
+
+  reasoning_effort:
+    type: string
+    required: false
+    description: "Optional reasoning effort to apply where supported"
+
+  verbosity:
+    type: string
+    required: false
+    description: "Optional verbosity to apply where supported"
+
+  temperature:
+    type: number
+    required: false
+    description: "Optional temperature to apply where supported"
+
+  max_tokens:
+    type: number
+    required: false
+    description: "Optional max_tokens for LangGraphScore. TactusScore does not support max_tokens in this flow and will fail loudly."
+
+  include_scores:
+    type: array
+    required: false
+    description: "Optional allow-list of score IDs, names, keys, or external IDs"
+
+  exclude_scores:
+    type: array
+    required: false
+    description: "Optional deny-list of score IDs, names, keys, or external IDs"
+
+  dry_run:
+    type: boolean
+    default: true
+    description: "If true, plan only and create no ScoreVersions"
+
+  version_note:
+    type: string
+    required: false
+    description: "Note to attach to created ScoreVersions"
+
+outputs:
+  success:
+    type: boolean
+    required: true
+  status:
+    type: string
+    required: true
+  message:
+    type: string
+    required: true
+  scorecard_id:
+    type: string
+    required: false
+  planned_count:
+    type: number
+    required: false
+  changed_count:
+    type: number
+    required: false
+  created_count:
+    type: number
+    required: false
+  rows:
+    type: array
+    required: false
+
+agents:
+  placeholder:
+    system_prompt: |
+      This deterministic procedure does not use agent reasoning.
+    initial_message: "Ready."
+    tools: []
+
+code: |
+  -- Feature: Scorecard model retargeting
+  --
+  -- Scenario: Dry run previews changed score versions
+  -- Given a scorecard with LangGraphScore and TactusScore scores
+  -- When I run the retarget procedure with dry_run=true
+  -- Then it returns the planned YAML changes for each selected score
+  -- And it creates no ScoreVersions.
+  --
+  -- Scenario: Apply creates non-champion versions
+  -- Given selected scores whose champion YAML changes after retargeting
+  -- When I run the retarget procedure with dry_run=false
+  -- Then it creates one non-champion ScoreVersion per changed score
+  -- And each new version uses the champion version as parent
+  -- And no candidate is promoted to champion.
+  --
+  -- Scenario: Unsupported classes fail loudly
+  -- Given a selected score with an unsupported class
+  -- When I run the retarget procedure
+  -- Then the procedure fails with a clear unsupported class error unless that score is excluded.
+
+  local function has_text(value)
+    return value ~= nil and tostring(value) ~= ""
+  end
+
+  local function array_contains(values, score)
+    if type(values) ~= "table" then return false end
+    for _, value in ipairs(values) do
+      local needle = tostring(value)
+      if needle == tostring(score.id)
+        or needle == tostring(score.name)
+        or needle == tostring(score.key)
+        or needle == tostring(score.externalId) then
+        return true
+      end
+    end
+    return false
+  end
+
+  local function selected_score(score)
+    local include = params.include_scores
+    local exclude = params.exclude_scores
+    if type(include) == "table" and #include > 0 and not array_contains(include, score) then
+      return false
+    end
+    if type(exclude) == "table" and array_contains(exclude, score) then
+      return false
+    end
+    return true
+  end
+
+  local function score_sort_key(score)
+    return tostring(score.order or "") .. ":" .. tostring(score.name or "") .. ":" .. tostring(score.id or "")
+  end
+
+  local function flatten_scores(scorecard_info)
+    local rows = {}
+    local sections = ((scorecard_info or {}).sections or {}).items or {}
+    for _, section in ipairs(sections) do
+      local scores = ((section or {}).scores or {}).items or {}
+      for _, score in ipairs(scores) do
+        if selected_score(score) then
+          score.section_id = section.id
+          score.section_name = section.name
+          table.insert(rows, score)
+        end
+      end
+    end
+    table.sort(rows, function(a, b) return score_sort_key(a) < score_sort_key(b) end)
+    return rows
+  end
+
+  local function target_config()
+    local target = {
+      model_name = params.model_name,
+      model_provider = params.model_provider,
+      langgraph_model_provider = params.langgraph_model_provider,
+      tactus_model_provider = params.tactus_model_provider,
+      reasoning_effort = params.reasoning_effort,
+      verbosity = params.verbosity,
+      temperature = params.temperature,
+      max_tokens = params.max_tokens,
+    }
+    return target
+  end
+
+  if not has_text(params.scorecard) then
+    return {success = false, status = "error", message = "scorecard is required"}
+  end
+  if not has_text(params.model_name) then
+    return {success = false, status = "error", message = "model_name is required"}
+  end
+
+  Stage.set("setup")
+  Human.notify({message = "Resolving scorecard and planning model retarget...", level = "info"})
+
+  local scorecard_info = plexus.scorecards.info({scorecard_identifier = params.scorecard})
+  if not scorecard_info or not scorecard_info.additionalDetails then
+    return {success = false, status = "error", message = "Scorecard not found: " .. tostring(params.scorecard)}
+  end
+  local scorecard_id = scorecard_info.additionalDetails.id
+  local scores = flatten_scores(scorecard_info)
+  if #scores == 0 then
+    return {success = false, status = "error", message = "No selected scores found on scorecard.", scorecard_id = scorecard_id}
+  end
+
+  State.set("procedure_type", "Scorecard Model Retarget")
+  State.set("scorecard_id", scorecard_id)
+  State.set("scorecard_name", scorecard_info.name or params.scorecard)
+
+  Stage.set("plan")
+  local rows = {}
+  local planned = {}
+  local target = target_config()
+  for _, score in ipairs(scores) do
+    local pull = plexus.score.pull({
+      scorecard_identifier = params.scorecard,
+      score_identifier = score.id
+    })
+    if not pull or not pull.success then
+      return {
+        success = false,
+        status = "error",
+        message = "Failed to pull champion score YAML for " .. tostring(score.name),
+        scorecard_id = scorecard_id,
+        rows = rows,
+      }
+    end
+
+    local ok, plan = pcall(function()
+      return plexus.scorecard_retarget.plan_score({
+        yaml_content = pull.yaml_content or "",
+        target = target,
+      })
+    end)
+    if not ok then
+      return {
+        success = false,
+        status = "error",
+        message = "Failed to plan retarget for " .. tostring(score.name) .. ": " .. tostring(plan),
+        scorecard_id = scorecard_id,
+        rows = rows,
+      }
+    end
+
+    local row = {
+      score_id = score.id,
+      score_name = score.name,
+      score_key = score.key,
+      external_id = score.externalId,
+      section_name = score.section_name,
+      champion_version_id = pull.version_id,
+      score_class = plan.score_class,
+      changed = plan.changed == true,
+      status = plan.changed and "planned" or "unchanged",
+      message = plan.message,
+      current = plan.current,
+      candidate = plan.candidate,
+    }
+    table.insert(rows, row)
+    if plan.changed then
+      row.yaml_content = plan.yaml_content
+      table.insert(planned, row)
+    end
+  end
+
+  State.set("scorecard_model_retarget", {
+    status = params.dry_run and "dry_run" or "planned",
+    scorecard_id = scorecard_id,
+    planned_count = #rows,
+    changed_count = #planned,
+    rows = rows,
+  })
+
+  if #planned == 0 then
+    return {
+      success = true,
+      status = "no_changes",
+      message = "All selected scores already match the target model configuration.",
+      scorecard_id = scorecard_id,
+      planned_count = #rows,
+      changed_count = 0,
+      created_count = 0,
+      rows = rows,
+    }
+  end
+
+  if params.dry_run then
+    return {
+      success = true,
+      status = "dry_run",
+      message = "Planned " .. tostring(#planned) .. " score version(s); dry_run=true so no ScoreVersions were created.",
+      scorecard_id = scorecard_id,
+      planned_count = #rows,
+      changed_count = #planned,
+      created_count = 0,
+      rows = rows,
+    }
+  end
+
+  Stage.set("apply")
+  Human.notify({message = "Creating non-champion retargeted score versions...", level = "info"})
+  local created = 0
+  for _, row in ipairs(planned) do
+    local update = plexus.score.update({
+      scorecard_identifier = params.scorecard,
+      score_identifier = row.score_id,
+      code = row.yaml_content,
+      parent_version_id = row.champion_version_id,
+      version_note = has_text(params.version_note)
+        and params.version_note
+        or ("Retarget model to " .. tostring(params.model_name))
+    })
+    row.yaml_content = nil
+    if not update or update.success == false or not update.version_id then
+      row.status = "error"
+      row.error = tostring(update and update.error or "unknown")
+      return {
+        success = false,
+        status = "partial_failure",
+        message = "Failed to create ScoreVersion for " .. tostring(row.score_name) .. ": " .. tostring(row.error),
+        scorecard_id = scorecard_id,
+        planned_count = #rows,
+        changed_count = #planned,
+        created_count = created,
+        rows = rows,
+      }
+    end
+    created = created + 1
+    row.status = "created"
+    row.new_version_id = update.version_id
+    row.parent_version_id = update.parent_version_id or row.champion_version_id
+  end
+
+  Stage.set("complete")
+  State.set("scorecard_model_retarget", {
+    status = "completed",
+    scorecard_id = scorecard_id,
+    planned_count = #rows,
+    changed_count = #planned,
+    created_count = created,
+    rows = rows,
+  })
+
+  return {
+    success = true,
+    status = "completed",
+    message = "Created " .. tostring(created) .. " non-champion retargeted ScoreVersion(s).",
+    scorecard_id = scorecard_id,
+    planned_count = #rows,
+    changed_count = #planned,
+    created_count = created,
+    rows = rows,
+  }

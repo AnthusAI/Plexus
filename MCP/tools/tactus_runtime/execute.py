@@ -376,6 +376,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("model_frontier_plan", "model_frontier", "plan"),
     ("model_frontier_build_result_row", "model_frontier", "build_result_row"),
     ("model_frontier_finalize", "model_frontier", "finalize"),
+    ("scorecard_retarget_plan_score", "scorecard_retarget", "plan_score"),
     ("scorecards", "scorecards", "list"),
     ("scorecard", "scorecards", "info"),
     ("evaluate", "evaluation", "run"),
@@ -503,6 +504,7 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("model_frontier", "plan"): _method_spec("_call_model_frontier", planning_allowed=True),
     ("model_frontier", "build_result_row"): _method_spec("_call_model_frontier", planning_allowed=True),
     ("model_frontier", "finalize"): _method_spec("_call_model_frontier", planning_allowed=False),
+    ("scorecard_retarget", "plan_score"): _method_spec("_call_scorecard_retarget", planning_allowed=True),
 }
 
 
@@ -6514,6 +6516,28 @@ class PlexusRuntimeModule:
             }
         finally:
             self._budget.record_after("model_frontier", method)
+
+    def _call_scorecard_retarget(
+        self, namespace: str, method: str, args: Any = None
+    ) -> Any:
+        if namespace != "scorecard_retarget" or method != "plan_score":
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("scorecard_retarget", method)
+        self._record_api_call("scorecard_retarget", method)
+        try:
+            parsed = _args(args)
+            from plexus.cli.procedure.scorecard_model_retarget import (
+                plan_score_retarget,
+            )
+
+            return plan_score_retarget(
+                yaml_content=parsed.get("yaml_content") or "",
+                target=parsed.get("target") or {},
+            )
+        finally:
+            self._budget.record_after("scorecard_retarget", method)
 
     def _call_report_read(
         self, namespace: str, method: str, args: Any = None
