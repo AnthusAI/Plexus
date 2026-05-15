@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "626d6dd4-4f16-41c2-b722-0244d96d3d45",
+  "issue_id": "plx-434e42c9-a799-4d02-9501-ae83b0f9b78e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T16:36:25.890Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Remediate PR 368 code quality findings"
+  }
+}
