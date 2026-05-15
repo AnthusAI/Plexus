@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1ca8dc5d-c744-415d-ac85-96edd3fdbc4f",
+  "issue_id": "plx-3a79dc6b-e5c2-4b76-b021-5e4fc365b87c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T17:51:41.789Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "model_performance_frontier fails in plan stage with 'dictionary update sequence element #0 has length 1; 2 is required', likely from Lua table conversion into Python frontier planning. Normalize Tactus/Lua table inputs before variant planning.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix model frontier Lua table normalization"
+  }
+}

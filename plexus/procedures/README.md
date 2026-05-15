@@ -131,6 +131,26 @@ repeat
 until Tool.called("done")
 ```
 
+### 5. model_performance_frontier.yaml - Model Cost/Accuracy Comparison
+
+**Purpose**: Compares the current score configuration against a deterministic
+matrix of model and parameter variants.
+
+**What it demonstrates**:
+- Structured candidate matrix expansion
+- Non-champion ScoreVersion creation
+- Parallel feedback and regression evaluations
+- Cost-per-item and feedback AC1 frontier output
+- Optional ReportBlock attachments for JSON, CSV, and HTML chart artifacts
+
+**How to run**:
+```bash
+plexus procedure run --yaml plexus/procedures/model_performance_frontier.yaml \
+  -s scorecard="<scorecard name>" \
+  -s score="<score name>" \
+  -s 'candidate_matrix={"models":[{"label":"nano","model_provider":"ChatOpenAI","model_name":"gpt-5.4-nano"}],"parameter_sets":[{"label":"medium","reasoning_effort":"medium","verbosity":"medium"}]}'
+```
+
 ## Directory Structure
 
 ```

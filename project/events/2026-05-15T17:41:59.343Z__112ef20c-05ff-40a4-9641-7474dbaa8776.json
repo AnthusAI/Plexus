@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "112ef20c-05ff-40a4-9641-7474dbaa8776",
+  "issue_id": "plx-c74138c1-00c7-4d1e-9ee4-0b7a917190ea",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T17:41:59.343Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Update the model performance frontier procedure to support score YAMLs with root base_model_name and verbosity fields, including Project Type AI style LangGraphScore configs.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec",
+    "priority": 2,
+    "status": "open",
+    "title": "Support score root base model and verbosity in frontier variants"
+  }
+}

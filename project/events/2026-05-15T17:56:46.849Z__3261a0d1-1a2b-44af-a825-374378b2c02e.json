@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3261a0d1-1a2b-44af-a825-374378b2c02e",
+  "issue_id": "plx-01c62fbf-6f4f-4113-9444-e3802214f345",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T17:56:46.849Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "model_performance_frontier aborts when dataset.build_from_feedback_window throws for insufficient class/label overlap during balanced regression dataset build. Catch balanced build failures, fall back to unbalanced datasets, and checkpoint File.read.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec",
+    "priority": 1,
+    "status": "open",
+    "title": "Fallback when balanced frontier dataset cannot be built"
+  }
+}

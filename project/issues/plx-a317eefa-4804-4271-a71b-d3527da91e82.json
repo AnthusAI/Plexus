@@ -1,0 +1,25 @@
+{
+  "id": "plx-a317eefa-4804-4271-a71b-d3527da91e82",
+  "title": "bug Restore model frontier chart to AC1 y-axis",
+  "description": "Feature: Model frontier graph uses AC1 axis\n  Scenario: Procedure result rows drive the y axis from feedback alignment AC1\n    Given feedback evaluation metrics include Alignment and Accuracy\n    When model frontier rows are built\n    Then accuracy_axis is populated from Alignment/AC1 for the chart\n    And the dashboard labels the y axis as Feedback AC1\n\nRationale: the current chart scale is designed for AC1 from -1 to 1; switching to raw Accuracy made the graph scale incorrectly in the UI.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "91288296-91f7-4777-b176-1fa49cb17253",
+      "author": "derek.norrbom",
+      "text": "Restored model frontier y-axis to feedback Alignment/AC1 and reverted chart/table labels to Feedback AC1. Verified Python tests, chart Jest test, py_compile, and dashboard typecheck.",
+      "created_at": "2026-05-15T19:06:03.700090Z"
+    }
+  ],
+  "created_at": "2026-05-15T19:05:18.694252Z",
+  "updated_at": "2026-05-15T19:06:03.710248Z",
+  "closed_at": "2026-05-15T19:06:03.710248Z",
+  "custom": {}
+}
