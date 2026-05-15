@@ -1,6 +1,7 @@
 import type { StorybookConfig } from "@storybook/nextjs";
 import path from 'path';
 import { fileURLToPath } from 'url';
+import webpack from 'webpack';
 
 // ESM module equivalent for __dirname
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -26,29 +27,24 @@ const config: StorybookConfig = {
   },
   staticDirs: ['../public'],
   webpackFinal: async (config) => {
-    const webpack = require('webpack');
-    
+    config.plugins = config.plugins || [];
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /(^@\/app\/contexts\/AccountContext$|(^|.*\/)app\/contexts\/AccountContext$)/,
+        path.resolve(currentDir, '../__mocks__/AccountContext.ts')
+      )
+    );
+
     if (config.resolve) {
       config.resolve.alias = {
         ...config.resolve.alias,
         '@': path.resolve(currentDir, '../'),
         '@number-flow/react': path.resolve(currentDir, '../components/ui/number-flow-dev.tsx'),
+        '@/app/contexts/AccountContext$': path.resolve(currentDir, '../__mocks__/AccountContext.ts'),
+        'aws-amplify/data$': path.resolve(currentDir, '../__mocks__/aws-amplify-data.ts'),
       };
     }
-    
-    // Use NormalModuleReplacementPlugin to replace imports with mocks
-    config.plugins = config.plugins || [];
-    config.plugins.push(
-      new webpack.NormalModuleReplacementPlugin(
-        /.*\/app\/contexts\/AccountContext/,
-        path.resolve(currentDir, '../__mocks__/AccountContext.ts')
-      ),
-      new webpack.NormalModuleReplacementPlugin(
-        /aws-amplify\/data$/,
-        path.resolve(currentDir, '../__mocks__/aws-amplify-data.ts')
-      )
-    );
-    
+
     return config;
   },
 };

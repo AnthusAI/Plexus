@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bf44c56a-c18b-4ef6-8e2c-76173954f041",
+  "issue_id": "plx-ecc9bf2d-e353-4740-8ac1-1ff9cd58d1d4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-14T17:51:13.996Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+    "priority": 1,
+    "status": "open",
+    "title": "Refactor ProcedureCloudWatchLogger to general-purpose PlexusCloudWatchLogger"
+  }
+}

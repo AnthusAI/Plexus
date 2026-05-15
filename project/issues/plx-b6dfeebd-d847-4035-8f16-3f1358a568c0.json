@@ -1,0 +1,18 @@
+{
+  "id": "plx-b6dfeebd-d847-4035-8f16-3f1358a568c0",
+  "title": "Dashboard dependency vulnerability remediation",
+  "description": "",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-13T22:42:45.286896407Z",
+  "updated_at": "2026-05-14T22:13:32.491137051Z",
+  "closed_at": null,
+  "custom": {}
+}

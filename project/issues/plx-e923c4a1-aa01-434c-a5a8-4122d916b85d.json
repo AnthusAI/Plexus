@@ -1,0 +1,25 @@
+{
+  "id": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "title": "Console Chat Context Management Refactor",
+  "description": "",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7ac3ee9f-379e-442d-880d-0b8ad82d08ec",
+      "author": "derek.norrbom",
+      "text": "## Epic Purpose\n\nRefactor Plexus console chat to use Tactus infrastructure for proper context management, fixing the \\\"do that again\\\" continuity failures caused by aggressive message truncation.\n\n## Context\n\nCurrent state:\n- DynamoDB query hard-caps at 16 messages\n- TAC compresses to 8 turns with 180-char truncation per message\n- Tool responses, system messages excluded from history\n- No audit trail of exact LLM context sent per invocation\n\nThis breaks conversational continuity when users say \"do that again\" after long exchanges.\n\n## Goals\n\n1. **Observability**: Capture exact LLM request context for every invocation to S3 (14-day retention)\n2. **Continuity**: Token-budgeted history management using Tactus primitives\n3. **Memory**: Rolling summary/compaction when history exceeds budget\n4. **Migration**: Replace TAC-based approach with Tactus DSPyAgentHandle\n\n## Architectural Boundary\n\n**Tactus** (reusable infrastructure):\n- Message history management with token budgeting\n- Auto-compaction with pluggable CompactionStrategy interface\n- Rolling summary generation\n- DSPyAgentHandle with audit hook points\n\n**Plexus** (domain-specific):\n- DynamoDB ChatMessage persistence\n- S3 audit artifact upload and lifecycle\n- Privacy filtering by owner user ID\n- Console-specific compaction config\n- Tool access mode enforcement\n\n## Definition of Done\n\n- [ ] Console chat uses Tactus DSPyAgentHandle instead of TAC\n- [ ] Every LLM invocation has S3 audit artifact with exact context\n- [ ] Token budgeting replaces hard message caps\n- [ ] Rolling summary auto-compaction works in Tactus\n- [ ] \"Do that again\" works after 20+ turn conversations\n- [ ] Privacy filtering preserved\n- [ ] Turn latency \u2264 baseline (within 10%)\n- [ ] All behavior specified in Gherkin\n- [ ] All specifications green\n\n## Plan Reference\n\nDetailed implementation plan: `~/.claude/plans/there-are-two-projects-quirky-noodle.md`",
+      "created_at": "2026-05-13T21:09:34.806305Z"
+    }
+  ],
+  "created_at": "2026-05-13T21:09:05.140021Z",
+  "updated_at": "2026-05-13T21:34:16.612606Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,37 @@
+{
+  "id": "plx-d1afedc4-42d1-4cc4-bd8b-17eae726f5f5",
+  "title": "Add S3 lifecycle policy for console-contexts prefix",
+  "description": "",
+  "type": "chore",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2cf120ab-e357-4981-97d9-36f4817326c1",
+      "author": "derek.norrbom",
+      "text": "## Scope\n\nConfigure S3 bucket lifecycle to auto-expire console context audit artifacts after 14 days.\n\n## Implementation\n\nAdd lifecycle rule to reportblockdetails bucket (or env-specific equivalent):\n- Rule name: `console-contexts-expiration`\n- Prefix filter: `console-contexts/`\n- Expiration: 14 days\n- Apply to current versions\n\nThis balances observability needs (recent debugging) with storage costs.\n\n## Configuration\n\nUpdate Terraform/CloudFormation/AWS CLI configuration for S3 bucket.\n\n## Testing\n\nManual verification:\n- Upload test artifact to `console-contexts/test/artifact.json`\n- Verify lifecycle policy shows 14-day expiration\n- Confirm no impact on other prefixes (reportblocks/, procedures/)",
+      "created_at": "2026-05-13T21:13:11.154828Z"
+    },
+    {
+      "id": "8313f8e7-bd89-46fb-ba2b-56c76e84738c",
+      "author": "derek.norrbom",
+      "text": "## IMPORTANT: Infrastructure as Code\n\nAll AWS resource changes must be done through IaC (Terraform/CDK/CloudFormation), not manual Console changes.\n\n## Scope\n\nConfigure S3 bucket lifecycle to auto-expire console context audit artifacts after 14 days.\n\n## Implementation\n\nUpdate IaC configuration for reportblockdetails bucket (or env-specific equivalent):\n- Add lifecycle rule via Terraform/CDK resource definition\n- Rule name: `console-contexts-expiration`\n- Prefix filter: `console-contexts/`\n- Expiration: 14 days\n- Apply to current versions\n\n## Files to Modify\n\nFind and update the IaC definition for the S3 bucket. Likely locations:\n- `infrastructure/terraform/` or similar\n- CDK stack definitions\n- CloudFormation templates\n\n## Testing\n\nAfter IaC deployment:\n- Verify lifecycle policy applied via AWS CLI: `aws s3api get-bucket-lifecycle-configuration --bucket <bucket-name>`\n- Upload test artifact to `console-contexts/test/artifact.json`\n- Verify expiration date set correctly\n- Confirm no impact on other prefixes (reportblocks/, procedures/)\n\n## Deployment\n\nChanges must go through normal IaC deployment pipeline (terraform apply, cdk deploy, etc).",
+      "created_at": "2026-05-13T21:14:56.224561Z"
+    },
+    {
+      "id": "55c594e7-6f03-4c1d-bda8-323e8293fdee",
+      "author": "derek.norrbom",
+      "text": "## Files to Modify\n\nThe S3 bucket for report blocks is likely managed via AWS Amplify. Check:\n- `dashboard/amplify/storage/resource.ts` - Amplify storage resource definition\n- `infrastructure/stacks/*_stack.py` - CDK stacks that might define the bucket\n\nAdd lifecycle configuration to the storage bucket resource definition.\n\nFor Amplify Gen 2, lifecycle rules are added via the `defineStorage()` configuration.",
+      "created_at": "2026-05-13T21:32:04.430208Z"
+    }
+  ],
+  "created_at": "2026-05-13T21:13:02.764703Z",
+  "updated_at": "2026-05-13T21:32:04.430208Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-9cbbb9c6-3aa4-40ee-8d23-582a57412bce",
+  "title": "Tactus MessageHistoryManager auto-compacts when history exceeds budget",
+  "description": "",
+  "type": "story",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e5c0f0ed-408a-469d-b3f7-424d94220b59",
+      "author": "derek.norrbom",
+      "text": "**As a** Tactus agent developer  \n**I want** MessageHistoryManager to automatically compact history when it exceeds token budget  \n**So that** any agent can maintain long conversations without manual overflow handling\n\n## Gherkin Specification\n\n```gherkin\nFeature: Automatic history compaction in Tactus\n  MessageHistoryManager transparently compacts message history\n  when it exceeds configured token budget.\n\n  Scenario: No compaction when under budget\n    Given a MessageHistoryManager with max_tokens=8000\n    And auto_compact=True\n    And a message history with 6000 estimated tokens\n    When get_history() is called\n    Then the full uncompacted history is returned\n    And no compaction is triggered\n\n  Scenario: Rolling summary compaction when over budget\n    Given a MessageHistoryManager with RollingSummaryStrategy\n    And max_tokens=8000, recent_window=10\n    And a message history with 15000 estimated tokens\n    When get_history() is called\n    Then compaction is triggered automatically\n    And system messages are preserved at the start\n    And the last 10 messages are preserved uncompacted\n    And middle messages are summarized into a SYSTEM message\n    And the returned history fits within 8000 tokens\n    And compaction_metadata is stored (summary, tokens_saved)\n\n  Scenario: Pluggable compaction strategies\n    Given a MessageHistoryManager with a custom CompactionStrategy\n    And the strategy has should_compact() and compact() methods\n    When get_history() is called on overbudget history\n    Then the custom strategy's compact() method is invoked\n    And the returned history respects the strategy's behavior\n\n  Scenario: Compaction metadata is accessible\n    Given a MessageHistoryManager that has performed compaction\n    When I query compaction metadata for an agent\n    Then I receive summary text, tokens_before, tokens_after\n    And messages_summarized and messages_retained counts\n```",
+      "created_at": "2026-05-13T21:10:43.560988Z"
+    }
+  ],
+  "created_at": "2026-05-13T21:10:16.624316Z",
+  "updated_at": "2026-05-13T21:10:43.560988Z",
+  "closed_at": null,
+  "custom": {}
+}

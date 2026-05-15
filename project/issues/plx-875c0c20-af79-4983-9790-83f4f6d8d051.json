@@ -1,0 +1,31 @@
+{
+  "id": "plx-875c0c20-af79-4983-9790-83f4f6d8d051",
+  "title": "Every LLM invocation has auditable context artifact",
+  "description": "",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "eeae322d-cf34-40e3-8399-51f36dbc2742",
+      "author": "derek.norrbom",
+      "text": "**As a** Plexus developer debugging console chat issues  \n**I want** an audit trail of the exact message list sent to the LLM for each invocation  \n**So that** I can reproduce context-related failures and verify what the model actually saw\n\n## Gherkin Specification\n\n```gherkin\nFeature: LLM context audit trail\n  Every LLM invocation must have a persistent audit artifact\n  capturing the exact messages sent to the model.\n\n  Scenario: Single-call turn creates audit artifact\n    Given I have a console chat session\n    When I send a message that completes in one LLM call\n    Then an audit artifact is uploaded to S3\n    And the artifact contains the exact ordered message list sent to the model\n    And the artifact includes model config (ID, temperature, etc)\n    And the artifact includes token statistics\n    And the artifact includes timestamps and latency\n    And the ChatMessage metadata contains the S3 key for the artifact\n    And the artifact has 14-day lifecycle policy\n\n  Scenario: Multi-call turn with tools creates multiple artifacts\n    Given I have a console chat session\n    When I send a message that triggers tool use\n    And the assistant makes 3 LLM calls (initial, tool follow-up, synthesis)\n    Then 3 audit artifacts are uploaded to S3\n    And each artifact captures a distinct call_index (0, 1, 2)\n    And each artifact specifies call_type (initial, tool_followup, synthesis)\n    And the ChatMessage metadata contains all 3 S3 keys\n    And all artifacts are retrievable\n\n  Scenario: Audit artifact is retrievable for debugging\n    Given a console chat turn has completed\n    And audit artifacts exist in S3\n    When I fetch the ChatMessage metadata\n    Then I can extract the contextArtifacts array\n    And I can download each artifact from S3\n    And each artifact parses as valid JSON\n    And contains the complete message history sent to the model\n```",
+      "created_at": "2026-05-13T21:10:13.056481Z"
+    },
+    {
+      "id": "48373f4a-3450-4f11-b131-b0e3789d6c38",
+      "author": "derek.norrbom",
+      "text": "## Implementation Revised\n\nThe team decided to use CloudWatch Logs with PII protection instead of S3 artifacts for LLM context auditing.\n\n**Implementation completed**:\n- PlexusCloudWatchLogger integrated into console chat runtime\n- Two-stream logging:\n  -  - general logs\n  -  - structured LLM context\n- Logs session history with stats (message count, chars, tokens)\n- Logs procedure invocation context\n- Logs completion status\n- Comprehensive AWS managed data identifiers for PII/PHI protection\n- 14-day retention via CloudWatch lifecycle\n\n**What's logged to llm-context stream**:\n1. `session_history_loaded` event - full history + stats\n2. `procedure_invocation` event - context, tool access mode\n3. `procedure_completed` event - success status\n\n**Benefits over S3**:\n- Real-time visibility in CloudWatch Logs Insights\n- No separate retrieval step\n- Built-in PII masking at display time\n- Integrated with existing CloudWatch monitoring\n\nFile: plexus/console/chat_runtime.py\nLines: 878-989",
+      "created_at": "2026-05-14T23:43:43.100181Z"
+    }
+  ],
+  "created_at": "2026-05-13T21:09:58.285445Z",
+  "updated_at": "2026-05-14T23:43:45.810497Z",
+  "closed_at": "2026-05-14T23:43:45.810497Z",
+  "custom": {}
+}

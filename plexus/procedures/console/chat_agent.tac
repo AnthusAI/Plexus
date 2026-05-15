@@ -12,9 +12,7 @@ if type(input) == "table" then
   end
 end
 
--- History comes exclusively from the caller via console_session_history.
--- Never auto-load from MessageHistory: tool-result payloads stored there can
--- be extremely large and blow up the context window on the very next turn.
+-- History comes from caller via console_session_history, then filtered by MessageHistory
 local history = {}
 if type(input) == "table" then
   local provided_history = input.console_session_history
@@ -31,6 +29,7 @@ if type(input) == "table" then
   end
 end
 
+-- Extract latest and previous user prompts for reference
 local previous_user_prompt = nil
 if #history > 0 then
   local found_latest = false
@@ -52,19 +51,19 @@ if #history > 0 then
   end
 end
 
+-- Apply token-budgeted history management using MessageHistory primitives
+-- Target: 100K tokens for history (models have 128K+ windows; leave room for system prompt + response)
+local MAX_HISTORY_TOKENS = 100000
+MessageHistory.replace(history)
+local filtered_history = MessageHistory.tail_tokens(MAX_HISTORY_TOKENS)
+
+-- Format filtered history for prompt context (preserving role structure)
 local history_context = ""
-local history_start = 1
-if #history > 8 then
-  history_start = #history - 7
-end
-for i = history_start, #history do
-  local msg = history[i]
+for i = 1, #filtered_history do
+  local msg = filtered_history[i]
   local role = string.upper(tostring((msg and msg.role) or "UNKNOWN"))
-  local content = (msg and msg.content) or ""
-  if type(content) == "string" and content ~= "" then
-    if #content > 180 then
-      content = string.sub(content, 1, 180) .. "..."
-    end
+  local content = tostring((msg and msg.content) or "")
+  if content ~= "" then
     history_context = history_context .. role .. ": " .. content .. "\n"
   end
 end

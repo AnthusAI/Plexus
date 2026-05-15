@@ -2,7 +2,7 @@ import React from 'react'
 import type { Meta, StoryObj } from '@storybook/react'
 import { DualPhaseProgressBar } from '../components/ui/dual-phase-progress-bar'
 import { expect } from '@storybook/test'
-import { within } from '@storybook/testing-library'
+import { within } from '@storybook/test'
 
 const meta: Meta<typeof DualPhaseProgressBar> = {
   title: 'General/Components/DualPhaseProgressBar',
