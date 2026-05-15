@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a31b4f65-60aa-4444-90fd-71299c40a6f2",
+  "issue_id": "plx-c037bce7-22d8-4921-82b7-59fe96ac12fc",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T22:33:36.121Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Observed behavior: scorecard_model_retarget fails the whole procedure when plexus.score.pull raises 'No champion version for score'.\n\nExpected behavior: because this is a bulk scorecard maintenance procedure, a selected score with no champion version should be skipped with a clear row status, and the procedure should continue retargeting other selected scores.\n\nFeature: Scorecard model retarget skips scores without champions\n\nScenario: Selected score has no champion version\nGiven a selected score has no champion ScoreVersion\nWhen the scorecard model retarget procedure plans scores\nThen that score is marked skipped with the pull error\nAnd the procedure continues planning subsequent scores.\n\nScenario: All selected scores are skipped\nGiven no selected score can be retargeted\nWhen the procedure finishes planning\nThen it completes with no_changes and reports skipped rows.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-fb6c27b7-9d52-4955-b202-465dd7047f2a",
+    "priority": 1,
+    "status": "open",
+    "title": "Skip scores without champion during model retarget"
+  }
+}

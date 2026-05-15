@@ -1,0 +1,31 @@
+{
+  "id": "plx-c037bce7-22d8-4921-82b7-59fe96ac12fc",
+  "title": "Skip scores without champion during model retarget",
+  "description": "Observed behavior: scorecard_model_retarget fails the whole procedure when plexus.score.pull raises 'No champion version for score'.\n\nExpected behavior: because this is a bulk scorecard maintenance procedure, a selected score with no champion version should be skipped with a clear row status, and the procedure should continue retargeting other selected scores.\n\nFeature: Scorecard model retarget skips scores without champions\n\nScenario: Selected score has no champion version\nGiven a selected score has no champion ScoreVersion\nWhen the scorecard model retarget procedure plans scores\nThen that score is marked skipped with the pull error\nAnd the procedure continues planning subsequent scores.\n\nScenario: All selected scores are skipped\nGiven no selected score can be retargeted\nWhen the procedure finishes planning\nThen it completes with no_changes and reports skipped rows.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fb6c27b7-9d52-4955-b202-465dd7047f2a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3ec5f071-114e-4c90-894c-a0de12f87bd7",
+      "author": "derek.norrbom",
+      "text": "Implementing as procedure-only behavior: wrap plexus.score.pull in pcall, append a skipped row on missing champion/pull failure, and continue. No change to the lower-level score.pull API because other callers should still fail loudly for direct pulls.",
+      "created_at": "2026-05-15T22:33:39.778734Z"
+    },
+    {
+      "id": "7e325d4f-1ce3-4224-aa92-31d484325820",
+      "author": "derek.norrbom",
+      "text": "Implemented: scorecard_model_retarget now wraps plexus.score.pull in pcall. Pull failures, including missing champion versions, append a row with status=skipped, skip_reason=missing_champion, and the original error text, then continue with subsequent scores. Added contract assertions for skipped_count and skip status. Validation: retarget procedure/runtime tests passed and YAML parsed.",
+      "created_at": "2026-05-15T22:34:18.120499Z"
+    }
+  ],
+  "created_at": "2026-05-15T22:33:36.121654Z",
+  "updated_at": "2026-05-15T22:34:18.130712Z",
+  "closed_at": "2026-05-15T22:34:18.130712Z",
+  "custom": {}
+}

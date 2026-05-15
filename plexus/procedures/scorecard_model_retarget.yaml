@@ -94,6 +94,9 @@ outputs:
   created_count:
     type: number
     required: false
+  skipped_count:
+    type: number
+    required: false
   rows:
     type: array
     required: false
@@ -125,6 +128,12 @@ code: |
   -- Given a selected score with an unsupported class
   -- When I run the retarget procedure
   -- Then the procedure fails with a clear unsupported class error unless that score is excluded.
+  --
+  -- Scenario: Missing champion versions are skipped
+  -- Given a selected score has no champion ScoreVersion
+  -- When I run the retarget procedure
+  -- Then that score is marked skipped
+  -- And the procedure continues with subsequent selected scores.
 
   local function has_text(value)
     return value ~= nil and tostring(value) ~= ""
@@ -218,56 +227,65 @@ code: |
   Stage.set("plan")
   local rows = {}
   local planned = {}
+  local skipped = 0
   local target = target_config()
   for _, score in ipairs(scores) do
-    local pull = plexus.score.pull({
-      scorecard_identifier = params.scorecard,
-      score_identifier = score.id
-    })
-    if not pull or not pull.success then
-      return {
-        success = false,
-        status = "error",
-        message = "Failed to pull champion score YAML for " .. tostring(score.name),
-        scorecard_id = scorecard_id,
-        rows = rows,
-      }
-    end
-
-    local ok, plan = pcall(function()
-      return plexus.scorecard_retarget.plan_score({
-        yaml_content = pull.yaml_content or "",
-        target = target,
+    local pull_ok, pull = pcall(function()
+      return plexus.score.pull({
+        scorecard_identifier = params.scorecard,
+        score_identifier = score.id
       })
     end)
-    if not ok then
-      return {
-        success = false,
-        status = "error",
-        message = "Failed to plan retarget for " .. tostring(score.name) .. ": " .. tostring(plan),
-        scorecard_id = scorecard_id,
-        rows = rows,
-      }
-    end
+    if not pull_ok or not pull or not pull.success then
+      skipped = skipped + 1
+      table.insert(rows, {
+        score_id = score.id,
+        score_name = score.name,
+        score_key = score.key,
+        external_id = score.externalId,
+        section_name = score.section_name,
+        changed = false,
+        status = "skipped",
+        skip_reason = "missing_champion",
+        error = tostring((pull_ok and pull and pull.error) or pull or "Failed to pull champion score YAML")
+      })
+    else
 
-    local row = {
-      score_id = score.id,
-      score_name = score.name,
-      score_key = score.key,
-      external_id = score.externalId,
-      section_name = score.section_name,
-      champion_version_id = pull.version_id,
-      score_class = plan.score_class,
-      changed = plan.changed == true,
-      status = plan.changed and "planned" or "unchanged",
-      message = plan.message,
-      current = plan.current,
-      candidate = plan.candidate,
-    }
-    table.insert(rows, row)
-    if plan.changed then
-      row.yaml_content = plan.yaml_content
-      table.insert(planned, row)
+      local ok, plan = pcall(function()
+        return plexus.scorecard_retarget.plan_score({
+          yaml_content = pull.yaml_content or "",
+          target = target,
+        })
+      end)
+      if not ok then
+        return {
+          success = false,
+          status = "error",
+          message = "Failed to plan retarget for " .. tostring(score.name) .. ": " .. tostring(plan),
+          scorecard_id = scorecard_id,
+          rows = rows,
+        }
+      end
+
+      local row = {
+        score_id = score.id,
+        score_name = score.name,
+        score_key = score.key,
+        external_id = score.externalId,
+        section_name = score.section_name,
+        champion_version_id = pull.version_id,
+        score_class = plan.score_class,
+        changed = plan.changed == true,
+        status = plan.changed and "planned" or "unchanged",
+        message = plan.message,
+        current = plan.current,
+        candidate = plan.candidate,
+      }
+      table.insert(rows, row)
+      if plan.changed then
+        row.yaml_content = plan.yaml_content
+        table.insert(planned, row)
+      end
     end
   end
 
@@ -276,6 +294,7 @@ code: |
     scorecard_id = scorecard_id,
     planned_count = #rows,
     changed_count = #planned,
+    skipped_count = skipped,
     rows = rows,
   })
 
@@ -288,6 +307,7 @@ code: |
       planned_count = #rows,
       changed_count = 0,
       created_count = 0,
+      skipped_count = skipped,
       rows = rows,
     }
   end
@@ -301,6 +321,7 @@ code: |
       planned_count = #rows,
       changed_count = #planned,
       created_count = 0,
+      skipped_count = skipped,
       rows = rows,
     }
   end
@@ -330,6 +351,7 @@ code: |
         planned_count = #rows,
         changed_count = #planned,
         created_count = created,
+        skipped_count = skipped,
         rows = rows,
       }
     end
@@ -346,6 +368,7 @@ code: |
     planned_count = #rows,
     changed_count = #planned,
     created_count = created,
+    skipped_count = skipped,
     rows = rows,
   })
 
@@ -357,5 +380,6 @@ code: |
     planned_count = #rows,
     changed_count = #planned,
     created_count = created,
+    skipped_count = skipped,
     rows = rows,
   }

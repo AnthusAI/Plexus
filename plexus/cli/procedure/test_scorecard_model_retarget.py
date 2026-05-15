@@ -118,6 +118,7 @@ def test_scorecard_model_retarget_procedure_declares_contract_and_behavior():
     assert config["params"]["langgraph_model_provider"]["default"] == "ChatOpenAI"
     assert config["params"]["tactus_model_provider"]["default"] == "openai"
     assert config["outputs"]["created_count"]["type"] == "number"
+    assert config["outputs"]["skipped_count"]["type"] == "number"
     assert config["agents"]["placeholder"]["initial_message"] == "Ready."
 
     code = config["code"]
@@ -127,4 +128,7 @@ def test_scorecard_model_retarget_procedure_declares_contract_and_behavior():
     assert "plexus.scorecard_retarget.plan_score" in code
     assert "plexus.score.update" in code
     assert "plexus.score.set_champion" not in code
+    assert 'status = "skipped"' in code
+    assert 'skip_reason = "missing_champion"' in code
+    assert "skipped_count = skipped" in code
     assert "dry_run=true so no ScoreVersions were created" in code
