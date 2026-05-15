@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7704ed89-ffa0-46de-a5db-ab4ae12f970d",
+  "issue_id": "plx-840f4ff5-ffdc-4ec1-912d-2e1af38bcf0d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T18:22:49.480Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fix dashboard Next config/runtime regressions after Next upgrade"
+  }
+}
