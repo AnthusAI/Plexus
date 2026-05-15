@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "687750d9-f518-4779-86c8-e839eee07fbe",
+  "issue_id": "plx-7cf1ee90-7c39-4456-b9c7-5f6fd5245edf",
+  "event_type": "field_updated",
+  "occurred_at": "2026-05-15T18:19:00.053Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Add dashboard support for model performance frontier procedure results so procedure detail displays cost-vs-accuracy points and Pareto frontier status from procedure state, alongside compact artifact metadata.",
+        "to": "Add dashboard support for model performance frontier procedure results so procedure detail displays cost-vs-accuracy points and Pareto frontier status from procedure state, alongside compact artifact metadata.\n\nFeature: Model performance frontier dashboard display\n  Scenario: Procedure detail displays frontier chart\n    Given a model performance frontier procedure has completed with frontier rows in procedure state\n    When a user opens the procedure detail view\n    Then the UI displays a cost-vs-accuracy chart with one point per variant\n    And Pareto frontier variants are visually distinguished\n    And artifact metadata remains compact instead of rendering the full report inline\n\n  Scenario: Procedure state is populated for dashboard rendering\n    Given frontier evaluation rows are finalized\n    When the procedure completes\n    Then procedure state includes score identity, champion version, rows, frontier rows, and report output metadata"
+      }
+    }
+  }
+}

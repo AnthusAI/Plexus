@@ -1,0 +1,31 @@
+{
+  "id": "plx-5b561b73-f30a-49ae-b854-14437a74b1e6",
+  "title": "Implement model performance frontier procedure",
+  "description": "Implement the model_performance_frontier procedure, deterministic YAML variant helpers, dual-evaluation orchestration, cost/frontier calculations, report artifacts, and focused tests.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3728b041-2f45-4d76-b570-bf99e1137838",
+      "author": "derek.norrbom",
+      "text": "Starting implementation. Created behavior story plx-6001a0 and task plx-5b561b before source changes, per repository workflow.",
+      "created_at": "2026-05-15T17:22:08.869204Z"
+    },
+    {
+      "id": "daed2261-d25b-4c39-ab8f-e042dfa8f3b2",
+      "author": "derek.norrbom",
+      "text": "Implemented model performance frontier procedure.\n\nChanges:\n- Added `plexus/procedures/model_performance_frontier.yaml` with Gherkin Specification, deterministic candidate planning, non-champion ScoreVersion creation, dual evaluation dispatch, Pareto rows, and artifact finalization.\n- Added Python helper module for ruamel-based YAML variant generation, cost-axis calculation, Pareto selection, and JSON/CSV/HTML artifact rendering.\n- Exposed `plexus.model_frontier.{plan,build_result_row,finalize}` through the Tactus runtime.\n- Added focused unit/runtime tests and README entry.\n\nValidation:\n- `pytest -q plexus/cli/procedure/test_model_performance_frontier.py MCP/tools/tactus_runtime/test_model_frontier_runtime.py` -> 10 passed\n- `python -m py_compile plexus/cli/procedure/model_performance_frontier.py MCP/tools/tactus_runtime/execute.py` -> passed\n- YAML safe-load check -> passed",
+      "created_at": "2026-05-15T17:27:25.364397Z"
+    }
+  ],
+  "created_at": "2026-05-15T17:22:03.706535Z",
+  "updated_at": "2026-05-15T17:27:32.095965Z",
+  "closed_at": "2026-05-15T17:27:32.095965Z",
+  "custom": {}
+}

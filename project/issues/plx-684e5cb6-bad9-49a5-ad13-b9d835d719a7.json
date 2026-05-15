@@ -1,0 +1,25 @@
+{
+  "id": "plx-684e5cb6-bad9-49a5-ad13-b9d835d719a7",
+  "title": "bug Model frontier chart should plot cost against accuracy metric",
+  "description": "Feature: Model frontier cost/accuracy plot\n  Scenario: Frontier rows use evaluation accuracy for the y axis\n    Given a feedback evaluation result includes Accuracy and Alignment metrics\n    When the model frontier result row is built\n    Then accuracy_axis is derived from the evaluation Accuracy metric\n    And feedback_metrics.alignment still retains AC1 for drilldown\n\n  Scenario: Procedure detail labels frontier y axis as accuracy\n    Given a model frontier procedure has completed rows\n    When the user views the procedure detail chart\n    Then the chart labels the y axis and table column as Accuracy rather than Feedback AC1",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "218ea5ea-b8cf-4fc6-87b2-3bf7b77ee3a8",
+      "author": "derek.norrbom",
+      "text": "Changed model frontier accuracy_axis to use the feedback evaluation Accuracy metric instead of Alignment/AC1, kept alignment in feedback_metrics for drilldown, updated dashboard labels to Accuracy, and verified Python/Jest/typecheck.",
+      "created_at": "2026-05-15T18:54:56.872991Z"
+    }
+  ],
+  "created_at": "2026-05-15T18:54:06.577883Z",
+  "updated_at": "2026-05-15T18:54:56.883157Z",
+  "closed_at": "2026-05-15T18:54:56.883157Z",
+  "custom": {}
+}
