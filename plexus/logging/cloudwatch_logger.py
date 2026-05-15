@@ -333,6 +333,7 @@ class PlexusCloudWatchLogger:
             try:
                 self._logs_client.create_log_group(logGroupName=self.log_group)
             except self._logs_client.exceptions.ResourceAlreadyExistsException:
+                # Log group creation is idempotent; existing group is expected on retries.
                 pass
 
             # Apply data protection policy for PII/PHI masking
@@ -354,6 +355,7 @@ class PlexusCloudWatchLogger:
                         logGroupName=self.log_group, logStreamName=stream
                     )
                 except self._logs_client.exceptions.ResourceAlreadyExistsException:
+                    # Stream creation is idempotent; existing streams are non-fatal.
                     pass
 
             # Log initial event
@@ -418,8 +420,12 @@ def _format_tactus_event(event: Any) -> str:
                 "total_tokens": getattr(event, "total_tokens", None),
                 "cache_hit": getattr(event, "cache_hit", False),
             }, default=str)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(
+            "Falling back to generic tactus event formatting: %s",
+            exc,
+            exc_info=True,
+        )
 
     event_type = getattr(event, "event_type", None) or type(event).__name__
     content = getattr(event, "content", None) or getattr(event, "message", None)
