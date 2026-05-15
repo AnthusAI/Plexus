@@ -1,0 +1,34 @@
+{
+  "id": "plx-840f4ff5-ffdc-4ec1-912d-2e1af38bcf0d",
+  "title": "Fix dashboard Next config/runtime regressions after Next upgrade",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b5fbe177-3761-4a5f-8c9b-2df721c60597",
+      "author": "derek",
+      "text": "Investigating invalid next.config eslint key + Turbopack/webpack mismatch breaking dev:web and Amplify dashboard build.",
+      "created_at": "2026-05-15T18:22:52.190119580Z"
+    },
+    {
+      "id": "56cfe9db-e077-4cf8-849b-ff9967cfc81a",
+      "author": "derek",
+      "text": "Implemented remediation for local/Amplify Next runtime failures: removed unsupported next.config.js eslint key; updated scripts to explicitly use webpack (dev:web, build, build:fast). Validation: npm run dev:web starts cleanly in webpack mode; npm run build:fast completes successfully.",
+      "created_at": "2026-05-15T18:26:22.574629880Z"
+    }
+  ],
+  "created_at": "2026-05-15T18:22:49.480676549Z",
+  "updated_at": "2026-05-15T18:27:27.040257824Z",
+  "closed_at": "2026-05-15T18:27:27.040257824Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}
