@@ -1,0 +1,25 @@
+{
+  "id": "plx-d08d5ec2-c3f4-433d-8d8f-66aae321beae",
+  "title": "Preserve guidelines during scorecard model retarget",
+  "description": "Gherkin:\nGiven a selected score champion version has guidelines\nWhen scorecard_model_retarget creates a non-champion retargeted ScoreVersion\nThen the new ScoreVersion preserves the champion guidelines exactly\nAnd the procedure row records that guidelines were preserved.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fb6c27b7-9d52-4955-b202-465dd7047f2a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "29c0ae86-500c-40bd-8b0f-893bc41b790b",
+      "author": "derek.norrbom",
+      "text": "Implemented guideline preservation for scorecard_model_retarget: pulled champion guidelines are retained out-of-band during planning and passed to plexus.score.update for each created non-champion ScoreVersion. Added contract assertions and validated with focused tests plus YAML parse.",
+      "created_at": "2026-05-15T22:56:59.565157Z"
+    }
+  ],
+  "created_at": "2026-05-15T22:56:18.083396Z",
+  "updated_at": "2026-05-15T22:57:02.309695Z",
+  "closed_at": "2026-05-15T22:57:02.309695Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b60302d6-8b69-4fa2-b1eb-c662fb162b1c",
+  "issue_id": "plx-d08d5ec2-c3f4-433d-8d8f-66aae321beae",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T22:56:18.083Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Gherkin:\nGiven a selected score champion version has guidelines\nWhen scorecard_model_retarget creates a non-champion retargeted ScoreVersion\nThen the new ScoreVersion preserves the champion guidelines exactly\nAnd the procedure row records that guidelines were preserved.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-fb6c27b7-9d52-4955-b202-465dd7047f2a",
+    "priority": 1,
+    "status": "open",
+    "title": "Preserve guidelines during scorecard model retarget"
+  }
+}

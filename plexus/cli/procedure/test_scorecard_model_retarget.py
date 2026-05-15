@@ -131,4 +131,7 @@ def test_scorecard_model_retarget_procedure_declares_contract_and_behavior():
     assert 'status = "skipped"' in code
     assert 'skip_reason = "missing_champion"' in code
     assert "skipped_count = skipped" in code
+    assert "guidelines_by_score" in code
+    assert "guidelines = guidelines_by_score[row.score_id] or \"\"" in code
+    assert "guidelines_preserved = true" in code
     assert "dry_run=true so no ScoreVersions were created" in code

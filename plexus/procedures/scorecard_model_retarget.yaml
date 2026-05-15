@@ -134,6 +134,11 @@ code: |
   -- When I run the retarget procedure
   -- Then that score is marked skipped
   -- And the procedure continues with subsequent selected scores.
+  --
+  -- Scenario: Champion guidelines are preserved
+  -- Given a selected score champion version has guidelines
+  -- When I run the retarget procedure with dry_run=false
+  -- Then the created non-champion ScoreVersion preserves the champion guidelines exactly.
 
   local function has_text(value)
     return value ~= nil and tostring(value) ~= ""
@@ -227,6 +232,7 @@ code: |
   Stage.set("plan")
   local rows = {}
   local planned = {}
+  local guidelines_by_score = {}
   local skipped = 0
   local target = target_config()
   for _, score in ipairs(scores) do
@@ -280,10 +286,12 @@ code: |
         message = plan.message,
         current = plan.current,
         candidate = plan.candidate,
+        guidelines_preserved = true,
       }
       table.insert(rows, row)
       if plan.changed then
         row.yaml_content = plan.yaml_content
+        guidelines_by_score[row.score_id] = pull.guidelines or ""
         table.insert(planned, row)
       end
     end
@@ -334,6 +342,7 @@ code: |
       scorecard_identifier = params.scorecard,
       score_identifier = row.score_id,
       code = row.yaml_content,
+      guidelines = guidelines_by_score[row.score_id] or "",
       parent_version_id = row.champion_version_id,
       version_note = has_text(params.version_note)
         and params.version_note
