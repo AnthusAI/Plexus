@@ -5,8 +5,9 @@ import csv
 import io
 import json
 import math
+import re
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, MutableMapping
 
 from ruamel.yaml import YAML
 
@@ -20,6 +21,20 @@ ROOT_MODEL_FIELDS = (
     "temperature",
     "max_tokens",
 )
+
+TACTUS_ROOT_RUNTIME_FIELDS = (
+    "reasoning_effort",
+    "verbosity",
+)
+
+TACTUS_CLASSIFY_FIELDS = (
+    "temperature",
+)
+
+TACTUS_PROVIDER_ALIASES = {
+    "ChatOpenAI": "openai",
+    "OpenAI": "openai",
+}
 
 
 @dataclass(frozen=True)
@@ -167,7 +182,127 @@ def apply_override(data: Any, path: str, value: Any) -> None:
 
 
 def _extract_fields(data: Mapping[str, Any]) -> dict[str, Any]:
-    return {field: data.get(field) for field in ROOT_MODEL_FIELDS}
+    fields = {field: data.get(field) for field in ROOT_MODEL_FIELDS}
+    if str(data.get("class") or "") == "TactusScore":
+        tactus_model = _find_tactus_default_model(data.get("code") or "")
+        if tactus_model:
+            provider, model_name = _split_tactus_model_id(tactus_model)
+            fields["model_provider"] = fields["model_provider"] or provider
+            fields["model_name"] = fields["model_name"] or model_name
+            fields["base_model_name"] = fields["base_model_name"] or model_name
+    return fields
+
+
+def _split_tactus_model_id(model_id: str) -> tuple[str | None, str]:
+    if "/" not in model_id:
+        return None, model_id
+    provider, model_name = model_id.split("/", 1)
+    return provider or None, model_name
+
+
+def _compose_tactus_model_id(model: Mapping[str, Any], *, current_model_id: str | None = None) -> str | None:
+    model_name = model.get("model_name")
+    provider = model.get("model_provider")
+    if model_name is None:
+        return None
+    model_name_text = str(model_name)
+    if "/" in model_name_text:
+        return model_name_text
+
+    current_provider = None
+    if current_model_id:
+        current_provider, _ = _split_tactus_model_id(current_model_id)
+    provider_text = str(provider) if provider is not None else current_provider
+    provider_text = TACTUS_PROVIDER_ALIASES.get(provider_text, provider_text)
+    return f"{provider_text}/{model_name_text}" if provider_text else model_name_text
+
+
+def _find_tactus_default_model(code: str) -> str | None:
+    if not isinstance(code, str):
+        return None
+    match = re.search(r'(?m)^([ \t]*)default_model[ \t]*(?:\([ \t]*)?["\']([^"\']+)["\'][ \t]*\)?[ \t]*', code)
+    if match:
+        return match.group(2)
+    match = re.search(r'ClassifyProcedure\s*\{(?P<body>.*?)\n\s*\}', code, flags=re.S)
+    if not match:
+        return None
+    model_match = re.search(r'(?m)^([ \t]*)model\s*=\s*["\']([^"\']+)["\']', match.group("body"))
+    return model_match.group(2) if model_match else None
+
+
+def _replace_or_insert_tactus_default_model(code: str, model_id: str) -> str:
+    pattern = re.compile(r'(?m)^([ \t]*)default_model[ \t]*(?:\([ \t]*)?["\']([^"\']+)["\'][ \t]*\)?[ \t]*')
+    if pattern.search(code):
+        return pattern.sub(lambda match: f'{match.group(1)}default_model "{model_id}"', code, count=1)
+
+    classify_pattern = re.compile(r'(ClassifyProcedure\s*\{(?P<body>.*?)\n\s*\})', flags=re.S)
+    classify_match = classify_pattern.search(code)
+    if classify_match:
+        block = classify_match.group(1)
+        model_pattern = re.compile(r'(?m)^([ \t]*)model\s*=\s*["\']([^"\']+)["\']')
+        if model_pattern.search(block):
+            updated_block = model_pattern.sub(
+                lambda match: f'{match.group(1)}model = "{model_id}"',
+                block,
+                count=1,
+            )
+            return code[: classify_match.start()] + updated_block + code[classify_match.end() :]
+
+    return f'default_model "{model_id}"\n\n{code}'
+
+
+def _format_tactus_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return repr(value)
+    return json.dumps(str(value))
+
+
+def _replace_or_insert_classify_field(code: str, field: str, value: Any) -> str:
+    classify_pattern = re.compile(r'ClassifyProcedure\s*\{(?P<body>.*?)\n(?P<indent>[ \t]*)\}', flags=re.S)
+    match = classify_pattern.search(code)
+    if not match:
+        raise ValueError(f"TactusScore code must define ClassifyProcedure before setting {field!r}")
+    block = match.group(0)
+    value_text = _format_tactus_value(value)
+    field_pattern = re.compile(rf'(?m)^([ \t]*){re.escape(field)}\s*=\s*[^,\n]+,?')
+    if field_pattern.search(block):
+        updated_block = field_pattern.sub(
+            lambda field_match: f"{field_match.group(1)}{field} = {value_text},",
+            block,
+            count=1,
+        )
+        return code[: match.start()] + updated_block + code[match.end() :]
+
+    body = match.group("body")
+    non_empty_lines = [line for line in body.splitlines() if line.strip()]
+    indent = re.match(r"([ \t]*)", non_empty_lines[0]).group(1) if non_empty_lines else "  "
+    insert_at = match.start("body")
+    return code[:insert_at] + f"\n{indent}{field} = {value_text}," + code[insert_at:]
+
+
+def _apply_tactus_variant(
+    candidate: MutableMapping[str, Any],
+    model: Mapping[str, Any],
+    parameter_set: Mapping[str, Any],
+) -> None:
+    current_model_id = _find_tactus_default_model(candidate.get("code") or "")
+    model_id = _compose_tactus_model_id(model, current_model_id=current_model_id)
+    if model_id:
+        candidate["code"] = _replace_or_insert_tactus_default_model(candidate.get("code") or "", model_id)
+
+    for field in TACTUS_ROOT_RUNTIME_FIELDS:
+        if field in parameter_set and parameter_set[field] is not None:
+            candidate[field] = parameter_set[field]
+
+    for field in TACTUS_CLASSIFY_FIELDS:
+        if field in parameter_set and parameter_set[field] is not None:
+            candidate["code"] = _replace_or_insert_classify_field(
+                candidate.get("code") or "",
+                field,
+                parameter_set[field],
+            )
 
 
 def build_variants(
@@ -225,14 +360,17 @@ def build_variants(
                 raise ValueError("Each parameter set must be an object")
 
             candidate = copy.deepcopy(base)
-            for field in ("model_provider", "model_name", "base_model_name"):
-                if field in model and model[field] is not None:
-                    candidate[field] = model[field]
-            if "model_name" in model and "base_model_name" not in model and "base_model_name" in candidate:
-                candidate["base_model_name"] = model["model_name"]
-            for field in ("reasoning_effort", "verbosity", "temperature", "max_tokens"):
-                if field in parameter_set and parameter_set[field] is not None:
-                    candidate[field] = parameter_set[field]
+            if str(candidate.get("class") or "") == "TactusScore":
+                _apply_tactus_variant(candidate, model, parameter_set)
+            else:
+                for field in ("model_provider", "model_name", "base_model_name"):
+                    if field in model and model[field] is not None:
+                        candidate[field] = model[field]
+                if "model_name" in model and "base_model_name" not in model and "base_model_name" in candidate:
+                    candidate["base_model_name"] = model["model_name"]
+                for field in ("reasoning_effort", "verbosity", "temperature", "max_tokens"):
+                    if field in parameter_set and parameter_set[field] is not None:
+                        candidate[field] = parameter_set[field]
             extra_overrides = parameter_set.get("extra_overrides") or {}
             extra_overrides = _plain_value(extra_overrides)
             if not isinstance(extra_overrides, Mapping):

@@ -18,7 +18,7 @@ params:
   candidate_matrix:
     type: object
     required: true
-    description: "Structured model/parameter matrix. Shape: {include_current=true, models=[{label, model_provider, model_name, base_model_name?}], parameter_sets=[{label, reasoning_effort?, verbosity?, temperature?, max_tokens?, extra_overrides?}]}. If base_model_name exists in the score and a candidate sets model_name without base_model_name, base_model_name is updated to match model_name."
+    description: "Structured model/parameter matrix. Shape: {include_current=true, models=[{label, model_provider, model_name, base_model_name?}], parameter_sets=[{label, reasoning_effort?, verbosity?, temperature?, max_tokens?, extra_overrides?}]}. LangGraphScore variants update root model fields. TactusScore variants update the embedded default_model directive, put reasoning_effort/verbosity on the score root for TactusRuntime, and apply temperature inside ClassifyProcedure. If base_model_name exists in a LangGraphScore and a candidate sets model_name without base_model_name, base_model_name is updated to match model_name."
 
   days:
     type: number
@@ -231,7 +231,7 @@ code: |
     return results
   end
 
-  local function ensure_regression_dataset(version_id)
+  local function ensure_feedback_window_dataset(version_id)
     local requested = to_number(params.max_samples, 100)
     local minimum = math.max(math.floor(requested / 4), 15)
     local check = plexus.dataset.check_associated({
@@ -248,8 +248,14 @@ code: |
       and check.has_dataset
       and check.dataset_id
       and check.is_materialized
+      and has_text(check.feedback_target_hash)
       and to_number(check.row_count, 0) >= minimum then
-      return check.dataset_id
+      return {
+        dataset_id = check.dataset_id,
+        row_count = to_number(check.row_count, 0),
+        regression_ready = true,
+        source = "associated"
+      }
     end
 
     local build_ok, build = pcall(function()
@@ -278,8 +284,14 @@ code: |
     end
 
     if build and build.dataset_id and to_number(build.rows_written, 0) >= minimum then
-      return build.dataset_id
+      return {
+        dataset_id = build.dataset_id,
+        row_count = to_number(build.rows_written, 0),
+        regression_ready = true,
+        source = "balanced_build"
+      }
     end
+    local best_rows = to_number(build and build.rows_written, 0)
 
     local unbalanced_ok, unbalanced = pcall(function()
       return plexus.dataset.build_from_feedback_window({
@@ -303,14 +315,31 @@ code: |
           .. "); regression evaluation will be skipped for this variant.",
         level = "warning"
       })
-      return nil
+      return {
+        dataset_id = nil,
+        row_count = best_rows,
+        regression_ready = false,
+        source = "build_failed",
+        error = tostring(unbalanced)
+      }
     end
 
+    best_rows = math.max(best_rows, to_number(unbalanced and unbalanced.rows_written, 0))
     if unbalanced and unbalanced.dataset_id and to_number(unbalanced.rows_written, 0) >= minimum then
-      return unbalanced.dataset_id
+      return {
+        dataset_id = unbalanced.dataset_id,
+        row_count = to_number(unbalanced.rows_written, 0),
+        regression_ready = true,
+        source = "unbalanced_build"
+      }
     end
 
-    return nil
+    return {
+      dataset_id = nil,
+      row_count = best_rows,
+      regression_ready = false,
+      source = "insufficient_rows"
+    }
   end
 
   Stage.set("setup")
@@ -414,37 +443,54 @@ code: |
   Stage.set("evaluations")
   local batch = {}
   local eval_index = {}
+  local eligible_feedback_rows = 0
   for idx, variant in ipairs(variants) do
     if variant.score_version_id and not variant.error then
-      local dataset_id = ensure_regression_dataset(variant.score_version_id)
-      if dataset_id then
+      local feedback_window = ensure_feedback_window_dataset(variant.score_version_id)
+      local feedback_rows = to_number(feedback_window and feedback_window.row_count, 0)
+      eligible_feedback_rows = math.max(eligible_feedback_rows, feedback_rows)
+      if feedback_window and feedback_window.regression_ready and feedback_window.dataset_id then
         table.insert(batch, {
           scorecard_name = params.scorecard,
           score_name = params.score,
           evaluation_type = "accuracy",
-          dataset_id = dataset_id,
+          dataset_id = feedback_window.dataset_id,
           n_samples = to_number(params.max_samples, 100),
           version = variant.score_version_id,
           notes = "Model frontier regression: " .. tostring(variant.label)
         })
         table.insert(eval_index, {variant_index = idx, kind = "regression"})
       end
-      table.insert(batch, {
-        scorecard_name = params.scorecard,
-        score_name = params.score,
-        evaluation_type = "feedback",
-        version = variant.score_version_id,
-        days = params.days,
-        max_feedback_items = to_number(params.max_samples, 100),
-        sampling_mode = params.sampling_mode or "newest",
-        sample_seed = params.sample_seed,
-        feedback_start_at = params.feedback_window_start_at,
-        feedback_end_at = params.feedback_window_end_at,
-        score_rubric_consistency_check = true,
-        notes = "Model frontier feedback: " .. tostring(variant.label)
-      })
-      table.insert(eval_index, {variant_index = idx, kind = "feedback"})
+      if feedback_rows > 0 then
+        table.insert(batch, {
+          scorecard_name = params.scorecard,
+          score_name = params.score,
+          evaluation_type = "feedback",
+          version = variant.score_version_id,
+          days = params.days,
+          max_feedback_items = to_number(params.max_samples, 100),
+          sampling_mode = params.sampling_mode or "newest",
+          sample_seed = params.sample_seed,
+          feedback_start_at = params.feedback_window_start_at,
+          feedback_end_at = params.feedback_window_end_at,
+          score_rubric_consistency_check = true,
+          notes = "Model frontier feedback: " .. tostring(variant.label)
+        })
+        table.insert(eval_index, {variant_index = idx, kind = "feedback"})
+      end
     end
+  end
+
+  if eligible_feedback_rows <= 0 then
+    return {
+      success = false,
+      status = "error",
+      message = "No eligible labeled feedback-derived records are available for this score/version/window. Model frontier requires labeled records to compute accuracy.",
+      scorecard_id = scorecard_id,
+      score_id = score_id,
+      champion_version_id = champion_version_id,
+      planned_variant_count = #variants
+    }
   end
 
   Human.notify({message = "Dispatching " .. tostring(#batch) .. " frontier evaluation(s)...", level = "info"})

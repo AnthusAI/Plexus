@@ -35,6 +35,23 @@ graph:
 """
 
 
+TACTUS_SCORE_YAML = """\
+name: Acknowledges Before Redirecting
+class: TactusScore
+valid_classes:
+  - Yes
+  - No
+code: |-
+  default_model "openai/gpt-5.4-nano"
+
+  ClassifyProcedure {
+    classes = {"Yes", "No"},
+    system_message = [[Classify the text.]],
+    user_message = [[{{ text }}]]
+  }
+"""
+
+
 def test_build_variants_includes_current_first_and_deduplicates_semantic_matches():
     variants = build_variants(
         BASE_SCORE_YAML,
@@ -99,6 +116,50 @@ def test_build_variants_supports_project_type_ai_root_model_fields():
     assert generated["temperature"] == 0
     assert generated["graph"][0]["model_name"] == "gpt-5-mini"
     assert generated["graph"][0]["class"] == "Classifier"
+
+
+def test_build_variants_supports_tactus_score_default_model_and_runtime_controls():
+    variants = build_variants(
+        TACTUS_SCORE_YAML,
+        {
+            "models": [{"label": "mini", "model_provider": "openai", "model_name": "gpt-5.4-mini"}],
+            "parameter_sets": [
+                {
+                    "label": "high",
+                    "reasoning_effort": "high",
+                    "verbosity": "medium",
+                    "temperature": 0,
+                }
+            ],
+        },
+        include_current=False,
+    )
+
+    generated = yaml.safe_load(variants[0]["yaml_content"])
+    assert generated["class"] == "TactusScore"
+    assert 'default_model "openai/gpt-5.4-mini"' in generated["code"]
+    assert "temperature = 0," in generated["code"]
+    assert generated["reasoning_effort"] == "high"
+    assert generated["verbosity"] == "medium"
+    assert "model_provider" not in generated
+    assert "model_name" not in generated
+    assert variants[0]["model_provider"] == "openai"
+    assert variants[0]["model_name"] == "gpt-5.4-mini"
+
+
+def test_build_variants_extracts_current_tactus_score_model_from_code():
+    variants = build_variants(
+        TACTUS_SCORE_YAML,
+        {
+            "include_current": True,
+            "models": [{"label": "same", "model_provider": "openai", "model_name": "gpt-5.4-nano"}],
+            "parameter_sets": [{"label": "default"}],
+        },
+    )
+
+    assert [variant["label"] for variant in variants] == ["current"]
+    assert variants[0]["model_provider"] == "openai"
+    assert variants[0]["model_name"] == "gpt-5.4-nano"
 
 
 def test_build_variants_allows_explicit_node_overrides():
@@ -215,6 +276,7 @@ def test_procedure_yaml_declares_contract_and_specification():
     assert config["params"]["score"]["required"] is True
     assert config["params"]["candidate_matrix"]["type"] == "object"
     assert "base_model_name" in config["params"]["candidate_matrix"]["description"]
+    assert "TactusScore" in config["params"]["candidate_matrix"]["description"]
     assert "verbosity" in config["params"]["candidate_matrix"]["description"]
     assert config["params"]["evaluation_budget_usd"]["default"] == 5.0
     assert config["outputs"]["report_output"]["type"] == "object"
@@ -229,5 +291,7 @@ def test_procedure_yaml_declares_contract_and_specification():
     assert "Step.checkpoint(function()" in code
     assert "local build_ok, build = pcall(function()" in code
     assert "local unbalanced_ok, unbalanced = pcall(function()" in code
+    assert "has_text(check.feedback_target_hash)" in code
+    assert "No eligible labeled feedback-derived records are available" in code
     assert "budget = args.budget or eval_budget()" in code
     assert "plexus.model_frontier.finalize" in code
