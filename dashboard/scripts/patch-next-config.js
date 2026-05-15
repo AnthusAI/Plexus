@@ -4,6 +4,10 @@ const fs = require('fs');
 const path = require('path');
 const target = path.join(__dirname, '..', 'node_modules', 'next', 'config.js');
 const content = 'module.exports = { default: () => null, setConfig: () => {} };\n';
-if (!fs.existsSync(target)) {
-  fs.writeFileSync(target, content);
+try {
+  fs.writeFileSync(target, content, { flag: 'wx' });
+} catch (error) {
+  if (!error || error.code !== 'EEXIST') {
+    throw error;
+  }
 }

@@ -9,7 +9,6 @@ Usage:
     python scripts/test_pii_masking.py
 """
 
-import json
 import time
 from plexus.logging.cloudwatch_logger import PlexusCloudWatchLogger
 
