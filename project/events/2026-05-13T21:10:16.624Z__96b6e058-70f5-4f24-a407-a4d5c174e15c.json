@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "96b6e058-70f5-4f24-a407-a4d5c174e15c",
+  "issue_id": "plx-9cbbb9c6-3aa4-40ee-8d23-582a57412bce",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-13T21:10:16.624Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "title": "Tactus MessageHistoryManager auto-compacts when history exceeds budget",
+    "description": "",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+    "labels": []
+  }
+}

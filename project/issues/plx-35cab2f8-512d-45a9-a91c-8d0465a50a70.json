@@ -1,0 +1,31 @@
+{
+  "id": "plx-35cab2f8-512d-45a9-a91c-8d0465a50a70",
+  "title": "Extend Tactus MessageHistoryManager with auto-compaction",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "be5f20dc-3993-45a9-bb68-b228b4a2c283",
+      "author": "derek.norrbom",
+      "text": "## Scope\n\nExtend Tactus MessageHistoryManager to automatically compact history when over budget.\n\n## Implementation\n\n**Modify**: `tactus/core/message_history_manager.py`\n- Add constructor params:\n  - `compaction_strategy: Optional[CompactionStrategy]`\n  - `auto_compact: bool = False`\n  - `max_tokens: Optional[int]` (budget threshold)\n- Extend `get_history()` method:\n  - If `auto_compact` enabled, estimate tokens\n  - If over `max_tokens`, call `compaction_strategy.compact()`\n  - Store compaction metadata via `_store_compaction_metadata()`\n  - Return compacted history transparently\n- Add `_estimate_tokens()` helper (4 chars/token heuristic)\n- Add `get_compaction_metadata(agent_name)` accessor\n\n## Repository\n\nThis work happens in **Tactus** repository at `~/Projects/Tactus`\n\n## Dependencies\n\n- Requires `plx-4bdc03` (CompactionStrategy interface) to be complete\n\n## Testing\n\nUnit tests for:\n- Auto-compaction triggers when over budget\n- No compaction when under budget\n- Compaction metadata storage and retrieval\n- Integration with existing filter functions\n- Token estimation accuracy",
+      "created_at": "2026-05-13T21:12:31.995534Z"
+    },
+    {
+      "id": "1f965d7d-8284-4ab5-a10f-fea7dc904dcd",
+      "author": "derek.norrbom",
+      "text": "Completed in Tactus repository as tcts-35cab2. Auto-compaction functionality implemented in MessageHistoryManager with transparent get_history_for_agent() compaction.",
+      "created_at": "2026-05-13T23:29:49.454396Z"
+    }
+  ],
+  "created_at": "2026-05-13T21:12:24.567751Z",
+  "updated_at": "2026-05-13T23:29:49.454396Z",
+  "closed_at": "2026-05-13T23:29:35.324881Z",
+  "custom": {}
+}
