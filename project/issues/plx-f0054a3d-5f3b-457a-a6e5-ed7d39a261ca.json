@@ -1,0 +1,25 @@
+{
+  "id": "plx-f0054a3d-5f3b-457a-a6e5-ed7d39a261ca",
+  "title": "story Support TactusScore in model performance frontier",
+  "description": "Feature: Model performance frontier supports TactusScore\n  Scenario: TactusScore model variants update embedded default_model\n    Given a score YAML uses class TactusScore with code containing default_model \"openai/gpt-5.4-nano\"\n    When frontier variants are planned with a candidate model provider/name\n    Then the variant YAML updates the embedded default_model directive deterministically\n    And preserves the surrounding Tactus code\n\n  Scenario: TactusScore parameter variants flow to runtime controls\n    Given a TactusScore variant sets reasoning_effort or verbosity at the score YAML root\n    When the score executes its Tactus runtime\n    Then TactusRuntime receives those controls so ClassifyProcedure LLMModel calls forward them to the backend\n\n  Scenario: Existing LangGraphScore variants still update root model fields\n    Given a LangGraphScore YAML uses root model_provider/model_name fields\n    When frontier variants are planned\n    Then the existing root-field behavior is preserved",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8a96df5a-a9c9-4c78-9037-b40e9b9a1825",
+      "author": "derek.norrbom",
+      "text": "Implemented TactusScore support for model frontier: variants update embedded default_model, apply ClassifyProcedure temperature, extract current model from Tactus code, and TactusScore now forwards reasoning_effort/verbosity into TactusRuntime. Focused tests and py_compile pass.",
+      "created_at": "2026-05-15T19:47:35.094848Z"
+    }
+  ],
+  "created_at": "2026-05-15T19:44:07.057155Z",
+  "updated_at": "2026-05-15T19:47:35.107880Z",
+  "closed_at": "2026-05-15T19:47:35.107880Z",
+  "custom": {}
+}

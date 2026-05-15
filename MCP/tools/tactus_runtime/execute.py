@@ -373,6 +373,9 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("docs_list", "docs", "list"),
     ("docs_get", "docs", "get"),
     ("api_list", "api", "list"),
+    ("model_frontier_plan", "model_frontier", "plan"),
+    ("model_frontier_build_result_row", "model_frontier", "build_result_row"),
+    ("model_frontier_finalize", "model_frontier", "finalize"),
     ("scorecards", "scorecards", "list"),
     ("scorecard", "scorecards", "info"),
     ("evaluate", "evaluation", "run"),
@@ -497,6 +500,9 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("rubric_memory", "recent_entries"): _method_spec("_call_rubric_memory", planning_allowed=True),
     ("rubric_memory", "evidence_pack"): _method_spec("_call_rubric_memory", planning_allowed=True),
     ("rubric_memory", "sme_question_gate"): _method_spec("_call_rubric_memory", planning_allowed=True),
+    ("model_frontier", "plan"): _method_spec("_call_model_frontier", planning_allowed=True),
+    ("model_frontier", "build_result_row"): _method_spec("_call_model_frontier", planning_allowed=True),
+    ("model_frontier", "finalize"): _method_spec("_call_model_frontier", planning_allowed=False),
 }
 
 
@@ -6429,6 +6435,85 @@ class PlexusRuntimeModule:
             return self._dataset_handlers[method](_args(args))
         finally:
             self._budget.record_after("dataset", method)
+
+    def _call_model_frontier(
+        self, namespace: str, method: str, args: Any = None
+    ) -> Any:
+        if namespace != "model_frontier" or method not in {
+            "plan",
+            "build_result_row",
+            "finalize",
+        }:
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("model_frontier", method)
+        self._record_api_call("model_frontier", method)
+        try:
+            parsed = _args(args)
+            from plexus.cli.procedure.model_performance_frontier import (
+                build_result_row,
+                build_variants,
+                compact_report_envelope,
+                render_artifacts,
+            )
+
+            if method == "plan":
+                variants = build_variants(
+                    parsed.get("yaml_content") or "",
+                    parsed.get("candidate_matrix") or {},
+                    include_current=parsed.get("include_current"),
+                )
+                return {"variants": variants, "count": len(variants)}
+
+            if method == "build_result_row":
+                return build_result_row(
+                    parsed.get("variant") or {},
+                    feedback_evaluation=parsed.get("feedback_evaluation"),
+                    regression_evaluation=parsed.get("regression_evaluation"),
+                )
+
+            rows = parsed.get("rows") or []
+            title = parsed.get("title") or "Model Performance Frontier"
+            artifacts = render_artifacts(rows, title=title)
+            artifact_paths: list[str] = []
+            report_block_id = parsed.get("report_block_id")
+            if report_block_id:
+                from plexus.cli.shared.client_utils import create_client
+                from plexus.reports.s3_utils import add_file_to_report_block
+
+                client = create_client()
+                content_types = {
+                    "frontier.json": "application/json",
+                    "frontier.csv": "text/csv",
+                    "frontier.html": "text/html",
+                }
+                for filename, content in artifacts.items():
+                    attached = add_file_to_report_block(
+                        str(report_block_id),
+                        filename,
+                        content.encode("utf-8"),
+                        content_type=content_types.get(filename),
+                        client=client,
+                    )
+                    if attached:
+                        artifact_paths = list(attached)
+            else:
+                artifact_paths = [f"reportblocks/unpersisted/{filename}" for filename in artifacts]
+
+            rows_with_frontier = json.loads(artifacts["frontier.json"])["rows"]
+            return {
+                "rows": rows_with_frontier,
+                "artifacts": artifacts,
+                "artifact_paths": artifact_paths,
+                "report_output": compact_report_envelope(
+                    artifact_paths=artifact_paths,
+                    rows=rows_with_frontier,
+                ),
+                "persisted": bool(report_block_id),
+            }
+        finally:
+            self._budget.record_after("model_frontier", method)
 
     def _call_report_read(
         self, namespace: str, method: str, args: Any = None
