@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "75c3c35a-6688-456c-a510-cae67d9fc8f7",
+  "issue_id": "plx-fb0d46bb-b336-4f9f-b537-0f812407d35c",
+  "event_type": "field_updated",
+  "occurred_at": "2026-05-15T21:45:45.307Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "parent": {
+        "from": null,
+        "to": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec"
+      }
+    }
+  }
+}

@@ -1,0 +1,573 @@
+name: Model Performance Frontier
+version: 1.0.0
+class: Tactus
+procedure_type: Evaluation Procedure
+description: "Compare score model and parameter variants by feedback AC1 and evaluation cost. Creates non-champion ScoreVersions, evaluates each with feedback and regression protocols, and emits frontier artifacts."
+
+params:
+  scorecard:
+    type: string
+    required: true
+    description: "Scorecard identifier (name, key, or ID)"
+
+  score:
+    type: string
+    required: true
+    description: "Score identifier (name, key, or ID)"
+
+  candidate_matrix:
+    type: object
+    required: true
+    description: "Structured model/parameter matrix. Shape: {include_current=true, models=[{label, model_provider, model_name, base_model_name?}], parameter_sets=[{label, reasoning_effort?, verbosity?, temperature?, max_tokens?, extra_overrides?}]}. LangGraphScore variants update root model fields. TactusScore variants update the embedded default_model directive, put reasoning_effort/verbosity on the score root for TactusRuntime, and apply temperature inside ClassifyProcedure. If base_model_name exists in a LangGraphScore and a candidate sets model_name without base_model_name, base_model_name is updated to match model_name."
+
+  days:
+    type: number
+    default: 90
+    required: false
+    description: "Feedback window in days"
+
+  max_samples:
+    type: number
+    default: 100
+    required: false
+    description: "Maximum feedback/regression samples per evaluation"
+
+  sampling_mode:
+    type: string
+    default: "newest"
+    required: false
+    description: "Feedback sampling mode: newest or random"
+
+  sample_seed:
+    type: number
+    required: false
+    description: "Optional sample seed, valid when sampling_mode is random"
+
+  feedback_window_start_at:
+    type: string
+    required: false
+    description: "Optional frozen UTC feedback editedAt lower bound"
+
+  feedback_window_end_at:
+    type: string
+    required: false
+    description: "Optional frozen UTC feedback editedAt upper bound"
+
+  evaluation_budget_usd:
+    type: number
+    default: 5.0
+    required: false
+    description: "Child budget in USD for each evaluation"
+
+  report_block_id:
+    type: string
+    required: false
+    description: "Optional ReportBlock ID to receive frontier.json, frontier.csv, and frontier.html attachments"
+
+  dry_run:
+    type: boolean
+    default: false
+    required: false
+    description: "If true, plan variants only; do not create versions or run evaluations"
+
+outputs:
+  success:
+    type: boolean
+    required: true
+
+  status:
+    type: string
+    required: true
+
+  message:
+    type: string
+    required: true
+
+  scorecard_id:
+    type: string
+    required: false
+
+  score_id:
+    type: string
+    required: false
+
+  champion_version_id:
+    type: string
+    required: false
+
+  planned_variants:
+    type: array
+    required: false
+
+  rows:
+    type: array
+    required: false
+
+  frontier_rows:
+    type: array
+    required: false
+
+  report_output:
+    type: object
+    required: false
+
+  artifact_paths:
+    type: array
+    required: false
+
+agents:
+  placeholder:
+    provider: openai
+    model: gpt-5.4-mini
+    system_prompt: |
+      This deterministic procedure does not use an LLM agent.
+      This placeholder exists only because the current procedure loader requires at least one agent definition.
+    initial_message: "Ready."
+    tools: []
+
+stages:
+  - setup
+  - plan
+  - versions
+  - evaluations
+  - finalize
+
+code: |
+  Specification([[
+  Feature: Model performance frontier
+    Scenario: Current configuration is included
+      Given a score has a champion configuration
+      And the frontier procedure is run with include_current true
+      When variants are planned
+      Then the first candidate represents the current champion configuration
+
+    Scenario: Deterministic model matrix is evaluated
+      Given model candidates and parameter sets are supplied
+      When the frontier procedure runs
+      Then it creates one de-duplicated candidate per unique model and parameter combination
+      And every non-current candidate is evaluated with feedback and regression evaluations
+
+    Scenario: Frontier artifacts are persisted
+      Given candidate evaluations complete
+      When the procedure finalizes
+      Then it returns rows with metrics, costs, evaluation IDs, and Pareto frontier status
+      And it persists JSON, CSV, and HTML report attachments with only a compact output envelope inline
+  ]])
+
+  local function has_text(value)
+    return type(value) == "string" and #value > 0
+  end
+
+  local function table_field(value, key)
+    if type(value) == "table" then return value[key] end
+    return nil
+  end
+
+  local function to_number(value, default)
+    local parsed = tonumber(value)
+    if parsed == nil then return default end
+    return parsed
+  end
+
+  local function eval_budget()
+    return {
+      usd = to_number(params.evaluation_budget_usd, 5.0),
+      wallclock_seconds = 5400,
+      depth = 0,
+      tool_calls = 1000
+    }
+  end
+
+  local function await_eval_handle(handle, dispatch_args)
+    local waited = plexus.handle.await({id = handle.id, timeout = "PT90M"})
+    local eval_data = waited.evaluation
+    if not eval_data then
+      local eval_id = waited.evaluation_id
+        or (type(waited.dispatch_result) == "table" and waited.dispatch_result.evaluation_id)
+      if eval_id then
+        local ok, info = pcall(function()
+          return plexus.evaluation.info({evaluation_id = eval_id})
+        end)
+        if ok then eval_data = info end
+      end
+    end
+    if not eval_data then
+      return {error = "Evaluation handle did not resolve", dispatch_args = dispatch_args}
+    end
+    local status = string.upper(tostring(eval_data.status or waited.status or ""))
+    if status ~= "COMPLETED" then
+      return {
+        error = "Evaluation did not complete: status=" .. tostring(eval_data.status or waited.status),
+        evaluation_id = eval_data.evaluation_id or eval_data.id or waited.evaluation_id,
+        dispatch_args = dispatch_args
+      }
+    end
+    return eval_data
+  end
+
+  local function run_evaluation_batch(batch)
+    local handles = {}
+    for i, item in ipairs(batch) do
+      local args = {}
+      for k, v in pairs(item) do args[k] = v end
+      args.async = true
+      args.budget = args.budget or eval_budget()
+      local ok, handle = pcall(function() return plexus.evaluation.run(args) end)
+      if ok and type(handle) == "table" and handle.id then
+        table.insert(handles, {index = i, handle = handle, args = args})
+      else
+        table.insert(handles, {index = i, error = tostring(handle), args = args})
+      end
+    end
+
+    local results = {}
+    for _, entry in ipairs(handles) do
+      if entry.handle then
+        results[entry.index] = await_eval_handle(entry.handle, entry.args)
+      else
+        results[entry.index] = {error = entry.error, dispatch_args = entry.args}
+      end
+    end
+    return results
+  end
+
+  local function ensure_feedback_window_dataset(version_id)
+    local requested = to_number(params.max_samples, 100)
+    local minimum = math.max(math.floor(requested / 4), 15)
+    local check = plexus.dataset.check_associated({
+      scorecard = params.scorecard,
+      score = params.score,
+      score_version_id = version_id,
+      days = params.days,
+      max_items = requested,
+      feedback_start_at = params.feedback_window_start_at,
+      feedback_end_at = params.feedback_window_end_at,
+    })
+
+    if check
+      and check.has_dataset
+      and check.dataset_id
+      and check.is_materialized
+      and has_text(check.feedback_target_hash)
+      and to_number(check.row_count, 0) >= minimum then
+      return {
+        dataset_id = check.dataset_id,
+        row_count = to_number(check.row_count, 0),
+        regression_ready = true,
+        source = "associated"
+      }
+    end
+
+    local build_ok, build = pcall(function()
+      return plexus.dataset.build_from_feedback_window({
+        scorecard = params.scorecard,
+        score = params.score,
+        score_version_id = version_id,
+        max_items = requested,
+        days = params.days,
+        balance = true,
+        feedback_start_at = params.feedback_window_start_at,
+        feedback_end_at = params.feedback_window_end_at,
+      })
+    end)
+
+    if not build_ok then
+      Human.notify({
+        message = "Balanced regression dataset build failed for version "
+          .. tostring(version_id)
+          .. " ("
+          .. tostring(build)
+          .. "); trying unbalanced.",
+        level = "info"
+      })
+      build = nil
+    end
+
+    if build and build.dataset_id and to_number(build.rows_written, 0) >= minimum then
+      return {
+        dataset_id = build.dataset_id,
+        row_count = to_number(build.rows_written, 0),
+        regression_ready = true,
+        source = "balanced_build"
+      }
+    end
+    local best_rows = to_number(build and build.rows_written, 0)
+
+    local unbalanced_ok, unbalanced = pcall(function()
+      return plexus.dataset.build_from_feedback_window({
+        scorecard = params.scorecard,
+        score = params.score,
+        score_version_id = version_id,
+        max_items = requested,
+        days = params.days,
+        balance = false,
+        feedback_start_at = params.feedback_window_start_at,
+        feedback_end_at = params.feedback_window_end_at,
+      })
+    end)
+
+    if not unbalanced_ok then
+      Human.notify({
+        message = "Unbalanced regression dataset build failed for version "
+          .. tostring(version_id)
+          .. " ("
+          .. tostring(unbalanced)
+          .. "); regression evaluation will be skipped for this variant.",
+        level = "warning"
+      })
+      return {
+        dataset_id = nil,
+        row_count = best_rows,
+        regression_ready = false,
+        source = "build_failed",
+        error = tostring(unbalanced)
+      }
+    end
+
+    best_rows = math.max(best_rows, to_number(unbalanced and unbalanced.rows_written, 0))
+    if unbalanced and unbalanced.dataset_id and to_number(unbalanced.rows_written, 0) >= minimum then
+      return {
+        dataset_id = unbalanced.dataset_id,
+        row_count = to_number(unbalanced.rows_written, 0),
+        regression_ready = true,
+        source = "unbalanced_build"
+      }
+    end
+
+    return {
+      dataset_id = nil,
+      row_count = best_rows,
+      regression_ready = false,
+      source = "insufficient_rows"
+    }
+  end
+
+  Stage.set("setup")
+  Human.notify({message = "Resolving scorecard and score for model frontier run...", level = "info"})
+
+  local scorecard_info = plexus.scorecards.info({scorecard_identifier = params.scorecard})
+  if not scorecard_info or not scorecard_info.additionalDetails then
+    return {success = false, status = "error", message = "Scorecard not found: " .. tostring(params.scorecard)}
+  end
+  local scorecard_id = scorecard_info.additionalDetails.id
+
+  local score_info = plexus.score.info({
+    score_identifier = params.score,
+    scorecard_identifier = params.scorecard
+  })
+  if not score_info or not score_info.scoreId then
+    return {success = false, status = "error", message = "Score not found: " .. tostring(params.score)}
+  end
+  local score_id = score_info.scoreId
+  local score_name = score_info.scoreName or params.score
+
+  State.set("procedure_type", "Model Performance Frontier")
+  State.set("scorecard_id", scorecard_id)
+  State.set("score_id", score_id)
+  State.set("scorecard_name", scorecard_info.name or params.scorecard)
+  State.set("score_name", score_name)
+
+  local pull = plexus.score.pull({
+    scorecard_identifier = params.scorecard,
+    score_identifier = score_id
+  })
+  if not pull or not pull.success or not pull.code_file_path then
+    return {success = false, status = "error", message = "Failed to pull champion score YAML"}
+  end
+  local champion_version_id = pull.version_id or pull.versionId
+  local current_code = Step.checkpoint(function()
+    return File.read(pull.code_file_path)
+  end)
+
+  Stage.set("plan")
+  local plan = plexus.model_frontier.plan({
+    yaml_content = current_code,
+    candidate_matrix = params.candidate_matrix,
+    include_current = table_field(params.candidate_matrix, "include_current")
+  })
+  local variants = plan.variants or {}
+  if #variants == 0 then
+    return {success = false, status = "error", message = "No variants were planned"}
+  end
+  State.set("model_frontier", {
+    status = "planned",
+    champion_version_id = champion_version_id,
+    planned_variant_count = #variants,
+    rows = {},
+    frontier_rows = {},
+  })
+
+  if params.dry_run then
+    State.set("model_frontier", {
+      status = "dry_run",
+      champion_version_id = champion_version_id,
+      planned_variant_count = #variants,
+      planned_variants = variants,
+      rows = {},
+      frontier_rows = {},
+    })
+    return {
+      success = true,
+      status = "dry_run",
+      message = "Planned " .. tostring(#variants) .. " model frontier variant(s).",
+      scorecard_id = scorecard_id,
+      score_id = score_id,
+      champion_version_id = champion_version_id,
+      planned_variants = variants,
+      rows = {},
+      frontier_rows = {}
+    }
+  end
+
+  Stage.set("versions")
+  Human.notify({message = "Creating non-champion score versions for frontier variants...", level = "info"})
+  for _, variant in ipairs(variants) do
+    if variant.is_current then
+      variant.score_version_id = champion_version_id
+    else
+      local update = plexus.score.update({
+        scorecard_identifier = params.scorecard,
+        score_identifier = score_id,
+        code = variant.yaml_content,
+        parent_version_id = champion_version_id,
+        version_note = "Model frontier candidate: " .. tostring(variant.label)
+      })
+      if not update or update.success == false or not update.version_id then
+        variant.error = "Failed to create ScoreVersion: " .. tostring(update and update.error or "unknown")
+      else
+        variant.score_version_id = update.version_id
+      end
+    end
+  end
+
+  Stage.set("evaluations")
+  local batch = {}
+  local eval_index = {}
+  local eligible_feedback_rows = 0
+  for idx, variant in ipairs(variants) do
+    if variant.score_version_id and not variant.error then
+      local feedback_window = ensure_feedback_window_dataset(variant.score_version_id)
+      local feedback_rows = to_number(feedback_window and feedback_window.row_count, 0)
+      eligible_feedback_rows = math.max(eligible_feedback_rows, feedback_rows)
+      if feedback_window and feedback_window.regression_ready and feedback_window.dataset_id then
+        table.insert(batch, {
+          scorecard_name = params.scorecard,
+          score_name = params.score,
+          evaluation_type = "accuracy",
+          dataset_id = feedback_window.dataset_id,
+          n_samples = to_number(params.max_samples, 100),
+          version = variant.score_version_id,
+          notes = "Model frontier regression: " .. tostring(variant.label)
+        })
+        table.insert(eval_index, {variant_index = idx, kind = "regression"})
+      end
+      if feedback_rows > 0 then
+        table.insert(batch, {
+          scorecard_name = params.scorecard,
+          score_name = params.score,
+          evaluation_type = "feedback",
+          version = variant.score_version_id,
+          days = params.days,
+          max_feedback_items = to_number(params.max_samples, 100),
+          sampling_mode = params.sampling_mode or "newest",
+          sample_seed = params.sample_seed,
+          feedback_start_at = params.feedback_window_start_at,
+          feedback_end_at = params.feedback_window_end_at,
+          score_rubric_consistency_check = true,
+          notes = "Model frontier feedback: " .. tostring(variant.label)
+        })
+        table.insert(eval_index, {variant_index = idx, kind = "feedback"})
+      end
+    end
+  end
+
+  if eligible_feedback_rows <= 0 then
+    return {
+      success = false,
+      status = "error",
+      message = "No eligible labeled feedback-derived records are available for this score/version/window. Model frontier requires labeled records to compute accuracy.",
+      scorecard_id = scorecard_id,
+      score_id = score_id,
+      champion_version_id = champion_version_id,
+      planned_variant_count = #variants
+    }
+  end
+
+  Human.notify({message = "Dispatching " .. tostring(#batch) .. " frontier evaluation(s)...", level = "info"})
+  local eval_results = run_evaluation_batch(batch)
+  local by_variant = {}
+  for i, result in ipairs(eval_results) do
+    local entry = eval_index[i]
+    if entry then
+      by_variant[entry.variant_index] = by_variant[entry.variant_index] or {}
+      by_variant[entry.variant_index][entry.kind] = result
+    end
+  end
+
+  local rows = {}
+  for idx, variant in ipairs(variants) do
+    local evals = by_variant[idx] or {}
+    if variant.error then
+      table.insert(rows, {
+        label = variant.label,
+        is_current = variant.is_current,
+        score_version_id = variant.score_version_id,
+        model_provider = variant.model_provider,
+        model_name = variant.model_name,
+        base_model_name = variant.base_model_name,
+        reasoning_effort = variant.reasoning_effort,
+        verbosity = variant.verbosity,
+        temperature = variant.temperature,
+        max_tokens = variant.max_tokens,
+        status = "error",
+        error = variant.error
+      })
+    else
+      local row = plexus.model_frontier.build_result_row({
+        variant = variant,
+        feedback_evaluation = evals.feedback,
+        regression_evaluation = evals.regression,
+      })
+      table.insert(rows, row)
+    end
+  end
+
+  Stage.set("finalize")
+  local finalized = plexus.model_frontier.finalize({
+    rows = rows,
+    title = "Model Performance Frontier: " .. tostring(score_name),
+    report_block_id = has_text(params.report_block_id) and params.report_block_id or nil,
+  })
+
+  local final_rows = finalized.rows or rows
+  local frontier_rows = {}
+  for _, row in ipairs(final_rows) do
+    if row.is_pareto_frontier then
+      table.insert(frontier_rows, row)
+    end
+  end
+  State.set("model_frontier", {
+    status = "completed",
+    champion_version_id = champion_version_id,
+    planned_variant_count = #variants,
+    row_count = #final_rows,
+    frontier_count = #frontier_rows,
+    rows = final_rows,
+    frontier_rows = frontier_rows,
+    report_output = finalized.report_output,
+    artifact_paths = finalized.artifact_paths,
+  })
+
+  return {
+    success = true,
+    status = "completed",
+    message = "Completed model frontier comparison for " .. tostring(#final_rows) .. " variant(s).",
+    scorecard_id = scorecard_id,
+    score_id = score_id,
+    champion_version_id = champion_version_id,
+    planned_variants = variants,
+    rows = final_rows,
+    frontier_rows = frontier_rows,
+    report_output = finalized.report_output,
+    artifact_paths = finalized.artifact_paths
+  }

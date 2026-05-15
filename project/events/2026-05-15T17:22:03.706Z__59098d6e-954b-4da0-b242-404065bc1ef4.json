@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "59098d6e-954b-4da0-b242-404065bc1ef4",
+  "issue_id": "plx-5b561b73-f30a-49ae-b854-14437a74b1e6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T17:22:03.706Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the model_performance_frontier procedure, deterministic YAML variant helpers, dual-evaluation orchestration, cost/frontier calculations, report artifacts, and focused tests.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec",
+    "priority": 2,
+    "status": "open",
+    "title": "Implement model performance frontier procedure"
+  }
+}

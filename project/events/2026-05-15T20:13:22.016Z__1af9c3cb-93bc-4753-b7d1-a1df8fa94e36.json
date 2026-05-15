@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1af9c3cb-93bc-4753-b7d1-a1df8fa94e36",
+  "issue_id": "plx-28f3805e-d3b9-4136-a295-5b4511dc5fde",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T20:13:22.016Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the story by loading FeedbackItems samples in the feedback evaluation command and providing them to AccuracyEvaluation as labeled_samples. Add executable coverage for the no-data-section path.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-5dab7330-f4e3-49dd-9e6d-8edd3bf69fbf",
+    "priority": 1,
+    "status": "open",
+    "title": "Pass FeedbackItems samples into AccuracyEvaluation"
+  }
+}

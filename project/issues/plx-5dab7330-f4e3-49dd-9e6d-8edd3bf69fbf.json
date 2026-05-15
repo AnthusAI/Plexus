@@ -1,0 +1,18 @@
+{
+  "id": "plx-5dab7330-f4e3-49dd-9e6d-8edd3bf69fbf",
+  "title": "Repair feedback dataset handoff for model frontier",
+  "description": "Purpose: model frontier runs must evaluate score versions against feedback-derived labeled samples even when the score YAML has no persistent data section.\n\nDefinition of Done:\n- Feedback-backed evaluation receives explicit labeled samples instead of depending on AccuracyEvaluation fallback YAML data loading.\n- TactusScore frontier runs do not fail with generic Dataset not found when feedback items exist.\n- Behavior is covered by Gherkin and executable tests.\n- Existing LangGraphScore and direct accuracy evaluation behavior remains unchanged.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-15T20:13:12.996087Z",
+  "updated_at": "2026-05-15T20:15:31.973874Z",
+  "closed_at": "2026-05-15T20:15:31.973874Z",
+  "custom": {}
+}

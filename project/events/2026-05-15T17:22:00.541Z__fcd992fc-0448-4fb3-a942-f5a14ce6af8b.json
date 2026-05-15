@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "fcd992fc-0448-4fb3-a942-f5a14ce6af8b",
+  "issue_id": "plx-6001a06b-a6a2-41e5-a7fe-04e64ddf701e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T17:22:00.541Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As a Plexus operator, I want to run a procedure against a score with a structured matrix of model and parameter variants, so that I can decide whether a cheaper or more accurate model configuration is worth switching to.\n\nFeature: Model performance frontier\n\nScenario: Current configuration is included\nGiven a score has a champion configuration\nAnd the frontier procedure is run with include_current true\nWhen variants are planned\nThen the first candidate represents the current champion configuration\n\nScenario: Deterministic model matrix is evaluated\nGiven model candidates and parameter sets are supplied\nWhen the frontier procedure runs\nThen it creates one de-duplicated candidate per unique model and parameter combination\nAnd every non-current candidate is evaluated with feedback and regression evaluations\n\nScenario: Frontier artifacts are persisted\nGiven candidate evaluations complete\nWhen the procedure finalizes\nThen it returns rows with metrics, costs, evaluation IDs, and Pareto frontier status\nAnd it persists JSON, CSV, and HTML report attachments with only a compact output envelope inline.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec",
+    "priority": 2,
+    "status": "open",
+    "title": "Compare model variants on a cost accuracy frontier"
+  }
+}
