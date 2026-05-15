@@ -142,6 +142,7 @@ matrix of model and parameter variants.
 - Parallel feedback and regression evaluations
 - Cost-per-item and feedback AC1 frontier output
 - Optional ReportBlock attachments for JSON, CSV, and HTML chart artifacts
+- LangGraphScore root model fields and TactusScore `default_model` DSL variants
 
 **How to run**:
 ```bash
@@ -150,6 +151,10 @@ plexus procedure run --yaml plexus/procedures/model_performance_frontier.yaml \
   -s score="<score name>" \
   -s 'candidate_matrix={"models":[{"label":"nano","model_provider":"ChatOpenAI","model_name":"gpt-5.4-nano"}],"parameter_sets":[{"label":"medium","reasoning_effort":"medium","verbosity":"medium"}]}'
 ```
+
+For `TactusScore` scores using `ClassifyProcedure`, pass the Tactus provider
+name such as `openai`; the procedure rewrites `default_model "openai/<model>"`
+inside `code` and forwards `reasoning_effort`/`verbosity` through the score root.
 
 ## Directory Structure
 

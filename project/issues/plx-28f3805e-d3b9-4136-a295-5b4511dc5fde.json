@@ -1,0 +1,37 @@
+{
+  "id": "plx-28f3805e-d3b9-4136-a295-5b4511dc5fde",
+  "title": "Skip frontier evaluations when feedback window has no rows",
+  "description": "Implement the no-feedback story by tightening feedback-window dataset reuse and marking variants as no_data when no feedback-derived rows exist. This replaces the earlier suspected explicit-sample handoff; user clarified the score has no feedback samples, so no evaluations should be dispatched for that window.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-5dab7330-f4e3-49dd-9e6d-8edd3bf69fbf",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c5ba911c-5a77-4f6f-9507-66d136e97fd5",
+      "author": "derek.norrbom",
+      "text": "Observed frontier feedback evaluations invoking evaluate feedback --version. That command injects a FeedbackItems data section into temporary score YAML but constructs AccuracyEvaluation without labeled_samples, making it depend on AccuracyEvaluation fallback YAML loading. For TactusScore/no-data-section cases the fallback can fail and surfaces as Dataset not found. Next: add a failing unit around the explicit sample handoff, then patch feedback evaluation to pass samples directly.",
+      "created_at": "2026-05-15T20:13:25.480920Z"
+    },
+    {
+      "id": "7e36ed5e-f4f1-40ab-b766-68cc45253234",
+      "author": "derek.norrbom",
+      "text": "New user clarification: this score has no feedback samples. The immediate bug is not the TactusScore config path; the frontier procedure dispatches feedback-backed evaluations even when the feedback-derived sample set is empty. Adjusting implementation target: detect zero feedback-derived rows and emit no_data rows instead of failing the whole procedure. The explicit labeled_samples handoff may still be useful later but is not required for this fix.",
+      "created_at": "2026-05-15T20:13:55.291254Z"
+    },
+    {
+      "id": "3f450b59-e660-4da0-8c9c-419a4d699e03",
+      "author": "derek.norrbom",
+      "text": "Implemented: model_performance_frontier now requires a feedback_target_hash before reusing associated regression datasets, builds a fresh feedback-window dataset otherwise, skips regression unless enough rows exist, skips feedback when the feedback-window row count is zero, and marks rows no_data through build_result_row. Tests added for no_data row status and procedure contract strings. Focused tests and YAML parse passed.",
+      "created_at": "2026-05-15T20:15:26.310391Z"
+    }
+  ],
+  "created_at": "2026-05-15T20:13:22.016192Z",
+  "updated_at": "2026-05-15T20:15:31.963748Z",
+  "closed_at": "2026-05-15T20:15:31.963748Z",
+  "custom": {}
+}
