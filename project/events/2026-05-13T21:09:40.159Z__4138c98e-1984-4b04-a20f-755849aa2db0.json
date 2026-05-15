@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4138c98e-1984-4b04-a20f-755849aa2db0",
+  "issue_id": "plx-eff97ac0-f7d9-4486-a7c8-9858ce47c02a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-13T21:09:40.159Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "title": "Console chat maintains conversational context across long sessions",
+    "description": "",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+    "labels": []
+  }
+}

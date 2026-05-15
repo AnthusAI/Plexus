@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a3e3e2ed-7aaf-4217-a03b-7053acc9927d",
+  "issue_id": "plx-06871186-136e-40c6-b9fe-9cee491af827",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-13T21:12:35.797Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "title": "Create Plexus ConsoleAgent wrapper for Tactus DSPyAgentHandle",
+    "description": "",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+    "labels": []
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "id": "plx-23841e02-bf76-48e5-9941-2c7cc4934d0e",
+  "title": "Plan major-upgrade campaign for remaining moderate findings",
+  "description": "",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b6dfeebd-d847-4035-8f16-3f1358a568c0",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e6c97888-e670-4ab8-a79d-404e4c9973a6",
+      "author": "derek",
+      "text": "Backlog campaign scope confirmed: major-upgrade track for remaining moderate findings (Next 15 canary -> stable path, Excalidraw advisory path validation, Storybook/Jest ecosystem majors as needed) with compatibility test gates.",
+      "created_at": "2026-05-13T23:30:06.860361931Z"
+    },
+    {
+      "id": "bdd3bb80-e615-4768-a40d-8f45dafd6721",
+      "author": "derek",
+      "text": "Executing remediation-only pass: document unfixable Amplify high/critical chain in Kanbus, then attempt fixes for non-Amplify findings that can be remediated safely.",
+      "created_at": "2026-05-13T23:51:03.191212131Z"
+    },
+    {
+      "id": "c7e8093d-b2eb-4037-b20c-e791bb10a88d",
+      "author": "derek",
+      "text": "Blocked high/critical findings are currently all in Amplify dev toolchain transitives (not app runtime): fast-xml-parser/fast-xml-builder/handlebars and related @aws-sdk chains under @aws-amplify/backend + @aws-amplify/backend-cli. Direct deps are already latest in this repo (@aws-amplify/backend 1.22.0, @aws-amplify/backend-cli 1.8.2). npm audit currently proposes only breaking/regressive paths for these. Proceeding to remediate fixable non-Amplify findings now.",
+      "created_at": "2026-05-13T23:51:14.656118105Z"
+    },
+    {
+      "id": "10a6d6f1-51f9-4ed0-ae16-d25cff809f3a",
+      "author": "derek",
+      "text": "Remediation update: moved Next.js from 15.6.0-canary.61 to stable 15.5.18 (with aligned eslint packages), reducing audit from 52->51 (moderate 23->22). Verified prod-only audit has 0 high/critical (3 moderate remaining). Remaining high/critical are still blocked in Amplify dev-toolchain transitives; remaining moderate non-Amplify findings are Excalidraw/nanoid chain where npm audit only proposes breaking downgrade to @excalidraw/excalidraw 0.17.6 (previously caused runtime module errors).",
+      "created_at": "2026-05-13T23:55:25.966400728Z"
+    },
+    {
+      "id": "4dd3d11b-9f90-43fe-b268-2a5ff7864f18",
+      "author": "derek",
+      "text": "Addressing local run regression: next dev --webpack is no longer supported on the current Next version, causing npm run dev:web to fail immediately. Applying script fix and validating startup.",
+      "created_at": "2026-05-14T21:54:56.150480471Z"
+    },
+    {
+      "id": "97817740-2b56-478c-aadb-3540aab203a3",
+      "author": "derek",
+      "text": "Checkpoint ready for commit: remediation-only changes include Next migration from 15.6.0 canary to stable 15.5.18 (plus aligned eslint packages) and script compatibility updates for Next CLI flags (dev:web, build:fast). Audit delta: 52 -> 51; no high/critical reduction due upstream Amplify transitive blockers already documented.",
+      "created_at": "2026-05-14T21:57:19.781837213Z"
+    },
+    {
+      "id": "90581386-c905-47bb-b7af-3fc0220e5958",
+      "author": "derek",
+      "text": "Completed this remediation tranche and prepared branch for PR: safe, non-breaking fixes applied; Next canary moved to stable 15.5.18 with script compatibility updates; audit reduced from 52 to 51 while retaining documented Amplify upstream blockers.",
+      "created_at": "2026-05-14T21:59:23.019159904Z"
+    }
+  ],
+  "created_at": "2026-05-13T23:11:53.645382822Z",
+  "updated_at": "2026-05-14T21:59:23.027794503Z",
+  "closed_at": "2026-05-14T21:59:23.027794503Z",
+  "custom": {}
+}

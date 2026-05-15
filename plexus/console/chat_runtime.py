@@ -15,6 +15,7 @@ from openai import OpenAI
 from plexus.cli.procedure.builtin_procedures import CONSOLE_CHAT_BUILTIN_ID
 from plexus.cli.procedure.service import ProcedureService
 from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.logging.cloudwatch_logger import PlexusCloudWatchLogger
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ RUNNING = "RUNNING"
 COMPLETED = "COMPLETED"
 FAILED = "FAILED"
 HANDLED_HUMAN_INTERACTIONS = {"CHAT"}
-CONSOLE_HISTORY_LIMIT = 16
+CONSOLE_HISTORY_LIMIT = 500  # Fetch extensive history for 128K+ context models; token budgeting in TAC
 DEFAULT_SESSION_TITLE_MODEL = "gpt-5.4-mini"
 SESSION_TITLE_MAX_WORDS = 8
 _PROCEDURE_SERVICE_CACHE: Dict[int, ProcedureService] = {}
@@ -874,6 +875,20 @@ async def run_console_chat_response_async(
     owner: str,
     latency_trace: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    # Create CloudWatch logger for console chat
+    account_key = str(os.getenv("PLEXUS_ACCOUNT_KEY") or "").strip() or message.account_id
+    cw_logger = None
+    try:
+        cw_logger = PlexusCloudWatchLogger(
+            account_key=account_key,
+            component_name="console-chat",
+            invocation_id=message.id,
+            log_category="console",
+        )
+        cw_logger.open()
+    except Exception as exc:
+        logger.debug("Could not create CloudWatch logger for console chat: %s", exc)
+
     history = fetch_session_history(
         client,
         message.session_id,
@@ -883,6 +898,29 @@ async def run_console_chat_response_async(
         latency_trace["t_history_loaded"] = utc_now()
     if not history or history[-1].get("content") != message.content:
         history.append({"role": "USER", "content": message.content})
+
+    # Log session history to CloudWatch
+    if cw_logger:
+        history_stats = {
+            "session_id": message.session_id,
+            "message_id": message.id,
+            "history_message_count": len(history),
+            "history_total_chars": sum(len(str(msg.get("content", ""))) for msg in history),
+        }
+        try:
+            import tiktoken
+            enc = tiktoken.get_encoding("cl100k_base")
+            history_stats["history_total_tokens"] = sum(
+                len(enc.encode(str(msg.get("content", "")))) for msg in history
+            )
+        except Exception as exc:
+            logger.debug("Skipped session history token counting: %s", exc, exc_info=True)
+        cw_logger.log_llm_context({
+            "event": "session_history_loaded",
+            "stats": history_stats,
+            "history": history,
+        })
+
     service = _get_procedure_service(client)
     run_started = utc_now()
     if latency_trace is not None:
@@ -908,22 +946,47 @@ async def run_console_chat_response_async(
     if message.selected_model:
         context["agent_models"] = {"assistant": message.selected_model}
 
-    result = await service.run_procedure(
-        CONSOLE_CHAT_BUILTIN_ID,
-        account_id=message.account_id,
-        console_user_message=message.content,
-        console_session_history=history,
-        console_tool_access_mode=tool_access_mode,
-        enable_mcp=True,
-        context=context,
-    )
-    if latency_trace is not None:
-        latency_trace["t_first_assistant_chunk"] = fetch_first_assistant_chunk_timestamp(
-            client,
-            message.session_id,
-            after_iso=run_started,
+    # Log procedure invocation context
+    if cw_logger:
+        cw_logger.log_llm_context({
+            "event": "procedure_invocation",
+            "procedure_id": CONSOLE_CHAT_BUILTIN_ID,
+            "context": context,
+            "tool_access_mode": tool_access_mode,
+        })
+
+    try:
+        result = await service.run_procedure(
+            CONSOLE_CHAT_BUILTIN_ID,
+            account_id=message.account_id,
+            console_user_message=message.content,
+            console_session_history=history,
+            console_tool_access_mode=tool_access_mode,
+            enable_mcp=True,
+            context=context,
         )
-    return result
+        if latency_trace is not None:
+            latency_trace["t_first_assistant_chunk"] = fetch_first_assistant_chunk_timestamp(
+                client,
+                message.session_id,
+                after_iso=run_started,
+            )
+
+        # Log successful completion
+        if cw_logger:
+            cw_logger.log_llm_context({
+                "event": "procedure_completed",
+                "procedure_id": CONSOLE_CHAT_BUILTIN_ID,
+                "success": True,
+            })
+
+        return result
+    finally:
+        if cw_logger:
+            try:
+                cw_logger.close()
+            except Exception as exc:
+                logger.debug("Could not close CloudWatch logger: %s", exc)
 
 
 def run_console_chat_response(

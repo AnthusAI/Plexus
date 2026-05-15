@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a9f2e5a7-bc3f-446b-b2e2-6273682a36f6",
+  "issue_id": "plx-280f5bbb-bd3c-4a24-9800-afac31cee44c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-13T21:12:48.962Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "title": "Migrate chat_runtime.py to use ConsoleAgent instead of TAC procedure",
+    "description": "",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+    "labels": []
+  }
+}

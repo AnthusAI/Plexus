@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a6ad4e97-8c03-47d1-af68-8ea91eccc802",
+  "issue_id": "plx-b6dfeebd-d847-4035-8f16-3f1358a568c0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-13T22:42:45.287Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Dashboard dependency vulnerability remediation"
+  }
+}
