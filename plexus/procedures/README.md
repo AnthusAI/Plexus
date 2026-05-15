@@ -156,6 +156,32 @@ For `TactusScore` scores using `ClassifyProcedure`, pass the Tactus provider
 name such as `openai`; the procedure rewrites `default_model "openai/<model>"`
 inside `code` and forwards `reasoning_effort`/`verbosity` through the score root.
 
+### 6. scorecard_model_retarget.yaml - Bulk Model Version Creation
+
+**Purpose**: Creates non-champion model-retargeted ScoreVersions for selected
+scores on a scorecard. This is for rollout preparation when there is no ground
+truth for a cost/accuracy frontier comparison.
+
+**What it demonstrates**:
+- Scorecard-wide score iteration
+- Class-aware model retargeting using the shared frontier YAML mutation helpers
+- Dry-run planning by default
+- Non-champion ScoreVersion creation with champion parent versions
+- Include/exclude filters for controlled rollout batches
+
+**How to run**:
+```bash
+plexus procedure run --yaml plexus/procedures/scorecard_model_retarget.yaml \
+  -s scorecard="<scorecard name>" \
+  -s model_name="gpt-5.4-nano" \
+  -s reasoning_effort="medium" \
+  -s verbosity="medium" \
+  -s dry_run=true
+```
+
+Set `dry_run=false` to create the new ScoreVersions. The procedure never
+promotes candidates to champion.
+
 ## Directory Structure
 
 ```

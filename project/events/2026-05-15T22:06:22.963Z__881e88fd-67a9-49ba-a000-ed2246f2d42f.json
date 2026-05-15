@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "881e88fd-67a9-49ba-a000-ed2246f2d42f",
+  "issue_id": "plx-fb6c27b7-9d52-4955-b202-465dd7047f2a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T22:06:22.963Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Purpose: create a deterministic procedure that bulk-creates non-champion score versions for every selected score on a scorecard with a new model configuration.\n\nDefinition of Done:\n- Procedure supports dry-run and apply modes.\n- LangGraphScore root model fields and TactusScore default_model/runtime controls are updated deterministically.\n- Existing champion versions are used as parents.\n- No score is promoted to champion.\n- Unsupported score classes fail loudly unless excluded.\n- Behavior is covered by Gherkin and executable tests.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Scorecard model retarget procedure"
+  }
+}

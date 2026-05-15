@@ -1,0 +1,18 @@
+{
+  "id": "plx-08d313f7-bb48-4daa-b84c-3284e767d545",
+  "title": "Bulk retarget scorecard models",
+  "description": "As a scorecard operator, I want to create model-retargeted score versions for all selected scores on a scorecard, so that I can roll out a new model configuration without manually editing every score.\n\nFeature: Scorecard model retargeting\n\nScenario: Dry run previews changed score versions\nGiven a scorecard with LangGraphScore and TactusScore scores\nWhen I run the retarget procedure with dry_run=true\nThen it returns the planned YAML changes for each selected score\nAnd it creates no ScoreVersions.\n\nScenario: Apply creates non-champion versions\nGiven selected scores whose champion YAML changes after retargeting\nWhen I run the retarget procedure with dry_run=false\nThen it creates one non-champion ScoreVersion per changed score\nAnd each new version uses the champion version as parent\nAnd no candidate is promoted to champion.\n\nScenario: Unsupported classes fail loudly\nGiven a selected score with an unsupported class\nWhen I run the retarget procedure\nThen the procedure fails with a clear unsupported class error unless that score is excluded.\n\nScenario: Include and exclude filters select scores deterministically\nGiven include_scores and exclude_scores are provided\nWhen the procedure plans scores\nThen only included non-excluded scores are retargeted in stable order.",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fb6c27b7-9d52-4955-b202-465dd7047f2a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-15T22:06:29.405934Z",
+  "updated_at": "2026-05-15T22:16:01.318894Z",
+  "closed_at": "2026-05-15T22:16:01.318894Z",
+  "custom": {}
+}
