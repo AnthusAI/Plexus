@@ -98,15 +98,20 @@ class TactusScore(Score):
         Score.__init__(self, **parameters)
         self.parameters = self.Parameters(**parameters)
         isolation_mode = os.getenv("PLEXUS_TACTUS_RUNTIME_ISOLATION_MODE", "strict").lower()
-        self._strict_runtime_isolation = isolation_mode != "reuse"
-        self._runtime_pool: List[TactusRuntime] = []
-        self._pool_condition = asyncio.Condition()
+        self._runtime_isolation_mode = "reuse" if isolation_mode == "reuse" else "strict"
+        self._runtime_pool: Optional[List[TactusRuntime]] = None
+        self._pool_condition: Optional[asyncio.Condition] = None
         self._active_runtimes = 0
-        configured_pool_size = os.getenv("PLEXUS_TACTUS_RUNTIME_POOL_SIZE", "8")
-        try:
-            self._max_runtime_pool_size = max(1, int(configured_pool_size))
-        except ValueError:
-            self._max_runtime_pool_size = 8
+        self._max_runtime_pool_size = 0
+
+        if self._runtime_isolation_mode == "reuse":
+            self._runtime_pool = []
+            self._pool_condition = asyncio.Condition()
+            configured_pool_size = os.getenv("PLEXUS_TACTUS_RUNTIME_POOL_SIZE", "8")
+            try:
+                self._max_runtime_pool_size = max(1, int(configured_pool_size))
+            except ValueError:
+                self._max_runtime_pool_size = 8
 
     @classmethod
     async def create(cls, **parameters) -> "TactusScore":
@@ -126,14 +131,19 @@ class TactusScore(Score):
             temperature=self.parameters.temperature,
             reset_state_on_execute=True,
         )
-        logger.info(f"TactusScore created runtime for '{self.parameters.name}'")
+        logger.debug("Created Tactus runtime for '%s'", self.parameters.name)
         return runtime
 
     async def _acquire_runtime(self) -> TactusRuntime:
         """Borrow a runtime from the pool, creating one if capacity allows."""
-        if self._strict_runtime_isolation:
+        if self._runtime_isolation_mode == "strict":
             return await asyncio.to_thread(self._create_runtime)
+        return await self._acquire_pooled_runtime()
 
+    async def _acquire_pooled_runtime(self) -> TactusRuntime:
+        """Borrow a reusable runtime, creating one if pool capacity allows."""
+        if self._pool_condition is None or self._runtime_pool is None:
+            raise RuntimeError("Runtime pool is not initialized")
         should_create = False
         async with self._pool_condition:
             if self._runtime_pool:
@@ -159,8 +169,10 @@ class TactusScore(Score):
 
     async def _release_runtime(self, runtime: TactusRuntime) -> None:
         """Return a runtime to the pool for reuse."""
-        if self._strict_runtime_isolation:
+        if self._runtime_isolation_mode == "strict":
             return
+        if self._pool_condition is None or self._runtime_pool is None:
+            raise RuntimeError("Runtime pool is not initialized")
         async with self._pool_condition:
             self._runtime_pool.append(runtime)
             self._pool_condition.notify()
@@ -222,7 +234,7 @@ class TactusScore(Score):
                 try:
                     parsed_inner = json.loads(metadata['metadata'])
                     parsed['metadata'] = parsed_inner
-                    logger.info(
+                    logger.debug(
                         "Parsed nested metadata JSON string, got keys: "
                         f"{list(parsed_inner.keys()) if isinstance(parsed_inner, dict) else 'N/A'}"
                     )
@@ -230,7 +242,7 @@ class TactusScore(Score):
                     logger.warning(f"Failed to parse nested metadata JSON: {e}")
             elif isinstance(metadata['metadata'], dict):
                 # metadata.metadata is already a dict
-                logger.info("Found nested metadata dict, preserving outer metadata")
+                logger.debug("Found nested metadata dict, preserving outer metadata")
                 parsed['metadata'] = metadata['metadata'].copy()
 
         # Common fields that are JSON strings in Plexus metadata
@@ -240,12 +252,21 @@ class TactusScore(Score):
             if field in parsed and isinstance(parsed[field], str):
                 try:
                     parsed[field] = json.loads(parsed[field])
-                    logger.info(f"Parsed JSON string for metadata field '{field}', type={type(parsed[field])}, length={len(parsed[field]) if isinstance(parsed[field], (list, dict)) else 'N/A'}")
+                    logger.debug(
+                        "Parsed JSON string for metadata field '%s', type=%s, length=%s",
+                        field,
+                        type(parsed[field]),
+                        len(parsed[field]) if isinstance(parsed[field], (list, dict)) else "N/A",
+                    )
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to parse JSON in metadata field '{field}': {e}")
                     # Keep the original string if parsing fails
             elif field in parsed:
-                logger.info(f"Metadata field '{field}' exists but is type {type(parsed[field])}, not a string")
+                logger.debug(
+                    "Metadata field '%s' exists but is type %s, not a string",
+                    field,
+                    type(parsed[field]),
+                )
 
         return parsed
 
@@ -285,8 +306,11 @@ class TactusScore(Score):
                 tactus_context['results'] = self._convert_results(model_input.results)
 
             # Execute the Tactus procedure
-            logger.info(f"Executing Tactus procedure with text preview: {model_input.text[:100]}...")
-            logger.debug(f"Executing Tactus procedure with context keys: {list(tactus_context.keys())}")
+            logger.debug(
+                "Executing Tactus procedure for score '%s' with context keys: %s",
+                self.parameters.name,
+                list(tactus_context.keys()),
+            )
             result = await asyncio.to_thread(
                 self._execute_runtime_sync,
                 runtime,
@@ -308,7 +332,7 @@ class TactusScore(Score):
                 explanation = None
                 confidence = None
 
-            logger.info(f"Tactus returned value: {value}, explanation preview: {str(explanation)[:100] if explanation else 'None'}...")
+            logger.debug("Tactus returned value '%s' for score '%s'", value, self.parameters.name)
 
             # Validate required output
             if value is None:
