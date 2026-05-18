@@ -50,7 +50,7 @@ params:
   max_tokens:
     type: number
     required: false
-    description: "Optional max_tokens for LangGraphScore root config or TactusScore ClassifyProcedure config."
+    description: "Optional max_tokens for LangGraphScore root config or TactusScore root runtime default."
 
   include_scores:
     type: array

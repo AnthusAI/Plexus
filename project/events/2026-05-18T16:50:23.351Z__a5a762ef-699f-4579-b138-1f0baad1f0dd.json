@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a5a762ef-699f-4579-b138-1f0baad1f0dd",
+  "issue_id": "plx-45a37bd3-cc04-49c2-82f7-51abc9176e9e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-18T16:50:23.351Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Story: plx-94e940. Update TactusScore runtime setup so root max_tokens and temperature participate in runtime defaults alongside reasoning_effort and verbosity.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a9690a9c-4a6c-42b3-9a66-c87fc7c14ac3",
+    "priority": 1,
+    "status": "open",
+    "title": "Pass TactusScore max_tokens and temperature into TactusRuntime"
+  }
+}

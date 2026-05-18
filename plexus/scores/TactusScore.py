@@ -62,17 +62,17 @@ class TactusScore(Score):
         # Output mapping (optional - defaults to value/explanation)
         output: Optional[Dict[str, str]] = None
 
-        # Deprecated model fields are ignored by TactusScore execution.
-        # The model is specified inside the Lua code. These are kept so
-        # existing YAML configs parse without error during migration.
+        # Model identity is specified inside the Tactus code.
+        # These identity fields are kept so existing YAML configs parse.
         model_provider: Optional[str] = None
         model_name: Optional[str] = None
         base_model_name: Optional[str] = None
+
+        # Score-wide runtime defaults. Local Tactus Model/ClassifyProcedure
+        # config can still override these values.
         max_tokens: Optional[int] = None
         temperature: Optional[float] = None
         top_p: Optional[float] = None
-        # Runtime GPT-5 controls. These are forwarded to TactusRuntime so
-        # ClassifyProcedure's LLMModel path can apply them.
         reasoning_effort: Optional[str] = None
         verbosity: Optional[str] = None
         model_region: Optional[str] = None
@@ -116,6 +116,8 @@ class TactusScore(Score):
             openai_api_key=self._get_openai_api_key(),
             reasoning_effort=self.parameters.reasoning_effort,
             verbosity=self.parameters.verbosity,
+            max_tokens=self.parameters.max_tokens,
+            temperature=self.parameters.temperature,
         )
         logger.info(f"TactusScore initialized for '{self.parameters.name}'")
 
@@ -213,6 +215,8 @@ class TactusScore(Score):
             log_handler=log_handler,
             reasoning_effort=self.parameters.reasoning_effort,
             verbosity=self.parameters.verbosity,
+            max_tokens=self.parameters.max_tokens,
+            temperature=self.parameters.temperature,
         )
 
         try:

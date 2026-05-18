@@ -1,0 +1,18 @@
+{
+  "id": "plx-32efc444-7d76-4c2d-9a3d-3df60f9b81db",
+  "title": "Write Tactus procedure variants to root runtime fields",
+  "description": "Story: plx-94e940. Update model_performance_frontier and scorecard_model_retarget variant generation so score-wide Tactus controls are root fields, with procedure-local changes only through explicit extra_overrides.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a9690a9c-4a6c-42b3-9a66-c87fc7c14ac3",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-18T16:50:23.369549Z",
+  "updated_at": "2026-05-18T16:54:59.922412Z",
+  "closed_at": "2026-05-18T16:54:59.922412Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f68df092-d864-4732-bbed-34c6949ecb75",
+  "issue_id": "plx-bc4bcab2-5027-4b5a-9f88-5511e30d7ff8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-18T16:50:23.386Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Story: plx-94e940. Update procedure YAML descriptions and tests to assert root-field generation, preservation of local overrides, and no ClassifyProcedure mutation for score-wide controls.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a9690a9c-4a6c-42b3-9a66-c87fc7c14ac3",
+    "priority": 1,
+    "status": "open",
+    "title": "Update procedure docs and tests for final control shape"
+  }
+}

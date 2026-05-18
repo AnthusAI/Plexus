@@ -77,9 +77,10 @@ def test_plan_score_retarget_updates_tactus_default_model_and_runtime_controls()
     assert plan["changed"] is True
     assert plan["score_class"] == "TactusScore"
     assert 'default_model "openai/gpt-5.4-mini"' in generated["code"]
-    assert "max_tokens = 1000," in generated["code"]
     assert generated["reasoning_effort"] == "medium"
     assert generated["verbosity"] == "medium"
+    assert generated["max_tokens"] == 1000
+    assert "max_tokens = 1000," not in generated["code"]
     assert "model_provider" not in generated
     assert "model_name" not in generated
 
@@ -111,7 +112,7 @@ def test_scorecard_model_retarget_procedure_declares_contract_and_behavior():
     assert config["params"]["dry_run"]["default"] is True
     assert config["params"]["langgraph_model_provider"]["default"] == "ChatOpenAI"
     assert config["params"]["tactus_model_provider"]["default"] == "openai"
-    assert "ClassifyProcedure" in config["params"]["max_tokens"]["description"]
+    assert "TactusScore root runtime default" in config["params"]["max_tokens"]["description"]
     assert config["outputs"]["created_count"]["type"] == "number"
     assert config["outputs"]["skipped_count"]["type"] == "number"
     assert config["agents"]["placeholder"]["initial_message"] == "Ready."

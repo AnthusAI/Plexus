@@ -139,14 +139,43 @@ def test_build_variants_supports_tactus_score_default_model_and_runtime_controls
     generated = yaml.safe_load(variants[0]["yaml_content"])
     assert generated["class"] == "TactusScore"
     assert 'default_model "openai/gpt-5.4-mini"' in generated["code"]
-    assert "temperature = 0," in generated["code"]
-    assert "max_tokens = 1200," in generated["code"]
     assert generated["reasoning_effort"] == "high"
     assert generated["verbosity"] == "medium"
+    assert generated["temperature"] == 0
+    assert generated["max_tokens"] == 1200
+    assert "temperature = 0," not in generated["code"]
+    assert "max_tokens = 1200," not in generated["code"]
     assert "model_provider" not in generated
     assert "model_name" not in generated
     assert variants[0]["model_provider"] == "openai"
     assert variants[0]["model_name"] == "gpt-5.4-mini"
+
+
+def test_build_variants_preserves_tactus_classifyprocedure_local_controls():
+    yaml_content = TACTUS_SCORE_YAML.replace(
+        "    user_message = [[{{ text }}]]",
+        "    user_message = [[{{ text }}]],\n    max_tokens = 600,\n    verbosity = \"low\"",
+    )
+    variants = build_variants(
+        yaml_content,
+        {
+            "models": [{"label": "mini", "model_provider": "openai", "model_name": "gpt-5.4-mini"}],
+            "parameter_sets": [
+                {
+                    "label": "root-defaults",
+                    "verbosity": "medium",
+                    "max_tokens": 1200,
+                }
+            ],
+        },
+        include_current=False,
+    )
+
+    generated = yaml.safe_load(variants[0]["yaml_content"])
+    assert generated["verbosity"] == "medium"
+    assert generated["max_tokens"] == 1200
+    assert "max_tokens = 600," in generated["code"]
+    assert 'verbosity = "low"' in generated["code"]
 
 
 def test_build_variants_extracts_current_tactus_score_model_from_code():

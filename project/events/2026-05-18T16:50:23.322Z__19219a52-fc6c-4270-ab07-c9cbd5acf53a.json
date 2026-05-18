@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "19219a52-fc6c-4270-ab07-c9cbd5acf53a",
+  "issue_id": "plx-94e940ca-bbea-472e-bb04-ed48d98ee448",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-18T16:50:23.322Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: TactusScore model control retargeting\n  Scenario: Score-wide model controls are written to TactusScore root\n    Given a TactusScore YAML and a model retarget includes reasoning_effort, verbosity, temperature, and max_tokens\n    When Plexus generates the candidate YAML\n    Then all score-wide controls are written to the TactusScore root\n    And ClassifyProcedure code is not modified for score-wide controls\n\n  Scenario: Existing ClassifyProcedure overrides are preserved\n    Given a TactusScore YAML already has ClassifyProcedure-local model controls\n    When Plexus retargets score-wide model defaults\n    Then the local ClassifyProcedure override remains unchanged\n    And the root defaults apply only where local overrides are absent\n\n  Scenario: Existing TactusScore YAML remains loadable\n    Given an existing TactusScore YAML with supported root or local model fields\n    When Plexus loads and retargets the score\n    Then the procedure preserves unrelated score content and only changes requested model-control fields",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-a9690a9c-4a6c-42b3-9a66-c87fc7c14ac3",
+    "priority": 1,
+    "status": "open",
+    "title": "TactusScore procedures write score-wide model controls to root"
+  }
+}
