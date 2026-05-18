@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "event_id": "5866423a-3ead-4a80-ab72-2e5f9a276c4b",
+  "issue_id": "plx-28f3805e-d3b9-4136-a295-5b4511dc5fde",
+  "event_type": "field_updated",
+  "occurred_at": "2026-05-15T20:15:26.299Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Implement the story by loading FeedbackItems samples in the feedback evaluation command and providing them to AccuracyEvaluation as labeled_samples. Add executable coverage for the no-data-section path.",
+        "to": "Implement the no-feedback story by tightening feedback-window dataset reuse and marking variants as no_data when no feedback-derived rows exist. This replaces the earlier suspected explicit-sample handoff; user clarified the score has no feedback samples, so no evaluations should be dispatched for that window."
+      },
+      "title": {
+        "from": "Pass FeedbackItems samples into AccuracyEvaluation",
+        "to": "Skip frontier evaluations when feedback window has no rows"
+      }
+    }
+  }
+}

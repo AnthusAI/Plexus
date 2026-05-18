@@ -1,0 +1,31 @@
+{
+  "id": "plx-fb0d46bb-b336-4f9f-b537-0f812407d35c",
+  "title": "Fail model frontier loudly when no labeled records exist",
+  "description": "Observed behavior: model frontier can complete with no_data rows when the feedback-derived record set is empty.\n\nExpected behavior: because this procedure compares cost vs accuracy, a run with no labeled records should fail loudly before dispatching evaluations. Silent no_data completion is misleading in prototype mode.\n\nFeature: Model frontier requires labeled comparison records\n\nScenario: Score has no labeled records\nGiven a model frontier run for a score with no eligible feedback-derived labeled records\nWhen the procedure prepares evaluations\nThen the procedure fails with a clear message that no labeled records are available\nAnd it does not dispatch candidate evaluations.\n\nScenario: Score has labeled records\nGiven a model frontier run with eligible labeled records\nWhen the procedure prepares evaluations\nThen it dispatches evaluations for the planned variants.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "92ab62fc-c94e-4960-9226-c4d51f5a375b",
+      "author": "derek.norrbom",
+      "text": "User clarified that silent no_data completion is undesirable. Treating the previous no_data row behavior as a soft fallback and replacing it with a loud procedure failure when no eligible labeled feedback-derived records exist. Keep strict associated-dataset reuse check because stale dataset reuse was the source of misleading regular evaluation dispatch.",
+      "created_at": "2026-05-15T21:45:45.318441Z"
+    },
+    {
+      "id": "1ecd482d-9a20-4744-a8b7-cd97e6ca96ca",
+      "author": "derek.norrbom",
+      "text": "Changed implementation: removed no_data result-row behavior and made the procedure fail loudly when eligible_feedback_rows <= 0 before evaluation dispatch. Kept the stricter requirement that associated regression datasets have feedback_target_hash before reuse, so stale datasets are not used as a substitute for missing labeled records. Validation: focused frontier/runtime/TactusScore tests passed, procedure YAML parsed, py_compile passed.",
+      "created_at": "2026-05-15T21:46:16.226576Z"
+    }
+  ],
+  "created_at": "2026-05-15T21:45:36.046250Z",
+  "updated_at": "2026-05-15T21:46:16.236966Z",
+  "closed_at": "2026-05-15T21:46:16.236966Z",
+  "custom": {}
+}

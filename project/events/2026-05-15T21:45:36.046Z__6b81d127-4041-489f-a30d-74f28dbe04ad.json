@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "6b81d127-4041-489f-a30d-74f28dbe04ad",
+  "issue_id": "plx-fb0d46bb-b336-4f9f-b537-0f812407d35c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T21:45:36.046Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Observed behavior: model frontier can complete with no_data rows when the feedback-derived record set is empty.\n\nExpected behavior: because this procedure compares cost vs accuracy, a run with no labeled records should fail loudly before dispatching evaluations. Silent no_data completion is misleading in prototype mode.\n\nFeature: Model frontier requires labeled comparison records\n\nScenario: Score has no labeled records\nGiven a model frontier run for a score with no eligible feedback-derived labeled records\nWhen the procedure prepares evaluations\nThen the procedure fails with a clear message that no labeled records are available\nAnd it does not dispatch candidate evaluations.\n\nScenario: Score has labeled records\nGiven a model frontier run with eligible labeled records\nWhen the procedure prepares evaluations\nThen it dispatches evaluations for the planned variants.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Fail model frontier loudly when no labeled records exist"
+  }
+}
