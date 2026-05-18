@@ -29,6 +29,7 @@ TACTUS_ROOT_RUNTIME_FIELDS = (
 
 TACTUS_CLASSIFY_FIELDS = (
     "temperature",
+    "max_tokens",
 )
 
 TACTUS_PROVIDER_ALIASES = {

@@ -69,6 +69,7 @@ def test_plan_score_retarget_updates_tactus_default_model_and_runtime_controls()
             "model_name": "gpt-5.4-mini",
             "reasoning_effort": "medium",
             "verbosity": "medium",
+            "max_tokens": 1000,
         },
     )
 
@@ -76,6 +77,7 @@ def test_plan_score_retarget_updates_tactus_default_model_and_runtime_controls()
     assert plan["changed"] is True
     assert plan["score_class"] == "TactusScore"
     assert 'default_model "openai/gpt-5.4-mini"' in generated["code"]
+    assert "max_tokens = 1000," in generated["code"]
     assert generated["reasoning_effort"] == "medium"
     assert generated["verbosity"] == "medium"
     assert "model_provider" not in generated
@@ -100,14 +102,6 @@ def test_plan_score_retarget_fails_for_unsupported_classes():
         )
 
 
-def test_plan_score_retarget_rejects_tactus_max_tokens_until_runtime_support_exists():
-    with pytest.raises(ValueError, match="max_tokens is not supported"):
-        plan_score_retarget(
-            yaml_content=TACTUS_SCORE_YAML,
-            target={"model_name": "gpt-5.4-mini", "max_tokens": 1000},
-        )
-
-
 def test_scorecard_model_retarget_procedure_declares_contract_and_behavior():
     config = yaml.safe_load(PROCEDURE_PATH.read_text(encoding="utf-8"))
 
@@ -117,6 +111,7 @@ def test_scorecard_model_retarget_procedure_declares_contract_and_behavior():
     assert config["params"]["dry_run"]["default"] is True
     assert config["params"]["langgraph_model_provider"]["default"] == "ChatOpenAI"
     assert config["params"]["tactus_model_provider"]["default"] == "openai"
+    assert "ClassifyProcedure" in config["params"]["max_tokens"]["description"]
     assert config["outputs"]["created_count"]["type"] == "number"
     assert config["outputs"]["skipped_count"]["type"] == "number"
     assert config["agents"]["placeholder"]["initial_message"] == "Ready."

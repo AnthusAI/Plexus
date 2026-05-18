@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4d71223e-cf60-4e76-b65a-d28383c2765a",
+  "issue_id": "plx-ec90178a-d1b7-43a6-85e1-82e19ebdf7b3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-18T15:52:35.643Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Feature: TactusScore model retarget token limits\n\nScenario: TactusScore retarget applies max_tokens\nGiven a TactusScore YAML with ClassifyProcedure\nWhen scorecard_model_retarget receives max_tokens\nThen the planned candidate YAML includes max_tokens inside ClassifyProcedure\nAnd the procedure does not reject the target.\n\nScenario: Frontier variants apply Tactus max_tokens\nGiven a TactusScore candidate matrix parameter_set includes max_tokens\nWhen frontier variants are generated\nThen the candidate YAML includes max_tokens inside ClassifyProcedure.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-fb6c27b7-9d52-4955-b202-465dd7047f2a",
+    "priority": 1,
+    "status": "open",
+    "title": "Support max_tokens for Tactus retarget variants"
+  }
+}

@@ -129,6 +129,7 @@ def test_build_variants_supports_tactus_score_default_model_and_runtime_controls
                     "reasoning_effort": "high",
                     "verbosity": "medium",
                     "temperature": 0,
+                    "max_tokens": 1200,
                 }
             ],
         },
@@ -139,6 +140,7 @@ def test_build_variants_supports_tactus_score_default_model_and_runtime_controls
     assert generated["class"] == "TactusScore"
     assert 'default_model "openai/gpt-5.4-mini"' in generated["code"]
     assert "temperature = 0," in generated["code"]
+    assert "max_tokens = 1200," in generated["code"]
     assert generated["reasoning_effort"] == "high"
     assert generated["verbosity"] == "medium"
     assert "model_provider" not in generated
