@@ -43,8 +43,6 @@ def plan_score_retarget(
         )
 
     if score_class == "TactusScore":
-        if _target_value(target, "max_tokens") is not None:
-            raise ValueError("max_tokens is not supported for TactusScore retargeting")
         model_provider = (
             _target_value(target, "tactus_model_provider")
             or _target_value(target, "model_provider")
