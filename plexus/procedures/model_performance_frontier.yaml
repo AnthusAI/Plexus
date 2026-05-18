@@ -18,7 +18,7 @@ params:
   candidate_matrix:
     type: object
     required: true
-    description: "Structured model/parameter matrix. Shape: {include_current=true, models=[{label, model_provider, model_name, base_model_name?}], parameter_sets=[{label, reasoning_effort?, verbosity?, temperature?, max_tokens?, extra_overrides?}]}. LangGraphScore variants update root model fields. TactusScore variants update the embedded default_model directive, put reasoning_effort/verbosity on the score root for TactusRuntime, and apply temperature/max_tokens inside ClassifyProcedure. If base_model_name exists in a LangGraphScore and a candidate sets model_name without base_model_name, base_model_name is updated to match model_name."
+    description: "Structured model/parameter matrix. Shape: {include_current=true, models=[{label, model_provider, model_name, base_model_name?}], parameter_sets=[{label, reasoning_effort?, verbosity?, temperature?, max_tokens?, extra_overrides?}]}. LangGraphScore variants update root model fields. TactusScore variants update the embedded default_model directive and write reasoning_effort, verbosity, temperature, and max_tokens as score-root TactusRuntime defaults. Local ClassifyProcedure/model overrides are changed only through explicit extra_overrides. If base_model_name exists in a LangGraphScore and a candidate sets model_name without base_model_name, base_model_name is updated to match model_name."
 
   days:
     type: number

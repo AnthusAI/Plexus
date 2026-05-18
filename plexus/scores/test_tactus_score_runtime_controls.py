@@ -26,6 +26,8 @@ async def test_tactus_score_passes_runtime_gpt5_controls_to_prediction_runtime(m
         valid_classes=["Yes", "No"],
         reasoning_effort="high",
         verbosity="medium",
+        max_tokens=1200,
+        temperature=0.0,
     )
 
     result = await score.predict(Score.Input(text="hello", metadata={}))
@@ -33,3 +35,5 @@ async def test_tactus_score_passes_runtime_gpt5_controls_to_prediction_runtime(m
     assert result.value == "Yes"
     assert captured["reasoning_effort"] == "high"
     assert captured["verbosity"] == "medium"
+    assert captured["max_tokens"] == 1200
+    assert captured["temperature"] == 0.0

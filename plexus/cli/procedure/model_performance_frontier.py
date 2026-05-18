@@ -25,9 +25,6 @@ ROOT_MODEL_FIELDS = (
 TACTUS_ROOT_RUNTIME_FIELDS = (
     "reasoning_effort",
     "verbosity",
-)
-
-TACTUS_CLASSIFY_FIELDS = (
     "temperature",
     "max_tokens",
 )
@@ -252,37 +249,6 @@ def _replace_or_insert_tactus_default_model(code: str, model_id: str) -> str:
     return f'default_model "{model_id}"\n\n{code}'
 
 
-def _format_tactus_value(value: Any) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return repr(value)
-    return json.dumps(str(value))
-
-
-def _replace_or_insert_classify_field(code: str, field: str, value: Any) -> str:
-    classify_pattern = re.compile(r'ClassifyProcedure\s*\{(?P<body>.*?)\n(?P<indent>[ \t]*)\}', flags=re.S)
-    match = classify_pattern.search(code)
-    if not match:
-        raise ValueError(f"TactusScore code must define ClassifyProcedure before setting {field!r}")
-    block = match.group(0)
-    value_text = _format_tactus_value(value)
-    field_pattern = re.compile(rf'(?m)^([ \t]*){re.escape(field)}\s*=\s*[^,\n]+,?')
-    if field_pattern.search(block):
-        updated_block = field_pattern.sub(
-            lambda field_match: f"{field_match.group(1)}{field} = {value_text},",
-            block,
-            count=1,
-        )
-        return code[: match.start()] + updated_block + code[match.end() :]
-
-    body = match.group("body")
-    non_empty_lines = [line for line in body.splitlines() if line.strip()]
-    indent = re.match(r"([ \t]*)", non_empty_lines[0]).group(1) if non_empty_lines else "  "
-    insert_at = match.start("body")
-    return code[:insert_at] + f"\n{indent}{field} = {value_text}," + code[insert_at:]
-
-
 def _apply_tactus_variant(
     candidate: MutableMapping[str, Any],
     model: Mapping[str, Any],
@@ -296,14 +262,6 @@ def _apply_tactus_variant(
     for field in TACTUS_ROOT_RUNTIME_FIELDS:
         if field in parameter_set and parameter_set[field] is not None:
             candidate[field] = parameter_set[field]
-
-    for field in TACTUS_CLASSIFY_FIELDS:
-        if field in parameter_set and parameter_set[field] is not None:
-            candidate["code"] = _replace_or_insert_classify_field(
-                candidate.get("code") or "",
-                field,
-                parameter_set[field],
-            )
 
 
 def build_variants(
