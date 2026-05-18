@@ -1,0 +1,18 @@
+{
+  "id": "plx-a9690a9c-4a6c-42b3-9a66-c87fc7c14ac3",
+  "title": "Unified TactusScore model control retargeting",
+  "description": "Align Plexus score YAML generation with the final Tactus model-control shape: TactusScore root/runtime controls are the score-wide defaults, and explicit ClassifyProcedure or model-local overrides remain local overrides. Frontier and retarget procedures should stop treating max_tokens and temperature as special ClassifyProcedure-only fields.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-18T16:50:23.299140Z",
+  "updated_at": "2026-05-18T16:54:59.954591Z",
+  "closed_at": "2026-05-18T16:54:59.954591Z",
+  "custom": {}
+}
