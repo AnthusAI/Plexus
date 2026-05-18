@@ -1,0 +1,25 @@
+{
+  "id": "plx-8d1a14b9-416a-4507-9039-52413bac2f54",
+  "title": "task Prefer nested accuracy metric for existing frontier UI rows",
+  "description": "Feature: Existing model frontier runs display evaluation accuracy\n  Scenario: A completed row has an old accuracy_axis but includes feedback_metrics.accuracy\n    Given a model frontier row was produced before accuracy_axis used Accuracy\n    When the procedure detail chart renders the row\n    Then the plotted y value and table value use feedback_metrics.accuracy\n    And future rows may still use accuracy_axis directly",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "fb7760f8-3116-4b29-9ca8-5f7adda9fb33",
+      "author": "derek.norrbom",
+      "text": "Closed without implementation per user direction: this prototype does not need backward compatibility for old model frontier rows.",
+      "created_at": "2026-05-15T18:56:53.012795Z"
+    }
+  ],
+  "created_at": "2026-05-15T18:55:14.887875Z",
+  "updated_at": "2026-05-15T18:56:53.022370Z",
+  "closed_at": "2026-05-15T18:56:53.022370Z",
+  "custom": {}
+}

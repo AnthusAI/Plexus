@@ -1,0 +1,25 @@
+{
+  "id": "plx-ec90178a-d1b7-43a6-85e1-82e19ebdf7b3",
+  "title": "Support max_tokens for Tactus retarget variants",
+  "description": "Feature: TactusScore model retarget token limits\n\nScenario: TactusScore retarget applies max_tokens\nGiven a TactusScore YAML with ClassifyProcedure\nWhen scorecard_model_retarget receives max_tokens\nThen the planned candidate YAML includes max_tokens inside ClassifyProcedure\nAnd the procedure does not reject the target.\n\nScenario: Frontier variants apply Tactus max_tokens\nGiven a TactusScore candidate matrix parameter_set includes max_tokens\nWhen frontier variants are generated\nThen the candidate YAML includes max_tokens inside ClassifyProcedure.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fb6c27b7-9d52-4955-b202-465dd7047f2a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8a9eb16a-b243-41a3-988a-28c5bf5c499c",
+      "author": "derek.norrbom",
+      "text": "Implemented Plexus support for TactusScore max_tokens variants: shared frontier generation inserts max_tokens into ClassifyProcedure, scorecard_model_retarget no longer rejects max_tokens for TactusScore, and procedure descriptions/tests now reflect the supported behavior. Validated 21 focused Plexus tests.",
+      "created_at": "2026-05-18T15:53:54.315695Z"
+    }
+  ],
+  "created_at": "2026-05-18T15:52:35.643295Z",
+  "updated_at": "2026-05-18T15:53:54.325235Z",
+  "closed_at": "2026-05-18T15:53:54.325235Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "cf79d169-9ddc-4d73-92e7-930a533c6ed9",
+  "issue_id": "plx-f0143643-9c5f-4b44-88af-a55f8b99d9e6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T20:13:55.302Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As a procedure user, I want model frontier runs on scores with no recent feedback samples to complete with no_data rows, so that an empty feedback window does not fail the whole procedure.\n\nFeature: Model frontier no-feedback handling\n\nScenario: Score has no feedback samples\nGiven a model frontier run for a score with zero feedback-derived labeled samples\nWhen variants are planned successfully\nThen the procedure does not dispatch feedback-backed evaluations for those variants\nAnd each affected row reports status no_data with an explanatory error\nAnd the procedure finalizes successfully with report metadata.\n\nScenario: Score has some feedback samples\nGiven a model frontier run where feedback-derived rows exist below the regression minimum\nWhen variants are evaluated\nThen the feedback-backed evaluation still runs\nAnd the regression evaluation is skipped for insufficient regression dataset size.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-5dab7330-f4e3-49dd-9e6d-8edd3bf69fbf",
+    "priority": 1,
+    "status": "open",
+    "title": "Frontier handles scores with no feedback samples"
+  }
+}

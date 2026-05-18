@@ -1,0 +1,31 @@
+{
+  "id": "plx-772fe5e6-f2ae-443d-9b13-7c88ae76336f",
+  "title": "Implement scorecard model retarget procedure",
+  "description": "Add the procedure YAML, runtime helper module/tests, and README docs for bulk model retargeting across LangGraphScore and TactusScore scores.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fb6c27b7-9d52-4955-b202-465dd7047f2a",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "6691665c-0d0c-412b-86ed-919319def5ab",
+      "author": "derek.norrbom",
+      "text": "Branch created from updated develop: feature/scorecard-model-retarget-procedure. Implementation target: new procedure that lists scorecard scores, pulls champion YAML per score, plans deterministic model retarget changes, supports dry_run, and creates non-champion ScoreVersions via plexus.score.update only in apply mode.",
+      "created_at": "2026-05-15T22:06:37.045117Z"
+    },
+    {
+      "id": "8565351b-f09e-499f-97bc-27e90004309b",
+      "author": "derek.norrbom",
+      "text": "Implemented scorecard_model_retarget procedure using the merged model_frontier variant helper rather than duplicating class-specific YAML mutation logic. Added plexus.scorecard_retarget.plan_score runtime helper, unit tests for LangGraphScore/TactusScore planning, procedure contract tests, runtime API catalog tests, and README docs. Validation: focused retarget/frontier runtime tests passed, YAML parse passed, py_compile passed.",
+      "created_at": "2026-05-15T22:16:01.307461Z"
+    }
+  ],
+  "created_at": "2026-05-15T22:06:29.417284Z",
+  "updated_at": "2026-05-15T22:16:01.330460Z",
+  "closed_at": "2026-05-15T22:16:01.330460Z",
+  "custom": {}
+}

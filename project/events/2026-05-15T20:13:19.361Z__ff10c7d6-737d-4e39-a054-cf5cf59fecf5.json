@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ff10c7d6-737d-4e39-a054-cf5cf59fecf5",
+  "issue_id": "plx-11a7c5ef-1aa9-4771-bfdd-0f00d24669c2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-15T20:13:19.361Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "As a procedure author, I want feedback-backed score-version evaluations to pass their generated FeedbackItems samples directly into AccuracyEvaluation, so that scores without embedded data sections can still be compared in the model frontier.\n\nFeature: Feedback-backed model frontier evaluation samples\n\nScenario: TactusScore has feedback items but no data section\nGiven a TactusScore score version without a YAML data section\nAnd the feedback evaluation builds labeled samples from FeedbackItems\nWhen the model frontier dispatches a feedback-backed evaluation for that score version\nThen the evaluation runs with those labeled samples directly\nAnd it does not fall back to score YAML data loading.\n\nScenario: Existing evaluation behavior is preserved\nGiven an accuracy evaluation with an explicit cloud dataset id\nWhen the evaluation is dispatched through the runtime\nThen the dataset id path is still used unchanged.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-5dab7330-f4e3-49dd-9e6d-8edd3bf69fbf",
+    "priority": 1,
+    "status": "open",
+    "title": "Feedback-backed frontier evaluations use explicit samples"
+  }
+}

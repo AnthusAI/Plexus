@@ -60,6 +60,7 @@ import remarkGfm from "remark-gfm"
 import remarkBreaks from "remark-breaks"
 import { downloadData } from "aws-amplify/storage"
 import OptimizerMetricsChart, { type DatasetView, type IterationData } from "./OptimizerMetricsChart"
+import ModelFrontierChart, { type ModelFrontierRow } from "./ModelFrontierChart"
 import { EndOfRunReport, ReportSection } from "./OptimizationInsightsPanel"
 import { OptimizerProblemItemsPanel, type NotableItemRecurrence } from "./OptimizerProblemItemsPanel"
 import { CollapsibleText } from "./ui/message-utils"
@@ -231,6 +232,7 @@ export default function ProcedureTask({
     skipReason?: string
     disqualified?: boolean
   }>>([])
+  const [modelFrontierRows, setModelFrontierRows] = useState<ModelFrontierRow[]>([])
   const [cyclesTableView, setCyclesTableView] = useState<DatasetView>('overall')
   const [optimizerVersionBaseIds, setOptimizerVersionBaseIds] = useState<{ scorecardId?: string; scoreId?: string }>({})
   const [stateScorecardName, setStateScorecardName] = useState<string>('')
@@ -295,12 +297,18 @@ export default function ProcedureTask({
       const regressionBaseline = state.regression_initial_baseline_metrics ?? inferredRegressionBaseline ?? state.regression_baseline_metrics
       const recentBaselineCost = state.recent_initial_baseline_cost_per_item ?? state.recent_baseline_cost_per_item ?? null
       const regressionBaselineCost = state.regression_initial_baseline_cost_per_item ?? state.regression_baseline_cost_per_item ?? null
-      if (!recentBaseline && !regressionBaseline && cycleIterations.length === 0) return
+      const frontierState = state.model_frontier ?? null
+      const frontierRows = Array.isArray(frontierState?.rows) ? frontierState.rows : []
+      const hasFrontierState = Boolean(frontierState) || frontierRows.length > 0
+      if (!recentBaseline && !regressionBaseline && cycleIterations.length === 0 && !hasFrontierState) return
 
       // Heavy chart/table updates — include setIsLoadingProcedureState so the skeleton
       // only disappears once the chart data is ready in the same render pass.
       startTransition(() => {
         setIsLoadingProcedureState(false)
+        if (hasFrontierState) {
+          setModelFrontierRows(frontierRows)
+        }
         const iterations: IterationData[] = []
         if (recentBaseline || regressionBaseline) {
           iterations.push({
@@ -2016,6 +2024,10 @@ export default function ProcedureTask({
                 </tbody>
               </table>
             </div>
+          ) : null}
+
+          {modelFrontierRows.length > 0 ? (
+            <ModelFrontierChart rows={modelFrontierRows} />
           ) : null}
 
           {/* Problem item tracker — items with recurrent misclassifications */}

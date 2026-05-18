@@ -1,0 +1,25 @@
+{
+  "id": "plx-3a79dc6b-e5c2-4b76-b021-5e4fc365b87c",
+  "title": "Fix model frontier Lua table normalization",
+  "description": "model_performance_frontier fails in plan stage with 'dictionary update sequence element #0 has length 1; 2 is required', likely from Lua table conversion into Python frontier planning. Normalize Tactus/Lua table inputs before variant planning.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-d8f12143-8778-419d-8872-89fae5a7a2ec",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "70c6fe0e-8ab6-4ba6-83be-2957f7e739c4",
+      "author": "derek.norrbom",
+      "text": "Fixed plan-stage candidate_matrix normalization.\n\nRoot cause: candidate_matrix can arrive from CLI `-s` as a JSON string. The helper called `dict(candidate_matrix)`, which raises `dictionary update sequence element #0 has length 1; 2 is required` for strings.\n\nChange:\n- Added `_plain_value()` normalization in `model_performance_frontier.py` to parse JSON object/array strings and normalize Lua-style numeric tables to lists.\n- Applied normalization to candidate_matrix, models, parameter_sets, each candidate object, and extra_overrides.\n- Added regression test for JSON string candidate_matrix.\n\nValidation:\n- `pytest -q plexus/cli/procedure/test_model_performance_frontier.py MCP/tools/tactus_runtime/test_model_frontier_runtime.py` -> 12 passed\n- Direct Project Type AI reproduction with JSON string candidate_matrix -> 2 variants: current and gpt-5.4-nano, base_model_name synced, verbosity medium\n- py_compile -> passed",
+      "created_at": "2026-05-15T17:52:29.820920Z"
+    }
+  ],
+  "created_at": "2026-05-15T17:51:41.788921Z",
+  "updated_at": "2026-05-15T17:52:33.026440Z",
+  "closed_at": "2026-05-15T17:52:33.026440Z",
+  "custom": {}
+}
