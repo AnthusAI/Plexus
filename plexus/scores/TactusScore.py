@@ -164,9 +164,6 @@ class TactusScore(Score):
                     self._pool_condition.notify()
                 raise
 
-        # Should be unreachable but keeps return type explicit.
-        raise RuntimeError("Failed to acquire runtime from pool")
-
     async def _release_runtime(self, runtime: TactusRuntime) -> None:
         """Return a runtime to the pool for reuse."""
         if self._runtime_isolation_mode == "strict":
