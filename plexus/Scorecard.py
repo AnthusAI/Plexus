@@ -98,6 +98,10 @@ class Scorecard:
         # Can be set by callers (e.g., CLI/MCP) after construction as well
         self.yaml_only = False
 
+        # Cache for score instances to avoid recreating them for each prediction
+        # Key: score name, Value: score instance
+        self._score_instance_cache = {}
+
         # For API-first loading
         if api_data is not None:
             self.properties = api_data
@@ -503,7 +507,16 @@ class Scorecard:
                 {"scorecard_name": scorecard, "score_name": score}
             )
 
-            score_instance = await score_class.create(**score_configuration)
+            # Check if we have a cached instance for this score
+            # Use score name as cache key since configuration shouldn't change during evaluation
+            if score in self._score_instance_cache:
+                logging.debug(f"Reusing cached score instance for: {score}")
+                score_instance = self._score_instance_cache[score]
+            else:
+                logging.info(f"Creating new score instance for: {score}")
+                score_instance = await score_class.create(**score_configuration)
+                # Cache the instance for reuse
+                self._score_instance_cache[score] = score_instance
 
             if score_instance is None:
                 logging.error(
@@ -1075,15 +1088,6 @@ class Scorecard:
 
         results_by_score_id = {}
         results = []
-        processing_queue = asyncio.Queue()
-
-        # Initialize queue with scores that have no dependencies
-        for score_id, score_info in dependency_graph.items():
-            if not score_info["deps"]:
-                await processing_queue.put(score_id)
-                logging.info(
-                    f"Added score with no dependencies to queue: {score_info['name']} (ID: {score_id})"
-                )
 
         async def process_score(score_id: str):
             score_name = dependency_graph[score_id]["name"]
@@ -1103,20 +1107,6 @@ class Scorecard:
                         ),
                     )
                     results_by_score_id[score_id] = result
-
-                    # Enqueue scores that depend on this one
-                    for dependent_id, dependent_info in dependency_graph.items():
-                        if score_id in dependent_info["deps"]:
-                            # Check if all dependencies for this dependent score are now processed
-                            if all(
-                                dep_id in results_by_score_id
-                                for dep_id in dependent_info["deps"]
-                            ):
-                                logging.info(
-                                    f"Enqueuing dependent score: {dependent_info['name']}"
-                                )
-                                await processing_queue.put(dependent_id)
-
                     return
 
                 logging.info(
@@ -1232,18 +1222,6 @@ class Scorecard:
                 results.append({"id": score_id, "name": score_name, "result": result})
                 logging.info(f"Processed score: {score_name} (ID: {score_id})")
 
-                # Check if any waiting scores can now be processed
-                # Only check scores that directly depend on this score
-                for waiting_score_id, waiting_score_info in dependency_graph.items():
-                    if (
-                        score_id in waiting_score_info["deps"]
-                    ):  # Only check if this score is a dependency
-                        if waiting_score_id not in results_by_score_id and all(
-                            dep in results_by_score_id
-                            for dep in waiting_score_info["deps"]
-                        ):
-                            await processing_queue.put(waiting_score_id)
-
             except Score.SkippedScoreException as e:
                 logging.info(f"Score {score_name} was skipped: {e.reason}")
                 return
@@ -1265,15 +1243,39 @@ class Scorecard:
         remaining_scores = set(dependency_graph.keys())
         while remaining_scores:
             try:
-                score_id_to_process = await processing_queue.get()
-                if score_id_to_process not in remaining_scores:
-                    continue
+                ready_scores = [
+                    score_id
+                    for score_id in remaining_scores
+                    if all(
+                        dep in results_by_score_id
+                        for dep in dependency_graph[score_id]["deps"]
+                    )
+                ]
+                if not ready_scores:
+                    unresolved = ", ".join(
+                        dependency_graph[score_id]["name"] for score_id in remaining_scores
+                    )
+                    raise RuntimeError(
+                        f"No dependency-ready scores found. Remaining: {unresolved}"
+                    )
 
+                ready_batch = ready_scores
                 logging.info(
-                    f"Processing score: {dependency_graph[score_id_to_process]['name']}"
+                    "Processing %s score(s) in parallel (remaining=%s)",
+                    len(ready_batch),
+                    len(remaining_scores),
                 )
-                await process_score(score_id_to_process)
-                remaining_scores.discard(score_id_to_process)
+
+                batch_outcomes = await asyncio.gather(
+                    *(process_score(score_id) for score_id in ready_batch),
+                    return_exceptions=True,
+                )
+                for score_id, outcome in zip(ready_batch, batch_outcomes):
+                    if isinstance(outcome, BatchProcessingPause):
+                        raise outcome
+                    if isinstance(outcome, Exception):
+                        raise outcome
+                    remaining_scores.discard(score_id)
 
             except BatchProcessingPause as e:
                 # Don't remove from remaining scores, just re-raise to be handled by caller
