@@ -9306,14 +9306,14 @@ py-cpuinfo = "*"
 
 [[package]]
 name = "tactus"
-version = "0.50.0"
+version = "0.51.1"
 description = "Tactus: Lua-based DSL for agentic workflows"
 optional = false
 python-versions = "<3.14,>=3.10"
 groups = ["main"]
 files = [
-    {file = "tactus-0.50.0-py3-none-any.whl", hash = "sha256:1138b0077a969c9691fa31949ed0f17764754681f917cbad44c072939083855b"},
-    {file = "tactus-0.50.0.tar.gz", hash = "sha256:f61050f1109feed7427f3cd9fd9aac3e02fb9a1d27161cc88e611c56d85d4f2e"},
+    {file = "tactus-0.51.1-py3-none-any.whl", hash = "sha256:fca5c6a96b402a05277a0ddd21a592ec6f63de42ff99c569c980973e0cfdf647"},
+    {file = "tactus-0.51.1.tar.gz", hash = "sha256:18e73aacd4c69c3e79aa6bcd7d8c5bfa04f305f72b791e284e08f2ecd84e3814"},
 ]
 
 [package.dependencies]
@@ -10802,4 +10802,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "022a4f5ad4e1124d0bbf2bae8060d07692a25ce3f8abf271204897052043bbce"
+content-hash = "595b6005afa49acf8e5b11b84b5007ef6c9ae9d890375608723ef773cac9dc41"
