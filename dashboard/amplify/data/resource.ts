@@ -390,6 +390,8 @@ const schema = a.schema({
             value: a.string().required(),
             explanation: a.string(),
             confidence: a.float(),
+            startTimeSeconds: a.float(),
+            endTimeSeconds: a.float(),
             metadata: a.json(),
             trace: a.json(),
             correct: a.boolean(),
