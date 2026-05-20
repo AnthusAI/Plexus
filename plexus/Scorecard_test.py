@@ -1,4 +1,5 @@
 import unittest
+import asyncio
 from unittest.mock import Mock, MagicMock, AsyncMock
 from plexus.Scorecard import Scorecard
 import pytest
@@ -739,6 +740,66 @@ class TestScorecard:
         finally:
             self.scorecard.score_names_to_process = original_method
             self.scorecard.get_score_result = original_get_score_result
+
+    @pytest.mark.asyncio
+    async def test_score_entire_text_runs_independent_scores_in_parallel(self):
+        simple_config = {
+            'name': 'TestScorecard',
+            'id': 'test-scorecard-123',
+            'scores': [
+                {'name': 'ParallelScore1', 'id': 1},
+                {'name': 'ParallelScore2', 'id': 2},
+            ]
+        }
+        self.scorecard.properties = simple_config
+        self.scorecard.scores = simple_config['scores']
+
+        def get_properties_side_effect(score_name):
+            for score in simple_config['scores']:
+                if score['name'] == score_name:
+                    return score
+            return None
+
+        self.mock_registry.get_properties.side_effect = get_properties_side_effect
+
+        in_flight = 0
+        max_in_flight = 0
+        lock = asyncio.Lock()
+
+        async def mock_get_score_result(*_args, **_kwargs):
+            nonlocal in_flight, max_in_flight
+            async with lock:
+                in_flight += 1
+                max_in_flight = max(max_in_flight, in_flight)
+            await asyncio.sleep(0.05)
+            async with lock:
+                in_flight -= 1
+            return [Mock(value='Pass')]
+
+        original_get_score_result = self.scorecard.get_score_result
+        original_score_names = self.scorecard.score_names_to_process
+        self.scorecard.get_score_result = mock_get_score_result
+        self.scorecard.score_names_to_process = lambda: ['ParallelScore1', 'ParallelScore2']
+
+        import os
+        original_parallelism = os.environ.get('PLEXUS_SCORECARD_MAX_CONCURRENT_SCORES')
+        os.environ['PLEXUS_SCORECARD_MAX_CONCURRENT_SCORES'] = '4'
+
+        try:
+            result = await self.scorecard.score_entire_text(
+                text="Sample text",
+                metadata={},
+                modality="test"
+            )
+            assert len(result) == 2
+            assert max_in_flight >= 2
+        finally:
+            self.scorecard.get_score_result = original_get_score_result
+            self.scorecard.score_names_to_process = original_score_names
+            if original_parallelism is None:
+                os.environ.pop('PLEXUS_SCORECARD_MAX_CONCURRENT_SCORES', None)
+            else:
+                os.environ['PLEXUS_SCORECARD_MAX_CONCURRENT_SCORES'] = original_parallelism
 
     @pytest.mark.asyncio
     async def test_get_score_result_cleans_up_score_instance(self):
