@@ -30,7 +30,36 @@ npm list @aws-amplify/seed
 
 ## Setup
 
-### 1. Find Your Production Credentials
+### Quick Setup (Recommended)
+
+Use the helper script to automatically configure secrets from your `.env` file:
+
+```bash
+cd dashboard
+./scripts/setup-sandbox-secrets.sh
+```
+
+This script reads from your `.env` and sets all required secrets. Make sure your `.env` contains:
+
+```bash
+PLEXUS_API_URL=https://xxxxx.appsync-api.us-east-1.amazonaws.com/graphql
+PLEXUS_API_KEY=da2-xxxxxxxxxxxxx
+PLEXUS_ACCOUNT_UUID=9c929f25-a91f-4db7-8943-5aa93498b8e9
+
+# Optional: add this to skip password prompt
+SANDBOX_SEED_PASSWORD=your-secure-password
+```
+
+The script will:
+- Set `PROD_API_URL`, `PROD_API_KEY`, `PROD_ACCOUNT_ID` from your `.env`
+- Set dummy values for TaskDispatcher (not needed for seeding)
+- Prompt for seed user password if not in `.env`
+
+### Manual Setup
+
+If you prefer to set secrets manually:
+
+#### 1. Find Your Production Credentials
 
 You'll need these values from your production environment:
 
@@ -60,7 +89,7 @@ To find your account ID:
 - Look for the account with key "call-criteria" or your organization name
 - Use the UUID `id` value (not the `key` string)
 
-### 2. Configure Secrets
+#### 2. Configure Secrets Manually
 
 Set up required secrets for accessing production data:
 
