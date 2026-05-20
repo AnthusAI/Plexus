@@ -209,7 +209,9 @@ class Score(ABC,
         parameters: 'Score.Parameters'
         value:      Union[str, bool]
         explanation: Optional[str] = None
-        confidence:  Optional[float] = None
+        confidence:          Optional[float] = None
+        start_time_seconds:  Optional[float] = None
+        end_time_seconds:    Optional[float] = None
         metadata:   dict = {}
         error:      Optional[str] = None
         code:       Optional[str] = None
