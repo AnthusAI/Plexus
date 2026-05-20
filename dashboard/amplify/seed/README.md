@@ -30,7 +30,37 @@ npm list @aws-amplify/seed
 
 ## Setup
 
-### 1. Configure Secrets
+### 1. Find Your Production Credentials
+
+You'll need these values from your production environment:
+
+**PROD_API_URL**: Get from production `amplify_outputs.json`:
+```json
+{
+  "data": {
+    "url": "https://xxxxx.appsync-api.us-east-1.amazonaws.com/graphql"
+  }
+}
+```
+
+**PROD_API_KEY**: Get from production `amplify_outputs.json`:
+```json
+{
+  "data": {
+    "api_key": "da2-xxxxxxxxxxxxx"
+  }
+}
+```
+
+**PROD_ACCOUNT_ID**: Your Plexus account UUID (NOT AWS account ID or Amplify app ID).
+This is the `id` field from your Account table. For example: `9c929f25-a91f-4db7-8943-5aa93498b8e9`
+
+To find your account ID:
+- Query your production database: `SELECT id, key, name FROM Account;`
+- Look for the account with key "call-criteria" or your organization name
+- Use the UUID `id` value (not the `key` string)
+
+### 2. Configure Secrets
 
 Set up required secrets for accessing production data:
 
@@ -40,10 +70,10 @@ npx ampx sandbox secret set PROD_API_URL
 # Enter: https://{prod-api-id}.appsync-api.us-east-1.amazonaws.com/graphql
 
 npx ampx sandbox secret set PROD_API_KEY
-# Enter: da2-xxxxxxxxxxxxx (from production amplify_outputs.json)
+# Enter: da2-xxxxxxxxxxxxx
 
 npx ampx sandbox secret set PROD_ACCOUNT_ID
-# Enter: 9c929f25-a91f-4db7-8943-5aa93498b8e9
+# Enter: 9c929f25-a91f-4db7-8943-5aa93498b8e9 (your Plexus Account UUID)
 
 npx ampx sandbox secret set SEED_USER_PASSWORD
 # Enter: (secure password for sandbox seed user, min 8 characters)
@@ -57,19 +87,6 @@ npx ampx sandbox secret set INCLUDE_S3_SYNC
 # Enter: true (default: false - S3 copying is OFF)
 ```
 
-### 2. Generate IAM Policy
-
-Generate the IAM policy for seed operations:
-
-```bash
-npx ampx sandbox seed generate-policy
-```
-
-This creates permissions for:
-- Reading from production DynamoDB tables (via AppSync GraphQL API)
-- Writing to sandbox DynamoDB tables
-- Reading/writing S3 buckets (if S3 sync is enabled)
-
 ## Usage
 
 ### Running the Seed Script
@@ -78,9 +95,19 @@ This creates permissions for:
 # Step 1: Start your sandbox (in one terminal)
 npx ampx sandbox
 
-# Step 2: Run the seed script (in another terminal)
+# Step 2: Generate IAM policy (in another terminal, after sandbox starts)
+npx ampx sandbox seed generate-policy
+
+# Step 3: Run the seed script
 npx ampx sandbox seed
 ```
+
+**Note:** The sandbox must be running before you can generate the policy or run the seed script.
+
+The `generate-policy` command creates permissions for:
+- Reading from production DynamoDB tables (via AppSync GraphQL API)
+- Writing to sandbox DynamoDB tables
+- Reading/writing S3 buckets (if S3 sync is enabled)
 
 The seed script will:
 1. Create/sign in a seed user (`sandbox-seed@plexus.internal`)
