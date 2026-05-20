@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "f4f774df-c555-4b76-883c-caf617800114",
+  "issue_id": "plx-21c011f0-2f76-4899-86d0-1040e105ef30",
+  "event_type": "field_updated",
+  "occurred_at": "2026-05-20T21:35:28.480Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "## Acceptance Criteria\n- phase1-foundation.ts: Account, User (foundation tables)\n- phase2-structure.ts: Scorecard hierarchy (Scorecard → Section → Score → Version)\n- phase3-reference.ts: Reference data tables in parallel\n- phase4-operational.ts: Operational and large-scale tables in parallel\n- phase5-derived.ts: Derived/linked data tables\n- Main seed.ts orchestrates all phases sequentially\n\n## Implementation Steps\n- Create seed user via createAndSignUpUser() or sign in existing\n- Load secrets: PROD_API_URL, PROD_API_KEY, PROD_ACCOUNT_ID, INCLUDE_S3_SYNC, DAYS_RECENT\n- Initialize production and sandbox clients\n- Execute phases 1-5 in order, passing context object\n- Each phase calls appropriate strategy based on table config\n- Handle circular dependencies (ChatMessage parent, ScorecardExampleItem)"
+      }
+    }
+  }
+}

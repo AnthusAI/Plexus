@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ed5e0f80-910e-4403-9c4f-38d537fb7255",
+  "issue_id": "plx-7bfff028-86e1-4b55-88a5-afeaf9e4a8c6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-20T21:31:16.627Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-b7c6d1b0-17f5-4145-9017-a78e999422d2",
+    "priority": 2,
+    "status": "open",
+    "title": "Create documentation and setup guide"
+  }
+}

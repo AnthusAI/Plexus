@@ -1,0 +1,25 @@
+{
+  "id": "plx-ceea09d4-2b5a-4729-ab7e-4cd1f18b93bf",
+  "title": "Set up Amplify seed framework infrastructure",
+  "description": "## Acceptance Criteria\n- Install @aws-amplify/seed package as dev dependency\n- Create amplify/seed/ directory structure\n- Set up TypeScript configuration for seed scripts\n- Verify npx ampx sandbox seed command works\n\n## Implementation Steps\n- cd dashboard && npm install @aws-amplify/seed --save-dev\n- mkdir -p amplify/seed/{phases,strategies,utils}\n- Create empty seed.ts entry point\n- Test basic seed script execution",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7c6d1b0-17f5-4145-9017-a78e999422d2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0e2186c4-69b4-48e2-899b-b113dceea806",
+      "author": "derek.norrbom",
+      "text": "✅ Task completed:\n- Installed @aws-amplify/seed package (v2.x)\n- Created amplify/seed/ directory with subdirectories: phases/, strategies/, utils/\n- Created basic seed.ts entry point\n- Verified directory structure\n\nReady for next task: implementing core utilities and configuration.",
+      "created_at": "2026-05-20T21:41:15.677754Z"
+    }
+  ],
+  "created_at": "2026-05-20T21:31:16.323404Z",
+  "updated_at": "2026-05-20T21:41:18.099930Z",
+  "closed_at": "2026-05-20T21:41:18.099930Z",
+  "custom": {}
+}
