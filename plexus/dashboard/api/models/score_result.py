@@ -89,6 +89,8 @@ class ScoreResult(BaseModel):
     status: Optional[str] = 'COMPLETED'  # Status of score result: "COMPLETED", "ERROR", etc.
     createdAt: Optional[datetime] = None
     updatedAt: Optional[datetime] = None
+    start_time_seconds: Optional[float] = None
+    end_time_seconds: Optional[float] = None
 
     def __init__(
         self,
@@ -115,6 +117,8 @@ class ScoreResult(BaseModel):
         status: Optional[str] = 'COMPLETED',
         createdAt: Optional[datetime] = None,
         updatedAt: Optional[datetime] = None,
+        start_time_seconds: Optional[float] = None,
+        end_time_seconds: Optional[float] = None,
         client: Optional['_BaseAPIClient'] = None
     ):
         super().__init__(id, client)
@@ -140,6 +144,8 @@ class ScoreResult(BaseModel):
         self.status = status
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.start_time_seconds = start_time_seconds
+        self.end_time_seconds = end_time_seconds
     
     @property
     def scoreName(self) -> Optional[str]:
@@ -185,6 +191,8 @@ class ScoreResult(BaseModel):
             status
             createdAt
             updatedAt
+            startTimeSeconds
+            endTimeSeconds
         """
 
     @classmethod
@@ -263,6 +271,8 @@ class ScoreResult(BaseModel):
             status=data.get('status'),
             createdAt=created_at,
             updatedAt=updated_at,
+            start_time_seconds=data.get('startTimeSeconds'),
+            end_time_seconds=data.get('endTimeSeconds'),
             client=client
         )
 
