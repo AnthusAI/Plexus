@@ -57,9 +57,14 @@ if (getResourceByShareTokenFunction) {
 // 3. Ensure Docker images are available for sandbox environments
 const isSandbox = process.env.AWS_BRANCH === undefined &&
                   process.env.AMPLIFY_ENV === undefined;
+const enableSandboxConsoleWorker = process.env.AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER === 'true';
 
 if (isSandbox) {
-    console.log('🏖️  Sandbox mode detected - skipping TaskDispatcher and ConsoleWorker stacks');
+    if (enableSandboxConsoleWorker) {
+        console.log('🏖️  Sandbox mode detected - ConsoleRunWorker explicitly enabled for this deployment');
+    } else {
+        console.log('🏖️  Sandbox mode detected - skipping TaskDispatcher and ConsoleWorker stacks');
+    }
 }
 
 // Enable streams on tables for metrics aggregation
@@ -167,12 +172,37 @@ if (!isSandbox) {
         }
     );
 
-    const resolvedDataApiUrl = (process.env.PLEXUS_API_URL || '').trim();
+    // Add SQS permissions
+    taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
+        new PolicyStatement({
+            actions: ['sqs:SendMessage'],
+            resources: [process.env.CELERY_QUEUE_URL || '*']
+        })
+    );
+}
+
+const shouldDeployConsoleWorker = !isSandbox || enableSandboxConsoleWorker;
+if (shouldDeployConsoleWorker) {
+    const dataCfnResources = backend.data.resources.cfnResources as unknown as {
+        cfnGraphqlApi?: { attrGraphQlUrl?: string };
+    };
+    const sandboxGraphqlUrl = dataCfnResources.cfnGraphqlApi?.attrGraphQlUrl || '';
+    const resolvedDataApiUrl = (
+        isSandbox ? sandboxGraphqlUrl : (process.env.PLEXUS_API_URL || '')
+    ).trim();
     const consoleWorkerImageUri = (process.env.CONSOLE_WORKER_IMAGE_URI || '').trim();
     const consoleWorkerEnvironmentName = normalizeForResourceName(resolveEnvironmentName());
+    const consoleWorkerConfigSecretName = (
+        process.env.PLEXUS_CONFIG_SECRET_NAME ||
+        `plexus/${consoleWorkerEnvironmentName}/config`
+    ).trim();
 
     if (!resolvedDataApiUrl) {
-        throw new Error('PLEXUS_API_URL must be set for ConsoleRunWorkerStack deployment');
+        throw new Error(
+            isSandbox
+                ? 'Unable to resolve sandbox GraphQL URL for ConsoleRunWorkerStack deployment'
+                : 'PLEXUS_API_URL must be set for ConsoleRunWorkerStack deployment'
+        );
     }
 
     if (!consoleWorkerImageUri) {
@@ -187,16 +217,9 @@ if (!isSandbox) {
             plexusApiUrl: resolvedDataApiUrl,
             workerImageUri: consoleWorkerImageUri,
             environmentName: consoleWorkerEnvironmentName,
+            configSecretName: consoleWorkerConfigSecretName,
             reportBlockDetailsBucket: backend.reportBlockDetails.resources.bucket,
         }
-    );
-
-    // Add SQS permissions
-    taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
-        new PolicyStatement({
-            actions: ['sqs:SendMessage'],
-            resources: [process.env.CELERY_QUEUE_URL || '*']
-        })
     );
 }
 

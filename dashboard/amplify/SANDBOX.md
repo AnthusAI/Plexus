@@ -19,8 +19,10 @@ Amplify sandboxes in this project are configured for **development and testing**
 
 ❌ **Disabled:**
 - TaskDispatcher (requires Celery infrastructure)
-- ConsoleRunWorker (requires Docker image URI)
 - Vector store (TopicMemoryVectorStore)
+
+⚙️ **Optional (off by default):**
+- ConsoleRunWorker (can be enabled per sandbox deployment with a sandbox image URI)
 
 ### Why This Design?
 
@@ -39,44 +41,67 @@ Amplify sandboxes in this project are configured for **development and testing**
 
 ## Enabling Full Application in Sandboxes
 
-If you need TaskDispatcher and ConsoleWorker in your sandbox:
+If you need ConsoleRunWorker in your sandbox:
 
-### 1. Set Required Environment Variables
+### 1. Build and Push a Sandbox Worker Image
 
-Add to your `.env`:
+Run:
 
 ```bash
-# Celery Configuration
-CELERY_AWS_ACCESS_KEY_ID=your-key
-CELERY_AWS_SECRET_ACCESS_KEY=your-secret
-CELERY_AWS_REGION_NAME=us-west-2
-CELERY_QUEUE_NAME=your-queue-name
-CELERY_RESULT_BACKEND_TEMPLATE=dynamodb://...
-CELERY_QUEUE_URL=https://sqs.us-west-2.amazonaws.com/...
-
-# Console Worker Configuration
-CONSOLE_WORKER_IMAGE_URI=your-ecr-image-uri
-PLEXUS_API_URL=https://your-api.appsync-api.us-west-2.amazonaws.com/graphql
+cd dashboard
+./scripts/build-and-push-console-worker-image.sh --region us-west-2
 ```
 
-### 2. Modify backend.ts
+This prints:
 
-In `amplify/backend.ts`, change the sandbox detection logic:
-
-```typescript
-// Option A: Always enable (no sandbox mode)
-const isSandbox = false;
-
-// Option B: Enable for specific sandbox identifiers
-const isSandbox = process.env.AMPLIFY_SANDBOX_IDENTIFIER !== 'full-app';
-// Then run: npx ampx sandbox --identifier full-app
+```bash
+CONSOLE_WORKER_IMAGE_URI=<account>.dkr.ecr.<region>.amazonaws.com/plexus-console-run-worker:<tag>
 ```
 
-### 3. Infrastructure Requirements
+### 2. Start Sandbox with Worker Enabled
 
-- **Celery Queue**: Must be created separately (not in Amplify stack)
+```bash
+cd dashboard
+./scripts/start-sandbox-with-console-worker.sh --region us-west-2
+```
+
+This script:
+- Builds and pushes the image (unless `--skip-build` is set)
+- Sets `AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true`
+- Sets `CONSOLE_WORKER_IMAGE_URI=<image>`
+- Runs `npx ampx sandbox`
+
+You can pass normal sandbox args after `--`, for example:
+
+```bash
+./scripts/start-sandbox-with-console-worker.sh -- --identifier full-app
+```
+
+If your provider secret is not `plexus/development/config`, pass it explicitly:
+
+```bash
+./scripts/start-sandbox-with-console-worker.sh \
+  --config-secret-name plexus/production/config \
+  --region us-west-2
+```
+
+### 3. Optional Manual Path
+
+If you already have an image URI:
+
+```bash
+cd dashboard
+export AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true
+export CONSOLE_WORKER_IMAGE_URI=<your-ecr-image-uri>
+export PLEXUS_CONFIG_SECRET_NAME=plexus/production/config
+npx ampx sandbox
+```
+
+### 4. Infrastructure Requirements
+
 - **Docker Image**: Console worker image must be pushed to ECR
-- **DynamoDB Backend**: Celery result backend table must exist
+- **Secrets Manager**: `plexus/<environment>/config` secret must exist with provider keys
+- **No TaskDispatcher in sandbox**: TaskDispatcher remains disabled in sandbox mode
 
 ## Sandbox Detection Logic
 
@@ -94,12 +119,14 @@ const isSandbox = process.env.AWS_BRANCH === undefined &&
 
 ## Testing Seed Script in Sandbox
 
-The seed script works perfectly in sandbox mode:
+The seed script works in both default sandbox mode and worker-enabled sandbox mode:
 
 ```bash
 cd dashboard
 ./scripts/setup-sandbox-secrets.sh  # One-time setup
-npx ampx sandbox                    # Start sandbox (no env vars needed!)
+npx ampx sandbox                    # Default lightweight sandbox
+# OR:
+./scripts/start-sandbox-with-console-worker.sh
 npx ampx sandbox seed generate-policy
 npx ampx sandbox seed               # Seed from production
 ```
@@ -122,7 +149,21 @@ npx ampx sandbox
 
 ### Error: "CONSOLE_WORKER_IMAGE_URI must be set"
 
-Same as above - sandbox mode isn't detected properly.
+`AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true` was set but no image URI was provided.
+
+Use one of:
+
+```bash
+./scripts/start-sandbox-with-console-worker.sh
+```
+
+or
+
+```bash
+export AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true
+export CONSOLE_WORKER_IMAGE_URI=<your-ecr-image-uri>
+npx ampx sandbox
+```
 
 ### Want Full App in Sandbox
 

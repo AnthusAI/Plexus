@@ -14,6 +14,7 @@ interface ConsoleChatResponderStackProps extends NestedStackProps {
   plexusApiUrl?: string;
   workerImageUri?: string;
   environmentName?: string;
+  configSecretName?: string;
   reportBlockDetailsBucket?: IBucket;
 }
 
@@ -69,7 +70,15 @@ export class ConsoleChatResponderStack extends NestedStack {
       props.workerImageUri || process.env.CONSOLE_WORKER_IMAGE_URI || "",
     );
     const environmentName = props.environmentName || "staging";
-    const configSecretName = `plexus/${environmentName}/config`;
+    const configSecretName = (
+      props.configSecretName ||
+      process.env.PLEXUS_CONFIG_SECRET_NAME ||
+      `plexus/${environmentName}/config`
+    ).trim();
+
+    if (!configSecretName) {
+      throw new Error("PLEXUS_CONFIG_SECRET_NAME must be set for ConsoleRunWorkerStack deployment");
+    }
     const configSecret = secretsmanager.Secret.fromSecretNameV2(
       this,
       "PlexusConfigSecret",
