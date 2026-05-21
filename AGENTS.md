@@ -27,7 +27,31 @@ not diagnose runs from dispatcher state alone.
 - **Report persistence.** ReportBlock output goes to S3 attachments;
 DynamoDB stores only a compact metadata envelope.
 
-## How agents discover documentation
+## Internal research (agent knowledge base)
+
+Before guessing how a feature works, research the indexed docs in two
+steps (progressive disclosure):
+
+1. **`plexus.docs.list`** — metadata only (`id`, `title`, `summary`,
+   `namespace`, `tags`, `related`). Cheap; safe to call often.
+2. **`plexus.docs.get`** — full markdown body for one canonical `id`.
+
+```lua
+return plexus.docs.list({ namespace = "score-authoring" })
+return plexus.docs.get({ key = "repo-workflows.internal-research" })
+```
+
+There is no semantic search over agent docs; filter by namespace and
+read summaries, then follow `related` links. The Python implementation
+is `plexus/documentation/repository.py` (`DocumentationRepository`).
+Canonical cookbook: load topic `repo-workflows.internal-research` via
+`plexus.docs.get`, or read `skills/internal-research/SKILL.md` when not
+using MCP.
+
+Scorecard **rubric memory** (Biblicus corpora under `*.knowledge-base/`)
+is a separate system — see `score-authoring.rubric-memory`, not agent KB.
+
+## How agents discover APIs and documentation
 
 Plexus exposes a single MCP tool: `**execute_tactus`**. Inside that tool,
 all functionality is accessed through the injected `plexus.`* runtime.
@@ -44,7 +68,7 @@ return plexus.docs.list({})
 return plexus.docs.list({ namespace = "score-authoring" })
 
 -- Load a topic by its canonical id.
-return plexus.docs.get({ id = "mcp.execute-tactus-overview" })
+return plexus.docs.get({ key = "mcp.execute-tactus-overview" })
 ```
 
 Each entry returned by `plexus.docs.list` carries `id`, `title`,
