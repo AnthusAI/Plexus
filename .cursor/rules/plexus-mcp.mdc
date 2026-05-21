@@ -20,6 +20,12 @@ return plexus.docs.list({})
 return plexus.docs.get({ key = "mcp.execute-tactus-overview" })
 ```
 
+## Internal research
+
+Use progressive disclosure: `docs_list` for metadata summaries, then
+`docs_get{ id = "..." }` for one full topic. No semantic search. Cookbook:
+`repo-workflows.internal-research` or [`skills/internal-research/SKILL.md`](mdc:skills/internal-research/SKILL.md).
+
 ## Where to read more
 
 - Top-level rules and Git Flow: [`AGENTS.md`](mdc:AGENTS.md)

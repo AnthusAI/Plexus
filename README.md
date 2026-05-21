@@ -155,6 +155,7 @@ The "Flywheel" of Plexus:
 Plexus is designed to be operated *by* AI agents as much as by humans. The `/MCP` directory contains a fully-featured Model Context Protocol server.
 
 - **AGENTS.md**: [Read the full Agent Integration Guide](AGENTS.md)
+- **Internal research**: Agent docs live under `documentation/agent/` and are queried via `plexus.docs.list` / `plexus.docs.get` inside `execute_tactus` (metadata first, then full topics by canonical id). See [skills/internal-research/SKILL.md](skills/internal-research/SKILL.md) and topic `repo-workflows.internal-research`.
 - **Capabilities**: Agents can read data, update configurations, run tests, and analyze results.
 - **Safety**: The system includes specialized "Agents" and "Skills" in `.claude/` to ensure safe operations (e.g., validating YAML before pushing).
 

@@ -14,4 +14,8 @@ Kanbus, Git Flow, and local environment workflows used by humans and agents.
 
 ## Topics in this namespace
 
+- **internal-research** (`repo-workflows.internal-research`) — how to
+  run internal KB research via `docs_list` / `docs_get` and
+  `DocumentationRepository`.
+
 Use `plexus.docs.list({ namespace = "repo-workflows" })` to list every topic, then `plexus.docs.get({ key = "<id>" })` for the full doc.
