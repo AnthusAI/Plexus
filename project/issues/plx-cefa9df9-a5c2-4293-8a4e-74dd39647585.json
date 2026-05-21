@@ -196,10 +196,34 @@
       "author": "derek.norrbom",
       "text": "Successful bounded live run reported by user:\n\n`Sandbox seeding completed successfully` in 870.7s after dependency-aware Item sampling was added.\n\nCommit prep:\n- Include backend sandbox gating, seed orchestration/strategy fixes, seed contract tests, sandbox docs, setup script updates, and Kanbus records.\n- Do not commit generated `dashboard/seed-policy.json` because it contains account/sandbox-specific ARNs; added it to `dashboard/.gitignore`.",
       "created_at": "2026-05-21T19:44:36.779133Z"
+    },
+    {
+      "id": "7048c361-e9fd-432c-a310-002c1e643e8b",
+      "author": "derek.norrbom",
+      "text": "Starting follow-up to re-enable ConsoleRunWorker for sandbox workflows by automating image build/push to ECR and surfacing the resulting image URI for sandbox startup. Goal: one scriptable path for developers to create a sandbox-safe worker image instead of reusing production image URIs.",
+      "created_at": "2026-05-21T21:22:41.046141Z"
+    },
+    {
+      "id": "b142029d-caff-4366-a41f-e8f8aa86e013",
+      "author": "derek.norrbom",
+      "text": "Implemented optional sandbox ConsoleRunWorker enablement with scripted image workflow:\n\n- Added `dashboard/scripts/build-and-push-console-worker-image.sh` to build the `consoleRunWorker` Lambda image from repo root context, ensure ECR repo exists, and push a sandbox-tagged image.\n- Added `dashboard/scripts/start-sandbox-with-console-worker.sh` to (optionally) build/push, set `AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true` and `CONSOLE_WORKER_IMAGE_URI`, then run `npx ampx sandbox`.\n- Updated `dashboard/amplify/backend.ts` so sandbox deployments can opt-in ConsoleRunWorker via `AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true` while keeping default lightweight sandbox behavior.\n- In sandbox worker-enabled mode, backend resolves GraphQL URL from Amplify data CFN resources rather than requiring `PLEXUS_API_URL`.\n- Updated `dashboard/amplify/SANDBOX.md` with scripted worker-enabled sandbox flow and troubleshooting.\n\nValidation:\n- `cd dashboard && npx tsc --noEmit -p amplify/tsconfig.json`\n- `bash -n dashboard/scripts/build-and-push-console-worker-image.sh dashboard/scripts/start-sandbox-with-console-worker.sh`",
+      "created_at": "2026-05-21T21:24:37.772888Z"
+    },
+    {
+      "id": "d8706827-0b4c-4b1e-ab9b-4c094946ce0b",
+      "author": "derek.norrbom",
+      "text": "Addressed Lambda image media-type deployment failure for sandbox ConsoleRunWorker:\n\n- Updated `dashboard/scripts/build-and-push-console-worker-image.sh` to build/push a Lambda-compatible single-platform image manifest.\n- Uses `docker buildx build --platform linux/amd64 --provenance=false --sbom=false --push ...` when buildx is available.\n- Falls back to classic `DOCKER_BUILDKIT=0 docker build` + `docker push` when buildx is unavailable.\n\nThis avoids unsupported manifest/attestation media types that caused `The image manifest, config or layer media type ... is not supported` during CloudFormation deploy.",
+      "created_at": "2026-05-21T22:14:28.894510Z"
+    },
+    {
+      "id": "9d81453e-7dd8-4734-9577-67a03add2d9c",
+      "author": "derek.norrbom",
+      "text": "Fixed sandbox ConsoleRunWorker secret-name mismatch:\n\n- Added configurable `configSecretName` input to `ConsoleChatResponderStack` and fallback resolution order:\n  1) explicit stack prop\n  2) `PLEXUS_CONFIG_SECRET_NAME` env var\n  3) derived `plexus/<environment>/config`\n- Updated backend to pass `PLEXUS_CONFIG_SECRET_NAME` (or derived fallback) when deploying ConsoleRunWorker.\n- Updated `start-sandbox-with-console-worker.sh` to accept `--config-secret-name` and export `PLEXUS_CONFIG_SECRET_NAME` for sandbox deployment.\n- Updated sandbox docs with explicit example for non-development secret names (e.g. `plexus/production/config`).\n\nValidation:\n- `cd dashboard && npx tsc --noEmit -p amplify/tsconfig.json`\n- `bash -n dashboard/scripts/start-sandbox-with-console-worker.sh dashboard/scripts/build-and-push-console-worker-image.sh`",
+      "created_at": "2026-05-21T22:25:50.769928Z"
     }
   ],
   "created_at": "2026-05-20T22:58:38.908847Z",
-  "updated_at": "2026-05-21T19:44:36.779133Z",
+  "updated_at": "2026-05-21T22:25:50.769928Z",
   "closed_at": null,
   "custom": {}
 }
