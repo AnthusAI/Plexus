@@ -6,7 +6,7 @@ is intentionally short. Canonical, token-efficient documentation lives in
 Plexus MCP server's `execute_tactus` tool.
 
 ## Repository rules
-
+<important if="you are writing or modifying code">
 These rules apply to every change, human or agent.
 
 - **Project management is mandatory.** Every source-code change must be
@@ -26,6 +26,7 @@ code exists only to make a failing specification pass.
 not diagnose runs from dispatcher state alone.
 - **Report persistence.** ReportBlock output goes to S3 attachments;
 DynamoDB stores only a compact metadata envelope.
+</important>
 
 ## How agents discover documentation
 
