@@ -55,6 +55,7 @@ echo ""
 # Seed script secrets (from .env)
 set_secret "PROD_API_URL" "PLEXUS_API_URL"
 set_secret "PROD_API_KEY" "PLEXUS_API_KEY"
+set_secret "PROD_ACCOUNT_KEY" "PLEXUS_ACCOUNT_KEY"
 set_secret "PROD_ACCOUNT_ID" "PLEXUS_ACCOUNT_UUID"
 
 # Optional seed configuration (defaults)

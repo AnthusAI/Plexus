@@ -7,11 +7,14 @@ export async function loadConfig(): Promise<SeedConfig> {
       'Account': {
         name: 'Account',
         strategy: 'full',
+        maxItems: 1,
         dependencies: []
       },
       'User': {
         name: 'User',
         strategy: 'full',
+        enabled: false,
+        maxItems: 0,
         dependencies: []
       },
 
@@ -19,21 +22,30 @@ export async function loadConfig(): Promise<SeedConfig> {
       'Scorecard': {
         name: 'Scorecard',
         strategy: 'full',
+        maxItems: 100,
         dependencies: ['Account']
       },
       'ScorecardSection': {
         name: 'ScorecardSection',
         strategy: 'full',
+        maxItems: 500,
+        maxPerParent: 25,
         dependencies: ['Scorecard']
       },
       'Score': {
         name: 'Score',
         strategy: 'full',
+        maxItems: 500,
+        maxPerParent: 25,
         dependencies: ['ScorecardSection', 'Scorecard']
       },
       'ScoreVersion': {
         name: 'ScoreVersion',
         strategy: 'full',
+        maxItems: 300,
+        maxPerParent: 3,
+        pageSize: 25,
+        preferFeatured: true,
         dependencies: ['Score', 'User']
       },
 
@@ -41,26 +53,32 @@ export async function loadConfig(): Promise<SeedConfig> {
       'ReportConfiguration': {
         name: 'ReportConfiguration',
         strategy: 'full',
+        maxItems: 25,
         dependencies: ['Account']
       },
       'ShareLink': {
         name: 'ShareLink',
         strategy: 'full',
+        maxItems: 25,
         dependencies: ['Account']
       },
       'DataSource': {
         name: 'DataSource',
         strategy: 'full',
+        maxItems: 50,
         dependencies: ['Account', 'Scorecard', 'Score']
       },
       'DataSourceVersion': {
         name: 'DataSourceVersion',
         strategy: 'full',
+        maxItems: 100,
+        maxPerParent: 2,
         dependencies: ['DataSource']
       },
       'Procedure': {
         name: 'Procedure',
         strategy: 'full',
+        maxItems: 12,
         dependencies: ['Account', 'Scorecard', 'Score', 'ScoreVersion']
       },
 
@@ -68,6 +86,7 @@ export async function loadConfig(): Promise<SeedConfig> {
       'Task': {
         name: 'Task',
         strategy: 'recent',
+        maxItems: 100,
         gsiName: 'byAccountAndUpdatedAt',
         gsiKey: 'accountId',
         sortKey: 'updatedAt',
@@ -76,6 +95,7 @@ export async function loadConfig(): Promise<SeedConfig> {
       'Evaluation': {
         name: 'Evaluation',
         strategy: 'recent',
+        maxItems: 250,
         gsiName: 'byAccountAndCreatedAt',
         gsiKey: 'accountId',
         sortKey: 'createdAt',
@@ -84,6 +104,7 @@ export async function loadConfig(): Promise<SeedConfig> {
       'Report': {
         name: 'Report',
         strategy: 'recent',
+        maxItems: 25,
         gsiName: 'byAccountAndCreatedAt',
         gsiKey: 'accountId',
         sortKey: 'createdAt',
@@ -92,6 +113,7 @@ export async function loadConfig(): Promise<SeedConfig> {
       'ChatSession': {
         name: 'ChatSession',
         strategy: 'recent',
+        maxItems: 25,
         gsiName: 'byAccountAndCreatedAt',
         gsiKey: 'accountId',
         sortKey: 'createdAt',
@@ -100,6 +122,7 @@ export async function loadConfig(): Promise<SeedConfig> {
       'AggregatedMetrics': {
         name: 'AggregatedMetrics',
         strategy: 'recent',
+        maxItems: 250,
         gsiName: 'byAccountRecordType',
         gsiKey: 'accountId',
         sortKey: 'timeRangeStart',
@@ -110,8 +133,9 @@ export async function loadConfig(): Promise<SeedConfig> {
       'Item': {
         name: 'Item',
         strategy: 'sampled',
-        recentCount: 1000,
-        sampleCount: 1000,
+        maxItems: 500,
+        recentCount: 250,
+        sampleCount: 250,
         gsiName: 'byAccountAndCreatedAt',
         gsiKey: 'accountId',
         sortKey: 'createdAt',
@@ -120,8 +144,10 @@ export async function loadConfig(): Promise<SeedConfig> {
       'ScoreResult': {
         name: 'ScoreResult',
         strategy: 'sampled',
-        recentCount: 1000,
-        sampleCount: 1000,
+        maxItems: 500,
+        maxPerParent: 5,
+        recentCount: 250,
+        sampleCount: 250,
         gsiName: 'byAccountAndCreatedAt',
         gsiKey: 'accountId',
         sortKey: 'createdAt',
@@ -130,8 +156,10 @@ export async function loadConfig(): Promise<SeedConfig> {
       'ScoringJob': {
         name: 'ScoringJob',
         strategy: 'sampled',
-        recentCount: 1000,
-        sampleCount: 1000,
+        maxItems: 300,
+        maxPerParent: 3,
+        recentCount: 150,
+        sampleCount: 150,
         gsiName: 'byAccountAndUpdatedAt',
         gsiKey: 'accountId',
         sortKey: 'updatedAt',
@@ -140,8 +168,10 @@ export async function loadConfig(): Promise<SeedConfig> {
       'FeedbackItem': {
         name: 'FeedbackItem',
         strategy: 'sampled',
-        recentCount: 1000,
-        sampleCount: 1000,
+        maxItems: 300,
+        maxPerParent: 5,
+        recentCount: 150,
+        sampleCount: 150,
         gsiName: 'byAccountAndUpdatedAt',
         gsiKey: 'accountId',
         sortKey: 'updatedAt',
@@ -152,16 +182,21 @@ export async function loadConfig(): Promise<SeedConfig> {
       'TaskStage': {
         name: 'TaskStage',
         strategy: 'recent',
+        maxItems: 100,
+        maxPerParent: 10,
         dependencies: ['Task']
       },
       'ReportBlock': {
         name: 'ReportBlock',
         strategy: 'recent',
+        maxItems: 100,
+        maxPerParent: 10,
         dependencies: ['Report', 'DataSet']
       },
       'ChatMessage': {
         name: 'ChatMessage',
         strategy: 'recent',
+        maxItems: 250,
         gsiName: 'byAccountAndCreatedAt',
         gsiKey: 'accountId',
         sortKey: 'createdAt',
@@ -170,13 +205,15 @@ export async function loadConfig(): Promise<SeedConfig> {
       'Identifier': {
         name: 'Identifier',
         strategy: 'sampled',
-        recentCount: 2000,
+        maxItems: 250,
+        recentCount: 250,
         sampleCount: 0,
         dependencies: ['Account', 'Item']
       },
       'DataSet': {
         name: 'DataSet',
         strategy: 'recent',
+        maxItems: 100,
         gsiName: 'byAccountAndCreatedAt',
         gsiKey: 'accountId',
         sortKey: 'createdAt',
@@ -185,6 +222,8 @@ export async function loadConfig(): Promise<SeedConfig> {
       'ScorecardExampleItem': {
         name: 'ScorecardExampleItem',
         strategy: 'full',
+        maxItems: 100,
+        maxPerParent: 10,
         dependencies: ['Scorecard', 'Item']
       }
     },

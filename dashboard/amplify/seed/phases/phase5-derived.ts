@@ -1,7 +1,7 @@
 import type { SeedContext } from '../types';
 import { recentCopy } from '../strategies/recent-copy';
 import { sampledCopy } from '../strategies/sampled-copy';
-import { fullCopy } from '../strategies/full-copy';
+import { fullCopyByParent } from '../strategies/full-copy';
 
 export async function seedPhase5(context: SeedContext): Promise<void> {
   const { sandboxClient, productionClient, accountId, daysRecent, config, logger } = context;
@@ -9,7 +9,7 @@ export async function seedPhase5(context: SeedContext): Promise<void> {
   logger.phase('Phase 5: Derived & Linked Data');
 
   // Report and related
-  await recentCopy(
+  context.copiedIds['Report'] = await recentCopy(
     config.tables['Report'],
     productionClient,
     sandboxClient,
@@ -18,7 +18,7 @@ export async function seedPhase5(context: SeedContext): Promise<void> {
     logger
   );
 
-  await recentCopy(
+  context.copiedIds['ChatSession'] = await recentCopy(
     config.tables['ChatSession'],
     productionClient,
     sandboxClient,
@@ -27,7 +27,7 @@ export async function seedPhase5(context: SeedContext): Promise<void> {
     logger
   );
 
-  await recentCopy(
+  context.copiedIds['ChatMessage'] = await recentCopy(
     config.tables['ChatMessage'],
     productionClient,
     sandboxClient,
@@ -36,7 +36,7 @@ export async function seedPhase5(context: SeedContext): Promise<void> {
     logger
   );
 
-  await recentCopy(
+  context.copiedIds['AggregatedMetrics'] = await recentCopy(
     config.tables['AggregatedMetrics'],
     productionClient,
     sandboxClient,
@@ -46,7 +46,7 @@ export async function seedPhase5(context: SeedContext): Promise<void> {
   );
 
   // DataSet (recent)
-  await recentCopy(
+  context.copiedIds['DataSet'] = await recentCopy(
     config.tables['DataSet'],
     productionClient,
     sandboxClient,
@@ -56,13 +56,15 @@ export async function seedPhase5(context: SeedContext): Promise<void> {
   );
 
   // ReportBlock (depends on Report + DataSet)
-  await recentCopy(
-    config.tables['ReportBlock'],
+  context.copiedIds['ReportBlock'] = await fullCopyByParent(
+    'ReportBlock',
+    context.copiedIds['Report'] || [],
+    'listReportBlockByReportIdAndPosition',
+    'reportId',
     productionClient,
     sandboxClient,
-    accountId,
-    daysRecent,
-    logger
+    logger,
+    config.tables['ReportBlock']
   );
 
   // Identifier (linked to Item)
@@ -76,15 +78,29 @@ export async function seedPhase5(context: SeedContext): Promise<void> {
   );
 
   // ScorecardExampleItem (links Scorecard + Item)
-  await fullCopy('ScorecardExampleItem', productionClient, sandboxClient, accountId, logger);
-
-  // TaskStage (linked to Task)
-  await recentCopy(
-    config.tables['TaskStage'],
+  context.copiedIds['ScorecardExampleItem'] = await fullCopyByParent(
+    'ScorecardExampleItem',
+    context.copiedIds['Scorecard'] || [],
+    'listScorecardExampleItemByScorecardIdAndAddedAt',
+    'scorecardId',
     productionClient,
     sandboxClient,
-    accountId,
-    daysRecent,
-    logger
+    logger,
+    {
+      ...config.tables['ScorecardExampleItem'],
+      queryArgs: { sortDirection: 'DESC' }
+    }
+  );
+
+  // TaskStage (linked to Task)
+  context.copiedIds['TaskStage'] = await fullCopyByParent(
+    'TaskStage',
+    context.copiedIds['Task'] || [],
+    'listTaskStageByTaskId',
+    'taskId',
+    productionClient,
+    sandboxClient,
+    logger,
+    config.tables['TaskStage']
   );
 }

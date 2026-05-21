@@ -1,0 +1,205 @@
+{
+  "id": "plx-cefa9df9-a5c2-4293-8a4e-74dd39647585",
+  "title": "Fix sandbox seed entrypoint execution",
+  "description": "Running `npx ampx sandbox seed` reports success almost immediately, but the seed logic does not run and no data is written. Investigation shows the Amplify CLI imports `amplify/seed/seed.ts` for top-level execution; the current file only exports an async default function that is never invoked.\n\nBehavior expectation:\n\nFeature: Sandbox seed entrypoint execution\n\nScenario: Developer runs Amplify sandbox seed\nGiven the dashboard Amplify sandbox exists\nWhen the developer runs `npx ampx sandbox seed`\nThen the Plexus seed phases execute\nAnd observable seed logging is emitted\nAnd failures from the seed phases cause the command to fail.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7c6d1b0-17f5-4145-9017-a78e999422d2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2e9b7226-ed60-46c5-89a0-1f394d4f8fd1",
+      "author": "derek.norrbom",
+      "text": "Identified root cause: installed @aws-amplify/backend-cli sandbox seed command imports amplify/seed/seed.ts via tsx tsImport and does not call a default export. Updated dashboard/amplify/seed/seed.ts to invoke seed() at top level so npx ampx sandbox seed actually runs the orchestrator.",
+      "created_at": "2026-05-20T22:58:53.966599Z"
+    },
+    {
+      "id": "8c1f0048-3dd2-467e-bff5-90c9c56ca7a2",
+      "author": "derek.norrbom",
+      "text": "Follow-up from user run: seed now starts but tsx reported ReferenceError: cannot determine module format because require() and top-level await are both present. Replaced the debug log require('fs') call with an ESM import from node:fs while keeping await seed() so async failures still propagate to ampx.",
+      "created_at": "2026-05-20T23:00:23.412599Z"
+    },
+    {
+      "id": "b08cfdb6-5716-4f8c-b87a-af28c3ed610a",
+      "author": "derek.norrbom",
+      "text": "Follow-up from user run: seed reached createAndSignUpUser and failed with AuthUserPoolException because Amplify was not configured. Added Amplify.configure(JSON.parse(await readFile(new URL('../../amplify_outputs.json', import.meta.url)))) before Auth/Data seed setup, matching Amplify's documented seed script pattern. TypeScript check passes with npx tsc --noEmit -p amplify/tsconfig.json.",
+      "created_at": "2026-05-20T23:02:12.715146Z"
+    },
+    {
+      "id": "33d1b2b2-d21e-4ae8-9f83-acf3ecf550b5",
+      "author": "derek.norrbom",
+      "text": "Additional safety fix: isolated sandbox and production data clients with separate AmplifyClassV6 instances. The singleton Amplify remains configured for sandbox Auth, while createSandboxClient(outputs) and createProductionClient(prodUrl, prodKey, outputs) generate clients bound to their own configs. This prevents the production client setup from overwriting the sandbox data client before copy phases run. Validation: npx tsc --noEmit -p amplify/tsconfig.json; runtime utility import check passed with npx tsx.",
+      "created_at": "2026-05-20T23:03:53.088221Z"
+    },
+    {
+      "id": "66c6ca7c-a5f4-4e76-9289-afef189a9b9c",
+      "author": "derek.norrbom",
+      "text": "Follow-up from user run: all copy strategies failed because `productionClient.models` was the empty proxy. Local reproduction confirmed the sandbox client had models but the production client did not.\n\nRoot cause: `createProductionClient` passed a partial lower-case `data` outputs object. Without a full Amplify outputs envelope/version, Amplify did not parse it into `API.GraphQL`.\n\nFix: configure the production client with a ResourcesConfig-shaped `API.GraphQL` object directly, including endpoint, region, apiKey, defaultAuthMode, and sandbox model introspection.\n\nValidation:\n- Sandbox and production client local model access checks pass.\n- `npx tsc --noEmit -p amplify/tsconfig.json` passes.",
+      "created_at": "2026-05-21T15:16:05.279989Z"
+    },
+    {
+      "id": "ba9e0b0c-4e65-43ee-93c1-177121d99f03",
+      "author": "derek.norrbom",
+      "text": "Follow-up from user run: seeding no longer errored, but all production fetches returned 0. Root causes addressed:\n\n- `fullCopy` filtered every model with `accountId`, which excludes `Account` itself and is invalid for relationship-only models like `ScorecardSection`, `Score`, and `ScoreVersion`.\n- Account-scoped models were using `list({ filter })`, causing DynamoDB/AppSync scans that can page through empty filtered results.\n\nChanges:\n- Added `amplify/seed/utils/model-queries.ts`.\n- `Account` is fetched with `get({ id: PROD_ACCOUNT_ID })`.\n- Models with generated account indexes use methods like `listScorecardByAccountId`.\n- Models without account indexes use unfiltered list instead of an invalid `accountId` filter.\n- If the production account id is not found, `fullCopy('Account')` now throws instead of letting the seed continue with 0 rows.\n\nValidation: `npx tsc --noEmit -p amplify/tsconfig.json` passes.",
+      "created_at": "2026-05-21T15:19:42.506322Z"
+    },
+    {
+      "id": "57d9d8d1-fd12-448b-8fe3-41f481ce7964",
+      "author": "derek.norrbom",
+      "text": "Follow-up from user run:\n\nObserved:\n- `PROD_ACCOUNT_ID` appeared in logs with a line break before \"was not found\", indicating the secret value likely included a trailing newline.\n- Sandbox writes failed with `No federated jwt`, because `createSandboxClient` used a separate `AmplifyClassV6` instance that did not share the Auth session created by `createAndSignUpUser` / `signInUser`.\n\nChanges:\n- Added `getTrimmedSecret()` and now trim all sandbox seed secrets before use, including `PROD_ACCOUNT_ID`, API URL/key, seed password, `DAYS_RECENT`, and `INCLUDE_S3_SYNC`.\n- Changed `createSandboxClient()` back to the configured/signed-in Amplify singleton via `aws-amplify/data`.\n- Kept production reads isolated in a separate Amplify instance so production config does not overwrite the signed-in sandbox singleton.\n- Made a missing production Account fatal instead of allowing the seed to continue after `Account` fails.\n\nValidation:\n- `npx tsc --noEmit -p amplify/tsconfig.json` passes.\n- Local sandbox model generation check passes after configuring Amplify from `amplify_outputs.json`.",
+      "created_at": "2026-05-21T15:24:38.127011Z"
+    },
+    {
+      "id": "d7ee2f80-ea93-462b-9280-5c8d31d5346c",
+      "author": "derek.norrbom",
+      "text": "Follow-up from user run: existing seed user sign-in failed with `NotAuthorizedException: Incorrect username or password`.\n\nRoot cause: previous runs created `sandbox-seed@plexus.internal` with a different password. The generated seed policy grants Cognito AdminCreateUser/AdminAddUserToGroup, but not password reset, so the script cannot repair that fixed user in place.\n\nChange: derive a stable seed username from the current `SEED_USER_PASSWORD` (`sandbox-seed-<sha256-prefix>@plexus.internal`). A changed seed password creates a new sandbox-only seed user; subsequent runs with the same password reuse and sign in that user.\n\nValidation: `npx tsc --noEmit -p amplify/tsconfig.json` passes.",
+      "created_at": "2026-05-21T15:26:12.188047Z"
+    },
+    {
+      "id": "05dddebc-fa1b-4754-a6c8-fc56b1e686c0",
+      "author": "derek.norrbom",
+      "text": "Course correction after user feedback:\n\n- Removed the unsafe fallback that listed relationship-only tables without an account scope. That was the source of misleading \"found items\" output for tables like ScorecardSection; those rows were not proven to belong to the requested account.\n- `Account` lookup now reports up to 10 visible account ids/keys from the configured production API when `PROD_ACCOUNT_ID` is not found. This should distinguish \"wrong account id\" from \"wrong production API/key\" quickly.\n- Tables without an account-scoped query now fail/skip rather than scanning all production rows.\n\nValidation: `npx tsc --noEmit -p amplify/tsconfig.json` passes.",
+      "created_at": "2026-05-21T15:31:42.693462Z"
+    },
+    {
+      "id": "0e92332d-678e-48a9-bc40-5115c3295a2d",
+      "author": "derek.norrbom",
+      "text": "Follow-up from account diagnostic:\n\nThe production API is valid and exposes `call-criteria` as account id `9c929f25-a91f-4db7-8943-5aa93498b8e9`, but the sandbox secret `PROD_ACCOUNT_ID` contains `cfe03a18-8e2f-4c51-91bd-5d3b0581a30b`.\n\nChanges:\n- Added account resolution helpers in `amplify/seed/utils/model-queries.ts`.\n- Seed now reads optional `PROD_ACCOUNT_KEY` and resolves it against production before seeding.\n- If `PROD_ACCOUNT_KEY` and `PROD_ACCOUNT_ID` disagree, the key-resolved account wins and a warning is logged.\n- `dashboard/scripts/setup-sandbox-secrets.sh` now sets `PROD_ACCOUNT_KEY` from `PLEXUS_ACCOUNT_KEY`.\n\nValidation: `npx tsc --noEmit -p amplify/tsconfig.json` passes.",
+      "created_at": "2026-05-21T15:35:38.292345Z"
+    },
+    {
+      "id": "28339013-45ec-4541-8271-fad8862389b4",
+      "author": "derek.norrbom",
+      "text": "Follow-up from user report: seed logs showed copied counts, but sandbox tables appeared empty.\n\nConcern: Amplify model mutations can return `{ errors }` without throwing, and the strategies were incrementing copied counts after `await create(...)` without inspecting the returned result.\n\nChanges:\n- Added `amplify/seed/utils/write-result.ts`.\n- All copy strategies now require create results to have no `errors` and non-null `data` before incrementing copied counts.\n- Each strategy records created IDs and performs a post-copy read-back sample from the sandbox client, logging either `Verified created item ...` or a specific verification warning.\n\nValidation: `npx tsc --noEmit -p amplify/tsconfig.json` passes.",
+      "created_at": "2026-05-21T15:44:09.186038Z"
+    },
+    {
+      "id": "5c38adab-c421-482c-8a50-83fc2854a6a5",
+      "author": "derek.norrbom",
+      "text": "Follow-up from real write failures:\n\nObserved:\n- Account create returned DynamoDB conditional failure, meaning that row already exists in the sandbox.\n- Scorecard creates failed with vague GraphQL coercion errors for non-null String fields.\n\nChange:\n- Added schema-aware create input builder in `amplify/seed/utils/create-input.ts` using sandbox `amplify_outputs.json` model introspection.\n- Create inputs now include only non-association model fields, omit metadata fields (`createdAt`, `updatedAt`, `owner`), omit optional null/undefined fields, and report exact required fields that are null/missing before calling AppSync.\n- Copy strategies now pass raw source items to `createItem`; input shaping is centralized.\n\nValidation: `npx tsc --noEmit -p amplify/tsconfig.json` passes.",
+      "created_at": "2026-05-21T15:46:07.650351Z"
+    },
+    {
+      "id": "6ace4a4c-7b7c-43f6-b9f5-83e2b643c62b",
+      "author": "derek.norrbom",
+      "text": "Follow-up from verified Scorecard writes:\n\nObserved:\n- Scorecard rows are now genuinely written and verified.\n- Child hierarchy tables (`ScorecardSection`, `Score`, `ScoreVersion`) lacked direct `accountId` indexes, so account-scoped copy intentionally skipped them.\n- Reruns after partial seeding also need existing parent rows to count as available for child traversal.\n\nChanges:\n- Added `copiedIds` to `SeedContext` to carry IDs between phases.\n- `fullCopy` now returns created/existing IDs instead of a count.\n- Added `fullCopyByParent` for parent-index traversal.\n- Phase 2 now copies:\n  - Scorecard by account\n  - ScorecardSection by each copied Scorecard ID\n  - Score by each copied Scorecard ID\n  - ScoreVersion by each copied Score ID\n- Conditional-create failures for existing IDs are treated as idempotent success for ID tracking.\n\nValidation: `npx tsc --noEmit -p amplify/tsconfig.json` passes.",
+      "created_at": "2026-05-21T15:50:20.533747Z"
+    },
+    {
+      "id": "b417160f-2080-4d49-b7c3-fea993a706be",
+      "author": "derek.norrbom",
+      "text": "Follow-up from ScoreVersion partial copy:\n\nObserved: historical production ScoreVersion rows can have null `isFeatured`, while the current sandbox create input requires it.\n\nChange: `buildCreateInput` now normalizes missing/null `ScoreVersion.isFeatured` to the string `'false'`, matching the dashboard and Python score creation code paths that use string values (`'true'` / `'false'`) for score version pin state.\n\nValidation: `npx tsc --noEmit -p amplify/tsconfig.json` passes.",
+      "created_at": "2026-05-21T16:07:31.683039Z"
+    },
+    {
+      "id": "880a9232-2c78-4abf-8139-7bd0b36baedb",
+      "author": "derek.norrbom",
+      "text": "Added local seed contract coverage to reduce manual sandbox iteration:\n\n- New Jest suite: `amplify/seed/utils/seed-contract.test.ts`.\n- Covers account-scoped config against model introspection, account-index query resolver behavior for exact and `ByAccountIdAnd...` generated methods, parent-scoped model presence, `ScoreVersion.isFeatured` normalization, and required field rejection.\n- The first test run caught a real bug: `create-input.ts` was reading `dashboard/amplify/amplify_outputs.json` while the seed runtime uses `dashboard/amplify_outputs.json`. Fixed the path to `../../../amplify_outputs.json`.\n- Expanded account query resolution to accept generated methods like `listTaskByAccountIdAndUpdatedAt`, `listDataSourceByAccountIdAndKey`, `listItemByAccountIdAndCreatedAt`, and `listScoreResultByAccountIdAndUpdatedAt`, not just exact `list<Model>ByAccountId`.\n\nValidation:\n- `npx jest amplify/seed/utils/seed-contract.test.ts --runInBand` passes.\n- `npx tsc --noEmit -p amplify/tsconfig.json` passes.",
+      "created_at": "2026-05-21T16:14:47.659314Z"
+    },
+    {
+      "id": "0c278d1a-84e3-4954-b92e-e39943928c51",
+      "author": "derek.norrbom",
+      "text": "Follow-up scope control notes from live seed run:\n\n- ScoreVersion volume should be reduced. We do not need every historical score version in a sandbox seed. Target behavior should copy the champion/pinned version plus a small number of recent versions per Score.\n- Procedure volume should be capped. Current run copied roughly 1603 Procedure records, which is more than needed for a useful development sandbox. Target behavior should copy around a dozen relevant/recent Procedure records unless a specific workflow requires more.\n- Evaluation volume should be capped. Current run reported over 5000 Evaluation records copied, which is too much for the default sandbox seed. Target behavior should sample or limit Evaluation records to a practical development subset.\n\nThese are follow-up tuning items after the seed flow is functionally correct. They should become explicit config knobs or table strategy updates rather than ad hoc hard-coded behavior.",
+      "created_at": "2026-05-21T17:40:18.741917Z"
+    },
+    {
+      "id": "2c61d8b8-1b25-4ce8-b3fb-bc1c371e0f96",
+      "author": "derek.norrbom",
+      "text": "Additional live-run finding:\n\n`DataSourceVersion` currently logs `No account-scoped query is configured for DataSourceVersion` and copies 0 rows. This is expected with the current generic account-scoped strategy because `DataSourceVersion` is scoped through `dataSourceId`, not `accountId`.\n\nFollow-up fix: after copying `DataSource`, carry copied DataSource IDs in `context.copiedIds['DataSource']` and copy versions via `listDataSourceVersionByDataSourceIdAndCreatedAt` using the parent-scoped traversal helper. Consider limiting to the featured/current version plus a small number of recent versions, similar to the planned ScoreVersion cap.",
+      "created_at": "2026-05-21T17:41:29.178910Z"
+    },
+    {
+      "id": "35c1d00b-a779-4b4b-9d5e-394013fa961b",
+      "author": "derek.norrbom",
+      "text": "Additional live-run finding:\n\n`ScoreResult` sampled copy is failing for historical rows with:\n\n`When creating any part of the composite sort key for @index 'byTypeStatusUpdated', you must provide all fields for the key. Missing key: 'status'.`\n\nThis indicates current sandbox schema/index requirements expect `ScoreResult.status` when `type`/`updatedAt` are present, but some production rows have missing status.\n\nFollow-up options:\n- Add a seed normalization rule for `ScoreResult.status` with a safe default if the application semantics allow it.\n- Or filter out historical ScoreResult rows that are missing required composite-index fields.\n- Add this to seed contract tests with a representative historical ScoreResult fixture so the issue is caught locally.",
+      "created_at": "2026-05-21T18:01:23.488591Z"
+    },
+    {
+      "id": "b541183a-759a-451d-9575-3ad2fd226b9e",
+      "author": "derek.norrbom",
+      "text": "Seed sizing requirement from live run:\n\nThe default sandbox seed must prioritize fast, representative app validation over production-scale data volume. Current run has been running 30-60 minutes and tables like AggregatedMetrics, ChatSession, Evaluation, Procedure, and ScoreVersion can pull thousands of records.\n\nFollow-up requirement:\n- Add explicit volume knobs per strategy/table, with conservative defaults.\n- Default seed should copy enough data to verify UI/workflows, not exhaustive production history.\n- Suggested defaults:\n  - ScoreVersion: champion/pinned plus a few recent versions per Score.\n  - Procedure: around a dozen relevant/recent records.\n  - Evaluation: capped/sample subset, likely hundreds at most, not thousands.\n  - AggregatedMetrics: recent narrow window or small cap by metric type.\n  - ChatSession/ChatMessage: small number of recent sessions plus bounded messages per session.\n  - ScoreResult/Item/FeedbackItem/ScoringJob: bounded sampled sets with dependency-aware selection.\n- Make limits configurable via sandbox secrets or seed config, e.g. MAX_RECENT_PER_TABLE, MAX_SAMPLE_PER_TABLE, MAX_SCORE_VERSIONS_PER_SCORE, MAX_CHAT_SESSIONS, MAX_MESSAGES_PER_SESSION.\n- Add contract tests for default caps so future changes do not accidentally restore production-scale seeding.\n\nDefinition of done for tuning: default seed should complete in minutes, not tens of minutes, while leaving enough records to validate dashboard navigation and common workflows.",
+      "created_at": "2026-05-21T18:03:47.259208Z"
+    },
+    {
+      "id": "d6411d58-c3bc-4e89-b10b-b8e5fb7234de",
+      "author": "derek.norrbom",
+      "text": "Implementing bounded sandbox seed defaults before committing: cap high-volume tables, wire table limits into copy strategies/phases, and add contract tests so future schema/config changes fail fast instead of requiring long manual seed runs.",
+      "created_at": "2026-05-21T18:28:00.162620Z"
+    },
+    {
+      "id": "c47e1570-8f8f-4667-9e4b-21b9da412e10",
+      "author": "derek.norrbom",
+      "text": "Implemented bounded seed behavior and contract coverage:\n\n- Added explicit maxItems/maxPerParent defaults across all enabled tables, with User disabled until a scoped user strategy exists.\n- Enforced caps in full, recent, and sampled strategies using attempted candidate counts so dirty rows cannot cause unbounded scans.\n- Stored copied ids from phases so parent-only models use generated parent indexes instead of account-scoped queries.\n- Routed DataSourceVersion, ReportBlock, TaskStage, and ScorecardExampleItem through parent traversal.\n- Capped ScoreVersion to featured/preferred plus recent candidates per score and sorted parent queries newest-first where supported.\n- Normalized legacy ScoreResult status to avoid composite key creation failures on historical rows.\n- Added seed contract tests for bounded config, high-volume caps, sampled count limits, parent-scoped model docs, and legacy normalization.\n\nValidation:\n- cd dashboard && npx jest amplify/seed/utils/seed-contract.test.ts --runInBand\n- cd dashboard && npx tsc --noEmit -p amplify/tsconfig.json",
+      "created_at": "2026-05-21T18:31:43.039550Z"
+    },
+    {
+      "id": "2db0f88f-d773-4c2c-b213-a7ff6eed46da",
+      "author": "derek.norrbom",
+      "text": "Backend stack gating decision confirmed for commit scope:\n\n`dashboard/amplify/backend.ts` changes are intentional for sandbox seeding. The sandbox workflow only needs Auth/Data/API resources for seed execution and data validation. TaskDispatcher, ConsoleChatResponder worker, and TopicMemoryVectorStore depend on external Celery/SQS/image/vector infrastructure that is not currently provisioned for local Amplify sandboxes. Keeping those stacks required in sandbox blocks the seeding workflow on infrastructure outside the seed problem.\n\nDecision for this branch: include the sandbox guard in the seeding work so `ampx sandbox`/`ampx sandbox seed` can run without CELERY_* and CONSOLE_WORKER_IMAGE_URI. Non-sandbox deployments should still require the production worker env vars and create those stacks.\n\nFollow-up if full app parity is required in sandboxes: provision sandbox worker image/Celery/vector resources, then remove or narrow the sandbox guard.",
+      "created_at": "2026-05-21T18:42:21.609014Z"
+    },
+    {
+      "id": "672db42d-5f64-422f-8ad7-092a9994998f",
+      "author": "derek.norrbom",
+      "text": "Follow-up from bounded live run: `ScoreResult` can still hit current-schema composite index validation on legacy rows. Example: `byItemScorecardScore` requires `scoreId` when creating a row with `itemId`/`scorecardId`, but some historical production rows have no scoreId. We should not synthesize relationship ids. Seed should filter/skip rows that cannot satisfy current composite index contracts and report them as skipped rather than failed writes.",
+      "created_at": "2026-05-21T18:53:31.134617Z"
+    },
+    {
+      "id": "306312ab-2973-4922-b2f7-9b6b874acf85",
+      "author": "derek.norrbom",
+      "text": "Fixed the live-run `ScoreResult` composite-index failure:\n\n- Added a schema-aware preflight in `buildCreateInput` that inspects model key attributes and skips items with incomplete non-timestamp composite index fields.\n- This intentionally skips legacy `ScoreResult` rows missing `scoreId` instead of inventing a relationship id.\n- Strategies now log skipped items separately from failed writes.\n- Added a regression test for historical `ScoreResult` rows missing `scoreId`.\n\nValidation:\n- cd dashboard && npx jest amplify/seed/utils/seed-contract.test.ts --runInBand\n- cd dashboard && npx tsc --noEmit -p amplify/tsconfig.json",
+      "created_at": "2026-05-21T18:54:36.411014Z"
+    },
+    {
+      "id": "1074f901-8ee3-4458-ba23-bfcbf729b1c4",
+      "author": "derek.norrbom",
+      "text": "Follow-up from bounded live run: `AggregatedMetrics` logs `Failed to copy item undefined: conditional request failed`. This model has a custom primary key (`accountId`, `compositeKey`) rather than `id`, so current idempotent existing-row handling and log labels only work for normal id-based models. Fix should use model introspection primaryKeyInfo to identify existing custom-key rows and produce useful item labels.",
+      "created_at": "2026-05-21T18:55:47.945459Z"
+    },
+    {
+      "id": "654dc92c-9510-451c-a379-7f72342d51fc",
+      "author": "derek.norrbom",
+      "text": "Fixed custom-primary-key idempotency for `AggregatedMetrics`:\n\n- Added primary-key helpers backed by model introspection.\n- Conditional create failures are now treated as idempotent success for both normal `id` models and custom-key models such as `AggregatedMetrics` (`accountId`, `compositeKey`).\n- Strategy logs now label items by their real primary key instead of `undefined`.\n- Narrowed composite-index skip logic so optional secondary indexes are only enforced when their partition key is present.\n- Added contract coverage for `AggregatedMetrics` custom primary key handling.\n\nValidation:\n- cd dashboard && npx jest amplify/seed/utils/seed-contract.test.ts --runInBand\n- cd dashboard && npx tsc --noEmit -p amplify/tsconfig.json",
+      "created_at": "2026-05-21T18:56:41.651224Z"
+    },
+    {
+      "id": "7ab2731f-656e-41d9-8b33-ecb8720c58dd",
+      "author": "derek.norrbom",
+      "text": "Follow-up from bounded live run: `Item` copied 0 rows while `ScoreResult` found historical rows. The shown `ScoreResult` skips are due to incomplete composite-index fields, not directly because `Item` copied 0. However, copying ScoreResult independently of copied Items can create an inconsistent sandbox. Next fix should make dependent sampled tables respect copied parent ids, at minimum skipping ScoreResult when no Items were copied, and preferably copying ScoreResults by copied Item ids when possible. Also investigate why account-scoped Item sampling returns 0 for call-criteria while related ScoreResult/ScoringJob rows exist.",
+      "created_at": "2026-05-21T19:06:43.854903Z"
+    },
+    {
+      "id": "1b038e4e-5bcf-4e72-b7fa-e1fc026d3161",
+      "author": "derek.norrbom",
+      "text": "Tightened phase 4 dependency handling after Item copied 0 records:\n\n- `sampledCopy` now returns created/existing ids like `fullCopy` and `recentCopy`.\n- Phase 4 records copied Item ids in context.\n- ScoringJob, ScoreResult, and FeedbackItem now skip when no Items were copied instead of creating orphaned records that reference missing Items.\n\nThis does not yet explain why Item returned 0 for call-criteria, but it makes the default seed consistent and prevents downstream tables from producing misleading partial data.\n\nValidation:\n- cd dashboard && npx jest amplify/seed/utils/seed-contract.test.ts --runInBand\n- cd dashboard && npx tsc --noEmit -p amplify/tsconfig.json",
+      "created_at": "2026-05-21T19:07:17.510814Z"
+    },
+    {
+      "id": "aa71d9aa-1a04-4fd2-84a6-b4b0b165853f",
+      "author": "derek.norrbom",
+      "text": "Investigating why Item returns 0 for call-criteria. Likely root cause is that the generic account/time sampled strategy is the wrong selection mechanism for Item: Item has many associations and may not have useful createdAt/updatedAt values in the account indexes for this production data. Desired direction is dependency-aware Item sampling: choose a small representative set of Items from related records we already intend to copy (ScoringJob/Evaluation/ScoreResult/FeedbackItem), then copy only those Items and their bounded related rows.",
+      "created_at": "2026-05-21T19:18:48.733946Z"
+    },
+    {
+      "id": "b984d6d1-2e2d-48f0-96ba-a5b99c325301",
+      "author": "derek.norrbom",
+      "text": "Changed Item seeding to dependency-aware sampling:\n\n- Generic account/time sampling returned 0 Items for call-criteria, even though ScoringJob rows referenced Items.\n- Phase 4 now samples ScoringJob records first, extracts their itemId values, and copies those Items by primary id.\n- ScoringJob, ScoreResult, and FeedbackItem are then copied through copied Item ids using parent queries (`listScoringJobByItemId`, `listScoreResultByItemId`, `listFeedbackItemByItemId`) with per-parent caps.\n- This makes the sandbox slice relationship-consistent and avoids blind Item scans over a large/complex table.\n\nValidation:\n- cd dashboard && npx jest amplify/seed/utils/seed-contract.test.ts --runInBand\n- cd dashboard && npx tsc --noEmit -p amplify/tsconfig.json",
+      "created_at": "2026-05-21T19:20:02.618977Z"
+    },
+    {
+      "id": "aebdf2f3-8eb9-455c-b042-e55ca548c4c5",
+      "author": "derek.norrbom",
+      "text": "Successful bounded live run reported by user:\n\n`Sandbox seeding completed successfully` in 870.7s after dependency-aware Item sampling was added.\n\nCommit prep:\n- Include backend sandbox gating, seed orchestration/strategy fixes, seed contract tests, sandbox docs, setup script updates, and Kanbus records.\n- Do not commit generated `dashboard/seed-policy.json` because it contains account/sandbox-specific ARNs; added it to `dashboard/.gitignore`.",
+      "created_at": "2026-05-21T19:44:36.779133Z"
+    }
+  ],
+  "created_at": "2026-05-20T22:58:38.908847Z",
+  "updated_at": "2026-05-21T19:44:36.779133Z",
+  "closed_at": null,
+  "custom": {}
+}

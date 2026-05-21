@@ -1,24 +1,64 @@
 import type { SeedContext } from '../types';
-import { fullCopy } from '../strategies/full-copy';
+import { fullCopy, fullCopyByParent } from '../strategies/full-copy';
 
 export async function seedPhase3(context: SeedContext): Promise<void> {
-  const { sandboxClient, productionClient, accountId, logger } = context;
+  const { sandboxClient, productionClient, accountId, config, logger } = context;
 
   logger.phase('Phase 3: Reference Data');
 
   // These can potentially run in parallel, but we'll run sequentially for simplicity
   // ReportConfiguration (references Account)
-  await fullCopy('ReportConfiguration', productionClient, sandboxClient, accountId, logger);
+  context.copiedIds['ReportConfiguration'] = await fullCopy(
+    'ReportConfiguration',
+    productionClient,
+    sandboxClient,
+    accountId,
+    logger,
+    config.tables['ReportConfiguration']
+  );
 
   // ShareLink (references Account)
-  await fullCopy('ShareLink', productionClient, sandboxClient, accountId, logger);
+  context.copiedIds['ShareLink'] = await fullCopy(
+    'ShareLink',
+    productionClient,
+    sandboxClient,
+    accountId,
+    logger,
+    config.tables['ShareLink']
+  );
 
   // DataSource (references Account + Scorecard + Score)
-  await fullCopy('DataSource', productionClient, sandboxClient, accountId, logger);
+  context.copiedIds['DataSource'] = await fullCopy(
+    'DataSource',
+    productionClient,
+    sandboxClient,
+    accountId,
+    logger,
+    config.tables['DataSource']
+  );
 
   // DataSourceVersion (references DataSource)
-  await fullCopy('DataSourceVersion', productionClient, sandboxClient, accountId, logger);
+  context.copiedIds['DataSourceVersion'] = await fullCopyByParent(
+    'DataSourceVersion',
+    context.copiedIds['DataSource'] || [],
+    'listDataSourceVersionByDataSourceIdAndCreatedAt',
+    'dataSourceId',
+    productionClient,
+    sandboxClient,
+    logger,
+    {
+      ...config.tables['DataSourceVersion'],
+      queryArgs: { sortDirection: 'DESC' }
+    }
+  );
 
   // Procedure (references Account + Scorecard + Score + ScoreVersion)
-  await fullCopy('Procedure', productionClient, sandboxClient, accountId, logger);
+  context.copiedIds['Procedure'] = await fullCopy(
+    'Procedure',
+    productionClient,
+    sandboxClient,
+    accountId,
+    logger,
+    config.tables['Procedure']
+  );
 }

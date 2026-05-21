@@ -1,24 +1,32 @@
-import { Amplify } from 'aws-amplify';
-import { generateClient } from 'aws-amplify/data';
+import { AmplifyClassV6 } from '@aws-amplify/core';
+import { generateClient } from '@aws-amplify/api-graphql/internals';
+import type { ModelIntrospectionSchema } from '@aws-amplify/core/internals/utils';
 import type { Schema } from '../../data/resource';
 
-export function createProductionClient(apiUrl: string, apiKey: string) {
+type AmplifyOutputs = {
+  data?: {
+    model_introspection?: ModelIntrospectionSchema;
+  };
+};
+
+export function createProductionClient(apiUrl: string, apiKey: string, sandboxOutputs: AmplifyOutputs) {
   // Extract region from API URL
   // Format: https://{api-id}.appsync-api.{region}.amazonaws.com/graphql
   const urlParts = apiUrl.split('.');
   const region = urlParts.length >= 3 ? urlParts[2] : 'us-east-1';
 
-  // Configure Amplify to point to production
-  Amplify.configure({
+  const amplify = new AmplifyClassV6();
+  amplify.configure({
     API: {
       GraphQL: {
         endpoint: apiUrl,
-        region: region,
+        region,
         defaultAuthMode: 'apiKey',
-        apiKey: apiKey
+        apiKey,
+        modelIntrospection: sandboxOutputs.data?.model_introspection
       }
     }
-  }, { ssr: false });
+  });
 
-  return generateClient<Schema>();
+  return generateClient<Schema>({ amplify });
 }
