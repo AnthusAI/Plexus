@@ -220,10 +220,25 @@
       "author": "derek.norrbom",
       "text": "Fixed sandbox ConsoleRunWorker secret-name mismatch:\n\n- Added configurable `configSecretName` input to `ConsoleChatResponderStack` and fallback resolution order:\n  1) explicit stack prop\n  2) `PLEXUS_CONFIG_SECRET_NAME` env var\n  3) derived `plexus/<environment>/config`\n- Updated backend to pass `PLEXUS_CONFIG_SECRET_NAME` (or derived fallback) when deploying ConsoleRunWorker.\n- Updated `start-sandbox-with-console-worker.sh` to accept `--config-secret-name` and export `PLEXUS_CONFIG_SECRET_NAME` for sandbox deployment.\n- Updated sandbox docs with explicit example for non-development secret names (e.g. `plexus/production/config`).\n\nValidation:\n- `cd dashboard && npx tsc --noEmit -p amplify/tsconfig.json`\n- `bash -n dashboard/scripts/start-sandbox-with-console-worker.sh dashboard/scripts/build-and-push-console-worker-image.sh`",
       "created_at": "2026-05-21T22:25:50.769928Z"
+    },
+    {
+      "id": "677f4adf-0a3e-4a2d-b8b5-02c51772bfe3",
+      "author": "derek.norrbom",
+      "text": "CI regression triage started: GitHub Actions failing on dashboard npm ci with lock mismatch (Missing: jsonschema@1.4.1). Reproducing locally with npm ci --include=optional, then regenerating dashboard/package-lock.json in a deterministic way and re-running npm ci to verify.",
+      "created_at": "2026-05-21T23:22:24.507544Z"
+    },
+    {
+      "id": "968d732f-fe19-4e25-9106-8f582a9bf8f2",
+      "author": "derek.norrbom",
+      "text": "CI lockfile fix completed for dashboard:\n\n- Reproduced failure locally in dashboard with npm ci include optional: Missing jsonschema 1.4.1 from lock file.\n- Regenerated lock with CI-aligned Node 20 npm using package-lock-only in dashboard.\n- Lock now includes missing bundled path under aws-cdk-lib cloud-assembly-api jsonschema 1.4.1.\n- Validation passed by rerunning npm ci include optional in dashboard with the same retry flags used in CI.",
+      "created_at": "2026-05-21T23:25:06.263298Z"
     }
   ],
   "created_at": "2026-05-20T22:58:38.908847Z",
-  "updated_at": "2026-05-21T22:25:50.769928Z",
+  "updated_at": "2026-05-21T23:25:09.745840Z",
   "closed_at": null,
-  "custom": {}
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }
