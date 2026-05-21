@@ -22,13 +22,7 @@ type ModelIntrospection = {
   }>;
 };
 
-const outputs = JSON.parse(
-  readFileSync(new URL('../../../amplify_outputs.json', import.meta.url), { encoding: 'utf8' })
-) as {
-  data?: {
-    model_introspection?: ModelIntrospection;
-  };
-};
+let cachedModelIntrospection: ModelIntrospection | null = null;
 
 const metadataFields = new Set(['createdAt', 'updatedAt', 'owner']);
 const autoTimestampFields = new Set(['createdAt', 'updatedAt']);
@@ -38,6 +32,27 @@ export class SkippedSeedItemError extends Error {
     super(message);
     this.name = 'SkippedSeedItemError';
   }
+}
+
+function getModelIntrospection(): ModelIntrospection {
+  if (cachedModelIntrospection) {
+    return cachedModelIntrospection;
+  }
+
+  const outputs = JSON.parse(
+    readFileSync(new URL('../../../amplify_outputs.json', import.meta.url), { encoding: 'utf8' })
+  ) as {
+    data?: {
+      model_introspection?: ModelIntrospection;
+    };
+  };
+
+  if (!outputs.data?.model_introspection) {
+    throw new Error('No model introspection found in amplify_outputs.json');
+  }
+
+  cachedModelIntrospection = outputs.data.model_introspection;
+  return cachedModelIntrospection;
 }
 
 function normalizeValue(tableName: string, fieldName: string, value: unknown): unknown {
@@ -53,7 +68,7 @@ function normalizeValue(tableName: string, fieldName: string, value: unknown): u
 }
 
 export function buildCreateInput(tableName: string, item: Record<string, unknown>): Record<string, unknown> {
-  const model = outputs.data?.model_introspection?.models[tableName];
+  const model = getModelIntrospection().models[tableName];
   const fields = model?.fields;
 
   if (!fields) {
@@ -93,7 +108,7 @@ export function buildCreateInput(tableName: string, item: Record<string, unknown
 }
 
 export function getPrimaryKeyInput(tableName: string, input: Record<string, unknown>): Record<string, unknown> | null {
-  const primaryKeyInfo = outputs.data?.model_introspection?.models[tableName]?.primaryKeyInfo;
+  const primaryKeyInfo = getModelIntrospection().models[tableName]?.primaryKeyInfo;
   const primaryKeyFieldName = primaryKeyInfo?.primaryKeyFieldName || 'id';
   const keyFieldNames = [primaryKeyFieldName, ...(primaryKeyInfo?.sortKeyFieldNames || [])];
   const keyInput: Record<string, unknown> = {};
