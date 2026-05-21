@@ -4,6 +4,10 @@
     "deny": [
       "Read(./project/**)",
       "Edit(./project/**)"
+    ],
+    "allow": [
+      "Bash(kbs *)",
+      "Bash(kanbus *)"
     ]
   }
 }
