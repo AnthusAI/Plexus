@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "8a056ea2-cdae-4e2e-a926-36dcb9774659",
+  "issue_id": "plx-cefa9df9-a5c2-4293-8a4e-74dd39647585",
+  "event_type": "field_updated",
+  "occurred_at": "2026-05-20T22:58:45.537Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Running  reports success almost immediately but the seed logic does not run and no data is written. Investigation shows the Amplify CLI imports  for top-level execution; the current file only exports an async default function that is never invoked.\n\nBehavior expectation:\n\nFeature: Sandbox seed entrypoint execution\n\nScenario: Developer runs Amplify sandbox seed\nGiven the dashboard Amplify sandbox exists\nWhen the developer runs \nThen the Plexus seed phases execute\nAnd observable seed logging is emitted\nAnd failures from the seed phases cause the command to fail.",
+        "to": "Running `npx ampx sandbox seed` reports success almost immediately, but the seed logic does not run and no data is written. Investigation shows the Amplify CLI imports `amplify/seed/seed.ts` for top-level execution; the current file only exports an async default function that is never invoked.\n\nBehavior expectation:\n\nFeature: Sandbox seed entrypoint execution\n\nScenario: Developer runs Amplify sandbox seed\nGiven the dashboard Amplify sandbox exists\nWhen the developer runs `npx ampx sandbox seed`\nThen the Plexus seed phases execute\nAnd observable seed logging is emitted\nAnd failures from the seed phases cause the command to fail."
+      }
+    }
+  }
+}

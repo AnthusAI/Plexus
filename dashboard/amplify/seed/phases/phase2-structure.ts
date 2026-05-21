@@ -1,20 +1,57 @@
 import type { SeedContext } from '../types';
-import { fullCopy } from '../strategies/full-copy';
+import { fullCopy, fullCopyByParent } from '../strategies/full-copy';
 
 export async function seedPhase2(context: SeedContext): Promise<void> {
-  const { sandboxClient, productionClient, accountId, logger } = context;
+  const { sandboxClient, productionClient, accountId, config, logger } = context;
 
   logger.phase('Phase 2: Core Structure (Scorecard Hierarchy)');
 
   // Scorecard (references Account)
-  await fullCopy('Scorecard', productionClient, sandboxClient, accountId, logger);
+  context.copiedIds['Scorecard'] = await fullCopy(
+    'Scorecard',
+    productionClient,
+    sandboxClient,
+    accountId,
+    logger,
+    config.tables['Scorecard']
+  );
 
   // ScorecardSection (references Scorecard)
-  await fullCopy('ScorecardSection', productionClient, sandboxClient, accountId, logger);
+  context.copiedIds['ScorecardSection'] = await fullCopyByParent(
+    'ScorecardSection',
+    context.copiedIds['Scorecard'] || [],
+    'listScorecardSectionByScorecardId',
+    'scorecardId',
+    productionClient,
+    sandboxClient,
+    logger,
+    config.tables['ScorecardSection']
+  );
 
   // Score (references ScorecardSection + Scorecard)
-  await fullCopy('Score', productionClient, sandboxClient, accountId, logger);
+  context.copiedIds['Score'] = await fullCopyByParent(
+    'Score',
+    context.copiedIds['Scorecard'] || [],
+    'listScoreByScorecardIdAndExternalId',
+    'scorecardId',
+    productionClient,
+    sandboxClient,
+    logger,
+    config.tables['Score']
+  );
 
   // ScoreVersion (references Score + User)
-  await fullCopy('ScoreVersion', productionClient, sandboxClient, accountId, logger);
+  context.copiedIds['ScoreVersion'] = await fullCopyByParent(
+    'ScoreVersion',
+    context.copiedIds['Score'] || [],
+    'listScoreVersionByScoreIdAndCreatedAt',
+    'scoreId',
+    productionClient,
+    sandboxClient,
+    logger,
+    {
+      ...config.tables['ScoreVersion'],
+      queryArgs: { sortDirection: 'DESC' }
+    }
+  );
 }

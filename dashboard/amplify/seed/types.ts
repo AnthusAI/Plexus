@@ -6,6 +6,12 @@ export type CopyStrategy = 'full' | 'recent' | 'sampled';
 export interface TableConfig {
   name: string;
   strategy: CopyStrategy;
+  enabled?: boolean;
+  maxItems?: number;
+  maxPerParent?: number;
+  pageSize?: number;
+  preferFeatured?: boolean;
+  queryArgs?: Record<string, unknown>;
   recentCount?: number;
   sampleCount?: number;
   gsiName?: string;
@@ -27,6 +33,7 @@ export interface SeedContext {
   daysRecent: number;
   config: SeedConfig;
   logger: Logger;
+  copiedIds: Record<string, string[]>;
 }
 
 export interface Logger {

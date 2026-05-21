@@ -1,0 +1,25 @@
+{
+  "id": "plx-e849fc9b-d938-44b6-a8b0-0b51417c3db7",
+  "title": "Amplify sandbox seeding reliability",
+  "description": "Ensure Amplify Gen 2 sandbox seeding actually executes and provides observable feedback when invoked with npx ampx sandbox seed.",
+  "type": "epic",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bda4b6f5-c8fa-49ed-a973-614245ebf0b0",
+      "author": "derek.norrbom",
+      "text": "Duplicate of existing sandbox seeding epic plx-b7c6d1. Created in error while investigating the seed entrypoint issue; closing without source changes attached.",
+      "created_at": "2026-05-20T22:58:29.318138Z"
+    }
+  ],
+  "created_at": "2026-05-20T22:58:00.724083Z",
+  "updated_at": "2026-05-20T22:58:30.937950Z",
+  "closed_at": "2026-05-20T22:58:30.937950Z",
+  "custom": {}
+}
