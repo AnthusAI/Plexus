@@ -22,10 +22,22 @@
       "author": "derek.norrbom",
       "text": "Completed implementation and pushed branch `feature/console-worker-cdk-image-assets` (commit `9f0d20c8`).\n\nResult:\n- ConsoleRunWorker now deploys from CDK image assets (`fromImageAsset`) instead of external `CONSOLE_WORKER_IMAGE_URI`.\n- Backend no longer requires `CONSOLE_WORKER_IMAGE_URI` for worker deployment.\n- Sandbox worker helper script now enables the worker and relies on CDK asset build/publish during deploy.\n- SANDBOX.md updated to document the new flow and Docker prerequisite.\n\nValidation already run:\n- `cd dashboard && npx tsc --noEmit -p amplify/tsconfig.json`\n- `bash -n dashboard/scripts/start-sandbox-with-console-worker.sh`",
       "created_at": "2026-05-22T16:41:19.648078Z"
+    },
+    {
+      "id": "6a6933a7-3718-42d8-913d-2072e221c0ca",
+      "author": "derek.norrbom",
+      "text": "Follow-up cleanup requested: remove legacy GitHub Actions `publish-console-worker-image` job now that ConsoleRunWorker is deployed via CDK image assets. Keep `trigger-deployment` job unchanged. Will validate workflow references after edit.",
+      "created_at": "2026-05-22T17:27:52.867246Z"
+    },
+    {
+      "id": "84871322-bf0b-4404-a198-749400611145",
+      "author": "derek.norrbom",
+      "text": "Applied CI cleanup:\n\n- Removed `.github/workflows/ci.yaml` job `publish-console-worker-image` entirely.\n- Kept `trigger-deployment` job untouched.\n- Confirmed workflow YAML still parses (`python + yaml.safe_load`).\n\nThis removes the old ECR push + branch env mutation path now that worker deploy is CDK image-asset based.",
+      "created_at": "2026-05-22T17:28:17.729977Z"
     }
   ],
   "created_at": "2026-05-22T16:38:48.535218Z",
-  "updated_at": "2026-05-22T16:41:19.648078Z",
+  "updated_at": "2026-05-22T17:28:17.729977Z",
   "closed_at": null,
   "custom": {
     "project_label": "plx",
