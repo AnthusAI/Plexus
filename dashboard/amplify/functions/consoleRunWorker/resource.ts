@@ -92,6 +92,7 @@ export class ConsoleChatResponderStack extends NestedStack {
           "logs:CreateLogStream",
           "logs:PutLogEvents",
           "logs:DescribeLogStreams",
+          "logs:PutDataProtectionPolicy",
         ],
         resources: [
           "arn:aws:logs:*:*:log-group:/plexus/procedures/*",
