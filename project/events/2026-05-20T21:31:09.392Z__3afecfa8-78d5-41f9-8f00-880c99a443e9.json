@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "3afecfa8-78d5-41f9-8f00-880c99a443e9",
+  "issue_id": "plx-b7c6d1b0-17f5-4145-9017-a78e999422d2",
+  "event_type": "field_updated",
+  "occurred_at": "2026-05-20T21:31:09.392Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "Enable developers to use Amplify Gen2 sandboxes with production-like data by implementing an automated seeding utility. Currently, sandboxes start empty, forcing troubleshooting in production. This epic delivers a TypeScript seed script using @aws-amplify/seed that copies data from production (configurable via secrets) with smart strategies: full copy for small reference tables, recent data for operational tables, and sampled data for large tables. S3 file copying is opt-in via flag. The solution integrates with native 'npx ampx sandbox seed' workflow, respects foreign key dependencies through 5-phase execution, and enables safe development without production access."
+      }
+    }
+  }
+}
