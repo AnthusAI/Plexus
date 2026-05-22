@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "785be035-a9dc-4a15-bcb1-6cd78ca6519e",
+  "issue_id": "plx-e4073525-0fad-4aac-986a-b0a4723bde06",
+  "event_type": "field_updated",
+  "occurred_at": "2026-05-20T21:35:27.049Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "## Acceptance Criteria\n- full-copy.ts: copies all records for a table filtered by accountId\n- recent-copy.ts: time-filtered copying using GSI and date range\n- sampled-copy.ts: recent N records plus random sample of older records\n- All strategies handle pagination, errors, and logging\n\n## Implementation Steps\n- Implement fullCopy() with productionClient.models[table].list() pagination loop\n- Implement recentCopy() with date filtering on sortKey field\n- Implement sampledCopy() with two queries (recent + older) and random sampling\n- Add error handling for individual item failures (continue on error)\n- Clean metadata fields (createdAt, updatedAt, owner) before sandbox write"
+      }
+    }
+  }
+}

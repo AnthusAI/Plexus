@@ -1,0 +1,25 @@
+{
+  "id": "plx-7bfff028-86e1-4b55-88a5-afeaf9e4a8c6",
+  "title": "Create documentation and setup guide",
+  "description": "## Acceptance Criteria\n- README.md in amplify/seed/ with complete usage instructions\n- Secret setup documentation (PROD_API_URL, PROD_API_KEY, PROD_ACCOUNT_ID, etc.)\n- IAM policy generation instructions\n- Troubleshooting guide\n- Performance estimates and cost breakdown\n\n## Implementation Steps\n- Document installation: npm install @aws-amplify/seed --save-dev\n- Document secret setup: npx ampx sandbox secret set commands\n- Document IAM policy: npx ampx sandbox seed generate-policy\n- Document execution: npx ampx sandbox seed\n- Add examples for optional S3 sync\n- Include verification checklist",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7c6d1b0-17f5-4145-9017-a78e999422d2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9fde21b6-f6e7-45c1-bdcd-a6b5f9b53562",
+      "author": "derek.norrbom",
+      "text": "✅ Task completed:\n- Created comprehensive README.md with:\n  - Overview and prerequisites\n  - Installation instructions\n  - Secret setup guide (PROD_API_URL, PROD_API_KEY, PROD_ACCOUNT_ID, SEED_USER_PASSWORD, DAYS_RECENT, INCLUDE_S3_SYNC)\n  - IAM policy generation steps\n  - Usage instructions with npx ampx sandbox seed\n  - Performance estimates (5-47 minutes depending on data size)\n  - Cost breakdown (~/bin/zsh.23 per seed)\n  - Configuration details (table strategies, dependency ordering, S3 buckets)\n  - Troubleshooting guide\n  - Verification checklist\n  - Security notes\n  - Architecture diagram\n  - Future enhancements\n\nComplete documentation ready for team adoption.",
+      "created_at": "2026-05-20T21:45:47.432641Z"
+    }
+  ],
+  "created_at": "2026-05-20T21:31:16.627788Z",
+  "updated_at": "2026-05-20T21:45:47.495100Z",
+  "closed_at": "2026-05-20T21:45:47.495100Z",
+  "custom": {}
+}

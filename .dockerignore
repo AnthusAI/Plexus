@@ -1,6 +1,7 @@
 # Project files
 dashboard/*
 !dashboard/amplify/
+dashboard/amplify/**
 !dashboard/amplify/functions/
 !dashboard/amplify/functions/consoleRunWorker/
 !dashboard/amplify/functions/consoleRunWorker/Dockerfile

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "85d49b8f-0f63-45b8-9a23-699df138ca40",
+  "issue_id": "plx-c05d2aa4-c993-4798-871a-e8be5b047ee9",
+  "event_type": "field_updated",
+  "occurred_at": "2026-05-20T21:35:25.856Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "",
+        "to": "## Acceptance Criteria\n- config.ts with all 30 table configurations (strategy, dependencies, GSI names)\n- types.ts with TypeScript interfaces\n- logger.ts with progress tracking utilities\n- production-client.ts for connecting to source environment\n- sandbox-client.ts helpers\n\n## Implementation Steps\n- Define TableConfig interface with strategy, dependencies, GSI metadata\n- Create loadConfig() function returning complete table configuration\n- Implement Logger class with phase(), table(), progress(), success(), warn(), error() methods\n- Create createProductionClient() using Amplify.configure with API endpoint and key\n- Add utility functions for data transformation"
+      }
+    }
+  }
+}
