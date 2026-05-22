@@ -3,7 +3,7 @@
   "title": "Migrate console worker Lambda to CDK-managed image assets",
   "description": "Replace external CONSOLE_WORKER_IMAGE_URI dependency with a CDK-managed Docker image asset for ConsoleRunWorker so sandbox/deploy updates are driven by code changes.\n\nScope:\n- Update Amplify backend stack wiring for ConsoleRunWorker image source\n- Keep production behavior explicit and predictable\n- Remove/adjust scripts/docs that assume manual ECR push as primary path\n- Validate TypeScript compile and sandbox workflow docs\n\nSuccess criteria:\n- Worker code changes produce a new Lambda container image asset on deploy\n- No manual image URI rotation needed for normal deploy path\n- Sandbox docs reflect the new workflow",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -37,8 +37,8 @@
     }
   ],
   "created_at": "2026-05-22T16:38:48.535218Z",
-  "updated_at": "2026-05-22T17:28:17.729977Z",
-  "closed_at": null,
+  "updated_at": "2026-05-22T17:36:08.165084Z",
+  "closed_at": "2026-05-22T17:36:08.165084Z",
   "custom": {
     "project_label": "plx",
     "source": "shared"
