@@ -1,0 +1,28 @@
+{
+  "id": "plx-ec157387-052e-4359-8092-94659bf47e32",
+  "title": "Address PR #383 bot findings in seed.ts",
+  "description": "Fix GitHub bot findings on dashboard/amplify/seed/seed.ts from PR #383:\n- remove unused `user` binding when creating seed user\n- replace SHA-256 password hashing used for username derivation with a stronger KDF-based derivation to satisfy CodeQL (insufficient computational effort).\n\nValidation: run amplify TypeScript compile.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7c6d1b0-17f5-4145-9017-a78e999422d2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "97c81adf-7be3-407e-aa2f-025d320e9523",
+      "author": "derek.norrbom",
+      "text": "Implemented both PR #383 bot fixes in `dashboard/amplify/seed/seed.ts`:\n\n- Removed unused variable binding by changing `const user = await createAndSignUpUser(...)` to `await createAndSignUpUser(...)`.\n- Replaced `createHash('sha256')` password-derived username hash with `scryptSync(..., \"plexus-sandbox-seed-user\", 16)` to use a KDF and address CodeQL computational-effort finding.\n\nValidation:\n- `cd dashboard && npx tsc --noEmit -p amplify/tsconfig.json` passed.",
+      "created_at": "2026-05-22T20:03:27.516872Z"
+    }
+  ],
+  "created_at": "2026-05-22T20:03:03.930967Z",
+  "updated_at": "2026-05-22T20:03:31.815217Z",
+  "closed_at": "2026-05-22T20:03:31.815217Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}
