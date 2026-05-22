@@ -46,15 +46,15 @@ if (getResourceByShareTokenFunction) {
 // Detect sandbox environment
 // Sandboxes are used for development/testing and don't need full infrastructure.
 // We skip TaskDispatcher and ConsoleWorker stacks in sandbox mode to avoid
-// requiring CELERY_* and CONSOLE_WORKER_IMAGE_URI environment variables.
+// requiring CELERY_* environment variables.
 //
 // Decision: Sandboxes are primarily for testing the seed script and Data API,
 // not for running the full application with task dispatching and console workers.
 //
 // To enable full app in sandboxes in the future:
-// 1. Set all required env vars (CELERY_*, CONSOLE_WORKER_IMAGE_URI)
+// 1. Set all required env vars (CELERY_*)
 // 2. Remove or modify this isSandbox check
-// 3. Ensure Docker images are available for sandbox environments
+// 3. Ensure the local environment can build Lambda Docker image assets
 const isSandbox = process.env.AWS_BRANCH === undefined &&
                   process.env.AMPLIFY_ENV === undefined;
 const enableSandboxConsoleWorker = process.env.AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER === 'true';
@@ -190,7 +190,6 @@ if (shouldDeployConsoleWorker) {
     const resolvedDataApiUrl = (
         isSandbox ? sandboxGraphqlUrl : (process.env.PLEXUS_API_URL || '')
     ).trim();
-    const consoleWorkerImageUri = (process.env.CONSOLE_WORKER_IMAGE_URI || '').trim();
     const consoleWorkerEnvironmentName = normalizeForResourceName(resolveEnvironmentName());
     const consoleWorkerConfigSecretName = (
         process.env.PLEXUS_CONFIG_SECRET_NAME ||
@@ -205,17 +204,12 @@ if (shouldDeployConsoleWorker) {
         );
     }
 
-    if (!consoleWorkerImageUri) {
-        throw new Error('CONSOLE_WORKER_IMAGE_URI must be set for ConsoleRunWorkerStack deployment');
-    }
-
     consoleRunWorkerStack = new ConsoleChatResponderStack(
         backend.stack,
         'ConsoleChatResponder',
         {
             chatMessageTable,
             plexusApiUrl: resolvedDataApiUrl,
-            workerImageUri: consoleWorkerImageUri,
             environmentName: consoleWorkerEnvironmentName,
             configSecretName: consoleWorkerConfigSecretName,
             reportBlockDetailsBucket: backend.reportBlockDetails.resources.bucket,

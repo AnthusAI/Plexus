@@ -1,0 +1,28 @@
+{
+  "id": "plx-82a16eed-a404-4ec2-a3d1-8ef923b3ef09",
+  "title": "Migrate console worker Lambda to CDK-managed image assets",
+  "description": "Replace external CONSOLE_WORKER_IMAGE_URI dependency with a CDK-managed Docker image asset for ConsoleRunWorker so sandbox/deploy updates are driven by code changes.\n\nScope:\n- Update Amplify backend stack wiring for ConsoleRunWorker image source\n- Keep production behavior explicit and predictable\n- Remove/adjust scripts/docs that assume manual ECR push as primary path\n- Validate TypeScript compile and sandbox workflow docs\n\nSuccess criteria:\n- Worker code changes produce a new Lambda container image asset on deploy\n- No manual image URI rotation needed for normal deploy path\n- Sandbox docs reflect the new workflow",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7e775ff0-d0d0-4706-9ece-d0c56408b94a",
+      "author": "derek.norrbom",
+      "text": "Implemented CDK-managed ConsoleRunWorker image asset path.\n\nChanges made:\n- `dashboard/amplify/functions/consoleRunWorker/resource.ts` now uses `lambda.DockerImageCode.fromImageAsset(...)` with repo-root context and Dockerfile `dashboard/amplify/functions/consoleRunWorker/Dockerfile`.\n- Removed ECR URI parsing and dependency on `CONSOLE_WORKER_IMAGE_URI` from the stack.\n- `dashboard/amplify/backend.ts` no longer requires/reads `CONSOLE_WORKER_IMAGE_URI`; sandbox opt-in now only needs `AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true` plus normal API/secret resolution.\n- Simplified `dashboard/scripts/start-sandbox-with-console-worker.sh` to only enable worker + run sandbox; no image build/push step.\n- Updated `dashboard/amplify/SANDBOX.md` to document CDK asset-based worker deploy flow and Docker prerequisite.\n\nValidation:\n- `cd dashboard && npx tsc --noEmit -p amplify/tsconfig.json`\n- `bash -n dashboard/scripts/start-sandbox-with-console-worker.sh`",
+      "created_at": "2026-05-22T16:40:46.159309Z"
+    }
+  ],
+  "created_at": "2026-05-22T16:38:48.535218Z",
+  "updated_at": "2026-05-22T16:40:46.159309Z",
+  "closed_at": null,
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

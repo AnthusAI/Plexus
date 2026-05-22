@@ -22,7 +22,7 @@ Amplify sandboxes in this project are configured for **development and testing**
 - Vector store (TopicMemoryVectorStore)
 
 ⚙️ **Optional (off by default):**
-- ConsoleRunWorker (can be enabled per sandbox deployment with a sandbox image URI)
+- ConsoleRunWorker (can be enabled per sandbox deployment; image is built by CDK asset flow)
 
 ### Why This Design?
 
@@ -43,22 +43,7 @@ Amplify sandboxes in this project are configured for **development and testing**
 
 If you need ConsoleRunWorker in your sandbox:
 
-### 1. Build and Push a Sandbox Worker Image
-
-Run:
-
-```bash
-cd dashboard
-./scripts/build-and-push-console-worker-image.sh --region us-west-2
-```
-
-This prints:
-
-```bash
-CONSOLE_WORKER_IMAGE_URI=<account>.dkr.ecr.<region>.amazonaws.com/plexus-console-run-worker:<tag>
-```
-
-### 2. Start Sandbox with Worker Enabled
+### 1. Start Sandbox with Worker Enabled
 
 ```bash
 cd dashboard
@@ -66,10 +51,9 @@ cd dashboard
 ```
 
 This script:
-- Builds and pushes the image (unless `--skip-build` is set)
 - Sets `AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true`
-- Sets `CONSOLE_WORKER_IMAGE_URI=<image>`
 - Runs `npx ampx sandbox`
+- Lets CDK build and publish the worker Lambda container image as an image asset
 
 You can pass normal sandbox args after `--`, for example:
 
@@ -85,21 +69,9 @@ If your provider secret is not `plexus/development/config`, pass it explicitly:
   --region us-west-2
 ```
 
-### 3. Optional Manual Path
+### 2. Infrastructure Requirements
 
-If you already have an image URI:
-
-```bash
-cd dashboard
-export AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true
-export CONSOLE_WORKER_IMAGE_URI=<your-ecr-image-uri>
-export PLEXUS_CONFIG_SECRET_NAME=plexus/production/config
-npx ampx sandbox
-```
-
-### 4. Infrastructure Requirements
-
-- **Docker Image**: Console worker image must be pushed to ECR
+- **Docker available locally**: CDK image asset build requires Docker
 - **Secrets Manager**: `plexus/<environment>/config` secret must exist with provider keys
 - **No TaskDispatcher in sandbox**: TaskDispatcher remains disabled in sandbox mode
 
@@ -147,23 +119,14 @@ unset AWS_BRANCH AMPLIFY_ENV
 npx ampx sandbox
 ```
 
-### Error: "CONSOLE_WORKER_IMAGE_URI must be set"
+### Error: Docker build/publish failed for ConsoleRunWorker image asset
 
-`AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true` was set but no image URI was provided.
+`AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true` was set and CDK could not build/publish the container image.
 
-Use one of:
-
-```bash
-./scripts/start-sandbox-with-console-worker.sh
-```
-
-or
-
-```bash
-export AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true
-export CONSOLE_WORKER_IMAGE_URI=<your-ecr-image-uri>
-npx ampx sandbox
-```
+Check:
+1. Docker Desktop/daemon is running
+2. You can run `docker build` locally
+3. Your AWS credentials can publish CDK assets in this account/region
 
 ### Want Full App in Sandbox
 
