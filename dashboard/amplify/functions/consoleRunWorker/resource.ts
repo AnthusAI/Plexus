@@ -97,6 +97,8 @@ export class ConsoleChatResponderStack extends NestedStack {
         resources: [
           "arn:aws:logs:*:*:log-group:/plexus/procedures/*",
           "arn:aws:logs:*:*:log-group:/plexus/procedures/*:*",
+          "arn:aws:logs:*:*:log-group:/plexus/console/*",
+          "arn:aws:logs:*:*:log-group:/plexus/console/*:*",
         ],
       }),
     );
