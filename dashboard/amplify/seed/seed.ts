@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { scryptSync } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { getSecret, createAndSignUpUser, signInUser } from '@aws-amplify/seed';
@@ -26,7 +26,7 @@ async function getTrimmedSecret(name: string): Promise<string> {
 }
 
 function getSeedUsername(password: string): string {
-  const passwordHash = createHash('sha256').update(password).digest('hex').slice(0, 12);
+  const passwordHash = scryptSync(password, 'plexus-sandbox-seed-user', 16).toString('hex').slice(0, 12);
   return `sandbox-seed-${passwordHash}@plexus.internal`;
 }
 
@@ -78,7 +78,7 @@ export default async function seed() {
     // Create/sign in seed user in sandbox
     logger.phase('Creating seed user');
     try {
-      const user = await createAndSignUpUser({
+      await createAndSignUpUser({
         username: seedUsername,
         password: seedUserPassword,
         signInAfterCreation: true,

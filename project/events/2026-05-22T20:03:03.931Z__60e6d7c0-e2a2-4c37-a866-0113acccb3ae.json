@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "60e6d7c0-e2a2-4c37-a866-0113acccb3ae",
+  "issue_id": "plx-ec157387-052e-4359-8092-94659bf47e32",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-22T20:03:03.931Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Fix GitHub bot findings on dashboard/amplify/seed/seed.ts from PR #383:\n- remove unused `user` binding when creating seed user\n- replace SHA-256 password hashing used for username derivation with a stronger KDF-based derivation to satisfy CodeQL (insufficient computational effort).\n\nValidation: run amplify TypeScript compile.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-b7c6d1b0-17f5-4145-9017-a78e999422d2",
+    "priority": 1,
+    "status": "open",
+    "title": "Address PR #383 bot findings in seed.ts"
+  }
+}
