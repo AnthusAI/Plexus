@@ -1,0 +1,28 @@
+{
+  "id": "plx-867d2c1d-dc61-417c-8c70-e3638865eb11",
+  "title": "Allow console worker data-protection policy on /plexus/console log groups",
+  "description": "Follow-up to plx-50029c: ConsoleChatResponder can now apply data protection policy on /plexus/procedures/* but still fails on /plexus/console/* with AccessDenied for logs:PutDataProtectionPolicy.\n\nFix: extend IAM log-group resource scope for ConsoleChatResponder to include /plexus/console/* (and child streams) for existing CloudWatch Logs actions and policy application.",
+  "type": "bug",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "dcd7678f-db30-4aec-bd59-c7121786deac",
+      "author": "derek.norrbom",
+      "text": "Implemented IAM scope extension in `dashboard/amplify/functions/consoleRunWorker/resource.ts`:\n\n- Kept existing CloudWatch Logs actions unchanged.\n- Added `/plexus/console/*` and `/plexus/console/*:*` resource ARNs alongside existing `/plexus/procedures/*` scope.\n\nValidation:\n- `cd dashboard && npx tsc --noEmit -p amplify/tsconfig.json` passed.",
+      "created_at": "2026-05-22T18:49:41.380525Z"
+    }
+  ],
+  "created_at": "2026-05-22T18:49:25.161063Z",
+  "updated_at": "2026-05-22T18:49:43.248186Z",
+  "closed_at": "2026-05-22T18:49:43.248186Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
+}

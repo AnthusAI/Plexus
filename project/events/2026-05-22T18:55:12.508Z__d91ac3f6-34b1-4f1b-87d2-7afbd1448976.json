@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d91ac3f6-34b1-4f1b-87d2-7afbd1448976",
+  "issue_id": "plx-f2d75061-5418-40af-a5c2-478ee2a167d5",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-22T18:55:12.508Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Console worker procedure logs are written to /plexus/procedures/unknown because procedure executor reads client.context.account_key and the Lambda initializes PlexusDashboardClient without context.\n\nFix: in dashboard/amplify/functions/consoleRunWorker/app.py, initialize PlexusDashboardClient with ClientContext(account_key=PLEXUS_ACCOUNT_KEY) after secret load so procedure log group uses account key.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-e923c4a1-aa01-434c-a5a8-4122d916b85d",
+    "priority": 1,
+    "status": "open",
+    "title": "Pass account_key into console worker dashboard client context"
+  }
+}
