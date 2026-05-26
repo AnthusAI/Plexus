@@ -13,7 +13,7 @@ from plexus.console.chat_runtime import (
     normalize_response_target,
     process_console_message,
 )
-from plexus.dashboard.api.client import PlexusDashboardClient
+from plexus.dashboard.api.client import ClientContext, PlexusDashboardClient
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -62,7 +62,9 @@ def _resolve_client() -> PlexusDashboardClient:
     auth_mode = str(os.getenv("PLEXUS_GRAPHQL_AUTH_MODE") or "").strip().lower()
     if auth_mode != "iam":
         raise RuntimeError("PLEXUS_GRAPHQL_AUTH_MODE must be iam")
-    return PlexusDashboardClient(api_url=api_url)
+    account_key = str(os.getenv("PLEXUS_ACCOUNT_KEY") or "").strip()
+    context = ClientContext(account_key=account_key or None)
+    return PlexusDashboardClient(api_url=api_url, context=context)
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

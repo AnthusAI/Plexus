@@ -1,63 +1,21 @@
 import { CfnOutput, Duration, NestedStack, NestedStackProps } from "aws-cdk-lib";
-import * as ecr from "aws-cdk-lib/aws-ecr";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
+import * as ecr_assets from "aws-cdk-lib/aws-ecr-assets";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { StartingPosition } from "aws-cdk-lib/aws-lambda";
 import { DynamoEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { IBucket } from "aws-cdk-lib/aws-s3";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
+import { fileURLToPath } from "node:url";
 import { Construct } from "constructs";
 
 interface ConsoleChatResponderStackProps extends NestedStackProps {
   chatMessageTable: ITable;
   plexusApiUrl?: string;
-  workerImageUri?: string;
   environmentName?: string;
+  configSecretName?: string;
   reportBlockDetailsBucket?: IBucket;
-}
-
-interface ParsedEcrImageUri {
-  repositoryName: string;
-  tagOrDigest: string;
-}
-
-const parseEcrImageUri = (imageUri: string): ParsedEcrImageUri => {
-  const trimmed = imageUri.trim();
-  if (!trimmed) {
-    throw new Error("CONSOLE_WORKER_IMAGE_URI must be set to a full ECR image URI");
-  }
-
-  const firstSlashIndex = trimmed.indexOf("/");
-  if (firstSlashIndex <= 0 || firstSlashIndex === trimmed.length - 1) {
-    throw new Error(
-      `CONSOLE_WORKER_IMAGE_URI must include a repository and tag/digest. Received: "${trimmed}"`,
-    );
-  }
-
-  const repositoryAndReference = trimmed.slice(firstSlashIndex + 1);
-  const digestSeparatorIndex = repositoryAndReference.lastIndexOf("@");
-  if (digestSeparatorIndex > 0 && digestSeparatorIndex < repositoryAndReference.length - 1) {
-    const repositoryName = repositoryAndReference.slice(0, digestSeparatorIndex);
-    const digest = repositoryAndReference.slice(digestSeparatorIndex + 1);
-    if (!digest.startsWith("sha256:")) {
-      throw new Error(
-        `CONSOLE_WORKER_IMAGE_URI digest must start with "sha256:". Received: "${digest}"`,
-      );
-    }
-    return { repositoryName, tagOrDigest: digest };
-  }
-
-  const tagSeparatorIndex = repositoryAndReference.lastIndexOf(":");
-  if (tagSeparatorIndex <= 0 || tagSeparatorIndex === repositoryAndReference.length - 1) {
-    throw new Error(
-      `CONSOLE_WORKER_IMAGE_URI must include either @sha256:digest or :tag. Received: "${trimmed}"`,
-    );
-  }
-
-  const repositoryName = repositoryAndReference.slice(0, tagSeparatorIndex);
-  const tag = repositoryAndReference.slice(tagSeparatorIndex + 1);
-  return { repositoryName, tagOrDigest: tag };
 }
 
 export class ConsoleChatResponderStack extends NestedStack {
@@ -65,20 +23,22 @@ export class ConsoleChatResponderStack extends NestedStack {
 
   constructor(scope: Construct, id: string, props: ConsoleChatResponderStackProps) {
     super(scope, id, props);
-    const workerImage = parseEcrImageUri(
-      props.workerImageUri || process.env.CONSOLE_WORKER_IMAGE_URI || "",
-    );
+    const repoRootPath = fileURLToPath(new URL("../../../../", import.meta.url));
+    const workerDockerfilePath = "dashboard/amplify/functions/consoleRunWorker/Dockerfile";
     const environmentName = props.environmentName || "staging";
-    const configSecretName = `plexus/${environmentName}/config`;
+    const configSecretName = (
+      props.configSecretName ||
+      process.env.PLEXUS_CONFIG_SECRET_NAME ||
+      `plexus/${environmentName}/config`
+    ).trim();
+
+    if (!configSecretName) {
+      throw new Error("PLEXUS_CONFIG_SECRET_NAME must be set for ConsoleRunWorkerStack deployment");
+    }
     const configSecret = secretsmanager.Secret.fromSecretNameV2(
       this,
       "PlexusConfigSecret",
       configSecretName,
-    );
-    const workerImageRepository = ecr.Repository.fromRepositoryName(
-      this,
-      "ConsoleRunWorkerImageRepository",
-      workerImage.repositoryName,
     );
     const lambdaEnvironment: Record<string, string> = {
       PLEXUS_API_URL: props.plexusApiUrl || process.env.PLEXUS_API_URL || "",
@@ -94,8 +54,9 @@ export class ConsoleChatResponderStack extends NestedStack {
     }
 
     this.responderFunction = new lambda.DockerImageFunction(this, "ConsoleChatResponderFunction", {
-      code: lambda.DockerImageCode.fromEcr(workerImageRepository, {
-        tagOrDigest: workerImage.tagOrDigest,
+      code: lambda.DockerImageCode.fromImageAsset(repoRootPath, {
+        file: workerDockerfilePath,
+        platform: ecr_assets.Platform.LINUX_AMD64,
       }),
       timeout: Duration.minutes(15),
       memorySize: 2048,
@@ -131,10 +92,13 @@ export class ConsoleChatResponderStack extends NestedStack {
           "logs:CreateLogStream",
           "logs:PutLogEvents",
           "logs:DescribeLogStreams",
+          "logs:PutDataProtectionPolicy",
         ],
         resources: [
           "arn:aws:logs:*:*:log-group:/plexus/procedures/*",
           "arn:aws:logs:*:*:log-group:/plexus/procedures/*:*",
+          "arn:aws:logs:*:*:log-group:/plexus/console/*",
+          "arn:aws:logs:*:*:log-group:/plexus/console/*:*",
         ],
       }),
     );

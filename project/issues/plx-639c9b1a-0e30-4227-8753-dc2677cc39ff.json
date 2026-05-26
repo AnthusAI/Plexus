@@ -1,0 +1,25 @@
+{
+  "id": "plx-639c9b1a-0e30-4227-8753-dc2677cc39ff",
+  "title": "Add optional S3 storage syncing",
+  "description": "## Acceptance Criteria\n- storage-sync.ts implements S3 file copying from production to sandbox\n- Respects INCLUDE_S3_SYNC secret (default: false, opt-in)\n- Applies size limits (5GB per bucket max)\n- Only copies recent files (last N days matching DAYS_RECENT)\n- Handles 5 buckets: reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments, rubricMemory\n\n## Implementation Steps\n- Use Amplify Storage API: list(), downloadData(), uploadData()\n- Filter files by lastModified >= cutoff date\n- Track total bytes per bucket, stop at 5GB limit\n- Log progress every 10 files\n- Handle errors gracefully (skip failed files, continue)",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b7c6d1b0-17f5-4145-9017-a78e999422d2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "66a0b1cd-a325-4c5e-a2b1-c93531c75f42",
+      "author": "derek.norrbom",
+      "text": "✅ Task completed:\n- Implemented storage-sync.ts with S3 file copying functionality\n- Uses Amplify Storage API (list, downloadData, uploadData)\n- Filters files by lastModified date (respects DAYS_RECENT setting)\n- Enforces 5GB per-bucket limit\n- Logs progress every 10 files\n- Handles errors gracefully (skip failed files, continue)\n- Integrated into main seed.ts with INCLUDE_S3_SYNC flag (default: false)\n- Syncs all 5 buckets: reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments, rubricMemory\n\nS3 syncing is now fully functional and opt-in.",
+      "created_at": "2026-05-20T21:44:39.842508Z"
+    }
+  ],
+  "created_at": "2026-05-20T21:31:16.564322Z",
+  "updated_at": "2026-05-20T21:44:39.898128Z",
+  "closed_at": "2026-05-20T21:44:39.898128Z",
+  "custom": {}
+}

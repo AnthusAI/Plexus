@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "57c29fce-78b9-4495-a307-cd54063b4c07",
+  "issue_id": "plx-c05d2aa4-c993-4798-871a-e8be5b047ee9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-20T21:31:16.386Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-b7c6d1b0-17f5-4145-9017-a78e999422d2",
+    "priority": 1,
+    "status": "open",
+    "title": "Implement core seeding utilities and configuration"
+  }
+}

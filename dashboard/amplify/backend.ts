@@ -43,6 +43,30 @@ if (getResourceByShareTokenFunction) {
     );
 }
 
+// Detect sandbox environment
+// Sandboxes are used for development/testing and don't need full infrastructure.
+// We skip TaskDispatcher and ConsoleWorker stacks in sandbox mode to avoid
+// requiring CELERY_* environment variables.
+//
+// Decision: Sandboxes are primarily for testing the seed script and Data API,
+// not for running the full application with task dispatching and console workers.
+//
+// To enable full app in sandboxes in the future:
+// 1. Set all required env vars (CELERY_*)
+// 2. Remove or modify this isSandbox check
+// 3. Ensure the local environment can build Lambda Docker image assets
+const isSandbox = process.env.AWS_BRANCH === undefined &&
+                  process.env.AMPLIFY_ENV === undefined;
+const enableSandboxConsoleWorker = process.env.AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER === 'true';
+
+if (isSandbox) {
+    if (enableSandboxConsoleWorker) {
+        console.log('🏖️  Sandbox mode detected - ConsoleRunWorker explicitly enabled for this deployment');
+    } else {
+        console.log('🏖️  Sandbox mode detected - skipping TaskDispatcher and ConsoleWorker stacks');
+    }
+}
+
 // Enable streams on tables for metrics aggregation
 const taskTable = backend.data.resources.tables.Task;
 const taskAmplifyTable = amplifyDynamoDbTables.Task;
@@ -128,52 +152,70 @@ backend.auth.resources.authenticatedUserIamRole.addToPrincipalPolicy(
     })
 );
 
-// Create the TaskDispatcher stack with the table reference
-const taskDispatcherStack = new TaskDispatcherStack(
-    backend.createStack('TaskDispatcherStack'),
-    'TaskDispatcher',
-    {
-        taskTable,
-        taskTableStreamArn: taskTable.tableStreamArn,
-        celeryAwsAccessKeyId: requireTaskDispatcherEnv('CELERY_AWS_ACCESS_KEY_ID'),
-        celeryAwsSecretAccessKey: requireTaskDispatcherEnv('CELERY_AWS_SECRET_ACCESS_KEY'),
-        celeryAwsRegion: requireTaskDispatcherEnv('CELERY_AWS_REGION_NAME'),
-        celeryQueueName: requireTaskDispatcherEnv('CELERY_QUEUE_NAME'),
-        celeryResultBackendTemplate: requireTaskDispatcherEnv('CELERY_RESULT_BACKEND_TEMPLATE')
-    }
-);
+// Create TaskDispatcher and ConsoleWorker stacks (skip in sandbox mode)
+let taskDispatcherStack: TaskDispatcherStack | undefined;
+let consoleRunWorkerStack: ConsoleChatResponderStack | undefined;
 
-const resolvedDataApiUrl = (process.env.PLEXUS_API_URL || '').trim();
-const consoleWorkerImageUri = (process.env.CONSOLE_WORKER_IMAGE_URI || '').trim();
-const consoleWorkerEnvironmentName = normalizeForResourceName(resolveEnvironmentName());
+if (!isSandbox) {
+    // Create the TaskDispatcher stack with the table reference
+    taskDispatcherStack = new TaskDispatcherStack(
+        backend.createStack('TaskDispatcherStack'),
+        'TaskDispatcher',
+        {
+            taskTable,
+            taskTableStreamArn: taskTable.tableStreamArn,
+            celeryAwsAccessKeyId: requireTaskDispatcherEnv('CELERY_AWS_ACCESS_KEY_ID'),
+            celeryAwsSecretAccessKey: requireTaskDispatcherEnv('CELERY_AWS_SECRET_ACCESS_KEY'),
+            celeryAwsRegion: requireTaskDispatcherEnv('CELERY_AWS_REGION_NAME'),
+            celeryQueueName: requireTaskDispatcherEnv('CELERY_QUEUE_NAME'),
+            celeryResultBackendTemplate: requireTaskDispatcherEnv('CELERY_RESULT_BACKEND_TEMPLATE')
+        }
+    );
 
-if (!resolvedDataApiUrl) {
-    throw new Error('PLEXUS_API_URL must be set for ConsoleRunWorkerStack deployment');
+    // Add SQS permissions
+    taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
+        new PolicyStatement({
+            actions: ['sqs:SendMessage'],
+            resources: [process.env.CELERY_QUEUE_URL || '*']
+        })
+    );
 }
 
-if (!consoleWorkerImageUri) {
-    throw new Error('CONSOLE_WORKER_IMAGE_URI must be set for ConsoleRunWorkerStack deployment');
-}
+const shouldDeployConsoleWorker = !isSandbox || enableSandboxConsoleWorker;
+if (shouldDeployConsoleWorker) {
+    const dataCfnResources = backend.data.resources.cfnResources as unknown as {
+        cfnGraphqlApi?: { attrGraphQlUrl?: string };
+    };
+    const sandboxGraphqlUrl = dataCfnResources.cfnGraphqlApi?.attrGraphQlUrl || '';
+    const resolvedDataApiUrl = (
+        isSandbox ? sandboxGraphqlUrl : (process.env.PLEXUS_API_URL || '')
+    ).trim();
+    const consoleWorkerEnvironmentName = normalizeForResourceName(resolveEnvironmentName());
+    const consoleWorkerConfigSecretName = (
+        process.env.PLEXUS_CONFIG_SECRET_NAME ||
+        `plexus/${consoleWorkerEnvironmentName}/config`
+    ).trim();
 
-const consoleRunWorkerStack = new ConsoleChatResponderStack(
-    backend.stack,
-    'ConsoleChatResponder',
-    {
-        chatMessageTable,
-        plexusApiUrl: resolvedDataApiUrl,
-        workerImageUri: consoleWorkerImageUri,
-        environmentName: consoleWorkerEnvironmentName,
-        reportBlockDetailsBucket: backend.reportBlockDetails.resources.bucket,
+    if (!resolvedDataApiUrl) {
+        throw new Error(
+            isSandbox
+                ? 'Unable to resolve sandbox GraphQL URL for ConsoleRunWorkerStack deployment'
+                : 'PLEXUS_API_URL must be set for ConsoleRunWorkerStack deployment'
+        );
     }
-);
 
-// Add SQS permissions
-taskDispatcherStack.taskDispatcherFunction.addToRolePolicy(
-    new PolicyStatement({
-        actions: ['sqs:SendMessage'],
-        resources: [process.env.CELERY_QUEUE_URL || '*']
-    })
-);
+    consoleRunWorkerStack = new ConsoleChatResponderStack(
+        backend.stack,
+        'ConsoleChatResponder',
+        {
+            chatMessageTable,
+            plexusApiUrl: resolvedDataApiUrl,
+            environmentName: consoleWorkerEnvironmentName,
+            configSecretName: consoleWorkerConfigSecretName,
+            reportBlockDetailsBucket: backend.reportBlockDetails.resources.bucket,
+        }
+    );
+}
 
 // Create the MCP stack
 const mcpStack = new McpStack(
@@ -217,7 +259,17 @@ function normalizeForResourceName(value: string): string {
 function requireTaskDispatcherEnv(name: string): string {
     const placeholder = 'WILL_BE_SET_AFTER_DEPLOYMENT';
     const value = (process.env[name] || '').trim();
+
+    // Allow dummy values for sandbox environments
+    const isSandbox = process.env.AMPLIFY_SANDBOX === 'true' ||
+                      process.env.AWS_BRANCH === undefined ||
+                      process.env.AWS_BRANCH === 'sandbox';
+
     if (!value || value === placeholder) {
+        if (isSandbox) {
+            console.warn(`⚠️  TaskDispatcher ${name} not set. Using dummy value for sandbox.`);
+            return 'dummy-sandbox-value';
+        }
         throw new Error(`TaskDispatcher requires ${name}. Set it in the Amplify branch environment before deployment.`);
     }
     return value;
@@ -249,12 +301,17 @@ backupPlan.addSelection('AmplifyDataTablesSelection', {
     resources: dynamoDbBackupResources
 });
 
-const topicMemoryVectorStoreStack = new TopicMemoryVectorStoreStack(
-    backend.createStack('TopicMemoryVectorStoreStack'),
-    'TopicMemoryVectorStore',
-    {
-        environmentName
-    }
-);
+// Create vector store (skip in sandbox mode - not needed for seed testing)
+let topicMemoryVectorStoreStack: TopicMemoryVectorStoreStack | undefined;
+
+if (!isSandbox) {
+    topicMemoryVectorStoreStack = new TopicMemoryVectorStoreStack(
+        backend.createStack('TopicMemoryVectorStoreStack'),
+        'TopicMemoryVectorStore',
+        {
+            environmentName
+        }
+    );
+}
 
 export { backend, mcpStack, topicMemoryVectorStoreStack, consoleRunWorkerStack };

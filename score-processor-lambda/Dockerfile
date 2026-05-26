@@ -20,7 +20,7 @@ COPY . /workspace
 
 # Install Plexus and Lambda runtime interface client.
 RUN python -m pip install --upgrade pip && \
-    python -m pip install --no-cache-dir -e /workspace && \
+    python -m pip install --no-cache-dir -e "/workspace[all]" && \
     python -m pip install --no-cache-dir awslambdaric
 
 # Download NLTK data during build
