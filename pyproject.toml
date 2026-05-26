@@ -20,33 +20,19 @@ include = [
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
+# --- Core (always installed) ---
 dateparser = ">=1.1.0"
 python-dotenv = ">=1.1.0"
 nest_asyncio = "*"
 python-statemachine = ">=2.5.0"
-pandas = "2.1.4"
 openai = ">=1.35.10"
 tenacity = "8.2.3"
-nltk = "3.9.4"
 pybind11 = "*"
 tiktoken = "0.12.0"
-transformers = "*"
-seaborn = "*"
-pydot = "2.0.0"
-pydotplus = "2.0.2"
-graphviz = "0.20.3"
 boto3 = "*"
 "ruamel.yaml" = ">=0.18.10"
 mistune = "3.0.2"
 pyyaml = "*"
-scikit-learn = "1.5.1"
-tables = "*"
-xgboost = "2.0.3"
-imbalanced-learn = "0.12.3"
-imblearn = "0.0"
-shap = "0.45.1"
-numba = "0.59.1"
-contractions = "0.1.73"
 langchain = "0.3.27"
 "langchain-core" = "0.3.81"
 "langchain-community" = "0.3.31"
@@ -59,29 +45,70 @@ langgraph = "0.6.7"
 "langgraph-checkpoint-postgres" = "2.0.9"
 psycopg = { version = ">=3.2.0,<4.0.0", extras = ["binary"] }
 lupa = "2.7"
-tactus = "^0.51.1"
-openpyxl = "3.1.5"
+tactus = "^0.51.2"
 rapidfuzz = "3.9.4"
-datasets = "*"
-gensim = "*"
 watchtower = "*"
-pyairtable = "*"
 azure-identity = ">=1.15.0"
 rich = ">=13.9.4"
 gql = { version = ">=3.0.0,<4.0.0", extras = ["requests"] }
 openai-cost-calculator = { git = "https://github.com/AnthusAI/openai_cost_calculator.git", branch = "main" }
-celery = ">=5.4.0"
-pycurl = ">=7.45.4"
-sqlalchemy = { version = "1.4.15", extras = ["asyncio"] }
 fastmcp = ">=2.3.5"
 ollama = ">=0.1.6"
-bertopic = ">=0.16.2"
-umap-learn = "0.5.7"
-hdbscan = "0.8.40"
-sentence-transformers = ">=5.0.0"
-kaleido = ">=0.2.1"
 requests = ">=2.31.0"
 requests-aws4auth = "*"
+# --- Optional: ML/scoring/visualization ---
+pandas = { version = "2.1.4", optional = true }
+nltk = { version = "3.9.4", optional = true }
+transformers = { version = "*", optional = true }
+seaborn = { version = "*", optional = true }
+pydot = { version = "2.0.0", optional = true }
+pydotplus = { version = "2.0.2", optional = true }
+graphviz = { version = "0.20.3", optional = true }
+scikit-learn = { version = "1.5.1", optional = true }
+tables = { version = "*", optional = true }
+xgboost = { version = "2.0.3", optional = true }
+imbalanced-learn = { version = "0.12.3", optional = true }
+imblearn = { version = "0.0", optional = true }
+shap = { version = "0.45.1", optional = true }
+numba = { version = "0.59.1", optional = true }
+contractions = { version = "0.1.73", optional = true }
+openpyxl = { version = "3.1.5", optional = true }
+datasets = { version = "*", optional = true }
+gensim = { version = "*", optional = true }
+bertopic = { version = ">=0.16.2", optional = true }
+umap-learn = { version = "0.5.7", optional = true }
+hdbscan = { version = "0.8.40", optional = true }
+sentence-transformers = { version = ">=5.0.0", optional = true }
+kaleido = { version = ">=0.2.1", optional = true }
+# --- Optional: Infrastructure ---
+celery = { version = ">=5.4.0", optional = true }
+pycurl = { version = ">=7.45.4", optional = true }
+sqlalchemy = { version = "1.4.15", extras = ["asyncio"], optional = true }
+pyairtable = { version = "*", optional = true }
+
+[tool.poetry.extras]
+ml = [
+    "pandas", "nltk", "transformers", "seaborn",
+    "pydot", "pydotplus", "graphviz",
+    "scikit-learn", "tables", "xgboost",
+    "imbalanced-learn", "imblearn", "shap", "numba",
+    "contractions", "openpyxl", "datasets", "gensim",
+    "bertopic", "umap-learn", "hdbscan",
+    "sentence-transformers", "kaleido",
+]
+infra = [
+    "celery", "pycurl", "sqlalchemy", "pyairtable",
+]
+all = [
+    "pandas", "nltk", "transformers", "seaborn",
+    "pydot", "pydotplus", "graphviz",
+    "scikit-learn", "tables", "xgboost",
+    "imbalanced-learn", "imblearn", "shap", "numba",
+    "contractions", "openpyxl", "datasets", "gensim",
+    "bertopic", "umap-learn", "hdbscan",
+    "sentence-transformers", "kaleido",
+    "celery", "pycurl", "sqlalchemy", "pyairtable",
+]
 
 [tool.poetry.group.dev.dependencies]
 invoke = ">=2.2.0"

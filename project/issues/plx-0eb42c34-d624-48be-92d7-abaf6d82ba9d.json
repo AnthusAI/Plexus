@@ -1,0 +1,25 @@
+{
+  "id": "plx-0eb42c34-d624-48be-92d7-abaf6d82ba9d",
+  "title": "Reduce console chat worker Docker image size by making ML deps optional",
+  "description": "",
+  "type": "epic",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "cc097c78-1460-4846-b5af-e604e9f6b031",
+      "author": "derek.norrbom",
+      "text": "The console chat worker Lambda (`dashboard/amplify/functions/consoleRunWorker/Dockerfile`) was downloading torch (~532MB), nvidia_cudnn (~366MB), and other heavy ML packages it never uses. Root cause is two-layered:\n\n1. **Plexus itself** — 27 heavy ML packages (sklearn, xgboost, transformers, bertopic, etc.) were required core deps; they are now being moved to a `[ml]`, `[infra]`, and `[all]` optional extras.\n2. **Tactus transitive dep** — `tactus` requires `biblicus[reinforcement-memory]` as a hard core dep, which chains to `bertopic → sentence-transformers → torch`. Tactus is being patched (tcts-6722aa) to make this optional via `tactus[rca]`.\n\n**Definition of Done:**\n- `pip install plexus` (bare) installs no torch/sklearn/xgboost/transformers\n- `pip install plexus[all]` restores full behaviour for score processor and local dev\n- Console worker Docker build no longer downloads torch or NVIDIA packages\n- Score processor Docker build uses `plexus[all]` and remains fully functional\n- CI passes",
+      "created_at": "2026-05-22T21:35:54.282398Z"
+    }
+  ],
+  "created_at": "2026-05-22T21:35:46.056157Z",
+  "updated_at": "2026-05-22T21:35:54.282398Z",
+  "closed_at": null,
+  "custom": {}
+}
