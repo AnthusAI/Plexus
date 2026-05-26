@@ -104,7 +104,7 @@ jobs:
         python -m pip install --upgrade pip --no-cache-dir
         pip install "poetry>=1.8,<2.0" --no-cache-dir
         poetry config virtualenvs.create false
-        poetry install --with dev --no-interaction --no-ansi
+        poetry install --with dev --all-extras --no-interaction --no-ansi
 
         echo "Disk space after Python installation:"
         df -h
