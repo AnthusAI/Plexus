@@ -1,0 +1,25 @@
+{
+  "id": "plx-09493a3c-4aae-4ea3-a91b-ccc29effaf30",
+  "title": "Update score-processor Dockerfile to install plexus[all]",
+  "description": "",
+  "type": "chore",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-0eb42c34-d624-48be-92d7-abaf6d82ba9d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5ba7e5f2-ff1d-4fc2-9fef-967109602cf3",
+      "author": "derek.norrbom",
+      "text": "Updated score-processor Dockerfile to install plexus[all].",
+      "created_at": "2026-05-26T17:29:13.848274Z"
+    }
+  ],
+  "created_at": "2026-05-22T21:35:59.934284Z",
+  "updated_at": "2026-05-26T17:29:13.848274Z",
+  "closed_at": "2026-05-26T17:29:13.827740Z",
+  "custom": {}
+}
