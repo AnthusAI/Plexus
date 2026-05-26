@@ -161,17 +161,18 @@ def test_resolve_client_uses_iam_auth_without_api_key(monkeypatch):
     created = []
 
     class FakeClient:
-        def __init__(self, *, api_url):
-            created.append(api_url)
+        def __init__(self, *, api_url, context):
+            created.append((api_url, context.account_key))
 
     monkeypatch.setenv("PLEXUS_API_URL", "https://example.appsync-api.us-west-2.amazonaws.com/graphql")
     monkeypatch.setenv("PLEXUS_GRAPHQL_AUTH_MODE", "iam")
+    monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "call-criteria")
     monkeypatch.delenv("PLEXUS_API_KEY", raising=False)
     monkeypatch.setattr(app, "PlexusDashboardClient", FakeClient)
 
     app._resolve_client()
 
-    assert created == ["https://example.appsync-api.us-west-2.amazonaws.com/graphql"]
+    assert created == [("https://example.appsync-api.us-west-2.amazonaws.com/graphql", "call-criteria")]
 
 
 def test_resolve_client_requires_iam_auth_mode(monkeypatch):
