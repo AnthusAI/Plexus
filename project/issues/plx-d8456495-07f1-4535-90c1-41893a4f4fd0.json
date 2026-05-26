@@ -1,0 +1,25 @@
+{
+  "id": "plx-d8456495-07f1-4535-90c1-41893a4f4fd0",
+  "title": "Fix documentation CI workflow to install all extras",
+  "description": "",
+  "type": "bug",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7296a245-fdd3-4160-a551-003a19b96ea0",
+      "author": "derek.norrbom",
+      "text": "Documentation workflow was failing with msgpack import error because it only installed dev dependencies without extras. Updated to use --all-extras.",
+      "created_at": "2026-05-26T18:43:43.781450Z"
+    }
+  ],
+  "created_at": "2026-05-26T18:43:39.263345Z",
+  "updated_at": "2026-05-26T18:43:43.781450Z",
+  "closed_at": "2026-05-26T18:43:43.770388Z",
+  "custom": {}
+}
