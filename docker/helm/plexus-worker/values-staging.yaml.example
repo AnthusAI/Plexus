@@ -1,0 +1,51 @@
+# Staging environment values
+# Override base values.yaml for staging environment
+
+workerType: score-processor
+
+replicaCount: 2
+
+image:
+  tag: "staging-latest"
+
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+
+env:
+  LOG_LEVEL: INFO
+  MAX_JOBS_PER_WORKER: "50"
+
+# Staging-specific Plexus config
+plexus:
+  createSecrets: true
+  api:
+    url: "https://your-staging-api.appsync-api.us-west-2.amazonaws.com/graphql"
+    # Set via Octopus variables:
+    # key: "#{Plexus.Staging.ApiKey}"
+
+  account:
+    # Set via Octopus variables:
+    # key: "#{Plexus.Staging.AccountKey}"
+
+scoreProcessor:
+  aws:
+    region: us-west-2
+    createSecrets: true
+    # Set via Octopus variables:
+    # accessKeyId: "#{AWS.Staging.AccessKeyId}"
+    # secretAccessKey: "#{AWS.Staging.SecretAccessKey}"
+
+  sqs:
+    # Set via Octopus variables:
+    # requestQueueUrl: "#{AWS.Staging.SQS.RequestQueue}"
+    # responseQueueUrl: "#{AWS.Staging.SQS.ResponseQueue}"
