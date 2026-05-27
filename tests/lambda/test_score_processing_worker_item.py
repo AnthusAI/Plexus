@@ -22,7 +22,13 @@ async def test_score_processing_job_passes_item_to_scorecard():
     processor.account_id = "acct-1"
 
     fake_item = SimpleNamespace(id="item-123", text="fallback")
-    fake_result = SimpleNamespace(value="ok", metadata={})
+    fake_result = SimpleNamespace(
+        value="ok",
+        explanation='The agent said "General Kenobi" [0:01.20-0:02.00].',
+        metadata={},
+        start_time_seconds=1.2,
+        end_time_seconds=2.0,
+    )
     fake_scorecard = SimpleNamespace(
         score_entire_text=AsyncMock(return_value={"score-id": fake_result})
     )
@@ -34,7 +40,7 @@ async def test_score_processing_job_passes_item_to_scorecard():
                 with patch.object(handler, "get_text_from_report", return_value="text"):
                     with patch.object(handler, "get_metadata_from_report", return_value={}):
                         with patch.object(handler, "create_scorecard_instance_for_single_score", return_value=fake_scorecard):
-                            with patch.object(handler, "create_score_result_for_api", return_value=None):
+                            with patch.object(handler, "create_score_result_for_api", return_value=None) as mock_create:
                                 with patch.object(handler, "Item", SimpleNamespace(get_by_id=Mock(return_value=fake_item)), create=True):
                                     await processor.process_job(
                                         "job-1",
@@ -45,3 +51,52 @@ async def test_score_processing_job_passes_item_to_scorecard():
 
     call_kwargs = fake_scorecard.score_entire_text.call_args.kwargs
     assert call_kwargs["item"] is fake_item
+    create_kwargs = mock_create.call_args.kwargs
+    assert create_kwargs["start_time_seconds"] == 1.2
+    assert create_kwargs["end_time_seconds"] == 2.0
+
+
+@pytest.mark.asyncio
+async def test_create_score_result_for_api_includes_timestamp_fields():
+    handler = _load_handler_module()
+    captured_inputs = []
+
+    def fake_gql(query, variables=None):
+        if "listAccountByKey" in query:
+            return {"listAccountByKey": {"items": [{"id": "account-1", "name": "Account"}]}}
+        if "createScoreResult" in query:
+            captured_inputs.append(variables["input"])
+            return {
+                "createScoreResult": {
+                    "id": "score-result-1",
+                    "createdAt": "2026-05-21T00:00:00Z",
+                }
+            }
+        return {}
+
+    fake_item_model = SimpleNamespace(
+        upsert_by_identifiers=Mock(return_value=("item-1", True, None)),
+        find_by_identifier=Mock(return_value=SimpleNamespace(id="item-1")),
+    )
+
+    with patch.object(handler, "gql", side_effect=fake_gql):
+        with patch.object(handler, "ACCOUNT_KEY", "account-key"):
+            with patch.object(handler, "PlexusDashboardClient", Mock(return_value=Mock())):
+                with patch.object(handler, "resolve_scorecard_id", AsyncMock(return_value="scorecard-1")):
+                    with patch.object(handler, "resolve_score_id", AsyncMock(return_value={"id": "score-1"})):
+                        with patch.object(handler, "get_text_from_report", AsyncMock(return_value="text")):
+                            with patch.object(handler, "get_metadata_from_report", AsyncMock(return_value={})):
+                                with patch.object(handler, "PLEXUS_ITEM_AVAILABLE", True):
+                                    with patch.object(handler, "Item", fake_item_model):
+                                        await handler.create_score_result_for_api(
+                                            report_id="report-1",
+                                            scorecard_id="scorecard-external",
+                                            score_id="score-external",
+                                            value="Yes",
+                                            explanation='The agent said "General Kenobi" [0:01.20-0:02.00].',
+                                            start_time_seconds=5,
+                                            end_time_seconds=6,
+                                        )
+
+    assert captured_inputs[0]["startTimeSeconds"] == 5.0
+    assert captured_inputs[0]["endTimeSeconds"] == 6.0

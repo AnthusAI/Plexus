@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, TYPE_CHECKING
+from plexus.utils.score_result_timestamps import extract_score_result_timestamps
 
 try:
     import boto3
@@ -438,6 +439,8 @@ async def create_score_result(
     trace_data: dict = None,
     log_content: str = None,
     cost: dict = None,
+    start_time_seconds: Optional[float] = None,
+    end_time_seconds: Optional[float] = None,
     client: "PlexusDashboardClient" = None
 ):
     """
@@ -455,6 +458,8 @@ async def create_score_result(
         trace_data: Optional trace data to upload to S3
         log_content: Optional log content to upload to S3
         cost: Optional cost data
+        start_time_seconds: Optional evidence start timestamp in seconds
+        end_time_seconds: Optional evidence end timestamp in seconds
         client: The PlexusDashboardClient instance
     """
     try:
@@ -479,6 +484,13 @@ async def create_score_result(
             except Exception:
                 cost_data = {"raw": str(cost)}
 
+        timestamp_source = {
+            "start_time_seconds": start_time_seconds,
+            "end_time_seconds": end_time_seconds,
+        }
+        timestamps = extract_score_result_timestamps(timestamp_source, explanation)
+        timestamp_input = timestamps.as_graphql_input()
+
         # Create ScoreResult using model method
         score_result = await asyncio.to_thread(
             ScoreResult.create,
@@ -495,7 +507,8 @@ async def create_score_result(
             cost=cost_data,
             code="200",
             type="prediction",
-            status="COMPLETED"
+            status="COMPLETED",
+            **timestamp_input,
         )
 
         if not score_result:
