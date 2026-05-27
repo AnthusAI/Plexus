@@ -1,0 +1,52 @@
+# Development environment values
+# Override base values.yaml for dev environment
+
+workerType: score-processor
+
+replicaCount: 1
+
+image:
+  tag: "dev-latest"
+
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "1Gi"
+    cpu: "500m"
+
+autoscaling:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: false
+
+env:
+  LOG_LEVEL: DEBUG
+  MAX_JOBS_PER_WORKER: "10"  # Restart frequently in dev
+
+# Dev-specific Plexus config
+plexus:
+  createSecrets: true
+  api:
+    url: "https://dev-api.plexus.example.com"
+    # Set via Octopus variables:
+    # key: "#{Plexus.Dev.ApiKey}"
+
+  account:
+    # Set via Octopus variables:
+    # key: "#{Plexus.Dev.AccountKey}"
+
+scoreProcessor:
+  aws:
+    region: us-west-2
+    createSecrets: true
+    # Set via Octopus variables:
+    # accessKeyId: "#{AWS.Dev.AccessKeyId}"
+    # secretAccessKey: "#{AWS.Dev.SecretAccessKey}"
+
+  sqs:
+    # Set via Octopus variables:
+    # requestQueueUrl: "#{AWS.Dev.SQS.RequestQueue}"
+    # responseQueueUrl: "#{AWS.Dev.SQS.ResponseQueue}"

@@ -1,0 +1,7 @@
+# Trivy Ignore File
+# Add CVEs that are accepted risks or false positives
+# Format: CVE-ID [reason]
+
+# Example:
+# CVE-2021-12345  # Low severity, affects dev dependencies only
+# CVE-2022-67890  # False positive, not applicable to our use case
