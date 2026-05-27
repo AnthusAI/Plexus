@@ -1033,6 +1033,97 @@ class TestComplexWorkflows:
             # String 'high' is converted to 0.9 by TactusScore._convert_confidence
             assert result.confidence == 0.9
 
+    @pytest.mark.asyncio
+    async def test_structured_timestamp_field_mapping(self, basic_code):
+        """Test that structured timestamps are mapped to Score.Result."""
+        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+            mock_runtime_instance = AsyncMock()
+            mock_runtime_instance.execute = AsyncMock(return_value={
+                'result': {
+                    'value': 'Yes',
+                    'explanation': 'Structured timestamps',
+                    'start_time_seconds': '1.2',
+                    'end_time_seconds': 2.0
+                }
+            })
+            MockRuntime.return_value = mock_runtime_instance
+
+            from plexus.scores.TactusScore import TactusScore
+
+            score = TactusScore(name="test_score", code=basic_code)
+            result = await score.predict(Score.Input(text="Test"))
+
+            assert result.start_time_seconds == 1.2
+            assert result.end_time_seconds == 2.0
+
+    @pytest.mark.asyncio
+    async def test_deepgram_start_end_timestamp_field_mapping(self, basic_code):
+        """Test that Deepgram-style start/end fields are mapped to Score.Result."""
+        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+            mock_runtime_instance = AsyncMock()
+            mock_runtime_instance.execute = AsyncMock(return_value={
+                'result': {
+                    'value': 'Yes',
+                    'explanation': 'Deepgram timestamps',
+                    'start': 1.2,
+                    'end': 2.0
+                }
+            })
+            MockRuntime.return_value = mock_runtime_instance
+
+            from plexus.scores.TactusScore import TactusScore
+
+            score = TactusScore(name="test_score", code=basic_code)
+            result = await score.predict(Score.Input(text="Test"))
+
+            assert result.start_time_seconds == 1.2
+            assert result.end_time_seconds == 2.0
+
+    @pytest.mark.asyncio
+    async def test_bracketed_timestamp_explanation_fallback(self, basic_code):
+        """Test that bracketed explanation timestamps are used as fallback."""
+        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+            mock_runtime_instance = AsyncMock()
+            mock_runtime_instance.execute = AsyncMock(return_value={
+                'result': {
+                    'value': 'Yes',
+                    'explanation': 'The agent said "General Kenobi" [0:01.20-0:02.00].'
+                }
+            })
+            MockRuntime.return_value = mock_runtime_instance
+
+            from plexus.scores.TactusScore import TactusScore
+
+            score = TactusScore(name="test_score", code=basic_code)
+            result = await score.predict(Score.Input(text="Test"))
+
+            assert result.start_time_seconds == 1.2
+            assert result.end_time_seconds == 2.0
+            assert result.explanation == 'The agent said "General Kenobi" [0:01.20-0:02.00].'
+
+    @pytest.mark.asyncio
+    async def test_structured_timestamps_win_over_bracketed_explanation(self, basic_code):
+        """Test structured timestamps take precedence over bracketed text."""
+        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+            mock_runtime_instance = AsyncMock()
+            mock_runtime_instance.execute = AsyncMock(return_value={
+                'result': {
+                    'value': 'Yes',
+                    'explanation': 'The agent said "General Kenobi" [0:01.20-0:02.00].',
+                    'startTimeSeconds': 5,
+                    'endTimeSeconds': 6
+                }
+            })
+            MockRuntime.return_value = mock_runtime_instance
+
+            from plexus.scores.TactusScore import TactusScore
+
+            score = TactusScore(name="test_score", code=basic_code)
+            result = await score.predict(Score.Input(text="Test"))
+
+            assert result.start_time_seconds == 5.0
+            assert result.end_time_seconds == 6.0
+
 
 # ============================================================================
 # Integration-Style Tests (Still Mocked)

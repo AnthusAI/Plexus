@@ -9,6 +9,7 @@ for high-volume Plexus scenarios with trusted code.
 """
 
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ from typing import Optional, Union, List, Any, Dict
 from pydantic import ConfigDict, model_validator
 
 from plexus.scores.Score import Score
+from plexus.utils.score_result_timestamps import extract_score_result_timestamps
 
 # Import Tactus components
 from tactus.core.runtime import TactusRuntime
@@ -121,16 +123,30 @@ class TactusScore(Score):
     def _create_runtime(self) -> TactusRuntime:
         """Create a runtime instance for pool use."""
         storage = MemoryStorage()
-        runtime = TactusRuntime(
-            procedure_id=self.parameters.name or "tactus_score",
-            storage_backend=storage,
-            openai_api_key=self._get_openai_api_key(),
-            reasoning_effort=self.parameters.reasoning_effort,
-            verbosity=self.parameters.verbosity,
-            max_tokens=self.parameters.max_tokens,
-            temperature=self.parameters.temperature,
-            reset_state_on_execute=True,
+        runtime_kwargs = {
+            "procedure_id": self.parameters.name or "tactus_score",
+            "storage_backend": storage,
+            "openai_api_key": self._get_openai_api_key(),
+            "reasoning_effort": self.parameters.reasoning_effort,
+            "verbosity": self.parameters.verbosity,
+            "max_tokens": self.parameters.max_tokens,
+            "temperature": self.parameters.temperature,
+            "reset_state_on_execute": True,
+        }
+        runtime_signature = inspect.signature(TactusRuntime.__init__)
+        accepts_arbitrary_kwargs = any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in runtime_signature.parameters.values()
         )
+        if accepts_arbitrary_kwargs:
+            accepted_runtime_kwargs = runtime_kwargs
+        else:
+            accepted_runtime_kwargs = {
+                key: value
+                for key, value in runtime_kwargs.items()
+                if key in runtime_signature.parameters
+            }
+        runtime = TactusRuntime(**accepted_runtime_kwargs)
         logger.debug("Created Tactus runtime for '%s'", self.parameters.name)
         return runtime
 
@@ -324,10 +340,12 @@ class TactusScore(Score):
                 value = procedure_output.get('value')
                 explanation = procedure_output.get('explanation')
                 confidence = procedure_output.get('confidence')
+                timestamps = extract_score_result_timestamps(procedure_output, explanation)
             else:
                 value = str(procedure_output)
                 explanation = None
                 confidence = None
+                timestamps = extract_score_result_timestamps(explanation=explanation)
 
             logger.debug("Tactus returned value '%s' for score '%s'", value, self.parameters.name)
 
@@ -350,6 +368,8 @@ class TactusScore(Score):
                 value=str(value),
                 explanation=explanation,
                 confidence=self._convert_confidence(confidence),
+                start_time_seconds=timestamps.start_time_seconds,
+                end_time_seconds=timestamps.end_time_seconds,
                 metadata={
                     'tactus_output': result,
                 }

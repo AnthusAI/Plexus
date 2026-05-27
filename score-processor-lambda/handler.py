@@ -307,6 +307,8 @@ class LambdaJobProcessor:
                 result_metadata = result.metadata if isinstance(getattr(result, "metadata", None), dict) else {}
                 explanation = (getattr(result, 'explanation', None) or
                               result_metadata.get('explanation', ''))
+                start_time_seconds = getattr(result, 'start_time_seconds', None)
+                end_time_seconds = getattr(result, 'end_time_seconds', None)
 
                 # Check for ERROR result
                 if value and value.upper() == "ERROR":
@@ -350,6 +352,8 @@ class LambdaJobProcessor:
                     trace_data=trace_data,
                     log_content=current_logs,
                     cost=cost,
+                    start_time_seconds=start_time_seconds,
+                    end_time_seconds=end_time_seconds,
                     client=self.client
                 )
 
