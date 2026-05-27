@@ -42,6 +42,7 @@ from plexus.Scorecard import Scorecard
 from plexus.dashboard.api.models.item import Item
 from plexus.CustomLogging import logging, set_log_group
 from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
+from plexus.utils.score_result_timestamps import extract_score_result_timestamps
 
 # Import Item model for upsert functionality
 try:
@@ -291,7 +292,21 @@ def upload_score_result_log_file(score_result_id: str, log_content: str) -> Opti
         logging.error(f"Stack trace: {traceback.format_exc()}")
         return None
 
-async def create_score_result_for_api(report_id: str, scorecard_id: str, score_id: str, value: str, explanation: str, trace_data: dict = None, log_content: str = None, request_id: str = None, code: str = "200", status: str = "COMPLETED", cost: Optional[dict] = None):
+async def create_score_result_for_api(
+    report_id: str,
+    scorecard_id: str,
+    score_id: str,
+    value: str,
+    explanation: str,
+    trace_data: dict = None,
+    log_content: str = None,
+    request_id: str = None,
+    code: str = "200",
+    status: str = "COMPLETED",
+    cost: Optional[dict] = None,
+    start_time_seconds: Optional[float] = None,
+    end_time_seconds: Optional[float] = None,
+):
     """
     Create a score result in DynamoDB for API memoization.
     This function creates an Item (if needed) and a ScoreResult to cache the scoring results.
@@ -309,6 +324,8 @@ async def create_score_result_for_api(report_id: str, scorecard_id: str, score_i
         code: Optional code to include in the score result
         status: Optional status to include in the score result
         cost: Optional cost to include in the score result
+        start_time_seconds: Optional evidence start timestamp in seconds
+        end_time_seconds: Optional evidence end timestamp in seconds
         
     Returns:
         A dictionary containing score_result_id, item_id, value, explanation, and trace_attachment_path (or None)
@@ -657,6 +674,15 @@ async def create_score_result_for_api(report_id: str, scorecard_id: str, score_i
             "type": "prediction",  # API calls are predictions
             "status": status,
         }
+
+        timestamps = extract_score_result_timestamps(
+            {
+                "start_time_seconds": start_time_seconds,
+                "end_time_seconds": end_time_seconds,
+            },
+            explanation,
+        )
+        create_score_result_input.update(timestamps.as_graphql_input())
         
         # Add trace data if available (same approach as evaluation)
         if trace_data:
@@ -1408,7 +1434,8 @@ class JobProcessor:
                 raise RuntimeError(f"No result for score {dyn_score_id}")
 
             value = str(result.value) if result.value is not None else None
-            explanation = (result.metadata or {}).get("explanation", "")
+            result_metadata = result.metadata if isinstance(getattr(result, "metadata", None), dict) else {}
+            explanation = getattr(result, "explanation", None) or result_metadata.get("explanation", "")
 
             if value and value.upper() == "ERROR":
                 await asyncio.to_thread(
@@ -1419,8 +1446,8 @@ class JobProcessor:
                 )
                 return {"status": "failed", "reason": "ERROR value"}
 
-            trace_data = (result.metadata or {}).get("trace")
-            cost = (result.metadata or {}).get("cost")
+            trace_data = result_metadata.get("trace")
+            cost = result_metadata.get("cost")
 
             await create_score_result_for_api(
                 report_id=report_id,
@@ -1433,6 +1460,8 @@ class JobProcessor:
                 request_id=None,
                 code="200",
                 cost=cost,
+                start_time_seconds=getattr(result, "start_time_seconds", None),
+                end_time_seconds=getattr(result, "end_time_seconds", None),
             )
 
             await asyncio.to_thread(
