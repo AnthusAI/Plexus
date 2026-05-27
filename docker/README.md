@@ -1,0 +1,497 @@
+# Plexus Kubernetes Deployment
+
+Production-ready Kubernetes deployment for Plexus workers using Helm charts and Octopus Deploy.
+
+## Overview
+
+This directory contains everything needed to deploy Plexus workers to Kubernetes:
+
+- **Dockerfile** - Multi-worker container image (score-processor, celery, console-worker)
+- **helm/plexus-worker/** - Helm chart for Kubernetes deployment
+- **docker-compose.yml** - Local testing environment
+- **SECURITY.md** - Security best practices and hardening guide
+
+## Quick Start
+
+### 1. Configure Environment
+
+Create your environment-specific values file:
+
+```bash
+# Copy example template
+cp docker/helm/plexus-worker/values-dev.yaml.example \
+   docker/helm/plexus-worker/values-dev.yaml
+
+# Edit with your credentials
+vim docker/helm/plexus-worker/values-dev.yaml
+```
+
+**⚠️ Important**: Values files contain credentials and are git-ignored. Never commit them!
+
+Available templates:
+- `values-dev.yaml.example` - Development environment
+- `values-staging.yaml.example` - Staging environment  
+- `values-prod.yaml.example` - Production environment
+
+### 2. Build Docker Image
+
+```bash
+docker build -f docker/Dockerfile -t your-registry/plexus-worker:1.52.0 .
+docker push your-registry/plexus-worker:1.52.0
+```
+
+### 3. Deploy with Helm
+
+```bash
+# Package the chart
+helm package docker/helm/plexus-worker
+
+# Install to Kubernetes
+helm install plexus-worker docker/helm/plexus-worker \
+  -f docker/helm/plexus-worker/values-prod.yaml \
+  --set image.repository=your-registry/plexus-worker \
+  --set image.tag=1.52.0 \
+  --set plexus.api.key=your-api-key \
+  --namespace plexus-prod \
+  --create-namespace
+```
+
+## Deployment with Octopus Deploy
+
+Octopus Deploy has native Helm chart support for Kubernetes deployments.
+
+### Setup Steps
+
+#### 1. Package the Helm Chart
+
+```bash
+cd docker/helm
+helm package plexus-worker
+# Creates: plexus-worker-1.0.0.tgz
+```
+
+#### 2. Upload to Octopus
+
+1. Go to **Library** → **Packages** → **Upload Package**
+2. Upload `plexus-worker-1.0.0.tgz`
+
+#### 3. Create Octopus Project
+
+1. **Projects** → **Add Project**: "Plexus Worker Deployment"
+2. **Process** → **Add Step** → **Deploy Helm Chart**
+
+**Step Configuration**:
+- **Package ID**: `plexus-worker`
+- **Release Name**: `plexus-worker-#{Octopus.Environment.Name | ToLower}`
+- **Namespace**: `#{Kubernetes.Namespace}`
+- **Reset Values**: ✅ Checked
+
+**Values Files** (scoped by environment):
+- Dev: `values-dev.yaml`
+- Staging: `values-staging.yaml`
+- Production: `values-prod.yaml`
+
+**Explicit Key Values** (Raw YAML):
+```yaml
+image:
+  repository: "#{Docker.Registry}/plexus-worker"
+  tag: "#{Docker.Image.Tag}"
+
+plexus:
+  api:
+    url: "#{Plexus.ApiUrl}"
+    key: "#{Plexus.ApiKey}"
+  account:
+    key: "#{Plexus.AccountKey}"
+
+scoreProcessor:
+  aws:
+    region: "#{AWS.Region}"
+    accessKeyId: "#{AWS.AccessKeyId}"
+    secretAccessKey: "#{AWS.SecretAccessKey}"
+  sqs:
+    requestQueueUrl: "#{AWS.SQS.RequestQueue}"
+    responseQueueUrl: "#{AWS.SQS.ResponseQueue}"
+```
+
+#### 4. Configure Octopus Variables
+
+| Variable | Example | Scope | Sensitive |
+|----------|---------|-------|-----------|
+| `Docker.Registry` | `123456.dkr.ecr.us-west-2.amazonaws.com` | All | No |
+| `Docker.Image.Tag` | `1.52.0` | Per Release | No |
+| `Kubernetes.Namespace` | `plexus-prod` | Per Environment | No |
+| `Plexus.ApiUrl` | `https://api.plexus.example.com` | Per Environment | No |
+| `Plexus.ApiKey` | `***` | Per Environment | **Yes** |
+| `Plexus.AccountKey` | `***` | Per Environment | **Yes** |
+| `AWS.Region` | `us-west-2` | Per Environment | No |
+| `AWS.AccessKeyId` | `***` | Per Environment | **Yes** |
+| `AWS.SecretAccessKey` | `***` | Per Environment | **Yes** |
+| `AWS.SQS.RequestQueue` | `https://sqs...` | Per Environment | No |
+| `AWS.SQS.ResponseQueue` | `https://sqs...` | Per Environment | No |
+
+#### 5. Deploy
+
+1. **Create Release** → Enter version
+2. **Deploy to Dev** → Monitor deployment
+3. **Promote to Staging** → Test
+4. **Promote to Production** → After approval
+
+### Automated CI/CD
+
+Integrate with GitHub Actions:
+
+```yaml
+- name: Create Octopus Release
+  uses: OctopusDeploy/create-release-action@v3
+  with:
+    api_key: ${{ secrets.OCTOPUS_API_KEY }}
+    server: ${{ secrets.OCTOPUS_SERVER_URL }}
+    project: "Plexus Worker Deployment"
+    release_number: ${{ steps.version.outputs.VERSION }}
+
+- name: Deploy to Dev
+  uses: OctopusDeploy/deploy-release-action@v3
+  with:
+    api_key: ${{ secrets.OCTOPUS_API_KEY }}
+    server: ${{ secrets.OCTOPUS_SERVER_URL }}
+    project: "Plexus Worker Deployment"
+    release_number: ${{ steps.version.outputs.VERSION }}
+    environment: "Development"
+```
+
+## Worker Types
+
+The image supports three worker modes via `workerType` value:
+
+### 1. Score Processor (`score-processor`)
+Polls SQS queues and processes scoring jobs.
+
+**Required Config**:
+- `PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL`
+- `PLEXUS_RESPONSE_WORKER_QUEUE_URL`
+- AWS credentials (or IRSA)
+
+### 2. Celery Worker (`celery`)
+Processes async tasks from RabbitMQ/Redis.
+
+**Required Config**:
+- `CELERY_BROKER_URL`
+- `CELERY_APP`, `CELERY_QUEUE`, `CELERY_CONCURRENCY`
+
+### 3. Console Worker (`console-worker`)
+Polls for console chat messages.
+
+**Required Config**:
+- `CONSOLE_RESPONSE_TARGET`
+
+## Configuration
+
+### Environment Values Files
+
+Environment-specific configuration is managed through values files:
+
+```
+helm/plexus-worker/
+├── values.yaml                    # Base configuration (committed to git)
+├── values-dev.yaml.example        # Dev template (committed)
+├── values-staging.yaml.example    # Staging template (committed)
+├── values-prod.yaml.example       # Production template (committed)
+│
+├── values-dev.yaml               # Your dev config (git-ignored)
+├── values-staging.yaml           # Your staging config (git-ignored)
+└── values-prod.yaml              # Your production config (git-ignored)
+```
+
+**Setup Process:**
+1. Copy `.example` file to remove `.example` extension
+2. Fill in your actual credentials
+3. Use with `helm install -f values-{env}.yaml`
+
+**Security**: Actual values files are git-ignored to prevent credential leaks.
+
+### Environment-Specific Values
+
+**Development** (`values-dev.yaml.example` → `values-dev.yaml`):
+- 1 replica
+- DEBUG logging
+- Lower resources
+
+**Staging** (`values-staging.yaml`):
+- 2-10 replicas (HPA)
+- INFO logging
+- Moderate resources
+
+**Production** (`values-prod.yaml`):
+- 5-30 replicas (HPA)
+- INFO logging
+- High resources
+- Network policies enabled
+- IRSA enabled (no AWS credentials in secrets)
+- Pod Disruption Budget
+
+### Key Helm Values
+
+```yaml
+# Worker type
+workerType: score-processor
+
+# Image
+image:
+  repository: your-registry/plexus-worker
+  tag: "1.52.0"
+
+# Resources
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "1500m"
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+
+# Security (Production)
+networkPolicy:
+  enabled: true
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/PlexusWorkerRole
+```
+
+## Local Testing
+
+Use Docker Compose for local development:
+
+```bash
+# Copy environment template
+cp docker/.env.example docker/.env
+
+# Edit with your credentials
+vim docker/.env
+
+# Start services
+docker-compose -f docker/docker-compose.yml up
+
+# View logs
+docker-compose -f docker/docker-compose.yml logs -f
+
+# Clean up
+docker-compose -f docker/docker-compose.yml down
+```
+
+## Security
+
+This deployment follows security best practices:
+
+✅ **Non-root user** - Container runs as UID 1000  
+✅ **No privilege escalation** - `allowPrivilegeEscalation: false`  
+✅ **Dropped capabilities** - All Linux capabilities dropped  
+✅ **seccomp profile** - RuntimeDefault applied  
+✅ **Network policies** - Pod-to-pod communication restricted  
+✅ **IRSA support** - No AWS credentials in secrets (production)  
+✅ **Secrets management** - All sensitive data in Kubernetes Secrets  
+✅ **Resource limits** - CPU and memory limits enforced  
+
+See [SECURITY.md](SECURITY.md) for detailed security documentation and hardening guide.
+
+## Monitoring
+
+### Check Deployment Status
+
+```bash
+# Pods
+kubectl get pods -l app.kubernetes.io/name=plexus-worker -n plexus-prod
+
+# Deployment
+kubectl get deployment -n plexus-prod
+
+# HPA
+kubectl get hpa -n plexus-prod
+
+# Logs
+kubectl logs -f deployment/plexus-worker-score-processor -n plexus-prod
+```
+
+### Key Metrics
+
+- **CPU/Memory usage** - For autoscaling
+- **Job processing rate** - Jobs per minute
+- **Error rate** - Failed jobs percentage
+- **Queue depth** - SQS queue size
+
+## Scaling
+
+### Manual Scaling
+
+```bash
+kubectl scale deployment plexus-worker-score-processor --replicas=10 -n plexus-prod
+```
+
+### Automatic Scaling (HPA)
+
+Enabled by default in staging/production:
+- **Min**: 3 replicas (5 in prod)
+- **Max**: 20 replicas (30 in prod)
+- **Target CPU**: 70%
+- **Target Memory**: 80%
+
+### Queue-Based Autoscaling (Advanced)
+
+Use [KEDA](https://keda.sh/) for SQS queue depth-based scaling:
+
+```yaml
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: plexus-score-processor-scaler
+spec:
+  scaleTargetRef:
+    name: plexus-worker-score-processor
+  minReplicaCount: 5
+  maxReplicaCount: 50
+  triggers:
+  - type: aws-sqs-queue
+    metadata:
+      queueURL: https://sqs.us-west-2.amazonaws.com/123/queue
+      queueLength: "10"
+      awsRegion: "us-west-2"
+```
+
+## Troubleshooting
+
+### Pods CrashLoopBackOff
+
+```bash
+kubectl logs <pod-name> -n plexus-prod
+kubectl describe pod <pod-name> -n plexus-prod
+
+# Common causes:
+# - Missing environment variables
+# - Invalid AWS credentials
+# - Image pull errors
+# - Insufficient resources
+```
+
+### Workers Not Processing Jobs
+
+```bash
+# Check worker logs
+kubectl logs -f deployment/plexus-worker-score-processor -n plexus-prod | grep ERROR
+
+# Verify environment variables
+kubectl exec -it <pod-name> -n plexus-prod -- env | grep PLEXUS
+
+# Check SQS queue
+aws sqs get-queue-attributes \
+  --queue-url $QUEUE_URL \
+  --attribute-names ApproximateNumberOfMessages
+```
+
+### High Memory Usage
+
+- Reduce `CELERY_CONCURRENCY` for Celery workers
+- Set `MAX_JOBS_PER_WORKER` to force periodic restarts
+- Increase memory limits in values file
+- Profile scoring logic for memory leaks
+
+### Helm Deployment Fails
+
+```bash
+# Dry run to check for errors
+helm install plexus-worker docker/helm/plexus-worker --dry-run --debug
+
+# Validate templates
+helm template plexus-worker docker/helm/plexus-worker \
+  -f docker/helm/plexus-worker/values-prod.yaml
+
+# Check for missing values
+helm lint docker/helm/plexus-worker
+```
+
+## Production Checklist
+
+Before deploying to production:
+
+### Security
+- [ ] Container runs as non-root (UID 1000)
+- [ ] Network policies enabled
+- [ ] IRSA configured (no AWS creds in secrets)
+- [ ] Secrets in Kubernetes Secrets (marked sensitive in Octopus)
+- [ ] Image scanned for vulnerabilities
+- [ ] Pod Security Standards enforced
+
+### Reliability
+- [ ] Min 5 replicas configured
+- [ ] HPA enabled and tested
+- [ ] Pod Disruption Budget configured
+- [ ] Health checks working
+- [ ] Graceful shutdown tested (60s grace period)
+
+### Operations
+- [ ] Specific image tag (not `:latest`)
+- [ ] Resource limits appropriate for workload
+- [ ] Monitoring and alerting configured
+- [ ] Logging aggregation set up
+- [ ] Runbook documented
+- [ ] Rollback tested
+
+## Differences from Lambda
+
+This Kubernetes deployment complements the existing Lambda setup in `score-processor-lambda/`:
+
+| Aspect | Lambda | Kubernetes |
+|--------|--------|------------|
+| Execution | Event-driven | Continuous process |
+| Scaling | 0-1000s automatic | 3-30 via HPA |
+| Cost | Pay per invocation | Pay for running pods |
+| Startup | Cold start (1-3s) | Always warm |
+| Max Duration | 15 minutes | Unlimited |
+| Infrastructure | AWS managed | Self-managed |
+
+**Both can run simultaneously** in a hybrid architecture.
+
+## Files Structure
+
+```
+docker/
+├── Dockerfile                    # Multi-worker container image
+├── entrypoint.sh                 # Worker type selector
+├── docker-compose.yml            # Local testing
+├── .dockerignore                 # Build optimization
+├── .env.example                  # Environment template
+├── .gitignore                    # Protect secrets
+├── README.md                     # This file
+├── SECURITY.md                   # Security guide
+└── helm/plexus-worker/          # Helm chart
+    ├── Chart.yaml
+    ├── values.yaml              # Default config
+    ├── values-dev.yaml          # Dev overrides
+    ├── values-staging.yaml      # Staging overrides
+    ├── values-prod.yaml         # Production overrides
+    └── templates/               # K8s resources
+        ├── deployment.yaml
+        ├── configmap.yaml
+        ├── secret.yaml
+        ├── hpa.yaml
+        ├── pdb.yaml
+        ├── serviceaccount.yaml
+        └── networkpolicy.yaml
+```
+
+## Support
+
+- **Helm Chart**: See `helm/plexus-worker/README.md`
+- **Security**: See `SECURITY.md`
+- **Kubernetes Issues**: Check pod logs and events
+- **Octopus Deploy**: Check Octopus logs and deployment history
+
+## License
+
+MIT License - See repository root for details.

@@ -1,0 +1,97 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.circleci/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Node modules (dashboard)
+node_modules/
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+dashboard/.amplify/
+
+# Infrastructure
+infrastructure/
+terraform/
+*.tfstate
+*.tfstate.backup
+
+# Temporary files
+tmp/
+*.log
+.env.local
+.env.*.local
+
+# CDK artifacts
+cdk.out/
+*.js
+*.d.ts
+
+# Lambda-specific (not needed for K8s)
+score-processor-lambda/
+score-processor-fanout-lambda/
+lambda_functions/
+
+# But DO include docker/entrypoint.sh (needed for build)
+!docker/entrypoint.sh
+
+# Test artifacts
+tests/
+features/
+.plexus_training_data_cache/
+
+# Development artifacts
+spikes/
+examples/
+scripts/

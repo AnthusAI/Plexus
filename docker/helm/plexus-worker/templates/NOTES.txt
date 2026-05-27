@@ -1,0 +1,50 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+
+Worker Type: {{ .Values.workerType }}
+
+To check the status of your deployment:
+
+  kubectl get deployment {{ include "plexus-worker.fullname" . }} -n {{ .Values.global.namespace }}
+  kubectl get pods -l app.kubernetes.io/name={{ include "plexus-worker.name" . }} -n {{ .Values.global.namespace }}
+
+To view logs:
+
+  kubectl logs -f deployment/{{ include "plexus-worker.fullname" . }} -n {{ .Values.global.namespace }}
+
+{{- if .Values.autoscaling.enabled }}
+
+Autoscaling is enabled:
+  Min replicas: {{ .Values.autoscaling.minReplicas }}
+  Max replicas: {{ .Values.autoscaling.maxReplicas }}
+
+To check HPA status:
+
+  kubectl get hpa {{ include "plexus-worker.fullname" . }} -n {{ .Values.global.namespace }}
+{{- else }}
+
+Autoscaling is disabled. Running {{ .Values.replicaCount }} replicas.
+{{- end }}
+
+{{- if eq .Values.workerType "score-processor" }}
+
+Score Processor Configuration:
+  SQS Request Queue: {{ .Values.scoreProcessor.sqs.requestQueueUrl }}
+  SQS Response Queue: {{ .Values.scoreProcessor.sqs.responseQueueUrl }}
+  AWS Region: {{ .Values.scoreProcessor.aws.region }}
+{{- end }}
+
+{{- if eq .Values.workerType "celery" }}
+
+Celery Worker Configuration:
+  App: {{ .Values.celery.app }}
+  Queue: {{ .Values.celery.queue }}
+  Concurrency: {{ .Values.celery.concurrency }}
+{{- end }}
+
+{{- if eq .Values.workerType "console-worker" }}
+
+Console Worker Configuration:
+  Response Target: {{ .Values.console.responseTarget }}
+{{- end }}
