@@ -1,0 +1,8 @@
+# Ignore environment-specific values files with credentials
+values-dev.yaml
+values-staging.yaml
+values-prod.yaml
+values-local.yaml
+
+# Keep example templates
+!values-*.yaml.example

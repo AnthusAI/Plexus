@@ -1,0 +1,101 @@
+# Production environment values
+# Override base values.yaml for production environment
+
+workerType: score-processor
+
+image:
+  tag: "1.52.0"  # Use specific version tags in prod
+  pullPolicy: IfNotPresent
+
+# Pull secrets for private registry (recommended)
+imagePullSecrets: []
+# - name: registry-credentials
+
+resources:
+  requests:
+    memory: "2Gi"
+    cpu: "1000m"
+  limits:
+    memory: "4Gi"
+    cpu: "2000m"
+
+autoscaling:
+  enabled: true
+  minReplicas: 5
+  maxReplicas: 30
+  targetCPUUtilizationPercentage: 60  # Scale earlier in prod
+  targetMemoryUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 3  # Always keep 3 running
+
+# Use IRSA in production (no AWS credentials in secrets)
+serviceAccount:
+  create: true
+  annotations:
+    # Set via Octopus variables:
+    # eks.amazonaws.com/role-arn: "#{AWS.Prod.IAMRoleArn}"
+
+# Network policies - Enable in production
+networkPolicy:
+  enabled: true  # Restrict pod-to-pod communication
+  ingress: []    # Workers don't need ingress
+  extraEgress: []
+  celeryBroker:
+    # Configure if using Celery worker
+    podSelector:
+      matchLabels:
+        app: rabbitmq
+    namespaceSelector: {}
+
+# Security contexts are inherited from values.yaml (already secure)
+
+env:
+  LOG_LEVEL: INFO
+  MAX_JOBS_PER_WORKER: "100"
+  ERROR_RETRY_DELAY: "10"  # Longer backoff in prod
+
+# Production Plexus config
+plexus:
+  createSecrets: true
+  api:
+    url: "https://your-prod-api.appsync-api.us-west-2.amazonaws.com/graphql"
+    # Set via Octopus variables:
+    # key: "#{Plexus.Prod.ApiKey}"
+
+  account:
+    # Set via Octopus variables:
+    # key: "#{Plexus.Prod.AccountKey}"
+
+scoreProcessor:
+  aws:
+    region: us-west-2
+    createSecrets: false  # Using IRSA instead
+    # No credentials needed with IRSA
+
+  sqs:
+    # Set via Octopus variables:
+    # requestQueueUrl: "#{AWS.Prod.SQS.RequestQueue}"
+    # responseQueueUrl: "#{AWS.Prod.SQS.ResponseQueue}"
+
+# Production affinity rules
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:  # Hard requirement
+    - labelSelector:
+        matchExpressions:
+        - key: app.kubernetes.io/name
+          operator: In
+          values:
+          - plexus-worker
+      topologyKey: kubernetes.io/hostname
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      preference:
+        matchExpressions:
+        - key: workload-type
+          operator: In
+          values:
+          - compute-intensive
