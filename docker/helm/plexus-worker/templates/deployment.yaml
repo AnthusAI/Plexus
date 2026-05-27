@@ -1,0 +1,210 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "plexus-worker.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "plexus-worker.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "plexus-worker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "plexus-worker.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "plexus-worker.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: worker
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        # Worker type
+        - name: WORKER_TYPE
+          value: {{ .Values.workerType | quote }}
+
+        # Common environment variables
+        {{- range $key, $value := .Values.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+
+        # Plexus API configuration
+        - name: PLEXUS_API_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "plexus-worker.secretName" . }}
+              key: api-url
+        - name: PLEXUS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "plexus-worker.secretName" . }}
+              key: api-key
+        - name: PLEXUS_ACCOUNT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "plexus-worker.secretName" . }}
+              key: account-key
+
+        {{- if eq .Values.workerType "score-processor" }}
+        # Score Processor specific config
+        - name: PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: sqs-request-queue-url
+        - name: PLEXUS_RESPONSE_WORKER_QUEUE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: sqs-response-queue-url
+        - name: AWS_DEFAULT_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: aws-region
+        {{- if not .Values.serviceAccount.annotations }}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "plexus-worker.awsSecretName" . }}
+              key: aws-access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "plexus-worker.awsSecretName" . }}
+              key: aws-secret-access-key
+        {{- end }}
+        {{- end }}
+
+        {{- if eq .Values.workerType "celery" }}
+        # Celery specific config
+        - name: CELERY_BROKER_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "plexus-worker.celerySecretName" . }}
+              key: broker-url
+        - name: CELERY_APP
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: celery-app
+        - name: CELERY_QUEUE
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: celery-queue
+        - name: CELERY_CONCURRENCY
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: celery-concurrency
+        {{- end }}
+
+        {{- if eq .Values.workerType "console-worker" }}
+        # Console worker specific config
+        - name: CONSOLE_RESPONSE_TARGET
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: console-response-target
+        - name: CONSOLE_LOCAL_WORKER_IDLE_POLL_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: console-idle-poll-seconds
+        - name: CONSOLE_LOCAL_WORKER_ERROR_BACKOFF_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: console-error-backoff-seconds
+        {{- end }}
+
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+
+        {{- if .Values.livenessProbe.enabled }}
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        {{- end }}
+
+        {{- if .Values.readinessProbe.enabled }}
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+        {{- end }}
+
+        volumeMounts:
+        {{- if .Values.volumes.scorecardCache.enabled }}
+        - name: scorecard-cache
+          mountPath: /app/data/scorecards
+        {{- end }}
+        {{- if .Values.volumes.tmp.enabled }}
+        - name: tmp
+          mountPath: /app/tmp
+        {{- end }}
+
+      volumes:
+      {{- if .Values.volumes.scorecardCache.enabled }}
+      - name: scorecard-cache
+        emptyDir:
+          sizeLimit: {{ .Values.volumes.scorecardCache.sizeLimit }}
+      {{- end }}
+      {{- if .Values.volumes.tmp.enabled }}
+      - name: tmp
+        emptyDir:
+          sizeLimit: {{ .Values.volumes.tmp.sizeLimit }}
+      {{- end }}
+
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
