@@ -33,6 +33,7 @@ from plexus.utils.feedback_selection import (
     normalize_feedback_sampling_mode,
     select_feedback_items,
 )
+from plexus.utils.score_result_timestamps import extract_score_result_timestamps
 from plexus.cli.shared.optimizer_shadow_invalidation import (
     resolve_score_version_shadow_invalidation_metadata,
 )
@@ -2755,6 +2756,14 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'status': 'COMPLETED',  # Add status
                 'type': 'evaluation',  # Add type field required by byTypeStatusUpdated GSI
             }
+            timestamps = extract_score_result_timestamps(
+                {
+                    "start_time_seconds": getattr(score_result, "start_time_seconds", None),
+                    "end_time_seconds": getattr(score_result, "end_time_seconds", None),
+                },
+                score_result.explanation,
+            )
+            data.update(timestamps.as_graphql_input())
             logging.info(f"🔧 CODE VERSION 2025-10-17-v3 ACTIVE - Creating ScoreResult with type='{data.get('type')}' and status='{data.get('status')}'")
             logging.info(f"🔧 Full data dict keys: {list(data.keys())}")
             

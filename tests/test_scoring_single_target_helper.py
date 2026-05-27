@@ -2,7 +2,7 @@ import importlib.util
 import sys
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from pathlib import Path
 
 def _load_scoring_module():
@@ -118,3 +118,70 @@ def test_helper_marks_dependency_unmet_when_scorecard_raises_skipped_exception()
 
     assert outcome.dependency_unmet is True
     assert outcome.result is None
+
+
+def test_create_score_result_persists_structured_timestamps():
+    scoring = _load_scoring_module()
+
+    class FakeScoreResult:
+        create = Mock(
+            return_value=SimpleNamespace(
+                id="score-result-1",
+                createdAt="2026-05-21T00:00:00Z",
+            )
+        )
+
+    scoring.ScoreResult = FakeScoreResult
+
+    result_id = asyncio.run(
+        scoring.create_score_result(
+            item_id="item-1",
+            scorecard_id="scorecard-1",
+            score_id="score-1",
+            account_id="account-1",
+            scoring_job_id="job-1",
+            external_id="external-1",
+            value="Yes",
+            explanation='The agent said "General Kenobi" [0:01.20-0:02.00].',
+            start_time_seconds=5,
+            end_time_seconds=6,
+            client=Mock(),
+        )
+    )
+
+    assert result_id == "score-result-1"
+    call_kwargs = FakeScoreResult.create.call_args.kwargs
+    assert call_kwargs["startTimeSeconds"] == 5.0
+    assert call_kwargs["endTimeSeconds"] == 6.0
+
+
+def test_create_score_result_parses_bracketed_timestamps_when_structured_missing():
+    scoring = _load_scoring_module()
+
+    class FakeScoreResult:
+        create = Mock(
+            return_value=SimpleNamespace(
+                id="score-result-1",
+                createdAt="2026-05-21T00:00:00Z",
+            )
+        )
+
+    scoring.ScoreResult = FakeScoreResult
+
+    asyncio.run(
+        scoring.create_score_result(
+            item_id="item-1",
+            scorecard_id="scorecard-1",
+            score_id="score-1",
+            account_id="account-1",
+            scoring_job_id="job-1",
+            external_id="external-1",
+            value="Yes",
+            explanation='The agent said "General Kenobi" [0:01.20-0:02.00].',
+            client=Mock(),
+        )
+    )
+
+    call_kwargs = FakeScoreResult.create.call_args.kwargs
+    assert call_kwargs["startTimeSeconds"] == 1.2
+    assert call_kwargs["endTimeSeconds"] == 2.0
