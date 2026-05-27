@@ -76,8 +76,9 @@ test_*.py
 *.egg-info/
 .next/
 
-# Docker
-docker/
+# Docker (but keep entrypoint.sh for K8s worker image)
+docker/*
+!docker/entrypoint.sh
 Dockerfile
 .dockerignore
 

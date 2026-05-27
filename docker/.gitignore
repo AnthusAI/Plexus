@@ -1,0 +1,20 @@
+# Environment files with secrets
+.env
+.env.local
+.env.*.local
+
+# Docker Compose overrides
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Kubernetes secrets (if testing locally)
+*-secrets.yaml
+*.secret.yaml
+
+# Build artifacts
+*.tar
+*.tar.gz
+
+# Logs
+logs/
+*.log

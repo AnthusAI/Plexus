@@ -1,0 +1,67 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "plexus-worker.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "plexus-worker.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "plexus-worker.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Egress
+  - Ingress
+
+  # Ingress rules - workers typically don't need ingress
+  ingress:
+  {{- if .Values.networkPolicy.ingress }}
+  {{- toYaml .Values.networkPolicy.ingress | nindent 2 }}
+  {{- else }}
+  []  # No ingress by default
+  {{- end }}
+
+  # Egress rules
+  egress:
+  # Allow DNS queries
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+  # Allow HTTPS to external APIs (Plexus API, AWS APIs, etc.)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 8443
+
+  {{- if eq .Values.workerType "celery" }}
+  # Allow Celery broker access (RabbitMQ/Redis)
+  - to:
+    {{- if .Values.networkPolicy.celeryBroker.podSelector }}
+    - podSelector:
+        {{- toYaml .Values.networkPolicy.celeryBroker.podSelector | nindent 8 }}
+    {{- end }}
+    {{- if .Values.networkPolicy.celeryBroker.namespaceSelector }}
+    - namespaceSelector:
+        {{- toYaml .Values.networkPolicy.celeryBroker.namespaceSelector | nindent 8 }}
+    {{- end }}
+    ports:
+    - protocol: TCP
+      port: 5672  # RabbitMQ AMQP
+    - protocol: TCP
+      port: 6379  # Redis
+  {{- end }}
+
+  # Additional egress rules
+  {{- with .Values.networkPolicy.extraEgress }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "plexus-worker.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "plexus-worker.labels" . | nindent 4 }}
+data:
+  {{- if eq .Values.workerType "score-processor" }}
+  # Score Processor configuration
+  sqs-request-queue-url: {{ .Values.scoreProcessor.sqs.requestQueueUrl | quote }}
+  sqs-response-queue-url: {{ .Values.scoreProcessor.sqs.responseQueueUrl | quote }}
+  aws-region: {{ .Values.scoreProcessor.aws.region | quote }}
+  {{- end }}
+
+  {{- if eq .Values.workerType "celery" }}
+  # Celery configuration
+  celery-app: {{ .Values.celery.app | quote }}
+  celery-queue: {{ .Values.celery.queue | quote }}
+  celery-concurrency: {{ .Values.celery.concurrency | quote }}
+  {{- end }}
+
+  {{- if eq .Values.workerType "console-worker" }}
+  # Console worker configuration
+  console-response-target: {{ .Values.console.responseTarget | quote }}
+  console-idle-poll-seconds: {{ .Values.console.idlePollSeconds | quote }}
+  console-error-backoff-seconds: {{ .Values.console.errorBackoffSeconds | quote }}
+  {{- end }}
