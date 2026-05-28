@@ -1,0 +1,198 @@
+# Default values for plexus-worker Helm chart
+# This file can be overridden per environment (dev, staging, prod)
+
+# Container image configuration
+image:
+  repository: plexus-worker
+  pullPolicy: IfNotPresent
+  tag: "latest"  # Override with specific version in production
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Global configuration
+global:
+  namespace: default
+
+# Worker type to deploy
+# Options: score-processor, celery, console-worker
+workerType: score-processor
+
+# Replica configuration
+replicaCount: 3
+
+# Resource limits and requests
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "1500m"
+
+# Autoscaling configuration
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  # Scale up/down behavior
+  scaleUp:
+    stabilizationWindowSeconds: 60
+    percentageValue: 50
+    podsValue: 2
+  scaleDown:
+    stabilizationWindowSeconds: 300
+    percentageValue: 10
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  # For AWS IRSA:
+  # annotations:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/PlexusWorkerRole
+  name: ""
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod security context - Apply security best practices
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container security context - Harden container
+securityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  readOnlyRootFilesystem: false  # Set to true if app doesn't need to write to disk
+  capabilities:
+    drop:
+    - ALL
+    add:
+    - NET_BIND_SERVICE  # Only if needed for binding to privileged ports
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Network policy for pod-to-pod communication restrictions
+networkPolicy:
+  enabled: false  # Enable in production
+  ingress: []     # Workers typically don't need ingress
+  extraEgress: []
+  celeryBroker:   # For celery workers only
+    podSelector: {}
+    namespaceSelector: {}
+
+# Affinity rules
+affinity:
+  # Pod anti-affinity to spread across nodes
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/component
+            operator: In
+            values:
+            - worker
+        topologyKey: kubernetes.io/hostname
+
+# Volumes
+volumes:
+  scorecardCache:
+    enabled: true
+    sizeLimit: 1Gi
+  tmp:
+    enabled: true
+    sizeLimit: 512Mi
+
+# Liveness and readiness probes
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 60
+  periodSeconds: 60
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Graceful shutdown
+terminationGracePeriodSeconds: 60
+
+# Environment variables
+env:
+  # Worker configuration
+  LOG_LEVEL: INFO
+  MAX_JOBS_PER_WORKER: "100"
+  ERROR_RETRY_DELAY: "5"
+  SCORECARD_CACHE_DIR: /app/data/scorecards
+
+# Plexus API configuration (from secrets)
+plexus:
+  # Create secrets from these values or reference existing secrets
+  createSecrets: true
+  existingSecret: ""  # Use existing secret instead of creating new one
+
+  api:
+    url: ""  # Set via values override or Octopus variables
+    key: ""  # Set via values override or Octopus variables
+
+  account:
+    key: ""  # Set via values override or Octopus variables
+
+# Score Processor specific configuration
+scoreProcessor:
+  enabled: true
+  aws:
+    region: us-west-2
+    # Credentials - prefer IRSA in production
+    createSecrets: true
+    existingSecret: ""
+    accessKeyId: ""  # Set via values override
+    secretAccessKey: ""  # Set via values override
+
+  sqs:
+    requestQueueUrl: ""  # Set via values override
+    responseQueueUrl: ""  # Set via values override
+
+# Celery worker specific configuration
+celery:
+  enabled: false
+  app: plexus.cli.score_chat.celery
+  queue: score_chat
+  concurrency: 4
+
+  broker:
+    createSecrets: true
+    existingSecret: ""
+    url: ""  # e.g., amqp://user:pass@rabbitmq:5672//
+
+# Console worker specific configuration
+console:
+  enabled: false
+  responseTarget: local:developer
+  idlePollSeconds: 0.2
+  errorBackoffSeconds: 5.0
