@@ -368,7 +368,7 @@ describe("ConversationViewer session-routing states", () => {
     expect(screen.queryByText("assistant reply")).not.toBeInTheDocument()
   })
 
-  it("uses matching fixed header heights for sidebar and main session header", () => {
+  it("keeps sidebar header fixed height and renders two-row main session header", () => {
     render(
       <ConversationViewer
         sessions={sessions}
@@ -382,7 +382,57 @@ describe("ConversationViewer session-routing states", () => {
     const mainHeader = screen.getByTestId("conversation-main-header")
 
     expect(sidebarHeader.className).toContain("h-12")
-    expect(mainHeader.className).toContain("h-12")
+    expect(mainHeader.className).toContain("py-2")
+    expect(mainHeader.className).not.toContain("h-12")
+    expect(within(mainHeader).getByText("1 messages")).toBeInTheDocument()
+    expect(within(mainHeader).getAllByTestId("timestamp")).toHaveLength(1)
+  })
+
+  it("uses session updatedAt when no messages exist for session timestamp", () => {
+    render(
+      <ConversationViewer
+        sessions={[
+          {
+            id: "session-no-messages-updated",
+            accountId: "acct-1",
+            procedureId: "builtin:console/chat",
+            name: "No Messages",
+            category: "Console Chat",
+            createdAt: "2026-03-27T00:00:00.000Z",
+            updatedAt: "2026-03-27T00:15:00.000Z",
+            messageCount: 0,
+          },
+        ]}
+        messages={[]}
+        selectedSessionId="session-no-messages-updated"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    expect(screen.getAllByText("2026-03-27T00:15:00.000Z")).toHaveLength(2)
+  })
+
+  it("falls back to session createdAt when updatedAt is missing", () => {
+    render(
+      <ConversationViewer
+        sessions={[
+          {
+            id: "session-created-only",
+            accountId: "acct-1",
+            procedureId: "builtin:console/chat",
+            name: "Created Only",
+            category: "Console Chat",
+            createdAt: "2026-03-27T00:20:00.000Z",
+            messageCount: 0,
+          } as ChatSession,
+        ]}
+        messages={[]}
+        selectedSessionId="session-created-only"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    expect(screen.getAllByText("2026-03-27T00:20:00.000Z")).toHaveLength(2)
   })
 
   it("does not use category as visible session title fallback", () => {
@@ -430,8 +480,8 @@ describe("ConversationViewer session-routing states", () => {
 
     expect(screen.queryByText("Optimize")).not.toBeInTheDocument()
     expect(screen.queryByText("Session sess-opt")).not.toBeInTheDocument()
-    expect(screen.getAllByTestId("timestamp")).toHaveLength(2)
-    expect(screen.getAllByText("2026-03-27T00:08:00.000Z")).toHaveLength(2)
+    expect(screen.getAllByTestId("timestamp")).toHaveLength(4)
+    expect(screen.getAllByText("2026-03-27T00:08:00.000Z")).toHaveLength(4)
   })
 
   it("hides unnamed sessions that are marked hidden-until-named", () => {
@@ -499,7 +549,7 @@ describe("ConversationViewer session-routing states", () => {
 
     expect(screen.getByText("Chat Sessions (1)")).toBeInTheDocument()
     expect(screen.queryByText("Session legacy-u")).not.toBeInTheDocument()
-    expect(screen.getAllByText("2026-03-27T00:09:00.000Z")).toHaveLength(2)
+    expect(screen.getAllByText("2026-03-27T00:09:00.000Z")).toHaveLength(4)
   })
 
   it("renames a session from the action menu and marks title source manual", async () => {
@@ -578,7 +628,10 @@ describe("ConversationViewer session-routing states", () => {
     )
 
     const header = screen.getByTestId("conversation-main-header")
-    expect(within(header).getByText("Private")).toBeInTheDocument()
+    const badge = within(header).getByText("Private")
+    const messageCount = within(header).getByText("1 messages")
+    expect(badge).toBeInTheDocument()
+    expect(messageCount.parentElement).toContainElement(badge)
   })
 
   it("snapshots planning and private mode into submitted Console messages", async () => {
