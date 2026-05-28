@@ -22,10 +22,16 @@
       "author": "derek.norrbom",
       "text": "Investigating recurring Amplify main-branch failures. CloudFormation shows no events during failed window, indicating failures occur during CDK asset build/publish before stack update. Latest retry (job 1129) fails with Failed to build asset ConsoleChatResponder/ConsoleChatResponderFunction/AssetImage. Planning a code fix to stop building this image inside Amplify pipeline.",
       "created_at": "2026-05-28T16:36:29.671991Z"
+    },
+    {
+      "id": "6e3bfd69-3b57-4b82-9d11-27271f70a020",
+      "author": "derek.norrbom",
+      "text": "Follow-up bug opened for Amplify main build: ConsoleChatResponder Docker build now fails on Docker Hub pull rate limit (429) for python:3.11-slim after dockerd startup was fixed.",
+      "created_at": "2026-05-28T19:08:28.563550Z"
     }
   ],
   "created_at": "2026-05-22T21:35:46.056157Z",
-  "updated_at": "2026-05-28T16:36:29.671991Z",
+  "updated_at": "2026-05-28T19:08:28.563550Z",
   "closed_at": null,
   "custom": {}
 }
