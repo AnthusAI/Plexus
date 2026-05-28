@@ -3,7 +3,7 @@
   "title": "Stabilize Amplify deploy by removing in-pipeline ConsoleChatResponder image build",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -34,10 +34,22 @@
       "author": "derek.norrbom",
       "text": "Committed fix on branch bugfix/amplify-docker-daemon-main: c9d86b3df (dashboard/amplify.yml). Commit starts dockerd, waits for docker readiness, and runs ampx pipeline-deploy with --debug.",
       "created_at": "2026-05-28T16:58:54.936046Z"
+    },
+    {
+      "id": "f7d2dc77-7cd3-4098-91c2-56d1280c498d",
+      "author": "derek.norrbom",
+      "text": "Opened PR #393 to develop from bugfix/amplify-docker-daemon-main: https://github.com/AnthusAI/Plexus/pull/393. Includes amplify.yml dockerd startup/readiness fix and required Kanbus artifact sync commit enforced by push hook.",
+      "created_at": "2026-05-28T16:59:29.770439Z"
+    },
+    {
+      "id": "151e03e0-8248-4b3c-88ea-844e53e2533a",
+      "author": "derek.norrbom",
+      "text": "Work completed for this bug scope: branch created, fix committed, and PR opened to develop (#393). Closing issue for implementation scope.",
+      "created_at": "2026-05-28T17:02:37.894420Z"
     }
   ],
   "created_at": "2026-05-28T16:36:29.674259Z",
-  "updated_at": "2026-05-28T16:58:54.936046Z",
-  "closed_at": null,
+  "updated_at": "2026-05-28T17:02:37.894420Z",
+  "closed_at": "2026-05-28T17:02:37.883586Z",
   "custom": {}
 }
