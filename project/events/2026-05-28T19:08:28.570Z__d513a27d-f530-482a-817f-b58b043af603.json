@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d513a27d-f530-482a-817f-b58b043af603",
+  "issue_id": "plx-99124af6-f9a7-4d6e-967e-22adaa38bd03",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-28T19:08:28.570Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-0eb42c34-d624-48be-92d7-abaf6d82ba9d",
+    "priority": 1,
+    "status": "open",
+    "title": "Fix Amplify ConsoleChatResponder Docker build Docker Hub rate limit"
+  }
+}
