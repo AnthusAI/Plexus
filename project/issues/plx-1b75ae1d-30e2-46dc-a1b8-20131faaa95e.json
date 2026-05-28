@@ -1,0 +1,43 @@
+{
+  "id": "plx-1b75ae1d-30e2-46dc-a1b8-20131faaa95e",
+  "title": "Stabilize Amplify deploy by removing in-pipeline ConsoleChatResponder image build",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-0eb42c34-d624-48be-92d7-abaf6d82ba9d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "efa71f8e-5a56-4c09-b308-0c328deeef81",
+      "author": "derek.norrbom",
+      "text": "Confirmed with AWS CLI: failing Amplify jobs 1125-1129 stop before CloudFormation updates. Error evolved from failed asset publish to failed ConsoleChatResponder asset image build. Implementing fix to stop building the ConsoleChatResponder Docker image inside Amplify pipeline and use the existing prebuilt ECR image reference instead.",
+      "created_at": "2026-05-28T16:36:34.215893Z"
+    },
+    {
+      "id": "0762fd63-d93b-4ff5-ae80-91412c9bc2cb",
+      "author": "derek.norrbom",
+      "text": "Applying fix: update dashboard/amplify.yml backend build phase to start Docker daemon (dockerd-entrypoint.sh), wait for docker readiness, then run ampx pipeline-deploy with --debug for clearer asset-build diagnostics in Amplify.",
+      "created_at": "2026-05-28T16:56:18.857732Z"
+    },
+    {
+      "id": "c5d126df-a064-4767-9942-d443da9ed2f3",
+      "author": "derek.norrbom",
+      "text": "Implemented buildspec update in dashboard/amplify.yml backend phase: start dockerd via /usr/local/bin/dockerd-entrypoint.sh, wait until docker info succeeds, print docker version/info, and run ampx pipeline-deploy with --debug.",
+      "created_at": "2026-05-28T16:56:31.689217Z"
+    },
+    {
+      "id": "5e94920d-9427-460f-a94d-abb643bcd022",
+      "author": "derek.norrbom",
+      "text": "Committed fix on branch bugfix/amplify-docker-daemon-main: c9d86b3df (dashboard/amplify.yml). Commit starts dockerd, waits for docker readiness, and runs ampx pipeline-deploy with --debug.",
+      "created_at": "2026-05-28T16:58:54.936046Z"
+    }
+  ],
+  "created_at": "2026-05-28T16:36:29.674259Z",
+  "updated_at": "2026-05-28T16:58:54.936046Z",
+  "closed_at": null,
+  "custom": {}
+}
