@@ -1,0 +1,25 @@
+{
+  "id": "plx-99124af6-f9a7-4d6e-967e-22adaa38bd03",
+  "title": "Fix Amplify ConsoleChatResponder Docker build Docker Hub rate limit",
+  "description": "",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-0eb42c34-d624-48be-92d7-abaf6d82ba9d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "b5709e2f-4552-4488-bd80-8929deb82300",
+      "author": "derek.norrbom",
+      "text": "Implementing fix in dashboard/amplify/functions/consoleRunWorker/Dockerfile: replace docker.io base image with AWS Public ECR mirror to avoid anonymous Docker Hub rate limits in Amplify CI builds.",
+      "created_at": "2026-05-28T19:08:30.635612Z"
+    }
+  ],
+  "created_at": "2026-05-28T19:08:28.570264Z",
+  "updated_at": "2026-05-28T19:08:30.635612Z",
+  "closed_at": null,
+  "custom": {}
+}
