@@ -9,6 +9,7 @@ mlruns/
 /reports/
 .DS_Store
 .env
+.env.full-stack
 tmp/
 .langchain.db/
 .plexus_training_data_cache/
