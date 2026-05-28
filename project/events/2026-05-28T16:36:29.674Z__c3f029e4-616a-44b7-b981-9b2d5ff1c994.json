@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "c3f029e4-616a-44b7-b981-9b2d5ff1c994",
+  "issue_id": "plx-1b75ae1d-30e2-46dc-a1b8-20131faaa95e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-28T16:36:29.674Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-0eb42c34-d624-48be-92d7-abaf6d82ba9d",
+    "priority": 1,
+    "status": "open",
+    "title": "Stabilize Amplify deploy by removing in-pipeline ConsoleChatResponder image build"
+  }
+}
