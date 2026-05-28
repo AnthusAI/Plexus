@@ -1,0 +1,18 @@
+{
+  "id": "plx-56545e35-e050-4d7c-a57b-15a692bff45e",
+  "title": "Score version note handling hardening",
+  "description": "",
+  "type": "epic",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-05-28T22:14:43.722163Z",
+  "updated_at": "2026-05-28T22:14:43.722163Z",
+  "closed_at": null,
+  "custom": {}
+}
