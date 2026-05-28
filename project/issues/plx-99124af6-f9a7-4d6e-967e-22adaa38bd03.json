@@ -3,7 +3,7 @@
   "title": "Fix Amplify ConsoleChatResponder Docker build Docker Hub rate limit",
   "description": "",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,22 @@
       "author": "derek.norrbom",
       "text": "Implementing fix in dashboard/amplify/functions/consoleRunWorker/Dockerfile: replace docker.io base image with AWS Public ECR mirror to avoid anonymous Docker Hub rate limits in Amplify CI builds.",
       "created_at": "2026-05-28T19:08:30.635612Z"
+    },
+    {
+      "id": "692d9180-1a1b-4ffd-a54e-c133c2d6364b",
+      "author": "derek.norrbom",
+      "text": "Implemented and pushed fix on branch bugfix/amplify-consoleworker-dockerhub-rate-limit (commit ae3990212) and opened PR #395 to develop: https://github.com/AnthusAI/Plexus/pull/395.",
+      "created_at": "2026-05-28T19:09:03.783597Z"
+    },
+    {
+      "id": "88746119-74ff-4c2a-94aa-0df09563a6b4",
+      "author": "derek.norrbom",
+      "text": "Closing implementation scope after PR creation; final validation occurs in Amplify main deployment after merge.",
+      "created_at": "2026-05-28T19:09:03.802206Z"
     }
   ],
   "created_at": "2026-05-28T19:08:28.570264Z",
-  "updated_at": "2026-05-28T19:08:30.635612Z",
-  "closed_at": null,
+  "updated_at": "2026-05-28T19:09:03.802206Z",
+  "closed_at": "2026-05-28T19:09:03.793046Z",
   "custom": {}
 }
