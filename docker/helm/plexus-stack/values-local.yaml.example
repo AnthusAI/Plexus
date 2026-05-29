@@ -1,0 +1,91 @@
+# Example values for Docker Desktop Kubernetes (local development)
+# Copy this to values-local.yaml and fill in your actual API keys
+
+global:
+  namespace: plexus-local
+  environment: local
+
+  services:
+    postgresql:
+      host: "{{ .Release.Name }}-postgresql"
+      port: 5432
+      database: plexus_proxy
+
+    graphqlProxy:
+      host: "{{ .Release.Name }}-graphql-proxy"
+      port: 8000
+      path: "/graphql"
+
+postgresql:
+  enabled: true
+  image:
+    tag: "latest"
+  auth:
+    username: plexus_proxy
+    password: "plexus-local-dev"
+    database: plexus_proxy
+  primary:
+    persistence:
+      enabled: true
+      size: 5Gi
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+    initdb:
+      scripts:
+        init.sql: |
+          CREATE SCHEMA IF NOT EXISTS private_data;
+          CREATE SCHEMA IF NOT EXISTS control_cache;
+          CREATE SCHEMA IF NOT EXISTS proxy_debug;
+
+graphql-proxy:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: plexus-graphql-proxy
+    tag: "local"
+    pullPolicy: IfNotPresent
+  config:
+    proxyApiKey: "your-proxy-api-key-here"
+    upstreamApiUrl: "https://your-appsync-endpoint.appsync-api.us-west-2.amazonaws.com/graphql"
+    upstreamApiKey: "your-appsync-api-key-here"
+    enableDebug: true
+  createSecrets: true
+  postgresql:
+    username: "plexus_proxy"  # Set username explicitly
+
+plexus-worker:
+  enabled: true
+  workerType: celery
+  replicaCount: 1
+  image:
+    repository: plexus-worker
+    tag: "local"
+    pullPolicy: IfNotPresent
+  env:
+    LOG_LEVEL: DEBUG
+    MAX_JOBS_PER_WORKER: "10"
+  plexus:
+    createSecrets: true
+    api:
+      key: "local-dev-key"
+    account:
+      key: "call-criteria"
+  celery:
+    enabled: true
+    app: plexus.workers.celery_app
+    queue: scoring-requests
+    concurrency: 2
+    broker:
+      createSecrets: true
+      url: "amqp://plexus:plexus@host.docker.internal:5672/"
+  llm:
+    createSecrets: true
+    openai:
+      apiKey: "your-openai-api-key-here"
+    anthropic:
+      apiKey: "your-anthropic-api-key-here"

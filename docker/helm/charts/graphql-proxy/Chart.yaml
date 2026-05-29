@@ -1,0 +1,16 @@
+apiVersion: v2
+name: graphql-proxy
+description: GraphQL proxy for Plexus - routes between local PostgreSQL and AWS AppSync
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+maintainers:
+  - name: Plexus Team
+
+keywords:
+  - graphql
+  - proxy
+  - adapter
+  - postgresql
+  - appsync
