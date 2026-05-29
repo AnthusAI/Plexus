@@ -17,6 +17,7 @@ from functools import partialmethod
 from plexus.LangChainUser import LangChainUser
 from plexus.scores.Score import Score
 from plexus.utils.dict_utils import truncate_dict_strings
+from plexus.utils.score_result_timestamps import extract_score_result_timestamps
 
 from langchain_community.callbacks import OpenAICallbackHandler
 
@@ -1580,12 +1581,17 @@ class LangGraphScore(Score, LangChainUser):
             if value_for_result is None:
                 logging.warning("DEBUG: graph_result['value'] is None, defaulting to 'No'")
                 value_for_result = 'No'
-            
+
+            # Extract timestamps from graph_result
+            timestamps = extract_score_result_timestamps(graph_result, graph_result.get('explanation'))
+
             result = Score.Result(
                 parameters=self.parameters,
                 value=value_for_result,
                 explanation=graph_result.get('explanation'),
                 confidence=graph_result.get('confidence'),
+                start_time_seconds=timestamps.start_time_seconds,
+                end_time_seconds=timestamps.end_time_seconds,
                 metadata={
                     'good_call': graph_result.get('good_call'),
                     'good_call_explanation': graph_result.get('good_call_explanation'),
