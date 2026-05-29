@@ -1,0 +1,180 @@
+# Global values shared across all subcharts
+global:
+  # Namespace for all resources
+  namespace: plexus
+
+  # Environment identifier
+  environment: development
+
+  # Service discovery endpoints
+  # These are used by all components to find each other
+  services:
+    postgresql:
+      host: "{{ .Release.Name }}-postgresql"
+      port: 5432
+      database: plexus_proxy
+      # For external PostgreSQL (production), set:
+      # host: "plexus-prod-rds.amazonaws.com"
+
+    graphqlProxy:
+      host: "{{ .Release.Name }}-graphql-proxy"
+      port: 8000
+      path: "/graphql"
+      # For external proxy, set:
+      # externalUrl: "https://proxy.plexus.example.com/graphql"
+
+  # Shared labels applied to all resources
+  labels:
+    app.kubernetes.io/part-of: plexus
+    app.kubernetes.io/managed-by: helm
+
+# PostgreSQL configuration (Bitnami chart)
+postgresql:
+  enabled: true
+
+  auth:
+    username: plexus_proxy
+    database: plexus_proxy
+    existingSecret: ""  # Set to use external secret
+    # If existingSecret is not set, password will be generated
+
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      # storageClass: "gp3"  # Uncomment for AWS EBS
+
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+
+    # Initialize the database with required schemas
+    initdb:
+      scripts:
+        init.sql: |
+          -- Create schemas for proxy
+          CREATE SCHEMA IF NOT EXISTS private_data;
+          CREATE SCHEMA IF NOT EXISTS control_cache;
+          CREATE SCHEMA IF NOT EXISTS proxy_debug;
+
+  # Enable metrics for monitoring
+  metrics:
+    enabled: false
+    serviceMonitor:
+      enabled: false
+
+# GraphQL Proxy configuration
+graphql-proxy:
+  enabled: true
+
+  replicaCount: 2
+
+  image:
+    repository: plexus-graphql-proxy
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+
+  # Proxy-specific configuration
+  config:
+    # Local proxy API key (for workers to authenticate)
+    proxyApiKey: "local-dev-key"
+
+    # Upstream AWS AppSync configuration
+    upstreamApiUrl: ""  # Set in values-{env}.yaml
+    upstreamApiKey: ""  # Set in values-{env}.yaml or use existingSecret
+
+    # Cache settings
+    cacheTtlSeconds: 900
+    cacheStaleSeconds: 86400
+    enableDebug: false
+
+  # Secret management
+  createSecrets: true
+  existingSecret: ""
+
+# Plexus Worker configuration
+plexus-worker:
+  enabled: true
+
+  # Set to 'celery' for RabbitMQ-based workers
+  workerType: celery
+
+  replicaCount: 2
+
+  image:
+    repository: plexus-worker
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+
+  # Common environment variables
+  env:
+    LOG_LEVEL: INFO
+    MAX_JOBS_PER_WORKER: "100"
+
+  # Plexus API configuration (points to proxy)
+  plexus:
+    createSecrets: true
+    existingSecret: ""
+    api:
+      # Will be templated to point to graphql-proxy service
+      url: ""  # Auto-configured from global.services.graphqlProxy
+      key: "local-dev-key"
+    account:
+      key: ""  # Set in values-{env}.yaml
+
+  # Celery configuration
+  celery:
+    enabled: true
+    app: plexus.workers.celery_app
+    queue: scoring-requests
+    concurrency: 4
+
+    broker:
+      createSecrets: true
+      existingSecret: ""
+      url: ""  # Set in values-{env}.yaml (e.g., amqp://user:pass@rabbitmq:5672/)
+
+  # LLM API keys
+  llm:
+    createSecrets: true
+    existingSecret: ""
+    openai:
+      apiKey: ""
+    anthropic:
+      apiKey: ""
