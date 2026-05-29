@@ -1,0 +1,55 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your Plexus stack has been deployed to namespace: {{ .Release.Namespace }}
+
+Components deployed:
+{{- if .Values.postgresql.enabled }}
+  ✓ PostgreSQL database for private data storage
+{{- end }}
+{{- if index .Values "graphql-proxy" "enabled" }}
+  ✓ GraphQL Proxy (The Adapter)
+{{- end }}
+{{- if index .Values "plexus-worker" "enabled" }}
+  ✓ Plexus workers ({{ index .Values "plexus-worker" "workerType" }} mode)
+{{- end }}
+
+To check the status of your deployment:
+
+  kubectl get pods -n {{ .Release.Namespace }}
+
+{{- if index .Values "graphql-proxy" "enabled" }}
+
+To access the GraphQL Proxy:
+
+  # Port forward to local machine
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ .Release.Name }}-graphql-proxy 8000:8000
+
+  # Then access at: http://localhost:8000/graphql
+{{- end }}
+
+{{- if .Values.postgresql.enabled }}
+
+To connect to PostgreSQL:
+
+  # Get the password
+  export POSTGRES_PASSWORD=$(kubectl get secret -n {{ .Release.Namespace }} {{ .Release.Name }}-postgresql -o jsonpath="{.data.password}" | base64 -d)
+
+  # Port forward
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ .Release.Name }}-postgresql 5432:5432
+
+  # Connect
+  psql -h localhost -U {{ .Values.postgresql.auth.username }} -d {{ .Values.postgresql.auth.database }}
+{{- end }}
+
+{{- if index .Values "plexus-worker" "enabled" }}
+
+To view worker logs:
+
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name=plexus-worker --tail=100 -f
+{{- end }}
+
+To check the health of all services:
+
+  kubectl get all -n {{ .Release.Namespace }}
+
+For more information, visit: https://github.com/AnthusAI/Plexus

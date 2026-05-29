@@ -143,6 +143,24 @@ spec:
               key: console-error-backoff-seconds
         {{- end }}
 
+        # LLM API Keys
+        {{- if .Values.llm }}
+        {{- if .Values.llm.openai }}
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ if .Values.llm.existingSecret }}{{ .Values.llm.existingSecret }}{{ else }}{{ include "plexus-worker.fullname" . }}-llm-keys{{ end }}
+              key: openai-api-key
+        {{- end }}
+        {{- if .Values.llm.anthropic }}
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ if .Values.llm.existingSecret }}{{ .Values.llm.existingSecret }}{{ else }}{{ include "plexus-worker.fullname" . }}-llm-keys{{ end }}
+              key: anthropic-api-key
+        {{- end }}
+        {{- end }}
+
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
 
