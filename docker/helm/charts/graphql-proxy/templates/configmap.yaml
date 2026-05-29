@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "graphql-proxy.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "graphql-proxy.labels" . | nindent 4 }}
+data:
+  PLEXUS_PROXY_UPSTREAM_API_URL: {{ .Values.config.upstreamApiUrl | quote }}
+  PLEXUS_PROXY_UPSTREAM_TIMEOUT_SECONDS: {{ .Values.config.upstreamTimeoutSeconds | quote }}
+  PLEXUS_PROXY_UPSTREAM_DISABLED: {{ .Values.config.upstreamDisabled | quote }}
+  PLEXUS_PROXY_CACHE_TTL_SECONDS: {{ .Values.config.cacheTtlSeconds | quote }}
+  PLEXUS_PROXY_CACHE_STALE_SECONDS: {{ .Values.config.cacheStaleSeconds | quote }}
+  PLEXUS_PROXY_ENABLE_DEBUG: {{ .Values.config.enableDebug | quote }}
