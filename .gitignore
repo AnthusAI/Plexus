@@ -61,6 +61,7 @@ prescriber_policy_email.md
 /vector_topic_memory_report.md
 /HCS-*.md
 /MULTI_MODAL_INPUT_REFACTORING.md
+/AGENTS.local.md
 project-local/
 dashboard/amplify/functions/consoleRunWorker/deploy-direct.sh
 dashboard/amplify/functions/consoleRunWorker/DEPLOY.md
