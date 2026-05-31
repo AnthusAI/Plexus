@@ -26,7 +26,7 @@ def _procedures_root() -> Path:
 def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
     return {
         "name": "Console Chat Agent",
-        "version": "1.6.6",
+        "version": "1.6.9",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -82,7 +82,7 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- `plexus.api.list` and helper aliases still show the full tool surface in planning mode so you can plan what would be available after switching modes.\n"
                     "- Planning mode may inspect existing procedure runs with `plexus.procedure.list`, `plexus.procedure.info`, `plexus.procedure.chat_sessions`, `plexus.procedure.chat_messages`, and `plexus.procedure.steering_messages`; do not ask the user to switch modes for procedure status/history lookup.\n"
                     "- Planning mode may run predictions, evaluations, reports, `plexus.score.contradictions`, `plexus.report.acceptance_rate`, and `plexus.report.score_champion_version_timeline`.\n"
-                    "- Planning mode blocks significant mutations: creating/updating score versions with `plexus.score.update`, promoting champions with `plexus.score.set_champion`, and starting/continuing/branching/optimizing procedures with `plexus.procedure.run`, `plexus.procedure.continue`, `plexus.procedure.branch`, or `plexus.procedure.optimize`.\n"
+                    "- Planning mode blocks significant mutations: creating/updating score versions with `plexus.score.update` or `plexus.score.edit`, promoting champions with `plexus.score.set_champion`, and starting/continuing/branching/optimizing procedures with `plexus.procedure.run`, `plexus.procedure.continue`, `plexus.procedure.branch`, or `plexus.procedure.optimize`.\n"
                     "- If a method returns `tool_not_allowed_in_planning_mode`, explain the blocked mutation and ask the user to switch the chat to Execute mode before retrying.\n"
                     "- Private mode is soft UI privacy: private turns are stored, marked private, hidden from other users in the workspace UI, and excluded from future public-agent context; do not promise hard privacy semantics.\n\n"
                     "REPORT REQUESTS (HARD RULES):\n"
@@ -184,6 +184,13 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "  return plexus.score.update({ scorecard_identifier = \"My SC\","
                     " score_identifier = \"My Score\", code = \"<full yaml>\","
                     " note = \"what changed\" })\n\n"
+                    "  -- Instruction-based score editing with a dedicated editor sub-agent.\n"
+                    "  -- Resolve targets first, then run the edit tool with concrete identifiers.\n"
+                    "  local done = plexus.score.edit({ scorecard_identifier = \"<resolved-scorecard-uuid>\","
+                    " score_identifier = \"<resolved-score-uuid>\","
+                    " instruction = \"tighten the refund exception rule\", async = true,"
+                    " budget = { usd = 1.0, wallclock_seconds = 600, depth = 1, tool_calls = 5 } })\n"
+                    "  return { status = done[\"status\"], result = done[\"result\"], error = done[\"error\"] }\n\n"
                     "  -- Update a score's guidelines text:\n"
                     "  return plexus.score.update({ scorecard_identifier = \"My SC\","
                     " score_identifier = \"My Score\","
@@ -193,6 +200,14 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- To update YAML: pass the complete code string.\n"
                     "- To update only guidelines: pass only guidelines (omit code).\n"
                     "- To update metadata (description, name, key): pass the field directly, e.g. description = \"new text\".\n\n"
+                    "IMPORTANT for score.edit:\n"
+                    "- Use score.edit when the user gives an instruction and wants the system to perform the edit.\n"
+                    "- score.edit is async-only; pass async=true with an explicit budget.\n"
+                    "- Resolve scorecard and score targets first using `plexus.scorecards.search` and `plexus.score.info` when needed.\n"
+                    "- score.edit is edit execution only; do not use it for fuzzy discovery or target selection.\n"
+                    "- Prefer resolved UUIDs for deterministic execution (other canonical identifiers are accepted if unique).\n"
+                    "- score.edit waits internally for terminal completion; do not report success unless status is `completed` with result `version_id`.\n"
+                    "- score.edit creates a non-champion candidate version; do not auto-promote.\n\n"
                     "TIPS:\n"
                     "- For long-running ops (report, eval, optimize), use async=true and return durable ids.\n"
                     "- Never invent data; query Plexus for current values.\n"
@@ -215,7 +230,7 @@ _BUILTINS: Dict[str, BuiltinProcedureSpec] = {
         procedure_id=CONSOLE_CHAT_BUILTIN_ID,
         name="Console Chat Agent",
         description="Built-in general-purpose chat procedure for Plexus Console.",
-        version="1.6.5",
+        version="1.6.9",
         tac_path=_procedures_root() / "console" / "chat_agent.tac",
     ),
 }
