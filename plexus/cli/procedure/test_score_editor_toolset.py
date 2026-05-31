@@ -114,7 +114,11 @@ output:
 
 @pytest.mark.asyncio
 async def test_submit_score_version_surfaces_validation_errors_from_envelope(monkeypatch):
-    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
+    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import (
+        GUIDELINES_PATH,
+        ScoreEditorToolset,
+        VIRTUAL_PATH,
+    )
     import tools.tactus_runtime.execute as _exec  # type: ignore
 
     monkeypatch.setattr(
@@ -133,8 +137,10 @@ async def test_submit_score_version_surfaces_validation_errors_from_envelope(mon
     toolset._iteration = 1
     toolset._hypothesis = "h"
     toolset._dry_run = False
-    toolset._original = "a: 1\n"
-    toolset._content = "a: 2\n"  # modified
+    toolset._original_files[VIRTUAL_PATH] = "a: 1\n"
+    toolset._files[VIRTUAL_PATH] = "a: 2\n"  # modified
+    toolset._original_files[GUIDELINES_PATH] = ""
+    toolset._files[GUIDELINES_PATH] = ""
 
     result = await toolset.submit_score_version({"version_note": "n"})
 
@@ -146,7 +152,11 @@ async def test_submit_score_version_surfaces_validation_errors_from_envelope(mon
 
 @pytest.mark.asyncio
 async def test_submit_score_version_rejects_semantically_unchanged_yaml():
-    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
+    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import (
+        GUIDELINES_PATH,
+        ScoreEditorToolset,
+        VIRTUAL_PATH,
+    )
 
     mcp_client = FakeMCPClient({"success": True, "version_id": "should-not-create"})
     toolset = ScoreEditorToolset(mcp_client=mcp_client)
@@ -155,19 +165,21 @@ async def test_submit_score_version_rejects_semantically_unchanged_yaml():
     toolset._iteration = 1
     toolset._hypothesis = "h"
     toolset._dry_run = False
-    toolset._original = (
+    toolset._original_files[VIRTUAL_PATH] = (
         "name: Test Score\n"
         "key: test-score\n"
         "class: LangGraphScore\n"
         "model_name: gpt-5-mini\n"
     )
-    toolset._content = (
+    toolset._files[VIRTUAL_PATH] = (
         "# harmless formatting-only candidate\n"
         "key: test-score\n"
         "class: LangGraphScore\n"
         "model_name: gpt-5-mini\n"
         "name: Test Score\n"
     )
+    toolset._original_files[GUIDELINES_PATH] = "unchanged"
+    toolset._files[GUIDELINES_PATH] = "unchanged"
 
     result = await toolset.submit_score_version({"version_note": "format only"})
 
@@ -200,7 +212,7 @@ def test_setup_normalizes_direct_yaml_content_to_block_scalars():
     assert "system_message: |" in content
     assert "user_message: |" in content
     assert "\\n\\n" not in content
-    assert toolset._content == toolset._original
+    assert toolset._files["score_config.yaml"] == toolset._original_files["score_config.yaml"]
 
 
 def test_setup_normalizes_numeric_external_id_to_string():
@@ -268,9 +280,9 @@ def test_load_content_from_api_normalizes_yaml_before_exposing_it(monkeypatch):
     load_error = toolset._load_content_from_api()
 
     assert load_error is None
-    assert "system_message: |" in toolset._content
-    assert "user_message: |" in toolset._content
-    assert toolset._content == toolset._original
+    assert "system_message: |" in toolset._files["score_config.yaml"]
+    assert "user_message: |" in toolset._files["score_config.yaml"]
+    assert toolset._files["score_config.yaml"] == toolset._original_files["score_config.yaml"]
 
 
 def test_load_content_from_api_fails_clearly_on_invalid_yaml(monkeypatch):
@@ -295,7 +307,11 @@ def test_load_content_from_api_fails_clearly_on_invalid_yaml(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_submit_score_version_rejects_classifier_as_extractor_candidate():
-    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
+    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import (
+        GUIDELINES_PATH,
+        ScoreEditorToolset,
+        VIRTUAL_PATH,
+    )
 
     toolset = ScoreEditorToolset()
     toolset._scorecard = "sc-1"
@@ -303,8 +319,10 @@ async def test_submit_score_version_rejects_classifier_as_extractor_candidate():
     toolset._iteration = 1
     toolset._hypothesis = "structural"
     toolset._dry_run = False
-    toolset._original = VALID_TWO_STAGE_EXTRACTOR_YAML
-    toolset._content = INVALID_PSEUDO_EXTRACTOR_YAML
+    toolset._original_files[VIRTUAL_PATH] = VALID_TWO_STAGE_EXTRACTOR_YAML
+    toolset._files[VIRTUAL_PATH] = INVALID_PSEUDO_EXTRACTOR_YAML
+    toolset._original_files[GUIDELINES_PATH] = ""
+    toolset._files[GUIDELINES_PATH] = ""
 
     result = await toolset.submit_score_version({"version_note": "reject pseudo extractor"})
 
@@ -323,7 +341,11 @@ async def test_submit_score_version_allows_extractor_then_classifier_pattern(mon
         lambda args: {"success": True, "version_id": "v-2"},
     )
 
-    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
+    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import (
+        GUIDELINES_PATH,
+        ScoreEditorToolset,
+        VIRTUAL_PATH,
+    )
 
     toolset = ScoreEditorToolset()
     toolset._scorecard = "sc-1"
@@ -331,10 +353,36 @@ async def test_submit_score_version_allows_extractor_then_classifier_pattern(mon
     toolset._iteration = 1
     toolset._hypothesis = "structural"
     toolset._dry_run = False
-    toolset._original = "name: baseline\nkey: baseline\nclass: LangGraphScore\n"
-    toolset._content = VALID_TWO_STAGE_EXTRACTOR_YAML
+    toolset._original_files[VIRTUAL_PATH] = "name: baseline\nkey: baseline\nclass: LangGraphScore\n"
+    toolset._files[VIRTUAL_PATH] = VALID_TWO_STAGE_EXTRACTOR_YAML
+    toolset._original_files[GUIDELINES_PATH] = ""
+    toolset._files[GUIDELINES_PATH] = ""
 
     result = await toolset.submit_score_version({"version_note": "valid extractor chain"})
 
     assert result["success"] is True
     assert result["version_id"] == "v-2"
+
+
+def test_str_replace_editor_supports_guidelines_path():
+    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import (
+        GUIDELINES_PATH,
+        ScoreEditorToolset,
+    )
+
+    toolset = ScoreEditorToolset()
+    toolset.setup(
+        {
+            "scorecard_identifier": "sc-1",
+            "score_identifier": "score-1",
+            "yaml_content": "name: test\nkey: test\nclass: LangGraphScore\n",
+            "guidelines_content": "old guide",
+        }
+    )
+    result = toolset.str_replace_editor(
+        {"command": "create", "path": GUIDELINES_PATH, "new_str": "new guide"}
+    )
+    assert "Edit applied (create) on guidelines.md." in result
+    content = toolset.get_content({})
+    assert content["guidelines_content"] == "new guide"
+    assert "guidelines.md" in content["modified_files"]
