@@ -898,7 +898,7 @@ def test_dispatch_routes_scorecards_to_direct_handlers() -> None:
 
 
 def test_dispatch_routes_score_to_direct_handlers() -> None:
-    for method in ("info", "create", "search", "evaluations", "predict", "set_champion"):
+    for method in ("info", "create", "search", "evaluations", "predict", "edit", "set_champion"):
         assert execute.DIRECT_HANDLERS[("score", method)] == "_call_score"
         assert ("score", method) not in execute.MCP_TOOL_MAP
 
@@ -2617,6 +2617,259 @@ def test_evaluation_run_async_requires_explicit_child_budget() -> None:
 
     assert called is False
     assert module.api_calls == ["plexus.evaluation.run"]
+
+
+def test_score_edit_blocking_requires_handle_protocol() -> None:
+    module = execute.PlexusRuntimeModule(FastMCP("test"))
+
+    with pytest.raises(execute.RequiresHandleProtocol):
+        module.score.edit(
+            {
+                "scorecard_identifier": "Compliance",
+                "score_identifier": "Tone",
+                "instruction": "tighten refund handling",
+            }
+        )
+
+    assert module.handle_protocol_required == ("score", "edit")
+    assert module.api_calls == ["plexus.score.edit"]
+
+
+def test_score_edit_async_always_waits_and_records_budget(tmp_path) -> None:
+    seen_args: dict = {}
+    handles = _MemoryHandleStore()
+    result_file = tmp_path / "score-edit-result.json"
+    result_file.write_text(
+        json.dumps({"success": True, "version_id": "sv-abc"}),
+        encoding="utf-8",
+    )
+
+    def fake_runner(args: dict) -> dict:
+        seen_args.update(args)
+        return {
+            "status": "dispatched",
+            "result_file": str(result_file),
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        handle_store=handles,
+        score_edit_runner=fake_runner,
+    )
+
+    budget = _child_budget()
+    completed = module.score.edit(
+        {
+            "scorecard_identifier": "Compliance",
+            "score_identifier": "Tone",
+            "instruction": "tighten refund handling",
+            "async": True,
+            "wait_for_completion": False,
+            "budget": budget,
+        }
+    )
+
+    assert completed["status"] == "completed"
+    assert completed["result"]["version_id"] == "sv-abc"
+    assert seen_args["instruction"] == "tighten refund handling"
+    assert module.api_calls == ["plexus.score.edit", "plexus.handle.await"]
+    assert handles.created[0]["id"] == "handle-1"
+    assert handles.created[0]["dispatch_result"]["result_file"] == str(result_file)
+    assert handles.created[0]["child_budget"] == budget
+
+
+def test_score_edit_async_waits_for_terminal_result_by_default(tmp_path) -> None:
+    handles = _MemoryHandleStore()
+    result_file = tmp_path / "score-edit-result.json"
+    result_file.write_text(
+        json.dumps({"success": True, "version_id": "sv-123"}),
+        encoding="utf-8",
+    )
+
+    def fake_runner(_args: dict) -> dict:
+        return {"status": "dispatched", "result_file": str(result_file)}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        handle_store=handles,
+        score_edit_runner=fake_runner,
+    )
+
+    budget = _child_budget()
+    completed = module.score.edit(
+        {
+            "scorecard_identifier": "Compliance",
+            "score_identifier": "Tone",
+            "instruction": "tighten refund handling",
+            "async": True,
+            "budget": budget,
+        }
+    )
+
+    assert completed["status"] == "completed"
+    assert completed["result"]["version_id"] == "sv-123"
+    assert module.api_calls == ["plexus.score.edit", "plexus.handle.await"]
+
+
+def test_score_edit_resolver_accepts_external_id_identifiers() -> None:
+    class FakeClient:
+        def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+            if "GetScorecardById" in query:
+                return {"getScorecard": None}
+            if "ListScorecardsForExactIdentifier" in query:
+                return {
+                    "listScorecards": {
+                        "items": [
+                            {
+                                "id": "sc-1",
+                                "name": "Compliance",
+                                "key": "compliance",
+                                "externalId": "sc-ext",
+                            }
+                        ]
+                    }
+                }
+            if "GetScoreByIdForEdit" in query:
+                return {"getScore": None}
+            if "GetScorecardScoresForEdit" in query:
+                return {
+                    "getScorecard": {
+                        "sections": {
+                            "items": [
+                                {
+                                    "scores": {
+                                        "items": [
+                                            {
+                                                "id": "s-1",
+                                                "name": "Tone",
+                                                "key": "tone",
+                                                "externalId": "s-ext",
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    client = FakeClient()
+    scorecard = execute._resolve_scorecard_for_score_edit(client, "sc-ext")
+    score = execute._resolve_score_for_score_edit(client, "sc-1", "s-ext")
+
+    assert scorecard["id"] == "sc-1"
+    assert score["id"] == "s-1"
+
+
+def test_score_edit_resolver_fails_for_ambiguous_matches() -> None:
+    class FakeClient:
+        def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+            if "GetScorecardById" in query:
+                return {"getScorecard": None}
+            if "ListScorecardsForExactIdentifier" in query:
+                return {
+                    "listScorecards": {
+                        "items": [
+                            {"id": "sc-1", "name": "Compliance", "key": "c-1", "externalId": "ext-1"},
+                            {"id": "sc-2", "name": "Compliance", "key": "c-2", "externalId": "ext-2"},
+                        ]
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        execute._resolve_scorecard_for_score_edit(FakeClient(), "Compliance")
+
+
+def test_score_edit_resolver_accepts_identifiers_with_trailing_punctuation() -> None:
+    class FakeClient:
+        def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+            if "GetScorecardById" in query:
+                return {"getScorecard": None}
+            if "ListScorecardsForExactIdentifier" in query:
+                return {
+                    "listScorecards": {
+                        "items": [
+                            {
+                                "id": "sc-1",
+                                "name": "SelectQuote HCS Medium-Risk",
+                                "key": "selectquote_hcs_medium_risk",
+                                "externalId": "1438",
+                            }
+                        ]
+                    }
+                }
+            if "GetScoreByIdForEdit" in query:
+                return {"getScore": None}
+            if "GetScorecardScoresForEdit" in query:
+                return {
+                    "getScorecard": {
+                        "sections": {
+                            "items": [
+                                {
+                                    "scores": {
+                                        "items": [
+                                            {
+                                                "id": "s-1",
+                                                "name": "Agent Misrepresentation",
+                                                "key": "agent-misrepresentation",
+                                                "externalId": "45813",
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    client = FakeClient()
+    scorecard = execute._resolve_scorecard_for_score_edit(
+        client, "SelectQuote HCS Medium-Risk."
+    )
+    score = execute._resolve_score_for_score_edit(
+        client, "sc-1", "\"Agent Misrepresentation.\""
+    )
+
+    assert scorecard["id"] == "sc-1"
+    assert score["id"] == "s-1"
+
+
+def test_default_score_pull_does_not_fallback_to_fuzzy_search(monkeypatch) -> None:
+    from plexus.cli.shared import client_utils, direct_identifier_resolution
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+            raise AssertionError(f"unexpected query: {query}")
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        direct_identifier_resolution,
+        "direct_resolve_scorecard_identifier",
+        lambda _client, _identifier: None,
+    )
+    monkeypatch.setattr(
+        direct_identifier_resolution,
+        "direct_resolve_score_identifier",
+        lambda _client, _scorecard_id, _identifier: None,
+    )
+    monkeypatch.setattr(
+        execute,
+        "_default_scorecards_search",
+        lambda _args: (_ for _ in ()).throw(AssertionError("fuzzy fallback must not run")),
+    )
+
+    with pytest.raises(ValueError, match="Scorecard not found"):
+        execute._default_score_pull(
+            {
+                "scorecard_identifier": "SelectQuote HCS Medium Risk",
+                "score_identifier": "Agent Misrepresentation",
+            }
+        )
 
 
 def test_evaluation_run_async_preserves_explicit_procedure_id() -> None:
