@@ -26,7 +26,7 @@ def _procedures_root() -> Path:
 def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
     return {
         "name": "Console Chat Agent",
-        "version": "1.6.9",
+        "version": "1.6.10",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -204,6 +204,7 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- Use score.edit when the user gives an instruction and wants the system to perform the edit.\n"
                     "- score.edit is async-only; pass async=true with an explicit budget.\n"
                     "- Resolve scorecard and score targets first using `plexus.scorecards.search` and `plexus.score.info` when needed.\n"
+                    "- If resolution yields multiple candidates, do not auto-select one; ask a concise disambiguation question first.\n"
                     "- score.edit is edit execution only; do not use it for fuzzy discovery or target selection.\n"
                     "- Prefer resolved UUIDs for deterministic execution (other canonical identifiers are accepted if unique).\n"
                     "- score.edit waits internally for terminal completion; do not report success unless status is `completed` with result `version_id`.\n"
@@ -230,7 +231,7 @@ _BUILTINS: Dict[str, BuiltinProcedureSpec] = {
         procedure_id=CONSOLE_CHAT_BUILTIN_ID,
         name="Console Chat Agent",
         description="Built-in general-purpose chat procedure for Plexus Console.",
-        version="1.6.9",
+        version="1.6.10",
         tac_path=_procedures_root() / "console" / "chat_agent.tac",
     ),
 }
