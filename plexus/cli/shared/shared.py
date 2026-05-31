@@ -1,7 +1,6 @@
 """Shared functions between BatchCommands and PredictionCommands."""
 import os
 import json
-import pandas as pd
 import re
 from pathlib import Path
 from plexus.CustomLogging import logging
@@ -164,6 +163,11 @@ def select_sample_data_driven(scorecard_class, score_name, content_id, score_con
 
 def select_sample_csv(csv_path, content_id):
     """Select a sample from CSV file."""
+    try:
+        import pandas as pd
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("pandas is required for CSV sampling workflows") from exc
+
     if not os.path.exists(csv_path):
         logging.error(f"labeled-samples.csv not found at {csv_path}")
         raise FileNotFoundError(f"labeled-samples.csv not found at {csv_path}")
