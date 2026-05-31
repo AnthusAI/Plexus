@@ -5132,6 +5132,36 @@ def _score_edit_identifier_variants(identifier: Any) -> list[str]:
     return variants
 
 
+def _score_edit_canonical_identifier(value: Any) -> str:
+    """Canonicalize identifiers for deterministic separator-insensitive matches."""
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").strip().lower())
+
+
+def _score_edit_matches_identifier(
+    row: dict[str, Any], variants: list[str]
+) -> bool:
+    direct_values = [
+        str(row.get("id") or ""),
+        str(row.get("name") or ""),
+        str(row.get("key") or ""),
+        str(row.get("externalId") or ""),
+    ]
+    direct_value_set = {value for value in direct_values if value}
+    canonical_value_set = {
+        _score_edit_canonical_identifier(value)
+        for value in direct_value_set
+        if _score_edit_canonical_identifier(value)
+    }
+
+    for variant in variants:
+        if variant in direct_value_set:
+            return True
+        canonical_variant = _score_edit_canonical_identifier(variant)
+        if canonical_variant and canonical_variant in canonical_value_set:
+            return True
+    return False
+
+
 def _resolve_scorecard_for_score_edit(client: Any, identifier: Any) -> dict[str, Any]:
     needle = str(identifier or "").strip()
     variants = _score_edit_identifier_variants(identifier)
@@ -5177,13 +5207,7 @@ def _resolve_scorecard_for_score_edit(client: Any, identifier: Any) -> dict[str,
         row_id = str(row.get("id") or "")
         if not row_id:
             continue
-        if any(
-            row_id == variant
-            or str(row.get("name") or "") == variant
-            or str(row.get("key") or "") == variant
-            or str(row.get("externalId") or "") == variant
-            for variant in variants
-        ):
+        if _score_edit_matches_identifier(row, variants):
             candidates[row_id] = {
                 "id": row_id,
                 "name": row.get("name"),
@@ -5277,13 +5301,7 @@ def _resolve_score_for_score_edit(
             row_id = str(row.get("id") or "")
             if not row_id:
                 continue
-            if any(
-                row_id == variant
-                or str(row.get("name") or "") == variant
-                or str(row.get("key") or "") == variant
-                or str(row.get("externalId") or "") == variant
-                for variant in variants
-            ):
+            if _score_edit_matches_identifier(row, variants):
                 candidates[row_id] = {
                     "id": row_id,
                     "name": row.get("name"),

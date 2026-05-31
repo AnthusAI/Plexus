@@ -2839,6 +2839,61 @@ def test_score_edit_resolver_accepts_identifiers_with_trailing_punctuation() -> 
     assert score["id"] == "s-1"
 
 
+def test_score_edit_resolver_accepts_separator_insensitive_identifiers() -> None:
+    class FakeClient:
+        def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+            if "GetScorecardById" in query:
+                return {"getScorecard": None}
+            if "ListScorecardsForExactIdentifier" in query:
+                return {
+                    "listScorecards": {
+                        "items": [
+                            {
+                                "id": "sc-1",
+                                "name": "SelectQuote HCS Medium-Risk",
+                                "key": "selectquote_hcs_medium_risk",
+                                "externalId": "1438",
+                            }
+                        ]
+                    }
+                }
+            if "GetScoreByIdForEdit" in query:
+                return {"getScore": None}
+            if "GetScorecardScoresForEdit" in query:
+                return {
+                    "getScorecard": {
+                        "sections": {
+                            "items": [
+                                {
+                                    "scores": {
+                                        "items": [
+                                            {
+                                                "id": "s-1",
+                                                "name": "Agent Misrepresentation",
+                                                "key": "agent-misrepresentation",
+                                                "externalId": "45813",
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    client = FakeClient()
+    scorecard = execute._resolve_scorecard_for_score_edit(
+        client, "selectquote hcs medium risk"
+    )
+    score = execute._resolve_score_for_score_edit(
+        client, "sc-1", "agent_misrepresentation"
+    )
+
+    assert scorecard["id"] == "sc-1"
+    assert score["id"] == "s-1"
+
+
 def test_default_score_pull_does_not_fallback_to_fuzzy_search(monkeypatch) -> None:
     from plexus.cli.shared import client_utils, direct_identifier_resolution
 
