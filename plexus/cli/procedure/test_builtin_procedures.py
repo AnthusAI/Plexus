@@ -94,6 +94,7 @@ def test_builtin_console_procedure_prompt_enforces_score_edit_completion_contrac
 
     assert "IMPORTANT for score.edit" in system_prompt
     assert "Resolve scorecard and score targets first" in system_prompt
+    assert "do not auto-select one" in system_prompt
     assert "score.edit is edit execution only" in system_prompt
     assert "waits internally for terminal completion" in system_prompt
     assert "status is `completed` with result `version_id`" in system_prompt
@@ -137,7 +138,7 @@ def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
     # Bumped when planning mode's blocked-action boundary changes.
-    assert parsed["version"] == "1.6.9"
+    assert parsed["version"] == "1.6.10"
 
 
 def test_is_builtin_procedure_id():
