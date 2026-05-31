@@ -330,6 +330,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("score_contradictions", "score", "contradictions"),
     ("score_pull", "score", "pull"),
     ("score_update", "score", "update"),
+    ("score_edit", "score", "edit"),
     ("score_test", "score", "test"),
     ("score_set_champion", "score", "set_champion"),
     ("item_info", "item", "info"),
@@ -463,6 +464,7 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("score", "contradictions"): _method_spec("_call_score", planning_allowed=True),
     ("score", "pull"): _method_spec("_call_score", planning_allowed=True),
     ("score", "update"): _method_spec("_call_score", planning_allowed=False),
+    ("score", "edit"): _method_spec("_call_score", planning_allowed=False),
     ("score", "test"): _method_spec("_call_score", planning_allowed=True),
     ("score", "set_champion"): _method_spec("_call_score", planning_allowed=False),
     ("item", "info"): _method_spec("_call_item", planning_allowed=True),
@@ -5099,6 +5101,213 @@ async def _send_mcp_stream_event(ctx: Context, event: dict[str, Any]) -> None:
         logger.debug("Ignoring failed execute_tactus info event: %s", exc)
 
 
+def _score_edit_format_candidates(candidates: list[dict[str, Any]]) -> str:
+    rows: list[str] = []
+    for candidate in candidates[:10]:
+        rows.append(
+            f"{candidate.get('id')} (name={candidate.get('name')!r}, "
+            f"key={candidate.get('key')!r}, externalId={candidate.get('externalId')!r})"
+        )
+    if len(candidates) > 10:
+        rows.append(f"... and {len(candidates) - 10} more")
+    return "; ".join(rows)
+
+
+def _score_edit_identifier_variants(identifier: Any) -> list[str]:
+    """Return deterministic exact-match variants for score.edit identifiers.
+
+    This keeps strict matching behavior while tolerating common LLM punctuation
+    wrappers such as trailing periods and surrounding quotes.
+    """
+    raw = str(identifier or "").strip()
+    if not raw:
+        return []
+
+    variants: list[str] = [raw]
+    normalized = raw.strip().strip("\"'`").strip()
+    normalized = normalized.rstrip(".,;:!?")
+    normalized = normalized.strip()
+    if normalized and normalized not in variants:
+        variants.append(normalized)
+    return variants
+
+
+def _resolve_scorecard_for_score_edit(client: Any, identifier: Any) -> dict[str, Any]:
+    needle = str(identifier or "").strip()
+    variants = _score_edit_identifier_variants(identifier)
+    if not needle:
+        raise ValueError("plexus.score.edit requires scorecard_identifier")
+
+    candidates: dict[str, dict[str, Any]] = {}
+
+    id_query = """
+    query GetScorecardById($id: ID!) {
+        getScorecard(id: $id) {
+            id
+            name
+            key
+            externalId
+        }
+    }
+    """
+    for variant in variants:
+        by_id = (client.execute(id_query, {"id": variant}) or {}).get("getScorecard")
+        if by_id and by_id.get("id"):
+            candidates[str(by_id["id"])] = {
+                "id": str(by_id.get("id")),
+                "name": by_id.get("name"),
+                "key": by_id.get("key"),
+                "externalId": by_id.get("externalId"),
+            }
+
+    list_query = """
+    query ListScorecardsForExactIdentifier {
+        listScorecards(limit: 1000) {
+            items {
+                id
+                name
+                key
+                externalId
+            }
+        }
+    }
+    """
+    items = (client.execute(list_query) or {}).get("listScorecards", {}).get("items", [])
+    for row in items:
+        row_id = str(row.get("id") or "")
+        if not row_id:
+            continue
+        if any(
+            row_id == variant
+            or str(row.get("name") or "") == variant
+            or str(row.get("key") or "") == variant
+            or str(row.get("externalId") or "") == variant
+            for variant in variants
+        ):
+            candidates[row_id] = {
+                "id": row_id,
+                "name": row.get("name"),
+                "key": row.get("key"),
+                "externalId": row.get("externalId"),
+            }
+
+    resolved = list(candidates.values())
+    if not resolved:
+        raise ValueError(
+            "plexus.score.edit could not resolve scorecard_identifier "
+            f"{needle!r}. Resolve it first with plexus.scorecards.search/info and retry."
+        )
+    if len(resolved) > 1:
+        raise ValueError(
+            "plexus.score.edit scorecard_identifier is ambiguous for "
+            f"{needle!r}. Resolve to a unique identifier before editing. Candidates: "
+            f"{_score_edit_format_candidates(resolved)}"
+        )
+
+    return resolved[0]
+
+
+def _resolve_score_for_score_edit(
+    client: Any, scorecard_id: str, score_identifier: Any
+) -> dict[str, Any]:
+    needle = str(score_identifier or "").strip()
+    variants = _score_edit_identifier_variants(score_identifier)
+    if not needle:
+        raise ValueError("plexus.score.edit requires score_identifier")
+
+    candidates: dict[str, dict[str, Any]] = {}
+
+    id_query = """
+    query GetScoreByIdForEdit($id: ID!) {
+        getScore(id: $id) {
+            id
+            name
+            key
+            externalId
+            section {
+                scorecard {
+                    id
+                }
+            }
+        }
+    }
+    """
+    for variant in variants:
+        by_id = (client.execute(id_query, {"id": variant}) or {}).get("getScore")
+        if (
+            by_id
+            and str(by_id.get("id") or "")
+            and str(((by_id.get("section") or {}).get("scorecard") or {}).get("id") or "")
+            == str(scorecard_id)
+        ):
+            candidates[str(by_id["id"])] = {
+                "id": str(by_id.get("id")),
+                "name": by_id.get("name"),
+                "key": by_id.get("key"),
+                "externalId": by_id.get("externalId"),
+            }
+
+    card_scores_query = """
+    query GetScorecardScoresForEdit($id: ID!) {
+        getScorecard(id: $id) {
+            sections {
+                items {
+                    scores {
+                        items {
+                            id
+                            name
+                            key
+                            externalId
+                        }
+                    }
+                }
+            }
+        }
+    }
+    """
+    sections = (
+        (client.execute(card_scores_query, {"id": str(scorecard_id)}) or {})
+        .get("getScorecard", {})
+        .get("sections", {})
+        .get("items", [])
+    )
+    for section in sections:
+        scores = (section.get("scores") or {}).get("items", [])
+        for row in scores:
+            row_id = str(row.get("id") or "")
+            if not row_id:
+                continue
+            if any(
+                row_id == variant
+                or str(row.get("name") or "") == variant
+                or str(row.get("key") or "") == variant
+                or str(row.get("externalId") or "") == variant
+                for variant in variants
+            ):
+                candidates[row_id] = {
+                    "id": row_id,
+                    "name": row.get("name"),
+                    "key": row.get("key"),
+                    "externalId": row.get("externalId"),
+                }
+
+    resolved = list(candidates.values())
+    if not resolved:
+        raise ValueError(
+            "plexus.score.edit could not resolve score_identifier "
+            f"{needle!r} in scorecard {scorecard_id!r}. Resolve it first with "
+            "plexus.score.info and retry."
+        )
+    if len(resolved) > 1:
+        raise ValueError(
+            "plexus.score.edit score_identifier is ambiguous for "
+            f"{needle!r} in scorecard {scorecard_id!r}. Resolve to a unique identifier "
+            f"before editing. Candidates: {_score_edit_format_candidates(resolved)}"
+        )
+
+    return resolved[0]
+
+
 def _default_score_pull(args: dict[str, Any]) -> dict[str, Any]:
     """Return the champion (or specific version) YAML for a score in-memory.
 
@@ -5113,17 +5322,21 @@ def _default_score_pull(args: dict[str, Any]) -> dict[str, Any]:
 
     scorecard_identifier = args.get("scorecard_identifier") or args.get("scorecard")
     score_identifier = args.get("score_identifier") or args.get("score")
+    scorecard_id = args.get("scorecard_id")
+    score_id = args.get("score_id")
     version_id = args.get("version_id") or args.get("version")
-    if not scorecard_identifier:
+    if not scorecard_identifier and not scorecard_id:
         raise ValueError("plexus.score.pull requires scorecard_identifier")
-    if not score_identifier:
+    if not score_identifier and not score_id:
         raise ValueError("plexus.score.pull requires score_identifier")
 
     client = create_client()
-    scorecard_id = direct_resolve_scorecard_identifier(client, scorecard_identifier)
+    if not scorecard_id:
+        scorecard_id = direct_resolve_scorecard_identifier(client, scorecard_identifier)
     if not scorecard_id:
         raise ValueError(f"Scorecard not found: {scorecard_identifier!r}")
-    score_id = direct_resolve_score_identifier(client, scorecard_id, score_identifier)
+    if not score_id:
+        score_id = direct_resolve_score_identifier(client, scorecard_id, score_identifier)
     if not score_id:
         raise ValueError(f"Score not found: {score_identifier!r}")
 
@@ -5359,6 +5572,179 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
         else f"Score metadata updated: {list(metadata_updates.keys())}"
     )
     return result
+
+
+def _extract_json_object(text: str) -> dict[str, Any]:
+    cleaned = (text or "").strip()
+    if "```" in cleaned:
+        match = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
+        if match:
+            cleaned = match.group(1).strip()
+    object_match = re.search(r"\{[\s\S]*\}", cleaned)
+    if object_match:
+        cleaned = object_match.group(0)
+    parsed = json.loads(cleaned)
+    if not isinstance(parsed, dict):
+        raise ValueError("LLM response must be a JSON object")
+    return parsed
+
+
+def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
+    os.makedirs(os.path.dirname(result_path), exist_ok=True)
+    output: dict[str, Any]
+    try:
+        from openai import OpenAI
+        from plexus.cli.shared.client_utils import create_client
+        from plexus.cli.procedure.tactus_adapters.score_editor_toolset import (
+            GUIDELINES_PATH,
+            ScoreEditorToolset,
+            VIRTUAL_PATH,
+        )
+
+        scorecard_identifier = args.get("scorecard_identifier") or args.get("scorecard")
+        score_identifier = args.get("score_identifier") or args.get("score")
+        instruction = str(args.get("instruction") or "").strip()
+        if not scorecard_identifier:
+            raise ValueError("plexus.score.edit requires scorecard_identifier")
+        if not score_identifier:
+            raise ValueError("plexus.score.edit requires score_identifier")
+        if not instruction:
+            raise ValueError("plexus.score.edit requires instruction")
+
+        resolver_client = create_client()
+        resolved_scorecard = _resolve_scorecard_for_score_edit(
+            resolver_client, scorecard_identifier
+        )
+        resolved_score = _resolve_score_for_score_edit(
+            resolver_client,
+            str(resolved_scorecard["id"]),
+            score_identifier,
+        )
+
+        pull_args: dict[str, Any] = {
+            "scorecard_id": resolved_scorecard["id"],
+            "score_id": resolved_score["id"],
+        }
+        version_id = args.get("version_id") or args.get("version")
+        if version_id:
+            pull_args["version_id"] = version_id
+
+        pull_data = _default_score_pull(pull_args)
+        base_code = str(pull_data.get("yaml_content") or "")
+        base_guidelines = str(pull_data.get("guidelines") or "")
+        parent_version_id = str(pull_data.get("version_id") or "")
+
+        model = str(args.get("model") or "gpt-5-mini")
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        prompt = (
+            "You are editing a Plexus score version.\n"
+            "Apply the user instruction to the score YAML and guidelines.\n"
+            "Return ONLY JSON with keys: code, guidelines, note, summary.\n"
+            "Keep YAML valid and preserve behavior unless the instruction requires change.\n\n"
+            f"Instruction:\n{instruction}\n\n"
+            f"Current YAML:\n{base_code}\n\n"
+            f"Current Guidelines:\n{base_guidelines}\n"
+        )
+        response = client.responses.create(
+            model=model,
+            reasoning={"effort": "low"},
+            input=[{"role": "user", "content": prompt}],
+            max_output_tokens=5000,
+        )
+        parsed = _extract_json_object(response.output_text or "")
+        candidate_code = str(parsed.get("code") or base_code)
+        candidate_guidelines = str(parsed.get("guidelines") if parsed.get("guidelines") is not None else base_guidelines)
+        note = str(parsed.get("note") or f"Edited via plexus.score.edit: {instruction[:180]}")
+        summary = str(parsed.get("summary") or "")
+
+        toolset = ScoreEditorToolset()
+        setup_result = toolset.setup(
+            {
+                "scorecard_identifier": resolved_scorecard["id"],
+                "score_identifier": resolved_score["id"],
+                "yaml_content": base_code,
+                "guidelines_content": base_guidelines,
+                "parent_version_id": parent_version_id or None,
+                "hypothesis": instruction[:200],
+            }
+        )
+        if not setup_result.get("success"):
+            raise RuntimeError(str(setup_result.get("message") or "score editor setup failed"))
+
+        if candidate_code != base_code:
+            toolset.str_replace_editor(
+                {"command": "create", "path": VIRTUAL_PATH, "new_str": candidate_code}
+            )
+        if candidate_guidelines != base_guidelines:
+            toolset.str_replace_editor(
+                {
+                    "command": "create",
+                    "path": GUIDELINES_PATH,
+                    "new_str": candidate_guidelines,
+                }
+            )
+        submit = asyncio.run(toolset.submit_score_version({"version_note": note}))
+        if not submit.get("success"):
+            raise RuntimeError(str(submit.get("error") or "score edit submit failed"))
+
+        output = {
+            "success": True,
+            "version_id": submit.get("version_id"),
+            "parent_version_id": parent_version_id or None,
+            "changed_fields": submit.get("changed_fields") or [],
+            "note": note,
+            "summary": summary,
+            "scorecard_identifier": scorecard_identifier,
+            "score_identifier": score_identifier,
+            "scorecard_id": resolved_scorecard["id"],
+            "score_id": resolved_score["id"],
+        }
+    except Exception as exc:  # noqa: BLE001
+        output = {"success": False, "error": str(exc)}
+
+    with open(result_path, "w", encoding="utf-8") as handle:
+        json.dump(output, handle, indent=2, sort_keys=True, default=str)
+
+
+def _default_score_edit_runner(args: dict[str, Any]) -> dict[str, Any]:
+    import tempfile
+
+    run_dir = tempfile.mkdtemp(prefix="plexus_score_edit_")
+    run_id = str(uuid.uuid4())
+    result_path = os.path.join(run_dir, f"{run_id}.json")
+
+    worker = threading.Thread(
+        target=_run_score_edit_job,
+        args=(dict(args), result_path),
+        daemon=True,
+        name=f"score-edit-{run_id[:8]}",
+    )
+    worker.start()
+
+    return {
+        "status": "dispatched",
+        "run_id": run_id,
+        "temp_dir": run_dir,
+        "result_file": result_path,
+        "scorecard_identifier": args.get("scorecard_identifier") or args.get("scorecard"),
+        "score_identifier": args.get("score_identifier") or args.get("score"),
+        "message": "Score edit dispatched in background.",
+    }
+
+
+def _cleanup_score_edit_artifacts(dispatch_result: dict[str, Any]) -> None:
+    result_file = dispatch_result.get("result_file")
+    temp_dir = dispatch_result.get("temp_dir")
+    try:
+        if result_file and os.path.isfile(str(result_file)):
+            os.unlink(str(result_file))
+    except OSError:
+        pass
+    try:
+        if temp_dir and os.path.isdir(str(temp_dir)):
+            os.rmdir(str(temp_dir))
+    except OSError:
+        pass
 
 
 def _default_score_create(args: dict[str, Any]) -> dict[str, Any]:
@@ -5938,6 +6324,7 @@ class PlexusRuntimeModule:
         score_contradictions: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_pull: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_update: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_edit_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_test: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_set_champion: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         feedback_latest_update: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
@@ -6013,6 +6400,9 @@ class PlexusRuntimeModule:
         )
         self._score_pull = score_pull if score_pull is not None else _default_score_pull
         self._score_update = score_update if score_update is not None else _default_score_update
+        self._score_edit_runner = (
+            score_edit_runner if score_edit_runner is not None else _default_score_edit_runner
+        )
         self._score_test = score_test if score_test is not None else _default_score_test
         self._score_set_champion = (
             score_set_champion
@@ -6222,6 +6612,7 @@ class PlexusRuntimeModule:
             "contradictions",
             "pull",
             "update",
+            "edit",
             "test",
             "set_champion",
         }:
@@ -6248,6 +6639,35 @@ class PlexusRuntimeModule:
                 return self._score_pull(parsed)
             if method == "update":
                 return self._score_update(parsed)
+            if method == "edit":
+                if not bool(parsed.get("async")):
+                    self.handle_protocol_required = ("score", "edit")
+                    raise RequiresHandleProtocol("score", "edit")
+                child_budget = self._budget.carve_child("score", "edit", parsed.get("budget"))
+                dispatch_result = self._score_edit_runner(parsed)
+                handle = self._handle_store.create(
+                    kind="score_edit",
+                    parent_trace_id=self._trace_id,
+                    api_call="plexus.score.edit",
+                    args=parsed,
+                    dispatch_result=dispatch_result,
+                    child_budget=child_budget,
+                )
+                await_timeout = (
+                    parsed.get("await_timeout")
+                    or parsed.get("timeout")
+                    or "PT10M"
+                )
+                await_args: dict[str, Any] = {
+                    "id": handle["id"],
+                    "timeout": await_timeout,
+                }
+                await_poll = parsed.get("await_poll_interval") or parsed.get(
+                    "poll_interval"
+                )
+                if await_poll is not None:
+                    await_args["poll_interval"] = await_poll
+                return self._call_handle("handle", "await", await_args)
             if method == "test":
                 return self._score_test(parsed)
             if method == "set_champion":
@@ -6830,6 +7250,35 @@ class PlexusRuntimeModule:
     def _refresh_handle(self, handle_id: str) -> dict[str, Any]:
         record = self._handle_store.get(handle_id)
         dispatch_result = record.get("dispatch_result") or {}
+        if record.get("kind") == "score_edit":
+            result_file = dispatch_result.get("result_file")
+            if result_file and os.path.isfile(str(result_file)):
+                try:
+                    with open(str(result_file), "r", encoding="utf-8") as handle:
+                        score_edit_result = json.load(handle)
+                except Exception as exc:  # noqa: BLE001
+                    return self._handle_store.update(
+                        handle_id,
+                        {"status": "failed", "error": f"Could not read score edit result: {exc}"},
+                    )
+                if score_edit_result.get("success"):
+                    updated = self._handle_store.update(
+                        handle_id,
+                        {"status": "completed", "result": score_edit_result},
+                    )
+                    _cleanup_score_edit_artifacts(dispatch_result)
+                    return updated
+                updated = self._handle_store.update(
+                    handle_id,
+                    {
+                        "status": "failed",
+                        "error": score_edit_result.get("error") or "Score edit failed",
+                        "result": score_edit_result,
+                    },
+                )
+                _cleanup_score_edit_artifacts(dispatch_result)
+                return updated
+            return self._handle_store.update(handle_id, {"status": "running"})
         evaluation_id = dispatch_result.get("evaluation_id") or dispatch_result.get(
             "id"
         )
