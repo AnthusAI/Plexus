@@ -5701,7 +5701,7 @@ def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
         base_guidelines = str(pull_data.get("guidelines") or "")
         parent_version_id = str(pull_data.get("version_id") or "")
 
-        model = str(args.get("model") or "gpt-5-mini")
+        model = str(args.get("model") or "gpt-5.3-codex")
         client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         prompt = (
             "You are editing a Plexus score version.\n"
