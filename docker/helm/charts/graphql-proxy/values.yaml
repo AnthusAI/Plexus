@@ -146,7 +146,7 @@ postgresql:
   port: 5432
   database: ""  # Will default to global.services.postgresql.database
   username: ""
-  password: ""
+  # Passwords are sourced from Kubernetes Secrets; do not set inline here.
   existingSecret: ""  # Name of secret containing database credentials
   existingSecretPasswordKey: "password"  # For Bitnami PostgreSQL, use "password"
   existingSecretUsernameKey: "username"  # For Bitnami PostgreSQL in global context, the username is in auth.username
