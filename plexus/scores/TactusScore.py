@@ -283,6 +283,82 @@ class TactusScore(Score):
 
         return parsed
 
+    async def _enrich_explanation_with_timestamps(
+        self,
+        runtime: TactusRuntime,
+        explanation: Optional[str],
+        metadata: Dict[str, Any]
+    ) -> str:
+        """
+        Enrich explanation text with timestamp brackets using Tactus deepgram module.
+
+        If metadata contains deepgram data and explanation contains quotes, this will
+        add bracketed timestamps like [M:SS.ff-M:SS.ff] after each quote.
+
+        Parameters
+        ----------
+        runtime : TactusRuntime
+            The runtime instance to use for Lua execution
+        explanation : Optional[str]
+            The explanation text that may contain quotes
+        metadata : Dict[str, Any]
+            Metadata that may contain deepgram transcript data
+
+        Returns
+        -------
+        str
+            The explanation with timestamps enriched (or unchanged if no deepgram data)
+        """
+        if not explanation:
+            return explanation or ""
+
+        # Check if we have deepgram data in metadata
+        deepgram_data = None
+        if metadata:
+            # Handle both metadata.deepgram and metadata.metadata.deepgram patterns
+            if 'deepgram' in metadata:
+                deepgram_data = metadata['deepgram']
+            elif 'metadata' in metadata and isinstance(metadata['metadata'], dict):
+                deepgram_data = metadata['metadata'].get('deepgram')
+
+        if not deepgram_data:
+            logger.debug("No deepgram data found in metadata, skipping timestamp enrichment")
+            return explanation
+
+        # Call Tactus deepgram.enrich_timestamps() via runtime
+        enrichment_code = """
+        local deepgram = require("tactus.deepgram")
+        local input_text = context.text
+        local data = context.data
+
+        -- enrich_timestamps may throw if quotes aren't found - let it propagate
+        return deepgram.enrich_timestamps(input_text, data)
+        """
+
+        try:
+            enrichment_context = {
+                'text': explanation,
+                'data': deepgram_data,
+            }
+            result = await asyncio.to_thread(
+                self._execute_runtime_sync,
+                runtime,
+                enrichment_code,
+                enrichment_context,
+            )
+            enriched = result.get('result', explanation)
+            logger.debug(
+                "Enriched explanation with timestamps for score '%s'",
+                self.parameters.name
+            )
+            return enriched if isinstance(enriched, str) else explanation
+        except Exception as e:
+            # If enrichment fails (e.g., quote not found), log warning and return original
+            logger.warning(
+                f"Failed to enrich timestamps for score '{self.parameters.name}': {e}"
+            )
+            return explanation
+
     async def predict(
         self,
         model_input: Score.Input,
@@ -340,12 +416,26 @@ class TactusScore(Score):
                 value = procedure_output.get('value')
                 explanation = procedure_output.get('explanation')
                 confidence = procedure_output.get('confidence')
-                timestamps = extract_score_result_timestamps(procedure_output, explanation)
             else:
                 value = str(procedure_output)
                 explanation = None
                 confidence = None
-                timestamps = extract_score_result_timestamps(explanation=explanation)
+
+            # Enrich explanation with timestamps if deepgram data is available
+            # This happens BEFORE extracting timestamps so ClassifyProcedure scores
+            # get automatic timestamp enrichment without manual deepgram.enrich_timestamps()
+            if explanation:
+                explanation = await self._enrich_explanation_with_timestamps(
+                    runtime,
+                    explanation,
+                    parsed_metadata
+                )
+
+            # Extract timestamps from enriched explanation or structured fields
+            timestamps = extract_score_result_timestamps(
+                procedure_output if isinstance(procedure_output, dict) else {},
+                explanation
+            )
 
             logger.debug("Tactus returned value '%s' for score '%s'", value, self.parameters.name)
 
