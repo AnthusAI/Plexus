@@ -1813,6 +1813,9 @@ function ConversationViewer({
 
     return latestBySession
   }, [messages])
+  const getSessionTimestamp = React.useCallback((session: Pick<ChatSession, "id" | "updatedAt" | "createdAt">) => (
+    latestMessageAtBySession.get(session.id) || session.updatedAt || session.createdAt
+  ), [latestMessageAtBySession])
 
   useEffect(() => {
     selectedSessionIdRef.current = selectedSessionId
@@ -3702,23 +3705,33 @@ function ConversationViewer({
                 onClick={() => handleSessionSelect(session.id)}
                 className="w-full justify-start text-left p-2 h-auto"
               >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  {getSessionExplicitName(session) && (
-                    <MessageSquare className="h-4 w-4 flex-shrink-0" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium truncate">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 text-xs font-medium truncate">
                       <SessionLabel
                         session={session}
                         latestMessageAt={latestMessageAtBySession.get(session.id)}
                         timestampClassName="text-xs font-medium"
                       />
                     </div>
-                  <div className="text-xs text-muted-foreground">
+                    {getSessionExplicitName(session) && (
+                      <MessageSquare className="h-4 w-4 shrink-0" />
+                    )}
+                  </div>
+                  <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span className="truncate">
                       {session.messageCount ? `${session.messageCount} messages` : 'No messages'}
+                    </span>
+                    {getSessionTimestamp(session) && (
+                      <Timestamp
+                        time={getSessionTimestamp(session) as string}
+                        variant="relative"
+                        showIcon={false}
+                        className="shrink-0 text-xs text-muted-foreground"
+                      />
+                    )}
                     </div>
                   </div>
-                </div>
               </Button>
             ))}
           </div>
@@ -3756,13 +3769,10 @@ function ConversationViewer({
       <div className="flex h-full min-w-0 flex-1 flex-col">
         {/* Session Header */}
         {selectedSession && (
-          <div data-testid="conversation-main-header" className="h-12 border-b border-border px-3 pt-0.5">
-            <div className="flex h-full items-center justify-between">
-              <div className="flex min-w-0 items-center gap-2">
-                {getSessionExplicitName(selectedSession) && (
-                  <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
-                )}
-                <div className="min-w-0 flex items-center gap-2">
+          <div data-testid="conversation-main-header" className="border-b border-border px-3 py-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center justify-between gap-2">
                   <div className="font-medium text-sm truncate">
                     <SessionLabel
                       session={selectedSession}
@@ -3770,18 +3780,33 @@ function ConversationViewer({
                       timestampClassName="font-medium text-sm"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground truncate">
-                    {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
-                  </span>
-                  {isConsolePrivate && (
-                    <Badge
-                      variant="secondary"
-                      className="shrink-0 gap-1 px-1.5 py-0 text-[11px] font-normal"
-                      title="Hidden from other users in this workspace UI."
-                    >
-                      <HatGlasses className="h-3 w-3" />
-                      Private
-                    </Badge>
+                  {getSessionExplicitName(selectedSession) && (
+                    <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                  )}
+                </div>
+                <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">
+                      {selectedSession.messageCount ? `${selectedSession.messageCount} messages` : 'No messages'}
+                    </span>
+                    {isConsolePrivate && (
+                      <Badge
+                        variant="secondary"
+                        className="shrink-0 gap-1 px-1.5 py-0 text-[11px] font-normal"
+                        title="Hidden from other users in this workspace UI."
+                      >
+                        <HatGlasses className="h-3 w-3" />
+                        Private
+                      </Badge>
+                    )}
+                  </div>
+                  {getSessionTimestamp(selectedSession) && (
+                    <Timestamp
+                      time={getSessionTimestamp(selectedSession) as string}
+                      variant="relative"
+                      showIcon={false}
+                      className="shrink-0 text-xs text-muted-foreground"
+                    />
                   )}
                 </div>
               </div>

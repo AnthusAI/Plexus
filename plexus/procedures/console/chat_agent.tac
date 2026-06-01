@@ -234,6 +234,17 @@ local function extract_text(value)
   return ""
 end
 
+local function looks_like_uuid(value)
+  if type(value) ~= "string" then
+    return false
+  end
+  local trimmed = _trim(value)
+  if trimmed == "" then
+    return false
+  end
+  return string.match(trimmed, "^[0-9a-fA-F]{8}%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") ~= nil
+end
+
 local assistant_result = nil
 if deterministic_response ~= nil and deterministic_response ~= "" then
   assistant_result = { response = deterministic_response }
@@ -264,7 +275,7 @@ if final_response == "" then
 end
 
 if final_response == "" then
-  for _, key in ipairs({ "response", "content", "message", "text", "output", "result" }) do
+  for _, key in ipairs({ "response", "content", "message", "text", "output" }) do
     local ok_attr, attr_value = pcall(function()
       return assistant_result[key]
     end)
@@ -276,6 +287,10 @@ if final_response == "" then
       end
     end
   end
+end
+
+if looks_like_uuid(final_response) then
+  final_response = "Completed, but the assistant returned only a version identifier (" .. final_response .. "). I will include a clear human-readable summary next time."
 end
 
 if final_response == "" then

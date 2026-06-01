@@ -28,6 +28,8 @@ from plexus.cli.shared.optimizer_shadow_invalidation import (
 logger = logging.getLogger(__name__)
 
 VIRTUAL_PATH = "score_config.yaml"
+GUIDELINES_PATH = "guidelines.md"
+ALLOWED_PATHS = (VIRTUAL_PATH, GUIDELINES_PATH)
 EXTRACTION_LIKE_VALID_CLASSES = {
     "extract",
     "extracted",
@@ -67,9 +69,9 @@ class ScoreEditorToolset:
 
     def __init__(self, mcp_client=None):
         self._mcp_client = mcp_client
-        self._content: str = ""
-        self._original: str = ""
-        self._history: List[str] = []
+        self._files: dict[str, str] = {VIRTUAL_PATH: "", GUIDELINES_PATH: ""}
+        self._original_files: dict[str, str] = {VIRTUAL_PATH: "", GUIDELINES_PATH: ""}
+        self._histories: dict[str, List[str]] = {VIRTUAL_PATH: [], GUIDELINES_PATH: []}
         self._scorecard: str = ""
         self._score: str = ""
         self._iteration: int = 0
@@ -166,9 +168,9 @@ class ScoreEditorToolset:
         without any async API call — bypassing nested event loop issues in the Tactus
         agent context. When yaml_content is omitted, falls back to _load_content_from_api().
         """
-        self._content = ""
-        self._original = ""
-        self._history = []
+        self._files = {VIRTUAL_PATH: "", GUIDELINES_PATH: ""}
+        self._original_files = {VIRTUAL_PATH: "", GUIDELINES_PATH: ""}
+        self._histories = {VIRTUAL_PATH: [], GUIDELINES_PATH: []}
         self._code_file_path = None
         # Only overwrite scorecard/score if the caller provides non-empty values.
         # When the orchestrator LLM calls setup({}) (args stripped by DSPy), we
@@ -191,6 +193,7 @@ class ScoreEditorToolset:
             self._code_file_path = code_file_path
 
         yaml_content = arguments.get("yaml_content", "")
+        guidelines_content = str(arguments.get("guidelines_content", "") or "")
         if yaml_content:
             try:
                 normalized_yaml = self._normalize_yaml_content(yaml_content, "score_editor_setup yaml_content")
@@ -203,9 +206,12 @@ class ScoreEditorToolset:
                 }
 
             # Direct injection from Lua — no async call needed
-            self._content = normalized_yaml
-            self._original = normalized_yaml
-            self._history = []
+            self._files[VIRTUAL_PATH] = normalized_yaml
+            self._original_files[VIRTUAL_PATH] = normalized_yaml
+            self._histories[VIRTUAL_PATH] = []
+            self._files[GUIDELINES_PATH] = guidelines_content
+            self._original_files[GUIDELINES_PATH] = guidelines_content
+            self._histories[GUIDELINES_PATH] = []
             logger.info(
                 "ScoreEditorToolset: loaded %d normalized chars directly for iteration %d, score=%s, dry_run=%s",
                 len(normalized_yaml), self._iteration, self._score, self._dry_run,
@@ -224,7 +230,7 @@ class ScoreEditorToolset:
             "success": True,
             "message": (
                 f"Score editor ready for iteration {self._iteration}. "
-                f"Content: {len(self._content)} chars. "
+                f"Content: {len(self._files[VIRTUAL_PATH])} chars. "
                 f"Code file: {self._code_file_path or 'not set'}."
             ),
             "path": VIRTUAL_PATH,
@@ -243,19 +249,31 @@ class ScoreEditorToolset:
 
     def get_content(self, arguments: dict) -> dict:
         """Return the current virtual file content for Lua to build system messages."""
+        modified_files = [
+            path
+            for path in ALLOWED_PATHS
+            if self._files[path] != self._original_files[path]
+        ]
         return {
             "success": True,
-            "file_content": self._content,
-            "original": self._original,
-            "modified": self._content != self._original,
-            "length": len(self._content),
+            "file_content": self._files[VIRTUAL_PATH],
+            "guidelines_content": self._files[GUIDELINES_PATH],
+            "files": {
+                VIRTUAL_PATH: self._files[VIRTUAL_PATH],
+                GUIDELINES_PATH: self._files[GUIDELINES_PATH],
+            },
+            "original": self._original_files[VIRTUAL_PATH],
+            "original_guidelines": self._original_files[GUIDELINES_PATH],
+            "modified": bool(modified_files),
+            "modified_files": modified_files,
+            "length": len(self._files[VIRTUAL_PATH]),
         }
 
     # ------------------------------------------------------------------
     # Helpers for str_replace error recovery
     # ------------------------------------------------------------------
 
-    def _try_fix_indentation(self, old_str: str, new_str: str):
+    def _try_fix_indentation(self, content: str, old_str: str, new_str: str):
         """
         Try to fix indentation mismatches between old_str and file content.
 
@@ -274,7 +292,7 @@ class ScoreEditorToolset:
         if not first_stripped:
             return None
 
-        content_lines = self._content.split("\n")
+        content_lines = content.split("\n")
         for ci, cline in enumerate(content_lines):
             if cline.strip() == first_stripped:
                 # Found the first line — determine the indent
@@ -306,7 +324,7 @@ class ScoreEditorToolset:
                     fixed_old = "\n".join(fixed_old_lines)
 
                     # Verify the fixed old_str actually matches
-                    if fixed_old not in self._content:
+                    if fixed_old not in content:
                         continue  # Try next match location
 
                     # Apply the same indent to new_str
@@ -323,7 +341,7 @@ class ScoreEditorToolset:
 
         return None
 
-    def _build_match_error(self, old_str: str) -> str:
+    def _build_match_error(self, content: str, old_str: str, path: str) -> str:
         """
         Build a diagnostic error message showing the agent what went wrong.
 
@@ -336,7 +354,7 @@ class ScoreEditorToolset:
         hint_lines = []
 
         # Try to find the first line (stripped) in content
-        content_lines = self._content.split("\n")
+        content_lines = content.split("\n")
         match_line = None
         for i, cline in enumerate(content_lines):
             if first_stripped and first_stripped in cline:
@@ -375,14 +393,14 @@ class ScoreEditorToolset:
         else:
             # First line not found at all
             hint_lines.append(
-                "Error: No match found for old_str in score_config.yaml. "
+                f"Error: No match found for old_str in {path}. "
                 "The text you provided does not appear in the editable file. "
                 "It may have come from another part of your prompt context "
                 "(e.g. guidelines, RCA analysis, or instructions) rather than "
-                "from score_config.yaml itself."
+                f"from {path} itself."
             )
             hint_lines.append(
-                "\nUse str_replace_editor(command='view', path='score_config.yaml') "
+                f"\nUse str_replace_editor(command='view', path='{path}') "
                 "to re-read the editable file and copy the exact text from there."
             )
 
@@ -397,7 +415,7 @@ class ScoreEditorToolset:
         Standard Claude text editor tool — virtual in-memory implementation.
 
         Commands: view, str_replace, insert, undo_edit, create
-        Path: must be 'score_config.yaml'
+        Path: must be one of the virtual editor files.
 
         On the first view command, automatically loads the current champion score
         YAML from the Plexus API (avoids passing large content through LLM args).
@@ -405,25 +423,29 @@ class ScoreEditorToolset:
         command = arguments.get("command", "")
         path = arguments.get("path", "")
 
-        if path != VIRTUAL_PATH:
+        if path not in ALLOWED_PATHS:
             return (
-                f"Error: Only '{VIRTUAL_PATH}' is available for editing.\n"
+                "Error: Unsupported file path for editor.\n"
                 f"Requested path: {path}\n"
-                f"Use: str_replace_editor(command=\"view\", path=\"{VIRTUAL_PATH}\")"
+                f"Allowed paths: {', '.join(ALLOWED_PATHS)}"
             )
+
+        content = self._files[path]
+        history = self._histories[path]
 
         if command == "view":
             # Clear any pending edit error — viewing the file is the recovery action
             self._last_edit_error = None
 
             # Auto-load content on first view if not yet populated
-            if not self._content:
+            if not content:
                 load_error = self._load_content_from_api()
                 if load_error:
                     return f"Error loading score configuration: {load_error}"
+                content = self._files[path]
 
             view_range = arguments.get("view_range")
-            lines = self._content.split("\n")
+            lines = content.split("\n")
             if view_range and len(view_range) == 2:
                 start = max(0, int(view_range[0]) - 1)
                 end = min(len(lines), int(view_range[1]))
@@ -444,11 +466,11 @@ class ScoreEditorToolset:
             for esc, char in [("\\n", "\n"), ("\\t", "\t"), ("\\'", "'"), ('\\"', '"')]:
                 old_str = old_str.replace(esc, char)
                 new_str = new_str.replace(esc, char)
-            if old_str not in self._content:
+            if old_str not in content:
                 # Try auto-fixing indentation mismatches.
                 # LLMs commonly strip leading whitespace when copying multi-line
                 # text from context. Detect this and re-indent old_str/new_str.
-                fixed = self._try_fix_indentation(old_str, new_str)
+                fixed = self._try_fix_indentation(content, old_str, new_str)
                 if fixed:
                     old_str, new_str = fixed
                     logger.info(
@@ -458,10 +480,10 @@ class ScoreEditorToolset:
                     )
                 else:
                     # Build a diagnostic error message the agent can act on
-                    err = self._build_match_error(old_str)
+                    err = self._build_match_error(content, old_str, path)
                     self._last_edit_error = err
                     return err
-            count = self._content.count(old_str)
+            count = content.count(old_str)
             if count > 1:
                 err = (
                     f"Error: old_str matches {count} locations in the file. "
@@ -469,10 +491,10 @@ class ScoreEditorToolset:
                 )
                 self._last_edit_error = err
                 return err
-            self._history.append(self._content)
-            self._content = self._content.replace(old_str, new_str, 1)
+            history.append(content)
+            self._files[path] = content.replace(old_str, new_str, 1)
             self._last_edit_error = None
-            return self._format_edit_result("str_replace")
+            return self._format_edit_result("str_replace", path)
 
         elif command == "insert":
             insert_line = arguments.get("insert_line")
@@ -485,30 +507,30 @@ class ScoreEditorToolset:
                 err = "Error: new_str is required for insert command"
                 self._last_edit_error = err
                 return err
-            self._history.append(self._content)
-            lines = self._content.split("\n")
+            history.append(content)
+            lines = content.split("\n")
             insert_at = max(0, min(int(insert_line), len(lines)))
             insert_lines = new_str.split("\n")
             lines[insert_at:insert_at] = insert_lines
-            self._content = "\n".join(lines)
+            self._files[path] = "\n".join(lines)
             self._last_edit_error = None
-            return self._format_edit_result("insert")
+            return self._format_edit_result("insert", path)
 
         elif command == "undo_edit":
-            if not self._history:
+            if not history:
                 err = "Error: No previous edit to undo"
                 self._last_edit_error = err
                 return err
-            self._content = self._history.pop()
+            self._files[path] = history.pop()
             self._last_edit_error = None
-            return "Last edit undone.\n\n" + self._format_validation()
+            return "Last edit undone.\n\n" + self._format_validation(path)
 
         elif command == "create":
             new_str = arguments.get("new_str", arguments.get("file_text", ""))
-            self._history.append(self._content)
-            self._content = new_str
+            history.append(content)
+            self._files[path] = new_str
             self._last_edit_error = None
-            return self._format_edit_result("create")
+            return self._format_edit_result("create", path)
 
         else:
             return (
@@ -542,7 +564,7 @@ class ScoreEditorToolset:
                 ),
             }
 
-        if not self._content:
+        if not self._files[VIRTUAL_PATH]:
             return {
                 "success": False,
                 "error": (
@@ -552,18 +574,24 @@ class ScoreEditorToolset:
                 ),
             }
 
-        # Guard 2: reject if content is unchanged — edit was a no-op or not yet made
-        if self._original and self._content == self._original:
+        code_changed = self._files[VIRTUAL_PATH] != self._original_files[VIRTUAL_PATH]
+        guidelines_changed = self._files[GUIDELINES_PATH] != self._original_files[GUIDELINES_PATH]
+        if not code_changed and not guidelines_changed:
             return {
                 "success": False,
                 "error": (
-                    "Cannot submit: the score configuration is unchanged from the original champion version. "
+                    "Cannot submit: score code and guidelines are unchanged from the original baseline. "
                     "Use str_replace_editor to make a meaningful change, then call submit_score_version again."
                 ),
             }
 
         # Guard 2b: reject YAML-equivalent changes, such as comments, key order, or block-scalar rendering only.
-        if self._original and self._yaml_semantically_equal(self._content, self._original):
+        if (
+            code_changed
+            and self._original_files[VIRTUAL_PATH]
+            and self._yaml_semantically_equal(self._files[VIRTUAL_PATH], self._original_files[VIRTUAL_PATH])
+            and not guidelines_changed
+        ):
             return {
                 "success": False,
                 "error": (
@@ -577,16 +605,16 @@ class ScoreEditorToolset:
         # Fix common YAML issues before validation
         # external_id / externalId must be a string, not an integer
         import re
-        self._content = re.sub(
+        self._files[VIRTUAL_PATH] = re.sub(
             r'^(external_id:\s*)(\d+)\s*$',
             r'\1"\2"',
-            self._content,
+            self._files[VIRTUAL_PATH],
             flags=re.MULTILINE,
         )
-        self._content = re.sub(
+        self._files[VIRTUAL_PATH] = re.sub(
             r'^(externalId:\s*)(\d+)\s*$',
             r'\1"\2"',
-            self._content,
+            self._files[VIRTUAL_PATH],
             flags=re.MULTILINE,
         )
 
@@ -635,7 +663,8 @@ class ScoreEditorToolset:
             payload = _default_score_update({
                 "scorecard_identifier": self._scorecard,
                 "score_identifier": self._score,
-                "code": self._content,
+                "code": self._files[VIRTUAL_PATH],
+                "guidelines": self._files[GUIDELINES_PATH],
                 "parent_version_id": self._parent_version_id,
                 "version_note": note,
             })
@@ -654,6 +683,14 @@ class ScoreEditorToolset:
                 return {
                     "success": True,
                     "version_id": version_id,
+                    "changed_fields": [
+                        field
+                        for field, changed in (
+                            ("code", code_changed),
+                            ("guidelines", guidelines_changed),
+                        )
+                        if changed
+                    ],
                     "message": f"Score version created: {version_id}",
                 }
 
@@ -709,12 +746,16 @@ class ScoreEditorToolset:
 
                 normalized_code = self._normalize_yaml_content(yaml_content, "plexus.score.pull")
 
-                self._content = normalized_code
-                self._original = normalized_code
-                self._history = []
+                self._files[VIRTUAL_PATH] = normalized_code
+                self._original_files[VIRTUAL_PATH] = normalized_code
+                self._histories[VIRTUAL_PATH] = []
+                guidelines_content = str(pull_data.get("guidelines") or "")
+                self._files[GUIDELINES_PATH] = guidelines_content
+                self._original_files[GUIDELINES_PATH] = guidelines_content
+                self._histories[GUIDELINES_PATH] = []
                 logger.info(
-                    "ScoreEditorToolset: auto-loaded %d chars for %s/%s via plexus.score.pull",
-                    len(normalized_code), self._scorecard, self._score,
+                    "ScoreEditorToolset: auto-loaded %d yaml chars and %d guideline chars for %s/%s via plexus.score.pull",
+                    len(normalized_code), len(guidelines_content), self._scorecard, self._score,
                 )
                 return None
 
@@ -732,15 +773,17 @@ class ScoreEditorToolset:
                     )
                     return str(exc)
 
-    def _format_edit_result(self, operation: str) -> str:
-        validation = self._format_validation()
-        return f"Edit applied ({operation}).\n\n{validation}"
+    def _format_edit_result(self, operation: str, path: str) -> str:
+        validation = self._format_validation(path)
+        return f"Edit applied ({operation}) on {path}.\n\n{validation}"
 
-    def _format_validation(self) -> str:
+    def _format_validation(self, path: str = VIRTUAL_PATH) -> str:
+        if path != VIRTUAL_PATH:
+            return "No syntax validation is required for guidelines markdown."
         try:
             from plexus.linting.yaml_linter import YamlLinter
             linter = YamlLinter()
-            result = linter.lint(self._content)
+            result = linter.lint(self._files[VIRTUAL_PATH])
             errors = [m for m in result.messages if m.level == "error"]
             warnings = [m for m in result.messages if m.level == "warning"]
             if not errors:
@@ -765,7 +808,7 @@ class ScoreEditorToolset:
         errors: List[str] = []
         try:
             from plexus.linting.yaml_linter import YamlLinter
-            result = YamlLinter().lint(self._content)
+            result = YamlLinter().lint(self._files[VIRTUAL_PATH])
             errors.extend([
                 f"{m.title}" + (f" (line {m.line})" if m.line else "") + f": {m.message}"
                 for m in result.messages
@@ -785,7 +828,7 @@ class ScoreEditorToolset:
         """
         try:
             yaml = YAML(typ="safe")
-            parsed = yaml.load(self._content)
+            parsed = yaml.load(self._files[VIRTUAL_PATH])
         except Exception:
             return []
 
@@ -935,6 +978,7 @@ class ScoreEditorToolset:
                     "scorecard_identifier": {"type": "string", "description": "Scorecard name, key, or ID"},
                     "score_identifier": {"type": "string", "description": "Score name, key, or ID"},
                     "yaml_content": {"type": "string", "description": "Current score YAML content (direct injection, bypasses async API load)"},
+                    "guidelines_content": {"type": "string", "description": "Current score guidelines markdown content"},
                     "code_file_path": {"type": "string", "description": "Path to the score YAML file on disk (metadata only)"},
                     "parent_version_id": {"type": "string", "description": "ScoreVersion ID this edit is based on; persisted as parentVersionId on submit"},
                     "iteration": {"type": "integer", "description": "Current iteration number"},
@@ -973,7 +1017,7 @@ class ScoreEditorToolset:
             name="str_replace_editor",
             description=(
                 "Edit a text file using view, str_replace, insert, undo_edit, or create commands. "
-                f"The only available file is '{VIRTUAL_PATH}'."
+                f"Available files: '{VIRTUAL_PATH}', '{GUIDELINES_PATH}'."
             ),
             input_schema={
                 "type": "object",
@@ -985,7 +1029,7 @@ class ScoreEditorToolset:
                     },
                     "path": {
                         "type": "string",
-                        "description": f"Path to the file (use '{VIRTUAL_PATH}')",
+                        "description": f"Path to the file (use '{VIRTUAL_PATH}' or '{GUIDELINES_PATH}')",
                     },
                     "old_str": {
                         "type": "string",

@@ -14,10 +14,14 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
+
+_POLICY_APPLIED_LOG_GROUPS: set[str] = set()
+_POLICY_APPLY_LOCK = threading.Lock()
 
 
 def _safe_account_key(raw: str) -> str:
@@ -328,27 +332,35 @@ class PlexusCloudWatchLogger:
     def open(self) -> None:
         if not self._logs_client:
             return
+        started_at = time.perf_counter()
+        timing_ms = {
+            "create_log_group_ms": 0.0,
+            "apply_policy_ms": 0.0,
+            "create_streams_ms": 0.0,
+            "bootstrap_event_ms": 0.0,
+            "total_ms": 0.0,
+        }
         try:
             # Create log group
+            create_group_started = time.perf_counter()
             try:
                 self._logs_client.create_log_group(logGroupName=self.log_group)
             except self._logs_client.exceptions.ResourceAlreadyExistsException:
                 # Log group creation is idempotent; existing group is expected on retries.
                 pass
+            timing_ms["create_log_group_ms"] = round(
+                (time.perf_counter() - create_group_started) * 1000, 2
+            )
 
             # Apply data protection policy for PII/PHI masking
-            # Note: Always try to apply, even if log group already existed
-            try:
-                response = self._logs_client.put_data_protection_policy(
-                    logGroupIdentifier=self.log_group,
-                    policyDocument=_get_data_protection_policy()
-                )
-                logger.info("Applied data protection policy to %s: %s", self.log_group, response)
-            except Exception as exc:
-                # Non-fatal: log group is still usable, just without PII protection
-                logger.error("Could not apply data protection policy to %s: %s", self.log_group, exc, exc_info=True)
+            policy_started = time.perf_counter()
+            self._apply_data_protection_policy_once()
+            timing_ms["apply_policy_ms"] = round(
+                (time.perf_counter() - policy_started) * 1000, 2
+            )
 
             # Create log streams
+            streams_started = time.perf_counter()
             for stream in (self._run_stream, self._llm_stream):
                 try:
                     self._logs_client.create_log_stream(
@@ -357,8 +369,12 @@ class PlexusCloudWatchLogger:
                 except self._logs_client.exceptions.ResourceAlreadyExistsException:
                     # Stream creation is idempotent; existing streams are non-fatal.
                     pass
+            timing_ms["create_streams_ms"] = round(
+                (time.perf_counter() - streams_started) * 1000, 2
+            )
 
             # Log initial event
+            bootstrap_started = time.perf_counter()
             self._put(self._run_stream, json.dumps({
                 "event": "component_started",
                 "component_name": self._component_name,
@@ -367,8 +383,68 @@ class PlexusCloudWatchLogger:
                 "run_stream": self._run_stream,
                 "llm_context_stream": self._llm_stream,
             }))
+            timing_ms["bootstrap_event_ms"] = round(
+                (time.perf_counter() - bootstrap_started) * 1000, 2
+            )
+            timing_ms["total_ms"] = round((time.perf_counter() - started_at) * 1000, 2)
+            self._put(
+                self._run_stream,
+                json.dumps(
+                    {
+                        "event": "cloudwatch_open_metrics",
+                        "log_group": self.log_group,
+                        "timings_ms": timing_ms,
+                    },
+                    default=str,
+                ),
+            )
+            logger.info(
+                "CloudWatch open metrics log_group=%s create_group_ms=%.2f apply_policy_ms=%.2f "
+                "create_streams_ms=%.2f bootstrap_event_ms=%.2f total_ms=%.2f",
+                self.log_group,
+                timing_ms["create_log_group_ms"],
+                timing_ms["apply_policy_ms"],
+                timing_ms["create_streams_ms"],
+                timing_ms["bootstrap_event_ms"],
+                timing_ms["total_ms"],
+            )
         except Exception as exc:
             logger.debug("CloudWatch open failed: %s", exc)
+
+    def _apply_data_protection_policy_once(self) -> None:
+        if not self._logs_client:
+            return
+
+        with _POLICY_APPLY_LOCK:
+            if self.log_group in _POLICY_APPLIED_LOG_GROUPS:
+                logger.debug(
+                    "Skipping CloudWatch data protection policy apply for %s (already applied in-process)",
+                    self.log_group,
+                )
+                return
+            try:
+                response = self._logs_client.put_data_protection_policy(
+                    logGroupIdentifier=self.log_group,
+                    policyDocument=_get_data_protection_policy(),
+                )
+                metadata = response.get("ResponseMetadata", {}) if isinstance(response, dict) else {}
+                request_id = metadata.get("RequestId")
+                status_code = metadata.get("HTTPStatusCode")
+                logger.info(
+                    "Applied data protection policy to %s (request_id=%s status=%s)",
+                    self.log_group,
+                    request_id,
+                    status_code,
+                )
+                _POLICY_APPLIED_LOG_GROUPS.add(self.log_group)
+            except Exception as exc:
+                # Non-fatal: log group is still usable, just without PII protection.
+                logger.error(
+                    "Could not apply data protection policy to %s: %s",
+                    self.log_group,
+                    exc,
+                    exc_info=True,
+                )
 
     def _put(self, stream_name: str, message: str) -> None:
         try:

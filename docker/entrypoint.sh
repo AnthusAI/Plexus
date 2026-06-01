@@ -20,12 +20,13 @@ case "$WORKER_TYPE" in
         echo "🐝 Starting Celery worker"
         # Start Celery worker for task queue processing
         # Configure broker URL via CELERY_BROKER_URL env var
-        CELERY_APP="${CELERY_APP:-plexus.cli.score_chat.celery}"
-        CELERY_QUEUE="${CELERY_QUEUE:-default}"
+        CELERY_APP="${CELERY_APP:-plexus.workers.celery_app}"
+        CELERY_QUEUE="${CELERY_QUEUE:-scoring-requests}"
         CELERY_CONCURRENCY="${CELERY_CONCURRENCY:-4}"
+        LOG_LEVEL="${LOG_LEVEL:-info}"
 
         exec celery -A "$CELERY_APP" worker \
-            --loglevel=info \
+            --loglevel="$LOG_LEVEL" \
             --concurrency="$CELERY_CONCURRENCY" \
             --queues="$CELERY_QUEUE"
         ;;
