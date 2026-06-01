@@ -3,7 +3,7 @@
   "title": "Fix implicit return path in TactusScore runtime-controls test double",
   "description": "## Context\nGitHub Code Quality flagged an implicit `None` return in PR #408.\n\n- PR: https://github.com/AnthusAI/Plexus/pull/408\n- File: `plexus/scores/test_tactus_score_runtime_controls.py`\n- Target: `test_tactus_score_enrichment_fails_gracefully_on_error` -> `FakeRuntime.execute`\n\n## Goal\nMake all control-flow paths explicit in the fake runtime while preserving test behavior.\n\n## Planned change\n- Convert mixed explicit/implicit return flow to explicit branches\n- Add explicit fallback exception for unexpected context shape\n- Run targeted test file",
   "type": "bug",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -28,10 +28,22 @@
       "author": "derek",
       "text": "Validation rerun in Poetry env `call-criteria-python-o9nOlyIe-py3.11` from `~/projects/Call-Criteria-Python`:\n`poetry run pytest -q /home/derek/projects/Plexus/plexus/scores/test_tactus_score_runtime_controls.py`\nResult: `10 passed, 5 warnings in 9.30s`.",
       "created_at": "2026-06-01T20:10:28.767112161Z"
+    },
+    {
+      "id": "c4505e5f-87af-4d85-aba2-8afbbeeee4a3",
+      "author": "derek",
+      "text": "Code fix committed on branch ; PR to develop opened: https://github.com/AnthusAI/Plexus/pull/409",
+      "created_at": "2026-06-01T20:11:55.728797163Z"
+    },
+    {
+      "id": "82a93dda-a2a8-4989-a819-274e7c71c232",
+      "author": "derek",
+      "text": "Code fix committed on branch `bugfix/pr408-runtime-test-explicit-return`.\nPR to `develop` is open: https://github.com/AnthusAI/Plexus/pull/409",
+      "created_at": "2026-06-01T20:11:58.038149191Z"
     }
   ],
   "created_at": "2026-06-01T20:07:53.391462688Z",
-  "updated_at": "2026-06-01T20:10:28.767112161Z",
-  "closed_at": null,
+  "updated_at": "2026-06-01T20:11:58.038149191Z",
+  "closed_at": "2026-06-01T20:11:55.739532336Z",
   "custom": {}
 }
