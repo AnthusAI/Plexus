@@ -5191,29 +5191,38 @@ def _resolve_scorecard_for_score_edit(client: Any, identifier: Any) -> dict[str,
             }
 
     list_query = """
-    query ListScorecardsForExactIdentifier {
-        listScorecards(limit: 1000) {
+    query ListScorecardsForExactIdentifier($limit: Int, $nextToken: String) {
+        listScorecards(limit: $limit, nextToken: $nextToken) {
             items {
                 id
                 name
                 key
                 externalId
             }
+            nextToken
         }
     }
     """
-    items = (client.execute(list_query) or {}).get("listScorecards", {}).get("items", [])
-    for row in items:
-        row_id = str(row.get("id") or "")
-        if not row_id:
-            continue
-        if _score_edit_matches_identifier(row, variants):
-            candidates[row_id] = {
-                "id": row_id,
-                "name": row.get("name"),
-                "key": row.get("key"),
-                "externalId": row.get("externalId"),
-            }
+    next_token: Optional[str] = None
+    while True:
+        page = (client.execute(list_query, {"limit": 200, "nextToken": next_token}) or {}).get(
+            "listScorecards", {}
+        )
+        items = page.get("items") or []
+        for row in items:
+            row_id = str(row.get("id") or "")
+            if not row_id:
+                continue
+            if _score_edit_matches_identifier(row, variants):
+                candidates[row_id] = {
+                    "id": row_id,
+                    "name": row.get("name"),
+                    "key": row.get("key"),
+                    "externalId": row.get("externalId"),
+                }
+        next_token = page.get("nextToken")
+        if not next_token:
+            break
 
     resolved = list(candidates.values())
     if not resolved:
@@ -5223,8 +5232,8 @@ def _resolve_scorecard_for_score_edit(client: Any, identifier: Any) -> dict[str,
         )
     if len(resolved) > 1:
         raise ValueError(
-            "plexus.score.edit scorecard_identifier is ambiguous for "
-            f"{needle!r}. Resolve to a unique identifier before editing. Candidates: "
+            "Clarification required before plexus.score.edit: scorecard_identifier is ambiguous for "
+            f"{needle!r}. Reply with one exact target from candidates: "
             f"{_score_edit_format_candidates(resolved)}"
         )
 
@@ -5271,43 +5280,77 @@ def _resolve_score_for_score_edit(
                 "externalId": by_id.get("externalId"),
             }
 
-    card_scores_query = """
-    query GetScorecardScoresForEdit($id: ID!) {
+    section_ids_query = """
+    query GetScorecardSectionIdsForEdit($id: ID!, $limit: Int, $nextToken: String) {
         getScorecard(id: $id) {
-            sections {
+            sections(limit: $limit, nextToken: $nextToken) {
                 items {
-                    scores {
-                        items {
-                            id
-                            name
-                            key
-                            externalId
-                        }
-                    }
+                    id
                 }
+                nextToken
             }
         }
     }
     """
-    sections = (
-        (client.execute(card_scores_query, {"id": str(scorecard_id)}) or {})
-        .get("getScorecard", {})
-        .get("sections", {})
-        .get("items", [])
-    )
-    for section in sections:
-        scores = (section.get("scores") or {}).get("items", [])
-        for row in scores:
-            row_id = str(row.get("id") or "")
-            if not row_id:
-                continue
-            if _score_edit_matches_identifier(row, variants):
-                candidates[row_id] = {
-                    "id": row_id,
-                    "name": row.get("name"),
-                    "key": row.get("key"),
-                    "externalId": row.get("externalId"),
-                }
+    score_list_query = """
+    query ListScoresBySectionForEdit($sectionId: String!, $limit: Int, $nextToken: String) {
+        listScoreBySectionId(sectionId: $sectionId, limit: $limit, nextToken: $nextToken) {
+            items {
+                id
+                name
+                key
+                externalId
+            }
+            nextToken
+        }
+    }
+    """
+    section_ids: list[str] = []
+    seen_section_ids: set[str] = set()
+    section_next_token: Optional[str] = None
+    while True:
+        section_page = (
+            (client.execute(
+                section_ids_query,
+                {"id": str(scorecard_id), "limit": 200, "nextToken": section_next_token},
+            ) or {})
+            .get("getScorecard", {})
+            .get("sections", {})
+        )
+        for row in section_page.get("items") or []:
+            sid = str(row.get("id") or "")
+            if sid and sid not in seen_section_ids:
+                section_ids.append(sid)
+                seen_section_ids.add(sid)
+        section_next_token = section_page.get("nextToken")
+        if not section_next_token:
+            break
+
+    for section_id in section_ids:
+        score_next_token: Optional[str] = None
+        while True:
+            score_page = (client.execute(
+                score_list_query,
+                {
+                    "sectionId": str(section_id),
+                    "limit": 200,
+                    "nextToken": score_next_token,
+                },
+            ) or {}).get("listScoreBySectionId", {})
+            for row in score_page.get("items") or []:
+                row_id = str(row.get("id") or "")
+                if not row_id:
+                    continue
+                if _score_edit_matches_identifier(row, variants):
+                    candidates[row_id] = {
+                        "id": row_id,
+                        "name": row.get("name"),
+                        "key": row.get("key"),
+                        "externalId": row.get("externalId"),
+                    }
+            score_next_token = score_page.get("nextToken")
+            if not score_next_token:
+                break
 
     resolved = list(candidates.values())
     if not resolved:
@@ -5318,9 +5361,9 @@ def _resolve_score_for_score_edit(
         )
     if len(resolved) > 1:
         raise ValueError(
-            "plexus.score.edit score_identifier is ambiguous for "
-            f"{needle!r} in scorecard {scorecard_id!r}. Resolve to a unique identifier "
-            f"before editing. Candidates: {_score_edit_format_candidates(resolved)}"
+            "Clarification required before plexus.score.edit: score_identifier is ambiguous for "
+            f"{needle!r} in scorecard {scorecard_id!r}. Reply with one exact target from candidates: "
+            f"{_score_edit_format_candidates(resolved)}"
         )
 
     return resolved[0]
@@ -5629,15 +5672,21 @@ def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
         if not instruction:
             raise ValueError("plexus.score.edit requires instruction")
 
-        resolver_client = create_client()
-        resolved_scorecard = _resolve_scorecard_for_score_edit(
-            resolver_client, scorecard_identifier
-        )
-        resolved_score = _resolve_score_for_score_edit(
-            resolver_client,
-            str(resolved_scorecard["id"]),
-            score_identifier,
-        )
+        resolved_scorecard_id = str(args.get("scorecard_id") or "").strip()
+        resolved_score_id = str(args.get("score_id") or "").strip()
+        if resolved_scorecard_id and resolved_score_id:
+            resolved_scorecard = {"id": resolved_scorecard_id}
+            resolved_score = {"id": resolved_score_id}
+        else:
+            resolver_client = create_client()
+            resolved_scorecard = _resolve_scorecard_for_score_edit(
+                resolver_client, scorecard_identifier
+            )
+            resolved_score = _resolve_score_for_score_edit(
+                resolver_client,
+                str(resolved_scorecard["id"]),
+                score_identifier,
+            )
 
         pull_args: dict[str, Any] = {
             "scorecard_id": resolved_scorecard["id"],
@@ -6661,6 +6710,23 @@ class PlexusRuntimeModule:
                 if not bool(parsed.get("async")):
                     self.handle_protocol_required = ("score", "edit")
                     raise RequiresHandleProtocol("score", "edit")
+                # Hard orchestration gate: resolve targets before dispatch so
+                # ambiguous/non-resolved identifiers fail deterministically.
+                from plexus.cli.shared.client_utils import create_client
+
+                scorecard_identifier = parsed.get("scorecard_identifier") or parsed.get("scorecard")
+                score_identifier = parsed.get("score_identifier") or parsed.get("score")
+                resolver_client = create_client()
+                resolved_scorecard = _resolve_scorecard_for_score_edit(
+                    resolver_client, scorecard_identifier
+                )
+                resolved_score = _resolve_score_for_score_edit(
+                    resolver_client,
+                    str(resolved_scorecard["id"]),
+                    score_identifier,
+                )
+                parsed["scorecard_id"] = str(resolved_scorecard["id"])
+                parsed["score_id"] = str(resolved_score["id"])
                 child_budget = self._budget.carve_child("score", "edit", parsed.get("budget"))
                 dispatch_result = self._score_edit_runner(parsed)
                 handle = self._handle_store.create(
