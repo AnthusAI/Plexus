@@ -3012,7 +3012,7 @@ export function ScoreComponent({
       
       const now = new Date().toISOString();
       const attribution = await getCurrentUserAttribution();
-      const normalizedVersionNote = normalizeScoreVersionNote(versionNote)
+      const normalizedVersionNote = normalizeScoreVersionNote(versionNote);
       const versionPayload = {
         scoreId: String(score.id),
         configuration: configurationYaml,
