@@ -2635,7 +2635,7 @@ def test_score_edit_blocking_requires_handle_protocol() -> None:
     assert module.api_calls == ["plexus.score.edit"]
 
 
-def test_score_edit_async_always_waits_and_records_budget(tmp_path) -> None:
+def test_score_edit_async_always_waits_and_records_budget(tmp_path, monkeypatch) -> None:
     seen_args: dict = {}
     handles = _MemoryHandleStore()
     result_file = tmp_path / "score-edit-result.json"
@@ -2656,6 +2656,20 @@ def test_score_edit_async_always_waits_and_records_budget(tmp_path) -> None:
         trace_id="trace-1",
         handle_store=handles,
         score_edit_runner=fake_runner,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: {"id": "scorecard-1"},
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_score_for_score_edit",
+        lambda _client, _scorecard_id, _identifier: {"id": "score-1"},
     )
 
     budget = _child_budget()
@@ -2679,7 +2693,7 @@ def test_score_edit_async_always_waits_and_records_budget(tmp_path) -> None:
     assert handles.created[0]["child_budget"] == budget
 
 
-def test_score_edit_async_waits_for_terminal_result_by_default(tmp_path) -> None:
+def test_score_edit_async_waits_for_terminal_result_by_default(tmp_path, monkeypatch) -> None:
     handles = _MemoryHandleStore()
     result_file = tmp_path / "score-edit-result.json"
     result_file.write_text(
@@ -2695,6 +2709,20 @@ def test_score_edit_async_waits_for_terminal_result_by_default(tmp_path) -> None
         trace_id="trace-1",
         handle_store=handles,
         score_edit_runner=fake_runner,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: {"id": "scorecard-1"},
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_score_for_score_edit",
+        lambda _client, _scorecard_id, _identifier: {"id": "score-1"},
     )
 
     budget = _child_budget()
@@ -2733,25 +2761,29 @@ def test_score_edit_resolver_accepts_external_id_identifiers() -> None:
                 }
             if "GetScoreByIdForEdit" in query:
                 return {"getScore": None}
-            if "GetScorecardScoresForEdit" in query:
+            if "GetScorecardSectionIdsForEdit" in query:
                 return {
                     "getScorecard": {
                         "sections": {
                             "items": [
-                                {
-                                    "scores": {
-                                        "items": [
-                                            {
-                                                "id": "s-1",
-                                                "name": "Tone",
-                                                "key": "tone",
-                                                "externalId": "s-ext",
-                                            }
-                                        ]
-                                    }
-                                }
+                                {"id": "section-1"}
                             ]
                         }
+                    }
+                }
+            if "ListScoresBySectionForEdit" in query:
+                assert variables == {"sectionId": "section-1", "limit": 200, "nextToken": None}
+                return {
+                    "listScoreBySectionId": {
+                        "items": [
+                            {
+                                "id": "s-1",
+                                "name": "Tone",
+                                "key": "tone",
+                                "externalId": "s-ext",
+                            }
+                        ],
+                        "nextToken": None,
                     }
                 }
             raise AssertionError(f"Unexpected query: {query}")
@@ -2804,25 +2836,28 @@ def test_score_edit_resolver_accepts_identifiers_with_trailing_punctuation() -> 
                 }
             if "GetScoreByIdForEdit" in query:
                 return {"getScore": None}
-            if "GetScorecardScoresForEdit" in query:
+            if "GetScorecardSectionIdsForEdit" in query:
                 return {
                     "getScorecard": {
                         "sections": {
                             "items": [
-                                {
-                                    "scores": {
-                                        "items": [
-                                            {
-                                                "id": "s-1",
-                                                "name": "Agent Misrepresentation",
-                                                "key": "agent-misrepresentation",
-                                                "externalId": "45813",
-                                            }
-                                        ]
-                                    }
-                                }
+                                {"id": "section-1"}
                             ]
                         }
+                    }
+                }
+            if "ListScoresBySectionForEdit" in query:
+                return {
+                    "listScoreBySectionId": {
+                        "items": [
+                            {
+                                "id": "s-1",
+                                "name": "Agent Misrepresentation",
+                                "key": "agent-misrepresentation",
+                                "externalId": "45813",
+                            }
+                        ],
+                        "nextToken": None,
                     }
                 }
             raise AssertionError(f"Unexpected query: {query}")
@@ -2859,25 +2894,28 @@ def test_score_edit_resolver_accepts_separator_insensitive_identifiers() -> None
                 }
             if "GetScoreByIdForEdit" in query:
                 return {"getScore": None}
-            if "GetScorecardScoresForEdit" in query:
+            if "GetScorecardSectionIdsForEdit" in query:
                 return {
                     "getScorecard": {
                         "sections": {
                             "items": [
-                                {
-                                    "scores": {
-                                        "items": [
-                                            {
-                                                "id": "s-1",
-                                                "name": "Agent Misrepresentation",
-                                                "key": "agent-misrepresentation",
-                                                "externalId": "45813",
-                                            }
-                                        ]
-                                    }
-                                }
+                                {"id": "section-1"}
                             ]
                         }
+                    }
+                }
+            if "ListScoresBySectionForEdit" in query:
+                return {
+                    "listScoreBySectionId": {
+                        "items": [
+                            {
+                                "id": "s-1",
+                                "name": "Agent Misrepresentation",
+                                "key": "agent-misrepresentation",
+                                "externalId": "45813",
+                            }
+                        ],
+                        "nextToken": None,
                     }
                 }
             raise AssertionError(f"Unexpected query: {query}")
@@ -2892,6 +2930,98 @@ def test_score_edit_resolver_accepts_separator_insensitive_identifiers() -> None
 
     assert scorecard["id"] == "sc-1"
     assert score["id"] == "s-1"
+
+
+def test_score_edit_resolver_paginates_scorecards_and_sections() -> None:
+    class FakeClient:
+        def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+            if "GetScorecardById" in query:
+                return {"getScorecard": None}
+            if "ListScorecardsForExactIdentifier" in query:
+                next_token = (variables or {}).get("nextToken")
+                if next_token is None:
+                    return {
+                        "listScorecards": {
+                            "items": [{"id": "sc-a", "name": "Other", "key": "other", "externalId": "1"}],
+                            "nextToken": "page-2",
+                        }
+                    }
+                return {
+                    "listScorecards": {
+                        "items": [{"id": "sc-1", "name": "Compliance", "key": "compliance", "externalId": "2"}],
+                        "nextToken": None,
+                    }
+                }
+            if "GetScoreByIdForEdit" in query:
+                return {"getScore": None}
+            if "GetScorecardSectionIdsForEdit" in query:
+                next_token = (variables or {}).get("nextToken")
+                if next_token is None:
+                    return {"getScorecard": {"sections": {"items": [{"id": "section-1"}], "nextToken": "s2"}}}
+                return {"getScorecard": {"sections": {"items": [{"id": "section-2"}], "nextToken": None}}}
+            if "ListScoresBySectionForEdit" in query:
+                section_id = (variables or {}).get("sectionId")
+                if section_id == "section-1":
+                    return {"listScoreBySectionId": {"items": [], "nextToken": None}}
+                return {
+                    "listScoreBySectionId": {
+                        "items": [{"id": "score-1", "name": "Tone", "key": "tone", "externalId": "s-ext"}],
+                        "nextToken": None,
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    client = FakeClient()
+    scorecard = execute._resolve_scorecard_for_score_edit(client, "Compliance")
+    score = execute._resolve_score_for_score_edit(client, "sc-1", "Tone")
+
+    assert scorecard["id"] == "sc-1"
+    assert score["id"] == "score-1"
+
+
+def test_score_edit_preflight_gate_blocks_dispatch_on_ambiguous_targets(monkeypatch) -> None:
+    handles = _MemoryHandleStore()
+    dispatched = False
+
+    def fake_runner(_args: dict) -> dict:
+        nonlocal dispatched
+        dispatched = True
+        return {"status": "dispatched"}
+
+    class FakeClient:
+        pass
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: FakeClient(),
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: (_ for _ in ()).throw(
+            ValueError("Clarification required before plexus.score.edit: scorecard_identifier is ambiguous")
+        ),
+    )
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        handle_store=handles,
+        score_edit_runner=fake_runner,
+    )
+    budget = _child_budget()
+    with pytest.raises(ValueError, match="Clarification required before plexus.score.edit"):
+        module.score.edit(
+            {
+                "scorecard_identifier": "SelectQuote",
+                "score_identifier": "Agent Misrepresentation",
+                "instruction": "set model to gpt-4o-mini",
+                "async": True,
+                "budget": budget,
+            }
+        )
+
+    assert dispatched is False
 
 
 def test_default_score_pull_does_not_fallback_to_fuzzy_search(monkeypatch) -> None:
