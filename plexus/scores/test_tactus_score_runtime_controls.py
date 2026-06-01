@@ -371,8 +371,9 @@ async def test_tactus_score_enrichment_fails_gracefully_on_error(monkeypatch):
                     }
                 }
             # Enrichment execution - simulate error
-            elif 'data' in context:
+            if 'data' in context:
                 raise Exception("Quote not found in transcript")
+            raise ValueError(f"Unexpected runtime context keys: {sorted(context.keys())}")
 
     module = importlib.import_module("plexus.scores.TactusScore")
     monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
