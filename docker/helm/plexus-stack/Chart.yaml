@@ -1,0 +1,34 @@
+apiVersion: v2
+name: plexus-stack
+description: Complete Plexus data processing stack with PostgreSQL, GraphQL proxy, and Celery workers
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+maintainers:
+  - name: Plexus Team
+
+dependencies:
+  # PostgreSQL for private data storage (Items, ScoreResults, FeedbackItems)
+  - name: postgresql
+    version: "~15.5.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+    tags:
+      - database
+
+  # GraphQL Proxy - The Adapter between workers and data sources
+  - name: graphql-proxy
+    version: "1.0.0"
+    repository: "file://../charts/graphql-proxy"
+    condition: graphql-proxy.enabled
+    tags:
+      - application
+
+  # Plexus workers - Celery workers for scoring
+  - name: plexus-worker
+    version: "1.0.0"
+    repository: "file://../plexus-worker"
+    condition: plexus-worker.enabled
+    tags:
+      - application

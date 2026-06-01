@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "graphql-proxy.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "graphql-proxy.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "graphql-proxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "graphql-proxy.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "graphql-proxy.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: proxy
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        env:
+        {{- $dbUser := .Values.postgresql.username | default "plexus_proxy" }}
+        {{- $dbHost := tpl .Values.global.services.postgresql.host . }}
+        {{- $dbPort := .Values.global.services.postgresql.port }}
+        {{- $dbName := .Values.global.services.postgresql.database }}
+        # Database connection components - entrypoint.sh constructs the full URL
+        - name: DB_USER
+          value: {{ $dbUser | quote }}
+        - name: DB_HOST
+          value: {{ $dbHost | quote }}
+        - name: DB_PORT
+          value: {{ $dbPort | quote }}
+        - name: DB_NAME
+          value: {{ $dbName | quote }}
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "graphql-proxy.postgresqlSecretName" . }}
+              key: {{ .Values.postgresql.existingSecretPasswordKey | default "password" }}
+
+        # Proxy API key (for workers to authenticate)
+        - name: PLEXUS_PROXY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "graphql-proxy.secretName" . }}
+              key: proxy-api-key
+
+        # Upstream AWS AppSync key
+        - name: PLEXUS_PROXY_UPSTREAM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "graphql-proxy.secretName" . }}
+              key: upstream-api-key
+
+        # Configuration from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: {{ include "graphql-proxy.fullname" . }}
+
+        {{- if .Values.livenessProbe.enabled }}
+        livenessProbe:
+          {{- omit .Values.livenessProbe "enabled" | toYaml | nindent 12 }}
+        {{- end }}
+
+        {{- if .Values.readinessProbe.enabled }}
+        readinessProbe:
+          {{- omit .Values.readinessProbe "enabled" | toYaml | nindent 12 }}
+        {{- end }}
+
+        {{- if .Values.startupProbe.enabled }}
+        startupProbe:
+          {{- omit .Values.startupProbe "enabled" | toYaml | nindent 12 }}
+        {{- end }}
+
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

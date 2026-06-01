@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f6fe2cd5-9fb2-44de-970e-d81420e004b0",
+  "issue_id": "plx-a58de259-e4d7-4a7a-b7f4-6ebc57f34733",
+  "event_type": "issue_created",
+  "occurred_at": "2026-05-28T22:14:47.424Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-56545e35-e050-4d7c-a57b-15a692bff45e",
+    "priority": 1,
+    "status": "open",
+    "title": "Blank note on score version save incorrectly reuses previous version note"
+  }
+}

@@ -138,6 +138,11 @@ const assertGraphQLSuccess = (response: any, action: string) => {
 
 const isScoreVersionPinned = (version?: Pick<ScoreVersion, 'isFeatured'> | null) => version?.isFeatured === 'true'
 
+export const normalizeScoreVersionNote = (note: string): string | undefined => {
+  const trimmed = note.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
 const buildChampionMetadata = ({
   metadata,
   scoreId,
@@ -2292,7 +2297,7 @@ export function ScoreComponent({
   // Version selection handler
   const handleVersionSelect = (version: ScoreVersion) => {
     setSelectedVersionId(version.id)
-    setVersionNote(version.note || '')
+    setVersionNote('')
     
     // Call parent's version select handler to update URL
     onVersionSelect?.(version.id)
@@ -3007,12 +3012,13 @@ export function ScoreComponent({
       
       const now = new Date().toISOString();
       const attribution = await getCurrentUserAttribution();
+      const normalizedVersionNote = normalizeScoreVersionNote(versionNote);
       const versionPayload = {
         scoreId: String(score.id),
         configuration: configurationYaml,
         guidelines: overrideGuidelines !== undefined ? overrideGuidelines : (editedScore.guidelines || ''),
         isFeatured: "false",
-        note: versionNote || 'Updated score configuration',
+        ...(normalizedVersionNote !== undefined ? { note: normalizedVersionNote } : {}),
         parentVersionId: selectedVersionId || score.championVersionId || undefined,
         createdAt: now,
         updatedAt: now,
