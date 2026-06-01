@@ -2659,7 +2659,7 @@ def test_score_edit_async_always_waits_and_records_budget(tmp_path, monkeypatch)
     )
     monkeypatch.setattr(
         "plexus.cli.shared.client_utils.create_client",
-        lambda: object(),
+        object,
     )
     monkeypatch.setattr(
         execute,
@@ -2712,7 +2712,7 @@ def test_score_edit_async_waits_for_terminal_result_by_default(tmp_path, monkeyp
     )
     monkeypatch.setattr(
         "plexus.cli.shared.client_utils.create_client",
-        lambda: object(),
+        object,
     )
     monkeypatch.setattr(
         execute,

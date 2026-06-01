@@ -5806,12 +5806,20 @@ def _cleanup_score_edit_artifacts(dispatch_result: dict[str, Any]) -> None:
         if result_file and os.path.isfile(str(result_file)):
             os.unlink(str(result_file))
     except OSError:
-        pass
+        logger.debug(
+            "Failed to remove score edit result file during cleanup: %s",
+            result_file,
+            exc_info=True,
+        )
     try:
         if temp_dir and os.path.isdir(str(temp_dir)):
             os.rmdir(str(temp_dir))
     except OSError:
-        pass
+        logger.debug(
+            "Failed to remove score edit temp dir during cleanup: %s",
+            temp_dir,
+            exc_info=True,
+        )
 
 
 def _default_score_create(args: dict[str, Any]) -> dict[str, Any]:
