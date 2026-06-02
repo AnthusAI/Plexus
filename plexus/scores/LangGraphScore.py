@@ -19,6 +19,9 @@ from plexus.scores.Score import Score
 from plexus.utils.dict_utils import truncate_dict_strings
 from plexus.utils.score_result_timestamps import extract_score_result_timestamps
 
+from tactus.core.runtime import TactusRuntime
+from tactus.adapters.memory import MemoryStorage
+
 from langchain_community.callbacks import OpenAICallbackHandler
 
 from langgraph.graph import StateGraph, END
@@ -1499,6 +1502,81 @@ class LangGraphScore(Score, LangChainUser):
             
         return value_setter
 
+    async def _enrich_explanation_with_timestamps(
+        self,
+        explanation: Optional[str],
+        metadata: Dict[str, Any]
+    ) -> str:
+        """
+        Enrich explanation text with timestamp brackets using Tactus deepgram module.
+
+        This method attempts to find quoted text in the explanation and add bracketed
+        timestamps like [M:SS.ff-M:SS.ff] using the Tactus deepgram.enrich_timestamps()
+        function.
+        """
+        if not explanation:
+            return explanation or ""
+
+        # Check for deepgram data in metadata (both patterns)
+        deepgram_data = None
+        if metadata:
+            if 'deepgram' in metadata:
+                deepgram_data = metadata['deepgram']
+            elif 'metadata' in metadata and isinstance(metadata['metadata'], dict):
+                deepgram_data = metadata['metadata'].get('deepgram')
+
+        if not deepgram_data:
+            logging.debug("No deepgram data found in metadata, skipping timestamp enrichment")
+            return explanation
+
+        # Call Tactus deepgram.enrich_timestamps() via TactusRuntime
+        # Wrap in a Procedure structure like TactusScore does
+        enrichment_code = """
+Procedure {
+    input = {
+        text = field.string{required = true},
+        data = field.object{required = true}
+    },
+    output = field.string{},
+    function(input)
+        local deepgram = require("tactus.deepgram")
+        return deepgram.enrich_timestamps(input.text, input.data)
+    end
+}
+"""
+
+        try:
+            # Create a temporary TactusRuntime for enrichment using MemoryStorage
+            storage = MemoryStorage()
+            runtime = TactusRuntime(
+                procedure_id="timestamp-enrichment",
+                storage_backend=storage,
+                reset_state_on_execute=True
+            )
+            enrichment_context = {'text': explanation, 'data': deepgram_data}
+
+            # Execute synchronously in thread to avoid blocking
+            def _execute_sync():
+                return asyncio.run(
+                    runtime.execute(
+                        enrichment_code,
+                        context=enrichment_context,
+                        format='lua'
+                    )
+                )
+
+            result = await asyncio.to_thread(_execute_sync)
+            enriched = result.get('result', explanation)
+
+            if isinstance(enriched, str) and enriched != explanation:
+                logging.debug(f"Enriched explanation with timestamps for score '{self.parameters.name}'")
+                return enriched
+
+        except Exception as e:
+            logging.warning(f"Failed to enrich timestamps for score '{self.parameters.name}': {e}")
+
+        return explanation
+
     async def predict(
         self,
         model_input: Score.Input,
@@ -1582,13 +1660,21 @@ class LangGraphScore(Score, LangChainUser):
                 logging.warning("DEBUG: graph_result['value'] is None, defaulting to 'No'")
                 value_for_result = 'No'
 
-            # Extract timestamps from graph_result
-            timestamps = extract_score_result_timestamps(graph_result, graph_result.get('explanation'))
+            # Enrich explanation with timestamps if deepgram data is available
+            explanation = graph_result.get('explanation')
+            if explanation:
+                explanation = await self._enrich_explanation_with_timestamps(
+                    explanation,
+                    model_input.metadata or {}
+                )
+
+            # Extract timestamps from enriched explanation or structured fields
+            timestamps = extract_score_result_timestamps(graph_result, explanation)
 
             result = Score.Result(
                 parameters=self.parameters,
                 value=value_for_result,
-                explanation=graph_result.get('explanation'),
+                explanation=explanation,
                 confidence=graph_result.get('confidence'),
                 start_time_seconds=timestamps.start_time_seconds,
                 end_time_seconds=timestamps.end_time_seconds,
