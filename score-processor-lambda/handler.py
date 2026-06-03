@@ -243,6 +243,9 @@ class LambdaJobProcessor:
                 if not metadata:
                     metadata = {}
 
+                # Add item_id to metadata so LangGraphScore timestamp enrichment can auto-load deepgram
+                metadata['item_id'] = f"score-result-record--{item_id}"
+
                 # Desanitize metadata (parse JSON strings back to dicts/lists)
                 if isinstance(metadata, dict):
                     for key, value in list(metadata.items()):

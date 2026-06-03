@@ -325,6 +325,11 @@ class TactusScore(Score):
             logger.debug("No deepgram data found in metadata, skipping timestamp enrichment")
             return explanation
 
+        from plexus.utils.quote_normalization import normalize_quotes
+
+        # Normalize quotes so Tactus can match them against the transcript
+        explanation_normalized = normalize_quotes(explanation)
+
         # Call Tactus deepgram.enrich_timestamps() via runtime
         enrichment_code = """
         local deepgram = require("tactus.deepgram")
@@ -337,7 +342,7 @@ class TactusScore(Score):
 
         try:
             enrichment_context = {
-                'text': explanation,
+                'text': explanation_normalized,
                 'data': deepgram_data,
             }
             result = await asyncio.to_thread(
@@ -346,7 +351,7 @@ class TactusScore(Score):
                 enrichment_code,
                 enrichment_context,
             )
-            enriched = result.get('result', explanation)
+            enriched = result.get('result', explanation_normalized)
             logger.debug(
                 "Enriched explanation with timestamps for score '%s'",
                 self.parameters.name
@@ -354,7 +359,7 @@ class TactusScore(Score):
             return enriched if isinstance(enriched, str) else explanation
         except Exception as e:
             # If enrichment fails (e.g., quote not found), log warning and return original
-            logger.warning(
+            logger.debug(
                 f"Failed to enrich timestamps for score '{self.parameters.name}': {e}"
             )
             return explanation
