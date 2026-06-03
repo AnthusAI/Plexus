@@ -1,6 +1,5 @@
 """Tests for quote normalization utilities."""
 
-import pytest
 from plexus.utils.quote_normalization import normalize_quotes
 
 
