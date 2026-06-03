@@ -1546,17 +1546,10 @@ class LangGraphScore(Score, LangChainUser):
             logging.debug(f"No deepgram data found for score '{self.parameters.name}', skipping timestamp enrichment")
             return explanation
 
-        import re
-
-        def normalize_quotes_for_tactus(text):
-            """Normalize curly quotes to straight quotes so Tactus can match them."""
-            # Replace curly quotes with straight quotes using unicode escapes
-            text = text.replace('"', '"').replace('"', '"')  # LEFT/RIGHT DOUBLE QUOTATION MARK
-            text = text.replace(''', "'").replace(''', "'")  # LEFT/RIGHT SINGLE QUOTATION MARK
-            return text
+        from plexus.utils.quote_normalization import normalize_quotes
 
         # Normalize quotes so Tactus can match them against the transcript
-        explanation_for_enrichment = normalize_quotes_for_tactus(explanation)
+        explanation_for_enrichment = normalize_quotes(explanation)
 
         # Call Tactus deepgram.enrich_timestamps() via TactusRuntime
         # Wrap in a Procedure structure like TactusScore does
