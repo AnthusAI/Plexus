@@ -1514,10 +1514,7 @@ class LangGraphScore(Score, LangChainUser):
         timestamps like [M:SS.ff-M:SS.ff] using the Tactus deepgram.enrich_timestamps()
         function.
         """
-        logging.info(f"[TIMESTAMP] 🔍 _enrich_explanation_with_timestamps called for score '{self.parameters.name}'")
-
         if not explanation:
-            logging.info(f"[TIMESTAMP] No explanation provided, returning empty")
             return explanation or ""
 
         # Check for deepgram data in metadata (both patterns)
@@ -1531,7 +1528,6 @@ class LangGraphScore(Score, LangChainUser):
         # If no deepgram in metadata but we have an item_id, try to load it from attached files
         if not deepgram_data and metadata and 'item_id' in metadata:
             try:
-                logging.info(f"[TIMESTAMP] Attempting to auto-load deepgram data for item {metadata['item_id']}")
                 from plexus.utils.score_result_s3_utils import download_score_result_trace_file
 
                 # Try to load deepgram.json from S3
@@ -1542,38 +1538,25 @@ class LangGraphScore(Score, LangChainUser):
                 deepgram_data, _ = download_score_result_trace_file(deepgram_key)
 
                 if deepgram_data:
-                    logging.info(f"[TIMESTAMP] ✅ Successfully auto-loaded deepgram data from {deepgram_key}")
+                    logging.debug(f"Auto-loaded deepgram data from {deepgram_key}")
             except Exception as e:
-                logging.info(f"[TIMESTAMP] Could not auto-load deepgram data: {e}")
+                logging.debug(f"Could not auto-load deepgram data: {e}")
 
         if not deepgram_data:
-            logging.info(f"[TIMESTAMP] No deepgram data found in metadata for score '{self.parameters.name}', skipping enrichment")
+            logging.debug(f"No deepgram data found for score '{self.parameters.name}', skipping timestamp enrichment")
             return explanation
 
-        # Strip markdown bold/italic formatting from quotes before enrichment
-        # LLMs often return quotes with markdown inside like "text **bold** more"
-        # We need to strip all markdown from within quotes for Tactus matching
         import re
 
-        def strip_markdown_from_quotes(text):
-            """Strip markdown formatting from within quoted text."""
-            def replace_quote(match):
-                quote_content = match.group(1)
-                # Remove all bold/italic markdown from inside the quote
-                cleaned = re.sub(r'\*\*([^*]+)\*\*', r'\1', quote_content)  # **bold**
-                cleaned = re.sub(r'__([^_]+)__', r'\1', cleaned)  # __bold__
-                cleaned = re.sub(r'\*([^*]+)\*', r'\1', cleaned)  # *italic*
-                cleaned = re.sub(r'_([^_]+)_', r'\1', cleaned)  # _italic_
-                return f'"{cleaned}"'
+        def normalize_quotes_for_tactus(text):
+            """Normalize curly quotes to straight quotes so Tactus can match them."""
+            # Replace curly quotes with straight quotes using unicode escapes
+            text = text.replace('"', '"').replace('"', '"')  # LEFT/RIGHT DOUBLE QUOTATION MARK
+            text = text.replace(''', "'").replace(''', "'")  # LEFT/RIGHT SINGLE QUOTATION MARK
+            return text
 
-            return re.sub(r'"([^"]+)"', replace_quote, text)
-
-        explanation_for_enrichment = strip_markdown_from_quotes(explanation)
-
-        logging.info(f"[TIMESTAMP] Attempting enrichment for score '{self.parameters.name}'")
-        logging.info(f"[TIMESTAMP] Original explanation length: {len(explanation)}")
-        logging.info(f"[TIMESTAMP] Stripped explanation length: {len(explanation_for_enrichment)}")
-        logging.info(f"[TIMESTAMP] Has deepgram data: {deepgram_data is not None}")
+        # Normalize quotes so Tactus can match them against the transcript
+        explanation_for_enrichment = normalize_quotes_for_tactus(explanation)
 
         # Call Tactus deepgram.enrich_timestamps() via TactusRuntime
         # Wrap in a Procedure structure like TactusScore does
@@ -1614,42 +1597,15 @@ Procedure {
             result = await asyncio.to_thread(_execute_sync)
             enriched_stripped = result.get('result', explanation_for_enrichment)
 
-            # If enrichment succeeded on stripped text, apply timestamps back to original
+            # If enrichment succeeded, return the enriched text directly from Tactus
             if isinstance(enriched_stripped, str) and enriched_stripped != explanation_for_enrichment:
-                logging.info(f"[TIMESTAMP] Enrichment succeeded! Enriched length: {len(enriched_stripped)}")
-
-                # Extract timestamps that were added and apply them to the original explanation
-                # The enriched version has [timestamp] brackets after quotes
-                # We need to transfer those to the original with markdown
-                enriched = explanation  # Start with original
-
-                # Find all timestamp brackets in the enriched stripped version
-                timestamp_pattern = re.compile(r'"([^"]+)" \[([^\]]+)\]')
-                matches = list(timestamp_pattern.finditer(enriched_stripped))
-                logging.info(f"[TIMESTAMP] Found {len(matches)} timestamps to apply")
-
-                for match in matches:
-                    plain_quote = match.group(1)
-                    timestamp = match.group(2)
-                    # Find this quote in the original (might have markdown)
-                    # Replace "**text**" with "**text**" [timestamp]
-                    enriched = re.sub(
-                        rf'"(\*\*|__)?{re.escape(plain_quote)}(\1)?"',
-                        rf'"\1{plain_quote}\2" [{timestamp}]',
-                        enriched,
-                        count=1
-                    )
-
-                logging.info(f"[TIMESTAMP] ✅ Enriched explanation with timestamps for score '{self.parameters.name}'")
-                return enriched
+                logging.debug(f"Successfully enriched explanation with timestamps for score '{self.parameters.name}'")
+                return enriched_stripped
             else:
-                logging.info(f"[TIMESTAMP] Enrichment returned unchanged text (no matches found)")
-                logging.info(f"[TIMESTAMP] Enriched == Stripped: {enriched_stripped == explanation_for_enrichment}")
+                logging.debug(f"No timestamp matches found for score '{self.parameters.name}'")
 
         except Exception as e:
-            logging.warning(f"[TIMESTAMP] ❌ Failed to enrich timestamps for score '{self.parameters.name}': {e}")
-            import traceback
-            logging.warning(f"[TIMESTAMP] Traceback: {traceback.format_exc()}")
+            logging.debug(f"Failed to enrich timestamps for score '{self.parameters.name}': {e}")
 
         return explanation
 
