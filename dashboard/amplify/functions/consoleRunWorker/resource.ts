@@ -103,6 +103,21 @@ export class ConsoleChatResponderStack extends NestedStack {
       }),
     );
 
+    // SSM Parameter Store permissions for console chat JWT and other secrets
+    this.responderFunction.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+        ],
+        resources: [
+          `arn:aws:ssm:*:*:parameter/plexus/*`,
+          `arn:aws:ssm:*:*:parameter/amplify/*`,
+        ],
+      }),
+    );
+
     new CfnOutput(this, "ConsoleChatResponderFunctionArn", {
       value: this.responderFunction.functionArn,
     });
