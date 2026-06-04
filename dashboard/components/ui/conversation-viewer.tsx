@@ -2118,6 +2118,7 @@ function ConversationViewer({
         const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
           procedureId: effectiveId,
           limit: 100,
+          sortDirection: 'DESC',
         })
 
         const fetchedSessions = Array.isArray(sessionsData) ? sessionsData : []
@@ -2247,6 +2248,7 @@ function ConversationViewer({
         const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
           procedureId: effectiveId,
           limit: 100,
+          sortDirection: 'DESC',
         })
 
         const fetchedSessions = Array.isArray(sessionsData) ? sessionsData : []
