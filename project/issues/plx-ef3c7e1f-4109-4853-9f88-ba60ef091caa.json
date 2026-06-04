@@ -1,0 +1,79 @@
+{
+  "id": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "title": "Implement Amplify-controlled local schema contract",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c37e0c57-2980-4172-9d9e-a1ab72c9dc4b",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e56540ca-f884-4b43-a7ad-2220b23569c8",
+      "author": "ryan.porter",
+      "text": "Starting implementation in dedicated git worktree /Users/ryan.porter/Projects/Plexus-codex-control-plane on branch codex/non-aws-control-plane. Initial slice: evolve services/private-graphql-proxy toward local mode foundation, add backend-mode env surfaces, add object storage adapter and OIDC/JWT scaffolding, and extend Helm values for local control plane dependencies (Keycloak + MinIO hooks).",
+      "created_at": "2026-06-04T18:00:31.089132Z"
+    },
+    {
+      "id": "e5e4d345-4064-4616-ae43-4f5bf0bb33f4",
+      "author": "ryan.porter",
+      "text": "Refining implementation scope to the schema-contract foundation: generator, checked-in manifest/SDL/version artifacts, drift check script, proxy manifest loading/classification, and focused tests. This keeps resource.ts/auth/resource.ts/storage/resource.ts as the schema source of truth before expanding the local facade.",
+      "created_at": "2026-06-04T18:09:55.472355Z"
+    },
+    {
+      "id": "6b33f3ce-b29a-420d-86d3-0c3c24e7254d",
+      "author": "ryan.porter",
+      "text": "Implemented first schema-contract slice in worktree /Users/ryan.porter/Projects/Plexus-codex-control-plane. Added dashboard schema contract generator and checked-in artifacts under services/private-graphql-proxy/schema; added npm regeneration/check scripts; added private proxy schema_contract loader and manifest-driven root classification while preserving default hybrid local/control behavior; copied schema artifacts into the proxy image; added manifest/classifier tests. Verified: npm run schema:contract:check; PYTHONPATH=services/private-graphql-proxy poetry run pytest -q services/private-graphql-proxy/tests (14 passed, 6 deselected).",
+      "created_at": "2026-06-04T18:20:21.010233Z"
+    },
+    {
+      "id": "9982200e-8061-4700-93bc-8293b15c1769",
+      "author": "ryan.porter",
+      "text": "Implemented MVP local control-plane path on top of the schema-contract slice: manifest-driven local-mode CRUD/list/index routing for all models, relationship projection for nested dashboard selections, local Amplify data/auth/storage/UI shims, deterministic demo-user auth bypass, local demo seed script, and npm run dev:local-control-plane to start proxy + seed + dashboard. Verified schema drift check, private proxy tests, local shim Jest test, targeted shim TypeScript check, seed script py_compile, and local-mode Next build. Docker is not installed in this environment, so Compose-backed seed/browser smoke could not be executed here.",
+      "created_at": "2026-06-04T18:45:53.679272Z"
+    },
+    {
+      "id": "5e1e19dd-9912-486f-8c37-d3ea3c732928",
+      "author": "ryan.porter",
+      "text": "Started MVP bootstrap implementation slice for local control-plane proof. Added sub-tasks: plx-36e64d (host dependency bootstrap), plx-188543 (stack/seed verification), plx-afd15f (CLI smoke checks), plx-4e2cac (dashboard runbook). Implemented scripts/bootstrap-local-mvp.sh and scripts/smoke-local-cli.sh plus documentation/local-control-plane-mvp.md in worktree /Users/ryan.porter/Projects/Plexus-codex-control-plane. Validation so far: bash -n for both scripts, quick smoke run with SMOKE_READY_ATTEMPTS=1 (expected failures here because proxy not running and Poetry deps not installed yet).",
+      "created_at": "2026-06-04T19:11:00.211566Z"
+    },
+    {
+      "id": "c35c4483-c36e-4530-8dbd-ffb1c01582b8",
+      "author": "ryan.porter",
+      "text": "MVP bootstrap slice completed in this worktree: added scripts/bootstrap-local-mvp.sh, scripts/smoke-local-cli.sh, and documentation/local-control-plane-mvp.md. Installed host prerequisites in this environment (brew install node@20 postgresql@16 docker docker-credential-helper), ran poetry install + dashboard npm ci, and fixed Docker credential helper config to osxkeychain so compose pulls succeed. Verified bootstrap script end-to-end (reports Docker/Poetry/Node/psql versions). Verified local stack bring-up and seeding via npm run dev:local-control-plane (proxy + postgres + seed + dashboard). Verified smoke script passes against running local backend: pass=5 fail=0 with seeded-read checks and create/info/delete CLI roundtrip.",
+      "created_at": "2026-06-04T19:20:29.808139Z"
+    },
+    {
+      "id": "145b1e2d-d9e7-4eff-84e5-c0ab21ff1ab8",
+      "author": "ryan.porter",
+      "text": "Final verification for MVP bootstrap scripts: bootstrap-local-mvp.sh passes; local control plane starts via npm run dev:local-control-plane; smoke-local-cli.sh passes (pass=5 fail=0). Smoke run confirms readyz, seeded local records, CLI read checks, and create/info/delete roundtrip. Note: current local facade does not expose listItemByAccountIdAndCreatedAt/listTaskByAccountIdAndUpdatedAt roots used by canonical list/last commands, so smoke script now attempts list/last and falls back to seeded info checks when those index roots are unavailable.",
+      "created_at": "2026-06-04T19:23:55.959578Z"
+    },
+    {
+      "id": "6641ccc4-b348-4840-b5ef-fb0d9fd80c06",
+      "author": "ryan.porter",
+      "text": "Shifting current slice to prediction MVP proof on local control plane. Added sub-tasks: plx-7d1c03 (deterministic scoring fixture), plx-a4b4e8 (strict local predict smoke roundtrip), and plx-a9f685 (runbook/test verification). Implementation starts in worktree /Users/ryan.porter/Projects/Plexus-codex-control-plane on branch codex/non-aws-control-plane.",
+      "created_at": "2026-06-04T19:43:04.017394Z"
+    },
+    {
+      "id": "c1d43079-b63f-41da-8a11-90e4bea92348",
+      "author": "ryan.porter",
+      "text": "Prediction MVP slice completed in worktree /Users/ryan.porter/Projects/Plexus-codex-control-plane. Closed sub-tasks plx-7d1c03, plx-a4b4e8, plx-a9f685. Key verification: repaired corrupted griffe install in .venv, started docker compose stack with PLEXUS_BACKEND_MODE=local and upstream disabled, seeded deterministic Nira fixture, smoke-local-predict passed (readyz + champion path + predict + persisted ScoreResult linkage), and smoke-local-cli passed (read/create/info/delete checks).",
+      "created_at": "2026-06-04T19:56:53.880141Z"
+    },
+    {
+      "id": "e8b30ffd-7ee3-4590-9b03-3ed1f42f9d50",
+      "author": "ryan.porter",
+      "text": "Handoff context update for follow-on sessions: implementation is committed and pushed on feature/local-control-plane-mvp at commit ef6e566ee. Repro path: run scripts/bootstrap-local-mvp.sh, then start local stack and seed via services/private-graphql-proxy/scripts/dev-local-control-plane.sh (or npm run dev:local-control-plane), then run scripts/smoke-local-cli.sh and scripts/smoke-local-predict.sh. Completed/closed sub-tasks: plx-36e64d, plx-188543, plx-afd15f, plx-4e2cac, plx-7d1c03, plx-a4b4e8, plx-a9f685. Remaining follow-ups tracked as open: plx-4ee459 (index-root parity for list/last) and plx-5f3c67 (browser-level local-mode smoke with no AWS dependency).",
+      "created_at": "2026-06-04T21:49:58.698010Z"
+    }
+  ],
+  "created_at": "2026-06-04T18:00:17.155925Z",
+  "updated_at": "2026-06-04T21:49:58.698010Z",
+  "closed_at": null,
+  "custom": {}
+}

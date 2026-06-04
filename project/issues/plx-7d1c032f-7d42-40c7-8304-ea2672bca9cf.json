@@ -1,0 +1,25 @@
+{
+  "id": "plx-7d1c032f-7d42-40c7-8304-ea2672bca9cf",
+  "title": "Add deterministic local scoring fixture for prediction MVP",
+  "description": "Seed a public-safe call-center scorecard/score/version/item fixture with deterministic score config so CLI prediction can execute end-to-end against the local GraphQL backend without external model dependencies.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4731d279-fe3c-4ddb-ad98-79aaea7bb93b",
+      "author": "ryan.porter",
+      "text": "Implemented deterministic public-safe prediction fixture in services/private-graphql-proxy/scripts/seed_local_demo.py: nira-demo-scorecard, nira-demo-score, nira-demo-score-version (champion), nira-demo-item-1, and matching External ID identifier. ScoreVersion config now includes executable class: TactusScore YAML/Lua logic for deterministic Yes/No output. Verified seed path by running docker compose local mode + seed script and asserting fixture/champion fields via GraphQL.",
+      "created_at": "2026-06-04T19:56:27.641191Z"
+    }
+  ],
+  "created_at": "2026-06-04T19:42:52.804290Z",
+  "updated_at": "2026-06-04T19:56:38.295370Z",
+  "closed_at": "2026-06-04T19:56:38.295370Z",
+  "custom": {}
+}

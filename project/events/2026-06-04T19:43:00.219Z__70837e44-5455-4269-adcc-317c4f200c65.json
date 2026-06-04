@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "70837e44-5455-4269-adcc-317c4f200c65",
+  "issue_id": "plx-a9f685aa-7902-40bc-a807-128e58ed68f7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-04T19:43:00.219Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Document and verify champion-path prediction MVP",
+    "description": "Update local control-plane runbook and tests to cover champion-version resolution and ScoreResult persistence for local prediction MVP, keeping latest-version path out of scope until index root compatibility is addressed.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+    "labels": []
+  }
+}

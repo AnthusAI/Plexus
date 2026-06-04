@@ -1,0 +1,25 @@
+{
+  "id": "plx-afd15ff3-eac1-4e7d-8f18-10bfd32c745b",
+  "title": "Add and validate CLI smoke checks against local GraphQL",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "565d7049-36f3-4132-a6a7-18b29316f8e3",
+      "author": "ryan.porter",
+      "text": "Completed. Added scripts/smoke-local-cli.sh and scripts/smoke-local-predict.sh. Verified read/write CLI roundtrip and prediction roundtrip against local GraphQL with persisted ScoreResult linkage checks.",
+      "created_at": "2026-06-04T21:49:39.430340Z"
+    }
+  ],
+  "created_at": "2026-06-04T19:10:54.545940Z",
+  "updated_at": "2026-06-04T21:49:44.377026Z",
+  "closed_at": "2026-06-04T21:49:44.377026Z",
+  "custom": {}
+}
