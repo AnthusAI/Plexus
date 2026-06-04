@@ -144,6 +144,21 @@ def test_control_operation_is_cached(monkeypatch):
     assert upstream.calls == 1
 
 
+def test_graphql_endpoint_supports_local_cors_preflight(monkeypatch):
+    client, _store, _upstream = client_with_fakes(monkeypatch)
+    response = client.options(
+        "/graphql",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,x-api-key",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
 def test_mixed_query_splits_private_and_control_roots(monkeypatch):
     client, store, upstream = client_with_fakes(monkeypatch)
     store.upsert_private(
@@ -254,3 +269,72 @@ def test_local_mode_resolves_manifest_relationship_selections(monkeypatch):
         "name": "Demo Scorecard",
     }
     assert upstream.calls == 0
+
+
+def test_local_mode_supports_legacy_index_root_alias_queries(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    client, store, _upstream = client_with_fakes(monkeypatch)
+    store.upsert_private(
+        "Item",
+        {
+            "id": "item-legacy-1",
+            "accountId": "account-1",
+            "text": "legacy index root compatibility",
+            "createdAt": "2026-06-04T00:00:00Z",
+            "updatedAt": "2026-06-04T00:00:00Z",
+        },
+    )
+
+    response = client.post(
+        "/graphql",
+        json={
+            "query": """
+            query LegacyItemIndex($accountId: String!) {
+                listItemByAccountIdAndCreatedAt(accountId: $accountId, sortDirection: DESC, limit: 10) {
+                    items { id accountId text }
+                    nextToken
+                }
+            }
+            """,
+            "variables": {"accountId": "account-1"},
+        },
+    )
+
+    assert response.status_code == 200
+    connection = response.json()["data"]["listItemByAccountIdAndCreatedAt"]
+    assert connection["items"][0]["id"] == "item-legacy-1"
+
+
+def test_local_mode_supports_synthetic_legacy_score_index_queries(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    client, store, _upstream = client_with_fakes(monkeypatch)
+    store.upsert_private(
+        "Score",
+        {
+            "id": "score-legacy-1",
+            "name": "Legacy Score",
+            "scorecardId": "scorecard-1",
+            "order": 1,
+            "createdAt": "2026-06-04T00:00:00Z",
+            "updatedAt": "2026-06-04T00:00:00Z",
+        },
+    )
+
+    response = client.post(
+        "/graphql",
+        json={
+            "query": """
+            query LegacyScoreIndex($scorecardId: String!) {
+                listScoreByScorecardIdAndOrder(scorecardId: $scorecardId, sortDirection: ASC, limit: 10) {
+                    items { id name scorecardId order }
+                    nextToken
+                }
+            }
+            """,
+            "variables": {"scorecardId": "scorecard-1"},
+        },
+    )
+
+    assert response.status_code == 200
+    connection = response.json()["data"]["listScoreByScorecardIdAndOrder"]
+    assert connection["items"][0]["id"] == "score-legacy-1"

@@ -74,6 +74,7 @@ describe("local Amplify compatibility shims", () => {
     const listRequest = JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string)
     expect(listRequest.query).toContain("query LocalListAccount")
     expect(listRequest.query).toContain("listAccounts {")
+    expect(listRequest.query).toMatch(/\bid\b/)
     expect(listRequest.query).not.toContain("listAccounts()")
   })
 })

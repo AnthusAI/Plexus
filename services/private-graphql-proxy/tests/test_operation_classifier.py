@@ -75,6 +75,46 @@ def test_manifest_exposes_custom_share_token_operation_as_control_read():
     assert operation.operation_type == "query"
 
 
+def test_classifies_legacy_index_root_aliases_for_backward_compatibility(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    plan = build_operation_plan(
+        """
+        query LegacyIndexAlias($accountId: String!) {
+            listItemByAccountIdAndCreatedAt(accountId: $accountId) {
+                items { id accountId createdAt }
+                nextToken
+            }
+        }
+        """,
+        "LegacyIndexAlias",
+    )
+
+    assert [(field.name, field.model) for field in plan.private_fields] == [
+        ("listItemByAccountIdAndCreatedAt", "Item")
+    ]
+    assert not plan.blocked_fields
+
+
+def test_classifies_synthetic_legacy_index_roots_not_in_manifest(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    plan = build_operation_plan(
+        """
+        query LegacySyntheticIndex($scorecardId: String!) {
+            listScoreByScorecardIdAndOrder(scorecardId: $scorecardId, sortDirection: ASC) {
+                items { id scorecardId order }
+                nextToken
+            }
+        }
+        """,
+        "LegacySyntheticIndex",
+    )
+
+    assert [(field.name, field.model) for field in plan.private_fields] == [
+        ("listScoreByScorecardIdAndOrder", "Score")
+    ]
+    assert not plan.blocked_fields
+
+
 def test_local_backend_mode_routes_every_manifest_model_root_locally(monkeypatch):
     monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
     contract = get_schema_contract()

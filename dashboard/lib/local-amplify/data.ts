@@ -176,10 +176,14 @@ function noOpSubscription() {
 
 function selectionSet(modelName: ModelName): string {
   const model = manifest.models[modelName]
-  return Object.values(model.fields)
+  const scalarFieldNames = Object.values(model.fields)
     .filter((field: any) => field.kind !== "relationship")
     .map((field: any) => field.name)
-    .join("\n")
+  const selectedFields = new Set<string>([
+    ...(model.primaryKey || []),
+    ...scalarFieldNames,
+  ])
+  return Array.from(selectedFields).join("\n")
 }
 
 function variableDefinitions(args: Record<string, any>): string {

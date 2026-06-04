@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -71,12 +72,14 @@ class SchemaContract:
         backend_mode: Optional[str] = None,
         local_models: Optional[set[str]] = None,
     ) -> RootClassification:
-        operation = self.root_operation(root_name)
-        if not operation:
-            return RootClassification("blocked", None, None)
-
         mode = backend_mode or os.getenv("PLEXUS_BACKEND_MODE", "amplify")
         active_local_models = local_models if local_models is not None else configured_local_models()
+
+        operation = self.root_operation(root_name)
+        if not operation and mode == "local" and operation_type == "query":
+            operation = self._synthetic_legacy_index_operation(root_name)
+        if not operation:
+            return RootClassification("blocked", None, None)
 
         if operation.model:
             if mode == "local" or operation.model in active_local_models:
@@ -110,13 +113,25 @@ class SchemaContract:
 
             for index in manifest["indexes"].get(model_name, []):
                 root_name = index["queryField"]
-                roots[root_name] = RootOperation(
+                index_operation = RootOperation(
                     root_name,
                     "query",
                     model_name,
                     "index",
                     index=index,
                 )
+                roots[root_name] = index_operation
+                for alias_root_name in self._legacy_index_aliases(model_name, index):
+                    roots.setdefault(
+                        alias_root_name,
+                        RootOperation(
+                            alias_root_name,
+                            "query",
+                            model_name,
+                            "index",
+                            index=index,
+                        ),
+                    )
 
             for action in ("onCreate", "onUpdate", "onDelete"):
                 root_name = manifest["subscriptions"][model_name][action]
@@ -136,6 +151,74 @@ class SchemaContract:
                 custom_operation=operation,
             )
         return roots
+
+    @staticmethod
+    def _legacy_index_aliases(model_name: str, index: dict[str, Any]) -> list[str]:
+        """
+        Backward-compatible aliases for historical Amplify index root naming.
+
+        Some existing dashboard/CLI queries still use:
+          list<Model>By<Partition>And<Sort>
+        while current generated roots are:
+          list<Model>By<Partition><Sort>
+        """
+        sort_fields = index.get("sortFields") or []
+        partition_field = index.get("partitionField")
+        if len(sort_fields) != 1 or not partition_field:
+            return []
+
+        sort_field = sort_fields[0]
+        canonical_root = (
+            f"list{model_name}By"
+            f"{_pascal_case(partition_field)}"
+            f"{_pascal_case(sort_field)}"
+        )
+        if index.get("queryField") != canonical_root:
+            return []
+
+        legacy_alias = (
+            f"list{model_name}By"
+            f"{_pascal_case(partition_field)}"
+            f"And{_pascal_case(sort_field)}"
+        )
+        return [legacy_alias]
+
+    def _synthetic_legacy_index_operation(self, root_name: str) -> Optional[RootOperation]:
+        """
+        Support legacy, still-in-use dashboard roots that are not present in the
+        generated Amplify manifest, such as:
+          listScoreByScorecardIdAndOrder
+          listScorecardSectionByScorecardIdAndOrder
+        """
+        match = re.match(r"^list([A-Z][A-Za-z0-9]*)By([A-Z][A-Za-z0-9]*)And([A-Z][A-Za-z0-9]*)$", root_name)
+        if not match:
+            return None
+
+        model_name, partition_pascal, sort_pascal = match.groups()
+        model = self.models.get(model_name)
+        if not model:
+            return None
+
+        partition_field = _camel_case(partition_pascal)
+        sort_field = _camel_case(sort_pascal)
+        model_fields = model.get("fields", {})
+        if partition_field not in model_fields or sort_field not in model_fields:
+            return None
+
+        index = {
+            "name": "legacySynthetic",
+            "partitionField": partition_field,
+            "sortFields": [sort_field],
+            "queryField": root_name,
+            "arguments": [partition_field, sort_field, "filter", "sortDirection", "limit", "nextToken"],
+        }
+        return RootOperation(
+            root_name=root_name,
+            operation_type="query",
+            model=model_name,
+            action="index",
+            index=index,
+        )
 
 
 def configured_local_models() -> set[str]:
@@ -186,3 +269,15 @@ def validate_manifest(manifest: dict[str, Any]) -> None:
         raise RuntimeError(f"schema contract manifest is missing sections: {', '.join(missing)}")
     if not manifest["models"]:
         raise RuntimeError("schema contract manifest does not contain any models")
+
+
+def _pascal_case(value: str) -> str:
+    if not value:
+        return value
+    return value[0].upper() + value[1:]
+
+
+def _camel_case(value: str) -> str:
+    if not value:
+        return value
+    return value[0].lower() + value[1:]

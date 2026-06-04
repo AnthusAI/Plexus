@@ -5,6 +5,7 @@ from datetime import timezone
 from typing import Any, Optional
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from graphql.language.ast import FieldNode, SelectionSetNode
 
@@ -44,6 +45,15 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+if settings.cors_allow_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(settings.cors_allow_origins),
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.get("/healthz")

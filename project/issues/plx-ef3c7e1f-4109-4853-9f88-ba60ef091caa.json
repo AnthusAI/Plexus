@@ -70,10 +70,16 @@
       "author": "ryan.porter",
       "text": "Handoff context update for follow-on sessions: implementation is committed and pushed on feature/local-control-plane-mvp at commit ef6e566ee. Repro path: run scripts/bootstrap-local-mvp.sh, then start local stack and seed via services/private-graphql-proxy/scripts/dev-local-control-plane.sh (or npm run dev:local-control-plane), then run scripts/smoke-local-cli.sh and scripts/smoke-local-predict.sh. Completed/closed sub-tasks: plx-36e64d, plx-188543, plx-afd15f, plx-4e2cac, plx-7d1c03, plx-a4b4e8, plx-a9f685. Remaining follow-ups tracked as open: plx-4ee459 (index-root parity for list/last) and plx-5f3c67 (browser-level local-mode smoke with no AWS dependency).",
       "created_at": "2026-06-04T21:49:58.698010Z"
+    },
+    {
+      "id": "54da5404-25aa-4c7f-a3b2-64bc8b628212",
+      "author": "ryan.porter",
+      "text": "Local control-plane MVP status update:\n\nWe now have a working prototype path where the dashboard can run in local mode against a controlled GraphQL backend instead of the hosted GraphQL backend.\n\nProven so far:\n- Dashboard local mode can bypass hosted auth with a fixed demo user.\n- The local GraphQL facade can serve seeded account, item, scorecard, score, score version, task, evaluation, report, procedure, and chat data from PostgreSQL-backed storage.\n- The dashboard can load the local account context and render scorecards from local GraphQL.\n- The local facade supports enough Amplify/AppSync-compatible CRUD, list, index, and relationship behavior for initial MVP pages.\n- CLI smoke coverage has shown local API read/write viability.\n- Recent debugging found and fixed a representative contract-fidelity issue: generated local selection sets must include primary-key fields like `id`, or downstream dashboard flows silently fail.\n\nCurrent interpretation:\nThe prototype is credible as an architectural proof of concept, but it is not production-ready. The next work should vet contract fidelity, tenancy/auth, schema migration discipline, storage attachment behavior, subscriptions/realtime, and performance.\n\nNext validation milestone:\nProve one realistic worker workflow end to end against the local backend:\nscorecard -> score -> champion score version -> item -> prediction -> score result writeback -> dashboard/CLI readback.\n\nDemo constraints:\n- No hosted auth dependency in MVP mode.\n- No hosted GraphQL dependency in MVP mode.\n- No production or client-specific data in seed records.\n- Use generic demo call-center QA data only.",
+      "created_at": "2026-06-04T22:50:58.607911Z"
     }
   ],
   "created_at": "2026-06-04T18:00:17.155925Z",
-  "updated_at": "2026-06-04T21:49:58.698010Z",
+  "updated_at": "2026-06-04T22:50:58.607911Z",
   "closed_at": null,
   "custom": {}
 }

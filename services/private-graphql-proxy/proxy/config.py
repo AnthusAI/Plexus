@@ -16,6 +16,7 @@ class Settings:
     upstream_timeout_seconds: float
     upstream_disabled: bool
     enable_debug: bool
+    cors_allow_origins: tuple[str, ...]
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -34,4 +35,12 @@ class Settings:
             in {"1", "true", "yes"},
             enable_debug=os.getenv("PLEXUS_PROXY_ENABLE_DEBUG", "false").lower()
             in {"1", "true", "yes"},
+            cors_allow_origins=tuple(
+                origin.strip()
+                for origin in os.getenv(
+                    "PLEXUS_PROXY_CORS_ALLOW_ORIGINS",
+                    "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001",
+                ).split(",")
+                if origin.strip()
+            ),
         )

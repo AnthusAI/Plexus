@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ed790184-4ec5-447e-9e6d-e73d77304a0b",
+  "issue_id": "plx-777f1482-2c29-478f-bffe-607e845256f6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-04T22:10:00.833Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Fix local account discovery for evaluations page in demo mode",
+    "description": "Resolve local-mode account list failure (No account found) by aligning dashboard local amplify list behavior with local GraphQL roots and seeded account records.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+    "labels": []
+  }
+}

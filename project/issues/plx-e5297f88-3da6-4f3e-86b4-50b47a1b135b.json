@@ -1,0 +1,18 @@
+{
+  "id": "plx-e5297f88-3da6-4f3e-86b4-50b47a1b135b",
+  "title": "Production viability vetting",
+  "description": "Document and test production-readiness risks for the local control plane: auth and tenancy enforcement, schema migration discipline, attachment/storage behavior, realtime/subscription strategy, observability, backup/restore, and performance under high-volume models.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-04T22:51:32.910604Z",
+  "updated_at": "2026-06-04T22:51:32.910604Z",
+  "closed_at": null,
+  "custom": {}
+}

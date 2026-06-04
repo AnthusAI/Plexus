@@ -1,0 +1,18 @@
+{
+  "id": "plx-242cabe5-4663-4f29-a5c7-406466eca177",
+  "title": "Local contract fidelity hardening",
+  "description": "Expand local GraphQL and dashboard-shim tests for Amplify/AppSync contract fidelity: required primary keys, generated index roots, relationship selections, connection shape, and regression coverage for missing model identifiers.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-04T22:51:28.029408Z",
+  "updated_at": "2026-06-04T22:51:28.029408Z",
+  "closed_at": null,
+  "custom": {}
+}
