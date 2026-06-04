@@ -1,0 +1,105 @@
+# Local Control Plane MVP Runbook
+
+This runbook proves the local GraphQL control plane is usable by CLI tools without AppSync/Cognito.
+
+## 1) Bootstrap host dependencies
+
+Run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/bootstrap-local-mvp.sh
+```
+
+This script enforces:
+
+- Docker CLI is available and daemon is running.
+- Docker credential helper compatibility for `docker compose` pulls.
+- Host prerequisites are installed/usable: `node@20`, `postgresql@16` client tools (`psql`, `pg_isready`), and `poetry`.
+- `poetry install` succeeds at repo root.
+- `npm ci` succeeds in `dashboard/`.
+
+## 2) Start local control plane and dashboard
+
+Run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane/dashboard
+npm run dev:local-control-plane
+```
+
+Expected local mode settings:
+
+- `PLEXUS_BACKEND_MODE=local`
+- `NEXT_PUBLIC_PLEXUS_BACKEND=local`
+- `PLEXUS_API_URL=http://localhost:18080/graphql`
+- `PLEXUS_API_KEY=local-smoke-key`
+- `PLEXUS_ACCOUNT_KEY=local-demo`
+
+## 3) Assert backend health and seeded data
+
+Health check:
+
+```bash
+curl -s http://localhost:18080/readyz
+```
+
+Expected:
+
+```json
+{"status":"ready"}
+```
+
+Seed assertions are performed by the smoke script and check these IDs:
+
+- `local-demo-account`
+- `local-demo-scorecard`
+- `local-demo-item-1`
+- `local-demo-task`
+- `local-demo-evaluation`
+- `local-demo-report`
+- `local-demo-procedure`
+- `local-demo-chat-session`
+
+## 4) Run CLI smoke
+
+Run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/smoke-local-cli.sh
+```
+
+The script validates:
+
+- Read checks: `items list` and `tasks last`, with automatic fallback to seeded `info` commands when index roots are unavailable in the current local facade.
+- Write check: `items create` + `items info` roundtrip (by created item ID).
+- Optional cleanup (enabled by default): delete the created smoke item.
+
+To keep created smoke data for inspection:
+
+```bash
+SMOKE_CLEANUP=0 bash scripts/smoke-local-cli.sh
+```
+
+## 5) Run prediction smoke
+
+Run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/smoke-local-predict.sh
+```
+
+The prediction smoke is strict and validates:
+
+- Nira call-center fixture records exist (`nira-demo-scorecard`, `nira-demo-score`, `nira-demo-score-version`, `nira-demo-item-1`).
+- Champion path is wired (`getScore(...).championVersionId` resolves to the seeded version).
+- Champion version config is executable local score config (`class: TactusScore`).
+- `plexus predict` succeeds against local GraphQL with `--no-cache --format json`.
+- The returned `score_result_id` exists in GraphQL and is linked to expected `itemId`, `accountId`, `scorecardId`, `scoreId`, and `scoreVersionId`.
+
+Note:
+
+- This smoke intentionally uses the champion-version path only.
+- It does not use `--latest` until ScoreVersion index-root naming compatibility is aligned.

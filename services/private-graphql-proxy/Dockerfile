@@ -9,6 +9,7 @@ COPY services/private-graphql-proxy/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY services/private-graphql-proxy/proxy ./proxy
+COPY services/private-graphql-proxy/schema ./schema
 
 # Create entrypoint script for database URL construction
 # This constructs the PostgreSQL connection URL from individual environment variables

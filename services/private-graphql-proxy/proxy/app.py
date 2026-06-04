@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from graphql.language.ast import FieldNode, SelectionSetNode
 
 from .config import Settings
 from .graphql_tools import (
@@ -15,8 +16,8 @@ from .graphql_tools import (
     build_operation_plan,
     build_root_only_query,
     project_list_connection,
-    project_value,
 )
+from .schema_contract import get_schema_contract
 from .store import PostgresStore, cache_key_for, utcnow
 from .upstream import UpstreamAppSyncClient
 
@@ -33,6 +34,7 @@ upstream = UpstreamAppSyncClient(
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    get_schema_contract()
     store.initialize()
     yield
 
@@ -135,24 +137,27 @@ def handle_private_field(
     operation_type: str,
 ) -> Any:
     if not field.model:
-        raise HTTPException(status_code=400, detail=f"{field.name} has no private model")
+        return handle_local_custom_field(field, variables)
 
     if operation_type == "mutation":
         input_doc = argument_value(field.node, "input", variables)
         if not isinstance(input_doc, dict):
             raise HTTPException(status_code=400, detail=f"{field.name} requires an input object")
         if field.name.startswith("create"):
-            return project_value(
+            return project_model_value(
+                field.model,
                 store.upsert_private(field.model, input_doc),
                 field.node.selection_set,
             )
         if field.name.startswith("update"):
-            return project_value(
+            return project_model_value(
+                field.model,
                 store.update_private(field.model, input_doc),
                 field.node.selection_set,
             )
         if field.name.startswith("delete"):
-            return project_value(
+            return project_model_value(
+                field.model,
                 store.delete_private(field.model, input_doc),
                 field.node.selection_set,
             )
@@ -162,7 +167,8 @@ def handle_private_field(
         raise HTTPException(status_code=400, detail="subscriptions are not supported")
 
     if field.name.startswith("get"):
-        return project_value(
+        return project_model_value(
+            field.model,
             store.get_private(field.model, key_arguments(field, variables)),
             field.node.selection_set,
         )
@@ -180,12 +186,35 @@ def handle_private_field(
             sort_field=sort_field,
             limit=args.get("limit"),
         )
-        return project_list_connection(
+        return project_model_connection(
+            field.model,
             {"items": items, "nextToken": None},
             field.node.selection_set,
         )
 
     raise HTTPException(status_code=400, detail=f"unsupported private query {field.name}")
+
+
+def handle_local_custom_field(field: RootField, variables: dict[str, Any]) -> Any:
+    if field.name != "getResourceByShareToken":
+        raise HTTPException(status_code=400, detail=f"{field.name} has no private model")
+
+    token = argument_value(field.node, "token", variables)
+    if not token:
+        return None
+    matches = store.list_private("ShareLink", {"token": token}, limit=1)
+    share_link = matches[0] if matches else None
+    if not share_link or share_link.get("isRevoked"):
+        return None
+    resource_type = share_link.get("resourceType")
+    resource_id = share_link.get("resourceId")
+    data = None
+    if resource_type and resource_id and resource_type in get_schema_contract().models:
+        data = store.get_private(resource_type, {"id": resource_id})
+    return project_plain_value(
+        {"shareLink": share_link, "data": data},
+        field.node.selection_set,
+    )
 
 
 def execute_control_query(
@@ -221,9 +250,12 @@ def execute_control_query(
 
 def key_arguments(field: RootField, variables: dict[str, Any]) -> dict[str, Any]:
     args = all_argument_values(field.node, variables)
-    if field.model == "Identifier":
-        return {"itemId": args.get("itemId"), "name": args.get("name")}
-    return {"id": args.get("id")}
+    if not field.model:
+        return {}
+    return {
+        key: args.get(key)
+        for key in get_schema_contract().primary_key_fields(field.model)
+    }
 
 
 def list_filters(args: dict[str, Any]) -> dict[str, Any]:
@@ -256,6 +288,10 @@ def composite_begins_with_filters(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def sort_field_for_root(root_name: str) -> Optional[str]:
+    operation = get_schema_contract().root_operation(root_name)
+    if operation and operation.index and operation.index.get("sortFields"):
+        return operation.index["sortFields"][-1]
+
     suffixes = (
         ("UpdatedAt", "updatedAt"),
         ("CreatedAt", "createdAt"),
@@ -267,3 +303,114 @@ def sort_field_for_root(root_name: str) -> Optional[str]:
         if root_name.endswith(suffix):
             return field_name
     return None
+
+
+def project_model_connection(
+    model: str,
+    connection: dict[str, Any],
+    selection_set: Optional[SelectionSetNode],
+) -> dict[str, Any]:
+    if selection_set is None:
+        return connection
+
+    projected: dict[str, Any] = {}
+    for selection in selection_set.selections:
+        if not isinstance(selection, FieldNode):
+            continue
+        field_name = selection.name.value
+        response_key = selection.alias.value if selection.alias else field_name
+        if field_name == "items":
+            projected[response_key] = [
+                project_model_value(model, item, selection.selection_set)
+                for item in connection.get("items", [])
+            ]
+        else:
+            projected[response_key] = connection.get(field_name)
+    return projected
+
+
+def project_model_value(
+    model: str,
+    value: Any,
+    selection_set: Optional[SelectionSetNode],
+) -> Any:
+    if value is None or selection_set is None:
+        return value
+    if isinstance(value, list):
+        return [project_model_value(model, item, selection_set) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    projected: dict[str, Any] = {}
+    for selection in selection_set.selections:
+        if not isinstance(selection, FieldNode):
+            continue
+        field_name = selection.name.value
+        response_key = selection.alias.value if selection.alias else field_name
+        relationship = get_schema_contract().relationship(model, field_name)
+        if relationship:
+            projected[response_key] = project_relationship(value, relationship, selection.selection_set)
+            continue
+
+        child = value.get(field_name)
+        if isinstance(child, dict):
+            projected[response_key] = project_plain_value(child, selection.selection_set)
+        elif isinstance(child, list):
+            projected[response_key] = [
+                project_plain_value(item, selection.selection_set)
+                for item in child
+            ]
+        else:
+            projected[response_key] = child
+    return projected
+
+
+def project_relationship(
+    source: dict[str, Any],
+    relationship: dict[str, Any],
+    selection_set: Optional[SelectionSetNode],
+) -> Any:
+    target_model = relationship["targetModel"]
+    target_field = relationship["targetField"]
+    kind = relationship["kind"]
+
+    if kind == "belongsTo":
+        target_id = source.get(target_field)
+        target = store.get_private(target_model, {"id": target_id}) if target_id else None
+        return project_model_value(target_model, target, selection_set)
+
+    source_id = source.get("id")
+    if not source_id:
+        return {"items": [], "nextToken": None} if kind == "hasMany" else None
+
+    matches = store.list_private(target_model, {target_field: source_id}, limit=100)
+    if kind == "hasOne":
+        return project_model_value(target_model, matches[0] if matches else None, selection_set)
+
+    return project_model_connection(
+        target_model,
+        {"items": matches, "nextToken": None},
+        selection_set,
+    )
+
+
+def project_plain_value(value: Any, selection_set: Optional[SelectionSetNode]) -> Any:
+    if value is None or selection_set is None:
+        return value
+    if isinstance(value, list):
+        return [project_plain_value(item, selection_set) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    projected: dict[str, Any] = {}
+    for selection in selection_set.selections:
+        if not isinstance(selection, FieldNode):
+            continue
+        field_name = selection.name.value
+        response_key = selection.alias.value if selection.alias else field_name
+        child = value.get(field_name)
+        if isinstance(child, (dict, list)):
+            projected[response_key] = project_plain_value(child, selection.selection_set)
+        else:
+            projected[response_key] = child
+    return projected

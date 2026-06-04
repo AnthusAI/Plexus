@@ -1,0 +1,2414 @@
+scalar AWSDateTime
+
+scalar AWSJSON
+
+enum ModelSortDirection {
+  ASC
+  DESC
+}
+
+input ModelStringInput {
+  eq: String
+  beginsWith: String
+  contains: String
+}
+
+enum ChatSessionStatusEnum {
+  ACTIVE
+  COMPLETED
+  ERROR
+}
+
+enum ChatMessageRoleEnum {
+  USER
+  ASSISTANT
+  SYSTEM
+  TOOL
+}
+
+enum ChatMessageHumanInteractionEnum {
+  INTERNAL
+  CHAT
+  CHAT_ASSISTANT
+  NOTIFICATION
+  ALERT_INFO
+  ALERT_WARNING
+  ALERT_ERROR
+  ALERT_CRITICAL
+  PENDING_APPROVAL
+  PENDING_INPUT
+  PENDING_REVIEW
+  PENDING_ESCALATION
+  RESPONSE
+  TIMED_OUT
+  CANCELLED
+}
+
+enum ChatMessageMessageTypeEnum {
+  MESSAGE
+  TOOL_CALL
+  TOOL_RESPONSE
+}
+
+enum ChatMessageResponseStatusEnum {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+type ResourceByShareTokenResponse {
+  shareLink: String
+  data: AWSJSON
+}
+
+type Account {
+  name: String!
+  key: String!
+  description: String
+  settings: AWSJSON
+  scorecards: ModelScorecardConnection
+  evaluations: ModelEvaluationConnection
+  items: ModelItemConnection
+  scoringJobs: ModelScoringJobConnection
+  scoreResults: ModelScoreResultConnection
+  tasks: ModelTaskConnection
+  reportConfigurations: ModelReportConfigurationConnection
+  reports: ModelReportConnection
+  feedbackItems: ModelFeedbackItemConnection
+  identifiers: ModelIdentifierConnection
+  aggregatedMetrics: ModelAggregatedMetricsConnection
+  dataSources: ModelDataSourceConnection
+  dataSets: ModelDataSetConnection
+  procedures: ModelProcedureConnection
+  chatSessions: ModelChatSessionConnection
+  chatMessages: ModelChatMessageConnection
+}
+
+type ModelAccountConnection {
+  items: [Account]
+  nextToken: String
+}
+
+type User {
+  email: String!
+  displayName: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  evaluations: ModelEvaluationConnection
+  procedures: ModelProcedureConnection
+  reports: ModelReportConnection
+  scoreVersions: ModelScoreVersionConnection
+}
+
+type ModelUserConnection {
+  items: [User]
+  nextToken: String
+}
+
+type Scorecard {
+  name: String!
+  key: String!
+  description: String
+  guidelines: String
+  accountId: String!
+  account: Account
+  sections: ModelScorecardSectionConnection
+  scores: ModelScoreConnection
+  evaluations: ModelEvaluationConnection
+  scoringJobs: ModelScoringJobConnection
+  scoreResults: ModelScoreResultConnection
+  tasks: ModelTaskConnection
+  feedbackItems: ModelFeedbackItemConnection
+  externalId: String
+  exampleItems: ModelScorecardExampleItemConnection
+  aggregatedMetrics: ModelAggregatedMetricsConnection
+  dataSources: ModelDataSourceConnection
+  dataSets: ModelDataSetConnection
+  procedures: ModelProcedureConnection
+  chatSessions: ModelChatSessionConnection
+}
+
+type ModelScorecardConnection {
+  items: [Scorecard]
+  nextToken: String
+}
+
+type ScorecardSection {
+  name: String!
+  order: Int!
+  scorecardId: String!
+  scorecard: Scorecard
+  scores: ModelScoreConnection
+}
+
+type ModelScorecardSectionConnection {
+  items: [ScorecardSection]
+  nextToken: String
+}
+
+type Score {
+  name: String!
+  key: String
+  description: String
+  order: Int!
+  type: String!
+  targetAgreement: Float
+  accuracy: Float
+  version: String
+  aiProvider: String
+  aiModel: String
+  sectionId: String!
+  section: ScorecardSection
+  scorecardId: String!
+  scorecard: Scorecard
+  evaluations: ModelEvaluationConnection
+  scoringJobs: ModelScoringJobConnection
+  tasks: ModelTaskConnection
+  versions: ModelScoreVersionConnection
+  items: ModelItemConnection
+  scoreResults: ModelScoreResultConnection
+  feedbackItems: ModelFeedbackItemConnection
+  dataSources: ModelDataSourceConnection
+  dataSets: ModelDataSetConnection
+  championVersionId: String
+  championVersion: ScoreVersion
+  externalId: String!
+  isDisabled: Boolean
+  aggregatedMetrics: ModelAggregatedMetricsConnection
+  procedures: ModelProcedureConnection
+  chatSessions: ModelChatSessionConnection
+}
+
+type ModelScoreConnection {
+  items: [Score]
+  nextToken: String
+}
+
+type ScoreVersion {
+  scoreId: String!
+  score: Score
+  configuration: String!
+  guidelines: String
+  isFeatured: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  note: String
+  branch: String
+  metadata: AWSJSON
+  createdByUserId: String
+  createdByUser: User
+  scoreResults: ModelScoreResultConnection
+  scoresAsChampion: ModelScoreConnection
+  parentVersionId: String
+  parentVersion: ScoreVersion
+  childVersions: ModelScoreVersionConnection
+  evaluations: ModelEvaluationConnection
+  dataSets: ModelDataSetConnection
+  procedures: ModelProcedureConnection
+}
+
+type ModelScoreVersionConnection {
+  items: [ScoreVersion]
+  nextToken: String
+}
+
+type Evaluation {
+  type: String!
+  parameters: AWSJSON
+  metrics: AWSJSON
+  metricsExplanation: String
+  metadata: AWSJSON
+  inferences: Int
+  accuracy: Float!
+  cost: Float
+  costDetails: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  status: String!
+  startedAt: AWSDateTime
+  elapsedSeconds: Int
+  estimatedRemainingSeconds: Int
+  totalItems: Int
+  processedItems: Int
+  errorMessage: String
+  errorDetails: AWSJSON
+  accountId: String!
+  account: Account
+  scorecardId: String
+  scorecard: Scorecard
+  scoreId: String
+  score: Score
+  scoreVersionId: String
+  scoreVersion: ScoreVersion
+  confusionMatrix: AWSJSON
+  items: ModelItemConnection
+  scoreResults: ModelScoreResultConnection
+  scoringJobs: ModelScoringJobConnection
+  scoreGoal: String
+  datasetClassDistribution: AWSJSON
+  isDatasetClassDistributionBalanced: Boolean
+  predictedClassDistribution: AWSJSON
+  isPredictedClassDistributionBalanced: Boolean
+  taskId: String
+  task: Task
+  universalCode: String
+  createdByUserId: String
+  createdByUser: User
+}
+
+type ModelEvaluationConnection {
+  items: [Evaluation]
+  nextToken: String
+}
+
+type Item {
+  externalId: String
+  description: String
+  accountId: String!
+  account: Account
+  scoringJobs: ModelScoringJobConnection
+  scoreResults: ModelScoreResultConnection
+  evaluationId: String
+  evaluation: Evaluation
+  scoreId: String
+  score: Score
+  updatedAt: AWSDateTime
+  createdAt: AWSDateTime
+  isEvaluation: Boolean!
+  createdByType: String
+  identifiers: AWSJSON
+  feedbackItems: ModelFeedbackItemConnection
+  attachedFiles: [String]
+  text: String
+  metadata: AWSJSON
+  asExampleFor: ModelScorecardExampleItemConnection
+  itemIdentifiers: ModelIdentifierConnection
+}
+
+type ModelItemConnection {
+  items: [Item]
+  nextToken: String
+}
+
+type Identifier {
+  itemId: String!
+  name: String!
+  value: String!
+  url: String
+  position: Int!
+  accountId: String!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  item: Item
+  account: Account
+}
+
+type ModelIdentifierConnection {
+  items: [Identifier]
+  nextToken: String
+}
+
+type ScoringJob {
+  status: String!
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  errorMessage: String
+  errorDetails: AWSJSON
+  metadata: AWSJSON
+  itemId: String!
+  item: Item
+  accountId: String!
+  account: Account
+  scorecardId: String!
+  scorecard: Scorecard
+  evaluationId: String
+  evaluation: Evaluation
+  scoreId: String
+  score: Score
+  scoreResults: ModelScoreResultConnection
+  updatedAt: AWSDateTime
+  createdAt: AWSDateTime
+}
+
+type ModelScoringJobConnection {
+  items: [ScoringJob]
+  nextToken: String
+}
+
+type ScoreResult {
+  value: String!
+  explanation: String
+  confidence: Float
+  startTimeSeconds: Float
+  endTimeSeconds: Float
+  metadata: AWSJSON
+  trace: AWSJSON
+  correct: Boolean
+  cost: AWSJSON
+  attachments: [String]
+  type: String
+  status: String
+  itemId: String!
+  item: Item
+  accountId: String!
+  account: Account
+  scoringJobId: String
+  scoringJob: ScoringJob
+  evaluationId: String
+  evaluation: Evaluation
+  scorecardId: String!
+  scorecard: Scorecard
+  scoreVersionId: String
+  scoreVersion: ScoreVersion
+  scoreId: String
+  score: Score
+  code: String
+  updatedAt: AWSDateTime
+  createdAt: AWSDateTime
+  feedbackItemId: String
+  feedbackItem: FeedbackItem
+}
+
+type ModelScoreResultConnection {
+  items: [ScoreResult]
+  nextToken: String
+}
+
+type Task {
+  accountId: String!
+  type: String!
+  status: String!
+  target: String!
+  command: String!
+  description: String
+  dispatchStatus: String
+  metadata: AWSJSON
+  createdAt: AWSDateTime
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  estimatedCompletionAt: AWSDateTime
+  errorMessage: String
+  errorDetails: AWSJSON
+  stdout: String
+  stderr: String
+  output: String
+  error: String
+  attachedFiles: [String]
+  currentStageId: String
+  scorecardId: String
+  account: Account
+  scorecard: Scorecard
+  scoreId: String
+  score: Score
+  stages: ModelTaskStageConnection
+  currentStage: TaskStage
+  celeryTaskId: String
+  workerNodeId: String
+  updatedAt: AWSDateTime
+  evaluation: Evaluation
+  report: Report
+}
+
+type ModelTaskConnection {
+  items: [Task]
+  nextToken: String
+}
+
+type TaskStage {
+  taskId: String!
+  task: Task
+  name: String!
+  order: Int!
+  status: String!
+  statusMessage: String
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  estimatedCompletionAt: AWSDateTime
+  processedItems: Int
+  totalItems: Int
+  tasksAsCurrentStage: ModelTaskConnection
+}
+
+type ModelTaskStageConnection {
+  items: [TaskStage]
+  nextToken: String
+}
+
+type ShareLink {
+  token: String!
+  resourceType: String!
+  resourceId: String!
+  createdBy: String!
+  accountId: String!
+  expiresAt: AWSDateTime
+  viewOptions: AWSJSON
+  lastAccessedAt: AWSDateTime
+  accessCount: Int
+  isRevoked: Boolean
+}
+
+type ModelShareLinkConnection {
+  items: [ShareLink]
+  nextToken: String
+}
+
+type ReportConfiguration {
+  name: String!
+  description: String
+  accountId: String!
+  account: Account
+  configuration: String!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  reports: ModelReportConnection
+}
+
+type ModelReportConfigurationConnection {
+  items: [ReportConfiguration]
+  nextToken: String
+}
+
+type Report {
+  name: String
+  createdAt: AWSDateTime!
+  parameters: AWSJSON
+  output: String
+  metadata: AWSJSON
+  accountId: String!
+  account: Account
+  reportConfigurationId: String
+  reportConfiguration: ReportConfiguration
+  reportBlocks: ModelReportBlockConnection
+  updatedAt: AWSDateTime!
+  taskId: String
+  task: Task
+  createdByUserId: String
+  createdByUser: User
+}
+
+type ModelReportConnection {
+  items: [Report]
+  nextToken: String
+}
+
+type ReportBlock {
+  reportId: String!
+  report: Report
+  name: String
+  position: Int!
+  type: String!
+  output: String
+  log: String
+  warning: String
+  error: String
+  attachedFiles: [String]
+  dataSetId: String
+  dataSet: DataSet
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type ModelReportBlockConnection {
+  items: [ReportBlock]
+  nextToken: String
+}
+
+type FeedbackItem {
+  accountId: String!
+  account: Account
+  scorecardId: String!
+  scorecard: Scorecard
+  cacheKey: String!
+  scoreId: String!
+  score: Score
+  itemId: String!
+  item: Item
+  initialAnswerValue: String
+  finalAnswerValue: String
+  initialCommentValue: String
+  finalCommentValue: String
+  editCommentValue: String
+  editedAt: AWSDateTime
+  editorName: String
+  isAgreement: Boolean
+  isInvalid: Boolean
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  scoreResults: ModelScoreResultConnection
+}
+
+type ModelFeedbackItemConnection {
+  items: [FeedbackItem]
+  nextToken: String
+}
+
+type ScorecardExampleItem {
+  scorecardId: ID!
+  itemId: ID!
+  addedAt: AWSDateTime
+  addedBy: String
+  notes: String
+  scorecard: Scorecard
+  item: Item
+}
+
+type ModelScorecardExampleItemConnection {
+  items: [ScorecardExampleItem]
+  nextToken: String
+}
+
+type AggregatedMetrics {
+  accountId: String!
+  account: Account
+  compositeKey: String!
+  scorecardId: String
+  scorecard: Scorecard
+  scoreId: String
+  score: Score
+  recordType: String!
+  timeRangeStart: AWSDateTime!
+  timeRangeEnd: AWSDateTime!
+  numberOfMinutes: Int!
+  count: Int!
+  cost: Int
+  decisionCount: Int
+  externalAiApiCount: Int
+  cachedAiApiCount: Int
+  errorCount: Int
+  metadata: AWSJSON
+  complete: Boolean!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type ModelAggregatedMetricsConnection {
+  items: [AggregatedMetrics]
+  nextToken: String
+}
+
+type DataSource {
+  name: String!
+  key: String
+  description: String
+  yamlConfiguration: String
+  attachedFiles: [String]
+  accountId: String!
+  account: Account
+  scorecardId: String
+  scorecard: Scorecard
+  scoreId: String
+  score: Score
+  versions: ModelDataSourceVersionConnection
+  currentVersionId: String
+  currentVersion: DataSourceVersion
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type ModelDataSourceConnection {
+  items: [DataSource]
+  nextToken: String
+}
+
+type DataSourceVersion {
+  dataSourceId: String!
+  dataSource: DataSource
+  yamlConfiguration: String!
+  isFeatured: Boolean!
+  note: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  parentVersionId: String
+  parentVersion: DataSourceVersion
+  childVersions: ModelDataSourceVersionConnection
+  dataSourcesAsCurrentVersion: ModelDataSourceConnection
+  dataSets: ModelDataSetConnection
+}
+
+type ModelDataSourceVersionConnection {
+  items: [DataSourceVersion]
+  nextToken: String
+}
+
+type DataSet {
+  name: String
+  description: String
+  file: String
+  attachedFiles: [String]
+  isReferenceDataset: Boolean
+  provenance: AWSJSON
+  buildContext: AWSJSON
+  referenceAt: AWSDateTime
+  accountId: String!
+  account: Account
+  scorecardId: String
+  scorecard: Scorecard
+  scoreId: String
+  score: Score
+  scoreVersionId: String
+  scoreVersion: ScoreVersion
+  dataSourceVersionId: String!
+  dataSourceVersion: DataSourceVersion
+  reportBlocks: ModelReportBlockConnection
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type ModelDataSetConnection {
+  items: [DataSet]
+  nextToken: String
+}
+
+type Procedure {
+  name: String!
+  description: String
+  featured: Boolean
+  isTemplate: Boolean
+  parentProcedureId: String
+  parentProcedure: Procedure
+  childProcedures: ModelProcedureConnection
+  code: String
+  attachedFiles: [String]
+  category: String
+  version: String
+  isDefault: Boolean
+  status: String
+  waitingOnMessageId: String
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  accountId: String!
+  account: Account
+  scorecardId: String
+  scorecard: Scorecard
+  scoreId: String
+  score: Score
+  scoreVersionId: String
+  scoreVersion: ScoreVersion
+  chatSessions: ModelChatSessionConnection
+  chatMessages: ModelChatMessageConnection
+  createdByUserId: String
+  createdByUser: User
+}
+
+type ModelProcedureConnection {
+  items: [Procedure]
+  nextToken: String
+}
+
+type ChatSession {
+  accountId: String!
+  account: Account
+  scorecardId: String
+  scorecard: Scorecard
+  scoreId: String
+  score: Score
+  procedureId: String
+  procedure: Procedure
+  name: String
+  category: String
+  status: ChatSessionStatusEnum
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  messages: ModelChatMessageConnection
+}
+
+type ModelChatSessionConnection {
+  items: [ChatSession]
+  nextToken: String
+}
+
+type ChatMessage {
+  accountId: String
+  account: Account
+  createdByUserId: String
+  sessionId: String!
+  session: ChatSession
+  procedureId: String
+  procedure: Procedure
+  role: ChatMessageRoleEnum
+  humanInteraction: ChatMessageHumanInteractionEnum
+  content: String!
+  metadata: AWSJSON
+  messageType: ChatMessageMessageTypeEnum
+  toolName: String
+  toolParameters: AWSJSON
+  toolResponse: AWSJSON
+  parentMessageId: String
+  parentMessage: ChatMessage
+  childMessages: ModelChatMessageConnection
+  sequenceNumber: Int
+  responseTarget: String
+  responseStatus: ChatMessageResponseStatusEnum
+  responseOwner: String
+  responseStartedAt: AWSDateTime
+  responseCompletedAt: AWSDateTime
+  responseError: String
+  createdAt: AWSDateTime!
+}
+
+type ModelChatMessageConnection {
+  items: [ChatMessage]
+  nextToken: String
+}
+
+input CreateAccountInput {
+  name: String!
+  key: String!
+  description: String
+  settings: AWSJSON
+}
+
+input UpdateAccountInput {
+  name: String
+  key: String
+  description: String
+  settings: AWSJSON
+}
+
+input DeleteAccountInput {
+  id: ID!
+}
+
+input ModelAccountFilterInput {
+  name: ModelStringInput
+  key: ModelStringInput
+  description: ModelStringInput
+  settings: ModelStringInput
+}
+
+input CreateUserInput {
+  email: String!
+  displayName: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input UpdateUserInput {
+  email: String
+  displayName: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+input DeleteUserInput {
+  id: ID!
+}
+
+input ModelUserFilterInput {
+  email: ModelStringInput
+  displayName: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateScorecardInput {
+  name: String!
+  key: String!
+  description: String
+  guidelines: String
+  accountId: String!
+  externalId: String
+}
+
+input UpdateScorecardInput {
+  name: String
+  key: String
+  description: String
+  guidelines: String
+  accountId: String
+  externalId: String
+}
+
+input DeleteScorecardInput {
+  id: ID!
+}
+
+input ModelScorecardFilterInput {
+  name: ModelStringInput
+  key: ModelStringInput
+  description: ModelStringInput
+  guidelines: ModelStringInput
+  accountId: ModelStringInput
+  externalId: ModelStringInput
+}
+
+input CreateScorecardSectionInput {
+  name: String!
+  order: Int!
+  scorecardId: String!
+}
+
+input UpdateScorecardSectionInput {
+  name: String
+  order: Int
+  scorecardId: String
+}
+
+input DeleteScorecardSectionInput {
+  id: ID!
+}
+
+input ModelScorecardSectionFilterInput {
+  name: ModelStringInput
+  order: ModelStringInput
+  scorecardId: ModelStringInput
+}
+
+input CreateScoreInput {
+  name: String!
+  key: String
+  description: String
+  order: Int!
+  type: String!
+  targetAgreement: Float
+  accuracy: Float
+  version: String
+  aiProvider: String
+  aiModel: String
+  sectionId: String!
+  scorecardId: String!
+  championVersionId: String
+  externalId: String!
+  isDisabled: Boolean
+}
+
+input UpdateScoreInput {
+  name: String
+  key: String
+  description: String
+  order: Int
+  type: String
+  targetAgreement: Float
+  accuracy: Float
+  version: String
+  aiProvider: String
+  aiModel: String
+  sectionId: String
+  scorecardId: String
+  championVersionId: String
+  externalId: String
+  isDisabled: Boolean
+}
+
+input DeleteScoreInput {
+  id: ID!
+}
+
+input ModelScoreFilterInput {
+  name: ModelStringInput
+  key: ModelStringInput
+  description: ModelStringInput
+  order: ModelStringInput
+  type: ModelStringInput
+  targetAgreement: ModelStringInput
+  accuracy: ModelStringInput
+  version: ModelStringInput
+  aiProvider: ModelStringInput
+  aiModel: ModelStringInput
+  sectionId: ModelStringInput
+  scorecardId: ModelStringInput
+  championVersionId: ModelStringInput
+  externalId: ModelStringInput
+  isDisabled: ModelStringInput
+}
+
+input CreateScoreVersionInput {
+  scoreId: String!
+  configuration: String!
+  guidelines: String
+  isFeatured: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  note: String
+  branch: String
+  metadata: AWSJSON
+  createdByUserId: String
+  parentVersionId: String
+}
+
+input UpdateScoreVersionInput {
+  scoreId: String
+  configuration: String
+  guidelines: String
+  isFeatured: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+  note: String
+  branch: String
+  metadata: AWSJSON
+  createdByUserId: String
+  parentVersionId: String
+}
+
+input DeleteScoreVersionInput {
+  id: ID!
+}
+
+input ModelScoreVersionFilterInput {
+  scoreId: ModelStringInput
+  configuration: ModelStringInput
+  guidelines: ModelStringInput
+  isFeatured: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+  note: ModelStringInput
+  branch: ModelStringInput
+  metadata: ModelStringInput
+  createdByUserId: ModelStringInput
+  parentVersionId: ModelStringInput
+}
+
+input CreateEvaluationInput {
+  type: String!
+  parameters: AWSJSON
+  metrics: AWSJSON
+  metricsExplanation: String
+  metadata: AWSJSON
+  inferences: Int
+  accuracy: Float!
+  cost: Float
+  costDetails: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  status: String!
+  startedAt: AWSDateTime
+  elapsedSeconds: Int
+  estimatedRemainingSeconds: Int
+  totalItems: Int
+  processedItems: Int
+  errorMessage: String
+  errorDetails: AWSJSON
+  accountId: String!
+  scorecardId: String
+  scoreId: String
+  scoreVersionId: String
+  confusionMatrix: AWSJSON
+  scoreGoal: String
+  datasetClassDistribution: AWSJSON
+  isDatasetClassDistributionBalanced: Boolean
+  predictedClassDistribution: AWSJSON
+  isPredictedClassDistributionBalanced: Boolean
+  taskId: String
+  universalCode: String
+  createdByUserId: String
+}
+
+input UpdateEvaluationInput {
+  type: String
+  parameters: AWSJSON
+  metrics: AWSJSON
+  metricsExplanation: String
+  metadata: AWSJSON
+  inferences: Int
+  accuracy: Float
+  cost: Float
+  costDetails: AWSJSON
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+  status: String
+  startedAt: AWSDateTime
+  elapsedSeconds: Int
+  estimatedRemainingSeconds: Int
+  totalItems: Int
+  processedItems: Int
+  errorMessage: String
+  errorDetails: AWSJSON
+  accountId: String
+  scorecardId: String
+  scoreId: String
+  scoreVersionId: String
+  confusionMatrix: AWSJSON
+  scoreGoal: String
+  datasetClassDistribution: AWSJSON
+  isDatasetClassDistributionBalanced: Boolean
+  predictedClassDistribution: AWSJSON
+  isPredictedClassDistributionBalanced: Boolean
+  taskId: String
+  universalCode: String
+  createdByUserId: String
+}
+
+input DeleteEvaluationInput {
+  id: ID!
+}
+
+input ModelEvaluationFilterInput {
+  type: ModelStringInput
+  parameters: ModelStringInput
+  metrics: ModelStringInput
+  metricsExplanation: ModelStringInput
+  metadata: ModelStringInput
+  inferences: ModelStringInput
+  accuracy: ModelStringInput
+  cost: ModelStringInput
+  costDetails: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+  status: ModelStringInput
+  startedAt: ModelStringInput
+  elapsedSeconds: ModelStringInput
+  estimatedRemainingSeconds: ModelStringInput
+  totalItems: ModelStringInput
+  processedItems: ModelStringInput
+  errorMessage: ModelStringInput
+  errorDetails: ModelStringInput
+  accountId: ModelStringInput
+  scorecardId: ModelStringInput
+  scoreId: ModelStringInput
+  scoreVersionId: ModelStringInput
+  confusionMatrix: ModelStringInput
+  scoreGoal: ModelStringInput
+  datasetClassDistribution: ModelStringInput
+  isDatasetClassDistributionBalanced: ModelStringInput
+  predictedClassDistribution: ModelStringInput
+  isPredictedClassDistributionBalanced: ModelStringInput
+  taskId: ModelStringInput
+  universalCode: ModelStringInput
+  createdByUserId: ModelStringInput
+}
+
+input CreateItemInput {
+  externalId: String
+  description: String
+  accountId: String!
+  evaluationId: String
+  scoreId: String
+  updatedAt: AWSDateTime
+  createdAt: AWSDateTime
+  isEvaluation: Boolean!
+  createdByType: String
+  identifiers: AWSJSON
+  attachedFiles: [String]
+  text: String
+  metadata: AWSJSON
+}
+
+input UpdateItemInput {
+  externalId: String
+  description: String
+  accountId: String
+  evaluationId: String
+  scoreId: String
+  updatedAt: AWSDateTime
+  createdAt: AWSDateTime
+  isEvaluation: Boolean
+  createdByType: String
+  identifiers: AWSJSON
+  attachedFiles: [String]
+  text: String
+  metadata: AWSJSON
+}
+
+input DeleteItemInput {
+  id: ID!
+}
+
+input ModelItemFilterInput {
+  externalId: ModelStringInput
+  description: ModelStringInput
+  accountId: ModelStringInput
+  evaluationId: ModelStringInput
+  scoreId: ModelStringInput
+  updatedAt: ModelStringInput
+  createdAt: ModelStringInput
+  isEvaluation: ModelStringInput
+  createdByType: ModelStringInput
+  identifiers: ModelStringInput
+  attachedFiles: ModelStringInput
+  text: ModelStringInput
+  metadata: ModelStringInput
+}
+
+input CreateIdentifierInput {
+  itemId: String!
+  name: String!
+  value: String!
+  url: String
+  position: Int!
+  accountId: String!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input UpdateIdentifierInput {
+  itemId: String
+  name: String
+  value: String
+  url: String
+  position: Int
+  accountId: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+input DeleteIdentifierInput {
+  itemId: ID!
+  name: ID!
+}
+
+input ModelIdentifierFilterInput {
+  itemId: ModelStringInput
+  name: ModelStringInput
+  value: ModelStringInput
+  url: ModelStringInput
+  position: ModelStringInput
+  accountId: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateScoringJobInput {
+  status: String!
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  errorMessage: String
+  errorDetails: AWSJSON
+  metadata: AWSJSON
+  itemId: String!
+  accountId: String!
+  scorecardId: String!
+  evaluationId: String
+  scoreId: String
+  updatedAt: AWSDateTime
+  createdAt: AWSDateTime
+}
+
+input UpdateScoringJobInput {
+  status: String
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  errorMessage: String
+  errorDetails: AWSJSON
+  metadata: AWSJSON
+  itemId: String
+  accountId: String
+  scorecardId: String
+  evaluationId: String
+  scoreId: String
+  updatedAt: AWSDateTime
+  createdAt: AWSDateTime
+}
+
+input DeleteScoringJobInput {
+  id: ID!
+}
+
+input ModelScoringJobFilterInput {
+  status: ModelStringInput
+  startedAt: ModelStringInput
+  completedAt: ModelStringInput
+  errorMessage: ModelStringInput
+  errorDetails: ModelStringInput
+  metadata: ModelStringInput
+  itemId: ModelStringInput
+  accountId: ModelStringInput
+  scorecardId: ModelStringInput
+  evaluationId: ModelStringInput
+  scoreId: ModelStringInput
+  updatedAt: ModelStringInput
+  createdAt: ModelStringInput
+}
+
+input CreateScoreResultInput {
+  value: String!
+  explanation: String
+  confidence: Float
+  startTimeSeconds: Float
+  endTimeSeconds: Float
+  metadata: AWSJSON
+  trace: AWSJSON
+  correct: Boolean
+  cost: AWSJSON
+  attachments: [String]
+  type: String
+  status: String
+  itemId: String!
+  accountId: String!
+  scoringJobId: String
+  evaluationId: String
+  scorecardId: String!
+  scoreVersionId: String
+  scoreId: String
+  code: String
+  updatedAt: AWSDateTime
+  createdAt: AWSDateTime
+  feedbackItemId: String
+}
+
+input UpdateScoreResultInput {
+  value: String
+  explanation: String
+  confidence: Float
+  startTimeSeconds: Float
+  endTimeSeconds: Float
+  metadata: AWSJSON
+  trace: AWSJSON
+  correct: Boolean
+  cost: AWSJSON
+  attachments: [String]
+  type: String
+  status: String
+  itemId: String
+  accountId: String
+  scoringJobId: String
+  evaluationId: String
+  scorecardId: String
+  scoreVersionId: String
+  scoreId: String
+  code: String
+  updatedAt: AWSDateTime
+  createdAt: AWSDateTime
+  feedbackItemId: String
+}
+
+input DeleteScoreResultInput {
+  id: ID!
+}
+
+input ModelScoreResultFilterInput {
+  value: ModelStringInput
+  explanation: ModelStringInput
+  confidence: ModelStringInput
+  startTimeSeconds: ModelStringInput
+  endTimeSeconds: ModelStringInput
+  metadata: ModelStringInput
+  trace: ModelStringInput
+  correct: ModelStringInput
+  cost: ModelStringInput
+  attachments: ModelStringInput
+  type: ModelStringInput
+  status: ModelStringInput
+  itemId: ModelStringInput
+  accountId: ModelStringInput
+  scoringJobId: ModelStringInput
+  evaluationId: ModelStringInput
+  scorecardId: ModelStringInput
+  scoreVersionId: ModelStringInput
+  scoreId: ModelStringInput
+  code: ModelStringInput
+  updatedAt: ModelStringInput
+  createdAt: ModelStringInput
+  feedbackItemId: ModelStringInput
+}
+
+input CreateTaskInput {
+  accountId: String!
+  type: String!
+  status: String!
+  target: String!
+  command: String!
+  description: String
+  dispatchStatus: String
+  metadata: AWSJSON
+  createdAt: AWSDateTime
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  estimatedCompletionAt: AWSDateTime
+  errorMessage: String
+  errorDetails: AWSJSON
+  stdout: String
+  stderr: String
+  output: String
+  error: String
+  attachedFiles: [String]
+  currentStageId: String
+  scorecardId: String
+  scoreId: String
+  celeryTaskId: String
+  workerNodeId: String
+  updatedAt: AWSDateTime
+}
+
+input UpdateTaskInput {
+  accountId: String
+  type: String
+  status: String
+  target: String
+  command: String
+  description: String
+  dispatchStatus: String
+  metadata: AWSJSON
+  createdAt: AWSDateTime
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  estimatedCompletionAt: AWSDateTime
+  errorMessage: String
+  errorDetails: AWSJSON
+  stdout: String
+  stderr: String
+  output: String
+  error: String
+  attachedFiles: [String]
+  currentStageId: String
+  scorecardId: String
+  scoreId: String
+  celeryTaskId: String
+  workerNodeId: String
+  updatedAt: AWSDateTime
+}
+
+input DeleteTaskInput {
+  id: ID!
+}
+
+input ModelTaskFilterInput {
+  accountId: ModelStringInput
+  type: ModelStringInput
+  status: ModelStringInput
+  target: ModelStringInput
+  command: ModelStringInput
+  description: ModelStringInput
+  dispatchStatus: ModelStringInput
+  metadata: ModelStringInput
+  createdAt: ModelStringInput
+  startedAt: ModelStringInput
+  completedAt: ModelStringInput
+  estimatedCompletionAt: ModelStringInput
+  errorMessage: ModelStringInput
+  errorDetails: ModelStringInput
+  stdout: ModelStringInput
+  stderr: ModelStringInput
+  output: ModelStringInput
+  error: ModelStringInput
+  attachedFiles: ModelStringInput
+  currentStageId: ModelStringInput
+  scorecardId: ModelStringInput
+  scoreId: ModelStringInput
+  celeryTaskId: ModelStringInput
+  workerNodeId: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateTaskStageInput {
+  taskId: String!
+  name: String!
+  order: Int!
+  status: String!
+  statusMessage: String
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  estimatedCompletionAt: AWSDateTime
+  processedItems: Int
+  totalItems: Int
+}
+
+input UpdateTaskStageInput {
+  taskId: String
+  name: String
+  order: Int
+  status: String
+  statusMessage: String
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  estimatedCompletionAt: AWSDateTime
+  processedItems: Int
+  totalItems: Int
+}
+
+input DeleteTaskStageInput {
+  id: ID!
+}
+
+input ModelTaskStageFilterInput {
+  taskId: ModelStringInput
+  name: ModelStringInput
+  order: ModelStringInput
+  status: ModelStringInput
+  statusMessage: ModelStringInput
+  startedAt: ModelStringInput
+  completedAt: ModelStringInput
+  estimatedCompletionAt: ModelStringInput
+  processedItems: ModelStringInput
+  totalItems: ModelStringInput
+}
+
+input CreateShareLinkInput {
+  token: String!
+  resourceType: String!
+  resourceId: String!
+  createdBy: String!
+  accountId: String!
+  expiresAt: AWSDateTime
+  viewOptions: AWSJSON
+  lastAccessedAt: AWSDateTime
+  accessCount: Int
+  isRevoked: Boolean
+}
+
+input UpdateShareLinkInput {
+  token: String
+  resourceType: String
+  resourceId: String
+  createdBy: String
+  accountId: String
+  expiresAt: AWSDateTime
+  viewOptions: AWSJSON
+  lastAccessedAt: AWSDateTime
+  accessCount: Int
+  isRevoked: Boolean
+}
+
+input DeleteShareLinkInput {
+  id: ID!
+}
+
+input ModelShareLinkFilterInput {
+  token: ModelStringInput
+  resourceType: ModelStringInput
+  resourceId: ModelStringInput
+  createdBy: ModelStringInput
+  accountId: ModelStringInput
+  expiresAt: ModelStringInput
+  viewOptions: ModelStringInput
+  lastAccessedAt: ModelStringInput
+  accessCount: ModelStringInput
+  isRevoked: ModelStringInput
+}
+
+input CreateReportConfigurationInput {
+  name: String!
+  description: String
+  accountId: String!
+  configuration: String!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input UpdateReportConfigurationInput {
+  name: String
+  description: String
+  accountId: String
+  configuration: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+input DeleteReportConfigurationInput {
+  id: ID!
+}
+
+input ModelReportConfigurationFilterInput {
+  name: ModelStringInput
+  description: ModelStringInput
+  accountId: ModelStringInput
+  configuration: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateReportInput {
+  name: String
+  createdAt: AWSDateTime!
+  parameters: AWSJSON
+  output: String
+  metadata: AWSJSON
+  accountId: String!
+  reportConfigurationId: String
+  updatedAt: AWSDateTime!
+  taskId: String
+  createdByUserId: String
+}
+
+input UpdateReportInput {
+  name: String
+  createdAt: AWSDateTime
+  parameters: AWSJSON
+  output: String
+  metadata: AWSJSON
+  accountId: String
+  reportConfigurationId: String
+  updatedAt: AWSDateTime
+  taskId: String
+  createdByUserId: String
+}
+
+input DeleteReportInput {
+  id: ID!
+}
+
+input ModelReportFilterInput {
+  name: ModelStringInput
+  createdAt: ModelStringInput
+  parameters: ModelStringInput
+  output: ModelStringInput
+  metadata: ModelStringInput
+  accountId: ModelStringInput
+  reportConfigurationId: ModelStringInput
+  updatedAt: ModelStringInput
+  taskId: ModelStringInput
+  createdByUserId: ModelStringInput
+}
+
+input CreateReportBlockInput {
+  reportId: String!
+  name: String
+  position: Int!
+  type: String!
+  output: String
+  log: String
+  warning: String
+  error: String
+  attachedFiles: [String]
+  dataSetId: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input UpdateReportBlockInput {
+  reportId: String
+  name: String
+  position: Int
+  type: String
+  output: String
+  log: String
+  warning: String
+  error: String
+  attachedFiles: [String]
+  dataSetId: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+input DeleteReportBlockInput {
+  id: ID!
+}
+
+input ModelReportBlockFilterInput {
+  reportId: ModelStringInput
+  name: ModelStringInput
+  position: ModelStringInput
+  type: ModelStringInput
+  output: ModelStringInput
+  log: ModelStringInput
+  warning: ModelStringInput
+  error: ModelStringInput
+  attachedFiles: ModelStringInput
+  dataSetId: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateFeedbackItemInput {
+  accountId: String!
+  scorecardId: String!
+  cacheKey: String!
+  scoreId: String!
+  itemId: String!
+  initialAnswerValue: String
+  finalAnswerValue: String
+  initialCommentValue: String
+  finalCommentValue: String
+  editCommentValue: String
+  editedAt: AWSDateTime
+  editorName: String
+  isAgreement: Boolean
+  isInvalid: Boolean
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input UpdateFeedbackItemInput {
+  accountId: String
+  scorecardId: String
+  cacheKey: String
+  scoreId: String
+  itemId: String
+  initialAnswerValue: String
+  finalAnswerValue: String
+  initialCommentValue: String
+  finalCommentValue: String
+  editCommentValue: String
+  editedAt: AWSDateTime
+  editorName: String
+  isAgreement: Boolean
+  isInvalid: Boolean
+  metadata: AWSJSON
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+input DeleteFeedbackItemInput {
+  id: ID!
+}
+
+input ModelFeedbackItemFilterInput {
+  accountId: ModelStringInput
+  scorecardId: ModelStringInput
+  cacheKey: ModelStringInput
+  scoreId: ModelStringInput
+  itemId: ModelStringInput
+  initialAnswerValue: ModelStringInput
+  finalAnswerValue: ModelStringInput
+  initialCommentValue: ModelStringInput
+  finalCommentValue: ModelStringInput
+  editCommentValue: ModelStringInput
+  editedAt: ModelStringInput
+  editorName: ModelStringInput
+  isAgreement: ModelStringInput
+  isInvalid: ModelStringInput
+  metadata: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateScorecardExampleItemInput {
+  scorecardId: ID!
+  itemId: ID!
+  addedAt: AWSDateTime
+  addedBy: String
+  notes: String
+}
+
+input UpdateScorecardExampleItemInput {
+  scorecardId: ID
+  itemId: ID
+  addedAt: AWSDateTime
+  addedBy: String
+  notes: String
+}
+
+input DeleteScorecardExampleItemInput {
+  id: ID!
+}
+
+input ModelScorecardExampleItemFilterInput {
+  scorecardId: ModelStringInput
+  itemId: ModelStringInput
+  addedAt: ModelStringInput
+  addedBy: ModelStringInput
+  notes: ModelStringInput
+}
+
+input CreateAggregatedMetricsInput {
+  accountId: String!
+  compositeKey: String!
+  scorecardId: String
+  scoreId: String
+  recordType: String!
+  timeRangeStart: AWSDateTime!
+  timeRangeEnd: AWSDateTime!
+  numberOfMinutes: Int!
+  count: Int!
+  cost: Int
+  decisionCount: Int
+  externalAiApiCount: Int
+  cachedAiApiCount: Int
+  errorCount: Int
+  metadata: AWSJSON
+  complete: Boolean!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input UpdateAggregatedMetricsInput {
+  accountId: String
+  compositeKey: String
+  scorecardId: String
+  scoreId: String
+  recordType: String
+  timeRangeStart: AWSDateTime
+  timeRangeEnd: AWSDateTime
+  numberOfMinutes: Int
+  count: Int
+  cost: Int
+  decisionCount: Int
+  externalAiApiCount: Int
+  cachedAiApiCount: Int
+  errorCount: Int
+  metadata: AWSJSON
+  complete: Boolean
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+input DeleteAggregatedMetricsInput {
+  accountId: ID!
+  compositeKey: ID!
+}
+
+input ModelAggregatedMetricsFilterInput {
+  accountId: ModelStringInput
+  compositeKey: ModelStringInput
+  scorecardId: ModelStringInput
+  scoreId: ModelStringInput
+  recordType: ModelStringInput
+  timeRangeStart: ModelStringInput
+  timeRangeEnd: ModelStringInput
+  numberOfMinutes: ModelStringInput
+  count: ModelStringInput
+  cost: ModelStringInput
+  decisionCount: ModelStringInput
+  externalAiApiCount: ModelStringInput
+  cachedAiApiCount: ModelStringInput
+  errorCount: ModelStringInput
+  metadata: ModelStringInput
+  complete: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateDataSourceInput {
+  name: String!
+  key: String
+  description: String
+  yamlConfiguration: String
+  attachedFiles: [String]
+  accountId: String!
+  scorecardId: String
+  scoreId: String
+  currentVersionId: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input UpdateDataSourceInput {
+  name: String
+  key: String
+  description: String
+  yamlConfiguration: String
+  attachedFiles: [String]
+  accountId: String
+  scorecardId: String
+  scoreId: String
+  currentVersionId: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+input DeleteDataSourceInput {
+  id: ID!
+}
+
+input ModelDataSourceFilterInput {
+  name: ModelStringInput
+  key: ModelStringInput
+  description: ModelStringInput
+  yamlConfiguration: ModelStringInput
+  attachedFiles: ModelStringInput
+  accountId: ModelStringInput
+  scorecardId: ModelStringInput
+  scoreId: ModelStringInput
+  currentVersionId: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateDataSourceVersionInput {
+  dataSourceId: String!
+  yamlConfiguration: String!
+  isFeatured: Boolean!
+  note: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  parentVersionId: String
+}
+
+input UpdateDataSourceVersionInput {
+  dataSourceId: String
+  yamlConfiguration: String
+  isFeatured: Boolean
+  note: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+  parentVersionId: String
+}
+
+input DeleteDataSourceVersionInput {
+  id: ID!
+}
+
+input ModelDataSourceVersionFilterInput {
+  dataSourceId: ModelStringInput
+  yamlConfiguration: ModelStringInput
+  isFeatured: ModelStringInput
+  note: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+  parentVersionId: ModelStringInput
+}
+
+input CreateDataSetInput {
+  name: String
+  description: String
+  file: String
+  attachedFiles: [String]
+  isReferenceDataset: Boolean
+  provenance: AWSJSON
+  buildContext: AWSJSON
+  referenceAt: AWSDateTime
+  accountId: String!
+  scorecardId: String
+  scoreId: String
+  scoreVersionId: String
+  dataSourceVersionId: String!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input UpdateDataSetInput {
+  name: String
+  description: String
+  file: String
+  attachedFiles: [String]
+  isReferenceDataset: Boolean
+  provenance: AWSJSON
+  buildContext: AWSJSON
+  referenceAt: AWSDateTime
+  accountId: String
+  scorecardId: String
+  scoreId: String
+  scoreVersionId: String
+  dataSourceVersionId: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+input DeleteDataSetInput {
+  id: ID!
+}
+
+input ModelDataSetFilterInput {
+  name: ModelStringInput
+  description: ModelStringInput
+  file: ModelStringInput
+  attachedFiles: ModelStringInput
+  isReferenceDataset: ModelStringInput
+  provenance: ModelStringInput
+  buildContext: ModelStringInput
+  referenceAt: ModelStringInput
+  accountId: ModelStringInput
+  scorecardId: ModelStringInput
+  scoreId: ModelStringInput
+  scoreVersionId: ModelStringInput
+  dataSourceVersionId: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateProcedureInput {
+  name: String!
+  description: String
+  featured: Boolean
+  isTemplate: Boolean
+  parentProcedureId: String
+  code: String
+  attachedFiles: [String]
+  category: String
+  version: String
+  isDefault: Boolean
+  status: String
+  waitingOnMessageId: String
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  accountId: String!
+  scorecardId: String
+  scoreId: String
+  scoreVersionId: String
+  createdByUserId: String
+}
+
+input UpdateProcedureInput {
+  name: String
+  description: String
+  featured: Boolean
+  isTemplate: Boolean
+  parentProcedureId: String
+  code: String
+  attachedFiles: [String]
+  category: String
+  version: String
+  isDefault: Boolean
+  status: String
+  waitingOnMessageId: String
+  metadata: AWSJSON
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+  accountId: String
+  scorecardId: String
+  scoreId: String
+  scoreVersionId: String
+  createdByUserId: String
+}
+
+input DeleteProcedureInput {
+  id: ID!
+}
+
+input ModelProcedureFilterInput {
+  name: ModelStringInput
+  description: ModelStringInput
+  featured: ModelStringInput
+  isTemplate: ModelStringInput
+  parentProcedureId: ModelStringInput
+  code: ModelStringInput
+  attachedFiles: ModelStringInput
+  category: ModelStringInput
+  version: ModelStringInput
+  isDefault: ModelStringInput
+  status: ModelStringInput
+  waitingOnMessageId: ModelStringInput
+  metadata: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+  accountId: ModelStringInput
+  scorecardId: ModelStringInput
+  scoreId: ModelStringInput
+  scoreVersionId: ModelStringInput
+  createdByUserId: ModelStringInput
+}
+
+input CreateChatSessionInput {
+  accountId: String!
+  scorecardId: String
+  scoreId: String
+  procedureId: String
+  name: String
+  category: String
+  status: StatusEnum
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input UpdateChatSessionInput {
+  accountId: String
+  scorecardId: String
+  scoreId: String
+  procedureId: String
+  name: String
+  category: String
+  status: StatusEnum
+  metadata: AWSJSON
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+input DeleteChatSessionInput {
+  id: ID!
+}
+
+input ModelChatSessionFilterInput {
+  accountId: ModelStringInput
+  scorecardId: ModelStringInput
+  scoreId: ModelStringInput
+  procedureId: ModelStringInput
+  name: ModelStringInput
+  category: ModelStringInput
+  status: ModelStringInput
+  metadata: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateChatMessageInput {
+  accountId: String
+  createdByUserId: String
+  sessionId: String!
+  procedureId: String
+  role: RoleEnum
+  humanInteraction: HumanInteractionEnum
+  content: String!
+  metadata: AWSJSON
+  messageType: MessageTypeEnum
+  toolName: String
+  toolParameters: AWSJSON
+  toolResponse: AWSJSON
+  parentMessageId: String
+  sequenceNumber: Int
+  responseTarget: String
+  responseStatus: ResponseStatusEnum
+  responseOwner: String
+  responseStartedAt: AWSDateTime
+  responseCompletedAt: AWSDateTime
+  responseError: String
+  createdAt: AWSDateTime!
+}
+
+input UpdateChatMessageInput {
+  accountId: String
+  createdByUserId: String
+  sessionId: String
+  procedureId: String
+  role: RoleEnum
+  humanInteraction: HumanInteractionEnum
+  content: String
+  metadata: AWSJSON
+  messageType: MessageTypeEnum
+  toolName: String
+  toolParameters: AWSJSON
+  toolResponse: AWSJSON
+  parentMessageId: String
+  sequenceNumber: Int
+  responseTarget: String
+  responseStatus: ResponseStatusEnum
+  responseOwner: String
+  responseStartedAt: AWSDateTime
+  responseCompletedAt: AWSDateTime
+  responseError: String
+  createdAt: AWSDateTime
+}
+
+input DeleteChatMessageInput {
+  id: ID!
+}
+
+input ModelChatMessageFilterInput {
+  accountId: ModelStringInput
+  createdByUserId: ModelStringInput
+  sessionId: ModelStringInput
+  procedureId: ModelStringInput
+  role: ModelStringInput
+  humanInteraction: ModelStringInput
+  content: ModelStringInput
+  metadata: ModelStringInput
+  messageType: ModelStringInput
+  toolName: ModelStringInput
+  toolParameters: ModelStringInput
+  toolResponse: ModelStringInput
+  parentMessageId: ModelStringInput
+  sequenceNumber: ModelStringInput
+  responseTarget: ModelStringInput
+  responseStatus: ModelStringInput
+  responseOwner: ModelStringInput
+  responseStartedAt: ModelStringInput
+  responseCompletedAt: ModelStringInput
+  responseError: ModelStringInput
+  createdAt: ModelStringInput
+}
+
+type Query {
+  getAccount(id: ID!): Account
+  listAccounts(filter: ModelAccountFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelAccountConnection
+  listAccountByKey(key: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelAccountConnection
+  getUser(id: ID!): User
+  listUsers(filter: ModelUserFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelUserConnection
+  getScorecard(id: ID!): Scorecard
+  listScorecards(filter: ModelScorecardFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScorecardConnection
+  listScorecardByAccountId(accountId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScorecardConnection
+  listScorecardByKey(key: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScorecardConnection
+  listScorecardByExternalId(externalId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScorecardConnection
+  listScorecardByName(name: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScorecardConnection
+  listScorecardByAccountIdAndExternalId(accountId: String!, externalId: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScorecardConnection
+  getScorecardSection(id: ID!): ScorecardSection
+  listScorecardSections(filter: ModelScorecardSectionFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScorecardSectionConnection
+  listScorecardSectionByScorecardId(scorecardId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScorecardSectionConnection
+  getScore(id: ID!): Score
+  listScores(filter: ModelScoreFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreConnection
+  listScoreBySectionId(sectionId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreConnection
+  listScoreByExternalId(externalId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreConnection
+  listScoreByKey(key: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreConnection
+  listScoreByName(name: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreConnection
+  listScoreByScorecardIdAndExternalId(scorecardId: String!, externalId: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreConnection
+  getScoreVersion(id: ID!): ScoreVersion
+  listScoreVersions(filter: ModelScoreVersionFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreVersionConnection
+  listScoreVersionByScoreIdCreatedAt(scoreId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreVersionConnection
+  listScoreVersionByScoreIdAndIsFeaturedAndCreatedAt(scoreId: String!, isFeaturedCreatedAt: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreVersionConnection
+  listScoreVersionByCreatedByUserId(createdByUserId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreVersionConnection
+  getEvaluation(id: ID!): Evaluation
+  listEvaluations(filter: ModelEvaluationFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelEvaluationConnection
+  listEvaluationByAccountIdUpdatedAt(accountId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelEvaluationConnection
+  listEvaluationByScorecardIdUpdatedAt(scorecardId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelEvaluationConnection
+  listEvaluationByScoreIdUpdatedAt(scoreId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelEvaluationConnection
+  listEvaluationByScoreVersionIdCreatedAt(scoreVersionId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelEvaluationConnection
+  getItem(id: ID!): Item
+  listItems(filter: ModelItemFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelItemConnection
+  listItemByAccountIdUpdatedAt(accountId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelItemConnection
+  listItemByAccountIdCreatedAt(accountId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelItemConnection
+  listItemByScoreIdUpdatedAt(scoreId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelItemConnection
+  listItemByScoreIdCreatedAt(scoreId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelItemConnection
+  listItemByAccountAndExternalId(accountId: String!, externalId: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelItemConnection
+  getIdentifier(itemId: ID!, name: ID!): Identifier
+  listIdentifiers(filter: ModelIdentifierFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelIdentifierConnection
+  listIdentifierByAccountAndValue(accountId: String!, value: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelIdentifierConnection
+  listIdentifierByAccountNameAndValue(accountId: String!, nameValue: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelIdentifierConnection
+  listIdentifierByItemAndPosition(itemId: String!, position: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelIdentifierConnection
+  listIdentifierByItemAndName(itemId: String!, name: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelIdentifierConnection
+  getScoringJob(id: ID!): ScoringJob
+  listScoringJobs(filter: ModelScoringJobFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoringJobConnection
+  listScoringJobByAccountId(accountId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoringJobConnection
+  listScoringJobByAccountAndCreatedAt(accountId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoringJobConnection
+  listScoringJobByItemId(itemId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoringJobConnection
+  listScoringJobByItemScore(itemId: String!, scoreId: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoringJobConnection
+  listScoringJobByScoreId(scoreId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoringJobConnection
+  getScoreResult(id: ID!): ScoreResult
+  listScoreResults(filter: ModelScoreResultFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  listScoreResultByAccountIdUpdatedAt(accountId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  listScoreResultByItemId(itemId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  listScoreResultByScoringJobId(scoringJobId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  listScoreResultByScorecardIdUpdatedAt(scorecardId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  listScoreResultByScorecardItemAndCreatedAt(scorecardId: String!, itemIdCreatedAt: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  listScoreResultByEvaluationId(evaluationId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  listScoreResultByScoreVersionId(scoreVersionId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  listScoreResultByScoreId(scoreId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  listScoreResultByScorecardScoreItem(scorecardId: String!, scoreIdItemId: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  listScoreResultByItemScorecardScore(itemId: String!, scorecardIdScoreId: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  listScoreResultByTypeStatusUpdated(type: String!, statusUpdatedAt: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt(itemId: String!, typeScoreIdUpdatedAt: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScoreResultConnection
+  getTask(id: ID!): Task
+  listTasks(filter: ModelTaskFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelTaskConnection
+  listTaskByAccountIdUpdatedAt(accountId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelTaskConnection
+  listTaskByScorecardIdUpdatedAt(scorecardId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelTaskConnection
+  listTaskByScoreId(scoreId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelTaskConnection
+  getTaskStage(id: ID!): TaskStage
+  listTaskStages(filter: ModelTaskStageFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelTaskStageConnection
+  listTaskStageByTaskId(taskId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelTaskStageConnection
+  getShareLink(id: ID!): ShareLink
+  listShareLinks(filter: ModelShareLinkFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelShareLinkConnection
+  listShareLinkByToken(token: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelShareLinkConnection
+  listShareLinkByAccountId(accountId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelShareLinkConnection
+  listShareLinkByResourceId(resourceId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelShareLinkConnection
+  getReportConfiguration(id: ID!): ReportConfiguration
+  listReportConfigurations(filter: ModelReportConfigurationFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelReportConfigurationConnection
+  listReportConfigurationByAccountIdUpdatedAt(accountId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelReportConfigurationConnection
+  listReportConfigurationByAccountIdName(accountId: String!, name: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelReportConfigurationConnection
+  getReport(id: ID!): Report
+  listReports(filter: ModelReportFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelReportConnection
+  listReportByAccountIdUpdatedAt(accountId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelReportConnection
+  listReportByReportConfigurationIdCreatedAt(reportConfigurationId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelReportConnection
+  listReportByTaskId(taskId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelReportConnection
+  listReportByCreatedByUserId(createdByUserId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelReportConnection
+  getReportBlock(id: ID!): ReportBlock
+  listReportBlocks(filter: ModelReportBlockFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelReportBlockConnection
+  listReportBlockByReportAndName(reportId: String!, name: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelReportBlockConnection
+  listReportBlockByReportAndPosition(reportId: String!, position: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelReportBlockConnection
+  listReportBlockByDataSetAndPosition(dataSetId: String!, position: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelReportBlockConnection
+  getFeedbackItem(id: ID!): FeedbackItem
+  listFeedbackItems(filter: ModelFeedbackItemFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelFeedbackItemConnection
+  listFeedbackItemByAccountIdUpdatedAt(accountId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelFeedbackItemConnection
+  listFeedbackItemByAccountIdEditedAt(accountId: String!, editedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelFeedbackItemConnection
+  listFeedbackItemByAccountScorecardScoreUpdatedAt(accountId: String!, scorecardIdScoreIdUpdatedAt: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelFeedbackItemConnection
+  listFeedbackItemByAccountScorecardScoreEditedAt(accountId: String!, scorecardIdScoreIdEditedAt: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelFeedbackItemConnection
+  listFeedbackItemByCacheKey(cacheKey: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelFeedbackItemConnection
+  listFeedbackItemByItemId(itemId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelFeedbackItemConnection
+  getScorecardExampleItem(id: ID!): ScorecardExampleItem
+  listScorecardExampleItems(filter: ModelScorecardExampleItemFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScorecardExampleItemConnection
+  listScorecardExampleItemByScorecardId(scorecardId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScorecardExampleItemConnection
+  listScorecardExampleItemByItemId(itemId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScorecardExampleItemConnection
+  listScorecardExampleItemByScorecardIdAddedAt(scorecardId: String!, addedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelScorecardExampleItemConnection
+  getAggregatedMetrics(accountId: ID!, compositeKey: ID!): AggregatedMetrics
+  listAggregatedMetrics(filter: ModelAggregatedMetricsFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelAggregatedMetricsConnection
+  listAggregatedMetricsByAccountTimeRangeRecord(accountId: String!, timeRangeStartRecordType: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelAggregatedMetricsConnection
+  listAggregatedMetricsByScorecardTimeRangeRecord(scorecardId: String!, timeRangeStartRecordType: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelAggregatedMetricsConnection
+  listAggregatedMetricsByScoreTimeRangeRecord(scoreId: String!, timeRangeStartRecordType: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelAggregatedMetricsConnection
+  listAggregatedMetricsByAccountRecordType(accountId: String!, recordTypeTimeRangeStart: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelAggregatedMetricsConnection
+  getDataSource(id: ID!): DataSource
+  listDataSources(filter: ModelDataSourceFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSourceConnection
+  listDataSourceByAccountIdUpdatedAt(accountId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSourceConnection
+  listDataSourceByAccountIdName(accountId: String!, name: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSourceConnection
+  listDataSourceByAccountIdKey(accountId: String!, key: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSourceConnection
+  listDataSourceByScorecardIdUpdatedAt(scorecardId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSourceConnection
+  listDataSourceByScoreIdUpdatedAt(scoreId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSourceConnection
+  getDataSourceVersion(id: ID!): DataSourceVersion
+  listDataSourceVersions(filter: ModelDataSourceVersionFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSourceVersionConnection
+  listDataSourceVersionByDataSourceIdCreatedAt(dataSourceId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSourceVersionConnection
+  getDataSet(id: ID!): DataSet
+  listDataSets(filter: ModelDataSetFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSetConnection
+  listDataSetByAccountIdCreatedAt(accountId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSetConnection
+  listDataSetByScorecardIdUpdatedAt(scorecardId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSetConnection
+  listDataSetByScorecardIdCreatedAt(scorecardId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSetConnection
+  listDataSetByScoreIdUpdatedAt(scoreId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSetConnection
+  listDataSetByScoreIdCreatedAt(scoreId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSetConnection
+  listDataSetByScoreVersionIdUpdatedAt(scoreVersionId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSetConnection
+  listDataSetByScoreVersionIdCreatedAt(scoreVersionId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSetConnection
+  listDataSetByDataSourceVersionIdUpdatedAt(dataSourceVersionId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSetConnection
+  listDataSetByDataSourceVersionIdCreatedAt(dataSourceVersionId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelDataSetConnection
+  getProcedure(id: ID!): Procedure
+  listProcedures(filter: ModelProcedureFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelProcedureConnection
+  listProcedureByAccountIdUpdatedAt(accountId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelProcedureConnection
+  listProcedureByAccountIdCreatedAt(accountId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelProcedureConnection
+  listProcedureByScorecardIdUpdatedAt(scorecardId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelProcedureConnection
+  listProcedureByScoreIdUpdatedAt(scoreId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelProcedureConnection
+  listProcedureByScoreVersionIdUpdatedAt(scoreVersionId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelProcedureConnection
+  listProcedureByParentProcedureIdUpdatedAt(parentProcedureId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelProcedureConnection
+  listProcedureByCategory(category: String!, version: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelProcedureConnection
+  listProcedureByStatus(status: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelProcedureConnection
+  listProcedureByCreatedByUserId(createdByUserId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelProcedureConnection
+  getChatSession(id: ID!): ChatSession
+  listChatSessions(filter: ModelChatSessionFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelChatSessionConnection
+  listChatSessionByAccountIdUpdatedAt(accountId: String!, updatedAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelChatSessionConnection
+  listChatSessionByProcedureIdCreatedAt(procedureId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelChatSessionConnection
+  getChatMessage(id: ID!): ChatMessage
+  listChatMessages(filter: ModelChatMessageFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelChatMessageConnection
+  listChatMessageBySessionIdSequenceNumber(sessionId: String!, sequenceNumber: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelChatMessageConnection
+  listChatMessageBySessionIdCreatedAt(sessionId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelChatMessageConnection
+  listChatMessageByProcedureIdCreatedAt(procedureId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelChatMessageConnection
+  listChatMessageByParentMessageId(parentMessageId: String!, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelChatMessageConnection
+  listChatMessageByHumanInteractionCreatedAt(humanInteraction: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelChatMessageConnection
+  listChatMessageByAccountIdCreatedAt(accountId: String!, createdAt: ModelStringInput, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelChatMessageConnection
+  listChatMessageByResponseTargetResponseStatusCreatedAt(responseTarget: String!, responseStatusCreatedAt: AWSJSON, filter: AWSJSON, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelChatMessageConnection
+  getResourceByShareToken(token: String!): ResourceByShareTokenResponse
+}
+
+type Mutation {
+  createAccount(input: CreateAccountInput!): Account
+  updateAccount(input: UpdateAccountInput!): Account
+  deleteAccount(input: DeleteAccountInput!): Account
+  createUser(input: CreateUserInput!): User
+  updateUser(input: UpdateUserInput!): User
+  deleteUser(input: DeleteUserInput!): User
+  createScorecard(input: CreateScorecardInput!): Scorecard
+  updateScorecard(input: UpdateScorecardInput!): Scorecard
+  deleteScorecard(input: DeleteScorecardInput!): Scorecard
+  createScorecardSection(input: CreateScorecardSectionInput!): ScorecardSection
+  updateScorecardSection(input: UpdateScorecardSectionInput!): ScorecardSection
+  deleteScorecardSection(input: DeleteScorecardSectionInput!): ScorecardSection
+  createScore(input: CreateScoreInput!): Score
+  updateScore(input: UpdateScoreInput!): Score
+  deleteScore(input: DeleteScoreInput!): Score
+  createScoreVersion(input: CreateScoreVersionInput!): ScoreVersion
+  updateScoreVersion(input: UpdateScoreVersionInput!): ScoreVersion
+  deleteScoreVersion(input: DeleteScoreVersionInput!): ScoreVersion
+  createEvaluation(input: CreateEvaluationInput!): Evaluation
+  updateEvaluation(input: UpdateEvaluationInput!): Evaluation
+  deleteEvaluation(input: DeleteEvaluationInput!): Evaluation
+  createItem(input: CreateItemInput!): Item
+  updateItem(input: UpdateItemInput!): Item
+  deleteItem(input: DeleteItemInput!): Item
+  createIdentifier(input: CreateIdentifierInput!): Identifier
+  updateIdentifier(input: UpdateIdentifierInput!): Identifier
+  deleteIdentifier(input: DeleteIdentifierInput!): Identifier
+  createScoringJob(input: CreateScoringJobInput!): ScoringJob
+  updateScoringJob(input: UpdateScoringJobInput!): ScoringJob
+  deleteScoringJob(input: DeleteScoringJobInput!): ScoringJob
+  createScoreResult(input: CreateScoreResultInput!): ScoreResult
+  updateScoreResult(input: UpdateScoreResultInput!): ScoreResult
+  deleteScoreResult(input: DeleteScoreResultInput!): ScoreResult
+  createTask(input: CreateTaskInput!): Task
+  updateTask(input: UpdateTaskInput!): Task
+  deleteTask(input: DeleteTaskInput!): Task
+  createTaskStage(input: CreateTaskStageInput!): TaskStage
+  updateTaskStage(input: UpdateTaskStageInput!): TaskStage
+  deleteTaskStage(input: DeleteTaskStageInput!): TaskStage
+  createShareLink(input: CreateShareLinkInput!): ShareLink
+  updateShareLink(input: UpdateShareLinkInput!): ShareLink
+  deleteShareLink(input: DeleteShareLinkInput!): ShareLink
+  createReportConfiguration(input: CreateReportConfigurationInput!): ReportConfiguration
+  updateReportConfiguration(input: UpdateReportConfigurationInput!): ReportConfiguration
+  deleteReportConfiguration(input: DeleteReportConfigurationInput!): ReportConfiguration
+  createReport(input: CreateReportInput!): Report
+  updateReport(input: UpdateReportInput!): Report
+  deleteReport(input: DeleteReportInput!): Report
+  createReportBlock(input: CreateReportBlockInput!): ReportBlock
+  updateReportBlock(input: UpdateReportBlockInput!): ReportBlock
+  deleteReportBlock(input: DeleteReportBlockInput!): ReportBlock
+  createFeedbackItem(input: CreateFeedbackItemInput!): FeedbackItem
+  updateFeedbackItem(input: UpdateFeedbackItemInput!): FeedbackItem
+  deleteFeedbackItem(input: DeleteFeedbackItemInput!): FeedbackItem
+  createScorecardExampleItem(input: CreateScorecardExampleItemInput!): ScorecardExampleItem
+  updateScorecardExampleItem(input: UpdateScorecardExampleItemInput!): ScorecardExampleItem
+  deleteScorecardExampleItem(input: DeleteScorecardExampleItemInput!): ScorecardExampleItem
+  createAggregatedMetrics(input: CreateAggregatedMetricsInput!): AggregatedMetrics
+  updateAggregatedMetrics(input: UpdateAggregatedMetricsInput!): AggregatedMetrics
+  deleteAggregatedMetrics(input: DeleteAggregatedMetricsInput!): AggregatedMetrics
+  createDataSource(input: CreateDataSourceInput!): DataSource
+  updateDataSource(input: UpdateDataSourceInput!): DataSource
+  deleteDataSource(input: DeleteDataSourceInput!): DataSource
+  createDataSourceVersion(input: CreateDataSourceVersionInput!): DataSourceVersion
+  updateDataSourceVersion(input: UpdateDataSourceVersionInput!): DataSourceVersion
+  deleteDataSourceVersion(input: DeleteDataSourceVersionInput!): DataSourceVersion
+  createDataSet(input: CreateDataSetInput!): DataSet
+  updateDataSet(input: UpdateDataSetInput!): DataSet
+  deleteDataSet(input: DeleteDataSetInput!): DataSet
+  createProcedure(input: CreateProcedureInput!): Procedure
+  updateProcedure(input: UpdateProcedureInput!): Procedure
+  deleteProcedure(input: DeleteProcedureInput!): Procedure
+  createChatSession(input: CreateChatSessionInput!): ChatSession
+  updateChatSession(input: UpdateChatSessionInput!): ChatSession
+  deleteChatSession(input: DeleteChatSessionInput!): ChatSession
+  createChatMessage(input: CreateChatMessageInput!): ChatMessage
+  updateChatMessage(input: UpdateChatMessageInput!): ChatMessage
+  deleteChatMessage(input: DeleteChatMessageInput!): ChatMessage
+}
+
+type Subscription {
+  onCreateAccount: Account
+  onUpdateAccount: Account
+  onDeleteAccount: Account
+  onCreateUser: User
+  onUpdateUser: User
+  onDeleteUser: User
+  onCreateScorecard: Scorecard
+  onUpdateScorecard: Scorecard
+  onDeleteScorecard: Scorecard
+  onCreateScorecardSection: ScorecardSection
+  onUpdateScorecardSection: ScorecardSection
+  onDeleteScorecardSection: ScorecardSection
+  onCreateScore: Score
+  onUpdateScore: Score
+  onDeleteScore: Score
+  onCreateScoreVersion: ScoreVersion
+  onUpdateScoreVersion: ScoreVersion
+  onDeleteScoreVersion: ScoreVersion
+  onCreateEvaluation: Evaluation
+  onUpdateEvaluation: Evaluation
+  onDeleteEvaluation: Evaluation
+  onCreateItem: Item
+  onUpdateItem: Item
+  onDeleteItem: Item
+  onCreateIdentifier: Identifier
+  onUpdateIdentifier: Identifier
+  onDeleteIdentifier: Identifier
+  onCreateScoringJob: ScoringJob
+  onUpdateScoringJob: ScoringJob
+  onDeleteScoringJob: ScoringJob
+  onCreateScoreResult: ScoreResult
+  onUpdateScoreResult: ScoreResult
+  onDeleteScoreResult: ScoreResult
+  onCreateTask: Task
+  onUpdateTask: Task
+  onDeleteTask: Task
+  onCreateTaskStage: TaskStage
+  onUpdateTaskStage: TaskStage
+  onDeleteTaskStage: TaskStage
+  onCreateShareLink: ShareLink
+  onUpdateShareLink: ShareLink
+  onDeleteShareLink: ShareLink
+  onCreateReportConfiguration: ReportConfiguration
+  onUpdateReportConfiguration: ReportConfiguration
+  onDeleteReportConfiguration: ReportConfiguration
+  onCreateReport: Report
+  onUpdateReport: Report
+  onDeleteReport: Report
+  onCreateReportBlock: ReportBlock
+  onUpdateReportBlock: ReportBlock
+  onDeleteReportBlock: ReportBlock
+  onCreateFeedbackItem: FeedbackItem
+  onUpdateFeedbackItem: FeedbackItem
+  onDeleteFeedbackItem: FeedbackItem
+  onCreateScorecardExampleItem: ScorecardExampleItem
+  onUpdateScorecardExampleItem: ScorecardExampleItem
+  onDeleteScorecardExampleItem: ScorecardExampleItem
+  onCreateAggregatedMetrics: AggregatedMetrics
+  onUpdateAggregatedMetrics: AggregatedMetrics
+  onDeleteAggregatedMetrics: AggregatedMetrics
+  onCreateDataSource: DataSource
+  onUpdateDataSource: DataSource
+  onDeleteDataSource: DataSource
+  onCreateDataSourceVersion: DataSourceVersion
+  onUpdateDataSourceVersion: DataSourceVersion
+  onDeleteDataSourceVersion: DataSourceVersion
+  onCreateDataSet: DataSet
+  onUpdateDataSet: DataSet
+  onDeleteDataSet: DataSet
+  onCreateProcedure: Procedure
+  onUpdateProcedure: Procedure
+  onDeleteProcedure: Procedure
+  onCreateChatSession: ChatSession
+  onUpdateChatSession: ChatSession
+  onDeleteChatSession: ChatSession
+  onCreateChatMessage: ChatMessage
+  onUpdateChatMessage: ChatMessage
+  onDeleteChatMessage: ChatMessage
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}

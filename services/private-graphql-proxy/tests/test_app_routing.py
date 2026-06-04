@@ -5,6 +5,7 @@ from datetime import timedelta
 from fastapi.testclient import TestClient
 
 from proxy import app as proxy_app
+from proxy.schema_contract import get_schema_contract
 from proxy.store import utcnow
 
 
@@ -21,18 +22,14 @@ class InMemoryStore:
 
     def upsert_private(self, model, input_doc):
         doc = dict(input_doc)
-        if model == "Identifier":
-            key = (doc["itemId"], doc["name"])
-        else:
-            key = doc["id"]
+        key = self._key(model, doc)
+        self.private.setdefault(model, {})
         self.private[model][key] = doc
         return doc
 
     def update_private(self, model, input_doc):
-        if model == "Identifier":
-            key = (input_doc["itemId"], input_doc["name"])
-        else:
-            key = input_doc["id"]
+        key = self._key(model, input_doc)
+        self.private.setdefault(model, {})
         existing = self.private[model].get(key)
         if not existing:
             return None
@@ -40,23 +37,19 @@ class InMemoryStore:
         return existing
 
     def get_private(self, model, key):
-        if model == "Identifier":
-            private_key = (key["itemId"], key["name"])
-        else:
-            private_key = key["id"]
-        return self.private[model].get(private_key)
+        private_key = self._key(model, key)
+        return self.private.setdefault(model, {}).get(private_key)
 
     def delete_private(self, model, key):
-        if model == "Identifier":
-            private_key = (key["itemId"], key["name"])
-        else:
-            private_key = key["id"]
-        return self.private[model].pop(private_key, None)
+        private_key = self._key(model, key)
+        return self.private.setdefault(model, {}).pop(private_key, None)
 
     def list_private(self, model, filters, sort_direction="ASC", sort_field=None, limit=None):
-        docs = list(self.private[model].values())
+        docs = list(self.private.setdefault(model, {}).values())
         for name, expected in filters.items():
             docs = [doc for doc in docs if doc.get(name) == expected]
+        if sort_field:
+            docs.sort(key=lambda doc: doc.get(sort_field) or "", reverse=sort_direction == "DESC")
         if limit:
             docs = docs[:limit]
         return docs
@@ -82,6 +75,10 @@ class InMemoryStore:
                 "variables": variables,
             }
         )
+
+    def _key(self, model, doc):
+        key_fields = get_schema_contract().primary_key_fields(model)
+        return tuple(doc.get(field) for field in key_fields)
 
 
 class FakeUpstream:
@@ -125,7 +122,7 @@ def test_private_operation_uses_local_store_only(monkeypatch):
     assert response.status_code == 200
     assert response.json()["data"]["createItem"]["id"] == "item-1"
     assert set(response.json()["data"]["createItem"]) == {"id", "accountId", "text"}
-    assert store.private["Item"]["item-1"]["text"] == "private text"
+    assert store.private["Item"][("item-1",)]["text"] == "private text"
     assert upstream.calls == 0
 
 
@@ -174,3 +171,86 @@ def test_mixed_query_splits_private_and_control_roots(monkeypatch):
     assert upstream.calls == 1
     assert store.upstream_audit[0]["root_fields"] == ["getScore"]
     assert "getItem" not in store.upstream_audit[0]["forwarded_query"]
+
+
+def test_local_mode_routes_control_model_crud_to_local_store(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    client, store, upstream = client_with_fakes(monkeypatch)
+
+    response = client.post(
+        "/graphql",
+        json={
+            "query": """
+            mutation CreateScorecard($input: CreateScorecardInput!) {
+                createScorecard(input: $input) { id name key accountId }
+            }
+            """,
+            "variables": {
+                "input": {
+                    "id": "scorecard-1",
+                    "name": "Local Demo Scorecard",
+                    "key": "local-demo-scorecard",
+                    "accountId": "account-1",
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["createScorecard"]["id"] == "scorecard-1"
+    assert store.private["Scorecard"][("scorecard-1",)]["key"] == "local-demo-scorecard"
+    assert upstream.calls == 0
+
+
+def test_local_mode_resolves_manifest_relationship_selections(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    client, store, upstream = client_with_fakes(monkeypatch)
+    store.upsert_private("Account", {"id": "account-1", "name": "Demo", "key": "local-demo"})
+    store.upsert_private(
+        "Scorecard",
+        {"id": "scorecard-1", "name": "Demo Scorecard", "key": "demo", "accountId": "account-1"},
+    )
+    store.upsert_private(
+        "ScorecardSection",
+        {"id": "section-1", "name": "Section", "order": 1, "scorecardId": "scorecard-1"},
+    )
+    store.upsert_private(
+        "Score",
+        {
+            "id": "score-1",
+            "name": "Demo Score",
+            "type": "LangGraphScore",
+            "order": 1,
+            "externalId": "score-ext-1",
+            "sectionId": "section-1",
+            "scorecardId": "scorecard-1",
+        },
+    )
+
+    response = client.post(
+        "/graphql",
+        json={
+            "query": """
+            query GetScorecard($id: ID!) {
+                getScorecard(id: $id) {
+                    id
+                    name
+                    account { id key }
+                    sections { items { id name } }
+                    scores { items { id name scorecard { id name } } }
+                }
+            }
+            """,
+            "variables": {"id": "scorecard-1"},
+        },
+    )
+
+    data = response.json()["data"]["getScorecard"]
+    assert response.status_code == 200
+    assert data["account"] == {"id": "account-1", "key": "local-demo"}
+    assert data["sections"]["items"] == [{"id": "section-1", "name": "Section"}]
+    assert data["scores"]["items"][0]["scorecard"] == {
+        "id": "scorecard-1",
+        "name": "Demo Scorecard",
+    }
+    assert upstream.calls == 0
