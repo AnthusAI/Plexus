@@ -3844,6 +3844,58 @@ def test_default_report_runner_uses_remote_dispatch_by_default(monkeypatch) -> N
     }
 
 
+def test_default_report_runner_normalizes_cached_output_without_status(monkeypatch) -> None:
+    client = object()
+
+    def fake_run_block_cached(**_kwargs):
+        return ({"rows": [{"score": "A"}]}, None, True)
+
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr("plexus.reports.service.run_block_cached", fake_run_block_cached)
+    monkeypatch.delenv("PLEXUS_DISPATCH_MODE", raising=False)
+
+    result = execute._default_report_runner(
+        {
+            "block_class": "FeedbackAlignment",
+            "cache_key": "report-cache",
+            "block_config": {"scorecard": "Card", "days": 30},
+        }
+    )
+
+    assert result["status"] == "completed"
+    assert result["cached"] is True
+    assert result["result"] == {"rows": [{"score": "A"}]}
+    assert result["block_class"] == "FeedbackAlignment"
+
+
+def test_default_report_runner_rejects_empty_remote_payload(monkeypatch) -> None:
+    client = object()
+
+    def fake_run_block_cached(**_kwargs):
+        return ({}, None, False)
+
+    monkeypatch.setattr(
+        "plexus.cli.report.utils.resolve_account_id_for_command",
+        lambda _client, _account: "acct-1",
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr("plexus.reports.service.run_block_cached", fake_run_block_cached)
+    monkeypatch.delenv("PLEXUS_DISPATCH_MODE", raising=False)
+
+    with pytest.raises(ValueError, match="empty payload"):
+        execute._default_report_runner(
+            {
+                "block_class": "FeedbackAlignment",
+                "cache_key": "report-cache",
+                "block_config": {"scorecard": "Card", "days": 30},
+            }
+        )
+
+
 def test_default_report_runner_disables_feedback_alignment_memory_by_default(monkeypatch) -> None:
     captured: dict = {}
     client = object()
