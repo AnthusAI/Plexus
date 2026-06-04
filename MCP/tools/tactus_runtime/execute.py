@@ -3881,8 +3881,19 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
         )
         if not isinstance(output_data, dict):
             raise ValueError(log_output or "Report block remote dispatch failed")
+        normalized_output: dict[str, Any] = dict(output_data)
+        if "status" not in normalized_output:
+            if not normalized_output:
+                raise ValueError("Report block remote dispatch returned empty payload")
+            normalized_output = {
+                "status": "completed",
+                "cached": bool(was_cached),
+                "result": normalized_output,
+            }
+        elif was_cached:
+            normalized_output["cached"] = True
         return {
-            **output_data,
+            **normalized_output,
             "block_class": block_class,
             "child_budget": _jsonable(args.get("budget")),
         }
