@@ -305,6 +305,47 @@ def test_local_mode_supports_legacy_index_root_alias_queries(monkeypatch):
     assert connection["items"][0]["id"] == "item-legacy-1"
 
 
+def test_local_mode_supports_composite_legacy_index_root_alias_queries(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    client, store, _upstream = client_with_fakes(monkeypatch)
+    store.upsert_private(
+        "AggregatedMetrics",
+        {
+            "accountId": "account-1",
+            "compositeKey": "metrics-1",
+            "recordType": "items",
+            "timeRangeStart": "2026-06-04T00:00:00Z",
+            "timeRangeEnd": "2026-06-04T01:00:00Z",
+            "numberOfMinutes": 60,
+            "count": 5,
+            "complete": True,
+        },
+    )
+
+    response = client.post(
+        "/graphql",
+        json={
+            "query": """
+            query LegacyAggregatedMetricsIndex($accountId: String!, $recordType: String!) {
+                listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart(
+                    accountId: $accountId
+                    recordTypeTimeRangeStart: { beginsWith: { recordType: $recordType } }
+                    limit: 10
+                ) {
+                    items { accountId compositeKey recordType count }
+                    nextToken
+                }
+            }
+            """,
+            "variables": {"accountId": "account-1", "recordType": "items"},
+        },
+    )
+
+    assert response.status_code == 200
+    connection = response.json()["data"]["listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart"]
+    assert connection["items"][0]["compositeKey"] == "metrics-1"
+
+
 def test_local_mode_supports_synthetic_legacy_score_index_queries(monkeypatch):
     monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
     client, store, _upstream = client_with_fakes(monkeypatch)

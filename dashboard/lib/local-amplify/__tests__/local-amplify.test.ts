@@ -2,6 +2,7 @@ import { fetchAuthSession, fetchUserAttributes, getCurrentUser } from "../auth"
 import { generateClient } from "../data"
 import { downloadData, getUrl, uploadData } from "../storage"
 import { useAuthenticator } from "../ui-react"
+import manifest from "../../../../services/private-graphql-proxy/schema/amplify-manifest.json"
 
 describe("local Amplify compatibility shims", () => {
   beforeEach(() => {
@@ -76,5 +77,37 @@ describe("local Amplify compatibility shims", () => {
     expect(listRequest.query).toContain("listAccounts {")
     expect(listRequest.query).toMatch(/\bid\b/)
     expect(listRequest.query).not.toContain("listAccounts()")
+  })
+
+  it("includes manifest primary-key fields in every generated model list selection", async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    } as Response)
+    ;(globalThis as any).fetch = fetchMock
+
+    const client = generateClient() as any
+    const models = manifest.models as Record<string, { operations: { list: string }, primaryKey?: string[] }>
+
+    for (const modelName of Object.keys(models)) {
+      await client.models[modelName].list()
+      const request = JSON.parse((fetchMock.mock.calls.at(-1)?.[1] as RequestInit).body as string)
+      const query = request.query as string
+      for (const primaryKeyField of models[modelName].primaryKey || ["id"]) {
+        expect(query).toMatch(new RegExp(`\\b${primaryKeyField}\\b`))
+      }
+    }
+  })
+
+  it("returns no-op subscriptions synchronously from client.graphql", () => {
+    const client = generateClient() as any
+    const subscription = client.graphql({
+      query: "subscription LocalNoop { onCreateEvaluation { id } }",
+    })
+
+    expect(typeof subscription.subscribe).toBe("function")
+    expect(subscription.subscribe()).toMatchObject({
+      unsubscribe: expect.any(Function),
+    })
   })
 })

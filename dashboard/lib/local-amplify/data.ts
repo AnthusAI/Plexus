@@ -38,11 +38,18 @@ export function generateClient() {
   }
 }
 
-async function graphql<T = any>({ query, variables }: GraphqlRequest): Promise<T> {
+function graphql<T = any>({ query, variables }: GraphqlRequest): Promise<T> | T {
   if (/^\s*subscription\b/i.test(query)) {
     return noOpSubscription() as T
   }
 
+  return executeGraphqlFetch<T>(query, variables)
+}
+
+async function executeGraphqlFetch<T = any>(
+  query: string,
+  variables?: Record<string, any>,
+): Promise<T> {
   const response = await fetch(endpoint(), {
     method: "POST",
     headers: {

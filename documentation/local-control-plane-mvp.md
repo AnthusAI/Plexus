@@ -103,3 +103,27 @@ Note:
 
 - This smoke intentionally uses the champion-version path only.
 - It does not use `--latest` until ScoreVersion index-root naming compatibility is aligned.
+
+## 6) Run browser smoke
+
+After prediction smoke has written a local `ScoreResult`, run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/smoke-local-browser.sh
+```
+
+The browser smoke validates:
+
+- Local dashboard pages render through `http://localhost:3000`.
+- The browser makes no non-local hosted HTTP requests, including AWS/AppSync/Cognito/S3.
+- The rendered pages produce no browser console errors.
+- Demo user/account context is visible.
+- The Nira item and Nira scorecard render.
+- Local GraphQL can read back a Nira prediction `ScoreResult`.
+
+Screenshots are written to:
+
+```bash
+tmp/local-control-plane-browser-smoke/
+```

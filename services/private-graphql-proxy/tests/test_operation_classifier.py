@@ -95,6 +95,34 @@ def test_classifies_legacy_index_root_aliases_for_backward_compatibility(monkeyp
     assert not plan.blocked_fields
 
 
+def test_classifies_composite_legacy_index_root_aliases(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    plan = build_operation_plan(
+        """
+        query AggregatedMetricsAlias($accountId: String!, $recordType: String!, $startTime: String!, $endTime: String!) {
+            listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart(
+                accountId: $accountId
+                recordTypeTimeRangeStart: {
+                    between: [
+                        { recordType: $recordType, timeRangeStart: $startTime }
+                        { recordType: $recordType, timeRangeStart: $endTime }
+                    ]
+                }
+            ) {
+                items { accountId compositeKey recordType timeRangeStart }
+                nextToken
+            }
+        }
+        """,
+        "AggregatedMetricsAlias",
+    )
+
+    assert [(field.name, field.model) for field in plan.private_fields] == [
+        ("listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart", "AggregatedMetrics")
+    ]
+    assert not plan.blocked_fields
+
+
 def test_classifies_synthetic_legacy_index_roots_not_in_manifest(monkeypatch):
     monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
     plan = build_operation_plan(
@@ -138,6 +166,32 @@ def test_local_backend_mode_routes_every_manifest_model_root_locally(monkeypatch
             )
             assert classification.classification == "private"
             assert classification.model == model_name
+
+
+def test_local_backend_mode_routes_every_manifest_subscription_root_locally(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    contract = get_schema_contract()
+
+    for model_name in contract.models:
+        for action in ("onCreate", "onUpdate", "onDelete"):
+            root_name = contract.manifest["subscriptions"][model_name][action]
+            classification = contract.classify_root(root_name, "subscription")
+            assert classification.classification == "private"
+            assert classification.model == model_name
+
+
+def test_local_backend_mode_routes_manifest_custom_query_roots_locally(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    contract = get_schema_contract()
+
+    for root_name, operation in contract.custom_operations.items():
+        if operation["operationType"] != "query":
+            continue
+
+        classification = contract.classify_root(root_name, "query")
+        assert classification.classification == "private"
+        assert classification.operation is not None
+        assert classification.operation.action == "custom"
 
 
 def test_builds_control_only_query_for_mixed_operation():

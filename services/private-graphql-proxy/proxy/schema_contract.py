@@ -158,29 +158,21 @@ class SchemaContract:
         Backward-compatible aliases for historical Amplify index root naming.
 
         Some existing dashboard/CLI queries still use:
-          list<Model>By<Partition>And<Sort>
-        while current generated roots are:
-          list<Model>By<Partition><Sort>
+          list<Model>By<Partition>And<Sort>[And<Sort>...]
+        while current generated roots may use explicit Amplify index names.
         """
         sort_fields = index.get("sortFields") or []
         partition_field = index.get("partitionField")
-        if len(sort_fields) != 1 or not partition_field:
-            return []
-
-        sort_field = sort_fields[0]
-        canonical_root = (
-            f"list{model_name}By"
-            f"{_pascal_case(partition_field)}"
-            f"{_pascal_case(sort_field)}"
-        )
-        if index.get("queryField") != canonical_root:
+        if not sort_fields or not partition_field:
             return []
 
         legacy_alias = (
             f"list{model_name}By"
             f"{_pascal_case(partition_field)}"
-            f"And{_pascal_case(sort_field)}"
+            f"And{'And'.join(_pascal_case(field) for field in sort_fields)}"
         )
+        if legacy_alias == index.get("queryField"):
+            return []
         return [legacy_alias]
 
     def _synthetic_legacy_index_operation(self, root_name: str) -> Optional[RootOperation]:

@@ -12,8 +12,11 @@ const mockFetchUserAttributes = fetchUserAttributes as jest.MockedFunction<typeo
 const mockGetCurrentUser = getCurrentUser as jest.MockedFunction<typeof getCurrentUser>
 
 describe("getCurrentUserProfile", () => {
+  const originalBackendMode = process.env.NEXT_PUBLIC_PLEXUS_BACKEND
+
   beforeEach(() => {
     jest.clearAllMocks()
+    process.env.NEXT_PUBLIC_PLEXUS_BACKEND = originalBackendMode
     mockGetCurrentUser.mockResolvedValue({
       userId: "user-123",
       username: "ada@example.com",
@@ -27,6 +30,10 @@ describe("getCurrentUserProfile", () => {
     mockFetchAuthSession.mockResolvedValue({} as Awaited<ReturnType<typeof fetchAuthSession>>)
   })
 
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_PLEXUS_BACKEND = originalBackendMode
+  })
+
   it("returns profile from user attributes when available", async () => {
     const profile = await getCurrentUserProfile()
 
@@ -36,6 +43,16 @@ describe("getCurrentUserProfile", () => {
     expect(profile?.displayName).toBe("Ada Lovelace")
     expect(profile?.initials).toBe("AL")
     expect(profile?.gravatarUrl).toContain("https://www.gravatar.com/avatar/")
+  })
+
+  it("uses initials instead of external avatar URLs in local backend mode", async () => {
+    process.env.NEXT_PUBLIC_PLEXUS_BACKEND = "local"
+
+    const profile = await getCurrentUserProfile()
+
+    expect(profile).not.toBeNull()
+    expect(profile?.initials).toBe("AL")
+    expect(profile?.gravatarUrl).toBeNull()
   })
 
   it("falls back to auth session token claims when user attributes cannot be fetched", async () => {

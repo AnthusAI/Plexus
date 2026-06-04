@@ -3,16 +3,29 @@
   "title": "Add browser-level dashboard smoke for local control-plane mode",
   "description": "Automate local dashboard smoke for core lab routes and assert no outbound AWS dependencies are required when NEXT_PUBLIC_PLEXUS_BACKEND=local.",
   "type": "sub-task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "50338096-cdbb-4f22-b253-d24bd7953066",
+      "author": "ryan.porter",
+      "text": "Starting browser-level local-control-plane smoke implementation. Goal: prove local dashboard pages render against localhost GraphQL and fail on any hosted AWS/AppSync/Cognito/S3 network calls.",
+      "created_at": "2026-06-04T22:59:48.126878Z"
+    },
+    {
+      "id": "91b51a6c-3d87-4660-957b-c5e0820b3a56",
+      "author": "ryan.porter",
+      "text": "Implemented local browser smoke proof for core MVP routes. The script now verifies /lab/items/nira-demo-item-1, /lab/scorecards, /lab/evaluations, /lab/reports, and /lab/procedures against localhost dashboard and local GraphQL. It captures screenshots, verifies demo user/account plus Nira item/scorecard visibility, checks local GraphQL prediction ScoreResult readback, and fails on any non-local hosted HTTP request, hosted AWS/AppSync/Cognito/S3 request, or browser console error. Latest verification passed cleanly.",
+      "created_at": "2026-06-04T23:11:05.299938Z"
+    }
+  ],
   "created_at": "2026-06-04T21:49:53.745307Z",
-  "updated_at": "2026-06-04T21:49:53.745307Z",
-  "closed_at": null,
+  "updated_at": "2026-06-04T23:11:18.639643Z",
+  "closed_at": "2026-06-04T23:11:18.639643Z",
   "custom": {}
 }
