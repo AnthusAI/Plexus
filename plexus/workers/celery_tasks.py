@@ -67,13 +67,19 @@ def process_scoring_job(
 
         logger.info(f"Loading scorecard and score: {scorecard_name}/{score_name}")
 
-        # Fetch the scorecard and score IDs from the API
-        scorecard_obj = ScorecardModel.get_by_key(scorecard_name, client)
-        if not scorecard_obj:
+        # Resolve scorecard identifier (handles ID, key, name, or external ID)
+        from plexus.cli.shared.direct_memoized_resolvers import direct_memoized_resolve_scorecard_identifier
+
+        scorecard_id = direct_memoized_resolve_scorecard_identifier(client, scorecard_name)
+        if not scorecard_id:
             raise ValueError(f"Scorecard '{scorecard_name}' not found")
 
-        scorecard_id = scorecard_obj.id
-        logger.info(f"Found scorecard ID: {scorecard_id}")
+        logger.info(f"Resolved scorecard ID: {scorecard_id}")
+
+        # Fetch the scorecard object for any additional metadata needed
+        scorecard_obj = ScorecardModel.get_by_id(scorecard_id, client)
+        if not scorecard_obj:
+            raise ValueError(f"Scorecard '{scorecard_name}' not found")
 
         # Get the score ID
         score_obj = ScoreModel.get_by_name(score_name, scorecard_id, client)
