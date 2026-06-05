@@ -99,6 +99,25 @@ def test_builtin_console_procedure_prompt_enforces_score_edit_completion_contrac
     assert "waits internally for terminal completion" in system_prompt
     assert "status is `completed` with result `version_id`" in system_prompt
     assert "version_id" in system_prompt
+    assert "without asking for another confirmation" in system_prompt
+    assert "latest candidate version created in this chat" in system_prompt
+    assert "Do not restart from champion" in system_prompt
+
+
+def test_builtin_console_procedure_prompt_teaches_count_based_feedback_validation():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+
+    assert 'evaluation_type = "feedback"' in system_prompt
+    assert "max_feedback_items = 20" in system_prompt
+    assert 'sampling_mode = "newest"' in system_prompt
+    assert "omit days so available feedback history is scanned by count" in system_prompt
+    feedback_example = system_prompt[
+        system_prompt.index("-- Run a feedback evaluation")
+        : system_prompt.index("-- Run an accuracy evaluation")
+    ]
+    assert "days" not in feedback_example
 
 
 def test_builtin_console_procedure_guards_against_uuid_only_replies():
