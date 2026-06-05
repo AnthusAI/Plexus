@@ -15,12 +15,17 @@ export SMOKE_PROOF_DIR="${SMOKE_PROOF_DIR:-$ROOT_DIR/tmp/local-control-plane-pro
 export SMOKE_PREDICTION_PROOF_FILE="${SMOKE_PREDICTION_PROOF_FILE:-$SMOKE_PROOF_DIR/prediction.json}"
 export SMOKE_FEEDBACK_PROOF_FILE="${SMOKE_FEEDBACK_PROOF_FILE:-$SMOKE_PROOF_DIR/feedback-evaluation.json}"
 export SMOKE_REPORT_PROOF_FILE="${SMOKE_REPORT_PROOF_FILE:-$SMOKE_PROOF_DIR/report.json}"
+export SMOKE_VECTOR_TOPIC_MEMORY_PROOF_FILE="${SMOKE_VECTOR_TOPIC_MEMORY_PROOF_FILE:-$SMOKE_PROOF_DIR/vector-topic-memory.json}"
 export AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME="${AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME:-plexus-local-report-block-details}"
+export EMBEDDING_CACHE_BUCKET="${EMBEDDING_CACHE_BUCKET:-plexus-embeddings}"
 export PLEXUS_OBJECT_STORE_ENDPOINT="${PLEXUS_OBJECT_STORE_ENDPOINT:-http://localhost:19000}"
 export PLEXUS_OBJECT_STORE_REGION="${PLEXUS_OBJECT_STORE_REGION:-us-east-1}"
 export PLEXUS_OBJECT_STORE_FORCE_PATH_STYLE="${PLEXUS_OBJECT_STORE_FORCE_PATH_STYLE:-true}"
 export PLEXUS_OBJECT_STORE_ACCESS_KEY_ID="${PLEXUS_OBJECT_STORE_ACCESS_KEY_ID:-plexus-local}"
 export PLEXUS_OBJECT_STORE_SECRET_ACCESS_KEY="${PLEXUS_OBJECT_STORE_SECRET_ACCESS_KEY:-plexus-local-secret}"
+export PLEXUS_VECTOR_STORE_PROVIDER="${PLEXUS_VECTOR_STORE_PROVIDER:-qdrant}"
+export PLEXUS_VECTOR_STORE_URL="${PLEXUS_VECTOR_STORE_URL:-http://localhost:19002}"
+export PLEXUS_VECTOR_STORE_COLLECTION="${PLEXUS_VECTOR_STORE_COLLECTION:-topic-memory-local}"
 
 SMOKE_RESET_STACK="${SMOKE_RESET_STACK:-1}"
 
@@ -50,8 +55,8 @@ reset_smoke_stack() {
 }
 
 start_smoke_stack() {
-  log "Starting local PostgreSQL and GraphQL proxy."
-  docker compose -f "$COMPOSE_FILE" up -d --build postgres minio minio-init proxy
+  log "Starting local PostgreSQL, MinIO, Qdrant, and GraphQL proxy."
+  docker compose -f "$COMPOSE_FILE" up -d --build postgres minio minio-init qdrant proxy
 }
 
 seed_demo_data() {
@@ -80,8 +85,17 @@ dashboard_is_reachable() {
   curl -fsS -m 5 "$SMOKE_DASHBOARD_URL/lab/items/nira-demo-item-1" >/dev/null 2>&1
 }
 
+ensure_vector_topic_memory_deps() {
+  if poetry run python -c "import sentence_transformers" >/dev/null 2>&1; then
+    return 0
+  fi
+  log "Installing sentence-transformers for VectorTopicMemory smoke."
+  poetry run pip install --disable-pip-version-check sentence-transformers
+}
+
 main() {
   assert_local_mode
+  ensure_vector_topic_memory_deps
   rm -rf "$SMOKE_PROOF_DIR"
   mkdir -p "$SMOKE_PROOF_DIR"
 
@@ -100,6 +114,9 @@ main() {
 
   log "Running feedback-alignment report smoke."
   "$ROOT_DIR/scripts/smoke-local-report.sh"
+
+  log "Running vector-topic-memory smoke."
+  "$ROOT_DIR/scripts/smoke-local-vector-topic-memory.sh"
 
   log "Asserting proxy made no upstream requests."
   assert_no_upstream_requests

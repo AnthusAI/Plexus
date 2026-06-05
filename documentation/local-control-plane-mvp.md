@@ -35,6 +35,9 @@ Expected local mode settings:
 - `PLEXUS_API_URL=http://localhost:18080/graphql`
 - `PLEXUS_API_KEY=local-smoke-key`
 - `PLEXUS_ACCOUNT_KEY=local-demo`
+- `PLEXUS_VECTOR_STORE_PROVIDER=qdrant`
+- `PLEXUS_VECTOR_STORE_URL=http://localhost:19002`
+- `PLEXUS_VECTOR_STORE_COLLECTION=topic-memory-local`
 
 ## 3) Assert backend health and seeded data
 
@@ -171,10 +174,11 @@ bash scripts/prove-local-control-plane.sh
 The proof harness:
 
 - Resets only the smoke Docker Compose stack and volumes from `services/private-graphql-proxy/docker-compose.smoke.yml`.
-- Starts PostgreSQL and the local GraphQL proxy with `PLEXUS_BACKEND_MODE=local` and `PLEXUS_PROXY_UPSTREAM_DISABLED=true`.
+- Starts PostgreSQL, MinIO, Qdrant, and the local GraphQL proxy with `PLEXUS_BACKEND_MODE=local` and `PLEXUS_PROXY_UPSTREAM_DISABLED=true`.
 - Seeds deterministic local demo data.
 - Runs strict CLI smoke with no fallback reads.
 - Runs prediction smoke and writes the exact proof file.
 - Runs feedback-evaluation smoke and writes an exact evaluation proof file.
+- Runs VectorTopicMemory smoke in local mode with Qdrant and writes `tmp/local-control-plane-proof/vector-topic-memory.json`.
 - Asserts `/debug/upstream-requests` is empty.
 - Runs browser smoke when `http://localhost:3000` is reachable; otherwise it skips only the browser step.

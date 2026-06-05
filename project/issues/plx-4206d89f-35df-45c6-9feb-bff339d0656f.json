@@ -28,10 +28,22 @@
       "author": "ryan.porter",
       "text": "Storage scope clarification:\n\nMinIO is the local replacement for ordinary S3 object storage: report block output/log artifacts, downloadable attachments, uploaded datasets, task/item/score-result artifacts, and dashboard Amplify Storage calls.\n\nMinIO does not replace AWS S3 Vectors. Vector indexing/search should be tracked separately as a local vector memory store task, likely using Chroma for the MVP.\n\nImmediate storage focus:\n- Prove report artifact storage is stable through MinIO.\n- Audit every remaining ordinary S3/Amplify Storage path.\n- Add smoke coverage for at least one artifact-bearing record outside ReportBlock.\n- Keep hosted AWS storage unreachable in local MVP proof runs.\n",
       "created_at": "2026-06-05T18:31:52.733307Z"
+    },
+    {
+      "id": "ae226b0d-3af6-4836-b64e-fe16de798aaf",
+      "author": "ryan.porter",
+      "text": "Status update (local storage milestone):\n- Local smoke checks are passing for CLI, predict, feedback-evaluation, report artifact persistence, and browser page coverage.\n- MinIO-backed report artifact write/readback is working in local mode with no hosted GraphQL upstream requests.\n- Remaining storage subtasks under this issue stay focused on ordinary object storage and attachment paths only.\n- Vector indexing/search is intentionally out of scope for this issue and is tracked under plx-83e08d.\n",
+      "created_at": "2026-06-05T19:04:20.522442Z"
+    },
+    {
+      "id": "3f28258b-2656-4103-9b67-79fabe8daec5",
+      "author": "ryan.porter",
+      "text": "Coordination note: vector-store replacement work has been completed under plx-83e08d using Qdrant for local mode. This MinIO task remains focused on ordinary object-storage surfaces and attachment-path hardening only.",
+      "created_at": "2026-06-05T19:47:51.177902Z"
     }
   ],
   "created_at": "2026-06-05T16:22:46.101359Z",
-  "updated_at": "2026-06-05T18:31:52.733307Z",
+  "updated_at": "2026-06-05T19:47:51.177902Z",
   "closed_at": null,
   "custom": {}
 }

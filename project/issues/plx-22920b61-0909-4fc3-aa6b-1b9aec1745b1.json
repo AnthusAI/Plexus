@@ -1,0 +1,18 @@
+{
+  "id": "plx-22920b61-0909-4fc3-aa6b-1b9aec1745b1",
+  "title": "Vector provider factory and env/config wiring",
+  "description": "Add provider selection and config resolution for s3vectors or qdrant using env/config mappings, keeping AWS-mode defaults unchanged and enabling local-mode Qdrant.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-83e08d42-1182-41d8-aee6-99b97e1e26bb",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-05T19:04:28.459755Z",
+  "updated_at": "2026-06-05T19:47:31.297994Z",
+  "closed_at": "2026-06-05T19:47:31.297994Z",
+  "custom": {}
+}

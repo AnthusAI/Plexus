@@ -59,6 +59,7 @@ fastmcp = ">=2.3.5"
 ollama = ">=0.1.6"
 requests = ">=2.31.0"
 requests-aws4auth = "*"
+qdrant-client = ">=1.10.0"
 # --- Optional: ML/scoring/visualization ---
 pandas = { version = "2.1.4", optional = true }
 nltk = { version = "3.9.4", optional = true }

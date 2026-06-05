@@ -23,18 +23,27 @@ services:
       - "19000:9000"
       - "19001:9001"
 
+  qdrant:
+    image: qdrant/qdrant:v1.12.5
+    ports:
+      - "19002:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
   minio-init:
     image: minio/mc:RELEASE.2025-04-16T18-13-26Z
     environment:
       PLEXUS_OBJECT_STORE_ACCESS_KEY_ID: ${PLEXUS_OBJECT_STORE_ACCESS_KEY_ID:-plexus-local}
       PLEXUS_OBJECT_STORE_SECRET_ACCESS_KEY: ${PLEXUS_OBJECT_STORE_SECRET_ACCESS_KEY:-plexus-local-secret}
       AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME: ${AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME:-plexus-local-report-block-details}
+      EMBEDDING_CACHE_BUCKET: ${EMBEDDING_CACHE_BUCKET:-plexus-embeddings}
     depends_on:
       - minio
     entrypoint: >
       /bin/sh -c "
       until mc alias set local http://minio:9000 $$PLEXUS_OBJECT_STORE_ACCESS_KEY_ID $$PLEXUS_OBJECT_STORE_SECRET_ACCESS_KEY; do sleep 1; done;
       mc mb -p local/$$AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME || true;
+      mc mb -p local/$$EMBEDDING_CACHE_BUCKET || true;
       mc anonymous set download local/$$AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME || true;
       "
 
@@ -129,3 +138,6 @@ services:
     depends_on:
       proxy:
         condition: service_healthy
+
+volumes:
+  qdrant_data:

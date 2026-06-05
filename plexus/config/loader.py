@@ -118,6 +118,9 @@ class ConfigLoader:
         's3_vectors.index_name': 'S3_VECTOR_INDEX_NAME',
         's3_vectors.index_arn': 'S3_VECTOR_INDEX_ARN',
         's3_vectors.region': 'AWS_REGION',
+        'vector_store.provider': 'PLEXUS_VECTOR_STORE_PROVIDER',
+        'vector_store.url': 'PLEXUS_VECTOR_STORE_URL',
+        'vector_store.collection': 'PLEXUS_VECTOR_STORE_COLLECTION',
         'embedding_cache.bucket': 'EMBEDDING_CACHE_BUCKET',
 
         # Dashboard

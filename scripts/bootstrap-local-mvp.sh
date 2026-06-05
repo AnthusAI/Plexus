@@ -123,6 +123,18 @@ install_python_deps() {
   )
 }
 
+ensure_vector_topic_memory_deps() {
+  (
+    cd "$ROOT_DIR"
+    if poetry run python -c "import sentence_transformers" >/dev/null 2>&1; then
+      log "Vector topic-memory dependency already available: sentence-transformers"
+      return
+    fi
+    log "Installing sentence-transformers for local vector-topic-memory smoke..."
+    poetry run pip install --disable-pip-version-check sentence-transformers
+  )
+}
+
 install_dashboard_deps() {
   log "Installing dashboard dependencies with npm ci..."
   (
@@ -149,6 +161,7 @@ main() {
   ensure_pg_tools
   ensure_poetry
   install_python_deps
+  ensure_vector_topic_memory_deps
   install_dashboard_deps
   print_versions
   log "Bootstrap complete."
