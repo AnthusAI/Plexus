@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dae27250-4abb-4c4b-83ab-1fdc00621798",
+  "issue_id": "plx-dfef942e-9346-4ef3-9439-6524a5c4b78e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T18:29:58.224Z",
+  "actor_id": "ryan",
+  "payload": {
+    "title": "Fail-fast hardening for feedback contradictions/evaluation preflight + feedback integrity diagnostics",
+    "description": "",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-56545e35-e050-4d7c-a57b-15a692bff45e",
+    "labels": []
+  }
+}
