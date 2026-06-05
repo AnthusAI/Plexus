@@ -1,0 +1,18 @@
+{
+  "id": "plx-e0f180bf-4d99-4ec2-afe2-39452f6e64f8",
+  "title": "Local tenancy and auth evidence",
+  "description": "Production viability vetting track for plx-e5297f. Add focused evidence for current local demo API-key behavior, show where account scoping must be enforced, and record that production auth/tenancy remains unresolved.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-05T19:55:36.691964Z",
+  "updated_at": "2026-06-05T20:03:07.673923Z",
+  "closed_at": "2026-06-05T20:03:07.673923Z",
+  "custom": {}
+}

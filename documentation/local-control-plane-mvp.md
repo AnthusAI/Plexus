@@ -182,3 +182,14 @@ The proof harness:
 - Runs VectorTopicMemory smoke in local mode with Qdrant and writes `tmp/local-control-plane-proof/vector-topic-memory.json`.
 - Asserts `/debug/upstream-requests` is empty.
 - Runs browser smoke when `http://localhost:3000` is reachable; otherwise it skips only the browser step.
+
+## 9) Run production-vetting evidence harness
+
+After the clean proof harness passes, run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/vet-local-control-plane.sh
+```
+
+The vetting harness writes `tmp/local-control-plane-proof/production-vetting.json` and records production-readiness evidence for auth/tenancy, migration readiness, storage/vector boundaries, realtime behavior, query shape, and observability/backup gaps. The corresponding human-readable risk register is in `documentation/local-control-plane-production-vetting.md`.
