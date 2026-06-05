@@ -44,12 +44,29 @@ class InMemoryStore:
         private_key = self._key(model, key)
         return self.private.setdefault(model, {}).pop(private_key, None)
 
-    def list_private(self, model, filters, sort_direction="ASC", sort_field=None, limit=None):
+    def list_private(self, model, filters, sort_direction="ASC", sort_field=None, limit=None, offset=0):
         docs = list(self.private.setdefault(model, {}).values())
         for name, expected in filters.items():
-            docs = [doc for doc in docs if doc.get(name) == expected]
+            if isinstance(expected, dict):
+                if "eq" in expected:
+                    docs = [doc for doc in docs if doc.get(name) == expected["eq"]]
+                elif "beginsWith" in expected:
+                    prefix = str(expected["beginsWith"])
+                    docs = [doc for doc in docs if str(doc.get(name) or "").startswith(prefix)]
+                elif "between" in expected and isinstance(expected["between"], list) and len(expected["between"]) == 2:
+                    start, end = (str(expected["between"][0]), str(expected["between"][1]))
+                    docs = [doc for doc in docs if start <= str(doc.get(name) or "") <= end]
+                else:
+                    if "ge" in expected:
+                        docs = [doc for doc in docs if str(doc.get(name) or "") >= str(expected["ge"])]
+                    if "le" in expected:
+                        docs = [doc for doc in docs if str(doc.get(name) or "") <= str(expected["le"])]
+            else:
+                docs = [doc for doc in docs if doc.get(name) == expected]
         if sort_field:
             docs.sort(key=lambda doc: doc.get(sort_field) or "", reverse=sort_direction == "DESC")
+        if offset:
+            docs = docs[offset:]
         if limit:
             docs = docs[:limit]
         return docs
@@ -404,6 +421,132 @@ def test_local_mode_supports_composite_legacy_index_root_alias_queries(monkeypat
     assert response.status_code == 200
     connection = response.json()["data"]["listAggregatedMetricsByAccountIdAndRecordTypeAndTimeRangeStart"]
     assert connection["items"][0]["compositeKey"] == "metrics-1"
+
+
+def test_local_mode_supports_feedback_composite_alias_without_upstream(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    client, store, _upstream = client_with_fakes(monkeypatch)
+    monkeypatch.setattr(proxy_app, "upstream", FailingUpstream())
+    store.upsert_private(
+        "FeedbackItem",
+        {
+            "id": "feedback-cli-1",
+            "accountId": "account-1",
+            "scorecardId": "scorecard-1",
+            "scoreId": "score-1",
+            "itemId": "item-1",
+            "finalAnswerValue": "Yes",
+            "editedAt": "2026-06-05T01:00:00Z",
+            "createdAt": "2026-06-05T01:00:00Z",
+            "updatedAt": "2026-06-05T01:00:00Z",
+        },
+    )
+    store.upsert_private(
+        "FeedbackItem",
+        {
+            "id": "feedback-cli-other",
+            "accountId": "account-1",
+            "scorecardId": "scorecard-other",
+            "scoreId": "score-other",
+            "itemId": "item-other",
+            "finalAnswerValue": "No",
+            "editedAt": "2026-06-05T01:30:00Z",
+            "createdAt": "2026-06-05T01:30:00Z",
+            "updatedAt": "2026-06-05T01:30:00Z",
+        },
+    )
+
+    response = client.post(
+        "/graphql",
+        json={
+            "query": """
+            query FeedbackAlias($accountId: String!, $scorecardId: String!, $scoreId: String!) {
+                listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+                    accountId: $accountId
+                    scorecardIdScoreIdEditedAt: {
+                        between: [
+                            { scorecardId: $scorecardId, scoreId: $scoreId, editedAt: "2026-06-05T00:00:00Z" }
+                            { scorecardId: $scorecardId, scoreId: $scoreId, editedAt: "2026-06-06T00:00:00Z" }
+                        ]
+                    }
+                    sortDirection: DESC
+                    limit: 10
+                ) {
+                    items { id accountId itemId finalAnswerValue }
+                    nextToken
+                }
+            }
+            """,
+            "variables": {
+                "accountId": "account-1",
+                "scorecardId": "scorecard-1",
+                "scoreId": "score-1",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    connection = response.json()["data"]["listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt"]
+    assert [item["id"] for item in connection["items"]] == ["feedback-cli-1"]
+    assert connection["items"][0]["finalAnswerValue"] == "Yes"
+    assert store.upstream_requests() == []
+
+
+def test_local_mode_returns_next_token_for_feedback_composite_alias(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    client, store, _upstream = client_with_fakes(monkeypatch)
+    monkeypatch.setattr(proxy_app, "upstream", FailingUpstream())
+
+    for idx in range(1, 4):
+        store.upsert_private(
+            "FeedbackItem",
+            {
+                "id": f"feedback-page-{idx}",
+                "accountId": "account-1",
+                "scorecardId": "scorecard-1",
+                "scoreId": "score-1",
+                "itemId": f"item-{idx}",
+                "finalAnswerValue": "Yes" if idx % 2 else "No",
+                "editedAt": f"2026-06-05T0{idx}:00:00Z",
+                "createdAt": f"2026-06-05T0{idx}:00:00Z",
+                "updatedAt": f"2026-06-05T0{idx}:00:00Z",
+            },
+        )
+
+    query = """
+    query FeedbackAliasPage($accountId: String!, $scorecardId: String!, $scoreId: String!, $nextToken: String) {
+        listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+            accountId: $accountId
+            scorecardIdScoreIdEditedAt: {
+                between: [
+                    { scorecardId: $scorecardId, scoreId: $scoreId, editedAt: "2026-06-05T00:00:00Z" }
+                    { scorecardId: $scorecardId, scoreId: $scoreId, editedAt: "2026-06-06T00:00:00Z" }
+                ]
+            }
+            sortDirection: ASC
+            limit: 2
+            nextToken: $nextToken
+        ) {
+            items { id itemId editedAt }
+            nextToken
+        }
+    }
+    """
+    variables = {"accountId": "account-1", "scorecardId": "scorecard-1", "scoreId": "score-1", "nextToken": None}
+
+    first_response = client.post("/graphql", json={"query": query, "variables": variables})
+    assert first_response.status_code == 200
+    first_connection = first_response.json()["data"]["listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt"]
+    assert [item["id"] for item in first_connection["items"]] == ["feedback-page-1", "feedback-page-2"]
+    assert first_connection["nextToken"]
+
+    variables["nextToken"] = first_connection["nextToken"]
+    second_response = client.post("/graphql", json={"query": query, "variables": variables})
+    assert second_response.status_code == 200
+    second_connection = second_response.json()["data"]["listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt"]
+    assert [item["id"] for item in second_connection["items"]] == ["feedback-page-3"]
+    assert second_connection["nextToken"] is None
+    assert store.upstream_requests() == []
 
 
 def test_local_mode_supports_synthetic_legacy_score_index_queries(monkeypatch):

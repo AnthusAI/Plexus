@@ -60,6 +60,16 @@ Seed assertions are performed by the smoke script and check these IDs:
 - `local-demo-report`
 - `local-demo-procedure`
 - `local-demo-chat-session`
+- `nira-demo-scorecard`
+- `nira-demo-score`
+- `nira-demo-score-version`
+- `nira-demo-item-1`
+
+The seed also creates a deterministic feedback-evaluation fixture set:
+
+- 200 Nira `Item` records (`nira-demo-item-1` .. `nira-demo-item-200`)
+- 200 linked Nira `FeedbackItem` records (`nira-demo-feedback-001` .. `nira-demo-feedback-200`)
+- Balanced public-safe ground-truth labels in `finalAnswerValue` (`Yes`/`No`)
 
 ## 4) Run CLI smoke
 
@@ -131,7 +141,25 @@ Screenshots are written to:
 tmp/local-control-plane-browser-smoke/
 ```
 
-## 7) Run clean proof harness
+## 7) Run feedback-evaluation smoke
+
+Run:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/smoke-local-feedback-evaluation.sh
+```
+
+The feedback smoke validates:
+
+- The local seed contains at least 200 Nira feedback-labeled fixtures.
+- `plexus evaluate feedback` runs in local mode against the seeded scorecard/score/champion score version.
+- The emitted evaluation record is persisted and linked correctly.
+- At least 200 evaluation `ScoreResult` records are persisted and linked to that evaluation.
+- The proof artifact is written to `tmp/local-control-plane-proof/feedback-evaluation.json`.
+- The proxy debug audit still shows no upstream GraphQL requests.
+
+## 8) Run clean proof harness
 
 To prove the full MVP path from a clean smoke database, run:
 
@@ -147,5 +175,6 @@ The proof harness:
 - Seeds deterministic local demo data.
 - Runs strict CLI smoke with no fallback reads.
 - Runs prediction smoke and writes the exact proof file.
+- Runs feedback-evaluation smoke and writes an exact evaluation proof file.
 - Asserts `/debug/upstream-requests` is empty.
 - Runs browser smoke when `http://localhost:3000` is reachable; otherwise it skips only the browser step.

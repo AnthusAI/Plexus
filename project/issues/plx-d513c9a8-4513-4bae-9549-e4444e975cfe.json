@@ -3,16 +3,29 @@
   "title": "Seed 200 local feedback evaluation fixtures",
   "description": "Extend local deterministic seed data with 200 public-safe Nira call-center Item records and 200 linked FeedbackItem records with balanced Yes/No ground-truth labels, deterministic IDs, and complete feedback metadata required for feedback evaluation.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-89823a02-0f3a-40d5-b59c-a6252f465d4e",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "529606c8-3f4f-4d5b-a1f9-014e04251904",
+      "author": "ryan.porter",
+      "text": "Starting implementation: expand seed_local_demo to deterministic 200-item feedback fixture set and then wire strict feedback-evaluation smoke plus proof artifact readback.",
+      "created_at": "2026-06-05T15:45:04.213108Z"
+    },
+    {
+      "id": "7a0eba2d-1675-4c98-b22d-8a1b7d28611e",
+      "author": "ryan.porter",
+      "text": "Implemented deterministic fixture expansion in seed_local_demo.py: 200 Nira Item records and 200 linked FeedbackItem records with balanced Yes/No final labels, deterministic IDs, and complete metadata for feedback evaluation. Verified clean-stack seed produces all nira-demo-feedback-001..200 records.",
+      "created_at": "2026-06-05T16:03:56.464656Z"
+    }
+  ],
   "created_at": "2026-06-05T15:32:57.835275Z",
-  "updated_at": "2026-06-05T15:33:13.415607Z",
-  "closed_at": null,
+  "updated_at": "2026-06-05T16:04:07.276408Z",
+  "closed_at": "2026-06-05T16:04:07.276408Z",
   "custom": {}
 }

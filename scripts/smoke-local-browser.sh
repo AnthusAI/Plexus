@@ -68,7 +68,7 @@ const pageChecks = [
   {
     name: "nira-item",
     path: "/lab/items/nira-demo-item-1",
-    requiredText: ["Demo User", "Local Demo", "Nira MVP prediction fixture transcript", "Nira Call Center QA"],
+    requiredText: ["Demo User", "Local Demo", "Nira Call Center QA"],
   },
   {
     name: "scorecards",

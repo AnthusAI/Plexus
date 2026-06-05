@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import requests
@@ -55,6 +55,9 @@ def create(model: str, input_doc: dict[str, Any]) -> dict[str, Any]:
 def main() -> None:
     wait_for_proxy()
     ts = now()
+    feedback_fixture_count = int(os.getenv("PLEXUS_LOCAL_FEEDBACK_FIXTURE_COUNT", "200"))
+    if feedback_fixture_count < 1:
+        raise RuntimeError("PLEXUS_LOCAL_FEEDBACK_FIXTURE_COUNT must be >= 1")
     account_id = "local-demo-account"
     scorecard_id = "local-demo-scorecard"
     section_id = "local-demo-section"
@@ -228,6 +231,68 @@ def main() -> None:
         "createdAt": ts,
         "updatedAt": ts,
     })
+
+    # Seed a deterministic feedback-evaluation fixture set for local MVP proofing.
+    edited_anchor = datetime.now(timezone.utc) - timedelta(minutes=feedback_fixture_count)
+    for index in range(1, feedback_fixture_count + 1):
+        item_id = f"nira-demo-item-{index}"
+        external_id = f"nira-demo-external-{index}"
+        final_answer = "Yes" if index % 2 == 1 else "No"
+        initial_answer = final_answer if index % 5 else ("No" if final_answer == "Yes" else "Yes")
+        edited_at = (edited_anchor + timedelta(minutes=index)).isoformat().replace("+00:00", "Z")
+
+        if index > 1:
+            yes_text = (
+                f"Call #{index}: customer asked for an account update. "
+                "The agent confirmed the issue was resolved and provided the next step: "
+                "a follow-up confirmation email."
+            )
+            no_text = (
+                f"Call #{index}: customer asked for an account update. "
+                "The agent gathered details but ended the call without a clear outcome or action."
+            )
+            create("Item", {
+                "id": item_id,
+                "accountId": account_id,
+                "scoreId": nira_score_id,
+                "externalId": external_id,
+                "description": f"Nira feedback fixture transcript {index}",
+                "text": yes_text if final_answer == "Yes" else no_text,
+                "metadata": {"channel": "voice", "fixture": "nira-feedback", "ordinal": index},
+                "isEvaluation": True,
+                "createdByType": "seed",
+                "createdAt": edited_at,
+                "updatedAt": edited_at,
+            })
+            create("Identifier", {
+                "itemId": item_id,
+                "name": "External ID",
+                "value": external_id,
+                "accountId": account_id,
+                "position": index,
+                "createdAt": edited_at,
+                "updatedAt": edited_at,
+            })
+
+        create("FeedbackItem", {
+            "id": f"nira-demo-feedback-{index:03d}",
+            "accountId": account_id,
+            "scorecardId": nira_scorecard_id,
+            "scoreId": nira_score_id,
+            "itemId": item_id,
+            "cacheKey": f"{nira_score_id}:{item_id}",
+            "initialAnswerValue": initial_answer,
+            "finalAnswerValue": final_answer,
+            "initialCommentValue": "Initial reviewer classification.",
+            "finalCommentValue": "Final reviewer classification.",
+            "editCommentValue": f"Synthetic QA label for fixture {index}.",
+            "editorName": "Demo Reviewer",
+            "isAgreement": initial_answer == final_answer,
+            "isInvalid": False,
+            "editedAt": edited_at,
+            "createdAt": edited_at,
+            "updatedAt": edited_at,
+        })
 
     item_ids = ["local-demo-item-1", "local-demo-item-2", "local-demo-item-3"]
     for index, item_id in enumerate(item_ids, start=1):

@@ -393,6 +393,7 @@ class PostgresStore:
         sort_direction: str = "ASC",
         sort_field: Optional[str] = None,
         limit: Optional[int] = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         if self._uses_local_model_store(model):
             return self._list_local(
@@ -401,6 +402,7 @@ class PostgresStore:
                 sort_direction=sort_direction,
                 sort_field=sort_field,
                 limit=limit,
+                offset=offset,
             )
 
         config = MODEL_CONFIGS[model]
@@ -417,6 +419,17 @@ class PostgresStore:
                 elif "beginsWith" in expected:
                     clauses.append(f"{column}::text like %s")
                     values.append(f"{expected['beginsWith']}%")
+                elif "between" in expected and isinstance(expected["between"], list) and len(expected["between"]) == 2:
+                    start, end = expected["between"]
+                    clauses.append(f"{column} >= %s and {column} <= %s")
+                    values.extend([start, end])
+                else:
+                    if "ge" in expected:
+                        clauses.append(f"{column} >= %s")
+                        values.append(expected["ge"])
+                    if "le" in expected:
+                        clauses.append(f"{column} <= %s")
+                        values.append(expected["le"])
             else:
                 clauses.append(f"{column} = %s")
                 values.append(expected)
@@ -425,8 +438,11 @@ class PostgresStore:
         order_column = config.column_for(sort_field or "") or config.default_order
         direction = "DESC" if sort_direction.upper() == "DESC" else "ASC"
         limit_sql = "limit %s" if limit else ""
+        offset_sql = "offset %s" if offset else ""
         if limit:
             values.append(limit)
+        if offset:
+            values.append(offset)
 
         with self.connect() as conn:
             with conn.cursor() as cur:
@@ -437,6 +453,7 @@ class PostgresStore:
                     {where_sql}
                     order by {order_column} {direction} nulls last
                     {limit_sql}
+                    {offset_sql}
                     """,
                     tuple(values),
                 )
@@ -680,6 +697,7 @@ class PostgresStore:
         sort_direction: str = "ASC",
         sort_field: Optional[str] = None,
         limit: Optional[int] = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         table = self._local_table_name(model)
         clauses = []
@@ -694,6 +712,33 @@ class PostgresStore:
                 elif "beginsWith" in expected:
                     clauses.append("doc ->> %s like %s")
                     values.extend([field_name, f"{expected['beginsWith']}%"])
+                elif "between" in expected and isinstance(expected["between"], list) and len(expected["between"]) == 2:
+                    start, end = expected["between"]
+                    if _is_timestamp_field(field_name):
+                        clauses.append("(doc ->> %s)::timestamptz >= %s::timestamptz")
+                        values.extend([field_name, str(start)])
+                        clauses.append("(doc ->> %s)::timestamptz <= %s::timestamptz")
+                        values.extend([field_name, str(end)])
+                    else:
+                        clauses.append("doc ->> %s >= %s")
+                        values.extend([field_name, str(start)])
+                        clauses.append("doc ->> %s <= %s")
+                        values.extend([field_name, str(end)])
+                else:
+                    if "ge" in expected:
+                        if _is_timestamp_field(field_name):
+                            clauses.append("(doc ->> %s)::timestamptz >= %s::timestamptz")
+                            values.extend([field_name, str(expected["ge"])])
+                        else:
+                            clauses.append("doc ->> %s >= %s")
+                            values.extend([field_name, str(expected["ge"])])
+                    if "le" in expected:
+                        if _is_timestamp_field(field_name):
+                            clauses.append("(doc ->> %s)::timestamptz <= %s::timestamptz")
+                            values.extend([field_name, str(expected["le"])])
+                        else:
+                            clauses.append("doc ->> %s <= %s")
+                            values.extend([field_name, str(expected["le"])])
                 continue
             clauses.append("doc ->> %s = %s")
             values.extend([field_name, str(expected)])
@@ -702,22 +747,22 @@ class PostgresStore:
         order_field = sort_field or "updatedAt"
         direction = sql.SQL("DESC") if sort_direction.upper() == "DESC" else sql.SQL("ASC")
         limit_sql = sql.SQL(" limit %s") if limit else sql.SQL("")
-        if limit:
-            values.append(limit)
+        offset_sql = sql.SQL(" offset %s") if offset else sql.SQL("")
 
         query = sql.SQL(
-            "select doc from local_data.{table}{where} order by doc ->> %s {direction} nulls last{limit}"
+            "select doc from local_data.{table}{where} order by doc ->> %s {direction} nulls last{limit}{offset}"
         ).format(
             table=sql.Identifier(table),
             where=where_sql,
             direction=direction,
             limit=limit_sql,
+            offset=offset_sql,
         )
         values.append(order_field)
-
-        # The order field placeholder appears before the optional limit placeholder.
         if limit:
-            values[-1], values[-2] = values[-2], values[-1]
+            values.append(limit)
+        if offset:
+            values.append(offset)
 
         with self.connect() as conn:
             with conn.cursor() as cur:
@@ -736,3 +781,7 @@ def digest(value: str) -> str:
 
 def stable_json(value: Any) -> str:
     return json.dumps(value or {}, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _is_timestamp_field(field_name: str) -> bool:
+    return field_name.endswith("At")

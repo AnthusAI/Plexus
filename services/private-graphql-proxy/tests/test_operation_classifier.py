@@ -128,6 +128,35 @@ def test_classifies_composite_legacy_index_root_aliases(monkeypatch):
     assert not plan.blocked_fields
 
 
+def test_classifies_feedback_composite_legacy_index_root_alias(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    plan = build_operation_plan(
+        """
+        query FeedbackAlias($accountId: String!, $scorecardId: String!, $scoreId: String!, $start: String!, $end: String!) {
+            listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt(
+                accountId: $accountId
+                scorecardIdScoreIdEditedAt: {
+                    between: [
+                        { scorecardId: $scorecardId, scoreId: $scoreId, editedAt: $start }
+                        { scorecardId: $scorecardId, scoreId: $scoreId, editedAt: $end }
+                    ]
+                }
+                limit: 50
+            ) {
+                items { id itemId scorecardId scoreId editedAt }
+                nextToken
+            }
+        }
+        """,
+        "FeedbackAlias",
+    )
+
+    assert [(field.name, field.model) for field in plan.private_fields] == [
+        ("listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt", "FeedbackItem")
+    ]
+    assert not plan.blocked_fields
+
+
 def test_classifies_synthetic_legacy_index_roots_not_in_manifest(monkeypatch):
     monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
     plan = build_operation_plan(

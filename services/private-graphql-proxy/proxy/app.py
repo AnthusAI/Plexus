@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from contextlib import asynccontextmanager
 from datetime import timezone
 from typing import Any, Optional
@@ -187,18 +188,29 @@ def handle_private_field(
         args = all_argument_values(field.node, variables)
         filters = list_filters(args)
         filters.update(composite_begins_with_filters(args))
+        filters.update(composite_between_filters(args))
         sort_field = sort_field_for_root(field.name)
         sort_direction = args.get("sortDirection") or "ASC"
+        page_limit = args.get("limit")
+        page_size = int(page_limit) if page_limit is not None else None
+        page_offset = decode_next_token(args.get("nextToken"))
+        fetch_limit = page_size + 1 if page_size else None
+
         items = store.list_private(
             field.model,
             filters,
             sort_direction=sort_direction,
             sort_field=sort_field,
-            limit=args.get("limit"),
+            limit=fetch_limit,
+            offset=page_offset,
         )
+        next_token = None
+        if page_size and len(items) > page_size:
+            items = items[:page_size]
+            next_token = encode_next_token(page_offset + page_size)
         return project_model_connection(
             field.model,
-            {"items": items, "nextToken": None},
+            {"items": items, "nextToken": next_token},
             field.node.selection_set,
         )
 
@@ -297,6 +309,28 @@ def composite_begins_with_filters(args: dict[str, Any]) -> dict[str, Any]:
     return filters
 
 
+def composite_between_filters(args: dict[str, Any]) -> dict[str, Any]:
+    filters: dict[str, Any] = {}
+    for value in args.values():
+        if not isinstance(value, dict):
+            continue
+        between = value.get("between")
+        if not (isinstance(between, list) and len(between) == 2):
+            continue
+        start, end = between
+        if not (isinstance(start, dict) and isinstance(end, dict)):
+            continue
+        for key, start_value in start.items():
+            if key not in end:
+                continue
+            end_value = end[key]
+            if start_value == end_value:
+                filters[key] = start_value
+            else:
+                filters[key] = {"between": [start_value, end_value]}
+    return filters
+
+
 def sort_field_for_root(root_name: str) -> Optional[str]:
     operation = get_schema_contract().root_operation(root_name)
     if operation and operation.index and operation.index.get("sortFields"):
@@ -313,6 +347,21 @@ def sort_field_for_root(root_name: str) -> Optional[str]:
         if root_name.endswith(suffix):
             return field_name
     return None
+
+
+def decode_next_token(token: Optional[str]) -> int:
+    if not token:
+        return 0
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
+        offset = int(decoded)
+        return max(offset, 0)
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid nextToken")
+
+
+def encode_next_token(offset: int) -> str:
+    return base64.urlsafe_b64encode(str(offset).encode("utf-8")).decode("utf-8")
 
 
 def project_model_connection(

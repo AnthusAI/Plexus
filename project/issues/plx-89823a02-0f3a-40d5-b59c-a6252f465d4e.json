@@ -3,16 +3,29 @@
   "title": "Local feedback evaluation MVP",
   "description": "Milestone epic to prove local feedback-backed evaluation end to end: seed 200 fixture items and linked feedback labels, run local feedback evaluation, persist evaluation/score-result outputs, and verify dashboard plus CLI readback with no hosted GraphQL dependency.",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-5b670257-243b-4415-90b1-88418f1df375",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "476174ea-0892-4037-8278-26aba9a28516",
+      "author": "ryan.porter",
+      "text": "Implementation started: building deterministic 200-item/200-feedback fixture seed, then adding strict local feedback-evaluation smoke and proof-harness integration.",
+      "created_at": "2026-06-05T15:46:20.569423Z"
+    },
+    {
+      "id": "ae83ddc6-ffa0-4b97-8dc0-a03549a0a965",
+      "author": "ryan.porter",
+      "text": "Feedback-evaluation MVP milestone reached for local control plane proof: clean harness now passes end-to-end with 200 seeded feedback fixtures and 200-item evaluate feedback execution in local mode. Non-blocking note: feedback RCA emits expected warnings in demo mode when OpenAI/sentence-transformer dependencies are absent; this does not block evaluation persistence/readback proof.",
+      "created_at": "2026-06-05T16:04:36.253277Z"
+    }
+  ],
   "created_at": "2026-06-05T15:32:48.064478Z",
-  "updated_at": "2026-06-05T15:32:48.064478Z",
+  "updated_at": "2026-06-05T16:04:36.253277Z",
   "closed_at": null,
   "custom": {}
 }

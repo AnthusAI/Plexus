@@ -13,6 +13,7 @@ export PLEXUS_ACCOUNT_KEY="${PLEXUS_ACCOUNT_KEY:-local-demo}"
 export SMOKE_DASHBOARD_URL="${SMOKE_DASHBOARD_URL:-http://localhost:3000}"
 export SMOKE_PROOF_DIR="${SMOKE_PROOF_DIR:-$ROOT_DIR/tmp/local-control-plane-proof}"
 export SMOKE_PREDICTION_PROOF_FILE="${SMOKE_PREDICTION_PROOF_FILE:-$SMOKE_PROOF_DIR/prediction.json}"
+export SMOKE_FEEDBACK_PROOF_FILE="${SMOKE_FEEDBACK_PROOF_FILE:-$SMOKE_PROOF_DIR/feedback-evaluation.json}"
 
 SMOKE_RESET_STACK="${SMOKE_RESET_STACK:-1}"
 
@@ -86,6 +87,9 @@ main() {
 
   log "Running exact prediction smoke."
   "$ROOT_DIR/scripts/smoke-local-predict.sh"
+
+  log "Running feedback-evaluation smoke."
+  "$ROOT_DIR/scripts/smoke-local-feedback-evaluation.sh"
 
   log "Asserting proxy made no upstream requests."
   assert_no_upstream_requests
