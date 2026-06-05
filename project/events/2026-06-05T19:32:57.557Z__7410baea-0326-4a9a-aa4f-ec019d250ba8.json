@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "7410baea-0326-4a9a-aa4f-ec019d250ba8",
+  "issue_id": "plx-83e08d42-1182-41d8-aee6-99b97e1e26bb",
+  "event_type": "field_updated",
+  "occurred_at": "2026-06-05T19:32:57.557Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "description": {
+        "from": "Parked follow-up for replacing AWS S3 Vectors in local MVP mode. MinIO handles ordinary object storage, but vector indexing/search needs a separate local provider, likely Chroma for the first MVP proof.",
+        "to": "Replace AWS S3 Vectors in local MVP mode using Qdrant as the local provider for vector indexing/search while keeping AWS mode unchanged. Scope includes provider abstraction, env/config wiring, local compose runtime, and smoke proof for VectorTopicMemory end-to-end behavior."
+      }
+    }
+  }
+}

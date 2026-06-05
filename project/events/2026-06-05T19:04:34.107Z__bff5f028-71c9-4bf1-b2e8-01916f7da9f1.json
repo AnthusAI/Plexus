@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bff5f028-71c9-4bf1-b2e8-01916f7da9f1",
+  "issue_id": "plx-9028a88a-600d-42f9-99b0-e7c5546eddbb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T19:04:34.107Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Vector-store runbook and non-goals documentation",
+    "description": "Document Qdrant local setup, envs, smoke steps, acceptance criteria, and explicit non-goals including MinIO scope boundaries and unchanged AWS-mode behavior.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-83e08d42-1182-41d8-aee6-99b97e1e26bb",
+    "labels": []
+  }
+}

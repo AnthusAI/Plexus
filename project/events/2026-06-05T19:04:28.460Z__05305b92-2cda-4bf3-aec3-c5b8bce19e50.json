@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "05305b92-2cda-4bf3-aec3-c5b8bce19e50",
+  "issue_id": "plx-72869e1d-20b2-40af-855a-7337406e9569",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T19:04:28.460Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "VectorTopicMemory local smoke and regression tests",
+    "description": "Add unit and smoke coverage for Qdrant adapter/provider selection and a local VectorTopicMemory proof that persists report blocks without upstream forwarding.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-83e08d42-1182-41d8-aee6-99b97e1e26bb",
+    "labels": []
+  }
+}
