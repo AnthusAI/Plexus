@@ -2741,6 +2741,301 @@ def test_score_edit_async_waits_for_terminal_result_by_default(tmp_path, monkeyp
     assert module.api_calls == ["plexus.score.edit", "plexus.handle.await"]
 
 
+def test_score_edit_chains_followup_from_session_latest(tmp_path, monkeypatch) -> None:
+    handles = _MemoryHandleStore()
+    result_files = [
+        tmp_path / "score-edit-result-1.json",
+        tmp_path / "score-edit-result-2.json",
+    ]
+    result_files[0].write_text(
+        json.dumps({"success": True, "version_id": "sv-1", "parent_version_id": "champion-1"}),
+        encoding="utf-8",
+    )
+    result_files[1].write_text(
+        json.dumps({"success": True, "version_id": "sv-2", "parent_version_id": "sv-1"}),
+        encoding="utf-8",
+    )
+    seen_args: list[dict] = []
+
+    def fake_runner(args: dict) -> dict:
+        seen_args.append(dict(args))
+        return {"status": "dispatched", "result_file": str(result_files[len(seen_args) - 1])}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        handle_store=handles,
+        score_edit_runner=fake_runner,
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: {"id": "scorecard-1"},
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_score_for_score_edit",
+        lambda _client, _scorecard_id, _identifier: {"id": "score-1"},
+    )
+
+    module.score.edit(
+        {
+            "scorecard_identifier": "Compliance",
+            "score_identifier": "Tone",
+            "instruction": "first edit",
+            "async": True,
+            "budget": _child_budget(),
+        }
+    )
+    completed = module.score.edit(
+        {
+            "scorecard_identifier": "Compliance",
+            "score_identifier": "Tone",
+            "instruction": "follow-up edit",
+            "async": True,
+            "budget": _child_budget(),
+        }
+    )
+
+    assert "version_id" not in seen_args[0]
+    assert seen_args[0]["base_version_source"] == "champion"
+    assert seen_args[1]["version_id"] == "sv-1"
+    assert seen_args[1]["base_version_source"] == "session_latest"
+    assert completed["result"]["version_id"] == "sv-2"
+    assert completed["result"]["base_version_source"] == "session_latest"
+
+
+def test_score_edit_cache_is_keyed_by_score(tmp_path, monkeypatch) -> None:
+    result_files = [
+        tmp_path / "score-edit-result-1.json",
+        tmp_path / "score-edit-result-2.json",
+    ]
+    result_files[0].write_text(
+        json.dumps({"success": True, "version_id": "sv-score-1"}),
+        encoding="utf-8",
+    )
+    result_files[1].write_text(
+        json.dumps({"success": True, "version_id": "sv-score-2"}),
+        encoding="utf-8",
+    )
+    seen_args: list[dict] = []
+
+    def fake_runner(args: dict) -> dict:
+        seen_args.append(dict(args))
+        return {"status": "dispatched", "result_file": str(result_files[len(seen_args) - 1])}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        handle_store=_MemoryHandleStore(),
+        score_edit_runner=fake_runner,
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: {"id": "scorecard-1"},
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_score_for_score_edit",
+        lambda _client, _scorecard_id, identifier: {
+            "Tone": {"id": "score-1"},
+            "Resolution": {"id": "score-2"},
+        }[identifier],
+    )
+
+    for score_name in ("Tone", "Resolution"):
+        module.score.edit(
+            {
+                "scorecard_identifier": "Compliance",
+                "score_identifier": score_name,
+                "instruction": f"edit {score_name}",
+                "async": True,
+                "budget": _child_budget(),
+            }
+        )
+
+    assert "version_id" not in seen_args[0]
+    assert "version_id" not in seen_args[1]
+    assert seen_args[1]["base_version_source"] == "champion"
+
+
+def test_score_edit_explicit_version_and_champion_start_override_cache(
+    tmp_path, monkeypatch
+) -> None:
+    result_files = [
+        tmp_path / "score-edit-result-1.json",
+        tmp_path / "score-edit-result-2.json",
+        tmp_path / "score-edit-result-3.json",
+    ]
+    for index, result_file in enumerate(result_files, start=1):
+        result_file.write_text(
+            json.dumps({"success": True, "version_id": f"sv-{index}"}),
+            encoding="utf-8",
+        )
+    seen_args: list[dict] = []
+
+    def fake_runner(args: dict) -> dict:
+        seen_args.append(dict(args))
+        return {"status": "dispatched", "result_file": str(result_files[len(seen_args) - 1])}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        handle_store=_MemoryHandleStore(),
+        score_edit_runner=fake_runner,
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: {"id": "scorecard-1"},
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_score_for_score_edit",
+        lambda _client, _scorecard_id, _identifier: {"id": "score-1"},
+    )
+
+    module.score.edit(
+        {
+            "scorecard_identifier": "Compliance",
+            "score_identifier": "Tone",
+            "instruction": "seed cache",
+            "async": True,
+            "budget": _child_budget(),
+        }
+    )
+    module.score.edit(
+        {
+            "scorecard_identifier": "Compliance",
+            "score_identifier": "Tone",
+            "instruction": "explicit base",
+            "version_id": "explicit-base",
+            "async": True,
+            "budget": _child_budget(),
+        }
+    )
+    module.score.edit(
+        {
+            "scorecard_identifier": "Compliance",
+            "score_identifier": "Tone",
+            "instruction": "restart from champion",
+            "start_version": "champion",
+            "async": True,
+            "budget": _child_budget(),
+        }
+    )
+
+    assert seen_args[1]["version_id"] == "explicit-base"
+    assert seen_args[1]["base_version_source"] == "explicit"
+    assert "version_id" not in seen_args[2]
+    assert seen_args[2]["base_version_source"] == "champion"
+
+
+def test_score_update_chains_parent_from_session_latest(monkeypatch) -> None:
+    seen_args: list[dict] = []
+
+    def fake_update(args: dict) -> dict:
+        seen_args.append(dict(args))
+        return {"success": True, "version_id": f"sv-{len(seen_args)}"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        score_update=fake_update,
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: {"id": "scorecard-1"},
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_score_for_score_edit",
+        lambda _client, _scorecard_id, _identifier: {"id": "score-1"},
+    )
+
+    module.score.update(
+        {
+            "scorecard_identifier": "Compliance",
+            "score_identifier": "Tone",
+            "code": "name: Tone\n",
+        }
+    )
+    result = module.score.update(
+        {
+            "scorecard_identifier": "Compliance",
+            "score_identifier": "Tone",
+            "code": "name: Tone\n",
+        }
+    )
+
+    assert "parent_version_id" not in seen_args[0]
+    assert seen_args[0]["base_version_source"] == "champion"
+    assert seen_args[1]["parent_version_id"] == "sv-1"
+    assert seen_args[1]["base_version_source"] == "session_latest"
+    assert result["parent_version_id"] == "sv-1"
+
+
+def test_evaluation_run_uses_cached_latest_score_version_after_edit(monkeypatch) -> None:
+    update_seen: list[dict] = []
+    evaluation_seen: dict = {}
+
+    def fake_update(args: dict) -> dict:
+        update_seen.append(dict(args))
+        return {"success": True, "version_id": "sv-candidate"}
+
+    def fake_evaluation_runner(args: dict) -> dict:
+        evaluation_seen.update(args)
+        return {"status": "dispatched", "evaluation_id": "eval-1"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        score_update=fake_update,
+        evaluation_runner=fake_evaluation_runner,
+        handle_store=_MemoryHandleStore(),
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: {"id": "scorecard-1"},
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_score_for_score_edit",
+        lambda _client, _scorecard_id, _identifier: {"id": "score-1"},
+    )
+
+    module.score.update(
+        {
+            "scorecard_identifier": "Compliance",
+            "score_identifier": "Tone",
+            "code": "name: Tone\n",
+        }
+    )
+    module.evaluation.run(
+        {
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+            "evaluation_type": "feedback",
+            "max_feedback_items": 20,
+            "sampling_mode": "newest",
+            "async": True,
+            "budget": _child_budget(),
+        }
+    )
+
+    assert update_seen[0]["base_version_source"] == "champion"
+    assert evaluation_seen["version"] == "sv-candidate"
+    assert evaluation_seen["base_version_source"] == "session_latest"
+
+
 def test_score_edit_resolver_accepts_external_id_identifiers() -> None:
     class FakeClient:
         def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
