@@ -18,14 +18,14 @@ async def test_resolve_scorecard_accepts_hyphenated_name():
         patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_key", return_value=None),
         patch(
             "plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name",
-            return_value=SimpleNamespace(id="sc-1", name="Prime - EDU 3rd Party"),
+            return_value=SimpleNamespace(id="sc-1", name="Example Scorecard"),
         ),
         patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_external_id", return_value=None),
     ):
-        resolved = await resolve_scorecard(client, "Prime - EDU 3rd Party")
+        resolved = await resolve_scorecard(client, "Example Scorecard")
 
     assert resolved.id == "sc-1"
-    assert resolved.name == "Prime - EDU 3rd Party"
+    assert resolved.name == "Example Scorecard"
 
 
 @pytest.mark.asyncio

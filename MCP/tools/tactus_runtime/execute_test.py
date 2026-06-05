@@ -194,13 +194,13 @@ def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> 
 
     def fake_list(args):
         list_args.append(args)
-        return [{"id": "card-1", "name": "HCS Medium Risk"}]
+        return [{"id": "card-1", "name": "Example Scorecard"}]
 
     def fake_info(args):
         info_args.append(args)
         return {
-            "name": "HCS Medium Risk",
-            "key": "hcs_medium_risk",
+            "name": "Example Scorecard",
+            "key": "example_scorecard",
             "externalId": "ext-1",
             "description": None,
             "guidelines": None,
@@ -228,8 +228,8 @@ def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> 
     info = facade.scorecards.info({"id": "card-1"})
     searched = facade.scorecards.search({"query": "HCS"})
 
-    assert listed == [{"id": "card-1", "name": "HCS Medium Risk"}]
-    assert info["key"] == "hcs_medium_risk"
+    assert listed == [{"id": "card-1", "name": "Example Scorecard"}]
+    assert info["key"] == "example_scorecard"
     assert searched["count"] == 1
     assert list_args == [{"identifier": "hcs"}]
     assert info_args == [{"id": "card-1"}]
@@ -1520,7 +1520,7 @@ def test_default_score_predict_uses_account_context_for_item_resolution(
                 return {
                     "getScorecard": {
                         "id": "sc-id",
-                        "name": "PolicyPoint - Non-Sales",
+                        "name": "Example Scorecard",
                         "sections": {
                             "items": [
                                 {
@@ -1529,8 +1529,8 @@ def test_default_score_predict_uses_account_context_for_item_resolution(
                                         "items": [
                                             {
                                                 "id": "score-id",
-                                                "name": "Acknowledges Before Redirecting",
-                                                "key": "acknowledges-before-redirecting",
+                                                "name": "Example Score",
+                                                "key": "example-score",
                                                 "externalId": "48849",
                                                 "championVersionId": "version-1",
                                                 "isDisabled": False,
@@ -1561,15 +1561,15 @@ def test_default_score_predict_uses_account_context_for_item_resolution(
         scores = [
             {
                 "id": "score-id",
-                "name": "Acknowledges Before Redirecting",
-                "key": "acknowledges-before-redirecting",
+                "name": "Example Score",
+                "key": "example-score",
                 "externalId": "48849",
             }
         ]
 
         def build_dependency_graph(self, names):
             captured["dependency_names"] = names
-            return {}, {"Acknowledges Before Redirecting": "score-id"}
+            return {}, {"Example Score": "score-id"}
 
         async def score_entire_text(self, **kwargs):
             captured["score_kwargs"] = kwargs
@@ -1622,7 +1622,7 @@ def test_default_score_predict_uses_account_context_for_item_resolution(
 
     result = execute._default_score_predict(
         {
-            "scorecard_identifier": "PolicyPoint - Non-Sales",
+            "scorecard_identifier": "Example Scorecard",
             "score_identifier": "48849",
             "item_id": "311432364",
             "account_id": "acct-console",
@@ -1635,12 +1635,12 @@ def test_default_score_predict_uses_account_context_for_item_resolution(
         "account_id": "acct-console",
     }
     assert captured["load_scorecard_from_api"]["kwargs"]["use_cache"] is False
-    assert captured["dependency_names"] == ["Acknowledges Before Redirecting"]
+    assert captured["dependency_names"] == ["Example Score"]
     assert captured["score_kwargs"]["subset_of_score_names"] == [
-        "Acknowledges Before Redirecting"
+        "Example Score"
     ]
     assert result["success"] is True
-    assert result["scorecard_identifier"] == "PolicyPoint - Non-Sales"
+    assert result["scorecard_identifier"] == "Example Scorecard"
     assert result["score_identifier"] == "48849"
     assert result["predictions"][0]["item_id"] == "item-internal"
     assert result["predictions"][0]["scores"][0]["value"] == "No"
@@ -4020,7 +4020,7 @@ def test_report_run_async_receives_runtime_account_context() -> None:
     module.report.run(
         {
             "block_class": "FeedbackAlignment",
-            "block_config": {"scorecard": "Suco - Home Improvement", "days": 30},
+            "block_config": {"scorecard": "Example Scorecard", "days": 30},
             "async": True,
             "budget": _child_budget(),
         }
@@ -4052,7 +4052,7 @@ def test_score_champion_version_timeline_convenience_maps_report_block() -> None
     budget = _child_budget()
     handle = module.report.score_champion_version_timeline(
         {
-            "scorecard": "Suco - Home Improvement",
+            "scorecard": "Example Scorecard",
             "days": 21,
             "include_unchanged": True,
             "async": True,
@@ -4063,7 +4063,7 @@ def test_score_champion_version_timeline_convenience_maps_report_block() -> None
     assert handle["kind"] == "report"
     assert seen_args["block_class"] == "ScoreChampionVersionTimeline"
     assert seen_args["block_config"] == {
-        "scorecard": "Suco - Home Improvement",
+        "scorecard": "Example Scorecard",
         "days": 21,
         "include_unchanged": True,
     }
@@ -4211,13 +4211,13 @@ def test_default_report_runner_disables_feedback_alignment_memory_by_default(mon
         {
             "block_class": "FeedbackAlignment",
             "cache_key": "report-cache",
-            "block_config": {"scorecard": "Suco - Home Improvement", "days": 30},
+            "block_config": {"scorecard": "Example Scorecard", "days": 30},
         }
     )
 
     assert result["task_id"] == "task-1"
     assert captured["block_config"] == {
-        "scorecard": "Suco - Home Improvement",
+        "scorecard": "Example Scorecard",
         "days": 30,
         "memory_analysis": False,
     }
@@ -4244,7 +4244,7 @@ def test_default_report_runner_preserves_explicit_feedback_alignment_memory(monk
             "block_class": "FeedbackAlignment",
             "cache_key": "report-cache",
             "block_config": {
-                "scorecard": "Suco - Home Improvement",
+                "scorecard": "Example Scorecard",
                 "days": 30,
                 "memory_analysis": True,
             },
@@ -4324,26 +4324,26 @@ def test_default_report_runner_dispatches_report_config_remotely(monkeypatch) ->
     result = execute._default_report_runner(
         {
             "configuration_id": "config-1",
-            "parameters": {"days": 7, "score": "Project Intent AI"},
+            "parameters": {"days": 7, "score": "Example Score"},
         }
     )
 
     assert result == {
         "status": "dispatched",
         "configuration_id": "config-1",
-        "parameters": {"days": 7, "score": "Project Intent AI"},
+        "parameters": {"days": 7, "score": "Example Score"},
         "task_id": "task-1",
     }
     assert created["client"] is client
     assert created["accountId"] == "acct-1"
     assert created["type"] == "Report"
     assert created["target"] == "report/configuration"
-    assert created["command"] == "report run --config config-1 days=7 'score=Project Intent AI'"
+    assert created["command"] == "report run --config config-1 days=7 'score=Example Score'"
     assert created["dispatchStatus"] == "PENDING"
     assert created["status"] == "PENDING"
     assert json.loads(created["metadata"]) == {
         "report_configuration_id": "config-1",
-        "report_parameters": {"days": 7, "score": "Project Intent AI"},
+        "report_parameters": {"days": 7, "score": "Example Score"},
         "account_id": "acct-1",
         "trigger": "mcp_remote",
     }
@@ -4506,8 +4506,8 @@ def test_default_report_runner_launches_score_champion_timeline_command(monkeypa
         {
             "block_class": "ScoreChampionVersionTimeline",
             "block_config": {
-                "scorecard": "Suco - Home Improvement",
-                "score": "Project Type AI",
+                "scorecard": "Example Scorecard",
+                "score": "Example Score",
                 "days": 21,
                 "include_unchanged": True,
             },
@@ -4523,9 +4523,9 @@ def test_default_report_runner_launches_score_champion_timeline_command(monkeypa
         "report",
         "score-champion-version-timeline",
         "--scorecard",
-        "Suco - Home Improvement",
+        "Example Scorecard",
         "--score",
-        "Project Type AI",
+        "Example Score",
         "--days",
         "21",
         "--include-unchanged",
@@ -5298,8 +5298,8 @@ def test_default_feedback_alignment_uses_explicit_runtime_account(
 
     result = execute._default_feedback_alignment(
         {
-            "scorecard_name": "IA Call Center - Universal Pilot",
-            "score_name": "Professionalism Manners",
+            "scorecard_name": "Example Scorecard",
+            "score_name": "Example Score",
             "account_id": "acct-console",
             "days": 14,
         }
@@ -5309,8 +5309,8 @@ def test_default_feedback_alignment_uses_explicit_runtime_account(
     assert fake_client.context.account_id == "acct-console"
     kwargs = captured["summary_kwargs"]
     assert kwargs["account_id"] == "acct-console"
-    assert kwargs["scorecard_name"] == "IA Call Center - Universal Pilot"
-    assert kwargs["score_name"] == "Professionalism Manners"
+    assert kwargs["scorecard_name"] == "Example Scorecard"
+    assert kwargs["score_name"] == "Example Score"
     assert kwargs["days"] == 14
 
 
@@ -5334,8 +5334,8 @@ def test_default_feedback_alignment_requires_account_context_without_null_key(
     with pytest.raises(execute.AccountContextRequired, match="requires account context"):
         execute._default_feedback_alignment(
             {
-                "scorecard_name": "IA Call Center - Universal Pilot",
-                "score_name": "Professionalism Manners",
+                "scorecard_name": "Example Scorecard",
+                "score_name": "Example Score",
             }
         )
 
@@ -5423,7 +5423,7 @@ def test_plexus_facade_injects_runtime_account_into_scorecard_search() -> None:
         scorecards_searcher=fake_search,
         runtime_context={"account_id": "acct-console"},
     )
-    result = facade.scorecards.search({"query": "IA Call Center"})
+    result = facade.scorecards.search({"query": "Example Scorecard"})
 
     assert result["account_id"] == "acct-console"
     assert seen_args["account_id"] == "acct-console"

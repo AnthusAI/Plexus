@@ -24,8 +24,8 @@ interface FeedbackEvaluationOptions {
 
 export function FeedbackEvaluationDialog({ action, isOpen, onClose, onDispatch, initialOptions }: TaskDialogProps & { initialOptions?: Partial<FeedbackEvaluationOptions> }) {
   const [options, setOptions] = useState<FeedbackEvaluationOptions>({
-    scorecardName: initialOptions?.scorecardName || 'termlifev1',
-    scoreName: initialOptions?.scoreName || 'Assumptive Close',
+    scorecardName: initialOptions?.scorecardName || 'example-scorecard',
+    scoreName: initialOptions?.scoreName || 'Example Score',
     days: initialOptions?.days || 7,
     versionId: initialOptions?.versionId
   })

@@ -22,7 +22,7 @@ class _DummyClient:
 @pytest.mark.asyncio
 async def test_resolve_scorecard_accepts_hyphenated_name(monkeypatch):
     block = FeedbackContradictions(
-        config={"scorecard": "Prime - EDU 3rd Party", "score": "Agent Branding"},
+        config={"scorecard": "Example Scorecard", "score": "Example Score"},
         params={},
         api_client=_DummyClient(),
     )
@@ -40,10 +40,10 @@ async def test_resolve_scorecard_accepts_hyphenated_name(monkeypatch):
         lambda external_id, client: None,
     )
 
-    resolved = await block._resolve_scorecard("Prime - EDU 3rd Party")
+    resolved = await block._resolve_scorecard("Example Scorecard")
 
     assert resolved is not None
-    assert resolved.name == "Prime - EDU 3rd Party"
+    assert resolved.name == "Example Scorecard"
 
 
 def _parse_output(payload: str):

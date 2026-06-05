@@ -358,8 +358,8 @@ class TestRealWorldScenario:
         
         # This test simulates the exact scenario that was failing before the fix
         mock_scorecard = {
-            'id': 'andersen-windows-id',
-            'name': 'Andersen Windows IB Sales'
+            'id': 'example-scorecard-id',
+            'name': 'Example Scorecard'
         }
         
         mock_target_scores = [{

@@ -351,10 +351,10 @@ const sampleScoreResults = [
   {
     section: "Sales",
     scores: [
-      { 
-        name: "Assumptive Close", 
-        value: "No", 
-        explanation: "The agent did not use an assumptive close technique...", 
+      {
+        name: "Example Score",
+        value: "No",
+        explanation: "The agent did not use an assumptive close technique...",
         allowFeedback: true
       },
       { 
@@ -2925,17 +2925,14 @@ function ItemsDashboardInner() {
 
   const availableFields = [
     { value: 'Example Scorecard', label: 'Example Scorecard' },
-    { value: 'CS3 Nexstar v1', label: 'CS3 Nexstar v1' },
     { value: 'CS3 Services v2', label: 'CS3 Services v2' },
-    { value: 'CS3 Audigy', label: 'CS3 Audigy' },
     { value: 'AW IB Sales', label: 'AW IB Sales' },
   ]
 
   const scoreOptions = [
     { value: 'Good Call', label: 'Good Call' },
-    { value: 'Agent Branding', label: 'Agent Branding' },
+    { value: 'Example Score', label: 'Example Score' },
     { value: 'Temperature Check', label: 'Temperature Check' },
-    { value: 'Assumptive Close', label: 'Assumptive Close' },
   ]
 
   const toggleExplanation = React.useCallback((scoreName: string) => {

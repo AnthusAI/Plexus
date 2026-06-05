@@ -1896,7 +1896,7 @@ async def test_full_scorecard_flow_explanation_overwriting_bug():
     from pydantic import BaseModel, ConfigDict
     from typing import Optional
     
-    # This test simulates the EXACT flow from your Andersen Windows scorecard:
+    # This test simulates the EXACT flow from an example multi-node scorecard:
     # 1. Previous node sets value="No"
     # 2. Final classifier node outputs classification="NA", explanation="detailed explanation"
     # 3. Node-level output aliasing: value=classification, explanation=explanation
@@ -9032,12 +9032,12 @@ async def test_real_world_simple_binary_scorecard():
 @pytest.mark.asyncio
 async def test_real_world_call_quality_assessment_scorecard():
     """
-    Integration test based on CS3 Dealsaver Good Call scorecard.
+    Integration test based on an example call quality scorecard.
     Tests multi-node workflow with initial Classifier and conditional routing.
     """
     print("📞 REAL-WORLD CALL QUALITY ASSESSMENT INTEGRATION TEST")
     
-    # Sanitized version of CS3 - Dealsaver/Good Call scorecard
+    # Example call quality assessment scorecard configuration
     call_quality_config = {
         "name": "Call Quality Assessment",
         "class": "LangGraphScore",
