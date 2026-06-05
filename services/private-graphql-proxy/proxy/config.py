@@ -8,9 +8,12 @@ from typing import Optional
 @dataclass(frozen=True)
 class Settings:
     database_url: str
+    backend_mode: str
     upstream_api_url: Optional[str]
     upstream_api_key: Optional[str]
     proxy_api_key: Optional[str]
+    auth_mode: str
+    auth_mode_explicit: bool
     cache_ttl_seconds: int
     cache_stale_seconds: int
     upstream_timeout_seconds: float
@@ -20,14 +23,24 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        proxy_api_key = os.getenv("PLEXUS_PROXY_API_KEY")
+        auth_mode_env = os.getenv("PLEXUS_PROXY_AUTH_MODE")
+        auth_mode = (
+            auth_mode_env.strip().lower()
+            if auth_mode_env and auth_mode_env.strip()
+            else ("api_key" if proxy_api_key else "trusted_open")
+        )
         return cls(
             database_url=os.getenv(
                 "PLEXUS_PROXY_DATABASE_URL",
                 "postgresql://plexus:plexus@localhost:5432/plexus_proxy",
             ),
+            backend_mode=os.getenv("PLEXUS_BACKEND_MODE", "amplify").strip().lower(),
             upstream_api_url=os.getenv("PLEXUS_PROXY_UPSTREAM_API_URL"),
             upstream_api_key=os.getenv("PLEXUS_PROXY_UPSTREAM_API_KEY"),
-            proxy_api_key=os.getenv("PLEXUS_PROXY_API_KEY"),
+            proxy_api_key=proxy_api_key,
+            auth_mode=auth_mode,
+            auth_mode_explicit=bool(auth_mode_env and auth_mode_env.strip()),
             cache_ttl_seconds=int(os.getenv("PLEXUS_PROXY_CACHE_TTL_SECONDS", "900")),
             cache_stale_seconds=int(os.getenv("PLEXUS_PROXY_CACHE_STALE_SECONDS", "86400")),
             upstream_timeout_seconds=float(os.getenv("PLEXUS_PROXY_UPSTREAM_TIMEOUT_SECONDS", "30")),

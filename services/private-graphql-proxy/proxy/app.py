@@ -36,6 +36,7 @@ upstream = UpstreamAppSyncClient(
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    assert_security_configuration()
     get_schema_contract()
     store.initialize()
     yield
@@ -63,10 +64,13 @@ def healthz() -> dict[str, str]:
 
 
 @app.get("/readyz")
-def readyz() -> dict[str, str]:
+def readyz() -> dict[str, Any]:
+    security_error = security_configuration_error()
+    if security_error:
+        raise HTTPException(status_code=503, detail=security_error)
     if not store.ready():
         raise HTTPException(status_code=503, detail="database is not ready")
-    return {"status": "ready"}
+    return {"status": "ready", **security_metadata()}
 
 
 @app.get("/debug/upstream-requests")
@@ -81,8 +85,14 @@ async def graphql_endpoint(
     request: Request,
     x_api_key: Optional[str] = Header(default=None),
 ) -> JSONResponse:
-    if settings.proxy_api_key and x_api_key != settings.proxy_api_key:
-        raise HTTPException(status_code=401, detail="invalid proxy API key")
+    if settings.auth_mode == "api_key":
+        if not settings.proxy_api_key:
+            raise HTTPException(
+                status_code=503,
+                detail="PLEXUS_PROXY_AUTH_MODE=api_key requires PLEXUS_PROXY_API_KEY",
+            )
+        if x_api_key != settings.proxy_api_key:
+            raise HTTPException(status_code=401, detail="invalid proxy API key")
 
     payload = await request.json()
     query = payload.get("query")
@@ -140,6 +150,35 @@ async def graphql_endpoint(
         )
 
     return JSONResponse({"data": data, "extensions": extensions})
+
+
+def assert_security_configuration() -> None:
+    error = security_configuration_error()
+    if error:
+        raise RuntimeError(error)
+
+
+def security_configuration_error() -> Optional[str]:
+    if settings.auth_mode not in {"trusted_open", "api_key"}:
+        return "PLEXUS_PROXY_AUTH_MODE must be trusted_open or api_key"
+    if settings.auth_mode == "api_key" and not settings.proxy_api_key:
+        return "PLEXUS_PROXY_AUTH_MODE=api_key requires PLEXUS_PROXY_API_KEY"
+    if settings.auth_mode == "trusted_open":
+        if settings.backend_mode != "local":
+            return "PLEXUS_PROXY_AUTH_MODE=trusted_open requires PLEXUS_BACKEND_MODE=local"
+        if not settings.upstream_disabled:
+            return "PLEXUS_PROXY_AUTH_MODE=trusted_open requires PLEXUS_PROXY_UPSTREAM_DISABLED=true"
+    return None
+
+
+def security_metadata() -> dict[str, Any]:
+    return {
+        "backendMode": settings.backend_mode,
+        "authMode": settings.auth_mode,
+        "authModeExplicit": settings.auth_mode_explicit,
+        "upstreamDisabled": settings.upstream_disabled,
+        "externalAccessControlRequired": settings.auth_mode == "trusted_open",
+    }
 
 
 def handle_private_field(

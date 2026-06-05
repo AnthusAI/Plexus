@@ -50,7 +50,14 @@ curl -s http://localhost:18080/readyz
 Expected:
 
 ```json
-{"status":"ready"}
+{
+  "status": "ready",
+  "backendMode": "local",
+  "authMode": "api_key",
+  "authModeExplicit": false,
+  "upstreamDisabled": true,
+  "externalAccessControlRequired": false
+}
 ```
 
 Seed assertions are performed by the smoke script and check these IDs:
@@ -193,3 +200,22 @@ bash scripts/vet-local-control-plane.sh
 ```
 
 The vetting harness writes `tmp/local-control-plane-proof/production-vetting.json` and records production-readiness evidence for auth/tenancy, migration readiness, storage/vector boundaries, realtime behavior, query shape, and observability/backup gaps. The corresponding human-readable risk register is in `documentation/local-control-plane-production-vetting.md`.
+
+## 10) Optional trusted-open smoke
+
+Trusted-open mode is intentionally unauthenticated and unauthorised inside Plexus. Use it only when access to the GraphQL port is controlled externally.
+
+Start the clean proof stack in trusted-open mode:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+PLEXUS_PROXY_AUTH_MODE=trusted_open bash scripts/prove-local-control-plane.sh
+```
+
+Then run:
+
+```bash
+bash scripts/smoke-local-trusted-open.sh
+```
+
+The smoke verifies that `/readyz` declares `authMode=trusted_open`, a GraphQL read succeeds without `x-api-key`, and `/debug/upstream-requests` remains empty.

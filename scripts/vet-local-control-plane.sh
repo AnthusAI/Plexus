@@ -137,6 +137,13 @@ def explain_query(conn: psycopg.Connection, name: str, query: str, params: tuple
 
 
 def check_auth_and_tenancy() -> None:
+    ready_response = requests.get(api_url.replace("/graphql", "/readyz"), timeout=10)
+    ready_body = ready_response.json()
+    auth_mode = ready_body.get("authMode")
+    auth_mode_explicit = bool(ready_body.get("authModeExplicit"))
+    upstream_disabled = bool(ready_body.get("upstreamDisabled"))
+    external_access_required = bool(ready_body.get("externalAccessControlRequired"))
+
     unauthenticated = graphql("query VetUnauthenticated { listItems(limit: 1) { items { id } } }", api_key_header=None)
 
     create_mutation = """
@@ -165,18 +172,64 @@ def check_auth_and_tenancy() -> None:
     )
     item = read_body["data"]["getItem"]
 
+    if auth_mode == "trusted_open":
+        declared_and_guarded = (
+            auth_mode_explicit
+            and upstream_disabled
+            and external_access_required
+            and unauthenticated.status_code == 200
+        )
+        add_check(
+            area="auth_tenancy",
+            status="pass" if declared_and_guarded else "risk",
+            severity="medium" if declared_and_guarded else "high",
+            evidence={
+                "authMode": auth_mode,
+                "authModeExplicit": auth_mode_explicit,
+                "externalAccessControlRequired": external_access_required,
+                "upstreamDisabled": upstream_disabled,
+                "unauthenticatedStatus": unauthenticated.status_code,
+                "trustedOpenCanReadAccountId": item.get("accountId"),
+            },
+            production_gap=(
+                "Trusted-open mode intentionally performs no Plexus authentication or account authorization; "
+                "deployment security depends on external access control."
+            ),
+            next_required_work="Document and verify the external access boundary for any trusted-open deployment; use OIDC/service-token auth for public or multi-tenant exposure.",
+            kanbus="plx-b80481",
+        )
+        return
+
+    if auth_mode != "api_key":
+        add_check(
+            area="auth_tenancy",
+            status="risk",
+            severity="high",
+            evidence={
+                "authMode": auth_mode,
+                "authModeExplicit": auth_mode_explicit,
+                "unauthenticatedStatus": unauthenticated.status_code,
+                "sharedCredentialCanReadAccountId": item.get("accountId"),
+            },
+            production_gap="The local facade is running with an ambiguous or unrecognized auth mode.",
+            next_required_work="Set PLEXUS_PROXY_AUTH_MODE explicitly to trusted_open or api_key.",
+            kanbus="plx-b80481",
+        )
+        return
+
     add_check(
         area="auth_tenancy",
         status="risk",
         severity="high",
         evidence={
+            "authMode": auth_mode,
+            "authModeExplicit": auth_mode_explicit,
             "unauthenticatedStatus": unauthenticated.status_code,
             "sharedApiKeyCanReadAccountId": item.get("accountId"),
-            "authMode": "shared demo API key",
         },
-        production_gap="Local mode has a shared API-key boundary but no principal-derived account isolation.",
-        next_required_work="Add OIDC/service-token authentication and enforce account access in the facade before resolver execution.",
-        kanbus="plx-e0f180",
+        production_gap="API-key mode provides a shared-secret boundary but no principal-derived account isolation.",
+        next_required_work="Use trusted_open only behind an external perimeter, or add OIDC/service-token authentication and account scoping for public or multi-tenant deployments.",
+        kanbus="plx-b80481",
     )
 
 
