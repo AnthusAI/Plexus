@@ -7,9 +7,15 @@ COMPOSE_FILE="$ROOT_DIR/services/private-graphql-proxy/docker-compose.smoke.yml"
 export PLEXUS_BACKEND_MODE="${PLEXUS_BACKEND_MODE:-local}"
 export PLEXUS_PROXY_UPSTREAM_DISABLED="${PLEXUS_PROXY_UPSTREAM_DISABLED:-true}"
 export PLEXUS_PROXY_API_KEY="${PLEXUS_PROXY_API_KEY:-local-smoke-key}"
+export AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME="${AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME:-plexus-local-report-block-details}"
+export PLEXUS_OBJECT_STORE_ENDPOINT="${PLEXUS_OBJECT_STORE_ENDPOINT:-http://localhost:19000}"
+export PLEXUS_OBJECT_STORE_REGION="${PLEXUS_OBJECT_STORE_REGION:-us-east-1}"
+export PLEXUS_OBJECT_STORE_FORCE_PATH_STYLE="${PLEXUS_OBJECT_STORE_FORCE_PATH_STYLE:-true}"
+export PLEXUS_OBJECT_STORE_ACCESS_KEY_ID="${PLEXUS_OBJECT_STORE_ACCESS_KEY_ID:-plexus-local}"
+export PLEXUS_OBJECT_STORE_SECRET_ACCESS_KEY="${PLEXUS_OBJECT_STORE_SECRET_ACCESS_KEY:-plexus-local-secret}"
 
 cd "$ROOT_DIR"
-docker compose -f "$COMPOSE_FILE" up -d --build postgres proxy
+docker compose -f "$COMPOSE_FILE" up -d --build postgres minio minio-init proxy
 
 docker compose -f "$COMPOSE_FILE" run --rm \
   -e PLEXUS_API_URL=http://proxy:8000/graphql \

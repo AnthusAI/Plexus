@@ -1,0 +1,37 @@
+{
+  "id": "plx-4206d89f-35df-45c6-9feb-bff339d0656f",
+  "title": "Local report artifact storage",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-c37e0c57-2980-4172-9d9e-a1ab72c9dc4b",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "75dbb595-8023-4a29-993d-6c3f51b2c078",
+      "author": "ryan.porter",
+      "text": "Implement local report artifact storage for the local control-plane MVP. Feedback alignment computation already runs against local GraphQL and local seeded feedback data, but report block output/log persistence still assumes hosted S3 and leaves ReportBlock output as a placeholder when the bucket is unavailable. This slice should add MinIO-backed local artifact storage, preserve the compacted ReportBlock.output plus attachedFiles contract, and prove dashboard/report readback without hosted storage.",
+      "created_at": "2026-06-05T16:22:53.905898Z"
+    },
+    {
+      "id": "3b03fd03-4707-4a07-9fde-cf72d9491dd4",
+      "author": "ryan.porter",
+      "text": "Implemented local report artifact storage for the local control-plane MVP. Added MinIO to the smoke compose stack with an idempotent report-block bucket initializer, wired local dev/proof scripts to export object-store envs, updated Python report S3 utilities to use S3-compatible endpoint/path-style settings, and added a local-only dashboard storage route plus Amplify storage shim read/write support. Added scripts/smoke-local-report.sh to run the Nira feedback alignment report, verify compacted ReportBlock output plus attachedFiles, download the MinIO artifact, and assert total_items=200, accuracy=80.0, and overall_ac1=0.6000000000000001. Verification passed: s3_utils unit tests, dashboard local shim Jest test, report smoke, browser smoke for core pages, targeted report detail render with no hosted AWS requests, and local-mode dashboard build.",
+      "created_at": "2026-06-05T16:33:51.398662Z"
+    },
+    {
+      "id": "33e608a0-d1d3-4cfe-a805-8b8430c3fbe2",
+      "author": "ryan.porter",
+      "text": "Storage scope clarification:\n\nMinIO is the local replacement for ordinary S3 object storage: report block output/log artifacts, downloadable attachments, uploaded datasets, task/item/score-result artifacts, and dashboard Amplify Storage calls.\n\nMinIO does not replace AWS S3 Vectors. Vector indexing/search should be tracked separately as a local vector memory store task, likely using Chroma for the MVP.\n\nImmediate storage focus:\n- Prove report artifact storage is stable through MinIO.\n- Audit every remaining ordinary S3/Amplify Storage path.\n- Add smoke coverage for at least one artifact-bearing record outside ReportBlock.\n- Keep hosted AWS storage unreachable in local MVP proof runs.\n",
+      "created_at": "2026-06-05T18:31:52.733307Z"
+    }
+  ],
+  "created_at": "2026-06-05T16:22:46.101359Z",
+  "updated_at": "2026-06-05T18:31:52.733307Z",
+  "closed_at": null,
+  "custom": {}
+}

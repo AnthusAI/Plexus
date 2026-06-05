@@ -1,0 +1,18 @@
+{
+  "id": "plx-e7f58fb0-b6da-4bd3-a220-4f2f8fc85a30",
+  "title": "Dashboard local storage route hardening",
+  "description": "Harden the local dashboard storage route for content type, binary data, missing object errors, local-mode guardrails, and path validation while preserving Amplify Storage compatibility.",
+  "type": "sub-task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4206d89f-35df-45c6-9feb-bff339d0656f",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-05T18:32:17.608279Z",
+  "updated_at": "2026-06-05T18:32:17.608279Z",
+  "closed_at": null,
+  "custom": {}
+}

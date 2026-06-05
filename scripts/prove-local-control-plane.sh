@@ -14,6 +14,13 @@ export SMOKE_DASHBOARD_URL="${SMOKE_DASHBOARD_URL:-http://localhost:3000}"
 export SMOKE_PROOF_DIR="${SMOKE_PROOF_DIR:-$ROOT_DIR/tmp/local-control-plane-proof}"
 export SMOKE_PREDICTION_PROOF_FILE="${SMOKE_PREDICTION_PROOF_FILE:-$SMOKE_PROOF_DIR/prediction.json}"
 export SMOKE_FEEDBACK_PROOF_FILE="${SMOKE_FEEDBACK_PROOF_FILE:-$SMOKE_PROOF_DIR/feedback-evaluation.json}"
+export SMOKE_REPORT_PROOF_FILE="${SMOKE_REPORT_PROOF_FILE:-$SMOKE_PROOF_DIR/report.json}"
+export AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME="${AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME:-plexus-local-report-block-details}"
+export PLEXUS_OBJECT_STORE_ENDPOINT="${PLEXUS_OBJECT_STORE_ENDPOINT:-http://localhost:19000}"
+export PLEXUS_OBJECT_STORE_REGION="${PLEXUS_OBJECT_STORE_REGION:-us-east-1}"
+export PLEXUS_OBJECT_STORE_FORCE_PATH_STYLE="${PLEXUS_OBJECT_STORE_FORCE_PATH_STYLE:-true}"
+export PLEXUS_OBJECT_STORE_ACCESS_KEY_ID="${PLEXUS_OBJECT_STORE_ACCESS_KEY_ID:-plexus-local}"
+export PLEXUS_OBJECT_STORE_SECRET_ACCESS_KEY="${PLEXUS_OBJECT_STORE_SECRET_ACCESS_KEY:-plexus-local-secret}"
 
 SMOKE_RESET_STACK="${SMOKE_RESET_STACK:-1}"
 
@@ -44,7 +51,7 @@ reset_smoke_stack() {
 
 start_smoke_stack() {
   log "Starting local PostgreSQL and GraphQL proxy."
-  docker compose -f "$COMPOSE_FILE" up -d --build postgres proxy
+  docker compose -f "$COMPOSE_FILE" up -d --build postgres minio minio-init proxy
 }
 
 seed_demo_data() {
@@ -90,6 +97,9 @@ main() {
 
   log "Running feedback-evaluation smoke."
   "$ROOT_DIR/scripts/smoke-local-feedback-evaluation.sh"
+
+  log "Running feedback-alignment report smoke."
+  "$ROOT_DIR/scripts/smoke-local-report.sh"
 
   log "Asserting proxy made no upstream requests."
   assert_no_upstream_requests

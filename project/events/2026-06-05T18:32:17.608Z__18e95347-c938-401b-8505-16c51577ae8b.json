@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "18e95347-c938-401b-8505-16c51577ae8b",
+  "issue_id": "plx-e7f58fb0-b6da-4bd3-a220-4f2f8fc85a30",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T18:32:17.608Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Dashboard local storage route hardening",
+    "description": "Harden the local dashboard storage route for content type, binary data, missing object errors, local-mode guardrails, and path validation while preserving Amplify Storage compatibility.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-4206d89f-35df-45c6-9feb-bff339d0656f",
+    "labels": []
+  }
+}

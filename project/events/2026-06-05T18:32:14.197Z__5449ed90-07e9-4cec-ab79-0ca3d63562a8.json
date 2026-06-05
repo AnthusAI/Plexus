@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5449ed90-07e9-4cec-ab79-0ca3d63562a8",
+  "issue_id": "plx-0451debc-2139-4e2b-acf8-78d87728aff4",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T18:32:14.197Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Attachment smoke coverage beyond reports",
+    "description": "Add local proof coverage for upload, download, and readback of one non-report attachment-bearing model, preferably DataSet or Task, using MinIO and the local GraphQL facade.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-4206d89f-35df-45c6-9feb-bff339d0656f",
+    "labels": []
+  }
+}

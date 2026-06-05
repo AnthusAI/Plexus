@@ -9,6 +9,25 @@ describe("local Amplify compatibility shims", () => {
     jest.restoreAllMocks()
   })
 
+  function storageResponse(text: string, status = 200) {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      clone() {
+        return storageResponse(text, status)
+      },
+      async text() {
+        return text
+      },
+      async json() {
+        return JSON.parse(text)
+      },
+      async blob() {
+        return new Blob([text])
+      },
+    } as Response
+  }
+
   it("returns a fixed authenticated demo user", async () => {
     await expect(getCurrentUser()).resolves.toMatchObject({
       userId: "demo-user",
@@ -35,10 +54,18 @@ describe("local Amplify compatibility shims", () => {
     })
   })
 
-  it("implements deterministic storage placeholders", async () => {
-    await expect(downloadData({ path: "reports/demo.txt" }).result).resolves.toMatchObject({
+  it("implements local storage through the dashboard API route", async () => {
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce(storageResponse("demo-body"))
+      .mockResolvedValueOnce(storageResponse(JSON.stringify({ path: "reports/demo.txt" })))
+    ;(globalThis as any).fetch = fetchMock
+
+    const download = await downloadData({ path: "reports/demo.txt" }).result
+    expect(download).toMatchObject({
       path: "reports/demo.txt",
     })
+    await expect(download.body.text()).resolves.toBe("demo-body")
+
     await expect(uploadData({ path: "reports/demo.txt", data: "demo" }).result).resolves.toMatchObject({
       path: "reports/demo.txt",
     })
@@ -46,6 +73,9 @@ describe("local Amplify compatibility shims", () => {
       url: expect.any(URL),
       expiresAt: expect.any(Date),
     })
+    expect(fetchMock.mock.calls[0][0]).toContain("/api/local-storage?path=reports%2Fdemo.txt")
+    expect(fetchMock.mock.calls[1][0]).toContain("/api/local-storage?path=reports%2Fdemo.txt")
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "PUT" })
   })
 
   it("exposes Amplify-shaped model CRUD methods over local GraphQL", async () => {
