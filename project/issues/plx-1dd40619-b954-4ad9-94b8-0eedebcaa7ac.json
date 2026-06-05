@@ -1,0 +1,18 @@
+{
+  "id": "plx-1dd40619-b954-4ad9-94b8-0eedebcaa7ac",
+  "title": "Local feedback evaluation smoke workflow",
+  "description": "Add and verify strict smoke for local feedback evaluation: run evaluate feedback against Nira score/version with max-items 200, capture exact evaluation proof IDs, and assert persisted Evaluation plus ScoreResult linkage in local GraphQL.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-89823a02-0f3a-40d5-b59c-a6252f465d4e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-05T15:32:59.373151Z",
+  "updated_at": "2026-06-05T15:32:59.373151Z",
+  "closed_at": null,
+  "custom": {}
+}

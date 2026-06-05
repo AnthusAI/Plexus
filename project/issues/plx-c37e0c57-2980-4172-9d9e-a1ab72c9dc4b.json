@@ -1,18 +1,18 @@
 {
   "id": "plx-c37e0c57-2980-4172-9d9e-a1ab72c9dc4b",
-  "title": "Non-AWS control plane migration",
+  "title": "Local control-plane MVP: schema, dashboard, and prediction proof",
   "description": "",
   "type": "epic",
   "status": "open",
   "priority": 1,
   "assignee": null,
   "creator": null,
-  "parent": null,
+  "parent": "plx-5b670257-243b-4415-90b1-88418f1df375",
   "labels": [],
   "dependencies": [],
   "comments": [],
   "created_at": "2026-06-04T18:00:17.155886Z",
-  "updated_at": "2026-06-04T18:00:17.155886Z",
+  "updated_at": "2026-06-05T15:32:47.262888Z",
   "closed_at": null,
   "custom": {}
 }

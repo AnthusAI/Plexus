@@ -28,10 +28,16 @@
       "author": "ryan.porter",
       "text": "Extended contract fidelity hardening with item/task legacy index alias coverage and a local-mode no-upstream resolver test. This closes the immediate CLI list/last fallback gap; remaining contract hardening should still expand relationship, pagination, and connection-shape coverage across more models.",
       "created_at": "2026-06-05T00:50:36.346101Z"
+    },
+    {
+      "id": "c908abd9-fd40-4716-9dd7-cf95e5aa010d",
+      "author": "ryan.porter",
+      "text": "Feedback-evaluation contract parity for local roots/relationships now has dedicated tracking under epic plx-89823a task plx-dd4f39. Keep this issue focused on cross-cutting contract hardening and regression coverage.",
+      "created_at": "2026-06-05T15:33:12.660580Z"
     }
   ],
   "created_at": "2026-06-04T22:51:28.029408Z",
-  "updated_at": "2026-06-05T00:50:36.346101Z",
+  "updated_at": "2026-06-05T15:33:12.660580Z",
   "closed_at": null,
   "custom": {}
 }

@@ -1,0 +1,18 @@
+{
+  "id": "plx-89823a02-0f3a-40d5-b59c-a6252f465d4e",
+  "title": "Local feedback evaluation MVP",
+  "description": "Milestone epic to prove local feedback-backed evaluation end to end: seed 200 fixture items and linked feedback labels, run local feedback evaluation, persist evaluation/score-result outputs, and verify dashboard plus CLI readback with no hosted GraphQL dependency.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-5b670257-243b-4415-90b1-88418f1df375",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-05T15:32:48.064478Z",
+  "updated_at": "2026-06-05T15:32:48.064478Z",
+  "closed_at": null,
+  "custom": {}
+}

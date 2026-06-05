@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "98368532-7c9c-4bc8-8f6f-e05e03601c41",
+  "issue_id": "plx-89823a02-0f3a-40d5-b59c-a6252f465d4e",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T15:32:48.064Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Local feedback evaluation MVP",
+    "description": "Milestone epic to prove local feedback-backed evaluation end to end: seed 200 fixture items and linked feedback labels, run local feedback evaluation, persist evaluation/score-result outputs, and verify dashboard plus CLI readback with no hosted GraphQL dependency.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-5b670257-243b-4415-90b1-88418f1df375",
+    "labels": []
+  }
+}

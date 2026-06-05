@@ -10,9 +10,16 @@
   "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "cbbb7847-be6c-42d1-953e-ad8faa00f414",
+      "author": "ryan.porter",
+      "text": "Next seed expansion is tracked under epic plx-89823a (Local feedback evaluation MVP), task plx-d513c9, to add 200 deterministic Nira feedback-evaluation fixtures (Items + FeedbackItems) for feedback-run smoke.",
+      "created_at": "2026-06-05T15:33:11.914516Z"
+    }
+  ],
   "created_at": "2026-06-04T18:34:00.534738Z",
-  "updated_at": "2026-06-04T18:45:52.428923Z",
+  "updated_at": "2026-06-05T15:33:11.914516Z",
   "closed_at": null,
   "custom": {}
 }

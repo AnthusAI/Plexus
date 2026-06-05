@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9ff477e0-ccb9-475b-8ffa-802e32aece1c",
+  "issue_id": "plx-5b670257-243b-4415-90b1-88418f1df375",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T15:32:42.700Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Non-AWS control plane migration",
+    "description": "Program-level initiative for replacing hosted control-plane dependencies with a local, controlled GraphQL backend and validating milestone epics from MVP proof through production readiness.",
+    "issue_type": "initiative",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}

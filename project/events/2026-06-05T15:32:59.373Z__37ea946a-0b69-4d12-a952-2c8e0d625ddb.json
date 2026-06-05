@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "37ea946a-0b69-4d12-a952-2c8e0d625ddb",
+  "issue_id": "plx-1dd40619-b954-4ad9-94b8-0eedebcaa7ac",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T15:32:59.373Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Local feedback evaluation smoke workflow",
+    "description": "Add and verify strict smoke for local feedback evaluation: run evaluate feedback against Nira score/version with max-items 200, capture exact evaluation proof IDs, and assert persisted Evaluation plus ScoreResult linkage in local GraphQL.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-89823a02-0f3a-40d5-b59c-a6252f465d4e",
+    "labels": []
+  }
+}
