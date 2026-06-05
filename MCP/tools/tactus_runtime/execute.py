@@ -6609,6 +6609,7 @@ class PlexusRuntimeModule:
         self._procedure_branch = _default_procedure_branch
         self._stream_handler = stream_handler
         self._api_calls: list[str] = []
+        self._latest_score_versions: dict[tuple[str, str], dict[str, Any]] = {}
         self.handle_protocol_required: tuple[str, str] | None = None
         methods_by_namespace: dict[str, set[str]] = {}
         for namespace_name, method_name in MCP_TOOL_MAP.keys():
@@ -6652,6 +6653,183 @@ class PlexusRuntimeModule:
         self._api_calls.append(api_call)
         if self._stream_handler is not None:
             self._stream_handler.api_call(api_call)
+
+    def _score_version_cache_key(
+        self, scorecard_id: Any, score_id: Any
+    ) -> tuple[str, str] | None:
+        if not scorecard_id or not score_id:
+            return None
+        return (str(scorecard_id), str(score_id))
+
+    def _cache_latest_score_version(
+        self,
+        *,
+        scorecard_id: Any,
+        score_id: Any,
+        version_id: Any,
+        parent_version_id: Any = None,
+        source: str,
+    ) -> None:
+        key = self._score_version_cache_key(scorecard_id, score_id)
+        if key is None or not version_id:
+            return
+        self._latest_score_versions[key] = {
+            "scorecard_id": key[0],
+            "score_id": key[1],
+            "version_id": str(version_id),
+            "parent_version_id": str(parent_version_id) if parent_version_id else None,
+            "source": source,
+        }
+
+    def _cached_latest_score_version(
+        self, scorecard_id: Any, score_id: Any
+    ) -> dict[str, Any] | None:
+        key = self._score_version_cache_key(scorecard_id, score_id)
+        if key is None:
+            return None
+        return self._latest_score_versions.get(key)
+
+    def _resolve_score_identity_for_latest_cache(
+        self,
+        parsed: dict[str, Any],
+        *,
+        scorecard_arg_names: tuple[str, ...],
+        score_arg_names: tuple[str, ...],
+    ) -> tuple[str, str]:
+        from plexus.cli.shared.client_utils import create_client
+
+        scorecard_id = str(parsed.get("scorecard_id") or "").strip()
+        score_id = str(parsed.get("score_id") or "").strip()
+        if scorecard_id and score_id:
+            return scorecard_id, score_id
+
+        scorecard_identifier = next(
+            (parsed.get(name) for name in scorecard_arg_names if parsed.get(name)),
+            None,
+        )
+        score_identifier = next(
+            (parsed.get(name) for name in score_arg_names if parsed.get(name)),
+            None,
+        )
+        resolver_client = create_client()
+        resolved_scorecard = (
+            {"id": scorecard_id}
+            if scorecard_id
+            else _resolve_scorecard_for_score_edit(resolver_client, scorecard_identifier)
+        )
+        resolved_score = (
+            {"id": score_id}
+            if score_id
+            else _resolve_score_for_score_edit(
+                resolver_client,
+                str(resolved_scorecard["id"]),
+                score_identifier,
+            )
+        )
+        return str(resolved_scorecard["id"]), str(resolved_score["id"])
+
+    def _apply_latest_score_edit_start(
+        self, parsed: dict[str, Any], scorecard_id: str, score_id: str
+    ) -> str:
+        explicit_version = parsed.get("version_id") or parsed.get("version")
+        if explicit_version and str(explicit_version).strip().lower() != "latest":
+            parsed["base_version_source"] = "explicit"
+            return "explicit"
+        if explicit_version and str(explicit_version).strip().lower() == "latest":
+            parsed.pop("version", None)
+            parsed.pop("version_id", None)
+        elif str(parsed.get("start_version") or "").strip().lower() == "champion":
+            parsed["base_version_source"] = "champion"
+            return "champion"
+
+        cached = self._cached_latest_score_version(scorecard_id, score_id)
+        if cached:
+            parsed["version_id"] = cached["version_id"]
+            parsed["base_version_source"] = "session_latest"
+            return "session_latest"
+        parsed["base_version_source"] = "champion"
+        return "champion"
+
+    def _apply_latest_score_update_parent(
+        self, parsed: dict[str, Any], scorecard_id: str, score_id: str
+    ) -> str:
+        explicit_parent = parsed.get("parent_version_id")
+        explicit_version = parsed.get("version_id") or parsed.get("version")
+        if explicit_parent:
+            parsed["base_version_source"] = "explicit"
+            return "explicit"
+        if explicit_version and str(explicit_version).strip().lower() != "latest":
+            parsed["parent_version_id"] = explicit_version
+            parsed["base_version_source"] = "explicit"
+            return "explicit"
+        if explicit_version and str(explicit_version).strip().lower() == "latest":
+            parsed.pop("version", None)
+            parsed.pop("version_id", None)
+        elif str(parsed.get("start_version") or "").strip().lower() == "champion":
+            parsed["base_version_source"] = "champion"
+            return "champion"
+
+        cached = self._cached_latest_score_version(scorecard_id, score_id)
+        if cached:
+            parsed["parent_version_id"] = cached["version_id"]
+            parsed["base_version_source"] = "session_latest"
+            return "session_latest"
+        parsed["base_version_source"] = "champion"
+        return "champion"
+
+    def _apply_latest_score_evaluation_version(self, parsed: dict[str, Any]) -> None:
+        explicit_version = parsed.get("version")
+        explicit_version_id = parsed.get("version_id") or parsed.get("score_version_id")
+        version_value = explicit_version or explicit_version_id
+        if version_value and str(version_value).strip().lower() != "latest":
+            if explicit_version_id and not explicit_version:
+                parsed["version"] = explicit_version_id
+            return
+        if version_value and str(version_value).strip().lower() == "latest":
+            parsed.pop("version", None)
+            parsed.pop("version_id", None)
+            parsed.pop("score_version_id", None)
+
+        scorecard_identifier = (
+            parsed.get("scorecard_name")
+            or parsed.get("scorecard_identifier")
+            or parsed.get("scorecard")
+            or parsed.get("scorecard_id")
+        )
+        score_identifier = (
+            parsed.get("score_name")
+            or parsed.get("score_identifier")
+            or parsed.get("score")
+            or parsed.get("score_id")
+        )
+        if not scorecard_identifier or not score_identifier:
+            return
+        try:
+            scorecard_id, score_id = self._resolve_score_identity_for_latest_cache(
+                parsed,
+                scorecard_arg_names=(
+                    "scorecard_id",
+                    "scorecard_name",
+                    "scorecard_identifier",
+                    "scorecard",
+                ),
+                score_arg_names=(
+                    "score_id",
+                    "score_name",
+                    "score_identifier",
+                    "score",
+                ),
+            )
+        except Exception:
+            if version_value and str(version_value).strip().lower() == "latest":
+                raise
+            return
+        cached = self._cached_latest_score_version(scorecard_id, score_id)
+        if cached:
+            parsed["version"] = cached["version_id"]
+            parsed["scorecard_id"] = scorecard_id
+            parsed["score_id"] = score_id
+            parsed["base_version_source"] = "session_latest"
 
     def _enforce_tool_access(self, namespace: str, method: str) -> None:
         if self._tool_access_mode != "planning":
@@ -6724,7 +6902,45 @@ class PlexusRuntimeModule:
             if method == "pull":
                 return self._score_pull(parsed)
             if method == "update":
-                return self._score_update(parsed)
+                creates_version = bool(
+                    parsed.get("code")
+                    or parsed.get("yaml_content")
+                    or parsed.get("guidelines") is not None
+                )
+                scorecard_id: str | None = None
+                score_id: str | None = None
+                if creates_version:
+                    scorecard_id, score_id = self._resolve_score_identity_for_latest_cache(
+                        parsed,
+                        scorecard_arg_names=(
+                            "scorecard_id",
+                            "scorecard_identifier",
+                            "scorecard",
+                        ),
+                        score_arg_names=("score_id", "score_identifier", "score"),
+                    )
+                    parsed["scorecard_id"] = scorecard_id
+                    parsed["score_id"] = score_id
+                    self._apply_latest_score_update_parent(parsed, scorecard_id, score_id)
+                result = self._score_update(parsed)
+                if (
+                    creates_version
+                    and isinstance(result, dict)
+                    and result.get("success")
+                    and result.get("version_id")
+                ):
+                    result.setdefault("scorecard_id", scorecard_id)
+                    result.setdefault("score_id", score_id)
+                    result.setdefault("parent_version_id", parsed.get("parent_version_id"))
+                    result.setdefault("base_version_source", parsed.get("base_version_source"))
+                    self._cache_latest_score_version(
+                        scorecard_id=result.get("scorecard_id"),
+                        score_id=result.get("score_id"),
+                        version_id=result.get("version_id"),
+                        parent_version_id=result.get("parent_version_id"),
+                        source="score.update",
+                    )
+                return result
             if method == "edit":
                 if not bool(parsed.get("async")):
                     self.handle_protocol_required = ("score", "edit")
@@ -6746,6 +6962,11 @@ class PlexusRuntimeModule:
                 )
                 parsed["scorecard_id"] = str(resolved_scorecard["id"])
                 parsed["score_id"] = str(resolved_score["id"])
+                self._apply_latest_score_edit_start(
+                    parsed,
+                    str(resolved_scorecard["id"]),
+                    str(resolved_score["id"]),
+                )
                 child_budget = self._budget.carve_child("score", "edit", parsed.get("budget"))
                 dispatch_result = self._score_edit_runner(parsed)
                 handle = self._handle_store.create(
@@ -6770,7 +6991,21 @@ class PlexusRuntimeModule:
                 )
                 if await_poll is not None:
                     await_args["poll_interval"] = await_poll
-                return self._call_handle("handle", "await", await_args)
+                completed = self._call_handle("handle", "await", await_args)
+                if isinstance(completed, dict) and completed.get("status") == "completed":
+                    result = completed.get("result") or {}
+                    if isinstance(result, dict) and result.get("version_id"):
+                        result.setdefault("scorecard_id", parsed.get("scorecard_id"))
+                        result.setdefault("score_id", parsed.get("score_id"))
+                        result.setdefault("base_version_source", parsed.get("base_version_source"))
+                        self._cache_latest_score_version(
+                            scorecard_id=result.get("scorecard_id"),
+                            score_id=result.get("score_id"),
+                            version_id=result.get("version_id"),
+                            parent_version_id=result.get("parent_version_id"),
+                            source="score.edit",
+                        )
+                return completed
             if method == "test":
                 return self._score_test(parsed)
             if method == "set_champion":
@@ -6929,6 +7164,7 @@ class PlexusRuntimeModule:
         parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
         if not parsed.get("procedure_id") and self._trace_id:
             parsed["procedure_id"] = self._trace_id
+        self._apply_latest_score_evaluation_version(parsed)
         if not bool(parsed.get("async")):
             self._record_api_call("evaluation", "run")
             self.handle_protocol_required = ("evaluation", "run")
