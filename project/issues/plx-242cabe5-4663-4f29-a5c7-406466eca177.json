@@ -22,10 +22,16 @@
       "author": "ryan.porter",
       "text": "Added first contract hardening slice for local mode. Dashboard local shim tests now assert generated list selections include manifest primary-key fields, and subscription client.graphql calls return a synchronous no-op subscription object. Proxy tests now assert manifest subscription/custom roots classify locally, composite legacy index-root aliases classify and route, and the AggregatedMetrics accountId/recordType/timeRangeStart alias reaches local storage. Remaining hardening should expand relationship and connection-shape coverage across more models.",
       "created_at": "2026-06-04T23:11:19.358424Z"
+    },
+    {
+      "id": "55619bf4-74fa-4b53-a74d-b73de5e27e15",
+      "author": "ryan.porter",
+      "text": "Extended contract fidelity hardening with item/task legacy index alias coverage and a local-mode no-upstream resolver test. This closes the immediate CLI list/last fallback gap; remaining contract hardening should still expand relationship, pagination, and connection-shape coverage across more models.",
+      "created_at": "2026-06-05T00:50:36.346101Z"
     }
   ],
   "created_at": "2026-06-04T22:51:28.029408Z",
-  "updated_at": "2026-06-04T23:11:19.358424Z",
+  "updated_at": "2026-06-05T00:50:36.346101Z",
   "closed_at": null,
   "custom": {}
 }

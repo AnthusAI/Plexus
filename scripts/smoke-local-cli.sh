@@ -8,6 +8,7 @@ export PLEXUS_ACCOUNT_KEY="${PLEXUS_ACCOUNT_KEY:-local-demo}"
 SMOKE_CLEANUP="${SMOKE_CLEANUP:-1}"
 SMOKE_READY_ATTEMPTS="${SMOKE_READY_ATTEMPTS:-60}"
 SMOKE_READY_SLEEP_SECONDS="${SMOKE_READY_SLEEP_SECONDS:-2}"
+SMOKE_ASSERT_NO_UPSTREAM="${SMOKE_ASSERT_NO_UPSTREAM:-1}"
 
 failures=0
 passes=0
@@ -76,7 +77,7 @@ if account.get("key")!="local-demo":
 ' "$payload"
 }
 
-cli_items_list_with_fallback() {
+cli_items_list() {
   (
     cd "$ROOT_DIR"
     PLEXUS_API_URL="$PLEXUS_API_URL" \
@@ -88,30 +89,16 @@ import os
 
 account = os.environ["PLEXUS_ACCOUNT_KEY"]
 
-try:
-    items.main(
-        args=["list", "--account", account, "--limit", "1"],
-        prog_name="items",
-        standalone_mode=False,
-    )
-except Exception as exc:
-    print(f"items list fallback triggered: {exc}")
-    items.main(
-        args=[
-            "info",
-            "local-demo-item-1",
-            "--account",
-            account,
-            "--minimal",
-        ],
-        prog_name="items",
-        standalone_mode=False,
-    )
+items.main(
+    args=["list", "--account", account, "--limit", "1"],
+    prog_name="items",
+    standalone_mode=False,
+)
 PY
   )
 }
 
-cli_tasks_last_with_fallback() {
+cli_tasks_last() {
   (
     cd "$ROOT_DIR"
     PLEXUS_API_URL="$PLEXUS_API_URL" \
@@ -122,19 +109,11 @@ from plexus.cli.task.tasks import tasks
 
 account = __import__("os").environ["PLEXUS_ACCOUNT_KEY"]
 
-try:
-    tasks.main(
-        args=["last", "--account", account],
-        prog_name="tasks",
-        standalone_mode=False,
-    )
-except Exception as exc:
-    print(f"tasks last fallback triggered: {exc}")
-    tasks.main(
-        args=["info", "--id", "local-demo-task"],
-        prog_name="tasks",
-        standalone_mode=False,
-    )
+tasks.main(
+    args=["last", "--account", account],
+    prog_name="tasks",
+    standalone_mode=False,
+)
 PY
   )
 }
@@ -215,12 +194,29 @@ PY
   )
 }
 
+assert_no_upstream_requests() {
+  if [[ "$SMOKE_ASSERT_NO_UPSTREAM" != "1" ]]; then
+    return 0
+  fi
+
+  local debug_url="${PLEXUS_API_URL%/graphql}/debug/upstream-requests"
+  local payload
+  payload="$(curl -fsS -m 10 "$debug_url")"
+  python3 -c '
+import json,sys
+payload=json.loads(sys.argv[1])
+if payload:
+    raise SystemExit(f"expected no upstream proxy requests in local smoke, found {len(payload)}")
+' "$payload"
+}
+
 main() {
   run_step "Proxy readyz is healthy" wait_for_readyz
   run_step "Seeded GraphQL records exist" assert_seeded_graphql_records
-  run_step "CLI items list (fallback to seeded info if index root is unavailable)" cli_items_list_with_fallback
-  run_step "CLI tasks last (fallback to seeded task info if index root is unavailable)" cli_tasks_last_with_fallback
+  run_step "CLI items list uses local index roots" cli_items_list
+  run_step "CLI tasks last uses local index roots" cli_tasks_last
   run_step "CLI create + info (+ optional cleanup)" cli_create_and_lookup
+  run_step "Proxy made no upstream requests" assert_no_upstream_requests
 
   log "Smoke summary: pass=$passes fail=$failures"
   if [[ "$failures" -gt 0 ]]; then

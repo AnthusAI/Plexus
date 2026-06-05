@@ -84,13 +84,18 @@ def test_classifies_legacy_index_root_aliases_for_backward_compatibility(monkeyp
                 items { id accountId createdAt }
                 nextToken
             }
+            listTaskByAccountIdAndUpdatedAt(accountId: $accountId) {
+                items { id accountId updatedAt }
+                nextToken
+            }
         }
         """,
         "LegacyIndexAlias",
     )
 
     assert [(field.name, field.model) for field in plan.private_fields] == [
-        ("listItemByAccountIdAndCreatedAt", "Item")
+        ("listItemByAccountIdAndCreatedAt", "Item"),
+        ("listTaskByAccountIdAndUpdatedAt", "Task"),
     ]
     assert not plan.blocked_fields
 

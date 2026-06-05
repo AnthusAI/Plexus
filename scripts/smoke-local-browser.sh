@@ -9,6 +9,8 @@ export PLEXUS_API_URL="${PLEXUS_API_URL:-http://localhost:18080/graphql}"
 export PLEXUS_API_KEY="${PLEXUS_API_KEY:-local-smoke-key}"
 export SMOKE_BROWSER_CHANNEL="${SMOKE_BROWSER_CHANNEL:-chrome}"
 export SMOKE_BROWSER_OUT_DIR="${SMOKE_BROWSER_OUT_DIR:-$ROOT_DIR/tmp/local-control-plane-browser-smoke}"
+export SMOKE_PROOF_DIR="${SMOKE_PROOF_DIR:-$ROOT_DIR/tmp/local-control-plane-proof}"
+export SMOKE_PREDICTION_PROOF_FILE="${SMOKE_PREDICTION_PROOF_FILE:-$SMOKE_PROOF_DIR/prediction.json}"
 
 log() {
   printf '[smoke-local-browser] %s\n' "$*"
@@ -44,6 +46,7 @@ const apiUrl = process.env.PLEXUS_API_URL || "http://localhost:18080/graphql";
 const apiKey = process.env.PLEXUS_API_KEY || "local-smoke-key";
 const outDir = process.env.SMOKE_BROWSER_OUT_DIR;
 const browserChannel = process.env.SMOKE_BROWSER_CHANNEL || "chrome";
+const predictionProofFile = process.env.SMOKE_PREDICTION_PROOF_FILE;
 const allowedHosts = new Set([
   new URL(baseUrl).host,
   new URL(apiUrl).host,
@@ -117,9 +120,33 @@ async function postGraphql(query, variables = {}) {
   return body.data;
 }
 
-async function assertPredictionReadback() {
+function expectedScoreResultId() {
+  if (process.env.SMOKE_SCORE_RESULT_ID) {
+    return process.env.SMOKE_SCORE_RESULT_ID;
+  }
+  if (predictionProofFile && fs.existsSync(predictionProofFile)) {
+    const proof = JSON.parse(fs.readFileSync(predictionProofFile, "utf8"));
+    if (proof.scoreResultId) {
+      return proof.scoreResultId;
+    }
+  }
+  throw new Error(
+    "No exact prediction ScoreResult ID found. Run scripts/smoke-local-predict.sh first or set SMOKE_SCORE_RESULT_ID.",
+  );
+}
+
+async function assertPredictionReadback(scoreResultId) {
   const data = await postGraphql(`
-    query BrowserSmokePredictionReadback($itemId: String!) {
+    query BrowserSmokePredictionReadback($scoreResultId: ID!, $itemId: String!) {
+      scoreResult: getScoreResult(id: $scoreResultId) {
+        id
+        itemId
+        scorecardId
+        scoreId
+        scoreVersionId
+        type
+        status
+      }
       byItem: listScoreResultByItemId(itemId: $itemId, limit: 25) {
         items {
           id
@@ -132,16 +159,32 @@ async function assertPredictionReadback() {
         nextToken
       }
     }
-  `, { itemId: "nira-demo-item-1" });
+  `, { scoreResultId, itemId: "nira-demo-item-1" });
+  const scoreResult = data.scoreResult;
+  if (!scoreResult) {
+    throw new Error(`Prediction ScoreResult ${scoreResultId} was not found in local GraphQL.`);
+  }
+  if (
+    scoreResult.id !== scoreResultId
+    || scoreResult.itemId !== "nira-demo-item-1"
+    || scoreResult.scorecardId !== "nira-demo-scorecard"
+    || scoreResult.scoreId !== "nira-demo-score"
+    || scoreResult.scoreVersionId !== "nira-demo-score-version"
+    || scoreResult.type !== "prediction"
+    || scoreResult.status !== "COMPLETED"
+  ) {
+    throw new Error(`Prediction ScoreResult ${scoreResultId} did not match the expected Nira proof shape.`);
+  }
   const items = data.byItem?.items || [];
   const expected = items.find((item) => (
-    item.itemId === "nira-demo-item-1"
+    item.id === scoreResultId
+    && item.itemId === "nira-demo-item-1"
     && item.scoreId === "nira-demo-score"
     && item.scoreVersionId === "nira-demo-score-version"
     && item.type === "prediction"
   ));
   if (!expected) {
-    throw new Error("No Nira prediction ScoreResult found. Run scripts/smoke-local-predict.sh before browser smoke.");
+    throw new Error(`Prediction ScoreResult ${scoreResultId} was missing from listScoreResultByItemId readback.`);
   }
   return expected.id;
 }
@@ -177,7 +220,7 @@ async function assertPredictionReadback() {
   });
 
   try {
-    const scoreResultId = await assertPredictionReadback();
+    const scoreResultId = await assertPredictionReadback(expectedScoreResultId());
 
     for (const check of pageChecks) {
       const url = `${baseUrl}${check.path}`;

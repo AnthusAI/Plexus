@@ -76,6 +76,9 @@ class InMemoryStore:
             }
         )
 
+    def upstream_requests(self):
+        return self.upstream_audit
+
     def _key(self, model, doc):
         key_fields = get_schema_contract().primary_key_fields(model)
         return tuple(doc.get(field) for field in key_fields)
@@ -89,6 +92,11 @@ class FakeUpstream:
         self.calls += 1
         score_id = variables.get("id") or variables.get("scoreId")
         return {"data": {"getScore": {"id": score_id, "name": "Cached score"}}}
+
+
+class FailingUpstream:
+    def execute(self, query, variables, operation_name):
+        raise AssertionError("local-mode request unexpectedly forwarded upstream")
 
 
 def client_with_fakes(monkeypatch):
@@ -303,6 +311,58 @@ def test_local_mode_supports_legacy_index_root_alias_queries(monkeypatch):
     assert response.status_code == 200
     connection = response.json()["data"]["listItemByAccountIdAndCreatedAt"]
     assert connection["items"][0]["id"] == "item-legacy-1"
+
+
+def test_local_mode_supports_cli_item_task_index_aliases_without_upstream(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    client, store, _upstream = client_with_fakes(monkeypatch)
+    monkeypatch.setattr(proxy_app, "upstream", FailingUpstream())
+    store.upsert_private(
+        "Item",
+        {
+            "id": "item-cli-1",
+            "accountId": "account-1",
+            "text": "cli item list compatibility",
+            "createdAt": "2026-06-04T00:00:00Z",
+            "updatedAt": "2026-06-04T01:00:00Z",
+        },
+    )
+    store.upsert_private(
+        "Task",
+        {
+            "id": "task-cli-1",
+            "accountId": "account-1",
+            "type": "prediction",
+            "status": "COMPLETED",
+            "createdAt": "2026-06-04T00:00:00Z",
+            "updatedAt": "2026-06-04T02:00:00Z",
+        },
+    )
+
+    response = client.post(
+        "/graphql",
+        json={
+            "query": """
+            query CliIndexAliases($accountId: String!) {
+                items: listItemByAccountIdAndUpdatedAt(accountId: $accountId, sortDirection: DESC, limit: 1) {
+                    items { id accountId updatedAt }
+                    nextToken
+                }
+                tasks: listTaskByAccountIdAndUpdatedAt(accountId: $accountId, sortDirection: DESC, limit: 1) {
+                    items { id accountId updatedAt }
+                    nextToken
+                }
+            }
+            """,
+            "variables": {"accountId": "account-1"},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["items"]["items"][0]["id"] == "item-cli-1"
+    assert data["tasks"]["items"][0]["id"] == "task-cli-1"
+    assert store.upstream_requests() == []
 
 
 def test_local_mode_supports_composite_legacy_index_root_alias_queries(monkeypatch):

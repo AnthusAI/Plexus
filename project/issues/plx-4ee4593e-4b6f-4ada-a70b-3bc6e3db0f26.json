@@ -3,16 +3,23 @@
   "title": "Implement local index-root parity for item/task list operations",
   "description": "Add local resolver support for key list-by-account-and-time roots used by CLI list/last flows so fallback paths are no longer required in smoke tests.",
   "type": "sub-task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "25189278-639e-48c0-ba74-72983184e8c5",
+      "author": "ryan.porter",
+      "text": "Implemented strict local index-root proof for canonical CLI item/task flows. scripts/smoke-local-cli.sh now runs real items list and tasks last commands without fallback, and asserts /debug/upstream-requests is empty. Backend tests cover local item/task legacy index aliases with a failing upstream client so accidental forwarding fails the test. Clean proof harness verification passed from a reset smoke database.",
+      "created_at": "2026-06-05T00:50:32.645170Z"
+    }
+  ],
   "created_at": "2026-06-04T21:49:53.745395Z",
-  "updated_at": "2026-06-04T21:49:53.745395Z",
-  "closed_at": null,
+  "updated_at": "2026-06-05T00:50:33.390499Z",
+  "closed_at": "2026-06-05T00:50:33.390499Z",
   "custom": {}
 }

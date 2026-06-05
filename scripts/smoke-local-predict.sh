@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PLEXUS_API_URL="${PLEXUS_API_URL:-http://localhost:18080/graphql}"
 export PLEXUS_API_KEY="${PLEXUS_API_KEY:-local-smoke-key}"
 export PLEXUS_ACCOUNT_KEY="${PLEXUS_ACCOUNT_KEY:-local-demo}"
+export SMOKE_PROOF_DIR="${SMOKE_PROOF_DIR:-$ROOT_DIR/tmp/local-control-plane-proof}"
+export SMOKE_PREDICTION_PROOF_FILE="${SMOKE_PREDICTION_PROOF_FILE:-$SMOKE_PROOF_DIR/prediction.json}"
+SMOKE_ASSERT_NO_UPSTREAM="${SMOKE_ASSERT_NO_UPSTREAM:-1}"
 SMOKE_READY_ATTEMPTS="${SMOKE_READY_ATTEMPTS:-60}"
 SMOKE_READY_SLEEP_SECONDS="${SMOKE_READY_SLEEP_SECONDS:-2}"
 
@@ -128,12 +131,15 @@ PY
 }
 
 run_predict_and_verify_score_result() {
+  mkdir -p "$(dirname "$SMOKE_PREDICTION_PROOF_FILE")"
   (
     cd "$ROOT_DIR"
     poetry run python - <<'PY'
+from datetime import datetime, timezone
 import json
 import os
 import io
+from pathlib import Path
 from contextlib import redirect_stdout
 
 import requests
@@ -141,6 +147,7 @@ import requests
 api_url = os.environ["PLEXUS_API_URL"]
 api_key = os.environ["PLEXUS_API_KEY"]
 account_key = os.environ["PLEXUS_ACCOUNT_KEY"]
+proof_file = Path(os.environ["SMOKE_PREDICTION_PROOF_FILE"])
 from plexus.cli.prediction.predictions import predict
 
 predict_output = io.StringIO()
@@ -274,9 +281,40 @@ by_item = (data.get("byItem") or {}).get("items") or []
 if score_result_id not in {row.get("id") for row in by_item}:
     raise SystemExit("new score result missing from listScoreResultByItemId results")
 
+proof_file.parent.mkdir(parents=True, exist_ok=True)
+proof_file.write_text(json.dumps({
+    "scoreResultId": score_result_id,
+    "itemId": "nira-demo-item-1",
+    "accountId": account_id,
+    "accountKey": account_key,
+    "scorecardId": "nira-demo-scorecard",
+    "scoreId": "nira-demo-score",
+    "scoreVersionId": "nira-demo-score-version",
+    "type": "prediction",
+    "status": "COMPLETED",
+    "createdAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+}, indent=2, sort_keys=True))
+
 print(f"Prediction smoke passed with score_result_id={score_result_id}")
+print(f"Prediction proof written to {proof_file}")
 PY
   )
+}
+
+assert_no_upstream_requests() {
+  if [[ "$SMOKE_ASSERT_NO_UPSTREAM" != "1" ]]; then
+    return 0
+  fi
+
+  local debug_url="${PLEXUS_API_URL%/graphql}/debug/upstream-requests"
+  local payload
+  payload="$(curl -fsS -m 10 "$debug_url")"
+  python3 -c '
+import json,sys
+payload=json.loads(sys.argv[1])
+if payload:
+    raise SystemExit(f"expected no upstream proxy requests in local predict smoke, found {len(payload)}")
+' "$payload"
 }
 
 main() {
@@ -284,6 +322,7 @@ main() {
   run_step "Nira seed data and champion path are available" assert_nira_seed_and_champion_path
   run_step "Prediction CLI dependencies are available" ensure_predict_dependencies
   run_step "CLI predict roundtrip persists ScoreResult locally" run_predict_and_verify_score_result
+  run_step "Proxy made no upstream requests" assert_no_upstream_requests
 
   log "Smoke summary: pass=$passes fail=$failures"
   if [[ "$failures" -gt 0 ]]; then
