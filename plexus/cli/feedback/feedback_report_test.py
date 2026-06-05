@@ -1,5 +1,6 @@
 from click.testing import CliRunner
 from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
 
 from plexus.cli.feedback.feedback_report import report
 from plexus.reports.service import encode_programmatic_run_payload
@@ -335,6 +336,44 @@ def test_scorecard_history_supports_single_score_explicit_window_and_summary_mod
         "summary_llm_model": "gpt-5-mini",
     }
     assert kwargs["fresh"] is True
+
+
+@patch("plexus.cli.feedback.feedback_report.collect_feedback_score_integrity")
+@patch("plexus.cli.feedback.feedback_report.resolve_account_id_for_command")
+@patch("plexus.cli.feedback.feedback_report.create_client")
+def test_integrity_command_emits_orphaned_feedback_diagnostics(
+    mock_create_client,
+    mock_resolve_account_id,
+    mock_collect_feedback_score_integrity,
+):
+    runner = CliRunner()
+    mock_create_client.return_value = MagicMock()
+    mock_resolve_account_id.return_value = "acct-1"
+    mock_collect_feedback_score_integrity.return_value = {
+        "account_id": "acct-1",
+        "feedback_total": 10,
+        "orphaned_feedback_items": 4,
+        "orphaned_percentage": 40.0,
+        "orphaned_by_scorecard_score": [],
+    }
+
+    result = runner.invoke(
+        report,
+        [
+            "integrity",
+            "--start-date",
+            "2026-05-01",
+            "--end-date",
+            "2026-05-07",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert '"orphaned_feedback_items": 4' in result.output
+    _, kwargs = mock_collect_feedback_score_integrity.call_args
+    assert kwargs["account_id"] == "acct-1"
+    assert kwargs["start_at"] == datetime(2026, 5, 1, tzinfo=timezone.utc)
+    assert kwargs["end_at"] == datetime(2026, 5, 7, 23, 59, 59, 999999, tzinfo=timezone.utc)
 
 
 @patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")

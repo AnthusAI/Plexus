@@ -7,7 +7,9 @@ without mocking internal implementation details.
 
 import pytest
 from click.testing import CliRunner
+from unittest.mock import MagicMock, patch
 from plexus.cli.evaluation.evaluations import feedback
+from plexus.feedback_analysis_preflight import FeedbackAnalysisPreflightError
 
 
 class TestFeedbackCommandIntegration:
@@ -185,8 +187,8 @@ class TestFeedbackCommandParameterValidation:
                 '--score', 'test',
                 '--version', version
             ])
-            # Should not fail due to invalid version format
-            assert 'Invalid value' not in result.output or 'version' not in result.output.lower()
+        # Should not fail due to invalid version format
+        assert 'Invalid value' not in result.output or 'version' not in result.output.lower()
     
     def test_scorecard_and_score_required(self):
         """Test that both scorecard and score are required."""
@@ -201,6 +203,53 @@ class TestFeedbackCommandParameterValidation:
         result = runner.invoke(feedback, ['--score', 'test'])
         assert result.exit_code != 0
         assert 'scorecard' in result.output.lower() or 'required' in result.output.lower()
+
+    @patch("plexus.cli.evaluation.evaluations.validate_feedback_analysis_preflight")
+    @patch("plexus.dashboard.api.models.account.Account.get_by_id")
+    @patch("plexus.cli.shared.identifier_resolution.resolve_score_identifier")
+    @patch("plexus.cli.shared.identifier_resolution.resolve_scorecard_identifier")
+    @patch("plexus.cli.report.utils.resolve_account_id_for_command")
+    @patch("plexus.cli.shared.client_utils.create_client")
+    def test_feedback_command_fails_fast_when_preflight_fails(
+        self,
+        mock_create_client,
+        mock_resolve_account_id,
+        mock_resolve_scorecard_identifier,
+        mock_resolve_score_identifier,
+        mock_get_account_by_id,
+        mock_validate_feedback_analysis_preflight,
+    ):
+        runner = CliRunner()
+        client = MagicMock()
+        client.execute.return_value = {"getScore": {"championVersionId": "sv-1"}}
+        mock_create_client.return_value = client
+        mock_resolve_account_id.return_value = "acct-1"
+        mock_resolve_scorecard_identifier.return_value = "scorecard-1"
+        mock_resolve_score_identifier.return_value = "score-1"
+        mock_get_account_by_id.return_value = MagicMock(key="acct-key")
+        mock_validate_feedback_analysis_preflight.side_effect = FeedbackAnalysisPreflightError(
+            error_code="SCORE_VERSION_CONFIGURATION_MISSING",
+            root_cause="missing config",
+            scorecard_id="scorecard-1",
+            score_id="score-1",
+            score_version_id="sv-1",
+        )
+
+        result = runner.invoke(
+            feedback,
+            [
+                "--scorecard",
+                "sc",
+                "--score",
+                "s1",
+                "--version",
+                "sv-1",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "Feedback evaluation preflight failed" in result.output
+        assert "SCORE_VERSION_CONFIGURATION_MISSING" in result.output
 
 
 @pytest.mark.integration

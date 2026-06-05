@@ -6,6 +6,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
+from plexus.feedback_analysis_preflight import FeedbackAnalysisPreflightError
+from plexus.feedback_analysis_preflight import FeedbackAnalysisPreflightResult
 from plexus.feedback_item_explanations import FeedbackItemExplanationTimeoutError
 from plexus.reports.blocks.feedback_contradictions import FeedbackContradictions
 from plexus.reports.blocks.guideline_vetting import GuidelineVettingService
@@ -49,6 +51,16 @@ async def test_resolve_scorecard_accepts_hyphenated_name(monkeypatch):
 def _parse_output(payload: str):
     json_text = '\n'.join(line for line in payload.split('\n') if not line.startswith('#'))
     return json.loads(json_text)
+
+
+def _preflight_result() -> FeedbackAnalysisPreflightResult:
+    return FeedbackAnalysisPreflightResult(
+        scorecard_id="scorecard-1",
+        score_id="score-1",
+        score_version_id="score-version-1",
+        score_version_configuration={"name": "config"},
+        score_guidelines_text="Guideline text",
+    )
 
 
 def test_guideline_vetting_bedrock_uses_haiku_45(monkeypatch):
@@ -129,7 +141,10 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
         '_resolve_score',
         AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
     )
-    monkeypatch.setattr(block, '_fetch_guidelines', AsyncMock(return_value='Guideline text'))
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight',
+        AsyncMock(return_value=_preflight_result()),
+    )
 
     async def _fetch_items(*_args, **_kwargs):
         return [SimpleNamespace(id='fi-1', itemId='item-1', isInvalid=False)]
@@ -179,6 +194,8 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
     assert parsed['mode'] == 'contradictions'
     assert parsed['contradictions_found'] == 1
     assert parsed['aligned_found'] == 0
+    assert parsed['diagnostics']['feedback_items_fetched'] == 1
+    assert parsed['diagnostics']['eligible_items'] == 1
 
 
 @pytest.mark.asyncio
@@ -199,7 +216,10 @@ async def test_feedback_contradictions_propagates_feedback_explanation_timeout(m
         '_resolve_score',
         AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
     )
-    monkeypatch.setattr(block, '_fetch_guidelines', AsyncMock(return_value='Guideline text'))
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight',
+        AsyncMock(return_value=_preflight_result()),
+    )
 
     async def _fetch_items(*_args, **_kwargs):
         return [SimpleNamespace(id='fi-timeout', itemId='item-1', isInvalid=False)]
@@ -252,7 +272,10 @@ async def test_feedback_contradictions_accepts_explicit_timestamp_window(monkeyp
         '_resolve_score',
         AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
     )
-    monkeypatch.setattr(block, '_fetch_guidelines', AsyncMock(return_value='Guideline text'))
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight',
+        AsyncMock(return_value=_preflight_result()),
+    )
 
     captured = {}
 
@@ -295,7 +318,10 @@ async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(mon
         '_resolve_score',
         AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
     )
-    monkeypatch.setattr(block, '_fetch_guidelines', AsyncMock(return_value='Guideline text'))
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight',
+        AsyncMock(return_value=_preflight_result()),
+    )
 
     async def _fetch_items(*_args, **_kwargs):
         return [SimpleNamespace(id='fi-1', itemId='item-1', isInvalid=False)]
@@ -391,7 +417,10 @@ async def test_feedback_contradictions_applies_max_feedback_items_cap(monkeypatc
         '_resolve_score',
         AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
     )
-    monkeypatch.setattr(block, '_fetch_guidelines', AsyncMock(return_value='Guideline text'))
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight',
+        AsyncMock(return_value=_preflight_result()),
+    )
 
     async def _fetch_items(*_args, **_kwargs):
         return [
@@ -436,6 +465,8 @@ async def test_feedback_contradictions_applies_max_feedback_items_cap(monkeypatc
     assert captured_item_ids == ['item-1']
     assert parsed['total_items_analyzed'] == 1
     assert parsed['block_configuration']['max_feedback_items'] == 1
+    assert parsed['diagnostics']['feedback_items_fetched'] == 2
+    assert parsed['diagnostics']['eligible_items'] == 1
 
 
 @pytest.mark.asyncio
@@ -460,7 +491,10 @@ async def test_feedback_contradictions_rubric_memory_is_explicit_opt_in(monkeypa
         '_resolve_score',
         AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
     )
-    monkeypatch.setattr(block, '_fetch_guidelines', AsyncMock(return_value='Guideline text'))
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight',
+        AsyncMock(return_value=_preflight_result()),
+    )
 
     async def _fetch_items(*_args, **_kwargs):
         return [SimpleNamespace(id='fi-1', itemId='item-1', isInvalid=False)]
@@ -724,4 +758,38 @@ async def test_feedback_contradictions_generate_propagates_failures(monkeypatch)
     )
 
     with pytest.raises(ValueError, match="Score not found: broken"):
+        await block.generate()
+
+
+@pytest.mark.asyncio
+async def test_feedback_contradictions_fails_hard_on_preflight_error(monkeypatch):
+    block = FeedbackContradictions(
+        config={"scorecard": "CMG EDU", "score": "Branding and Matching"},
+        params={},
+        api_client=_DummyClient(),
+    )
+    monkeypatch.setattr(
+        block,
+        "_resolve_scorecard",
+        AsyncMock(return_value=SimpleNamespace(id="scorecard-1", name="CMG EDU")),
+    )
+    monkeypatch.setattr(
+        block,
+        "_resolve_score",
+        AsyncMock(return_value=SimpleNamespace(id="score-1", name="Branding and Matching")),
+    )
+    monkeypatch.setattr(
+        "plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight",
+        AsyncMock(
+            side_effect=FeedbackAnalysisPreflightError(
+                error_code="SCORE_VERSION_CONFIGURATION_MISSING",
+                root_cause="missing config",
+                scorecard_id="scorecard-1",
+                score_id="score-1",
+                score_version_id="sv-1",
+            )
+        ),
+    )
+
+    with pytest.raises(FeedbackAnalysisPreflightError):
         await block.generate()
