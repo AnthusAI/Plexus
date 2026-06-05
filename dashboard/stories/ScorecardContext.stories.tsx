@@ -17,7 +17,7 @@ Default.args = {
   setSelectedScore: () => {},
   useMockData: true,
   availableFields: [
-    { value: 'scorecard-1', label: 'SelectQuote Term Life v1' },
+    { value: 'scorecard-1', label: 'Example Scorecard' },
     { value: 'scorecard-2', label: 'CS3 Nexstar v1' },
     { value: 'scorecard-3', label: 'CS3 Services v2' },
     { value: 'scorecard-4', label: 'CS3 Audigy' },

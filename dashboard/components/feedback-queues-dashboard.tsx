@@ -26,7 +26,7 @@ const scorecardScoreCounts = {
   "CS3 Audigy": 4,
   "AW IB Sales": 1,
   "CS3 Nexstar v1": 29,
-  "SelectQuote Term Life v1": 42,
+  "Example Scorecard": 42,
 };
 
 const feedbackQueues = [
@@ -34,11 +34,11 @@ const feedbackQueues = [
   { id: 2, name: "CS3 Audigy", scores: 4, items: 80, date: relativeDate(0, 2, 0), started: relativeDate(0, 3, 0), progress: 60 },
   { id: 3, name: "AW IB Sales", scores: 1, items: 200, date: relativeDate(0, 3, 0), started: relativeDate(0, 4, 0), progress: 90 },
   { id: 4, name: "CS3 Nexstar v1", scores: 29, items: 100, date: relativeDate(0, 4, 0), started: relativeDate(0, 5, 0), progress: 40 },
-  { id: 5, name: "SelectQuote Term Life v1", scores: 42, items: 120, date: relativeDate(0, 5, 0), started: relativeDate(0, 6, 0), progress: 100 },
+  { id: 5, name: "Example Scorecard", scores: 42, items: 120, date: relativeDate(0, 5, 0), started: relativeDate(0, 6, 0), progress: 100 },
   { id: 6, name: "CS3 Services v2", scores: 1, items: 180, date: relativeDate(1, 0, 0), started: relativeDate(1, 1, 0), progress: 80 },
   { id: 7, name: "AW IB Sales", scores: 1, items: 90, date: relativeDate(1, 6, 0), started: relativeDate(1, 7, 0), progress: 30 },
   { id: 8, name: "CS3 Audigy", scores: 4, items: 110, date: relativeDate(2, 0, 0), started: relativeDate(2, 1, 0), progress: 70 },
-  { id: 9, name: "SelectQuote Term Life v1", scores: 42, items: 130, date: relativeDate(2, 12, 0), started: relativeDate(2, 13, 0), progress: 100 },
+  { id: 9, name: "Example Scorecard", scores: 42, items: 130, date: relativeDate(2, 12, 0), started: relativeDate(2, 13, 0), progress: 100 },
   { id: 10, name: "CS3 Nexstar v1", scores: 29, items: 160, date: relativeDate(3, 0, 0), started: relativeDate(3, 1, 0), progress: 85 },
 ];
 

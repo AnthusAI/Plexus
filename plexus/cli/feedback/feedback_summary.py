@@ -99,7 +99,7 @@ def feedback_summary(scorecard: str, score: str, days: int, output_format: str):
     - Actionable recommendations for next steps
     
     Example:
-        plexus feedback summary --scorecard "SelectQuote HCS" --score "Agent Misrepresentation"
+        plexus feedback summary --scorecard "Example Scorecard" --score "Example Score"
     """
     try:
         console.print(f"[cyan]Generating feedback summary for '{score}' on '{scorecard}'...[/cyan]")

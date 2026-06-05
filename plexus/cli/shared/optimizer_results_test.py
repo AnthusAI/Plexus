@@ -104,8 +104,8 @@ def _sample_procedure(metadata=None):
         "scorecardId": "scorecard-1",
         "scoreId": "score-1",
         "scoreVersionId": "version-baseline",
-        "scorecard": {"name": "Medication Review"},
-        "score": {"name": "Prescriber"},
+        "scorecard": {"name": "Example Scorecard"},
+        "score": {"name": "Example Score"},
         "metadata": json.dumps(metadata or {}),
     }
 
@@ -138,7 +138,7 @@ def test_build_manifest_marks_no_feedback_skip_terminal():
     service = OptimizerResultsService(_FakeClient())
     state = {
         "baseline_version_id": "version-baseline",
-        "scorecard_name": "SelectQuote HCS Medium-Risk",
+        "scorecard_name": "Example Scorecard",
         "score_name": "Information Accuracy: Copay Guarantees",
         "configured_max_iterations": 10,
         "skip_reason": "No qualifying recent feedback is available; skipping optimization.",
@@ -422,8 +422,8 @@ def test_build_optimizer_review_packet_counts_unindexed_runs(monkeypatch):
 
     packet = service.build_optimizer_review_packet_for_score(
         "score-1",
-        score_name="Prescriber",
-        scorecard_name="Medication Review",
+        score_name="Example Score",
+        scorecard_name="Example Scorecard",
         champion_version_id="version-old",
     )
 
@@ -478,8 +478,8 @@ def test_build_promotion_packet_uses_best_candidate_and_guideline_paths(monkeypa
 
     packet = service.build_promotion_packet_for_score(
         "score-1",
-        score_name="Medication Review: Prescriber",
-        scorecard_name="SelectQuote HCS Medium-Risk",
+        score_name="Example Score",
+        scorecard_name="Example Scorecard",
         champion_version_id="version-old",
     )
 
@@ -487,6 +487,6 @@ def test_build_promotion_packet_uses_best_candidate_and_guideline_paths(monkeypa
     assert packet["best_feedback_evaluation_url"].endswith("/eval-fb-best")
     assert packet["best_accuracy_evaluation_url"].endswith("/eval-acc-best")
     assert packet["guidelines_relative_path"] == (
-        "scorecards/SelectQuote HCS Medium-Risk/guidelines/Medication Review- Prescriber.md"
+        "scorecards/Example Scorecard/guidelines/Example Score.md"
     )
     assert packet["is_champion"] is False

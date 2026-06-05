@@ -269,7 +269,7 @@ def test_scorecards_list(server: MCPServer, result: TestResult):
     content = resp.get("result", {}).get("content", [])
     assert content, f"Empty content: {resp}"
     text = content[0].get("text", "")
-    assert "SelectQuote" in text or "scorecard" in text.lower(), f"Unexpected content: {text[:200]}"
+    assert "Example Scorecard" in text or "scorecard" in text.lower(), f"Unexpected content: {text[:200]}"
     result.message = f"{len(text)} chars returned"
 
 
@@ -283,7 +283,7 @@ def test_evaluation_run_dispatches(server: MCPServer, result: TestResult):
     # Use a small evaluation to keep test fast; once fix is in, this should
     # return quickly even for large evaluations.
     resp = server.call_tool("plexus_evaluation_run", {
-        "scorecard_name": "SelectQuote HCS Medium-Risk",
+        "scorecard_name": "Example Scorecard",
         "score_name": "Shipping Address",
         "evaluation_type": "feedback",
         "days": 7,

@@ -22,13 +22,13 @@ class CliRecordingClient:
         query = query if isinstance(query, str) else print_ast(query)
 
         if "getScorecard" in query:
-            return {"getScorecard": {"name": "SelectQuote HCS Medium-Risk"}}
+            return {"getScorecard": {"name": "Example Scorecard"}}
 
         if "getScore(id:" in query:
             return {
                 "getScore": {
                     "id": "score-1",
-                    "name": "Medication Review: Individual Confirmation",
+                    "name": "Example Score",
                     "championVersionId": "champion-version",
                 }
             }
@@ -36,7 +36,7 @@ class CliRecordingClient:
         if "getScoreVersion" in query:
             return {
                 "getScoreVersion": {
-                    "configuration": "name: Medication Review: Individual Confirmation\nkey: old\n",
+                    "configuration": "name: Example Score\nkey: old\n",
                     "guidelines": "Cloud guide",
                 }
             }
@@ -52,7 +52,7 @@ class CliRecordingClient:
                     "note": variables["input"]["note"],
                     "score": {
                         "id": "score-1",
-                        "name": "Medication Review: Individual Confirmation",
+                        "name": "Example Score",
                         "championVersionId": "champion-version",
                     },
                 }
@@ -77,19 +77,19 @@ def test_cli_push_preserves_champion_guidelines_when_local_guidelines_file_missi
     )
 
     yaml_path = get_score_yaml_path(
-        "SelectQuote HCS Medium-Risk",
-        "Medication Review: Individual Confirmation",
+        "Example Scorecard",
+        "Example Score",
     )
     yaml_path.write_text(
-        "name: Medication Review: Individual Confirmation\n"
+        "name: Example Score\n"
         "version: champion-version\n"
         "key: new\n",
         encoding="utf-8",
     )
 
     score_commands.push.callback(
-        scorecard="SelectQuote HCS Medium-Risk",
-        score="Medication Review: Individual Confirmation",
+        scorecard="Example Scorecard",
+        score="Example Score",
         note="test",
     )
 

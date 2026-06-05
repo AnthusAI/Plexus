@@ -8860,7 +8860,7 @@ async def test_real_world_healthcare_enrollment_scorecard():
     """
     print("🏥 REAL-WORLD HEALTHCARE ENROLLMENT INTEGRATION TEST")
     
-    # Sanitized version of SelectQuote HCS Medium-Risk/Medication Review scorecard
+    # Sanitized version of an Example Scorecard/Example Score scorecard
     healthcare_config = {
         "name": "Healthcare Enrollment Review",
         "class": "LangGraphScore",

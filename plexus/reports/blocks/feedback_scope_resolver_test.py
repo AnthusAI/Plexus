@@ -36,8 +36,8 @@ async def test_resolve_scorecard_accepts_case_insensitive_name_with_account_scop
             "items": [
                 {
                     "id": "sc-mel",
-                    "name": "Selectquote - MEL HRA v1.0",
-                    "key": "selectquote_mel_hra",
+                    "name": "Example Scorecard",
+                    "key": "example_scorecard",
                     "externalId": "1461",
                     "accountId": "acct-1",
                     "description": None,
@@ -54,12 +54,12 @@ async def test_resolve_scorecard_accepts_case_insensitive_name_with_account_scop
     ):
         resolved = await resolve_scorecard(
             client,
-            "SelectQuote - MEL HRA v1.0",
+            "Example Scorecard",
             account_id="acct-1",
         )
 
     assert resolved.id == "sc-mel"
-    assert resolved.name == "Selectquote - MEL HRA v1.0"
+    assert resolved.name == "Example Scorecard"
     variables = client.execute.call_args.args[1]
     assert variables["filter"] == {"accountId": {"eq": "acct-1"}}
 
@@ -72,7 +72,7 @@ async def test_resolve_scorecard_rejects_ambiguous_case_insensitive_names():
             "items": [
                 {
                     "id": "sc-1",
-                    "name": "Selectquote - MEL HRA v1.0",
+                    "name": "Example Scorecard",
                     "key": "one",
                     "externalId": "1",
                     "accountId": "acct-1",
@@ -80,7 +80,7 @@ async def test_resolve_scorecard_rejects_ambiguous_case_insensitive_names():
                 },
                 {
                     "id": "sc-2",
-                    "name": "SELECTQUOTE - MEL HRA V1.0",
+                    "name": "EXAMPLE SCORECARD",
                     "key": "two",
                     "externalId": "2",
                     "accountId": "acct-1",
@@ -99,7 +99,7 @@ async def test_resolve_scorecard_rejects_ambiguous_case_insensitive_names():
         with pytest.raises(ValueError, match="matched multiple scorecards"):
             await resolve_scorecard(
                 client,
-                "SelectQuote - MEL HRA v1.0",
+                "Example Scorecard",
                 account_id="acct-1",
             )
 
@@ -115,7 +115,7 @@ async def test_resolve_score_for_scorecard_uuid_success():
                         "id": "section-1",
                         "scores": {
                             "items": [
-                                {"id": "score-1", "name": "Agent Misrepresentation", "key": "agent_misrep", "externalId": "45813", "order": 1},
+                                {"id": "score-1", "name": "Example Score", "key": "agent_misrep", "externalId": "45813", "order": 1},
                             ]
                         },
                     }
@@ -126,7 +126,7 @@ async def test_resolve_score_for_scorecard_uuid_success():
 
     with patch(
         "plexus.reports.blocks.feedback_scope_resolver.Score.get_by_id",
-        return_value=SimpleNamespace(id="score-1", name="Agent Misrepresentation"),
+        return_value=SimpleNamespace(id="score-1", name="Example Score"),
     ):
         resolved = await resolve_score_for_scorecard(
             client,
@@ -135,7 +135,7 @@ async def test_resolve_score_for_scorecard_uuid_success():
         )
 
     assert resolved.id == "score-1"
-    assert resolved.name == "Agent Misrepresentation"
+    assert resolved.name == "Example Score"
 
 
 @pytest.mark.asyncio
@@ -177,7 +177,7 @@ async def test_resolve_score_for_scorecard_scoped_name_key_external_id_only():
                         "id": "section-1",
                         "scores": {
                             "items": [
-                                {"id": "score-1", "name": "Agent Misrepresentation", "key": "agent_misrep", "externalId": "45813", "order": 1},
+                                {"id": "score-1", "name": "Example Score", "key": "agent_misrep", "externalId": "45813", "order": 1},
                             ]
                         },
                     }
@@ -186,7 +186,7 @@ async def test_resolve_score_for_scorecard_scoped_name_key_external_id_only():
         }
     }
 
-    by_name = await resolve_score_for_scorecard(client, "sc-1", "Agent Misrepresentation")
+    by_name = await resolve_score_for_scorecard(client, "sc-1", "Example Score")
     by_key = await resolve_score_for_scorecard(client, "sc-1", "agent_misrep")
     by_external = await resolve_score_for_scorecard(client, "sc-1", "45813")
 

@@ -18,7 +18,7 @@ class _FakeClient:
                 "id": "score-version-db-123",
                 "configuration": "\n".join(
                     [
-                        "name: Agent Misrepresentation",
+                        "name: Example Score",
                         "key: agent-misrepresentation",
                         'id: "45813"',
                         "version: internal-yaml-version",
@@ -41,11 +41,11 @@ def test_fetch_score_configurations_without_cache_is_api_only(tmp_path, monkeypa
 
     configurations = fetch_score_configurations(
         client=_FakeClient(),
-        scorecard_data={"name": "SelectQuote HCS Medium-Risk"},
+        scorecard_data={"name": "Example Scorecard"},
         target_scores=[
             {
                 "id": "69e2adba-553e-49a3-9ede-7f9a679a08f3",
-                "name": "Agent Misrepresentation",
+                "name": "Example Score",
                 "championVersionId": "score-version-db-123",
             }
         ],
@@ -65,11 +65,11 @@ def test_fetch_score_configurations_with_cache_writes_normalized_yaml(tmp_path, 
 
     configurations = fetch_score_configurations(
         client=_FakeClient(),
-        scorecard_data={"name": "SelectQuote HCS Medium-Risk"},
+        scorecard_data={"name": "Example Scorecard"},
         target_scores=[
             {
                 "id": "69e2adba-553e-49a3-9ede-7f9a679a08f3",
-                "name": "Agent Misrepresentation",
+                "name": "Example Score",
                 "championVersionId": "score-version-db-123",
             }
         ],
@@ -81,8 +81,8 @@ def test_fetch_score_configurations_with_cache_writes_normalized_yaml(tmp_path, 
     in_memory = parser.load(configurations["69e2adba-553e-49a3-9ede-7f9a679a08f3"])
     on_disk = parser.load(
         get_score_yaml_path(
-            "SelectQuote HCS Medium-Risk",
-            "Agent Misrepresentation",
+            "Example Scorecard",
+            "Example Score",
         ).read_text()
     )
 

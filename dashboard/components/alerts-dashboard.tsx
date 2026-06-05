@@ -32,7 +32,7 @@ const alerts = [
   { id: 1, message: "Inappropriate language detected", source: "CS3 Services v2", date: relativeDate(0, 0, 5), status: "new", severity: "high" },
   { id: 2, message: "DNC request detected", source: "CS3 Audigy", date: relativeDate(0, 0, 10), status: "new", severity: "medium" },
   { id: 3, message: "Agent gave legal advice", source: "AW IB Sales", date: relativeDate(0, 0, 15), status: "new", severity: "high" },
-  { id: 4, message: "Agent gave guarantee", source: "SelectQuote Term Life v1", date: relativeDate(0, 1, 0), status: "actions...", severity: "medium" },
+  { id: 4, message: "Agent gave guarantee", source: "Example Scorecard", date: relativeDate(0, 1, 0), status: "actions...", severity: "medium" },
   { id: 5, message: "Inappropriate language detected", source: "CS3 Nexstar v1", date: relativeDate(0, 2, 0), status: "actions...", severity: "high" },
   { id: 6, message: "DNC request detected", source: "CS3 Services v2", date: relativeDate(0, 3, 0), status: "actions...", severity: "medium" },
   { id: 7, message: "Agent gave legal advice", source: "AW IB Sales", date: relativeDate(0, 4, 0), status: "actions...", severity: "high" },
@@ -40,21 +40,21 @@ const alerts = [
   { id: 9, message: "Exception from Plexus processing: NullPointerException at line 237", source: "System", date: relativeDate(2, 0, 0), status: "resolved", severity: "critical" },
   { id: 10, message: "Compliance training overdue for multiple agents", source: "CS3 Audigy", date: relativeDate(3, 0, 0), status: "resolved", severity: "medium" },
   { id: 11, message: "Unusual spike in refund requests", source: "CS3 Nexstar v1", date: relativeDate(4, 0, 0), status: "resolved", severity: "high" },
-  { id: 12, message: "Agent provided incorrect product information", source: "SelectQuote Term Life v1", date: relativeDate(5, 0, 0), status: "resolved", severity: "medium" },
+  { id: 12, message: "Agent provided incorrect product information", source: "Example Scorecard", date: relativeDate(5, 0, 0), status: "resolved", severity: "medium" },
   { id: 13, message: "Customer reported missing callback", source: "CS3 Services v2", date: relativeDate(6, 0, 0), status: "resolved", severity: "low" },
   { id: 14, message: "Potential data breach detected", source: "System", date: relativeDate(7, 0, 0), status: "resolved", severity: "critical" },
   { id: 15, message: "Agent used unauthorized script", source: "AW IB Sales", date: relativeDate(8, 0, 0), status: "resolved", severity: "high" },
   { id: 16, message: "Customer satisfaction score dropped below threshold", source: "CS3 Audigy", date: relativeDate(9, 0, 0), status: "resolved", severity: "medium" },
   { id: 17, message: "System maintenance required", source: "System", date: relativeDate(10, 0, 0), status: "resolved", severity: "low" },
   { id: 18, message: "Agent exceeded maximum call duration", source: "CS3 Nexstar v1", date: relativeDate(11, 0, 0), status: "resolved", severity: "medium" },
-  { id: 19, message: "Potential fraud attempt detected", source: "SelectQuote Term Life v1", date: relativeDate(12, 0, 0), status: "resolved", severity: "high" },
+  { id: 19, message: "Potential fraud attempt detected", source: "Example Scorecard", date: relativeDate(12, 0, 0), status: "resolved", severity: "high" },
   { id: 20, message: "API rate limit exceeded", source: "System", date: relativeDate(13, 0, 0), status: "resolved", severity: "medium" },
   { id: 21, message: "Agent failed to verify customer identity", source: "CS3 Services v2", date: relativeDate(14, 0, 0), status: "resolved", severity: "high" },
   { id: 22, message: "Unusual pattern in call transfers", source: "AW IB Sales", date: relativeDate(15, 0, 0), status: "resolved", severity: "medium" },
   { id: 23, message: "Customer reported incorrect billing", source: "CS3 Audigy", date: relativeDate(16, 0, 0), status: "resolved", severity: "high" },
   { id: 24, message: "System backup failure", source: "System", date: relativeDate(17, 0, 0), status: "resolved", severity: "critical" },
   { id: 25, message: "Agent used discriminatory language", source: "CS3 Nexstar v1", date: relativeDate(18, 0, 0), status: "resolved", severity: "critical" },
-  { id: 26, message: "Unusual increase in call abandonment rate", source: "SelectQuote Term Life v1", date: relativeDate(19, 0, 0), status: "resolved", severity: "medium" },
+  { id: 26, message: "Unusual increase in call abandonment rate", source: "Example Scorecard", date: relativeDate(19, 0, 0), status: "resolved", severity: "medium" },
   { id: 27, message: "Customer data update failed", source: "System", date: relativeDate(20, 0, 0), status: "resolved", severity: "high" },
   { id: 28, message: "Agent failed to follow up on customer request", source: "CS3 Services v2", date: relativeDate(21, 0, 0), status: "resolved", severity: "medium" },
   { id: 29, message: "Potential security vulnerability detected", source: "System", date: relativeDate(22, 0, 0), status: "resolved", severity: "critical" },
@@ -140,7 +140,7 @@ export default function AlertsDashboard() {
               <SelectItem value="CS3 Services v2">CS3 Services v2</SelectItem>
               <SelectItem value="CS3 Audigy">CS3 Audigy</SelectItem>
               <SelectItem value="AW IB Sales">AW IB Sales</SelectItem>
-              <SelectItem value="SelectQuote Term Life v1">SelectQuote Term Life v1</SelectItem>
+              <SelectItem value="Example Scorecard">Example Scorecard</SelectItem>
               <SelectItem value="CS3 Nexstar v1">CS3 Nexstar v1</SelectItem>
               <SelectItem value="System">System</SelectItem>
             </SelectContent>

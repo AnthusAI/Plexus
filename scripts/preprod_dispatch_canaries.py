@@ -728,7 +728,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-seconds", type=int, default=600)
     parser.add_argument("--poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--procedure-id", default=None)
-    parser.add_argument("--scorecard-name", default="SelectQuote HCS Medium-Risk")
+    parser.add_argument("--scorecard-name", default="Example Scorecard")
     parser.add_argument("--score-name", default="Patient Allergies")
     parser.add_argument("--timeline-scorecard", default="selectquote_hcs_medium_risk")
     parser.add_argument("--timeline-days", type=int, default=365)

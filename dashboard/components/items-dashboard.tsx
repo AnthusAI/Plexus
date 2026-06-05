@@ -2924,7 +2924,7 @@ function ItemsDashboardInner() {
   }
 
   const availableFields = [
-    { value: 'SelectQuote Term Life v1', label: 'SelectQuote Term Life v1' },
+    { value: 'Example Scorecard', label: 'Example Scorecard' },
     { value: 'CS3 Nexstar v1', label: 'CS3 Nexstar v1' },
     { value: 'CS3 Services v2', label: 'CS3 Services v2' },
     { value: 'CS3 Audigy', label: 'CS3 Audigy' },

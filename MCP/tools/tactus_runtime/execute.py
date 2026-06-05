@@ -8199,7 +8199,7 @@ Examples:
 ```tactus
 local cards = scorecards{}
 for _, card in ipairs(cards) do
-  if card.name == "SelectQuote HCS Medium-Risk" then
+  if card.name == "Example Scorecard" then
     return { id = card.id, key = card.key, external_id = card.externalId }
   end
 end

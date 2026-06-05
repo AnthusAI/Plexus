@@ -283,8 +283,8 @@ def test_default_score_update_applies_actor_attribution(monkeypatch) -> None:
 
     result = execute._default_score_update(
         {
-            "scorecard_identifier": "SelectQuote HCS Medium-Risk",
-            "score_identifier": "Medication Review: Dosage",
+            "scorecard_identifier": "Example Scorecard",
+            "score_identifier": "Example Score",
             "code": "name: Test\nkey: test\nclass: LangGraphScore\n",
             "parent_version_id": "parent-123",
             "version_note": "candidate",
@@ -489,8 +489,8 @@ def test_default_scorecards_search_ranks_matches(monkeypatch) -> None:
         },
         {
             "id": "sc-a",
-            "name": "SelectQuote HCS Medium-Risk",
-            "key": "selectquote_hcs_medium_risk",
+            "name": "Example Scorecard",
+            "key": "example_scorecard",
             "externalId": "ext-hcs",
             "description": "health",
             "createdAt": "2026-01-01T00:00:00Z",
@@ -509,7 +509,7 @@ def test_default_scorecards_search_ranks_matches(monkeypatch) -> None:
 
     result = execute._default_scorecards_search(
         {
-            "query": "HCS medium",
+            "query": "Example Scorecard",
             "limit": 5,
             "account_id": "00000000-0000-0000-0000-000000000001",
         }
@@ -3122,8 +3122,8 @@ def test_score_edit_resolver_accepts_identifiers_with_trailing_punctuation() -> 
                         "items": [
                             {
                                 "id": "sc-1",
-                                "name": "SelectQuote HCS Medium-Risk",
-                                "key": "selectquote_hcs_medium_risk",
+                                "name": "Example Scorecard",
+                                "key": "example_scorecard",
                                 "externalId": "1438",
                             }
                         ]
@@ -3147,8 +3147,8 @@ def test_score_edit_resolver_accepts_identifiers_with_trailing_punctuation() -> 
                         "items": [
                             {
                                 "id": "s-1",
-                                "name": "Agent Misrepresentation",
-                                "key": "agent-misrepresentation",
+                                "name": "Example Score",
+                                "key": "example-score",
                                 "externalId": "45813",
                             }
                         ],
@@ -3159,10 +3159,10 @@ def test_score_edit_resolver_accepts_identifiers_with_trailing_punctuation() -> 
 
     client = FakeClient()
     scorecard = execute._resolve_scorecard_for_score_edit(
-        client, "SelectQuote HCS Medium-Risk."
+        client, "Example Scorecard."
     )
     score = execute._resolve_score_for_score_edit(
-        client, "sc-1", "\"Agent Misrepresentation.\""
+        client, "sc-1", "\"Example Score.\""
     )
 
     assert scorecard["id"] == "sc-1"
@@ -3180,8 +3180,8 @@ def test_score_edit_resolver_accepts_separator_insensitive_identifiers() -> None
                         "items": [
                             {
                                 "id": "sc-1",
-                                "name": "SelectQuote HCS Medium-Risk",
-                                "key": "selectquote_hcs_medium_risk",
+                                "name": "Example Scorecard",
+                                "key": "example_scorecard",
                                 "externalId": "1438",
                             }
                         ]
@@ -3205,8 +3205,8 @@ def test_score_edit_resolver_accepts_separator_insensitive_identifiers() -> None
                         "items": [
                             {
                                 "id": "s-1",
-                                "name": "Agent Misrepresentation",
-                                "key": "agent-misrepresentation",
+                                "name": "Example Score",
+                                "key": "example-score",
                                 "externalId": "45813",
                             }
                         ],
@@ -3217,10 +3217,10 @@ def test_score_edit_resolver_accepts_separator_insensitive_identifiers() -> None
 
     client = FakeClient()
     scorecard = execute._resolve_scorecard_for_score_edit(
-        client, "selectquote hcs medium risk"
+        client, "example scorecard"
     )
     score = execute._resolve_score_for_score_edit(
-        client, "sc-1", "agent_misrepresentation"
+        client, "sc-1", "example_score"
     )
 
     assert scorecard["id"] == "sc-1"
@@ -3308,8 +3308,8 @@ def test_score_edit_preflight_gate_blocks_dispatch_on_ambiguous_targets(monkeypa
     with pytest.raises(ValueError, match="Clarification required before plexus.score.edit"):
         module.score.edit(
             {
-                "scorecard_identifier": "SelectQuote",
-                "score_identifier": "Agent Misrepresentation",
+                "scorecard_identifier": "Example Scorecard",
+                "score_identifier": "Example Score",
                 "instruction": "set model to gpt-4o-mini",
                 "async": True,
                 "budget": budget,
@@ -3346,8 +3346,8 @@ def test_default_score_pull_does_not_fallback_to_fuzzy_search(monkeypatch) -> No
     with pytest.raises(ValueError, match="Scorecard not found"):
         execute._default_score_pull(
             {
-                "scorecard_identifier": "SelectQuote HCS Medium Risk",
-                "score_identifier": "Agent Misrepresentation",
+                "scorecard_identifier": "Example Scorecard",
+                "score_identifier": "Example Score",
             }
         )
 
