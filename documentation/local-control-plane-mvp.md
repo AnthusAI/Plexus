@@ -219,3 +219,18 @@ bash scripts/smoke-local-trusted-open.sh
 ```
 
 The smoke verifies that `/readyz` declares `authMode=trusted_open`, a GraphQL read succeeds without `x-api-key`, and `/debug/upstream-requests` remains empty.
+
+## 11) Worker orchestration proof (task dispatcher + chat worker)
+
+Use the dedicated runbook:
+
+- [local-control-plane-worker-orchestration.md](./local-control-plane-worker-orchestration.md)
+
+Quick proof commands:
+
+```bash
+cd /Users/ryan.porter/Projects/Plexus-codex-control-plane
+bash scripts/smoke-local-task-dispatch.sh
+bash scripts/smoke-local-chat-worker.sh
+bash scripts/prove-local-worker-orchestration.sh
+```

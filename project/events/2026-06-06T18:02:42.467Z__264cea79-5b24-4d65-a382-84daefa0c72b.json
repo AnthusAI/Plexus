@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "264cea79-5b24-4d65-a382-84daefa0c72b",
+  "issue_id": "plx-ab931482-ddbc-445c-8166-93e9114db980",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-06T18:02:42.467Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Worker orchestration smoke scripts",
+    "description": "Add strict task-dispatch and chat-worker smokes plus orchestration proof script with no-upstream assertion and machine-readable output.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918d57f7-ed5c-4a83-accc-9f74c86729d7",
+    "labels": []
+  }
+}

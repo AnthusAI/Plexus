@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2488ea35-ede9-41bc-9fa0-fff338571fdf",
+  "issue_id": "plx-ecf20d06-2912-4c48-9099-ee2042e8defc",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-06T18:02:42.311Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Worker orchestration runbook",
+    "description": "Document exact local/K8s worker orchestration commands, envs, proof flow, and troubleshooting for task dispatch and local chat worker.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-918d57f7-ed5c-4a83-accc-9f74c86729d7",
+    "labels": []
+  }
+}
