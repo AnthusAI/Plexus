@@ -935,6 +935,7 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
                     section_input = {
                         "scorecardId": created_id,
                         "name": "Default",
+                        "order": 0,
                     }
                     try:
                         section_response = client.execute(section_mutation, {"input": section_input})
