@@ -93,9 +93,9 @@ const accountData = {
     {
       key: "scorecard:scorecard-1",
       scope: "scorecard" as const,
-      label: "SelectQuote HCS Medium-Risk",
+      label: "Example Scorecard",
       scorecardId: "scorecard-1",
-      scorecardName: "SelectQuote HCS Medium-Risk",
+      scorecardName: "Example Scorecard",
       points: [
         {
           bucket_index: 0,
@@ -136,17 +136,17 @@ const accountData = {
 const scorecardData = {
   ...accountData,
   scope: "scorecard" as const,
-  scorecard: { id: "scorecard-1", name: "SelectQuote HCS Medium-Risk" },
+  scorecard: { id: "scorecard-1", name: "Example Scorecard" },
   scorecardSeries: [],
   scoreSeries: [
     {
       key: "score:score-1",
       scope: "score" as const,
-      label: "Agent Misrepresentation",
+      label: "Example Score",
       scorecardId: "scorecard-1",
-      scorecardName: "SelectQuote HCS Medium-Risk",
+      scorecardName: "Example Scorecard",
       scoreId: "score-1",
-      scoreName: "Agent Misrepresentation",
+      scoreName: "Example Score",
       points: accountData.points,
       summary: accountData.summary,
     },
@@ -156,7 +156,7 @@ const scorecardData = {
 const scoreData = {
   ...scorecardData,
   scope: "score" as const,
-  score: { id: "score-1", name: "Agent Misrepresentation" },
+  score: { id: "score-1", name: "Example Score" },
   scoreSeries: [],
 };
 
@@ -181,12 +181,12 @@ describe("FeedbackDashboard", () => {
     render(<FeedbackDashboard />);
 
     expect(screen.getByText("Scorecards")).toBeInTheDocument();
-    expect(screen.getByText("SelectQuote HCS Medium-Risk")).toBeInTheDocument();
+    expect(screen.getByText("Example Scorecard")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /open/i }));
 
     expect(screen.getByText("Scores")).toBeInTheDocument();
-    expect(screen.getByText("Agent Misrepresentation")).toBeInTheDocument();
+    expect(screen.getByText("Example Score")).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: /open/i })[0]);
 

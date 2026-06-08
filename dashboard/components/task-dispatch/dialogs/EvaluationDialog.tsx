@@ -32,8 +32,8 @@ interface EvaluationOptions {
 
 export function EvaluationDialog({ action, isOpen, onClose, onDispatch, initialOptions }: TaskDialogProps & { initialOptions?: Partial<EvaluationOptions> }) {
   const [options, setOptions] = useState<EvaluationOptions>({
-    scorecardName: initialOptions?.scorecardName || 'termlifev1',
-    scoreName: initialOptions?.scoreName || 'Assumptive Close',
+    scorecardName: initialOptions?.scorecardName || 'example-scorecard',
+    scoreName: initialOptions?.scoreName || 'Example Score',
     numberOfSamples: initialOptions?.numberOfSamples || 10,
     samplingMethod: initialOptions?.samplingMethod || 'random',
     loadFresh: initialOptions?.loadFresh || false,

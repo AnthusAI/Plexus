@@ -29,7 +29,7 @@ describe("useFeedbackVolume", () => {
     mockGraphqlRequest.mockReset();
     mockListFromModel.mockReset();
     mockListFromModel.mockResolvedValue({
-      data: [{ id: "scorecard-1", name: "SelectQuote HCS Medium-Risk" }] as never[],
+      data: [{ id: "scorecard-1", name: "Example Scorecard" }] as never[],
       nextToken: null,
     });
   });
@@ -86,6 +86,6 @@ describe("useFeedbackVolume", () => {
     expect(result.current.data?.summary.feedback_items_changed).toBe(1);
     expect(result.current.data?.summary.feedback_items_unchanged).toBe(1);
     expect(result.current.data?.summary.feedback_items_invalid_or_unclassified).toBe(1);
-    expect(result.current.data?.scorecardSeries[0]?.label).toBe("SelectQuote HCS Medium-Risk");
+    expect(result.current.data?.scorecardSeries[0]?.label).toBe("Example Scorecard");
   });
 });

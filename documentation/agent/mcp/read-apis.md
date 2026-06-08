@@ -36,7 +36,7 @@ to use freely.
 ```tactus
 local cards = scorecards{}
 for _, card in ipairs(cards) do
-  if card.key == "selectquote_hcs_medium_risk" then
+  if card.key == "example-scorecard" then
     return scorecard{ id = card.id }
   end
 end
@@ -106,7 +106,7 @@ return item{ id = last.id }
 
 ```tactus
 local summary = feedback_alignment{
-  scorecard = "selectquote_hcs_medium_risk",
+  scorecard = "example-scorecard",
   score = "Compliance Tone",
   days = 30,
 }

@@ -110,7 +110,7 @@ def test_load_command_builtin_reference_cache_class_resolution(mock_resolve, run
             key='test-source',
             yamlConfiguration="""
             class: ScorecardExampleReferenceItems
-            scorecard: CMG EDU
+            scorecard: Example Scorecard
             score: Identify Objections
             """,
             owner='account-123'
@@ -381,8 +381,8 @@ def test_build_associated_dataset_from_feedback_ids_success(
 
     result = build_associated_dataset_from_feedback_ids(
         client=mock_client,
-        scorecard_identifier='CMG EDU',
-        score_identifier='Branding and Matching',
+        scorecard_identifier='Example Scorecard',
+        score_identifier='Example Score',
         feedback_item_ids=['fi-2', 'fi-1', 'fi-2'],
         source_report_block_id='block-123',
         eligibility_rule='unanimous non-contradiction',
@@ -431,8 +431,8 @@ def test_build_associated_dataset_from_feedback_ids_rejects_mismatched_score(
     with pytest.raises(ValueError, match='do not match the requested scorecard/score'):
         build_associated_dataset_from_feedback_ids(
             client=mock_client,
-            scorecard_identifier='CMG EDU',
-            score_identifier='Branding and Matching',
+            scorecard_identifier='Example Scorecard',
+            score_identifier='Example Score',
             feedback_item_ids=['fi-1'],
         )
 

@@ -824,7 +824,22 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("plexus.scorecards.create requires name")
 
     key = str(args.get("key") or "").strip() or _slugify(name)
-    external_id = str(args.get("external_id") or args.get("externalId") or "").strip() or key
+
+    # Parse external_id - handle both int and string inputs
+    external_id_raw = args.get("external_id") or args.get("externalId")
+    if external_id_raw is not None:
+        # If it's an int, keep it as int; if string, try to parse as int
+        if isinstance(external_id_raw, int):
+            external_id = external_id_raw
+        else:
+            external_id_str = str(external_id_raw).strip()
+            try:
+                external_id = int(external_id_str) if external_id_str else None
+            except ValueError:
+                external_id = external_id_str if external_id_str else None
+    else:
+        external_id = None
+
     description = str(args.get("description") or "").strip() or None
     account_identifier = args.get("account_identifier") or args.get("account") or args.get("account_id") or None
 
@@ -849,30 +864,33 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
     """
 
     # Compatibility strategy:
-    # 1) Try plain CreateScorecardInput variants first (older schemas often reject attribution fields).
-    # 2) If plain variants fail, retry with actor attribution for newer schemas that support it.
-    base_variants: list[dict[str, Any]] = [{"name": name}]
-    if key:
-        base_variants.append({"name": name, "key": key})
-    if external_id:
-        base_variants.append({"name": name, "externalId": external_id})
+    # 1) Try most complete variants first (with all provided fields)
+    # 2) Fall back to simpler variants if complete ones fail
+    # This ensures external_id and other fields are actually used
+    base_variants: list[dict[str, Any]] = []
+
+    # Most complete first
+    if key and external_id and description:
+        base_variants.append({
+            "name": name,
+            "key": key,
+            "externalId": external_id,
+            "description": description,
+        })
     if key and external_id:
         base_variants.append({"name": name, "key": key, "externalId": external_id})
-    if description:
-        base_variants.append({"name": name, "description": description})
-    if key and description:
-        base_variants.append({"name": name, "key": key, "description": description})
     if external_id and description:
         base_variants.append({"name": name, "externalId": external_id, "description": description})
-    if key and external_id and description:
-        base_variants.append(
-            {
-                "name": name,
-                "key": key,
-                "externalId": external_id,
-                "description": description,
-            }
-        )
+    if key and description:
+        base_variants.append({"name": name, "key": key, "description": description})
+    if external_id:
+        base_variants.append({"name": name, "externalId": external_id})
+    if description:
+        base_variants.append({"name": name, "description": description})
+    if key:
+        base_variants.append({"name": name, "key": key})
+    # Simplest last (fallback)
+    base_variants.append({"name": name})
 
     if account_id:
         account_variants: list[dict[str, Any]] = []
@@ -905,12 +923,37 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
                 created = (response or {}).get("createScorecard") or {}
                 created_id = created.get("id")
                 if created_id:
+                    # Create a default section for the scorecard
+                    section_mutation = """
+                    mutation CreateSection($input: CreateScorecardSectionInput!) {
+                        createScorecardSection(input: $input) {
+                            id
+                            name
+                        }
+                    }
+                    """
+                    section_input = {
+                        "scorecardId": created_id,
+                        "name": "Default",
+                        "order": 0,
+                    }
+                    try:
+                        section_response = client.execute(section_mutation, {"input": section_input})
+                        created_section = (section_response or {}).get("createScorecardSection") or {}
+                        section_id = created_section.get("id")
+                    except Exception as section_exc:
+                        logger.warning(
+                            f"Failed to create default section for scorecard {created_id}: {section_exc}"
+                        )
+                        section_id = None
+
                     return {
                         "success": True,
                         "id": created_id,
                         "name": created.get("name"),
                         "key": created.get("key"),
                         "externalId": created.get("externalId"),
+                        "defaultSectionId": section_id,
                     }
                 attempted_errors.append(
                     f"attribution={use_attribution} payload={input_obj!r} -> missing id in response {response!r}"
@@ -8199,7 +8242,7 @@ Examples:
 ```tactus
 local cards = scorecards{}
 for _, card in ipairs(cards) do
-  if card.name == "SelectQuote HCS Medium-Risk" then
+  if card.name == "Example Scorecard" then
     return { id = card.id, key = card.key, external_id = card.externalId }
   end
 end

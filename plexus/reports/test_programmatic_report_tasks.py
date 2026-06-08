@@ -241,15 +241,15 @@ def test_run_programmatic_block_and_persist_treats_error_payload_as_failure(
     mock_persist_block_result,
 ):
     mock_instantiate_and_run_block.return_value = (
-        {"error": "Scorecard not found for identifier 'SelectQuote'.", "scores": []},
-        "Scorecard not found for identifier 'SelectQuote'.",
+        {"error": "Scorecard not found for identifier 'Example Scorecard'.", "scores": []},
+        "Scorecard not found for identifier 'Example Scorecard'.",
         None,
     )
 
     output, log_output = run_programmatic_block_and_persist(
         cache_key="cache-key",
         block_class="FeedbackAlignment",
-        block_config={"scorecard": "SelectQuote"},
+        block_config={"scorecard": "Example Scorecard"},
         account_id="acct-1",
         client=MagicMock(),
     )
@@ -259,5 +259,5 @@ def test_run_programmatic_block_and_persist_treats_error_payload_as_failure(
     assert mock_persist_block_result.call_args.kwargs["success"] is False
     assert (
         mock_persist_block_result.call_args.kwargs["error_message"]
-        == "Scorecard not found for identifier 'SelectQuote'."
+        == "Scorecard not found for identifier 'Example Scorecard'."
     )

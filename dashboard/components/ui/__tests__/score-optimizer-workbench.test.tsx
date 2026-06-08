@@ -83,8 +83,8 @@ describe('ScoreOptimizerWorkbench', () => {
     render(
       <ScoreOptimizerWorkbench
         scoreId="score-1"
-        scoreName="Medication Review: Prescriber"
-        scorecardName="SelectQuote HCS Medium-Risk"
+        scoreName="Example Score"
+        scorecardName="Example Scorecard"
         championVersionId="version-1"
         versions={[
           {
