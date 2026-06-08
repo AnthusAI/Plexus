@@ -824,22 +824,7 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("plexus.scorecards.create requires name")
 
     key = str(args.get("key") or "").strip() or _slugify(name)
-
-    # Parse external_id - handle both int and string inputs
-    external_id_raw = args.get("external_id") or args.get("externalId")
-    if external_id_raw is not None:
-        # If it's an int, keep it as int; if string, try to parse as int
-        if isinstance(external_id_raw, int):
-            external_id = external_id_raw
-        else:
-            external_id_str = str(external_id_raw).strip()
-            try:
-                external_id = int(external_id_str) if external_id_str else None
-            except ValueError:
-                external_id = external_id_str if external_id_str else None
-    else:
-        external_id = None
-
+    external_id = str(args.get("external_id") or args.get("externalId") or "").strip() or key
     description = str(args.get("description") or "").strip() or None
     account_identifier = args.get("account_identifier") or args.get("account") or args.get("account_id") or None
 
@@ -920,36 +905,12 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
                 created = (response or {}).get("createScorecard") or {}
                 created_id = created.get("id")
                 if created_id:
-                    # Create a default section for the scorecard
-                    section_mutation = """
-                    mutation CreateSection($input: CreateScorecardSectionInput!) {
-                        createScorecardSection(input: $input) {
-                            id
-                            name
-                        }
-                    }
-                    """
-                    section_input = {
-                        "scorecardId": created_id,
-                        "name": "Default",
-                    }
-                    try:
-                        section_response = client.execute(section_mutation, {"input": section_input})
-                        created_section = (section_response or {}).get("createScorecardSection") or {}
-                        section_id = created_section.get("id")
-                    except Exception as section_exc:
-                        logger.warning(
-                            f"Failed to create default section for scorecard {created_id}: {section_exc}"
-                        )
-                        section_id = None
-
                     return {
                         "success": True,
                         "id": created_id,
                         "name": created.get("name"),
                         "key": created.get("key"),
                         "externalId": created.get("externalId"),
-                        "defaultSectionId": section_id,
                     }
                 attempted_errors.append(
                     f"attribution={use_attribution} payload={input_obj!r} -> missing id in response {response!r}"
