@@ -1149,26 +1149,161 @@ def pull(scorecard: str, score: Optional[str] = None, use_cache: bool = False, v
 @click.option('--scorecard', required=True, help='Scorecard identifier (ID, name, key, or external ID)')
 @click.option('--score', required=True, help='Score identifier (ID, name, key, or external ID)')
 @click.option('--note', default='Updated via CLI push command', help='Note to attach to the new version (default: "Updated via CLI push command")')
-def push(scorecard: str, score: str, note: str):
+@click.option('--create-if-missing', is_flag=True, default=False, help='Create the score if it does not exist')
+def push(scorecard: str, score: str, note: str, create_if_missing: bool):
     """Push a score's YAML configuration to the server.
-    
+
     This command reads the local YAML file for a score, compares it with the cloud version,
     and only pushes a new version if actual changes are detected.
     """
     client = create_client()
-    
+
     # Resolve scorecard ID
     scorecard_id = memoized_resolve_scorecard_identifier(client, scorecard)
     if not scorecard_id:
         console.print(f"[red]Unable to find scorecard: {scorecard}[/red]")
         return
-    
+
     # Resolve score ID
     score_id = memoized_resolve_score_identifier(client, scorecard_id, score)
+
+    # Create score if missing and flag is set
+    if not score_id and create_if_missing:
+        # Get scorecard name for proper file path
+        scorecard_query = f"""
+        query GetScorecard {{
+            getScorecard(id: "{scorecard_id}") {{
+                name
+            }}
+        }}
+        """
+
+        try:
+            with client as session:
+                result = session.execute(gql(scorecard_query))
+            scorecard_name = result.get('getScorecard', {}).get('name', 'Unknown')
+        except Exception as e:
+            console.print(f"[red]Error fetching scorecard details: {e}[/red]")
+            return
+
+        # Find the YAML file - scan the scorecard directory for a file with matching external_id
+        scorecard_dir = f"scorecards/{scorecard_name}"
+        yaml_path = None
+        yaml_content = None
+
+        if os.path.isdir(scorecard_dir):
+            # Scan all YAML files in the scorecard directory
+            for filename in os.listdir(scorecard_dir):
+                if filename.endswith('.yaml'):
+                    file_path = os.path.join(scorecard_dir, filename)
+                    with open(file_path, 'r') as f:
+                        content = f.read()
+
+                    # Check if this file has the matching external_id
+                    external_id_match = re.search(r'^external_id:\s*(.+)$', content, re.MULTILINE)
+                    if external_id_match:
+                        file_external_id = external_id_match.group(1).strip()
+                        if file_external_id == score:
+                            yaml_path = file_path
+                            yaml_content = content
+                            break
+
+        if not yaml_path:
+            console.print(f"[red]Cannot create score: No YAML file found with external_id '{score}' in {scorecard_dir}[/red]")
+            return
+
+        # Extract metadata from YAML
+        name_match = re.search(r'^name:\s*(.+)$', yaml_content, re.MULTILINE)
+        key_match = re.search(r'^key:\s*(.+)$', yaml_content, re.MULTILINE)
+        external_id_match = re.search(r'^external_id:\s*(.+)$', yaml_content, re.MULTILINE)
+
+        score_name = name_match.group(1).strip() if name_match else score
+        score_key = key_match.group(1).strip() if key_match else None
+        score_external_id = external_id_match.group(1).strip() if external_id_match else None
+
+        console.print(f"[blue]Creating score '{score_name}' (external_id: {score_external_id}) in scorecard '{scorecard_name}'...[/blue]")
+
+        # Create the score
+        create_mutation = """
+        mutation CreateScore($input: CreateScoreInput!) {
+            createScore(input: $input) {
+                id
+                name
+                key
+                externalId
+            }
+        }
+        """
+
+        # Get the default section ID for the scorecard (we need this for score creation)
+        sections_query = f"""
+        query GetScorecardSections {{
+            getScorecard(id: "{scorecard_id}") {{
+                sections {{
+                    items {{
+                        id
+                        order
+                    }}
+                }}
+            }}
+        }}
+        """
+
+        try:
+            with client as session:
+                result = session.execute(gql(sections_query))
+            sections = result.get('getScorecard', {}).get('sections', {}).get('items', [])
+            if not sections:
+                console.print(f"[red]Cannot create score: Scorecard has no sections[/red]")
+                return
+            # Use the first section
+            section_id = sections[0]['id']
+        except Exception as e:
+            console.print(f"[red]Error fetching scorecard sections: {e}[/red]")
+            return
+
+        mutation_input = {
+            'input': {
+                'scorecardId': scorecard_id,
+                'sectionId': section_id,
+                'name': score_name,
+                'order': 999,  # Put it at the end by default
+                'type': 'classification',  # Default type
+            }
+        }
+
+        if score_key:
+            mutation_input['input']['key'] = score_key
+        if score_external_id:
+            # Convert external_id to integer
+            try:
+                mutation_input['input']['externalId'] = int(score_external_id)
+            except (ValueError, TypeError):
+                mutation_input['input']['externalId'] = score_external_id
+
+        try:
+            with client as session:
+                result = session.execute(gql(create_mutation), mutation_input)
+
+            created_score = result.get('createScore')
+            if created_score:
+                score_id = created_score['id']
+                console.print(f"[green]✓ Created score: {created_score['name']} (ID: {score_id})[/green]")
+
+                # Clear resolver caches so the new score can be found
+                clear_resolver_caches()
+            else:
+                console.print("[red]Error: Failed to create score[/red]")
+                return
+        except Exception as e:
+            console.print(f"[red]Error creating score: {e}[/red]")
+            return
+
     if not score_id:
         console.print(f"[red]Unable to find score: {score} in scorecard: {scorecard}[/red]")
+        console.print(f"[yellow]Tip: Use --create-if-missing to create the score automatically[/yellow]")
         return
-    
+
     # Get score details including name
     query = f"""
     query GetScore {{
@@ -1289,51 +1424,58 @@ def push(scorecard: str, score: str, note: str):
         """
         with client as session:
             result = session.execute(gql(query))
-        cloud_yaml = result.get('getScoreVersion', {}).get('configuration', '')
-        cloud_guidelines = result.get('getScoreVersion', {}).get('guidelines', '')
 
-        # Clean the cloud YAML content for comparison
-        cleaned_cloud_yaml = re.sub(
-            r'^version:\s*["\']?[^"\'\n]+["\']?(\s*parent:\s*["\']?[^"\'\n]+["\']?)?',
-            '',
-            cloud_yaml,
-            flags=re.MULTILINE
-        )
-        cleaned_cloud_yaml = re.sub(
-            r'^parent:\s*["\']?[^"\'\n]+["\']?',
-            '',
-            cleaned_cloud_yaml,
-            flags=re.MULTILINE
-        )
-
-        # Trim only leading/trailing whitespace but preserve internal formatting
-        cleaned_cloud_yaml = cleaned_cloud_yaml.strip()
-        cleaned_cloud_guidelines = cloud_guidelines.strip() if cloud_guidelines else ""
-
-        # Create normalized versions for comparison only
-        normalized_cloud_yaml = re.sub(r'\n\n+', '\n', cleaned_cloud_yaml)
-        normalized_cloud_guidelines = cleaned_cloud_guidelines
-
-        if guidelines_content is None:
-            guidelines_content = cloud_guidelines
-
-        # Compare both code and guidelines independently
-        code_changed = normalized_yaml_content.strip() != normalized_cloud_yaml.strip()
-        local_guidelines = (guidelines_content or "").strip()
-        guidelines_changed = local_guidelines != normalized_cloud_guidelines
-
-        # If neither changed, skip push
-        if not code_changed and not guidelines_changed:
-            console.print("[yellow]No changes detected in code or guidelines. Skipping push.[/yellow]")
-            return
+        # Handle case where result might be None (e.g., newly created scores)
+        version_data = result.get('getScoreVersion') if result else None
+        if not version_data:
+            console.print(f"[yellow]Warning: Could not fetch version {current_version_id}, treating as initial push[/yellow]")
+            current_version_id = None  # Treat as initial version
         else:
-            # Report what changed
-            changes = []
-            if code_changed:
-                changes.append("code")
-            if guidelines_changed:
-                changes.append("guidelines")
-            console.print(f"[blue]Changes detected: {' and '.join(changes)}. Creating new version.[/blue]")
+            cloud_yaml = version_data.get('configuration', '')
+            cloud_guidelines = version_data.get('guidelines', '')
+
+            # Clean the cloud YAML content for comparison
+            cleaned_cloud_yaml = re.sub(
+                r'^version:\s*["\']?[^"\'\n]+["\']?(\s*parent:\s*["\']?[^"\'\n]+["\']?)?',
+                '',
+                cloud_yaml,
+                flags=re.MULTILINE
+            )
+            cleaned_cloud_yaml = re.sub(
+                r'^parent:\s*["\']?[^"\'\n]+["\']?',
+                '',
+                cleaned_cloud_yaml,
+                flags=re.MULTILINE
+            )
+
+            # Trim only leading/trailing whitespace but preserve internal formatting
+            cleaned_cloud_yaml = cleaned_cloud_yaml.strip()
+            cleaned_cloud_guidelines = cloud_guidelines.strip() if cloud_guidelines else ""
+
+            # Create normalized versions for comparison only
+            normalized_cloud_yaml = re.sub(r'\n\n+', '\n', cleaned_cloud_yaml)
+            normalized_cloud_guidelines = cleaned_cloud_guidelines
+
+            if guidelines_content is None:
+                guidelines_content = cloud_guidelines
+
+            # Compare both code and guidelines independently
+            code_changed = normalized_yaml_content.strip() != normalized_cloud_yaml.strip()
+            local_guidelines = (guidelines_content or "").strip()
+            guidelines_changed = local_guidelines != normalized_cloud_guidelines
+
+            # If neither changed, skip push
+            if not code_changed and not guidelines_changed:
+                console.print("[yellow]No changes detected in code or guidelines. Skipping push.[/yellow]")
+                return
+            else:
+                # Report what changed
+                changes = []
+                if code_changed:
+                    changes.append("code")
+                if guidelines_changed:
+                    changes.append("guidelines")
+                console.print(f"[blue]Changes detected: {' and '.join(changes)}. Creating new version.[/blue]")
     else:
         console.print("[blue]Creating initial version.[/blue]")
 
