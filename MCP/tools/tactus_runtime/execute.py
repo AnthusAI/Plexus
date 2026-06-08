@@ -864,30 +864,33 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
     """
 
     # Compatibility strategy:
-    # 1) Try plain CreateScorecardInput variants first (older schemas often reject attribution fields).
-    # 2) If plain variants fail, retry with actor attribution for newer schemas that support it.
-    base_variants: list[dict[str, Any]] = [{"name": name}]
-    if key:
-        base_variants.append({"name": name, "key": key})
-    if external_id:
-        base_variants.append({"name": name, "externalId": external_id})
+    # 1) Try most complete variants first (with all provided fields)
+    # 2) Fall back to simpler variants if complete ones fail
+    # This ensures external_id and other fields are actually used
+    base_variants: list[dict[str, Any]] = []
+
+    # Most complete first
+    if key and external_id and description:
+        base_variants.append({
+            "name": name,
+            "key": key,
+            "externalId": external_id,
+            "description": description,
+        })
     if key and external_id:
         base_variants.append({"name": name, "key": key, "externalId": external_id})
-    if description:
-        base_variants.append({"name": name, "description": description})
-    if key and description:
-        base_variants.append({"name": name, "key": key, "description": description})
     if external_id and description:
         base_variants.append({"name": name, "externalId": external_id, "description": description})
-    if key and external_id and description:
-        base_variants.append(
-            {
-                "name": name,
-                "key": key,
-                "externalId": external_id,
-                "description": description,
-            }
-        )
+    if key and description:
+        base_variants.append({"name": name, "key": key, "description": description})
+    if external_id:
+        base_variants.append({"name": name, "externalId": external_id})
+    if description:
+        base_variants.append({"name": name, "description": description})
+    if key:
+        base_variants.append({"name": name, "key": key})
+    # Simplest last (fallback)
+    base_variants.append({"name": name})
 
     if account_id:
         account_variants: list[dict[str, Any]] = []
