@@ -200,16 +200,16 @@ describe("ScoreResultsReport", () => {
         {...baseProps}
         output={{
           ...output,
-          block_title: "PolicyPoint - Non-Sales",
+          block_title: "Example Scorecard",
           scorecard_name: "Policy Point",
-          score_name: "PolicyPoint - Non-Sales",
-          scores: [{ score_id: "score-pp", score_name: "PolicyPoint - Non-Sales", results: [] }],
+          score_name: "Example Scorecard",
+          scores: [{ score_id: "score-pp", score_name: "Example Scorecard", results: [] }],
         }}
       />
     );
 
     expect(screen.getByText("Score Results Report")).toBeInTheDocument();
     expect(screen.getByTestId("report-subtitle")).toHaveTextContent("Policy Point");
-    expect(screen.getAllByText("PolicyPoint - Non-Sales")).toHaveLength(1);
+    expect(screen.getAllByText("Example Scorecard")).toHaveLength(1);
   });
 });

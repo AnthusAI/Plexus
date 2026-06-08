@@ -326,7 +326,7 @@ The `FeedbackItems` class provides an alternative approach for loading datasets 
 ```yaml
 class: FeedbackItems
 scorecard: 1438                    # Scorecard identifier (name, key, ID, or external ID)
-score: "Agent Misrepresentation"   # Score identifier (name, key, ID, or external ID)
+score: "Example Score"   # Score identifier (name, key, ID, or external ID)
 days: 30                          # Number of days back to search for feedback items
 limit: 100                       # Maximum total number of items in dataset
 ```
@@ -352,11 +352,11 @@ Use `column_mappings` to rename score columns in the resulting dataset. This is 
 ```yaml
 class: FeedbackItems
 scorecard: 1438
-score: "Agent Misrepresentation"
+score: "Example Score"
 days: 30
 limit: 100
 column_mappings:
-  "Agent Misrepresentation": "Agent Misrepresentation - With Confidence"
+  "Example Score": "Example Score - With Confidence"
   "Quality Score": "Enhanced Quality Score"
 ```
 
@@ -367,8 +367,8 @@ column_mappings:
 - Only applies when score name exactly matches mapping key
 
 **Example Output:**
-- Without mapping: `Agent Misrepresentation`, `Agent Misrepresentation comment`, `Agent Misrepresentation edit comment`
-- With mapping: `Agent Misrepresentation - With Confidence`, `Agent Misrepresentation - With Confidence comment`, `Agent Misrepresentation - With Confidence edit comment`
+- Without mapping: `Example Score`, `Example Score comment`, `Example Score edit comment`
+- With mapping: `Example Score - With Confidence`, `Example Score - With Confidence comment`, `Example Score - With Confidence edit comment`
 
 ### FeedbackItems vs CallCriteriaDBCache
 

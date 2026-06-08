@@ -311,102 +311,75 @@ async def test_production_bug_actual_execution():
         LangGraphScore._import_class = original_import
 
 
-@pytest.mark.asyncio 
-async def test_exact_production_bug_reproduction():
+@pytest.mark.asyncio
+async def test_toplevel_output_does_not_override_conditional_output():
     """
-    Test that uses the EXACT same configuration structure as production to reproduce the bug.
-    This matches the CMG - EDU v1.0 scorecard's "Computer w/ Internet" score configuration.
+    Test that a top-level output mapping does not override the output set by a conditional route.
+    When a node's condition matches and sets an explicit output value, that value must be
+    preserved even if a top-level output mapping references the raw classification state.
     """
-    
+
     config = {
-        'name': 'Exact Production Bug Test',
+        'name': 'Conditional Output Override Test',
         'model_provider': 'ChatOpenAI',
         'model_name': 'gpt-4o-mini-2024-07-18',
         'graph': [
             {
-                'name': 'device_response_analyzer',
+                'name': 'primary_classifier',
                 'class': 'Classifier',
-                'valid_classes': ['Computer_With_Internet', 'Computer_No_Internet'],
-                'system_message': 'Classify device access',
-                'user_message': 'Device access: {{text}}',
+                'valid_classes': ['Category_A', 'Category_B'],
+                'system_message': 'Classify the input',
+                'user_message': 'Input: {{text}}',
                 'conditions': [
                     {
                         'state': 'classification',
-                        'value': 'Computer_With_Internet',
+                        'value': 'Category_A',
                         'node': 'END',
                         'output': {
                             'value': 'Yes',  # Conditional says value should be "Yes"
-                            'explanation': 'The prospect said they have a computer with internet, this is a yes.',
+                            'explanation': 'The input matched category A, so the answer is yes.',
                         }
                     }
                 ],
                 'edge': {
                     'node': 'final_evaluator',
                     'output': {
-                        'device_status': 'classification'
+                        'primary_result': 'classification'
                     }
                 }
             },
             {
-                'name': 'final_evaluator', 
+                'name': 'final_evaluator',
                 'class': 'Classifier',
                 'valid_classes': ['Yes', 'No'],
                 'system_message': 'Make final determination',
-                'user_message': 'Device status: {{device_status}}'
+                'user_message': 'Primary result: {{primary_result}}'
             }
         ],
-        # PRODUCTION BUG: This top-level mapping overrides conditional outputs!
+        # Top-level output mapping — must not override conditional outputs
         'output': {
-            'value': 'classification',  # This causes value to be "Computer_With_Internet" instead of "Yes"
+            'value': 'classification',  # Would incorrectly produce "Category_A" instead of "Yes"
             'explanation': 'explanation'
         }
     }
-    
+
     with patch('plexus.LangChainUser.LangChainUser._initialize_model') as mock_init_model:
         mock_model = AsyncMock()
         mock_init_model.return_value = mock_model
-        
+
         score = await LangGraphScore.create(**config)
-        
-        # Mock the device_response_analyzer to return Computer_With_Internet
-        mock_model.ainvoke = AsyncMock(return_value=AIMessage(content="Computer_With_Internet"))
-        
+
+        mock_model.ainvoke = AsyncMock(return_value=AIMessage(content="Category_A"))
+
         input_data = Score.Input(
-            text="Yes, I have a computer with internet access",
+            text="This input matches category A",
             metadata={},
             results=[]
         )
-        
+
         result = await score.predict(input_data)
-        
-        print(f"\nExact Production Bug Reproduction:")
-        print(f"  Input: 'Yes, I have a computer with internet access'")
-        print(f"  Device Classification: '{result.metadata.get('classification', 'NOT_SET')}'")
-        print(f"  Expected Value: 'Yes' (from conditional output)")
-        print(f"  Actual Value: '{result.value}'")
-        print(f"  Expected Explanation: 'The prospect said they have a computer with internet, this is a yes.'")
-        print(f"  Actual Explanation: '{result.metadata.get('explanation', 'NOT_SET')}'")
-        
-        # Check if we reproduced the exact production bug
-        if result.value == "Computer_With_Internet":
-            print("🎯 EXACT PRODUCTION BUG REPRODUCED!")
-            print("   → Conditional routing worked but top-level output mapping overrode it")
-            print("   → This matches the production behavior we saw with plexus_predict")
-        elif result.value == "Yes":
-            print("✅ Bug appears to be fixed - conditional output was preserved")
-        else:
-            print(f"❓ Unexpected result: {result.value} - different from production")
-            
-        # This test documents the exact production bug
-        try:
-            assert result.value == "Yes", f"PRODUCTION BUG: Top-level output mapping overrode conditional output. Expected 'Yes', got '{result.value}'"
-            print("✅ Production bug is fixed!")
-        except AssertionError as e:
-            print(f"❌ EXPECTED FAILURE: {e}")
-            if result.value == "Computer_With_Internet":
-                print("✅ Successfully reproduced the exact production bug!")
-            # Re-raise to ensure test fails until bug is fixed  
-            raise
+
+        assert result.value == "Yes", f"Top-level output mapping overrode conditional output. Expected 'Yes', got '{result.value}'"
 
 
 @pytest.mark.asyncio

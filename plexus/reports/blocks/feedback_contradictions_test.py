@@ -24,7 +24,7 @@ class _DummyClient:
 @pytest.mark.asyncio
 async def test_resolve_scorecard_accepts_hyphenated_name(monkeypatch):
     block = FeedbackContradictions(
-        config={"scorecard": "Prime - EDU 3rd Party", "score": "Agent Branding"},
+        config={"scorecard": "Example Scorecard", "score": "Example Score"},
         params={},
         api_client=_DummyClient(),
     )
@@ -42,10 +42,10 @@ async def test_resolve_scorecard_accepts_hyphenated_name(monkeypatch):
         lambda external_id, client: None,
     )
 
-    resolved = await block._resolve_scorecard("Prime - EDU 3rd Party")
+    resolved = await block._resolve_scorecard("Example Scorecard")
 
     assert resolved is not None
-    assert resolved.name == "Prime - EDU 3rd Party"
+    assert resolved.name == "Example Scorecard"
 
 
 def _parse_output(payload: str):
@@ -126,7 +126,7 @@ def test_feedback_contradictions_topic_enrichment_uses_haiku_45(monkeypatch):
 @pytest.mark.asyncio
 async def test_feedback_contradictions_mode_returns_contradiction_payload(monkeypatch):
     block = FeedbackContradictions(
-        config={'scorecard': 'CMG EDU', 'score': 'Branding and Matching', 'mode': 'contradictions'},
+        config={'scorecard': 'Example Scorecard', 'score': 'Example Score', 'mode': 'contradictions'},
         params={},
         api_client=_DummyClient(),
     )
@@ -134,12 +134,12 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
 
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name',
-        lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
+        lambda name, client: SimpleNamespace(id='scorecard-1', name='Example Scorecard'),
     )
     monkeypatch.setattr(
         block,
         '_resolve_score',
-        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
+        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Example Score')),
     )
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight',
@@ -184,11 +184,11 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
     )
 
     output, _log = await block.generate()
-    assert output.startswith("# CMG EDU - Branding and Matching - Feedback Contradictions")
+    assert output.startswith("# Example Scorecard - Example Score - Feedback Contradictions")
     parsed = _parse_output(output)
     assert parsed['report_type'] == 'feedback_contradictions'
     assert parsed['scope'] == 'single_score'
-    assert parsed['scorecard_name'] == 'CMG EDU'
+    assert parsed['scorecard_name'] == 'Example Scorecard'
     assert parsed['score_id'] == 'score-1'
     assert parsed['block_title'] == 'Feedback Contradictions'
     assert parsed['mode'] == 'contradictions'
@@ -201,7 +201,7 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
 @pytest.mark.asyncio
 async def test_feedback_contradictions_propagates_feedback_explanation_timeout(monkeypatch):
     block = FeedbackContradictions(
-        config={'scorecard': 'CMG EDU', 'score': 'Branding and Matching', 'mode': 'contradictions'},
+        config={'scorecard': 'Example Scorecard', 'score': 'Example Score', 'mode': 'contradictions'},
         params={},
         api_client=_DummyClient(),
     )
@@ -209,12 +209,12 @@ async def test_feedback_contradictions_propagates_feedback_explanation_timeout(m
 
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name',
-        lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
+        lambda name, client: SimpleNamespace(id='scorecard-1', name='Example Scorecard'),
     )
     monkeypatch.setattr(
         block,
         '_resolve_score',
-        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
+        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Example Score')),
     )
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight',
@@ -252,8 +252,8 @@ async def test_feedback_contradictions_propagates_feedback_explanation_timeout(m
 async def test_feedback_contradictions_accepts_explicit_timestamp_window(monkeypatch):
     block = FeedbackContradictions(
         config={
-            'scorecard': 'CMG EDU',
-            'score': 'Branding and Matching',
+            'scorecard': 'Example Scorecard',
+            'score': 'Example Score',
             'mode': 'contradictions',
             'start_at': '2026-02-08T13:04:57Z',
             'end_at': '2026-05-09T13:04:57Z',
@@ -265,12 +265,12 @@ async def test_feedback_contradictions_accepts_explicit_timestamp_window(monkeyp
 
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name',
-        lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
+        lambda name, client: SimpleNamespace(id='scorecard-1', name='Example Scorecard'),
     )
     monkeypatch.setattr(
         block,
         '_resolve_score',
-        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
+        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Example Score')),
     )
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight',
@@ -303,7 +303,7 @@ async def test_feedback_contradictions_accepts_explicit_timestamp_window(monkeyp
 @pytest.mark.asyncio
 async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(monkeypatch):
     block = FeedbackContradictions(
-        config={'scorecard': 'CMG EDU', 'score': 'Branding and Matching', 'mode': 'aligned'},
+        config={'scorecard': 'Example Scorecard', 'score': 'Example Score', 'mode': 'aligned'},
         params={},
         api_client=_DummyClient(),
     )
@@ -311,12 +311,12 @@ async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(mon
 
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name',
-        lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
+        lambda name, client: SimpleNamespace(id='scorecard-1', name='Example Scorecard'),
     )
     monkeypatch.setattr(
         block,
         '_resolve_score',
-        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
+        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Example Score')),
     )
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight',
@@ -367,11 +367,11 @@ async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(mon
     )
 
     output, _log = await block.generate()
-    assert output.startswith("# CMG EDU - Branding and Matching - Feedback Aligned Items")
+    assert output.startswith("# Example Scorecard - Example Score - Feedback Aligned Items")
     parsed = _parse_output(output)
     assert parsed['report_type'] == 'feedback_contradictions'
     assert parsed['scope'] == 'single_score'
-    assert parsed['scorecard_name'] == 'CMG EDU'
+    assert parsed['scorecard_name'] == 'Example Scorecard'
     assert parsed['score_id'] == 'score-1'
     assert parsed['block_title'] == 'Feedback Contradictions'
     assert parsed['mode'] == 'aligned'
@@ -398,8 +398,8 @@ async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(mon
 async def test_feedback_contradictions_applies_max_feedback_items_cap(monkeypatch):
     block = FeedbackContradictions(
         config={
-            'scorecard': 'CMG EDU',
-            'score': 'Branding and Matching',
+            'scorecard': 'Example Scorecard',
+            'score': 'Example Score',
             'mode': 'aligned',
             'max_feedback_items': 1,
         },
@@ -410,12 +410,12 @@ async def test_feedback_contradictions_applies_max_feedback_items_cap(monkeypatc
 
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name',
-        lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
+        lambda name, client: SimpleNamespace(id='scorecard-1', name='Example Scorecard'),
     )
     monkeypatch.setattr(
         block,
         '_resolve_score',
-        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
+        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Example Score')),
     )
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight',
@@ -460,7 +460,7 @@ async def test_feedback_contradictions_applies_max_feedback_items_cap(monkeypatc
 
     output, _log = await block.generate()
     parsed = _parse_output(output)
-    assert parsed['scorecard_name'] == 'CMG EDU'
+    assert parsed['scorecard_name'] == 'Example Scorecard'
     assert parsed['score_id'] == 'score-1'
     assert captured_item_ids == ['item-1']
     assert parsed['total_items_analyzed'] == 1
@@ -473,8 +473,8 @@ async def test_feedback_contradictions_applies_max_feedback_items_cap(monkeypatc
 async def test_feedback_contradictions_rubric_memory_is_explicit_opt_in(monkeypatch):
     block = FeedbackContradictions(
         config={
-            'scorecard': 'CMG EDU',
-            'score': 'Branding and Matching',
+            'scorecard': 'Example Scorecard',
+            'score': 'Example Score',
             'mode': 'contradictions',
             'include_rubric_memory': True,
         },
@@ -484,12 +484,12 @@ async def test_feedback_contradictions_rubric_memory_is_explicit_opt_in(monkeypa
 
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name',
-        lambda name, client: SimpleNamespace(id='scorecard-1', name='CMG EDU'),
+        lambda name, client: SimpleNamespace(id='scorecard-1', name='Example Scorecard'),
     )
     monkeypatch.setattr(
         block,
         '_resolve_score',
-        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Branding and Matching')),
+        AsyncMock(return_value=SimpleNamespace(id='score-1', name='Example Score')),
     )
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_contradictions.validate_feedback_analysis_preflight',
@@ -541,7 +541,7 @@ async def test_feedback_contradictions_rubric_memory_is_explicit_opt_in(monkeypa
 @pytest.mark.asyncio
 async def test_build_rubric_memory_contexts_uses_retrieval_only_provider(monkeypatch):
     block = FeedbackContradictions(
-        config={'scorecard': 'CMG EDU', 'score': 'Branding and Matching'},
+        config={'scorecard': 'Example Scorecard', 'score': 'Example Score'},
         params={},
         api_client=_DummyClient(),
     )
@@ -593,8 +593,8 @@ async def test_build_rubric_memory_contexts_uses_retrieval_only_provider(monkeyp
             )
         ],
         score_results_by_item={'item-1': {'explanation': 'Model explanation'}},
-        scorecard_name='CMG EDU',
-        score_name='Branding and Matching',
+        scorecard_name='Example Scorecard',
+        score_name='Example Score',
         score_id='score-1',
     )
 
@@ -620,7 +620,7 @@ async def test_build_rubric_memory_contexts_uses_retrieval_only_provider(monkeyp
 @pytest.mark.asyncio
 async def test_build_rubric_memory_contexts_gracefully_skips_missing_corpus(monkeypatch):
     block = FeedbackContradictions(
-        config={'scorecard': 'CMG EDU', 'score': 'Branding and Matching'},
+        config={'scorecard': 'Example Scorecard', 'score': 'Example Score'},
         params={},
         api_client=_DummyClient(),
     )
@@ -634,7 +634,7 @@ async def test_build_rubric_memory_contexts_gracefully_skips_missing_corpus(monk
                 'available': False,
                 'roots': [
                     {
-                        'path': 's3://rubric-bucket/CMG EDU/scorecard.knowledge-base/',
+                        'path': 's3://rubric-bucket/Example Scorecard/scorecard.knowledge-base/',
                         'exists': False,
                     }
                 ],
@@ -659,8 +659,8 @@ async def test_build_rubric_memory_contexts_gracefully_skips_missing_corpus(monk
             )
         ],
         score_results_by_item={},
-        scorecard_name='CMG EDU',
-        score_name='Branding and Matching',
+        scorecard_name='Example Scorecard',
+        score_name='Example Score',
         score_id='score-1',
     )
 
@@ -670,7 +670,7 @@ async def test_build_rubric_memory_contexts_gracefully_skips_missing_corpus(monk
 @pytest.mark.asyncio
 async def test_build_rubric_memory_contexts_gracefully_skips_missing_configuration(monkeypatch):
     block = FeedbackContradictions(
-        config={'scorecard': 'CMG EDU', 'score': 'Branding and Matching'},
+        config={'scorecard': 'Example Scorecard', 'score': 'Example Score'},
         params={},
         api_client=_DummyClient(),
     )
@@ -701,8 +701,8 @@ async def test_build_rubric_memory_contexts_gracefully_skips_missing_configurati
             )
         ],
         score_results_by_item={},
-        scorecard_name='CMG EDU',
-        score_name='Branding and Matching',
+        scorecard_name='Example Scorecard',
+        score_name='Example Score',
         score_id='score-1',
     )
 
@@ -741,7 +741,7 @@ async def test_resolve_score_accepts_uuid_via_section_scorecard_lookup(monkeypat
 @pytest.mark.asyncio
 async def test_feedback_contradictions_generate_propagates_failures(monkeypatch):
     block = FeedbackContradictions(
-        config={"scorecard": "CMG EDU", "score": "Branding and Matching"},
+        config={"scorecard": "Example Scorecard", "score": "Example Score"},
         params={},
         api_client=_DummyClient(),
     )
@@ -749,7 +749,7 @@ async def test_feedback_contradictions_generate_propagates_failures(monkeypatch)
     monkeypatch.setattr(
         block,
         "_resolve_scorecard",
-        AsyncMock(return_value=SimpleNamespace(id="scorecard-1", name="CMG EDU")),
+        AsyncMock(return_value=SimpleNamespace(id="scorecard-1", name="Example Scorecard")),
     )
     monkeypatch.setattr(
         block,

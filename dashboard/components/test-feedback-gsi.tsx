@@ -35,7 +35,7 @@ export const TestFeedbackGSI: React.FC = () => {
           name: 'Test Case 1: Yes->No',
           filter: {
             accountId: selectedAccount.id,
-            scorecardId: 'f3e2c4b2-27ed-48d5-b24a-e7ae74b5c5d4', // CMG scorecard ID (replace with actual)
+            scorecardId: 'f3e2c4b2-27ed-48d5-b24a-e7ae74b5c5d4', // Example scorecard ID (replace with actual)
             scoreId: 'a7bb8592-8c4a-4c8c-8eb6-1b8c7c7a6f9d', // Score ID (replace with actual)
             predicted: 'Yes',
             actual: 'No'

@@ -421,19 +421,19 @@ def test_local_corpus_resolver_uses_score_yaml_stem(monkeypatch, tmp_path):
     monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
 
     paths = LocalRubricMemoryCorpusResolver().resolve(
-        scorecard_name="SelectQuote HCS Medium-Risk",
-        score_name="Medication Review: Dosage",
+        scorecard_name="Example Scorecard",
+        score_name="Example Score",
     )
 
-    assert paths.scorecard_root == cache_root / "SelectQuote HCS Medium-Risk"
+    assert paths.scorecard_root == cache_root / "Example Scorecard"
     assert paths.score_knowledge_base == (
         cache_root
-        / "SelectQuote HCS Medium-Risk"
-        / "Medication Review- Dosage.knowledge-base"
+        / "Example Scorecard"
+        / "Example Score.knowledge-base"
     )
     assert paths.scorecard_knowledge_base == (
         cache_root
-        / "SelectQuote HCS Medium-Risk"
+        / "Example Scorecard"
         / "scorecard.knowledge-base"
     )
     assert paths.prefix_knowledge_bases == []
@@ -447,19 +447,19 @@ def test_local_corpus_resolver_includes_matching_prefix_knowledge_base(
     monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
     prefix_root = (
         cache_root
-        / "SelectQuote HCS Medium-Risk"
+        / "Example Scorecard"
         / "Information Accuracy.knowledge-base"
     )
     score_root = (
         cache_root
-        / "SelectQuote HCS Medium-Risk"
+        / "Example Scorecard"
         / "Information Accuracy- High-Pressure Tactics.knowledge-base"
     )
     prefix_root.mkdir(parents=True)
     score_root.mkdir(parents=True)
 
     paths = LocalRubricMemoryCorpusResolver().resolve(
-        scorecard_name="SelectQuote HCS Medium-Risk",
+        scorecard_name="Example Scorecard",
         score_name="Information Accuracy: High-Pressure Tactics",
     )
 
@@ -479,13 +479,13 @@ def test_local_corpus_resolver_allows_prefix_without_score_specific_folder(
     monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
     prefix_root = (
         cache_root
-        / "SelectQuote HCS Medium-Risk"
+        / "Example Scorecard"
         / "Information Accuracy.knowledge-base"
     )
     prefix_root.mkdir(parents=True)
 
     paths = LocalRubricMemoryCorpusResolver().resolve(
-        scorecard_name="SelectQuote HCS Medium-Risk",
+        scorecard_name="Example Scorecard",
         score_name="Information Accuracy: High-Pressure Tactics",
     )
 
@@ -503,13 +503,13 @@ def test_local_corpus_resolver_includes_prefix_for_composite_score(
     monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
     prefix_root = (
         cache_root
-        / "SelectQuote HCS Medium-Risk"
+        / "Example Scorecard"
         / "Information Accuracy.knowledge-base"
     )
     prefix_root.mkdir(parents=True)
 
     paths = LocalRubricMemoryCorpusResolver().resolve(
-        scorecard_name="SelectQuote HCS Medium-Risk",
+        scorecard_name="Example Scorecard",
         score_name="Information Accuracy (Composite)",
     )
 
@@ -524,14 +524,14 @@ def test_local_corpus_resolver_does_not_duplicate_exact_score_knowledge_base(
     monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
     exact_root = (
         cache_root
-        / "SelectQuote HCS Medium-Risk"
-        / "Agent Misrepresentation.knowledge-base"
+        / "Example Scorecard"
+        / "Example Score.knowledge-base"
     )
     exact_root.mkdir(parents=True)
 
     paths = LocalRubricMemoryCorpusResolver().resolve(
-        scorecard_name="SelectQuote HCS Medium-Risk",
-        score_name="Agent Misrepresentation",
+        scorecard_name="Example Scorecard",
+        score_name="Example Score",
     )
 
     assert paths.prefix_knowledge_bases == []
@@ -546,7 +546,7 @@ def test_local_corpus_resolver_treats_missing_prefix_as_optional(
     monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
 
     paths = LocalRubricMemoryCorpusResolver().resolve(
-        scorecard_name="SelectQuote HCS Medium-Risk",
+        scorecard_name="Example Scorecard",
         score_name="Information Accuracy: High-Pressure Tactics",
     )
 
@@ -557,33 +557,33 @@ def test_local_corpus_resolver_treats_missing_prefix_as_optional(
 def test_s3_corpus_resolver_maps_scorecard_prefix_and_score_roots(monkeypatch):
     fake_s3 = _FakeS3Client()
     fake_s3.put_text(
-        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/2026-04-01/source.md",
+        "Example Scorecard/scorecard.knowledge-base/2026-04-01/source.md",
         "Scorecard memory.",
     )
     fake_s3.put_text(
-        "SelectQuote HCS Medium-Risk/Medication Review.knowledge-base/2026-04-10/source.md",
+        "Example Scorecard/Example Score.knowledge-base/2026-04-10/source.md",
         "Prefix memory.",
     )
     fake_s3.put_text(
-        "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/2026-04-24/source.md",
+        "Example Scorecard/Example Score- Detail.knowledge-base/2026-04-24/source.md",
         "Score memory.",
     )
     monkeypatch.setenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", "rubric-bucket")
 
     paths = S3RubricMemoryCorpusResolver(s3_client=fake_s3).resolve(
-        scorecard_name="SelectQuote HCS Medium-Risk",
-        score_name="Medication Review: Dosage",
+        scorecard_name="Example Scorecard",
+        score_name="Example Score: Detail",
     )
 
     assert paths.bucket_name == "rubric-bucket"
     assert paths.scorecard_knowledge_base_prefix == (
-        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/"
+        "Example Scorecard/scorecard.knowledge-base/"
     )
     assert paths.prefix_knowledge_base_prefixes == [
-        "SelectQuote HCS Medium-Risk/Medication Review.knowledge-base/"
+        "Example Scorecard/Example Score.knowledge-base/"
     ]
     assert paths.score_knowledge_base_prefix == (
-        "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/"
+        "Example Scorecard/Example Score- Detail.knowledge-base/"
     )
     assert [source.scope_level for source in paths.sources] == [
         "scorecard",
@@ -595,15 +595,15 @@ def test_s3_corpus_resolver_maps_scorecard_prefix_and_score_roots(monkeypatch):
 def test_s3_corpus_resolver_requires_scorecard_and_score_prefixes(monkeypatch):
     fake_s3 = _FakeS3Client()
     fake_s3.put_text(
-        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/2026-04-01/source.md",
+        "Example Scorecard/scorecard.knowledge-base/2026-04-01/source.md",
         "Scorecard memory.",
     )
     monkeypatch.setenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", "rubric-bucket")
 
-    with pytest.raises(FileNotFoundError, match="Medication Review- Dosage"):
+    with pytest.raises(FileNotFoundError, match="Example Score"):
         S3RubricMemoryCorpusResolver(s3_client=fake_s3).resolve(
-            scorecard_name="SelectQuote HCS Medium-Risk",
-            score_name="Medication Review: Dosage",
+            scorecard_name="Example Scorecard",
+            score_name="Example Score",
         )
 
 
@@ -613,23 +613,23 @@ async def test_recent_briefing_filters_to_recent_dated_s3_sources_and_ranks_rece
 ):
     fake_s3 = _FakeS3Client()
     fake_s3.put_text(
-        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/2026-03-01/old.md",
+        "Example Scorecard/scorecard.knowledge-base/2026-03-01/old.md",
         "Old scorecard policy.",
     )
     fake_s3.put_text(
-        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/2026-04-27/recent-scorecard.md",
+        "Example Scorecard/scorecard.knowledge-base/2026-04-27/recent-scorecard.md",
         "Recent scorecard policy.",
     )
     fake_s3.put_text(
-        "SelectQuote HCS Medium-Risk/Medication Review.knowledge-base/2026-04-28/recent-prefix.md",
-        "Recent prefix medication review policy.",
+        "Example Scorecard/Example Score.knowledge-base/2026-04-28/recent-prefix.md",
+        "Recent prefix policy.",
     )
     fake_s3.put_text(
-        "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/2026-04-28/recent-score.md",
-        "Recent score dosage policy.",
+        "Example Scorecard/Example Score- Detail.knowledge-base/2026-04-28/recent-score.md",
+        "Recent score detail policy.",
     )
     fake_s3.put_text(
-        "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/unknown-date/source.md",
+        "Example Scorecard/Example Score- Detail.knowledge-base/unknown-date/source.md",
         "Unknown date note.",
     )
     monkeypatch.setenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", "rubric-bucket")
@@ -642,7 +642,7 @@ async def test_recent_briefing_filters_to_recent_dated_s3_sources_and_ranks_rece
             assert score_id == "score-1"
             return RubricAuthority(
                 score_version_id="score-version-1",
-                rubric_text="Official dosage rubric.",
+                rubric_text="Official rubric.",
                 score_code="classifier prompt",
             )
 
@@ -650,7 +650,7 @@ async def test_recent_briefing_filters_to_recent_dated_s3_sources_and_ranks_rece
             assert score_version_id == "active-version-1"
             return RubricAuthority(
                 score_version_id="active-version-1",
-                rubric_text="Active version dosage rubric.",
+                rubric_text="Active version rubric.",
                 score_code="active classifier prompt",
             )
 
@@ -701,8 +701,8 @@ async def test_recent_briefing_filters_to_recent_dated_s3_sources_and_ranks_rece
         s3_client=fake_s3,
         reference_date=date(2026, 4, 29),
     ).retrieve_recent(
-        scorecard_identifier="SelectQuote HCS Medium-Risk",
-        score_identifier="Medication Review: Dosage",
+        scorecard_identifier="Example Scorecard",
+        score_identifier="Example Score: Detail",
         score_id="score-1",
         score_version_id="active-version-1",
         days=30,
@@ -801,26 +801,26 @@ def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
         monkeypatch.setenv("SCORECARD_CACHE_DIR", str(cache_root))
         monkeypatch.setenv("AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME", "rubric-bucket")
         paths = LocalRubricMemoryCorpusResolver().resolve(
-            scorecard_name="SelectQuote HCS Medium-Risk",
-            score_name="Medication Review: Dosage",
+            scorecard_name="Example Scorecard",
+            score_name="Example Score: Detail",
         )
         scorecard_file = (
             paths.scorecard_knowledge_base / "2026-04-01" / "scorecard.md"
         )
         prefix_file = (
             cache_root
-            / "SelectQuote HCS Medium-Risk"
-            / "Medication Review.knowledge-base"
+            / "Example Scorecard"
+            / "Example Score.knowledge-base"
             / "2026-04-10"
-            / "medication-review.md"
+            / "example-score.md"
         )
-        score_file = paths.score_knowledge_base / "2026-04-24" / "dosage.md"
+        score_file = paths.score_knowledge_base / "2026-04-24" / "detail.md"
         scorecard_file.parent.mkdir(parents=True)
         prefix_file.parent.mkdir(parents=True)
         score_file.parent.mkdir(parents=True)
-        scorecard_file.write_text("Shared medication review policy.", encoding="utf-8")
-        prefix_file.write_text("Medication review policy memory.", encoding="utf-8")
-        score_file.write_text("Dosage-specific policy memory.", encoding="utf-8")
+        scorecard_file.write_text("Shared scorecard policy.", encoding="utf-8")
+        prefix_file.write_text("Example score policy memory.", encoding="utf-8")
+        score_file.write_text("Detail-specific policy memory.", encoding="utf-8")
 
         sync_result = runner.invoke(
             cli,
@@ -828,9 +828,9 @@ def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
                 "rubric-memory",
                 "sync",
                 "--scorecard",
-                "SelectQuote HCS Medium-Risk",
+                "Example Scorecard",
                 "--score",
-                "Medication Review: Dosage",
+                "Example Score: Detail",
             ],
         )
         first = runner.invoke(
@@ -839,9 +839,9 @@ def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
                 "rubric-memory",
                 "prewarm",
                 "--scorecard",
-                "SelectQuote HCS Medium-Risk",
+                "Example Scorecard",
                 "--score",
-                "Medication Review: Dosage",
+                "Example Score: Detail",
             ],
         )
         second = runner.invoke(
@@ -850,16 +850,16 @@ def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
                 "rubric-memory",
                 "prewarm",
                 "--scorecard",
-                "SelectQuote HCS Medium-Risk",
+                "Example Scorecard",
                 "--score",
-                "Medication Review: Dosage",
+                "Example Score: Detail",
             ],
         )
 
     assert sync_result.exit_code == 0, sync_result.output
     assert "uploaded_file_count: 3" in sync_result.output
     assert any(
-        key.endswith("Medication Review- Dosage.knowledge-base/2026-04-24/dosage.md")
+        key.endswith("Example Score- Detail.knowledge-base/2026-04-24/detail.md")
         for _filename, key in fake_s3.uploads
     )
     assert first.exit_code == 0, first.output
@@ -874,8 +874,8 @@ def test_rubric_memory_prewarm_cli_reports_prepared_corpus(
     assert "included_knowledge_base[scorecard]:" in first.output
     assert "included_knowledge_base[prefix]:" in first.output
     assert "included_knowledge_base[score]:" in first.output
-    assert "Medication Review- Dosage.knowledge-base" in first.output
-    assert "Medication Review.knowledge-base" in first.output
+    assert "Example Score- Detail.knowledge-base" in first.output
+    assert "Example Score.knowledge-base" in first.output
 
 
 def test_rubric_memory_prewarm_cli_requires_s3_bucket(monkeypatch):
@@ -888,9 +888,9 @@ def test_rubric_memory_prewarm_cli_requires_s3_bucket(monkeypatch):
             "rubric-memory",
             "prewarm",
             "--scorecard",
-            "SelectQuote HCS Medium-Risk",
+            "Example Scorecard",
             "--score",
-            "Medication Review: Dosage",
+            "Example Score",
         ],
     )
 
@@ -943,9 +943,9 @@ def test_rubric_memory_recent_cli_reports_markdown_and_citations(monkeypatch):
             "rubric-memory",
             "recent",
             "--scorecard",
-            "SelectQuote HCS Medium-Risk",
+            "Example Scorecard",
             "--score",
-            "Medication Review: Dosage",
+            "Example Score",
             "--query",
             "SME update",
             "--format",
@@ -962,8 +962,8 @@ def test_rubric_memory_recent_cli_reports_markdown_and_citations(monkeypatch):
 
 def test_query_planner_derives_retrieval_phrases_from_request():
     request = RubricEvidencePackRequest(
-        scorecard_identifier="SelectQuote HCS Medium-Risk",
-        score_identifier="Medication Review: Dosage",
+        scorecard_identifier="Example Scorecard",
+        score_identifier="Example Score",
         score_version_id="version-1",
         rubric_text=(
             "The agent must verify dosage for current medications. "
@@ -984,7 +984,7 @@ def test_query_planner_derives_retrieval_phrases_from_request():
     plan = RubricMemoryQueryPlanner(max_phrases=80).plan(request)
     phrases = " | ".join(plan.retrieval_phrases).lower()
 
-    assert "medication review" in phrases
+    assert "example score" in phrases
     assert "dosage" in phrases
     assert "current medications" in phrases
     assert "completed short-course medications" in phrases
@@ -1059,8 +1059,8 @@ def test_source_window_expansion_finds_policy_section(tmp_path):
         encoding="utf-8",
     )
     request = RubricEvidencePackRequest(
-        scorecard_identifier="SelectQuote HCS Medium-Risk",
-        score_identifier="Medication Review: Dosage",
+        scorecard_identifier="Example Scorecard",
+        score_identifier="Example Score",
         score_version_id="version-1",
         rubric_text=(
             "The agent must verify current medication dosage and schedule. "
@@ -1098,7 +1098,7 @@ def test_source_window_expansion_finds_policy_section(tmp_path):
 def test_prepared_corpus_infers_date_folder_metadata_without_touching_raw_source(
     tmp_path,
 ):
-    score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
+    score_root = tmp_path / "Example Score.knowledge-base"
     source_file = score_root / "2026-04-24" / "client" / "source.md"
     source_file.parent.mkdir(parents=True)
     source_file.write_text("Dosage calibration note.", encoding="utf-8")
@@ -1123,7 +1123,7 @@ def test_prepared_corpus_infers_date_folder_metadata_without_touching_raw_source
 
 
 def test_prepared_corpus_leaves_unknown_date_without_timestamp(tmp_path):
-    score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
+    score_root = tmp_path / "Example Score.knowledge-base"
     source_file = score_root / "unknown-date" / "source.md"
     source_file.parent.mkdir(parents=True)
     source_file.write_text("Undated dosage note.", encoding="utf-8")
@@ -1147,8 +1147,8 @@ def test_prepared_corpus_leaves_unknown_date_without_timestamp(tmp_path):
 
 def test_prepared_corpus_combines_scorecard_prefix_and_score_scopes(tmp_path):
     scorecard_root = tmp_path / "scorecard.knowledge-base"
-    prefix_root = tmp_path / "Medication Review.knowledge-base"
-    score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
+    prefix_root = tmp_path / "Example Score.knowledge-base"
+    score_root = tmp_path / "Example Score- Detail.knowledge-base"
     scorecard_file = scorecard_root / "2026-04-01" / "scorecard.md"
     prefix_file = prefix_root / "2026-04-10" / "prefix.md"
     score_file = score_root / "2026-04-24" / "score.md"
@@ -1156,8 +1156,8 @@ def test_prepared_corpus_combines_scorecard_prefix_and_score_scopes(tmp_path):
     prefix_file.parent.mkdir(parents=True)
     score_file.parent.mkdir(parents=True)
     scorecard_file.write_text("Shared scorecard note.", encoding="utf-8")
-    prefix_file.write_text("Shared medication review note.", encoding="utf-8")
-    score_file.write_text("Score-local dosage note.", encoding="utf-8")
+    prefix_file.write_text("Shared example score note.", encoding="utf-8")
+    score_file.write_text("Score-local detail note.", encoding="utf-8")
 
     prepared = RubricMemoryPreparedCorpusManager(
         cache_root=tmp_path / "prepared"
@@ -1213,18 +1213,18 @@ def test_prepared_corpus_downloads_s3_objects_with_sidecar_metadata(
 
     fake_s3 = _FakeS3Client()
     fake_s3.put_text(
-        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/2026-04-01/source.md",
+        "Example Scorecard/scorecard.knowledge-base/2026-04-01/source.md",
         "S3 scorecard note.",
     )
     fake_s3.put_text(
-        "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/2026-04-24/client/source.md",
+        "Example Scorecard/Example Score.knowledge-base/2026-04-24/client/source.md",
         "S3 dosage calibration note.",
         etag="source-etag",
     )
     monkeypatch.setattr(boto3, "client", lambda service_name: fake_s3)
     source = S3RubricMemorySource(
         bucket_name="rubric-bucket",
-        prefix="SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/",
+        prefix="Example Scorecard/Example Score.knowledge-base/",
         scope_level="score",
         objects=tuple(
             S3RubricMemoryCorpusResolver(
@@ -1232,8 +1232,8 @@ def test_prepared_corpus_downloads_s3_objects_with_sidecar_metadata(
                 s3_client=fake_s3,
             )
             .resolve(
-                scorecard_name="SelectQuote HCS Medium-Risk",
-                score_name="Medication Review: Dosage",
+                scorecard_name="Example Scorecard",
+                score_name="Example Score",
             )
             .sources[-1]
             .objects
@@ -1253,14 +1253,14 @@ def test_prepared_corpus_downloads_s3_objects_with_sidecar_metadata(
     assert "S3 dosage calibration note." in copied_file.read_text(encoding="utf-8")
     assert (
         fake_s3.objects[
-            "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/2026-04-24/client/source.md"
+            "Example Scorecard/Example Score.knowledge-base/2026-04-24/client/source.md"
         ]["Body"]
         == b"S3 dosage calibration note."
     )
     assert metadata["scope_level"] == "score"
     assert metadata["source_uri"] == (
-        "s3://rubric-bucket/SelectQuote HCS Medium-Risk/"
-        "Medication Review- Dosage.knowledge-base/2026-04-24/client/source.md"
+        "s3://rubric-bucket/Example Scorecard/"
+        "Example Score.knowledge-base/2026-04-24/client/source.md"
     )
     assert metadata["bucket_name"] == "rubric-bucket"
     assert metadata["source_timestamp"] == "2026-04-24T00:00:00"
@@ -1273,11 +1273,11 @@ def test_prepared_corpus_rebuilds_when_s3_etag_changes(monkeypatch, tmp_path):
 
     fake_s3 = _FakeS3Client()
     fake_s3.put_text(
-        "SelectQuote HCS Medium-Risk/scorecard.knowledge-base/2026-04-01/source.md",
+        "Example Scorecard/scorecard.knowledge-base/2026-04-01/source.md",
         "S3 scorecard note.",
     )
     key = (
-        "SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/"
+        "Example Scorecard/Example Score.knowledge-base/"
         "2026-04-24/source.md"
     )
     fake_s3.put_text(key, "S3 dosage calibration note.", etag="etag-1")
@@ -1288,16 +1288,16 @@ def test_prepared_corpus_rebuilds_when_s3_etag_changes(monkeypatch, tmp_path):
         s3_client=fake_s3,
     )
     first_source = resolver.resolve(
-        scorecard_name="SelectQuote HCS Medium-Risk",
-        score_name="Medication Review: Dosage",
+        scorecard_name="Example Scorecard",
+        score_name="Example Score",
     ).sources[-1]
     manager = RubricMemoryPreparedCorpusManager(cache_root=tmp_path / "prepared")
     first = manager.prepare(corpus_sources=[first_source])
 
     fake_s3.put_text(key, "S3 dosage calibration note.", etag="etag-2")
     second_source = resolver.resolve(
-        scorecard_name="SelectQuote HCS Medium-Risk",
-        score_name="Medication Review: Dosage",
+        scorecard_name="Example Scorecard",
+        score_name="Example Score",
     ).sources[-1]
     second = manager.prepare(corpus_sources=[second_source])
 
@@ -1317,7 +1317,7 @@ def test_prepared_corpus_rejects_missing_knowledge_base_folder(tmp_path):
 
 
 def test_prepared_corpus_reuses_matching_fingerprint(tmp_path):
-    score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
+    score_root = tmp_path / "Example Score.knowledge-base"
     source_file = score_root / "2026-04-24" / "source.md"
     source_file.parent.mkdir(parents=True)
     source_file.write_text("Dosage calibration note.", encoding="utf-8")
@@ -1337,7 +1337,7 @@ def test_prepared_corpus_reuses_matching_fingerprint(tmp_path):
 
 
 def test_prepared_corpus_rebuilds_when_source_file_changes(tmp_path):
-    score_root = tmp_path / "Medication Review- Dosage.knowledge-base"
+    score_root = tmp_path / "Example Score.knowledge-base"
     source_file = score_root / "2026-04-24" / "source.md"
     source_file.parent.mkdir(parents=True)
     source_file.write_text("Dosage calibration note.", encoding="utf-8")
@@ -1357,7 +1357,7 @@ def test_prepared_corpus_rebuilds_when_source_file_changes(tmp_path):
 
 @pytest.mark.asyncio
 async def test_biblicus_retriever_preserves_inferred_date_and_scope(tmp_path):
-    source_root = tmp_path / "Medication Review- Dosage.knowledge-base"
+    source_root = tmp_path / "Example Score.knowledge-base"
     source_file = source_root / "2026-04-24" / "source.md"
     source_file.parent.mkdir(parents=True)
     source_file.write_text(
@@ -1376,8 +1376,8 @@ async def test_biblicus_retriever_preserves_inferred_date_and_scope(tmp_path):
 
     evidence = await retriever.retrieve(
         RubricEvidencePackRequest(
-            scorecard_identifier="SelectQuote HCS Medium-Risk",
-            score_identifier="Medication Review: Dosage",
+            scorecard_identifier="Example Scorecard",
+            score_identifier="Example Score",
             score_version_id="version-1",
             rubric_text="Verify medication dosage.",
             topic_hint="dosage medication strengths",
@@ -1802,7 +1802,7 @@ async def test_context_provider_retrieves_item_context_without_synthesis(monkeyp
 
     contexts = await RubricMemoryContextProvider(api_client=object()).retrieve_for_score_items(
         scorecard_identifier="Scorecard A",
-        score_identifier="Medication Review: Dosage",
+        score_identifier="Example Score",
         score_id="score-1",
         score_version_id="active-version-1",
         item_contexts=[

@@ -41,10 +41,10 @@ The S3 key hierarchy intentionally mirrors the existing pulled-score folder name
   <Score Name Stem>.knowledge-base/
 ```
 
-For `SelectQuote HCS Medium-Risk` / `Medication Review: Dosage`, the score-level knowledge base prefix is:
+For `Example Scorecard` / `Example Score`, the score-level knowledge base prefix is:
 
 ```text
-SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/
+Example Scorecard/Example Score.knowledge-base/
 ```
 
 The name must match the sanitized score file stem used by the pulled-score convention. This keeps the `.yaml`, `.md`, local `.knowledge-base`, and S3 `.knowledge-base` artifacts visibly aligned.
@@ -68,7 +68,7 @@ Prefix knowledge bases apply to multiple related scores in a scorecard. They are
 Example:
 
 ```text
-SelectQuote HCS Medium-Risk/
+Example Scorecard/
   Information Accuracy.knowledge-base/
   Information Accuracy- High-Pressure Sales Tactics.knowledge-base/
 ```
@@ -111,11 +111,11 @@ Overlap and duplication are acceptable. A source can be copied into a scorecard-
 Use local folders next to pulled score YAML/Markdown files as the authoring workspace. Sync uploads those raw files to the dedicated rubric-memory bucket using the same relative hierarchy.
 
 ```bash
-plexus rubric-memory sync --scorecard "SelectQuote HCS Medium-Risk"
+plexus rubric-memory sync --scorecard "Example Scorecard"
 
 plexus rubric-memory sync \
-  --scorecard "SelectQuote HCS Medium-Risk" \
-  --score "Medication Review: Dosage"
+  --scorecard "Example Scorecard" \
+  --score "Example Score"
 ```
 
 The score-specific sync uploads the scorecard-level folder, matching prefix folders, and the exact score folder. Missing required local scorecard or score folders fail clearly. Prefix folders remain optional.
@@ -141,8 +141,8 @@ Manual prewarming uses the same code path as just-in-time runtime preparation:
 
 ```bash
 AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME=<bucket> plexus rubric-memory prewarm \
-  --scorecard "SelectQuote HCS Medium-Risk" \
-  --score "Medication Review: Dosage"
+  --scorecard "Example Scorecard" \
+  --score "Example Score"
 ```
 
 Prewarming does not generate analysis. It only prepares the corpus so later retrieval starts faster and uses the same prepared state.
@@ -153,8 +153,8 @@ Score optimization should begin with a recency-biased review of recent knowledge
 
 ```bash
 plexus rubric-memory recent \
-  --scorecard "SelectQuote HCS Medium-Risk" \
-  --score "Medication Review: Dosage" \
+  --scorecard "Example Scorecard" \
+  --score "Example Score" \
   --days 30 \
   --query "recent SME stakeholder policy update rubric guideline change clarification"
 ```
