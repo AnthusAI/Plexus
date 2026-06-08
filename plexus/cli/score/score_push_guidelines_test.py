@@ -91,7 +91,6 @@ def test_cli_push_preserves_champion_guidelines_when_local_guidelines_file_missi
         scorecard="Example Scorecard",
         score="Example Score",
         note="test",
-        create_if_missing=False,
     )
 
     assert client.created_inputs[-1]["guidelines"] == "Cloud guide"
