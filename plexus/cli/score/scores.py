@@ -1429,7 +1429,6 @@ def push(scorecard: str, score: str, note: str, create_if_missing: bool):
         version_data = result.get('getScoreVersion') if result else None
         if not version_data:
             console.print(f"[yellow]Warning: Could not fetch version {current_version_id}, treating as initial push[/yellow]")
-            current_version_id = None  # Treat as initial version
         else:
             cloud_yaml = version_data.get('configuration', '')
             cloud_guidelines = version_data.get('guidelines', '')
