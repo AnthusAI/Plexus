@@ -17,12 +17,15 @@ related:
 
 Common patterns for scorecard-wide feedback analysis and optimization workflows.
 
+**IMPORTANT**: `plexus.procedure.optimize_batch` is limited to **5 scores maximum** per call.
+Each optimizer consumes 1-2GB RAM during execution. For larger batches, process in sequential
+groups of 5.
+
 ---
 
-## Pattern 1: Find and Optimize All Low-Accuracy Scores
+## Pattern 1: Find and Optimize Low-Accuracy Scores (Small Batch)
 
-The canonical workflow. Identify underperforming scores and dispatch optimizers
-in two API calls.
+Identify underperforming scores and dispatch optimizers (up to 5 at once).
 
 ```lua
 -- Step 1: Get all scores below 90% accuracy
@@ -32,10 +35,10 @@ local alignment = plexus.feedback.alignment_batch({
   accuracy_threshold = 90,
 })
 
--- Step 2: Collect valid score names
+-- Step 2: Collect valid score names (limit to 5 for batch constraints)
 local scores = {}
 for _, s in ipairs(alignment.scores) do
-  if not s.error then
+  if not s.error and #scores < 5 then
     table.insert(scores, s.score_name)
   end
 end
@@ -53,6 +56,57 @@ return {
   dispatched = #dispatch.dispatched,
   failed = #dispatch.failed,
   procedures = dispatch.dispatched,
+}
+```
+
+---
+
+## Pattern 1b: Scorecard-Wide Optimization (Sequential Batches)
+
+For scorecards with 10+ low-accuracy scores, process in batches of 5.
+
+```lua
+-- Step 1: Get all scores below threshold
+local alignment = plexus.feedback.alignment_batch({
+  scorecard = "My Scorecard",
+  days = 90,
+  accuracy_threshold = 85,
+})
+
+local all_scores = {}
+for _, s in ipairs(alignment.scores) do
+  if not s.error then
+    table.insert(all_scores, s.score_name)
+  end
+end
+
+-- Step 2: Process in batches of 5
+local all_procedures = {}
+for i = 1, #all_scores, 5 do
+  local batch = {}
+  for j = i, math.min(i + 4, #all_scores) do
+    table.insert(batch, all_scores[j])
+  end
+  
+  local dispatch = plexus.procedure.optimize_batch({
+    scorecard = "My Scorecard",
+    scores = batch,
+    max_iterations = 3,
+    days = 90,
+  })
+  
+  for _, proc in ipairs(dispatch.dispatched) do
+    table.insert(all_procedures, proc)
+  end
+  
+  -- NOTE: In practice, wait for this batch to complete before dispatching next
+  -- Check status with plexus.procedure.status_batch before continuing
+end
+
+return {
+  total_scores = #all_scores,
+  total_procedures = #all_procedures,
+  procedures = all_procedures,
 }
 ```
 

@@ -4400,9 +4400,15 @@ def _default_procedure_optimize_batch(args: dict[str, Any]) -> dict[str, Any]:
     Creates N procedures from the built-in feedback_alignment_optimizer.yaml,
     one per score, with shared parameters.
 
+    RESOURCE CONSTRAINTS:
+        - Maximum 5 scores per batch to prevent resource exhaustion
+        - Each optimizer consumes ~1-2GB RAM during LLM-intensive phases
+        - Concurrent optimizers can overwhelm shared infrastructure
+        - For larger batches, dispatch in groups of 3-5 with delays between
+
     Required args:
         scorecard (str): Scorecard name, key, or ID.
-        scores (list[str]): Array of score names, keys, or IDs.
+        scores (list[str]): Array of score names, keys, or IDs (max 5).
 
     Optional args (applied to all optimizer runs):
         days (int): Feedback lookback window in days. Default 90.
@@ -4432,6 +4438,8 @@ def _default_procedure_optimize_batch(args: dict[str, Any]) -> dict[str, Any]:
             ]
         }
     """
+    MAX_BATCH_SIZE = 5
+
     scorecard_identifier = args.get("scorecard") or args.get("scorecard_name") or args.get("scorecard_identifier")
     scores = args.get("scores") or []
 
@@ -4439,6 +4447,12 @@ def _default_procedure_optimize_batch(args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("plexus.procedure.optimize_batch requires 'scorecard'")
     if not scores or not isinstance(scores, list):
         raise ValueError("plexus.procedure.optimize_batch requires 'scores' as a non-empty array")
+    if len(scores) > MAX_BATCH_SIZE:
+        raise ValueError(
+            f"plexus.procedure.optimize_batch: batch size {len(scores)} exceeds maximum of {MAX_BATCH_SIZE}. "
+            f"Each optimizer consumes 1-2GB RAM during execution. For larger batches, dispatch multiple "
+            f"smaller batches sequentially."
+        )
 
     # Prepare shared parameters (everything except scorecard/score)
     shared_params = {k: v for k, v in args.items() if k not in ("scorecard", "scorecard_name", "scorecard_identifier", "scores", "score", "score_name", "score_identifier")}
