@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "0d958831-f1ee-4fbe-a455-4aa586211e07",
+  "issue_id": "plx-a33925f3-f2d5-4cb6-9538-03506dbf0602",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-09T21:01:03.177Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+    "priority": 2,
+    "status": "open",
+    "title": "Update optimizer-procedures.md to show plexus.procedure.optimize()"
+  }
+}
