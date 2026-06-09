@@ -471,6 +471,7 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("item", "last"): _method_spec("_call_item", planning_allowed=True),
     ("feedback", "find"): _method_spec("_call_feedback", planning_allowed=True),
     ("feedback", "alignment"): _method_spec("_call_feedback", planning_allowed=True),
+    ("feedback", "alignment_batch"): _method_spec("_call_feedback", planning_allowed=True),
     ("feedback", "latest_update"): _method_spec("_call_feedback", planning_allowed=True),
     ("evaluation", "info"): _method_spec("_call_evaluation_read", planning_allowed=True),
     ("evaluation", "find_recent"): _method_spec("_call_evaluation_read", planning_allowed=True),
@@ -494,6 +495,8 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("procedure", "archive"): _method_spec("_call_procedure_write", planning_allowed=False),
     ("procedure", "run"): _method_spec("_call_procedure_run", planning_allowed=False),
     ("procedure", "optimize"): _method_spec("_call_procedure_run", planning_allowed=False),
+    ("procedure", "optimize_batch"): _method_spec("_call_procedure_run", planning_allowed=False),
+    ("procedure", "status_batch"): _method_spec("_call_procedure_read", planning_allowed=True),
     ("procedure", "continue"): _method_spec("_call_procedure_run", planning_allowed=False),
     ("procedure", "branch"): _method_spec("_call_procedure_run", planning_allowed=False),
     ("handle", "peek"): _method_spec("_call_handle", planning_allowed=True),
@@ -1695,6 +1698,168 @@ def _default_feedback_alignment(args: dict[str, Any]) -> dict[str, Any]:
         )
     )
     return FeedbackService.format_summary_result_as_dict(summary)
+
+
+def _default_feedback_alignment_batch(args: dict[str, Any]) -> dict[str, Any]:
+    """
+    Run plexus.feedback.alignment for all scores in a scorecard.
+
+    Returns alignment metrics for each score in a single call, avoiding
+    N separate API calls when analyzing scorecard-wide performance.
+
+    Required args:
+        scorecard (str): Scorecard name, key, or ID.
+
+    Optional args:
+        days (int): Feedback lookback window in days. Default 7.
+        accuracy_threshold (float): If provided, only return scores below this accuracy %.
+        include_scores (list[str]): If provided, only return metrics for these score names.
+        exclude_scores (list[str]): If provided, exclude these score names from results.
+
+    Returns dict with:
+        {
+            "scorecard_id": str,
+            "scorecard_name": str,
+            "days": int,
+            "total_scores": int,
+            "scores_analyzed": int,
+            "scores": [
+                {
+                    "score_id": str,
+                    "score_name": str,
+                    "accuracy": float (0-100),
+                    "ac1": float (0-1),
+                    "total_items": int,
+                    "confusion_matrix": dict,
+                    "precision": float,
+                    "recall": float,
+                    "warning": str | None,
+                },
+                ...
+            ]
+        }
+    """
+    from plexus.cli.feedback.feedback_service import FeedbackService
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.memoized_resolvers import (
+        memoized_resolve_scorecard_identifier,
+    )
+
+    scorecard_name = args.get("scorecard_name") or args.get("scorecard")
+    if not scorecard_name:
+        raise ValueError("plexus.feedback.alignment_batch requires scorecard")
+
+    days = int(float(args.get("days", 7)))
+    accuracy_threshold = args.get("accuracy_threshold")
+    include_scores = args.get("include_scores")
+    exclude_scores = args.get("exclude_scores", [])
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.feedback.alignment_batch: could not create dashboard client")
+
+    account_id = _resolve_runtime_account_id(client, args, "plexus.feedback.alignment_batch")
+    scorecard_id = memoized_resolve_scorecard_identifier(client, str(scorecard_name))
+    if not scorecard_id:
+        raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found")
+
+    # Get all scores via the same GraphQL query pattern used by scorecards.info
+    import json as _json
+    query = (
+        "query GetScorecard { "
+        f'getScorecard(id: "{scorecard_id}") {{ '
+        "id name sections { items { scores { items { id name } } } } "
+        "} }"
+    )
+    response = client.execute(query)
+    if "errors" in response:
+        raise RuntimeError(
+            "plexus.feedback.alignment_batch dashboard error: "
+            + _json.dumps(response["errors"])
+        )
+    data = response.get("getScorecard")
+    if not data:
+        raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found after query")
+
+    # Flatten scores from all sections
+    all_scores = []
+    for section in (data.get("sections") or {}).get("items") or []:
+        for score in (section.get("scores") or {}).get("items") or []:
+            if score.get("id") and score.get("name"):
+                all_scores.append({"id": score["id"], "name": score["name"]})
+
+    if not all_scores:
+        return {
+            "scorecard_id": scorecard_id,
+            "scorecard_name": scorecard_name,
+            "days": days,
+            "total_scores": 0,
+            "scores_analyzed": 0,
+            "scores": [],
+        }
+
+    # Filter scores based on include/exclude lists
+    if include_scores:
+        all_scores = [s for s in all_scores if s["name"] in include_scores]
+    if exclude_scores:
+        all_scores = [s for s in all_scores if s["name"] not in exclude_scores]
+
+    # Run alignment analysis for each score
+    results = []
+    for score in all_scores:
+        score_name = score["name"]
+        score_id = score["id"]
+
+        try:
+            summary = _run_async_from_sync(
+                FeedbackService.summarize_feedback(
+                    client=client,
+                    scorecard_name=str(scorecard_name),
+                    score_name=score_name,
+                    scorecard_id=scorecard_id,
+                    score_id=score_id,
+                    account_id=account_id,
+                    days=days,
+                )
+            )
+            summary_dict = FeedbackService.format_summary_result_as_dict(summary)
+
+            # Extract just the fields we need
+            analysis = summary_dict.get("analysis", {})
+            accuracy = analysis.get("accuracy")
+
+            # Apply accuracy threshold filter if provided
+            if accuracy_threshold is not None and accuracy is not None:
+                if accuracy >= accuracy_threshold:
+                    continue
+
+            results.append({
+                "score_id": score_id,
+                "score_name": score_name,
+                "accuracy": accuracy,
+                "ac1": analysis.get("ac1"),
+                "total_items": analysis.get("total_items"),
+                "confusion_matrix": analysis.get("confusion_matrix"),
+                "precision": analysis.get("precision"),
+                "recall": analysis.get("recall"),
+                "warning": analysis.get("warning"),
+            })
+        except Exception as e:
+            # Include errors in results so caller knows which scores failed
+            results.append({
+                "score_id": score_id,
+                "score_name": score_name,
+                "error": str(e),
+            })
+
+    return {
+        "scorecard_id": scorecard_id,
+        "scorecard_name": scorecard_name,
+        "days": days,
+        "total_scores": len(all_scores),
+        "scores_analyzed": len(results),
+        "scores": results,
+    }
 
 
 def _default_feedback_finder(args: dict[str, Any]) -> dict[str, Any]:
@@ -4228,6 +4393,131 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
         }
 
 
+def _default_procedure_optimize_batch(args: dict[str, Any]) -> dict[str, Any]:
+    """
+    Start multiple Feedback Alignment Optimizer runs for multiple scores in parallel.
+
+    Creates N procedures from the built-in feedback_alignment_optimizer.yaml,
+    one per score, with shared parameters.
+
+    Required args:
+        scorecard (str): Scorecard name, key, or ID.
+        scores (list[str]): Array of score names, keys, or IDs.
+
+    Optional args (applied to all optimizer runs):
+        days (int): Feedback lookback window in days. Default 90.
+        max_iterations (int): Maximum optimization cycles. Default 3.
+        max_samples (int): Max feedback items per evaluation. Default 100.
+        ... (all other optimizer params from _default_procedure_optimize)
+
+    Returns dict with:
+        {
+            "scorecard": str,
+            "total_scores": int,
+            "dispatched": [
+                {
+                    "score": str,
+                    "procedure_id": str,
+                    "status": str,
+                    "dashboard_url": str,
+                },
+                ...
+            ],
+            "failed": [
+                {
+                    "score": str,
+                    "error": str,
+                },
+                ...
+            ]
+        }
+    """
+    scorecard_identifier = args.get("scorecard") or args.get("scorecard_name") or args.get("scorecard_identifier")
+    scores = args.get("scores") or []
+
+    if not scorecard_identifier:
+        raise ValueError("plexus.procedure.optimize_batch requires 'scorecard'")
+    if not scores or not isinstance(scores, list):
+        raise ValueError("plexus.procedure.optimize_batch requires 'scores' as a non-empty array")
+
+    # Prepare shared parameters (everything except scorecard/score)
+    shared_params = {k: v for k, v in args.items() if k not in ("scorecard", "scorecard_name", "scorecard_identifier", "scores", "score", "score_name", "score_identifier")}
+
+    dispatched = []
+    failed = []
+
+    for score_identifier in scores:
+        try:
+            # Call the single-score optimizer with shared params
+            single_args = {
+                "scorecard": scorecard_identifier,
+                "score": score_identifier,
+                **shared_params,
+            }
+            result = _default_procedure_optimize(single_args)
+            dispatched.append({
+                "score": score_identifier,
+                "procedure_id": result["procedure_id"],
+                "status": result.get("status", "dispatched"),
+                "dashboard_url": result.get("dashboard_url", ""),
+            })
+        except Exception as e:
+            failed.append({
+                "score": score_identifier,
+                "error": str(e),
+            })
+
+    return {
+        "scorecard": scorecard_identifier,
+        "total_scores": len(scores),
+        "dispatched": dispatched,
+        "failed": failed,
+    }
+
+
+def _default_procedure_status_batch(args: dict[str, Any]) -> dict[str, Any]:
+    """
+    Check status of multiple procedures in a single call.
+
+    Required args:
+        procedure_ids (list[str]): Array of procedure IDs to check.
+
+    Returns dict with:
+        {
+            "total": int,
+            "procedures": [
+                {
+                    "id": str,
+                    "status": str,
+                    "scorecard_name": str,
+                    "score_name": str,
+                    ...
+                },
+                ...
+            ]
+        }
+    """
+    procedure_ids = args.get("procedure_ids") or []
+    if not procedure_ids or not isinstance(procedure_ids, list):
+        raise ValueError("plexus.procedure.status_batch requires 'procedure_ids' as a non-empty array")
+
+    procedures = []
+    for proc_id in procedure_ids:
+        try:
+            info = _default_procedure_info({"procedure_id": str(proc_id)})
+            procedures.append(info)
+        except Exception as e:
+            procedures.append({
+                "procedure_id": proc_id,
+                "error": str(e),
+            })
+
+    return {
+        "total": len(procedure_ids),
+        "procedures": procedures,
+    }
+
+
 def _default_procedure_continue(args: dict[str, Any]) -> dict[str, Any]:
     """Continue a completed optimizer procedure for additional cycles.
 
@@ -6567,6 +6857,7 @@ class PlexusRuntimeModule:
         default_procedure_readers = {
             "list": _default_procedure_list,
             "info": _default_procedure_info,
+            "status_batch": _default_procedure_status_batch,
             "chat_sessions": _default_procedure_chat_sessions,
             "chat_messages": _default_procedure_chat_messages,
             "steering_messages": _default_procedure_steering_messages,
@@ -6584,6 +6875,7 @@ class PlexusRuntimeModule:
             if feedback_aligner is not None
             else _default_feedback_alignment
         )
+        self._feedback_aligner_batch = _default_feedback_alignment_batch
         self._evaluation_info = (
             evaluation_info if evaluation_info is not None else _default_evaluation_info
         )
@@ -6643,6 +6935,7 @@ class PlexusRuntimeModule:
             if procedure_optimize is not None
             else _default_procedure_optimize
         )
+        self._procedure_optimize_batch = _default_procedure_optimize_batch
         self._procedure_archive = (
             procedure_archive
             if procedure_archive is not None
@@ -7124,7 +7417,7 @@ class PlexusRuntimeModule:
             self._budget.record_after("scorecards", method)
 
     def _call_feedback(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "feedback" or method not in {"find", "alignment", "latest_update"}:
+        if namespace != "feedback" or method not in {"find", "alignment", "alignment_batch", "latest_update"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -7136,6 +7429,8 @@ class PlexusRuntimeModule:
                 return self._feedback_finder(parsed)
             if method == "latest_update":
                 return self._feedback_latest_update(parsed)
+            if method == "alignment_batch":
+                return self._feedback_aligner_batch(parsed)
             return self._feedback_aligner(parsed)
         finally:
             self._budget.record_after("feedback", method)
@@ -7458,7 +7753,7 @@ class PlexusRuntimeModule:
             self._budget.record_after("report", "run")
 
     def _call_procedure_run(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "procedure" or method not in {"run", "optimize", "continue", "branch"}:
+        if namespace != "procedure" or method not in {"run", "optimize", "optimize_batch", "continue", "branch"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -7468,6 +7763,11 @@ class PlexusRuntimeModule:
             # plexus.procedure.optimize always runs asynchronously — no handle protocol needed.
             self._record_api_call("procedure", "optimize")
             return self._procedure_optimize(parsed)
+
+        if method == "optimize_batch":
+            # plexus.procedure.optimize_batch dispatches multiple optimizers.
+            self._record_api_call("procedure", "optimize_batch")
+            return self._procedure_optimize_batch(parsed)
 
         if method == "continue":
             self._record_api_call("procedure", "continue")
