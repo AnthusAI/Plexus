@@ -3,7 +3,7 @@
   "title": "Implement _default_feedback_alignment_batch in execute.py",
   "description": "",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,16 @@
       "author": "derek",
       "text": "Implementation complete for _default_feedback_alignment_batch function in execute.py (inserted after line 1697).\n\nKey implementation details:\n- Accepts scorecard identifier (required) and optional days, accuracy_threshold, include_scores, exclude_scores parameters\n- Uses ScorecardService.get_scorecard_details() to fetch all scores in scorecard\n- Loops through scores calling existing FeedbackService.summarize_feedback() \n- Applies accuracy_threshold filtering if provided\n- Returns structured dict with scorecard info and array of score metrics\n- Error handling: includes failed scores in results with error message\n\nWiring complete:\n- Added to RUNTIME_METHOD_SPECS as ('feedback', 'alignment_batch')\n- Routed in _call_feedback method\n- Handler method _feedback_aligner_batch added to RuntimeEnv.__init__\n\nStatus: Code complete, ready for testing",
       "created_at": "2026-06-09T21:07:46.799853945Z"
+    },
+    {
+      "id": "3a71c824-0f57-45a7-919b-02efe0fe4563",
+      "author": "derek",
+      "text": "Implemented and tested. Function added to execute.py after line 1697, wired to RUNTIME_METHOD_SPECS and _call_feedback handler. Tested via execute_tactus - returns full scorecard-wide metrics in one call.",
+      "created_at": "2026-06-09T21:23:59.346994328Z"
     }
   ],
   "created_at": "2026-06-09T21:01:00.831610745Z",
-  "updated_at": "2026-06-09T21:07:46.799853945Z",
-  "closed_at": null,
+  "updated_at": "2026-06-09T21:23:59.346994328Z",
+  "closed_at": "2026-06-09T21:23:59.337837099Z",
   "custom": {}
 }

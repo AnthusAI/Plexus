@@ -3,7 +3,7 @@
   "title": "Batch optimizer dispatch accepts array of scores",
   "description": "",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-06-09T20:59:39.283798109Z",
-  "updated_at": "2026-06-09T21:00:47.952555102Z",
-  "closed_at": null,
+  "updated_at": "2026-06-09T21:24:04.457840347Z",
+  "closed_at": "2026-06-09T21:24:04.457840347Z",
   "custom": {}
 }
