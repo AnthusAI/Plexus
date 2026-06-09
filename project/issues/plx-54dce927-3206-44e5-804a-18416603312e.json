@@ -1,0 +1,25 @@
+{
+  "id": "plx-54dce927-3206-44e5-804a-18416603312e",
+  "title": "Documentation reflects actual Tactus API surface",
+  "description": "",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d37d0ed7-d9fc-4aaa-9a05-cbda05b75d42",
+      "author": "derek",
+      "text": "Feature: Accurate API Documentation\n  Scenario: Optimizer documentation shows correct API\n    Given the evaluation-feedback.optimizer-procedures doc\n    When I read the MCP code examples\n    Then the examples use plexus.procedure.optimize() not plexus.procedure.run()\n    And the parameter names match the actual implementation\n    And the budget constraints are documented with parent/child rules",
+      "created_at": "2026-06-09T21:00:49.651798250Z"
+    }
+  ],
+  "created_at": "2026-06-09T20:59:39.944333130Z",
+  "updated_at": "2026-06-09T21:24:04.466901430Z",
+  "closed_at": "2026-06-09T21:24:04.466901430Z",
+  "custom": {}
+}

@@ -9,6 +9,7 @@ audience: agent
 tags: [optimizer, procedures]
 related:
   - evaluation-feedback.optimizer-cookbook
+  - evaluation-feedback.batch-optimizer-dispatch
   - optimizer.run-direct
 ---
 # Feedback Alignment Optimizer — Procedure Reference
@@ -33,18 +34,25 @@ plexus procedure run -y plexus/procedures/feedback_alignment_optimizer.yaml \
   -s days=730
 ```
 
-**MCP (via `plexus_procedure_run`):**
-```json
-{
-  "yaml_path": "plexus/procedures/feedback_alignment_optimizer.yaml",
-  "params": {
-    "scorecard": "<scorecard name>",
-    "score": "<score name>",
-    "max_iterations": 10,
-    "max_samples": 200,
-    "days": 730
-  }
-}
+**MCP (via `execute_tactus`):**
+```lua
+-- Single score
+plexus.procedure.optimize({
+  scorecard = "<scorecard name>",
+  score = "<score name>",
+  max_iterations = 10,
+  max_samples = 200,
+  days = 730,
+})
+
+-- Multiple scores at once (see evaluation-feedback.batch-optimizer-dispatch)
+plexus.procedure.optimize_batch({
+  scorecard = "<scorecard name>",
+  scores = {"Score A", "Score B", "Score C"},
+  max_iterations = 10,
+  max_samples = 200,
+  days = 730,
+})
 ```
 
 ### Parameters

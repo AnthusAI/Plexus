@@ -140,3 +140,71 @@ work, including any reserved amounts held by outstanding handles.
 - Use `handle_cancel` immediately when the user cancels or when you've
   decided the run is no longer useful (cost continues to accrue against
   the carved child budget until the worker actually exits).
+
+## Common Budget Errors and Fixes
+
+### `child USD budget exceeded`
+
+**Error**: `child USD budget exceeded before plexus.X.Y: $1.0000 > $0.2500`
+
+**Cause**: The requested child `budget.usd` exceeds what the parent has remaining.
+The parent budget is shown in the `cost.budget_remaining_usd` field of the
+previous response envelope.
+
+**Fix**: Reduce the child `usd` allocation to fit within the parent's remaining
+budget:
+
+```lua
+-- Check parent remaining from the prior response envelope first.
+-- If budget_remaining_usd = 0.25, child usd must be <= 0.25.
+
+plexus.report.run({
+  block_class = "FeedbackAlignment",
+  block_config = { scorecard = "...", days = 30 },
+  cache_key = "...",
+  ttl_hours = 24,
+  async = true,
+  budget = { usd = 0.20, wallclock_seconds = 300, depth = 1, tool_calls = 10 },
+})
+```
+
+### `child wallclock budget exceeded`
+
+**Error**: `child wallclock budget exceeded before plexus.X.Y: 300.000s > 59.994s`
+
+**Cause**: The requested child `budget.wallclock_seconds` exceeds what the
+parent has remaining. The parent's remaining wallclock is shown in
+`cost.budget_remaining_seconds`.
+
+**Fix**: Reduce `wallclock_seconds` to fit within the parent budget. For
+`plexus.procedure.optimize` the budget is carved separately from the procedure's
+own execution time — the child wallclock only needs to cover the dispatch
+handshake, not the full optimization run.
+
+```lua
+-- If parent has ~60s remaining, keep child wallclock well under that.
+plexus.procedure.optimize({
+  scorecard = "...",
+  score = "...",
+  max_iterations = 3,
+  async = true,
+  budget = { usd = 0.15, wallclock_seconds = 50, depth = 1, tool_calls = 15 },
+})
+```
+
+### All four budget keys are required
+
+**Error**: `budget key 'tool_calls' missing`
+
+Every `budget` table passed to an async call must include all four keys:
+`usd`, `wallclock_seconds`, `depth`, `tool_calls`. Omitting any one will fail.
+
+```lua
+-- Required shape
+budget = {
+  usd = 0.15,
+  wallclock_seconds = 50,
+  depth = 1,
+  tool_calls = 15,
+}
+```
