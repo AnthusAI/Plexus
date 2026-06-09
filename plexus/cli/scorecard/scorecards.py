@@ -1,21 +1,15 @@
 import click
 import os
 import sys
-from pathlib import Path
 import json
 from ruamel.yaml import YAML
 import io
 from rich.table import Table
-from rich.panel import Panel
 from plexus.cli.shared.console import console
 from plexus.dashboard.api.client import PlexusDashboardClient
 from typing import Optional
 import rich
-import datetime
-from plexus.cli.shared.file_editor import FileEditor
-from plexus.cli.shared import sanitize_path_name
 from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
-from functools import lru_cache
 
 # Define the main command groups that will be exported
 @click.group()
@@ -53,9 +47,9 @@ def resolve_account_identifier(client, identifier):
         result = client.execute(query)
         if result.get('getAccount'):
             return identifier
-    except:
+    except Exception:
         pass
-    
+
     # Try lookup by key
     try:
         query = f"""
@@ -71,9 +65,9 @@ def resolve_account_identifier(client, identifier):
         items = result.get('listAccounts', {}).get('items', [])
         if items and len(items) > 0:
             return items[0]['id']
-    except:
+    except Exception:
         pass
-    
+
     # Try lookup by name
     try:
         query = f"""
@@ -89,7 +83,7 @@ def resolve_account_identifier(client, identifier):
         items = result.get('listAccounts', {}).get('items', [])
         if items and len(items) > 0:
             return items[0]['id']
-    except:
+    except Exception:
         pass
     
     return None
@@ -135,8 +129,7 @@ def detect_and_clean_duplicates(client, scorecard_id: str) -> int:
         scorecard_result = client.execute(scorecard_query)
         scorecard = scorecard_result.get('getScorecard', {})
         scorecard_key = scorecard.get('key')
-        account_id = scorecard.get('accountId')
-        
+
         if not scorecard_key:
             console.print("[yellow]Current scorecard has no key, skipping duplicate scorecard check[/yellow]")
         else:
@@ -256,12 +249,10 @@ def detect_and_clean_duplicates(client, scorecard_id: str) -> int:
                             # First, delete all versions for each score
                             for section in sections:
                                 section_id = section.get('id')
-                                section_name = section.get('name')
                                 scores = section.get('scores', {}).get('items', [])
-                                
+
                                 for score in scores:
                                     score_id = score.get('id')
-                                    score_name = score.get('name')
                                     versions = score.get('versions', {}).get('items', [])
                                     
                                     total_scores += 1
@@ -643,9 +634,8 @@ def ensure_valid_external_ids(client, scorecard_id: str) -> int:
         
         sections = scorecard.get('sections', {}).get('items', [])
         total_updated = 0
-        
+
         for section in sections:
-            section_name = section.get('name', 'Unknown Section')
             scores = section.get('scores', {}).get('items', [])
             
             for score in scores:
@@ -1613,12 +1603,10 @@ def find_duplicates(account: Optional[str], limit: int):
                         # First, delete all versions for each score
                         for section in sections:
                             section_id = section.get('id')
-                            section_name = section.get('name')
                             scores = section.get('scores', {}).get('items', [])
-                            
+
                             for score in scores:
                                 score_id = score.get('id')
-                                score_name = score.get('name')
                                 versions = score.get('versions', {}).get('items', [])
                                 
                                 total_scores += 1
