@@ -57,7 +57,7 @@ EOF
 
 kubectl wait --for=condition=Accepted gatewayclass/envoy-gateway --timeout=180s
 
-echo "Building local Plexus images"
+echo "Building local native-arch Plexus images for kind"
 docker build -t plexus-worker:local -f "$PROJECT_ROOT/docker/Dockerfile" "$PROJECT_ROOT"
 docker build -t plexus-graphql-proxy:local -f "$PROJECT_ROOT/services/private-graphql-proxy/Dockerfile" "$PROJECT_ROOT"
 

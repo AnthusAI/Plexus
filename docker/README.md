@@ -90,8 +90,16 @@ Available templates:
 ### 2. Build Docker Image
 
 ```bash
-docker build -f docker/Dockerfile -t your-registry/plexus-worker:1.52.0 .
-docker push your-registry/plexus-worker:1.52.0
+# Publish linux/amd64 images for real cluster deploys.
+REGISTRY=your-registry \
+IMAGE_TAG=1.52.0 \
+docker/scripts/build_k8s_images.sh
+
+# Optional: add linux/arm64 for a multi-arch manifest list.
+REGISTRY=your-registry \
+IMAGE_TAG=1.52.0 \
+PLATFORMS=linux/amd64,linux/arm64 \
+docker/scripts/build_k8s_images.sh
 ```
 
 ### 3. Deploy with Helm

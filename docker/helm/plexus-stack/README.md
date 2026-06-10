@@ -76,7 +76,7 @@ Deleting and recreating the disposable kind cluster is also valid.
 ### 3. Manual Deployment
 
 ```bash
-# Build images
+# Build local native images for kind
 docker build -t plexus-worker:local -f docker/Dockerfile .
 docker build -t plexus-graphql-proxy:local -f services/private-graphql-proxy/Dockerfile .
 
@@ -90,6 +90,12 @@ helm upgrade --install plexus docker/helm/plexus-stack \
   --namespace plexus-local \
   --create-namespace \
   --values docker/helm/plexus-stack/values-local.yaml
+```
+
+For non-local clusters, publish linux/amd64 images first, then point chart values to that registry/tag:
+
+```bash
+REGISTRY=your-registry IMAGE_TAG=1.52.0 docker/scripts/build_k8s_images.sh
 ```
 
 ### 4. Verify Deployment

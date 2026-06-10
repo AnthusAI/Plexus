@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1da1c1a5-c8ef-4c59-86a7-e924d795d146",
+  "issue_id": "plx-0b727d49-b7a5-4564-9d1e-b62406e2cf87",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-10T23:10:06.608Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "The scoring API Gateway listener is currently HTTP on port 80 with no hostname. Any non-local exposure needs TLS termination and hostname routing at the Gateway.\n\nAdd chart support for an HTTPS listener: certificateRef to a TLS Secret, hostname on listener and HTTPRoute, and values to choose HTTP (local) vs HTTPS (exposed). Cert issuance (e.g. cert-manager) stays a platform concern; the chart consumes a referenced Secret.\n\n```gherkin\nFeature: TLS on the scoring API Gateway\n  Scenario: HTTPS listener with certificate reference\n    Given scoringApi.gateway TLS is enabled with a certificate Secret and hostname\n    When the chart renders\n    Then the Gateway has an HTTPS listener on the configured port with that certificateRef and hostname\n    And the HTTPRoute matches the configured hostname\n\n  Scenario: Local HTTP mode still works\n    Given TLS is not enabled\n    When the chart renders\n    Then the Gateway exposes the HTTP listener as today\n```\n\nValidate with render-based template tests in tests/docker/test_helm_scoring_api_templates.py.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "priority": 2,
+    "status": "open",
+    "title": "Gateway listener supports TLS and hostname for exposed scoring API"
+  }
+}

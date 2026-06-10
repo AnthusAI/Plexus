@@ -50,8 +50,11 @@ docker/
 
 ### Build & Deploy
 ```bash
-# Build
+# Build local native image (kind / local k8s)
 docker build -f docker/Dockerfile -t plexus-worker:VERSION .
+
+# Build/push publishable linux/amd64 worker+proxy images
+REGISTRY=your-registry IMAGE_TAG=VERSION docker/scripts/build_k8s_images.sh
 
 # Deploy to local K8s
 helm install RELEASE docker/helm/plexus-worker -f values-ENV.yaml
