@@ -3,7 +3,7 @@
   "title": "Envoy Gateway scoring API POC",
   "description": "",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -12,7 +12,7 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-06-10T00:45:21.979152849Z",
-  "updated_at": "2026-06-10T00:45:21.979152849Z",
+  "updated_at": "2026-06-10T21:36:03.847714Z",
   "closed_at": null,
   "custom": {}
 }

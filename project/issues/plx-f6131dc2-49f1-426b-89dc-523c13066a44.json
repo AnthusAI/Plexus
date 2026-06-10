@@ -1,0 +1,31 @@
+{
+  "id": "plx-f6131dc2-49f1-426b-89dc-523c13066a44",
+  "title": "Worker image installs scoring dependency set without ML training stack",
+  "description": "The worker Dockerfile installs '.[all]', which pulls the full ML training stack (torch, transformers, sentence-transformers, gensim, bertopic, umap-learn, hdbscan, shap, numba/llvmlite, tables, datasets, kaleido) into a container that only scores. Empirically verified in a clean venv: the scoring API worker (full import chain incl. LangGraphScore/TactusScore/nodes), all 15 worker tests, and the plexus predict CLI work with core + infra + a small subset: pandas, scikit-learn, nltk, seaborn, graphviz, pydot, contractions. The only blockers for dropping the rest are module-level xgboost/imblearn imports in plexus/cli/data/operations.py serving the 'plexus data' training command. Expected effect: roughly 1.5-2 GB smaller Linux image, faster builds, and removal of the CPU-Torch preinstall workaround.\n\nPlan:\n1. Add a 'scoring' extra to pyproject.toml with the verified subset.\n2. Make xgboost/imblearn imports lazy inside the plexus data command paths.\n3. Dockerfile installs '.[scoring,infra]' and drops the Torch preinstall ARGs/line; NLTK data download stays.\n4. Keep 'all' unchanged for training/EC2 use.\n\n```gherkin\nFeature: Slim scoring worker dependencies\n  Scenario: Scoring worker runs without training packages\n    Given a Plexus installation with only the scoring and infra extras\n    When the scoring API worker and the plexus predict CLI load\n    Then no torch-family or training-only packages are required\n\n  Scenario: CLI loads without training packages\n    Given xgboost and imbalanced-learn are not installed\n    When the plexus CLI module tree loads\n    Then loading succeeds and only invoking the data training commands requires those packages\n```\n\nValidation: new failing test first (CLI data module imports with xgboost/imblearn blocked), full focused suite, poetry check, plexus --help in a venv without training packages, and a Docker image build comparing size against the previous local image. Final end-to-end proof remains the kind/Envoy POC scoring request.",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d99433e6-5858-4261-9be4-b695b68b63ff",
+      "author": "derek.norrbom",
+      "text": "Progress: previous audit-hardening work committed first as 531862228 so this story lands in its own commit. Spec-first implementation done: new failing test (subprocess import of plexus.cli.data.operations with xgboost/imblearn blocked) confirmed red, then made the training imports lazy inside compute_shap_feature_importances (matching the existing lazy shap import there); dropped the unused RandomOverSampler/RandomUnderSampler imports. Added the 'scoring' extra to pyproject (pandas, nltk, seaborn, pydot, graphviz, scikit-learn, contractions). Dockerfile now installs '.[scoring,infra]' via a PLEXUS_EXTRAS build arg and the CPU-Torch preinstall workaround is removed entirely (supersedes the Torch pin from plx-7da300 by eliminating Torch from this image). Validation so far: 22 focused tests pass (CLI imports incl. new spec + workers), poetry check passes with pre-existing deprecation warnings, and in the clean verification venv with xgboost/imbalanced-learn uninstalled: plexus --help loads, scoring API imports, and the scoring,infra extras resolve. Docker image build in progress to compare size against the 4.89GB current local image.",
+      "created_at": "2026-06-10T21:40:07.714873Z"
+    },
+    {
+      "id": "f28faec4-8209-40e3-914b-8fb6248c25a1",
+      "author": "derek.norrbom",
+      "text": "Completed and verified. Docker build results: 3.52GB vs 4.89GB for the previous all-extras image (1.37GB smaller) and the build completed in 1m50s with no Torch download and no CPU-wheel workaround. Container-level smoke tests pass: the full scoring import chain (scoring_api, plexus.scores registry, LangGraphScore) loads inside the image, plexus --help works, and pip list confirms zero torch/transformers/xgboost/numba packages. All Gherkin scenarios verified: scoring worker and predict CLI run from scoring+infra extras only, and the CLI loads with training packages absent (xgboost/imblearn now lazy in the plexus data training path). Full validation: 22 focused tests plus 8 Helm/seeder tests pass, poetry check passes with pre-existing warnings, py_compile and git diff --check clean. Remaining end-to-end confirmation happens naturally on the next kind/Envoy POC setup run, which rebuilds from this Dockerfile.",
+      "created_at": "2026-06-10T21:42:36.351774Z"
+    }
+  ],
+  "created_at": "2026-06-10T21:36:03.836272Z",
+  "updated_at": "2026-06-10T21:42:36.365380Z",
+  "closed_at": "2026-06-10T21:42:36.365380Z",
+  "custom": {}
+}

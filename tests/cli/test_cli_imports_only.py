@@ -5,6 +5,9 @@ These tests only validate imports work correctly, without running actual CLI com
 They should run in < 5 seconds and catch import-related restructuring issues.
 """
 
+import subprocess
+import sys
+
 import pytest
 
 
@@ -65,6 +68,31 @@ class TestCLIImportsOnly:
             except ImportError as e:
                 pytest.fail(f"Failed to import {module_name}: {e}")
     
+    def test_data_operations_loads_without_training_packages(self):
+        """Scoring-only installs must be able to load the full CLI.
+
+        xgboost and imblearn back only the 'plexus data' training commands,
+        so they must be imported lazily inside those command paths rather
+        than at module level. Runs in a subprocess so blocking the packages
+        cannot be defeated by modules already imported in this process.
+        """
+        code = (
+            "import sys\n"
+            "for blocked in ('xgboost', 'imblearn', 'imblearn.over_sampling', "
+            "'imblearn.under_sampling'):\n"
+            "    sys.modules[blocked] = None\n"
+            "import plexus.cli.data.operations\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, (
+            f"plexus.cli.data.operations requires training packages at import time:\n"
+            f"{result.stderr}"
+        )
+
     def test_scorecard_commands_import(self):
         """Test that both scorecard and scorecards can be imported"""
         try:

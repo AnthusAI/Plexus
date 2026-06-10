@@ -101,6 +101,14 @@ ml = [
     "bertopic", "umap-learn", "hdbscan",
     "sentence-transformers", "kaleido",
 ]
+# Minimal set for scoring workers and the predict CLI (no model training).
+# Verified against the worker test suite and full CLI/score import chain;
+# torch and the rest of the training stack stay out of scoring-only installs.
+scoring = [
+    "pandas", "nltk", "seaborn",
+    "pydot", "graphviz",
+    "scikit-learn", "contractions",
+]
 infra = [
     "celery", "fastapi", "uvicorn", "pycurl", "sqlalchemy", "pyairtable",
 ]
