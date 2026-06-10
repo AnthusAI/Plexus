@@ -43,6 +43,17 @@ Celery Worker Configuration:
   Concurrency: {{ .Values.celery.concurrency }}
 {{- end }}
 
+{{- if eq .Values.workerType "scoring-api" }}
+
+Scoring API Configuration:
+  Service: {{ include "plexus-worker.fullname" . }}:{{ .Values.service.port }}
+  Endpoint: POST /v1/score
+{{- if .Values.scoringApi.gateway.enabled }}
+  Gateway: {{ include "plexus-worker.gatewayName" . }}
+  HTTPRoute: {{ include "plexus-worker.routeName" . }}
+{{- end }}
+{{- end }}
+
 {{- if eq .Values.workerType "console-worker" }}
 
 Console Worker Configuration:

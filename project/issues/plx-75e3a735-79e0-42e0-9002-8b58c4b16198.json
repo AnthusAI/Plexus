@@ -1,0 +1,31 @@
+{
+  "id": "plx-75e3a735-79e0-42e0-9002-8b58c4b16198",
+  "title": "Implement synchronous scoring API behind Envoy Gateway",
+  "description": "Build a Docker-backed Kubernetes proof of concept for Plexus scoring over HTTP through Envoy Gateway. The POC adds a synchronous scoring API worker mode, Helm resources for Gateway API routing, local bootstrap documentation/scripts, and focused tests/render checks. Existing SQS-based infrastructure remains separate and unchanged.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5b67baf2-20cd-471e-9509-dde0a2211ce6",
+      "author": "derek",
+      "text": "Starting implementation. Scope: synchronous scoring API worker mode, Envoy Gateway Helm resources, local Docker-backed Kubernetes POC docs/scripts, and focused automated validation. Existing SQS infrastructure will not be changed.",
+      "created_at": "2026-06-10T00:45:29.428615295Z"
+    },
+    {
+      "id": "b8777226-50bd-49e4-a453-9768d9955092",
+      "author": "derek",
+      "text": "Implemented synchronous scoring API worker mode and Envoy Gateway POC chart/docs. Validation run in conda py311: focused worker/API/static chart tests passed; poetry check passed with existing metadata deprecation warnings; git diff whitespace check passed. Full kind/Helm/Envoy deployment validation not run on this EC2 environment.",
+      "created_at": "2026-06-10T00:55:07.438642398Z"
+    }
+  ],
+  "created_at": "2026-06-10T00:45:25.928877026Z",
+  "updated_at": "2026-06-10T00:55:07.438642398Z",
+  "closed_at": null,
+  "custom": {}
+}

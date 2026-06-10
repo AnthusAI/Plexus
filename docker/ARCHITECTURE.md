@@ -4,12 +4,14 @@ This document explains the complete architecture for deploying Plexus workers to
 
 ## Overview
 
-The Plexus Kubernetes deployment consists of four main components:
+The Plexus Kubernetes proof of concept consists of four main components:
 
-1. **Message Queue** (RabbitMQ or AWS SQS)
+1. **Envoy Gateway** (HTTP entrypoint using Kubernetes Gateway API)
 2. **Private Data Store** (PostgreSQL)
 3. **GraphQL Proxy** ("The Adapter")
-4. **Plexus Workers** (processing pods)
+4. **Plexus Scoring API Workers** (synchronous HTTP scoring pods)
+
+This POC intentionally does **not** preserve RabbitMQ queue semantics. Existing SQS/Lambda infrastructure remains a separate deployment path.
 
 ## Architecture Diagram
 
@@ -29,16 +31,16 @@ The Plexus Kubernetes deployment consists of four main components:
     │  Kubernetes Cluster                                  │
     │                                                       │
     │  ┌──────────────────┐      ┌────────────────────┐  │
-    │  │  RabbitMQ        │      │  PostgreSQL         │  │
-    │  │  (Message Queue) │      │  (Private Data)     │  │
+    │  │ Envoy Gateway    │      │  PostgreSQL         │  │
+    │  │ (HTTP entrypoint)│      │  (Private Data)     │  │
     │  │                  │      │  - Items            │  │
-    │  │  Queues:         │      │  - ScoreResults     │  │
-    │  │  - scoring-      │      │  - FeedbackItems    │  │
-    │  │    requests      │      │  - Identifiers      │  │
-    │  │  - chat-messages │      └─────────┬───────────┘  │
-    │  └────────┬─────────┘                │              │
-    │           │                           │              │
-    │  ┌────────▼───────────────────────────▼────────┐   │
+    │  │ Gateway API:     │      │  - ScoreResults     │  │
+    │  │ - Gateway        │      │  - FeedbackItems    │  │
+    │  │ - HTTPRoute      │      │  - Identifiers      │  │
+    │  └────────┬─────────┘      └─────────┬───────────┘  │
+    │           │ HTTP                      │              │
+    │           ▼                           │              │
+    │  ┌────────────────────────────────────▼────────┐   │
     │  │  GraphQL Proxy ("The Adapter")              │   │
     │  │  Deployment: 2-5 pods                       │   │
     │  │  Service: ClusterIP                         │   │
@@ -48,20 +50,18 @@ The Plexus Kubernetes deployment consists of four main components:
     │  │  ✓ Forward control-plane queries to AWS     │   │
     │  │  ✓ Cache control-plane data (15min TTL)     │   │
     │  │  ✓ Expose /graphql endpoint to workers      │   │
-    │  └──────────────────┬───────────────────────────┘   │
-    │                     │                                │
+    │  └──────────────────▲───────────────────────────┘   │
     │                     │ HTTP (in-cluster)              │
-    │  ┌──────────────────▼───────────────────────────┐  │
-    │  │  Plexus Workers                              │  │
+    │  ┌──────────────────┴───────────────────────────┐  │
+    │  │  Plexus Scoring API Workers                  │  │
     │  │  Deployment: 5-30 pods (HPA)                 │  │
     │  │                                               │  │
-    │  │  Worker Modes:                                │  │
-    │  │  1. Celery Worker (RabbitMQ consumer)        │  │
-    │  │  2. Score Processor (SQS poller)             │  │
-    │  │  3. Console Worker (chat processor)          │  │
+    │  │  Worker Mode: scoring-api                    │  │
+    │  │  - POST /v1/score                            │  │
+    │  │  - Synchronous score execution               │  │
     │  │                                               │  │
     │  │  Responsibilities:                            │  │
-    │  │  ✓ Consume scoring requests from queue       │  │
+    │  │  ✓ Accept scoring requests over HTTP         │  │
     │  │  ✓ Load scorecard configuration              │  │
     │  │  ✓ Execute score prediction                  │  │
     │  │  ✓ Store results via GraphQL proxy           │  │
@@ -72,25 +72,23 @@ The Plexus Kubernetes deployment consists of four main components:
 
 ## Component Details
 
-### 1. RabbitMQ (Message Queue)
+### 1. Envoy Gateway (HTTP Entry Point)
 
-**Purpose**: Distribute scoring requests across worker pods.
+**Purpose**: Route external HTTP scoring requests into the Kubernetes cluster.
 
 **Deployment**:
-- Standalone deployment or Bitnami Helm chart
-- Persistent volume for durability
-- Management UI for monitoring
+- Envoy Gateway controller installed separately from the Plexus chart
+- Gateway API resources created by the Plexus worker chart for the POC
+- Future clusters can provide a platform-managed Gateway; Plexus can create only HTTPRoutes
 
-**Queues**:
-- `scoring-requests` - Main scoring job queue
-- `chat-messages` - Console chat processing
-- `dlq-*` - Dead letter queues for failed messages
+**Routes**:
+- `POST /v1/score` - Synchronous scoring API
+- `/healthz` and `/readyz` - Worker health probes, available directly on the worker Service
 
 **Production Considerations**:
-- High availability: 3-node cluster
-- Persistent storage: EBS volumes or similar
-- Monitoring: Prometheus + Grafana
-- Alternative: AWS MQ (managed RabbitMQ)
+- Use a platform-managed GatewayClass and shared Gateway where available
+- Configure TLS, hostname policy, rate limiting, and request timeouts at the gateway layer
+- Keep queue-based SQS/Lambda infrastructure as a separate deployment path where durable async semantics are required
 
 ### 2. PostgreSQL (Private Data Store)
 
@@ -237,7 +235,34 @@ For most deployments, the Kubernetes Service is sufficient.
 
 **Worker Modes**:
 
-#### Celery Worker (RabbitMQ)
+#### Scoring API Worker (Envoy Gateway HTTP)
+```yaml
+env:
+  WORKER_TYPE: scoring-api
+  SCORING_API_HOST: 0.0.0.0
+  SCORING_API_PORT: "8000"
+```
+
+**Endpoint**:
+```http
+POST /v1/score
+Content-Type: application/json
+
+{
+  "scoring_job_id": "job-123",
+  "scorecard": "scorecard-key-or-name",
+  "score": "score-key-or-name",
+  "item_id": "item-123",
+  "account_key": "optional-account-key"
+}
+```
+
+**Best for**:
+- Envoy Gateway POC deployments
+- Synchronous request/response scoring
+- Clusters where RabbitMQ is not part of the target architecture
+
+#### Celery Worker (RabbitMQ, optional legacy mode)
 ```yaml
 env:
   WORKER_TYPE: celery
@@ -248,12 +273,12 @@ env:
 ```
 
 **Best for**:
-- Real-time request/response workflows
+- Existing RabbitMQ deployments
 - Priority queues
 - Task retries with exponential backoff
 - Task chaining and workflows
 
-#### Score Processor (SQS)
+#### Score Processor (SQS, separate deployment path)
 ```yaml
 env:
   WORKER_TYPE: score-processor
@@ -301,21 +326,24 @@ podDisruptionBudget:
 
 ```
 1. Client submits scoring request
-   └─> RabbitMQ: scoring-requests queue
+   └─> Envoy Gateway: POST /v1/score
 
-2. Worker pod consumes message
+2. Envoy routes request
+   └─> Plexus scoring-api Service → worker pod
+
+3. Worker pod handles request synchronously
    ├─> Load scorecard configuration (via proxy → AWS AppSync)
    └─> Fetch item data (via proxy → PostgreSQL)
 
-3. Worker executes score
+4. Worker executes score
    ├─> Call LLM APIs (OpenAI, Anthropic, etc.)
    └─> Generate score result
 
-4. Worker stores result
+5. Worker stores result
    └─> GraphQL Proxy → PostgreSQL: score_results table
 
-5. Worker acknowledges message
-   └─> RabbitMQ: remove from queue
+6. Worker returns HTTP response
+   └─> Envoy Gateway → Client
 ```
 
 ### Query Flow
@@ -357,21 +385,21 @@ spec:
   - port: 8000
     targetPort: 8000
 
-# RabbitMQ (internal only)
+# Scoring API Worker (internal Service routed by Envoy Gateway)
 apiVersion: v1
 kind: Service
 metadata:
-  name: rabbitmq
+  name: plexus-worker
   namespace: plexus
 spec:
   type: ClusterIP
   selector:
-    app: rabbitmq
+    app.kubernetes.io/component: worker
+    worker-type: scoring-api
   ports:
-  - name: amqp
-    port: 5672
-  - name: management
-    port: 15672
+  - name: http
+    port: 8000
+    targetPort: http
 
 # PostgreSQL (internal only)
 apiVersion: v1
@@ -387,7 +415,7 @@ spec:
   - port: 5432
 ```
 
-**No LoadBalancer or Ingress needed** - all communication is in-cluster.
+Envoy Gateway owns the external entrypoint. Plexus application pods remain behind ClusterIP Services.
 
 ### Network Policies
 
@@ -404,7 +432,11 @@ spec:
   - Ingress
   - Egress
   ingress:
-  - {}  # Deny all (workers don't accept inbound)
+  - from:
+    - namespaceSelector: {}  # Restrict to the Envoy Gateway namespace in production
+    ports:
+    - protocol: TCP
+      port: 8000
   egress:
   - to:
     - podSelector:
@@ -413,13 +445,6 @@ spec:
     ports:
     - protocol: TCP
       port: 8000
-  - to:
-    - podSelector:
-        matchLabels:
-          app: rabbitmq
-    ports:
-    - protocol: TCP
-      port: 5672
   - to:  # Allow external LLM APIs
     ports:
     - protocol: TCP
@@ -485,10 +510,10 @@ This eliminates the need for AWS access keys in secrets.
 ### Metrics
 
 **Worker Metrics**:
-- Jobs processed per minute
-- Job processing duration (p50, p95, p99)
-- Job success/failure rate
-- Queue depth
+- HTTP scoring requests per minute
+- Scoring request duration (p50, p95, p99)
+- Scoring success/failure rate
+- In-flight request count
 - Memory usage per job
 
 **Proxy Metrics**:
@@ -498,11 +523,11 @@ This eliminates the need for AWS access keys in secrets.
 - Upstream API error rate
 - Database connection pool usage
 
-**RabbitMQ Metrics**:
-- Queue length
-- Message rate (in/out)
-- Consumer count
-- Unacked message count
+**Envoy Gateway Metrics**:
+- Request rate by route
+- Response status by route
+- Upstream response latency
+- Upstream connection errors
 
 ### Logging
 
@@ -511,7 +536,7 @@ This eliminates the need for AWS access keys in secrets.
 {
   "timestamp": "2025-05-27T10:30:00Z",
   "level": "info",
-  "component": "celery-worker",
+  "component": "scoring-api",
   "pod": "plexus-worker-abc123",
   "scoring_job_id": "job-456",
   "scorecard": "customer-support",
@@ -527,7 +552,7 @@ This eliminates the need for AWS access keys in secrets.
 
 **Critical Alerts**:
 - Worker pods crash looping
-- RabbitMQ queue depth > 1000
+- Envoy Gateway route 5xx errors > 5%
 - PostgreSQL connection errors
 - GraphQL proxy 5xx errors > 5%
 - Job processing duration > 30s (p95)
@@ -545,7 +570,7 @@ helm install plexus-worker-green ./helm/plexus-worker \
 # Verify health
 kubectl get pods -n plexus-green
 
-# Switch traffic (update message routing)
+# Switch traffic (update HTTPRoute or Gateway references)
 # Drain old pods
 helm uninstall plexus-worker-blue -n plexus-blue
 ```
@@ -613,7 +638,13 @@ resources:
 - Scale up when CPU > 70%
 - Scale down when CPU < 30% (cooldown: 5min)
 
-**KEDA (Queue Depth)**:
+**Gateway/HTTP Metrics (Advanced)**:
+Use Prometheus adapter, KEDA HTTP add-ons, or platform metrics to scale on request rate or in-flight requests when CPU/memory does not reflect scoring load accurately.
+
+The existing SQS deployment path can still use KEDA queue-depth scaling independently of this Envoy Gateway POC.
+
+<!-- Queue-based example intentionally omitted for the Envoy Gateway POC. -->
+<!--
 ```yaml
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
@@ -628,6 +659,7 @@ spec:
       queueName: scoring-requests
       queueLength: "10"  # Scale up when > 10 messages per pod
 ```
+-->
 
 ### Spot Instances
 
@@ -649,17 +681,17 @@ tolerations:
 - Point-in-time recovery enabled
 - Cross-region replication for production
 
-**RabbitMQ**:
-- Persistent queues with durable storage
-- Regular configuration backups
-- Message TTL to prevent unbounded growth
+**Envoy Gateway**:
+- Gateway controller and data-plane replicas should run with disruption budgets
+- TLS and hostname policy should be managed by the platform
+- HTTP requests are synchronous; retry behavior belongs at the client or gateway layer
 
 ### Failure Scenarios
 
 | Failure | Impact | Recovery |
 |---------|--------|----------|
-| Worker pod crash | Single job fails, retried | Automatic (Kubernetes restarts) |
-| RabbitMQ down | New jobs queue, processing pauses | Jobs resume when RabbitMQ returns |
+| Worker pod crash | In-flight HTTP request fails | Client retries; Kubernetes restarts pod |
+| Envoy Gateway down | New HTTP requests cannot enter cluster | Restore gateway controller/data plane |
 | PostgreSQL down | Cannot store results | Proxy caches writes, replays on recovery |
 | AWS AppSync down | Cannot load new scorecards | Proxy serves stale cache (24h) |
 | GraphQL Proxy down | Workers cannot fetch/store data | Workers retry with exponential backoff |
@@ -668,7 +700,7 @@ tolerations:
 
 1. **Multi-region Deployment**: Deploy workers in multiple regions for latency reduction
 2. **Federated GraphQL**: Split proxy into multiple domain-specific services
-3. **Event Streaming**: Replace RabbitMQ with Kafka for higher throughput
+3. **Async Work Backend**: Add a durable queue or event stream if future deployments need async scoring semantics
 4. **ML Model Caching**: Cache expensive model downloads at pod level
 5. **Batch Processing**: Optimize for bulk scoring workloads
 6. **Service Mesh**: Add Istio/Linkerd for advanced traffic management

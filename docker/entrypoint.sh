@@ -31,6 +31,18 @@ case "$WORKER_TYPE" in
             --queues="$CELERY_QUEUE"
         ;;
 
+    scoring-api)
+        echo "🌐 Starting synchronous scoring API"
+        API_HOST="${SCORING_API_HOST:-0.0.0.0}"
+        API_PORT="${SCORING_API_PORT:-8000}"
+        LOG_LEVEL="${LOG_LEVEL:-info}"
+
+        exec uvicorn plexus.workers.scoring_api:app \
+            --host "$API_HOST" \
+            --port "$API_PORT" \
+            --log-level "$LOG_LEVEL"
+        ;;
+
     console-worker)
         echo "💬 Starting Console chat worker"
         # Run the console local worker for chat message processing
@@ -39,7 +51,7 @@ case "$WORKER_TYPE" in
 
     *)
         echo "❌ Unknown worker type: $WORKER_TYPE"
-        echo "Valid types: score-processor, celery, console-worker"
+        echo "Valid types: score-processor, celery, scoring-api, console-worker"
         exit 1
         ;;
 esac

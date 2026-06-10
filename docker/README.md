@@ -6,12 +6,26 @@ Production-ready Kubernetes deployment for Plexus workers using Helm charts and 
 
 This directory contains everything needed to deploy Plexus workers to Kubernetes:
 
-- **Dockerfile** - Multi-worker container image (score-processor, celery, console-worker)
+- **Dockerfile** - Multi-worker container image (score-processor, celery, scoring-api, console-worker)
 - **helm/plexus-worker/** - Helm chart for Kubernetes deployment
 - **docker-compose.yml** - Local testing environment
 - **SECURITY.md** - Security best practices and hardening guide
 
 ## Quick Start
+
+### Envoy Gateway Scoring API POC
+
+For the Docker-backed Kubernetes proof of concept, use the umbrella stack and Envoy Gateway bootstrap script:
+
+```bash
+cp docker/helm/plexus-stack/values-local.yaml.example \
+   docker/helm/plexus-stack/values-local.yaml
+
+# Edit values-local.yaml with API and LLM keys, then run:
+docker/scripts/setup_envoy_gateway_poc.sh
+```
+
+This path deploys `workerType: scoring-api`, exposes `POST /v1/score`, and routes traffic through Envoy Gateway. Existing SQS and Celery modes remain available as separate deployment paths.
 
 ### 1. Configure Environment
 
@@ -162,9 +176,21 @@ Integrate with GitHub Actions:
 
 ## Worker Types
 
-The image supports three worker modes via `workerType` value:
+The image supports four worker modes via `workerType` value:
 
-### 1. Score Processor (`score-processor`)
+### 1. Scoring API (`scoring-api`)
+Exposes synchronous HTTP scoring for Envoy Gateway deployments.
+
+**Required Config**:
+- `PLEXUS_API_URL`
+- `PLEXUS_API_KEY`
+- `PLEXUS_ACCOUNT_KEY`
+- Optional: `SCORING_API_HOST`, `SCORING_API_PORT`
+
+**Endpoint**:
+- `POST /v1/score`
+
+### 2. Score Processor (`score-processor`)
 Polls SQS queues and processes scoring jobs.
 
 **Required Config**:
@@ -172,14 +198,14 @@ Polls SQS queues and processes scoring jobs.
 - `PLEXUS_RESPONSE_WORKER_QUEUE_URL`
 - AWS credentials (or IRSA)
 
-### 2. Celery Worker (`celery`)
+### 3. Celery Worker (`celery`)
 Processes async tasks from RabbitMQ/Redis.
 
 **Required Config**:
 - `CELERY_BROKER_URL`
 - `CELERY_APP`, `CELERY_QUEUE`, `CELERY_CONCURRENCY`
 
-### 3. Console Worker (`console-worker`)
+### 4. Console Worker (`console-worker`)
 Polls for console chat messages.
 
 **Required Config**:
@@ -324,7 +350,8 @@ kubectl logs -f deployment/plexus-worker-score-processor -n plexus-prod
 - **CPU/Memory usage** - For autoscaling
 - **Job processing rate** - Jobs per minute
 - **Error rate** - Failed jobs percentage
-- **Queue depth** - SQS queue size
+- **HTTP request rate/latency** - For `scoring-api`
+- **Queue depth** - SQS queue size for `score-processor`
 
 ## Scaling
 
@@ -344,7 +371,7 @@ Enabled by default in staging/production:
 
 ### Queue-Based Autoscaling (Advanced)
 
-Use [KEDA](https://keda.sh/) for SQS queue depth-based scaling:
+Use [KEDA](https://keda.sh/) for SQS queue depth-based scaling in the `score-processor` deployment path:
 
 ```yaml
 apiVersion: keda.sh/v1alpha1
@@ -379,7 +406,21 @@ kubectl describe pod <pod-name> -n plexus-prod
 # - Insufficient resources
 ```
 
-### Workers Not Processing Jobs
+### Scoring API Not Responding
+
+```bash
+# Check worker logs
+kubectl logs -f deployment/plexus-worker -n plexus-prod | grep ERROR
+
+# Verify Service and Gateway API resources
+kubectl get svc,gateway,httproute -n plexus-prod
+
+# Bypass Envoy to isolate worker health
+kubectl port-forward -n plexus-prod svc/plexus-worker 8000:8000
+curl http://localhost:8000/readyz
+```
+
+### Score Processor Not Processing Jobs
 
 ```bash
 # Check worker logs

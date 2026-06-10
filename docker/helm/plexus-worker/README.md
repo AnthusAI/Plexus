@@ -15,6 +15,9 @@ plexus-worker/
 ├── README.md                      # This file
 └── templates/                     # Kubernetes manifests
     ├── deployment.yaml
+    ├── service.yaml
+    ├── gateway.yaml
+    ├── httproute.yaml
     ├── configmap.yaml
     ├── secret.yaml
     ├── hpa.yaml
@@ -80,6 +83,29 @@ helm install plexus-worker . \
 ## Configuration
 
 See the parent [README.md](../../README.md) for complete configuration documentation.
+
+## Envoy Gateway Scoring API
+
+Set `workerType: scoring-api` to expose synchronous scoring over HTTP. This mode creates a ClusterIP Service and, when `scoringApi.gateway.enabled` is true, Gateway API resources for Envoy Gateway.
+
+```yaml
+workerType: scoring-api
+
+service:
+  enabled: true
+  port: 8000
+
+scoringApi:
+  enabled: true
+  port: 8000
+  gateway:
+    enabled: true
+    createGateway: true
+    gatewayClassName: envoy-gateway
+    pathPrefix: /v1/score
+```
+
+For a platform-managed Gateway, set `createGateway: false`, `gatewayName`, and optionally `gatewayNamespace`.
 
 ## Quick Reference
 

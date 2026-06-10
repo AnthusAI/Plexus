@@ -16,7 +16,7 @@ global:
   namespace: default
 
 # Worker type to deploy
-# Options: score-processor, celery, console-worker
+# Options: score-processor, celery, scoring-api, console-worker
 workerType: score-processor
 
 # Replica configuration
@@ -99,6 +99,15 @@ networkPolicy:
   celeryBroker:   # For celery workers only
     podSelector: {}
     namespaceSelector: {}
+
+# Kubernetes Service for HTTP worker modes.
+# Currently used by scoring-api so Envoy Gateway can route to the worker.
+service:
+  enabled: true
+  type: ClusterIP
+  port: 8000
+  targetPort: http
+  annotations: {}
 
 # Affinity rules
 affinity:
@@ -189,6 +198,25 @@ celery:
     createSecrets: true
     existingSecret: ""
     url: ""  # e.g., amqp://user:pass@rabbitmq:5672//
+
+# Synchronous scoring API configuration
+scoringApi:
+  enabled: false
+  port: 8000
+  host: "0.0.0.0"
+
+  gateway:
+    enabled: false
+    # Set createGateway to false when attaching routes to a platform-managed Gateway.
+    createGateway: true
+    gatewayClassName: envoy-gateway
+    gatewayName: ""
+    gatewayNamespace: ""
+    listenerName: http
+    hostname: ""
+    port: 80
+    pathPrefix: /v1/score
+    routeName: ""
 
 # Console worker specific configuration
 console:

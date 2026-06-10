@@ -60,7 +60,7 @@ graphql-proxy:
 
 plexus-worker:
   enabled: true
-  workerType: celery
+  workerType: scoring-api
   replicaCount: 1
   image:
     repository: plexus-worker
@@ -75,8 +75,22 @@ plexus-worker:
       key: "local-dev-key"
     account:
       key: "call-criteria"
-  celery:
+  service:
     enabled: true
+    type: ClusterIP
+    port: 8000
+  scoringApi:
+    enabled: true
+    port: 8000
+    gateway:
+      enabled: true
+      createGateway: true
+      gatewayClassName: envoy-gateway
+      listenerName: http
+      port: 80
+      pathPrefix: /v1/score
+  celery:
+    enabled: false
     app: plexus.workers.celery_app
     queue: scoring-requests
     concurrency: 2

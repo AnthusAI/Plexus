@@ -124,6 +124,20 @@ spec:
               key: celery-concurrency
         {{- end }}
 
+        {{- if eq .Values.workerType "scoring-api" }}
+        # Scoring API specific config
+        - name: SCORING_API_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: scoring-api-host
+        - name: SCORING_API_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: scoring-api-port
+        {{- end }}
+
         {{- if eq .Values.workerType "console-worker" }}
         # Console worker specific config
         - name: CONSOLE_RESPONSE_TARGET
@@ -159,6 +173,13 @@ spec:
               name: {{ if .Values.llm.existingSecret }}{{ .Values.llm.existingSecret }}{{ else }}{{ include "plexus-worker.fullname" . }}-llm-keys{{ end }}
               key: anthropic-api-key
         {{- end }}
+        {{- end }}
+
+        {{- if eq .Values.workerType "scoring-api" }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.scoringApi.port }}
+          protocol: TCP
         {{- end }}
 
         resources:

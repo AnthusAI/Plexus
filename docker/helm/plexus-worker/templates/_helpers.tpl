@@ -93,3 +93,25 @@ Create the name of the secret to use for Celery broker
 {{- include "plexus-worker.fullname" . }}-celery-secrets
 {{- end }}
 {{- end }}
+
+{{/*
+Create the Gateway name for scoring API HTTP routing.
+*/}}
+{{- define "plexus-worker.gatewayName" -}}
+{{- if .Values.scoringApi.gateway.gatewayName }}
+{{- .Values.scoringApi.gateway.gatewayName | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-gateway" (include "plexus-worker.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Create the HTTPRoute name for scoring API HTTP routing.
+*/}}
+{{- define "plexus-worker.routeName" -}}
+{{- if .Values.scoringApi.gateway.routeName }}
+{{- .Values.scoringApi.gateway.routeName | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-route" (include "plexus-worker.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
