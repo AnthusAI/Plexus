@@ -82,10 +82,24 @@ def test_persist_task_output_artifact_yaml_uses_output_yaml_and_merges_attachmen
 
 
 def test_persist_task_output_artifact_requires_bucket_name(monkeypatch):
+    monkeypatch.delenv("AMPLIFY_STORAGE_TASKATTACHMENTS_BUCKET_NAME", raising=False)
     monkeypatch.setattr(
         "plexus.cli.shared.task_output_storage._candidate_amplify_outputs_paths",
         lambda: [],
     )
+
+    class _FakeLoader:
+        def load_config(self):
+            return {}
+
+        def get_config_value(self, _key_path, default=None):
+            return default
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.task_output_storage.ConfigLoader",
+        lambda: _FakeLoader(),
+    )
+
     with pytest.raises(RuntimeError, match="aws.storage.task_attachments_bucket"):
         persist_task_output_artifact(
             task_id="task-789",
