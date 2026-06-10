@@ -18,5 +18,5 @@ spec:
     targetPort: {{ .Values.service.targetPort }}
     protocol: TCP
   selector:
-    {{- include "plexus-worker.selectorLabels" . | nindent 4 }}
+    {{- include "plexus-worker.podLabels" . | nindent 4 }}
 {{- end }}

@@ -41,9 +41,13 @@ WORKDIR /app
 # Copy repository for local installation
 COPY --chown=plexus:plexus . /app
 
-# Install Plexus with all dependencies
-# Note: Using [all] to include ML, infra (celery), and all optional deps
+# Install Plexus with all dependencies.
+# Preinstall the CPU Torch wheel so ML extras do not pull CUDA packages into this
+# general-purpose worker image.
+ARG TORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
+ARG TORCH_VERSION=2.12.0
 RUN python -m pip install --upgrade pip && \
+    python -m pip install --no-cache-dir --index-url "$TORCH_CPU_INDEX_URL" "torch==$TORCH_VERSION" && \
     python -m pip install --no-cache-dir -e ".[all]"
 
 # Download NLTK data during build (required for some scoring operations)

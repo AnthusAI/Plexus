@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ecd04188-fc03-4714-a406-791ea972edfd",
+  "issue_id": "plx-a68e1cf1-e13f-4b85-a2fb-f1e539000031",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-10T20:39:06.326Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "docker/scripts/setup_envoy_gateway_poc.sh contains a block that checks whether an existing worker Deployment still has the old immutable label selector (the one that included `worker-type`, from an earlier chart revision on this branch) and deletes that Deployment so Helm can recreate it with the new selector.\n\nThat migration only ever applies to local kind POC clusters created from earlier revisions of this branch; nothing with the old selector has shipped anywhere else. Keeping the block means permanent dead scaffolding in the setup script.\n\nRemove the block now, before the branch merges. Recovery for anyone holding an old local cluster is a documented one-time manual step: delete the worker Deployment (or simply delete and recreate the disposable kind cluster) and re-run the setup script.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "priority": 2,
+    "status": "open",
+    "title": "Remove one-time worker selector migration block from POC setup script"
+  }
+}

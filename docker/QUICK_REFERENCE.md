@@ -16,7 +16,19 @@ docker/scripts/setup_envoy_gateway_poc.sh
 # 4. Check status
 kubectl get pods -n plexus-local
 kubectl get gateway,httproute -n plexus-local
+
+# 5. Find and port-forward the Envoy data-plane Service
+kubectl get svc -A \
+  -l gateway.envoyproxy.io/owning-gateway-name=plexus-plexus-worker-gateway
+kubectl port-forward -n <envoy-service-namespace> svc/<envoy-service-name> 8080:80
+
+# 6. Smoke test routing to the scoring API
+curl -i -X POST http://localhost:8080/v1/score \
+  -H 'content-type: application/json' \
+  -d '{"scoring_job_id":"poc-route-test"}'
 ```
+
+The local kind Service can show `EXTERNAL-IP <pending>` and the Gateway can remain unprogrammed while waiting for a load-balancer address. Port-forward the Envoy data-plane Service for local testing. The smoke test above should return HTTP 422 from FastAPI, proving the request reached the scoring API. A real score requires valid local credentials plus existing `scorecard`, `score`, and `item_id` values.
 
 ## File Structure
 

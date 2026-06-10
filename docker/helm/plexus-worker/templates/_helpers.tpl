@@ -47,6 +47,13 @@ Selector labels
 app.kubernetes.io/name: {{ include "plexus-worker.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: worker
+{{- end }}
+
+{{/*
+Pod labels
+*/}}
+{{- define "plexus-worker.podLabels" -}}
+{{ include "plexus-worker.selectorLabels" . }}
 worker-type: {{ .Values.workerType }}
 {{- end }}
 
@@ -70,6 +77,29 @@ Create the name of the secret to use for Plexus API
 {{- else }}
 {{- include "plexus-worker.fullname" . }}-secrets
 {{- end }}
+{{- end }}
+
+{{/*
+Create the Plexus API URL for the worker secret.
+*/}}
+{{- define "plexus-worker.apiUrl" -}}
+{{- if .Values.plexus.api.url -}}
+{{- .Values.plexus.api.url -}}
+{{- else -}}
+{{- $global := default dict .Values.global -}}
+{{- $services := default dict $global.services -}}
+{{- $graphqlProxy := default dict $services.graphqlProxy -}}
+{{- if $graphqlProxy.externalUrl -}}
+{{- $graphqlProxy.externalUrl -}}
+{{- else if and $graphqlProxy.host $graphqlProxy.port -}}
+{{- $host := tpl $graphqlProxy.host . -}}
+{{- $port := $graphqlProxy.port -}}
+{{- $path := default "/graphql" $graphqlProxy.path -}}
+{{- printf "http://%s:%d%s" $host (int $port) $path -}}
+{{- else -}}
+{{- "" -}}
+{{- end -}}
+{{- end -}}
 {{- end }}
 
 {{/*

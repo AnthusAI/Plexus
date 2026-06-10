@@ -26,7 +26,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "plexus-worker.selectorLabels" . | nindent 8 }}
+        {{- include "plexus-worker.podLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -136,6 +136,15 @@ spec:
             configMapKeyRef:
               name: {{ include "plexus-worker.fullname" . }}-config
               key: scoring-api-port
+        - name: SCORING_API_AUTH_REQUIRED
+          value: {{ or .Values.scoringApi.auth.required .Values.scoringApi.auth.enabled | quote }}
+        {{- if .Values.scoringApi.auth.enabled }}
+        - name: SCORING_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include "plexus-worker.secretName" .) .Values.scoringApi.auth.existingSecret }}
+              key: {{ .Values.scoringApi.auth.secretKey | quote }}
+        {{- end }}
         {{- end }}
 
         {{- if eq .Values.workerType "console-worker" }}

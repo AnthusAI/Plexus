@@ -14,6 +14,12 @@ fullnameOverride: ""
 # Global configuration
 global:
   namespace: default
+  environment: development
+  services:
+    graphqlProxy:
+      host: "{{ .Release.Name }}-graphql-proxy"
+      port: 8000
+      path: "/graphql"
 
 # Worker type to deploy
 # Options: score-processor, celery, scoring-api, console-worker
@@ -204,6 +210,14 @@ scoringApi:
   enabled: false
   port: 8000
   host: "0.0.0.0"
+  auth:
+    enabled: false
+    required: false
+    # Separate inbound API key for HTTP callers of POST /v1/score.
+    # Do not reuse the Plexus GraphQL/API key used by the worker.
+    apiKey: ""
+    existingSecret: ""
+    secretKey: scoring-api-key
 
   gateway:
     enabled: false

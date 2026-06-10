@@ -24,6 +24,7 @@ case "$WORKER_TYPE" in
         CELERY_QUEUE="${CELERY_QUEUE:-scoring-requests}"
         CELERY_CONCURRENCY="${CELERY_CONCURRENCY:-4}"
         LOG_LEVEL="${LOG_LEVEL:-info}"
+        LOG_LEVEL="${LOG_LEVEL,,}"
 
         exec celery -A "$CELERY_APP" worker \
             --loglevel="$LOG_LEVEL" \
@@ -36,6 +37,7 @@ case "$WORKER_TYPE" in
         API_HOST="${SCORING_API_HOST:-0.0.0.0}"
         API_PORT="${SCORING_API_PORT:-8000}"
         LOG_LEVEL="${LOG_LEVEL:-info}"
+        LOG_LEVEL="${LOG_LEVEL,,}"
 
         exec uvicorn plexus.workers.scoring_api:app \
             --host "$API_HOST" \

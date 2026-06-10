@@ -25,7 +25,47 @@ cp docker/helm/plexus-stack/values-local.yaml.example \
 docker/scripts/setup_envoy_gateway_poc.sh
 ```
 
-This path deploys `workerType: scoring-api`, exposes `POST /v1/score`, and routes traffic through Envoy Gateway. Existing SQS and Celery modes remain available as separate deployment paths.
+This path creates or reuses a local kind cluster, installs Envoy Gateway, creates the local `GatewayClass`, builds and loads local images, deploys `workerType: scoring-api`, exposes `POST /v1/score`, and routes traffic through Envoy Gateway. The local values file is the source of truth for scoring API, Service, and Gateway settings; the script only overrides image references so kind uses the locally built images, then validates that the expected scoring API resources exist. Existing SQS and Celery modes remain available as separate deployment paths.
+
+The script pins the Envoy Gateway Helm chart for reproducibility. Override
+`ENVOY_GATEWAY_CHART_VERSION` only when intentionally validating a newer
+Gateway release.
+
+In kind, the Envoy data-plane Service usually remains `EXTERNAL-IP <pending>` because there is no cloud load balancer. Use the Service printed by the script, or find it again with:
+
+```bash
+kubectl get svc -A \
+  -l gateway.envoyproxy.io/owning-gateway-name=plexus-plexus-worker-gateway
+```
+
+Then port-forward that Envoy Service and smoke test the route:
+
+```bash
+kubectl port-forward -n <envoy-service-namespace> svc/<envoy-service-name> 8080:80
+
+# Missing required fields should return HTTP 422 from the scoring API.
+curl -i -X POST http://localhost:8080/v1/score \
+  -H 'content-type: application/json' \
+  -d '{"scoring_job_id":"poc-route-test"}'
+```
+
+A complete scoring request reaches the real scoring code path. To get a successful score result, use valid API/LLM credentials in `values-local.yaml` and real existing `scorecard`, `score`, and `item_id` values:
+
+```bash
+curl -X POST http://localhost:8080/v1/score \
+  -H 'content-type: application/json' \
+  -d '{
+    "scoring_job_id": "poc-job-1",
+    "scorecard": "scorecard-key-or-name",
+    "score": "score-key-or-name",
+    "item_id": "item-id"
+  }'
+```
+
+For exposed environments, configure a separate inbound scoring API key with
+`plexus-worker.scoringApi.auth.enabled=true` and send it as
+`x-plexus-scoring-api-key`. Do not reuse the worker's backend `PLEXUS_API_KEY`
+for external callers.
 
 ### 1. Configure Environment
 
@@ -418,6 +458,11 @@ kubectl get svc,gateway,httproute -n plexus-prod
 # Bypass Envoy to isolate worker health
 kubectl port-forward -n plexus-prod svc/plexus-worker 8000:8000
 curl http://localhost:8000/readyz
+
+# For local kind POCs, find and port-forward the Envoy data-plane Service.
+kubectl get svc -A \
+  -l gateway.envoyproxy.io/owning-gateway-name=plexus-plexus-worker-gateway
+kubectl port-forward -n <envoy-service-namespace> svc/<envoy-service-name> 8080:80
 ```
 
 ### Score Processor Not Processing Jobs

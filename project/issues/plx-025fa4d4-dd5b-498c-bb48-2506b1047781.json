@@ -1,0 +1,31 @@
+{
+  "id": "plx-025fa4d4-dd5b-498c-bb48-2506b1047781",
+  "title": "Helm chart hardening: render-based template tests and required api-url",
+  "description": "1. tests/docker/test_helm_scoring_api_templates.py asserts on raw .tpl template source text (string matching against helper definitions). This is brittle: whitespace or refactors break it without behavior changing, and real regressions in rendered output can pass. Refactor to render manifests via `helm template` with representative values permutations and assert on the rendered YAML.\n\n2. The `plexus-worker.apiUrl` helper renders an empty `api-url` into the worker Secret when neither plexus.api.url nor the global graphqlProxy values are configured, deferring the failure to runtime. First confirm whether any worker mode legitimately runs without an API URL; if not, use `required`/`fail` so misconfiguration surfaces at install time.",
+  "type": "chore",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "97563cdb-f758-4ca4-b5f7-306317c54f7b",
+      "author": "derek.norrbom",
+      "text": "Progress: replaced source-string Helm template tests with render-based tests using helm template and parsed Kubernetes manifests. The tests now assert rendered Service/Gateway/HTTPRoute behavior, selector labels, Celery secret behavior, scoring API auth env/Secret wiring, and missing API URL failure. Added default standalone worker chart GraphQL proxy service discovery values and made the worker Secret require a resolved api-url during rendering. Validation passed: render-based pytest, py_compile for the test, helm lint for worker and stack, umbrella helm template with local example values, and git diff --check.",
+      "created_at": "2026-06-10T21:00:00.751451Z"
+    },
+    {
+      "id": "5a29afa7-5fa0-423e-ad9f-08b9ec1cdaf0",
+      "author": "derek.norrbom",
+      "text": "Verified and closed. Template tests now run helm template and assert on parsed rendered manifests (Service/Gateway/HTTPRoute, selector labels, Celery secret behavior, scoring auth env/Secret wiring, missing api-url failure) instead of matching template source text. The worker Secret now requires a resolved api-url at render time via the plexus-worker.apiUrl helper, with standalone-chart defaults for GraphQL proxy service discovery so default installs still render. helm lint and the render-based suite pass.",
+      "created_at": "2026-06-10T21:15:06.655809Z"
+    }
+  ],
+  "created_at": "2026-06-10T20:39:06.335716Z",
+  "updated_at": "2026-06-10T21:15:06.666967Z",
+  "closed_at": "2026-06-10T21:15:06.666967Z",
+  "custom": {}
+}

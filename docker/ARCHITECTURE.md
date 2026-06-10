@@ -80,10 +80,13 @@ This POC intentionally does **not** preserve RabbitMQ queue semantics. Existing 
 - Envoy Gateway controller installed separately from the Plexus chart
 - Gateway API resources created by the Plexus worker chart for the POC
 - Future clusters can provide a platform-managed Gateway; Plexus can create only HTTPRoutes
+- The local POC script creates the `envoy-gateway` `GatewayClass` and waits for the generated Envoy data-plane Service
 
 **Routes**:
 - `POST /v1/score` - Synchronous scoring API
 - `/healthz` and `/readyz` - Worker health probes, available directly on the worker Service
+
+For local kind validation, the Envoy data-plane Service can remain `EXTERNAL-IP <pending>` and the Gateway can report `Programmed=False` while waiting for a load-balancer address. Port-forward the generated Envoy Service to test the route locally.
 
 **Production Considerations**:
 - Use a platform-managed GatewayClass and shared Gateway where available
@@ -261,6 +264,8 @@ Content-Type: application/json
 - Envoy Gateway POC deployments
 - Synchronous request/response scoring
 - Clusters where RabbitMQ is not part of the target architecture
+
+For route smoke tests, an incomplete request should return HTTP 422 from FastAPI, confirming Envoy reached the scoring API. A successful score result requires valid Plexus credentials, LLM credentials for the selected score, and real existing `scorecard`, `score`, and `item_id` values.
 
 #### Celery Worker (RabbitMQ, optional legacy mode)
 ```yaml

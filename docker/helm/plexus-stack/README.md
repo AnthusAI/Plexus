@@ -62,7 +62,16 @@ cd ../../..
 docker/scripts/setup_envoy_gateway_poc.sh
 ```
 
-The script checks for Docker, kind, kubectl, and Helm; creates a kind cluster if needed; installs Envoy Gateway separately; builds local images; loads them into kind; and deploys this stack.
+The script checks for Docker, kind, kubectl, and Helm; creates a kind cluster if needed; installs Envoy Gateway separately; creates the local `GatewayClass`; builds local images; loads them into kind; deploys this stack with local image references; validates the scoring API Service, Gateway, and HTTPRoute; and prints the Envoy data-plane Service to port-forward. The values file remains the source of truth for worker type and Gateway behavior.
+
+If Helm reports an immutable Deployment selector error in an old disposable kind
+cluster, delete the stale local worker Deployment and rerun the script:
+
+```bash
+kubectl delete deployment/plexus-plexus-worker -n plexus-local
+```
+
+Deleting and recreating the disposable kind cluster is also valid.
 
 ### 3. Manual Deployment
 
@@ -90,6 +99,11 @@ kubectl get pods -n plexus-local
 kubectl get svc -n plexus-local
 kubectl get gateway,httproute -n plexus-local
 kubectl logs -n plexus-local -l app.kubernetes.io/name=plexus-worker --tail=50 -f
+
+# Bypass Envoy when isolating worker health.
+kubectl port-forward -n plexus-local svc/plexus-plexus-worker 8000:8000
+curl http://localhost:8000/healthz
+curl http://localhost:8000/readyz
 ```
 
 ### 5. Test Through Envoy Gateway
@@ -99,6 +113,12 @@ kubectl logs -n plexus-local -l app.kubernetes.io/name=plexus-worker --tail=50 -
 kubectl get svc -A -l gateway.envoyproxy.io/owning-gateway-name=plexus-plexus-worker-gateway
 kubectl port-forward -n <envoy-service-namespace> svc/<envoy-service-name> 8080:80
 
+# Missing required fields should return HTTP 422 from FastAPI.
+curl -i -X POST http://localhost:8080/v1/score \
+  -H 'content-type: application/json' \
+  -d '{"scoring_job_id":"poc-route-test"}'
+
+# A complete request reaches the scoring path. Use real existing IDs for a success.
 curl -X POST http://localhost:8080/v1/score \
   -H 'content-type: application/json' \
   -d '{
@@ -108,6 +128,8 @@ curl -X POST http://localhost:8080/v1/score \
     "item_id": "item-123"
   }'
 ```
+
+In kind, the Envoy data-plane Service commonly shows `EXTERNAL-IP <pending>` and the Gateway may report `Programmed=False` while it waits for a load-balancer address. Local validation should use the Envoy Service port-forward above. A successful scoring response also depends on valid API/LLM credentials and real existing `scorecard`, `score`, and `item_id` values.
 
 ## Production Deployment
 

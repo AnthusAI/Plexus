@@ -13,10 +13,10 @@ import requests
 
 
 AG_NEWS_LABELS = ("World", "Sports", "Business", "Sci/Tech")
-DEFAULT_DATASET = "fancyzhx/ag_news"
+DEFAULT_DATASET = "apptek-com/apptek_callcenter_dialogues"
 DEFAULT_SPLIT = "test"
 DEFAULT_IDENTIFIER_NAME = "Hugging Face Fixture ID"
-DEFAULT_PREFIX = "proxy-ag-news"
+DEFAULT_PREFIX = "proxy-call-center"
 
 
 @dataclass(frozen=True)
@@ -98,14 +98,26 @@ def resolve_label_names(dataset: Any, dataset_name: str) -> list[str] | tuple[st
 
 def load_rows(dataset_name: str, split: str, start: int, limit: int) -> tuple[Any, list[dict[str, Any]]]:
     try:
-        from datasets import load_dataset
+        from datasets import Features, Value, load_dataset
     except ImportError as exc:
         raise RuntimeError(
             "The Hugging Face 'datasets' package is required. "
             "Install the full Plexus dependencies or run the scoring integration Compose profile."
         ) from exc
 
-    dataset = load_dataset(dataset_name, split=f"{split}[{start}:{start + limit}]")
+    load_kwargs: dict[str, Any] = {}
+    if dataset_name == DEFAULT_DATASET:
+        # The default call-center dataset includes audio, but this seeder only
+        # needs transcript text. Explicit features avoid audio codec requirements.
+        load_kwargs["features"] = Features(
+            {
+                "text": Value("string"),
+                "domain": Value("string"),
+                "gender": Value("string"),
+                "accent": Value("string"),
+            }
+        )
+    dataset = load_dataset(dataset_name, split=f"{split}[{start}:{start + limit}]", **load_kwargs)
     return dataset, [dict(row) for row in dataset]
 
 
@@ -265,7 +277,7 @@ def seed_fixtures(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Seed Hugging Face text-classification rows as private proxy Items."
+        description="Seed Hugging Face call-center transcript rows as private proxy Items."
     )
     parser.add_argument("--proxy-url", default=os.getenv("PLEXUS_API_URL", "http://localhost:18080/graphql"))
     parser.add_argument("--api-key", default=os.getenv("PLEXUS_API_KEY", "local-smoke-key"))
