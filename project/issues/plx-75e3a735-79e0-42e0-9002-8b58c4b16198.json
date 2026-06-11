@@ -118,10 +118,16 @@
       "author": "derek.norrbom",
       "text": "Audit follow-up review completed and all nine findings issues closed (plx-ae1d73, plx-bcf0c8, plx-e3a0bf, plx-1421d5, plx-7da300, plx-a68e1c, plx-025fa4, plx-9eb034, plx-a3ba1e). Implementations were verified against each issue's acceptance criteria by reading the working-tree diffs and running validation: 23 focused tests pass in conda py311 (workers API/job, render-based Helm template tests, seeder behavior test), py_compile clean, bash -n clean, helm lint clean, git diff --check clean. One defect found and fixed during review under plx-ae1d73: the log reason-code classifier string-matched user-influenced error message text (score-not-found always classified as scorecard_not_found; identifiers could flip codes). Replaced with explicit constant reason_code values set on ScoringJobError at raise sites, spec-first with failing tests confirmed red before the fix. Remaining branch state: all changes uncommitted on feature/envoy-gateway-scoring-api-poc, ready for commit.",
       "created_at": "2026-06-10T21:15:20.331133Z"
+    },
+    {
+      "id": "e45a92d5-a986-4df7-98a1-3c163a776285",
+      "author": "derek.norrbom",
+      "text": "Handoff checkpoint after script/build cleanup. Branch: feature/envoy-gateway-scoring-api-poc. Recent commits: 21e0678 added the linux/amd64 buildx image path for worker/proxy images and validated amd64 smoke builds; 087df1a consolidated Docker/Kubernetes helper scripts, removed starter-phase Docker Compose/RabbitMQ helper entry points from docker/, added docker/scripts/README.md, and added docker/scripts/test_envoy_scoring_api.sh as the current Envoy HTTP scoring test command. Current intended workflow: use docker/helm/plexus-stack/values-local.yaml for local settings, run docker/scripts/setup_envoy_gateway_poc.sh for kind/Envoy, port-forward the Envoy data-plane Service, then run docker/scripts/test_envoy_scoring_api.sh with explicit scorecard, score, and item ID; set SCORING_API_KEY when inbound auth is enabled. Key decisions: Kubernetes/Envoy scoring-api is the project direction; Docker Compose/RabbitMQ scripts were starter-phase scaffolding and should not be presented as current; local kind stays native-arch for speed; registry-published images must use linux/amd64 or multi-arch via build_k8s_images.sh. Known remaining work is under the epic: platform prerequisites, TLS/hostname/Gateway listener work, and managed-cluster validation when an environment is available. Latest validation before commit: bash -n for current shell scripts, py_compile for edited Python helpers in py311, test_envoy_scoring_api.sh --help, stale-reference rg checks, git diff --check, plus earlier successful local kind/Envoy scoring with demo-safe call-center data.",
+      "created_at": "2026-06-11T02:41:10.948207Z"
     }
   ],
   "created_at": "2026-06-10T00:45:25.928877026Z",
-  "updated_at": "2026-06-10T21:15:20.331133Z",
+  "updated_at": "2026-06-11T02:41:10.948207Z",
   "closed_at": null,
   "custom": {}
 }
