@@ -371,4 +371,4 @@ helm dependency list
 
 For issues or questions:
 - GitHub Issues: https://github.com/AnthusAI/Plexus/issues
-- Documentation: See `docker/ARCHITECTURE.md` and `docker/FULL_STACK_LOCAL.md`
+- Documentation: See `docker/ARCHITECTURE.md` and `docker/scripts/README.md`

@@ -715,4 +715,3 @@ tolerations:
 - [Helm Chart Documentation](helm/plexus-worker/README.md)
 - [Security Best Practices](SECURITY.md)
 - [Local Testing Guide](LOCAL_TESTING.md)
-- [Full Stack Local Setup](FULL_STACK_LOCAL.md)

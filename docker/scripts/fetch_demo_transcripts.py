@@ -278,7 +278,7 @@ def main():
 
     print("\n✅ Demo data setup complete!")
     print(f"   {len(item_ids)} items ready for testing")
-    print(f"\n💡 Use these items with: ./demo_k8s.sh <score-name>")
+    print("\nUse these items with docker/scripts/test_envoy_scoring_api.sh")
 
     return 0
 

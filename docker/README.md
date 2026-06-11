@@ -8,7 +8,7 @@ This directory contains everything needed to deploy Plexus workers to Kubernetes
 
 - **Dockerfile** - Multi-worker container image (score-processor, celery, scoring-api, console-worker)
 - **helm/plexus-worker/** - Helm chart for Kubernetes deployment
-- **docker-compose.yml** - Local testing environment
+- **scripts/** - Kubernetes image build, Envoy setup, and scoring smoke-test helpers
 - **SECURITY.md** - Security best practices and hardening guide
 
 ## Quick Start
@@ -341,24 +341,18 @@ serviceAccount:
 
 ## Local Testing
 
-Use Docker Compose for local development:
+Use the kind/Envoy Gateway path for local Kubernetes validation:
 
 ```bash
-# Copy environment template
-cp docker/.env.example docker/.env
+cp docker/helm/plexus-stack/values-local.yaml.example \
+   docker/helm/plexus-stack/values-local.yaml
 
-# Edit with your credentials
-vim docker/.env
-
-# Start services
-docker-compose -f docker/docker-compose.yml up
-
-# View logs
-docker-compose -f docker/docker-compose.yml logs -f
-
-# Clean up
-docker-compose -f docker/docker-compose.yml down
+# Edit values-local.yaml with API/account/LLM keys, then run:
+docker/scripts/setup_envoy_gateway_poc.sh
 ```
+
+After port-forwarding the Envoy data-plane Service, run a real scoring request
+with `docker/scripts/test_envoy_scoring_api.sh`.
 
 ## Security
 
@@ -557,9 +551,8 @@ This Kubernetes deployment complements the existing Lambda setup in `score-proce
 docker/
 ├── Dockerfile                    # Multi-worker container image
 ├── entrypoint.sh                 # Worker type selector
-├── docker-compose.yml            # Local testing
+├── scripts/                      # Kubernetes helper scripts
 ├── .dockerignore                 # Build optimization
-├── .env.example                  # Environment template
 ├── .gitignore                    # Protect secrets
 ├── README.md                     # This file
 ├── SECURITY.md                   # Security guide

@@ -26,6 +26,13 @@ kubectl port-forward -n <envoy-service-namespace> svc/<envoy-service-name> 8080:
 curl -i -X POST http://localhost:8080/v1/score \
   -H 'content-type: application/json' \
   -d '{"scoring_job_id":"poc-route-test"}'
+
+# 7. Run a real scoring request after seeding/selecting an item
+SCORING_API_KEY=local-scoring-api-key \
+docker/scripts/test_envoy_scoring_api.sh \
+  --scorecard SCORECARD \
+  --score SCORE \
+  --item-id ITEM_ID
 ```
 
 The local kind Service can show `EXTERNAL-IP <pending>` and the Gateway can remain unprogrammed while waiting for a load-balancer address. Port-forward the Envoy data-plane Service for local testing. The smoke test above should return HTTP 422 from FastAPI, proving the request reached the scoring API. A real score requires valid local credentials plus existing `scorecard`, `score`, and `item_id` values.

@@ -489,8 +489,9 @@ def main():
     for score in result['scores']:
         print(f"   - {score['name']}")
 
-    print(f"\n💡 You can now use scorecard '{result['scorecard']['key']}' for demos")
-    print(f"   Example: ./demo_k8s.sh ProfessionalTone")
+    print(f"\nYou can now use scorecard '{result['scorecard']['key']}' for Envoy scoring tests")
+    print("   Example: docker/scripts/test_envoy_scoring_api.sh --scorecard "
+          f"{result['scorecard']['key']} --score ProfessionalTone --item-id <item-id>")
 
     return 0
 
