@@ -1,21 +1,15 @@
 import click
 import os
 import sys
-from pathlib import Path
 import json
 from ruamel.yaml import YAML
 import io
 from rich.table import Table
-from rich.panel import Panel
 from plexus.cli.shared.console import console
 from plexus.dashboard.api.client import PlexusDashboardClient
 from typing import Optional
 import rich
-import datetime
-from plexus.cli.shared.file_editor import FileEditor
-from plexus.cli.shared import sanitize_path_name
 from plexus.cli.shared.identifier_resolution import resolve_scorecard_identifier
-from functools import lru_cache
 
 # Define the main command groups that will be exported
 @click.group()
@@ -53,9 +47,9 @@ def resolve_account_identifier(client, identifier):
         result = client.execute(query)
         if result.get('getAccount'):
             return identifier
-    except:
+    except Exception:
         pass
-    
+
     # Try lookup by key
     try:
         query = f"""
@@ -71,9 +65,9 @@ def resolve_account_identifier(client, identifier):
         items = result.get('listAccounts', {}).get('items', [])
         if items and len(items) > 0:
             return items[0]['id']
-    except:
+    except Exception:
         pass
-    
+
     # Try lookup by name
     try:
         query = f"""
@@ -89,7 +83,7 @@ def resolve_account_identifier(client, identifier):
         items = result.get('listAccounts', {}).get('items', [])
         if items and len(items) > 0:
             return items[0]['id']
-    except:
+    except Exception:
         pass
     
     return None
@@ -135,8 +129,7 @@ def detect_and_clean_duplicates(client, scorecard_id: str) -> int:
         scorecard_result = client.execute(scorecard_query)
         scorecard = scorecard_result.get('getScorecard', {})
         scorecard_key = scorecard.get('key')
-        account_id = scorecard.get('accountId')
-        
+
         if not scorecard_key:
             console.print("[yellow]Current scorecard has no key, skipping duplicate scorecard check[/yellow]")
         else:
@@ -256,12 +249,10 @@ def detect_and_clean_duplicates(client, scorecard_id: str) -> int:
                             # First, delete all versions for each score
                             for section in sections:
                                 section_id = section.get('id')
-                                section_name = section.get('name')
                                 scores = section.get('scores', {}).get('items', [])
-                                
+
                                 for score in scores:
                                     score_id = score.get('id')
-                                    score_name = score.get('name')
                                     versions = score.get('versions', {}).get('items', [])
                                     
                                     total_scores += 1
@@ -643,9 +634,8 @@ def ensure_valid_external_ids(client, scorecard_id: str) -> int:
         
         sections = scorecard.get('sections', {}).get('items', [])
         total_updated = 0
-        
+
         for section in sections:
-            section_name = section.get('name', 'Unknown Section')
             scores = section.get('scores', {}).get('items', [])
             
             for score in scores:
@@ -803,14 +793,68 @@ def format_scorecard_panel(scorecard, include_sections=False, detailed_scores=Fa
     return panel 
 
 @scorecards.command()
+@click.option('--scorecard', help='Filter by specific scorecard (accepts ID, name, key, or external ID)')
 @click.option('--account', help='Filter by account (accepts ID, name, or key)')
-@click.option('--name', help='Filter by scorecard name')
-@click.option('--key', help='Filter by scorecard key')
 @click.option('--limit', type=int, default=10, help='Maximum number of scorecards to return')
-def list(account: Optional[str], name: Optional[str], key: Optional[str], limit: int):
+def list(scorecard: Optional[str], account: Optional[str], limit: int):
     """List scorecards with rich formatting."""
     client = create_client()
-    
+
+    # If a specific scorecard is requested, resolve it and show just that one
+    if scorecard:
+        scorecard_id = resolve_scorecard_identifier(client, scorecard)
+        if not scorecard_id:
+            click.echo(f"Scorecard not found: {scorecard}")
+            return
+
+        # Fetch the specific scorecard with sections and scores
+        query = f"""
+        query GetScorecard {{
+            getScorecard(id: "{scorecard_id}") {{
+                id
+                name
+                key
+                description
+                externalId
+                createdAt
+                updatedAt
+                sections {{
+                    items {{
+                        id
+                        name
+                        order
+                        scores {{
+                            items {{
+                                id
+                                name
+                                key
+                                description
+                                type
+                                order
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        """
+
+        try:
+            response = client.execute(query)
+            scorecard_data = response.get('getScorecard')
+
+            if not scorecard_data:
+                click.echo(f"Scorecard not found: {scorecard}")
+                return
+
+            console_obj = rich.console.Console()
+            panel = format_scorecard_panel(scorecard_data, include_sections=True)
+            console_obj.print(panel)
+
+        except Exception as e:
+            click.echo(f"Error getting scorecard: {e}")
+        return
+
     # Build filter string for GraphQL query
     filter_parts = []
     if account:
@@ -819,19 +863,13 @@ def list(account: Optional[str], name: Optional[str], key: Optional[str], limit:
             click.echo(f"Account not found: {account}")
             return
         filter_parts.append(f'accountId: {{ eq: "{account_id}" }}')
-    
-    if name:
-        filter_parts.append(f'name: {{ contains: "{name}" }}')
-    
-    if key:
-        filter_parts.append(f'key: {{ contains: "{key}" }}')
-    
-    filter_str = ", ".join(filter_parts)
-    
+
+    filter_str = ", ".join(filter_parts) if filter_parts else ""
+
     # Construct the GraphQL query with proper variable syntax
     query = f"""
     query ListScorecards {{
-        listScorecards(filter: {{ {filter_str} }}, limit: {limit}) {{
+        listScorecards({f'filter: {{ {filter_str} }}, ' if filter_str else ''}limit: {limit}) {{
             items {{
                 id
                 name
@@ -861,30 +899,30 @@ def list(account: Optional[str], name: Optional[str], key: Optional[str], limit:
         }}
     }}
     """
-    
+
     try:
         response = client.execute(query)
         scorecards = response.get('listScorecards', {}).get('items', [])
-        
+
         if not scorecards:
             click.echo("No scorecards found.")
             return
-        
-        console = rich.console.Console()
-        
+
+        console_obj = rich.console.Console()
+
         # Create a grid for the panels
         grid = Table.grid(expand=True)
         grid.add_column()
-        
-        for scorecard in scorecards:
+
+        for scorecard_item in scorecards:
             # Use the shared formatting function with sections included
-            panel = format_scorecard_panel(scorecard, include_sections=True)
+            panel = format_scorecard_panel(scorecard_item, include_sections=True)
             grid.add_row(panel)
             # Add a blank row for spacing
             grid.add_row("")
-        
-        console.print(grid)
-        
+
+        console_obj.print(grid)
+
     except Exception as e:
         click.echo(f"Error listing scorecards: {e}")
 
@@ -1565,12 +1603,10 @@ def find_duplicates(account: Optional[str], limit: int):
                         # First, delete all versions for each score
                         for section in sections:
                             section_id = section.get('id')
-                            section_name = section.get('name')
                             scores = section.get('scores', {}).get('items', [])
-                            
+
                             for score in scores:
                                 score_id = score.get('id')
-                                score_name = score.get('name')
                                 versions = score.get('versions', {}).get('items', [])
                                 
                                 total_scores += 1

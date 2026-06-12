@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "750858e3-ef52-403f-baf6-78bb0b54d8f1",
+  "issue_id": "plx-1bc4544e-f631-4c76-b0f4-2d5bcabdefb9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-09T21:01:03.190Z",
+  "actor_id": "derek",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+    "priority": 2,
+    "status": "open",
+    "title": "Create batch-operations-cookbook.md workflow examples"
+  }
+}

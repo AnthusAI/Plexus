@@ -46,8 +46,8 @@ langgraph = "0.6.7"
 psycopg = { version = ">=3.2.0,<4.0.0", extras = ["binary"] }
 lupa = "2.7"
 tactus = [
-    { version = "^0.51.3" },
-    { version = "^0.51.3", extras = ["rca"], markers = "extra == 'ml' or extra == 'all'" },
+    { version = "^0.51.4" },
+    { version = "^0.51.4", extras = ["rca"], markers = "extra == 'ml' or extra == 'all'" },
 ]
 rapidfuzz = "3.9.4"
 watchtower = "*"
