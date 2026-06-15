@@ -81,7 +81,8 @@ export async function GET(request: Request) {
       }),
     )
     const bytes = await streamToBytes(result.Body)
-    return new Response(bytes, {
+    const responseBody = new Uint8Array(bytes)
+    return new Response(responseBody, {
       headers: {
         "content-type": result.ContentType || "application/octet-stream",
         "cache-control": "no-store",
