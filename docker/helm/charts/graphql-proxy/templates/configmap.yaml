@@ -6,6 +6,8 @@ metadata:
   labels:
     {{- include "graphql-proxy.labels" . | nindent 4 }}
 data:
+  PLEXUS_BACKEND_MODE: {{ .Values.config.backendMode | quote }}
+  PLEXUS_PROXY_AUTH_MODE: {{ .Values.config.authMode | quote }}
   PLEXUS_PROXY_UPSTREAM_API_URL: {{ .Values.config.upstreamApiUrl | quote }}
   PLEXUS_PROXY_UPSTREAM_TIMEOUT_SECONDS: {{ .Values.config.upstreamTimeoutSeconds | quote }}
   PLEXUS_PROXY_UPSTREAM_DISABLED: {{ .Values.config.upstreamDisabled | quote }}

@@ -94,6 +94,29 @@ if [ "$WORKER_TYPE" != "scoring-api" ]; then
   exit 1
 fi
 
+echo "Seeding demo data into local control plane"
+kubectl port-forward -n "$NAMESPACE" "svc/$RELEASE_NAME-graphql-proxy" 18080:8000 &
+PF_PID=$!
+sleep 3
+
+PLEXUS_API_URL="http://localhost:18080/graphql" \
+PLEXUS_API_KEY="" \
+  python3 "$PROJECT_ROOT/services/private-graphql-proxy/scripts/seed_local_demo.py"
+
+echo "Verifying seeded data via GraphQL"
+SEED_CHECK="$(curl -sf http://localhost:18080/graphql \
+  -H 'content-type: application/json' \
+  -d '{"query":"{ getAccount(id: \"local-demo-account\") { id name } }"}')"
+if echo "$SEED_CHECK" | grep -q "local-demo-account"; then
+  echo "Seed verification passed"
+else
+  echo "Seed verification FAILED: $SEED_CHECK" >&2
+  kill "$PF_PID" 2>/dev/null || true
+  exit 1
+fi
+
+kill "$PF_PID" 2>/dev/null || true
+
 kubectl get svc/"$RELEASE_NAME-plexus-worker" -n "$NAMESPACE" >/dev/null
 kubectl get gateway/"$RELEASE_NAME-plexus-worker-gateway" -n "$NAMESPACE" >/dev/null
 kubectl get httproute/"$RELEASE_NAME-plexus-worker-route" -n "$NAMESPACE" >/dev/null

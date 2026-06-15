@@ -50,10 +50,22 @@ graphql-proxy:
     tag: "local"
     pullPolicy: IfNotPresent
   config:
-    proxyApiKey: "your-proxy-api-key-here"
-    upstreamApiUrl: "https://your-appsync-endpoint.appsync-api.us-west-2.amazonaws.com/graphql"
-    upstreamApiKey: "your-appsync-api-key-here"
+    # --- Option A: Local MVP (no auth, no upstream) ---
+    backendMode: "local"
+    authMode: "trusted_open"
+    proxyApiKey: ""
+    upstreamApiUrl: ""
+    upstreamApiKey: ""
+    upstreamDisabled: true
     enableDebug: true
+    # --- Option B: AppSync upstream (original) ---
+    # backendMode: "amplify"
+    # authMode: ""
+    # proxyApiKey: "your-proxy-api-key-here"
+    # upstreamApiUrl: "https://your-appsync-endpoint.appsync-api.us-west-2.amazonaws.com/graphql"
+    # upstreamApiKey: "your-appsync-api-key-here"
+    # upstreamDisabled: false
+    # enableDebug: true
   createSecrets: true
   postgresql:
     username: "plexus_proxy"  # Set username explicitly
@@ -74,7 +86,7 @@ plexus-worker:
     api:
       key: "local-dev-key"
     account:
-      key: "call-criteria"
+      key: "local-demo"
   service:
     enabled: true
     type: ClusterIP
