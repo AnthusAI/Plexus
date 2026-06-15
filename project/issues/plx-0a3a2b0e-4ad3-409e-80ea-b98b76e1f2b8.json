@@ -3,7 +3,7 @@
   "title": "Swap K8s scoring backend to local MVP trusted-open mode",
   "description": "",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-06-15T20:50:50.870128Z",
-  "updated_at": "2026-06-15T20:50:58.399837Z",
-  "closed_at": null,
+  "updated_at": "2026-06-15T21:35:46.092988Z",
+  "closed_at": "2026-06-15T21:35:46.092988Z",
   "custom": {}
 }
