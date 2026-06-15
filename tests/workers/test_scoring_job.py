@@ -9,14 +9,7 @@ from plexus.workers.scoring_job import ScoringJobError, process_scoring_job_sync
 class FakeScoreInstance:
     def __init__(self, result):
         self.result = result
-        self.async_setup = AsyncMock()
         self.predict = AsyncMock(return_value=result)
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        return False
 
 
 def test_process_scoring_job_sync_persists_result(monkeypatch):
@@ -78,7 +71,6 @@ def test_process_scoring_job_sync_persists_result(monkeypatch):
     result_input = fake_client.execute.call_args.args[1]["input"]
     assert result_input["accountId"] == "acct-1"
     assert result_input["scoreId"] == "score-1"
-    fake_score_instance.async_setup.assert_awaited_once()
     fake_score_instance.predict.assert_awaited_once()
 
 
