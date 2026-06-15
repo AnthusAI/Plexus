@@ -3,7 +3,7 @@
   "title": "Dashboard local storage route hardening",
   "description": "Harden the local dashboard storage route for content type, binary data, missing object errors, local-mode guardrails, and path validation while preserving Amplify Storage compatibility.",
   "type": "sub-task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -22,10 +22,16 @@
       "author": "derek.norrbom",
       "text": "Implemented fix in dashboard/app/api/local-storage/route.ts: normalized GET payload to a fresh Uint8Array before constructing Response to satisfy BodyInit typing. Verification: from dashboard/, ran npm run ci:typecheck (tsc --noEmit --pretty --diagnostics), completed successfully with no TS errors; total check time ~175.84s.",
       "created_at": "2026-06-15T21:47:21.460322Z"
+    },
+    {
+      "id": "3ba185ad-9864-4ac7-8fc1-d8e131d52ada",
+      "author": "derek.norrbom",
+      "text": "Landed in commit 06155ea75 on branch feature/k8s-trusted-open-backend. Fixed local-storage GET response typing by normalizing to Uint8Array before Response body construction; ci:typecheck in dashboard passes.",
+      "created_at": "2026-06-15T21:50:12.523351Z"
     }
   ],
   "created_at": "2026-06-05T18:32:17.608279Z",
-  "updated_at": "2026-06-15T21:47:21.460322Z",
-  "closed_at": null,
+  "updated_at": "2026-06-15T21:50:14.262496Z",
+  "closed_at": "2026-06-15T21:50:14.262496Z",
   "custom": {}
 }
