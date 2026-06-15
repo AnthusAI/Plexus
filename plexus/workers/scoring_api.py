@@ -2,11 +2,13 @@
 HTTP API entrypoint for synchronous Plexus scoring.
 """
 
+import json
 import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
-from typing import Dict, Optional
+from datetime import date, datetime
+from typing import Any, Dict, Optional
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -78,6 +80,19 @@ def public_error_message(status_code: int) -> str:
     return "Scoring request could not be processed."
 
 
+def _make_json_safe(obj: Any) -> Any:
+    """Recursively convert non-serializable types (datetime, Pydantic models) for JSON output."""
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if hasattr(obj, "model_dump"):
+        return _make_json_safe(obj.model_dump())
+    if isinstance(obj, dict):
+        return {k: _make_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_make_json_safe(item) for item in obj]
+    return obj
+
+
 def scoring_error_reason_code(error: ScoringJobError) -> str:
     if error.reason_code:
         return error.reason_code
@@ -112,7 +127,7 @@ async def score(request: ScoreRequest) -> JSONResponse:
             item_id=request.item_id,
             account_key=request.account_key,
         )
-        return JSONResponse(result)
+        return JSONResponse(_make_json_safe(result))
     except ScoringJobError as exc:
         logger.warning(
             "Scoring request failed request_id=%s status_code=%s reason_code=%s",

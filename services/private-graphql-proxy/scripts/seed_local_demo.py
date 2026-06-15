@@ -76,6 +76,8 @@ def main() -> None:
     nira_section_id = "nira-demo-section"
     nira_score_id = "nira-demo-score"
     nira_score_version_id = "nira-demo-score-version"
+    nira_lua_score_id = "nira-demo-lua-score"
+    nira_lua_score_version_id = "nira-demo-lua-score-version"
     nira_item_id = "nira-demo-item-1"
 
     create("Account", {
@@ -182,6 +184,60 @@ def main() -> None:
             "  - \"Yes\"\n"
             "  - \"No\"\n"
             "code: |\n"
+            "  default_model \"openai/gpt-4o-mini\"\n"
+            "\n"
+            "  ClassifyProcedure {\n"
+            "    classes = {\"Yes\", \"No\"},\n"
+            "    system_message = [[\n"
+            "    You are a QA analyst evaluating call center transcripts.\n"
+            "    Score: Resolution Quality\n"
+            "    Objective: Determine whether the agent provided a clear resolution to the customer's issue.\n"
+            "    Decision criteria:\n"
+            "    - Yes: The agent confirmed the issue was resolved and explained any next steps.\n"
+            "    - No: The agent did not provide a clear resolution or left the issue unaddressed.\n"
+            "    Return concise reasoning, then put exactly one final label on the last line: Yes or No.\n"
+            "    ]],\n"
+            "    user_message = [[\n"
+            "    Evaluate the transcript below.\n"
+            "\n"
+            "    <transcript>\n"
+            "    {{ text }}\n"
+            "    </transcript>\n"
+            "    ]]\n"
+            "  }\n"
+        ),
+        "guidelines": "LLM-backed Tactus score for local prediction smoke testing.",
+        "isFeatured": True,
+        "note": "Seeded LLM champion version for local predict smoke.",
+        "createdByUserId": "demo-user",
+        "createdAt": ts,
+        "updatedAt": ts,
+    })
+    create("Score", {
+        "id": nira_lua_score_id,
+        "name": "Resolution Quality (Lua)",
+        "key": "nira-resolution-quality-lua",
+        "description": "Programmatic keyword-based check for resolution language (no LLM).",
+        "order": 2,
+        "type": "TactusScore",
+        "sectionId": nira_section_id,
+        "scorecardId": nira_scorecard_id,
+        "externalId": "nira-resolution-quality-lua",
+        "championVersionId": nira_lua_score_version_id,
+        "createdAt": ts,
+        "updatedAt": ts,
+    })
+    create("ScoreVersion", {
+        "id": nira_lua_score_version_id,
+        "scoreId": nira_lua_score_id,
+        "configuration": (
+            "name: Resolution Quality (Lua)\n"
+            "key: nira-resolution-quality-lua\n"
+            "class: TactusScore\n"
+            "valid_classes:\n"
+            "  - \"Yes\"\n"
+            "  - \"No\"\n"
+            "code: |\n"
             "  local transcript = string.lower(text or \"\")\n"
             "  local has_resolution = string.find(transcript, \"resolved\") ~= nil\n"
             "  local has_next_step = string.find(transcript, \"next step\") ~= nil or string.find(transcript, \"follow-up\") ~= nil\n"
@@ -198,9 +254,9 @@ def main() -> None:
             "    explanation = \"No clear resolution language was detected.\"\n"
             "  }\n"
         ),
-        "guidelines": "Deterministic Tactus-based fixture for local prediction smoke testing.",
+        "guidelines": "Deterministic Lua-only fixture for local prediction smoke testing (no LLM cost).",
         "isFeatured": True,
-        "note": "Seeded deterministic champion version for local predict smoke.",
+        "note": "Seeded programmatic Lua champion version.",
         "createdByUserId": "demo-user",
         "createdAt": ts,
         "updatedAt": ts,
