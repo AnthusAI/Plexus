@@ -134,9 +134,7 @@ def process_scoring_job_sync(
     )
 
     async def run_prediction():
-        async with score_instance:
-            await score_instance.async_setup()
-            return await score_instance.predict(score_input)
+        return await score_instance.predict(score_input)
 
     result = asyncio.run(run_prediction())
     result_value = result.value
