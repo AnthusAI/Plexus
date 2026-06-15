@@ -1,0 +1,31 @@
+{
+  "id": "plx-e3a0bfa6-f32c-4232-8b0f-768ee8cdb8a8",
+  "title": "Scoring job account-key handling for empty item account IDs and missing server config",
+  "description": "Two account-handling defects in plexus/workers/scoring_job.py:\n\n1. `getattr(item, \"accountId\", account_key)` (used in both Score.Input metadata and the createScoreResult input) only falls back when the attribute is *absent*. An item whose accountId attribute exists but is None/empty persists None instead of falling back to the account key. Use a falsy-aware fallback: `getattr(item, \"accountId\", None) or account_key`.\n\n2. A missing PLEXUS_ACCOUNT_KEY environment variable raises ScoringJobError with status 400, but absent server configuration is the server's fault, not the caller's; it should surface as a 5xx.\n\n```gherkin\nFeature: Scoring job account handling\n  Scenario: Item with empty account ID falls back to the account key\n    Given an item whose accountId attribute is present but empty\n    When a scoring job persists its result\n    Then the persisted result uses the request or environment account key\n\n  Scenario: Missing server account key is a server error\n    Given no account key in the request or the environment\n    When a scoring request is processed\n    Then the API responds with a 5xx status\n```",
+  "type": "story",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "c9beeef6-d5a2-40b1-8fdc-e3b42f9b2326",
+      "author": "derek.norrbom",
+      "text": "Progress: fixed scoring job account handling. Empty item accountId values now fall back to the request/environment account key for both Score.Input metadata and persisted ScoreResult accountId. Missing PLEXUS_ACCOUNT_KEY is now treated as server misconfiguration with status 500 instead of caller 400, and the API reason-code helper classifies it as account_configuration_missing. Added focused tests for empty item account fallback and missing account config. Validation passed: focused worker/API pytest suite, py_compile, git diff --check, and rcql --scan-files for scoring_job.py and scoring_api.py returned Total: 0.",
+      "created_at": "2026-06-10T20:57:14.495510Z"
+    },
+    {
+      "id": "307fd3f9-4114-4909-ac26-e054afccd6da",
+      "author": "derek.norrbom",
+      "text": "Verified and closed. item_account_id = getattr(item, 'accountId', None) or account_key is applied to both Score.Input metadata and the persisted ScoreResult accountId; missing PLEXUS_ACCOUNT_KEY now raises with status 500 and (added during review) an explicit account_configuration_missing reason code. Both Gherkin scenarios covered: empty-item-account fallback test asserts persisted and metadata account values, and the missing-account test asserts the 5xx plus reason code. Focused suite green.",
+      "created_at": "2026-06-10T21:14:46.215661Z"
+    }
+  ],
+  "created_at": "2026-06-10T20:38:40.758499Z",
+  "updated_at": "2026-06-10T21:14:46.225308Z",
+  "closed_at": "2026-06-10T21:14:46.225308Z",
+  "custom": {}
+}

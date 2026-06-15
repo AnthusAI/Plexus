@@ -30,6 +30,30 @@ def load_env_file(env_path: str) -> dict:
     return env_vars
 
 
+def graphql_request(api_url: str, api_key: str, query: str, variables: dict) -> dict:
+    """Run a GraphQL request and return the unwrapped data payload."""
+    response = requests.post(
+        api_url,
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": api_key
+        },
+        json={
+            "query": query,
+            "variables": variables
+        },
+        timeout=30,
+    )
+    if response.status_code != 200:
+        raise RuntimeError(f"HTTP {response.status_code}: {response.text}")
+
+    payload = response.json()
+    if 'errors' in payload:
+        raise RuntimeError(f"GraphQL errors: {payload['errors']}")
+
+    return payload['data']
+
+
 def create_demo_scorecard(api_url: str, api_key: str, account_id: str) -> dict:
     """Create a demo scorecard with generic call-center quality scores."""
 
@@ -57,29 +81,13 @@ def create_demo_scorecard(api_url: str, api_key: str, account_id: str) -> dict:
     }
 
     print("   Creating scorecard...")
-    response = requests.post(
-        api_url,
-        headers={
-            "Content-Type": "application/json",
-            "x-api-key": api_key
-        },
-        json={
-            "query": scorecard_mutation,
-            "variables": scorecard_input
-        }
-    )
-
-    if response.status_code != 200:
-        print(f"   ❌ Failed to create scorecard: HTTP {response.status_code}")
-        print(response.text)
+    try:
+        data = graphql_request(api_url, api_key, scorecard_mutation, scorecard_input)
+    except RuntimeError as exc:
+        print(f"   ❌ Failed to create scorecard: {exc}")
         return None
 
-    data = response.json()
-    if 'errors' in data:
-        print(f"   ❌ GraphQL errors: {data['errors']}")
-        return None
-
-    scorecard = data['data']['createScorecard']
+    scorecard = data['createScorecard']
     scorecard_id = scorecard['id']
     print(f"   ✅ Created scorecard: {scorecard['key']} (ID: {scorecard_id})")
 
@@ -103,29 +111,13 @@ def create_demo_scorecard(api_url: str, api_key: str, account_id: str) -> dict:
     }
 
     print("   Creating scorecard section...")
-    response = requests.post(
-        api_url,
-        headers={
-            "Content-Type": "application/json",
-            "x-api-key": api_key
-        },
-        json={
-            "query": section_mutation,
-            "variables": section_input
-        }
-    )
-
-    if response.status_code != 200:
-        print(f"   ❌ Failed to create section: HTTP {response.status_code}")
-        print(response.text)
+    try:
+        data = graphql_request(api_url, api_key, section_mutation, section_input)
+    except RuntimeError as exc:
+        print(f"   ❌ Failed to create section: {exc}")
         return None
 
-    data = response.json()
-    if 'errors' in data:
-        print(f"   ❌ GraphQL errors: {data['errors']}")
-        return None
-
-    section = data['data']['createScorecardSection']
+    section = data['createScorecardSection']
     section_id = section['id']
     print(f"   ✅ Created section: {section['name']} (ID: {section_id})")
 
@@ -335,6 +327,15 @@ Output format (MANDATORY):
     }
     """
 
+    update_score_mutation = """
+    mutation UpdateScoreChampion($input: UpdateScoreInput!) {
+        updateScore(input: $input) {
+            id
+            championVersionId
+        }
+    }
+    """
+
     import uuid
     import yaml
 
@@ -356,29 +357,13 @@ Output format (MANDATORY):
             }
         }
 
-        response = requests.post(
-            api_url,
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": api_key
-            },
-            json={
-                "query": score_mutation,
-                "variables": score_input
-            }
-        )
-
-        if response.status_code != 200:
-            print(f"      ❌ Failed to create score: HTTP {response.status_code}")
-            print(response.text)
+        try:
+            data = graphql_request(api_url, api_key, score_mutation, score_input)
+        except RuntimeError as exc:
+            print(f"      ❌ Failed to create score: {exc}")
             continue
 
-        data = response.json()
-        if 'errors' in data:
-            print(f"      ❌ GraphQL errors creating score: {data['errors']}")
-            continue
-
-        score = data['data']['createScore']
+        score = data['createScore']
         score_id = score['id']
         print(f"      ✅ Created score: {score['key']} (ID: {score_id})")
 
@@ -424,30 +409,28 @@ Output format (MANDATORY):
             }
         }
 
-        response = requests.post(
-            api_url,
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": api_key
-            },
-            json={
-                "query": score_version_mutation,
-                "variables": version_input
-            }
-        )
-
-        if response.status_code != 200:
-            print(f"      ❌ Failed to create score version: HTTP {response.status_code}")
-            print(response.text)
+        try:
+            data = graphql_request(api_url, api_key, score_version_mutation, version_input)
+        except RuntimeError as exc:
+            print(f"      ❌ Failed to create score version: {exc}")
             continue
 
-        data = response.json()
-        if 'errors' in data:
-            print(f"      ❌ GraphQL errors creating version: {data['errors']}")
-            continue
-
-        version = data['data']['createScoreVersion']
+        version = data['createScoreVersion']
         print(f"      ✅ Created score version (ID: {version['id']})")
+
+        champion_input = {
+            "input": {
+                "id": score_id,
+                "championVersionId": version["id"]
+            }
+        }
+        try:
+            graphql_request(api_url, api_key, update_score_mutation, champion_input)
+        except RuntimeError as exc:
+            print(f"      ❌ Failed to set champion version: {exc}")
+            continue
+
+        print(f"      ✅ Set champion version for score {score['key']}")
 
         created_scores.append(score)
         order += 1
@@ -506,8 +489,9 @@ def main():
     for score in result['scores']:
         print(f"   - {score['name']}")
 
-    print(f"\n💡 You can now use scorecard '{result['scorecard']['key']}' for demos")
-    print(f"   Example: ./demo_k8s.sh ProfessionalTone")
+    print(f"\nYou can now use scorecard '{result['scorecard']['key']}' for Envoy scoring tests")
+    print("   Example: docker/scripts/test_envoy_scoring_api.sh --scorecard "
+          f"{result['scorecard']['key']} --score ProfessionalTone --item-id <item-id>")
 
     return 0
 

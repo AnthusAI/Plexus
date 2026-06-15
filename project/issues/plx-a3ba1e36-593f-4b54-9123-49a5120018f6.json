@@ -1,0 +1,31 @@
+{
+  "id": "plx-a3ba1e36-593f-4b54-9123-49a5120018f6",
+  "title": "Adopt immutable image tags for non-local deployments",
+  "description": "The local POC reuses the :local image tag plus unconditional kubectl rollout restart in setup_envoy_gateway_poc.sh so kind picks up rebuilt images. That is the standard kind workaround and fine locally.\n\nFor any shared or production environment, build and deploy images tagged with the git SHA (or use digest pinning) so that Helm upgrades drive rollouts deterministically and rollback to a prior tag works. Also consider a small graphql(query, variables) helper in docker/scripts/setup_demo_scorecard.py to collapse the five duplicated requests.post + status-check + GraphQL-error-check blocks, and decide whether a score whose champion-version promotion fails should count as created (currently it is created but skipped from the created list).",
+  "type": "task",
+  "status": "closed",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4c7f09c3-cd52-4690-8348-5dd47f9da60d",
+      "author": "derek.norrbom",
+      "text": "Progress: added non-local immutable worker image tag validation and cleaned up the demo scorecard script. The worker chart now has global.environment and fails rendering outside local/development/dev/test when image.tag is latest or local; render tests cover rejection and acceptance of an immutable tag. setup_demo_scorecard.py now uses a shared graphql_request helper with timeout and consistent HTTP/GraphQL error handling, and scores are only included after champion-version promotion succeeds. Validation passed: render-based Helm pytest, py_compile, helm lint/template for worker and stack, git diff --check, and rcql --scan-files for the changed script/test returned Total: 0.",
+      "created_at": "2026-06-10T21:03:28.364823Z"
+    },
+    {
+      "id": "c2a1ee38-6fda-4dfe-b377-63efb89b7dad",
+      "author": "derek.norrbom",
+      "text": "Verified and closed. The worker chart now enforces immutable tags at render time: validation.yaml fails rendering when global.environment is outside local/development/dev/test and image.tag is latest or local, with render tests covering rejection and acceptance; README documents using git SHA or digest-derived tags for non-local environments. Demo scorecard script now uses a shared graphql_request helper with timeout and consistent HTTP/GraphQL error handling, and scores only count as created after champion-version promotion succeeds. Actual SHA-tagged image publishing belongs to whatever CI/deploy pipeline serves a future non-local environment; the chart-level guard ensures it cannot be skipped silently.",
+      "created_at": "2026-06-10T21:15:06.700342Z"
+    }
+  ],
+  "created_at": "2026-06-10T20:39:20.850862Z",
+  "updated_at": "2026-06-10T21:15:06.710438Z",
+  "closed_at": "2026-06-10T21:15:06.710438Z",
+  "custom": {}
+}

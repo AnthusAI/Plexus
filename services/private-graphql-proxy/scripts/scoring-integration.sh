@@ -13,7 +13,7 @@ Required environment:
   PLEXUS_PROXY_SCORING_SCORE
 
 Optional:
-  PLEXUS_PROXY_SCORING_DATASET=fancyzhx/ag_news
+  PLEXUS_PROXY_SCORING_DATASET=apptek-com/apptek_callcenter_dialogues
   PLEXUS_PROXY_SCORING_SPLIT=test
   PLEXUS_PROXY_SCORING_FIXTURE_LIMIT=3
 EOF

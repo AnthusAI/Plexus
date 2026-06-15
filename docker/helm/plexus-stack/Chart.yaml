@@ -1,6 +1,6 @@
 apiVersion: v2
 name: plexus-stack
-description: Complete Plexus data processing stack with PostgreSQL, GraphQL proxy, and Celery workers
+description: Complete Plexus data processing stack with PostgreSQL, GraphQL proxy, and HTTP scoring workers
 type: application
 version: 1.0.0
 appVersion: "1.0.0"
@@ -25,7 +25,7 @@ dependencies:
     tags:
       - application
 
-  # Plexus workers - Celery workers for scoring
+  # Plexus workers - HTTP scoring API workers for Envoy Gateway routing
   - name: plexus-worker
     version: "1.0.0"
     repository: "file://../plexus-worker"

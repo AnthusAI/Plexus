@@ -47,6 +47,13 @@ Selector labels
 app.kubernetes.io/name: {{ include "plexus-worker.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: worker
+{{- end }}
+
+{{/*
+Pod labels
+*/}}
+{{- define "plexus-worker.podLabels" -}}
+{{ include "plexus-worker.selectorLabels" . }}
 worker-type: {{ .Values.workerType }}
 {{- end }}
 
@@ -73,6 +80,29 @@ Create the name of the secret to use for Plexus API
 {{- end }}
 
 {{/*
+Create the Plexus API URL for the worker secret.
+*/}}
+{{- define "plexus-worker.apiUrl" -}}
+{{- if .Values.plexus.api.url -}}
+{{- .Values.plexus.api.url -}}
+{{- else -}}
+{{- $global := default dict .Values.global -}}
+{{- $services := default dict $global.services -}}
+{{- $graphqlProxy := default dict $services.graphqlProxy -}}
+{{- if $graphqlProxy.externalUrl -}}
+{{- $graphqlProxy.externalUrl -}}
+{{- else if and $graphqlProxy.host $graphqlProxy.port -}}
+{{- $host := tpl $graphqlProxy.host . -}}
+{{- $port := $graphqlProxy.port -}}
+{{- $path := default "/graphql" $graphqlProxy.path -}}
+{{- printf "http://%s:%d%s" $host (int $port) $path -}}
+{{- else -}}
+{{- "" -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Create the name of the secret to use for AWS credentials
 */}}
 {{- define "plexus-worker.awsSecretName" -}}
@@ -91,5 +121,27 @@ Create the name of the secret to use for Celery broker
 {{- .Values.celery.broker.existingSecret }}
 {{- else }}
 {{- include "plexus-worker.fullname" . }}-celery-secrets
+{{- end }}
+{{- end }}
+
+{{/*
+Create the Gateway name for scoring API HTTP routing.
+*/}}
+{{- define "plexus-worker.gatewayName" -}}
+{{- if .Values.scoringApi.gateway.gatewayName }}
+{{- .Values.scoringApi.gateway.gatewayName | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-gateway" (include "plexus-worker.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Create the HTTPRoute name for scoring API HTTP routing.
+*/}}
+{{- define "plexus-worker.routeName" -}}
+{{- if .Values.scoringApi.gateway.routeName }}
+{{- .Values.scoringApi.gateway.routeName | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-route" (include "plexus-worker.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 {{- end }}

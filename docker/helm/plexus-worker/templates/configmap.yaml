@@ -20,6 +20,12 @@ data:
   celery-concurrency: {{ .Values.celery.concurrency | quote }}
   {{- end }}
 
+  {{- if eq .Values.workerType "scoring-api" }}
+  # Scoring API configuration
+  scoring-api-host: {{ .Values.scoringApi.host | quote }}
+  scoring-api-port: {{ .Values.scoringApi.port | quote }}
+  {{- end }}
+
   {{- if eq .Values.workerType "console-worker" }}
   # Console worker configuration
   console-response-target: {{ .Values.console.responseTarget | quote }}

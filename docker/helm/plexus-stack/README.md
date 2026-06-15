@@ -1,6 +1,6 @@
 # Plexus Stack Helm Chart
 
-Complete Kubernetes deployment for the Plexus data processing stack, including PostgreSQL, GraphQL Proxy, and Celery workers.
+Complete Kubernetes deployment for the Plexus data processing stack, including PostgreSQL, GraphQL Proxy, and HTTP scoring workers routed by Envoy Gateway.
 
 ## Architecture
 
@@ -8,19 +8,18 @@ This umbrella chart deploys three main components:
 
 1. **PostgreSQL** (Bitnami chart) - Stores private data (Items, ScoreResults, FeedbackItems)
 2. **GraphQL Proxy** (custom chart) - The Adapter that routes between PostgreSQL and AWS AppSync
-3. **Plexus Workers** (custom chart) - Celery workers that process scoring jobs
+3. **Plexus Workers** (custom chart) - Synchronous scoring API workers
 
 ```
 ┌─────────────────┐
-│   RabbitMQ      │  (External - provided by infrastructure)
-│  Message Queue  │
+│ Envoy Gateway   │  (Gateway API HTTP entrypoint)
 └────────┬────────┘
          │
-         │ Job Queue
+         │ POST /v1/score
          ▼
 ┌─────────────────┐      ┌──────────────────┐      ┌─────────────────┐
 │ Plexus Workers  │─────▶│  GraphQL Proxy   │─────▶│   PostgreSQL    │
-│  (Celery)       │      │  (The Adapter)   │      │ (Private Data)  │
+│ (scoring-api)   │      │  (The Adapter)   │      │ (Private Data)  │
 └─────────────────┘      └────────┬─────────┘      └─────────────────┘
                                   │
                                   │ Control-plane
@@ -35,35 +34,14 @@ This umbrella chart deploys three main components:
 
 ## Prerequisites
 
-- Kubernetes cluster (Docker Desktop, EKS, GKE, or AKS)
+- Kubernetes cluster (kind, Docker Desktop, EKS, GKE, or AKS)
 - Helm 3.x
 - `kubectl` configured to access your cluster
-- RabbitMQ accessible from the cluster (or running locally in docker-compose)
+- Envoy Gateway installed in the cluster, or use `docker/scripts/setup_envoy_gateway_poc.sh` for a local POC
 
 ## Quick Start (Local Development)
 
-### 1. Start RabbitMQ (in docker-compose)
-
-```bash
-cd docker
-docker-compose -f docker-compose.full-stack.yml --env-file .env.full-stack up -d rabbitmq postgres
-```
-
-This starts RabbitMQ on `localhost:5672` which Kubernetes pods can reach via `host.docker.internal`.
-
-### 2. Build Docker Images
-
-```bash
-# Build worker image
-cd docker
-docker build -t plexus-worker:local -f Dockerfile ..
-
-# Build proxy image
-cd ../services/private-graphql-proxy
-docker build -t plexus-graphql-proxy:local .
-```
-
-### 3. Configure Values
+### 1. Create Local Values
 
 ```bash
 cd docker/helm/plexus-stack
@@ -71,57 +49,100 @@ cp values-local.yaml.example values-local.yaml
 ```
 
 Edit `values-local.yaml` and set:
+- `graphql-proxy.config.upstreamApiUrl` - Your AWS AppSync endpoint
 - `graphql-proxy.config.upstreamApiKey` - Your AWS AppSync API key
 - `plexus-worker.plexus.account.key` - Your Plexus account key
 - `plexus-worker.llm.openai.apiKey` - Your OpenAI API key
 - `plexus-worker.llm.anthropic.apiKey` - Your Anthropic API key
 
-### 4. Install Bitnami Repository
+### 2. Run the Local Envoy Gateway POC
 
 ```bash
+cd ../../..
+docker/scripts/setup_envoy_gateway_poc.sh
+```
+
+The script checks for Docker, kind, kubectl, and Helm; creates a kind cluster if needed; installs Envoy Gateway separately; creates the local `GatewayClass`; builds local images; loads them into kind; deploys this stack with local image references; validates the scoring API Service, Gateway, and HTTPRoute; and prints the Envoy data-plane Service to port-forward. The values file remains the source of truth for worker type and Gateway behavior.
+
+If Helm reports an immutable Deployment selector error in an old disposable kind
+cluster, delete the stale local worker Deployment and rerun the script:
+
+```bash
+kubectl delete deployment/plexus-plexus-worker -n plexus-local
+```
+
+Deleting and recreating the disposable kind cluster is also valid.
+
+### 3. Manual Deployment
+
+```bash
+# Build local native images for kind
+docker build -t plexus-worker:local -f docker/Dockerfile .
+docker build -t plexus-graphql-proxy:local -f services/private-graphql-proxy/Dockerfile .
+
+# Install chart dependencies
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo update
-```
+helm dependency update docker/helm/plexus-stack
 
-### 5. Deploy the Stack
-
-```bash
-helm install plexus . \
+# Deploy
+helm upgrade --install plexus docker/helm/plexus-stack \
   --namespace plexus-local \
   --create-namespace \
-  --values values-local.yaml
+  --values docker/helm/plexus-stack/values-local.yaml
 ```
 
-### 6. Verify Deployment
+For non-local clusters, publish linux/amd64 images first, then point chart values to that registry/tag:
 
 ```bash
-# Check all pods are running
+REGISTRY=your-registry IMAGE_TAG=1.52.0 docker/scripts/build_k8s_images.sh
+```
+
+### 4. Verify Deployment
+
+```bash
 kubectl get pods -n plexus-local
-
-# Check services
 kubectl get svc -n plexus-local
-
-# View logs
+kubectl get gateway,httproute -n plexus-local
 kubectl logs -n plexus-local -l app.kubernetes.io/name=plexus-worker --tail=50 -f
+
+# Bypass Envoy when isolating worker health.
+kubectl port-forward -n plexus-local svc/plexus-plexus-worker 8000:8000
+curl http://localhost:8000/healthz
+curl http://localhost:8000/readyz
 ```
 
-### 7. Test the Stack
+### 5. Test Through Envoy Gateway
 
 ```bash
-# Port-forward to the proxy
-kubectl port-forward -n plexus-local svc/plexus-graphql-proxy 8000:8000
+# Find the Envoy Service for the Gateway and port-forward it.
+kubectl get svc -A -l gateway.envoyproxy.io/owning-gateway-name=plexus-plexus-worker-gateway
+kubectl port-forward -n <envoy-service-namespace> svc/<envoy-service-name> 8080:80
 
-# In another terminal, submit a test job
-cd docker
-./scripts/quick_test.sh "Courtesy"
+# Missing required fields should return HTTP 422 from FastAPI.
+curl -i -X POST http://localhost:8080/v1/score \
+  -H 'content-type: application/json' \
+  -d '{"scoring_job_id":"poc-route-test"}'
+
+# A complete request reaches the scoring path. Use real existing IDs for a success.
+curl -X POST http://localhost:8080/v1/score \
+  -H 'content-type: application/json' \
+  -d '{
+    "scoring_job_id": "job-123",
+    "scorecard": "scorecard-key-or-name",
+    "score": "score-key-or-name",
+    "item_id": "item-123"
+  }'
 ```
+
+In kind, the Envoy data-plane Service commonly shows `EXTERNAL-IP <pending>` and the Gateway may report `Programmed=False` while it waits for a load-balancer address. Local validation should use the Envoy Service port-forward above. A successful scoring response also depends on valid API/LLM credentials and real existing `scorecard`, `score`, and `item_id` values.
 
 ## Production Deployment
 
 For production deployments, you'll want to:
 
 1. **Use External PostgreSQL** (RDS, Cloud SQL, etc.)
-2. **Use External RabbitMQ** (provided by your infrastructure)
+2. **Use Platform Envoy Gateway** (provided by your infrastructure)
 3. **Use External Secrets** (AWS Secrets Manager, etc.)
 4. **Enable Autoscaling**
 5. **Configure Resource Limits**
@@ -160,17 +181,21 @@ graphql-proxy:
 
 plexus-worker:
   enabled: true
-  workerType: celery
+  workerType: scoring-api
   replicaCount: 10
   
   plexus:
     createSecrets: false
     existingSecret: "plexus-worker-secrets"
   
-  celery:
-    broker:
-      createSecrets: false
-      existingSecret: "rabbitmq-credentials"
+  scoringApi:
+    enabled: true
+    gateway:
+      enabled: true
+      createGateway: false
+      gatewayName: "platform-gateway"
+      gatewayNamespace: "gateway-system"
+      pathPrefix: /v1/score
   
   llm:
     createSecrets: false
@@ -228,10 +253,10 @@ Key parameters:
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `plexus-worker.enabled` | Deploy workers | `true` |
-| `plexus-worker.workerType` | Worker type | `celery` |
+| `plexus-worker.workerType` | Worker type | `scoring-api` |
 | `plexus-worker.replicaCount` | Number of workers | `2` |
-| `plexus-worker.celery.broker.url` | RabbitMQ URL | `` |
-| `plexus-worker.celery.queue` | Queue name | `scoring-requests` |
+| `plexus-worker.scoringApi.gateway.enabled` | Create Gateway API route | `true` |
+| `plexus-worker.scoringApi.gateway.pathPrefix` | HTTP path prefix | `/v1/score` |
 | `plexus-worker.llm.openai.apiKey` | OpenAI API key | `` |
 | `plexus-worker.autoscaling.enabled` | Enable HPA | `false` |
 
@@ -273,14 +298,18 @@ Common issues:
 - PVC not bound (check storage class)
 - Image pull errors (check image name/tag)
 
-### Workers Not Processing Jobs
+### Scoring API Not Responding
 
 ```bash
 # Check worker logs
 kubectl logs -n plexus-local -l app.kubernetes.io/name=plexus-worker --tail=100
 
-# Check if worker can reach RabbitMQ
-kubectl exec -n plexus-local <worker-pod> -- curl -v amqp://rabbitmq:5672
+# Check worker Service and Gateway API route
+kubectl get svc,gateway,httproute -n plexus-local
+
+# Port-forward directly to isolate Envoy from worker issues
+kubectl port-forward -n plexus-local svc/plexus-plexus-worker 8000:8000
+curl http://localhost:8000/readyz
 ```
 
 ### Proxy Returns 500 Errors
@@ -342,4 +371,4 @@ helm dependency list
 
 For issues or questions:
 - GitHub Issues: https://github.com/AnthusAI/Plexus/issues
-- Documentation: See `docker/ARCHITECTURE.md` and `docker/FULL_STACK_LOCAL.md`
+- Documentation: See `docker/ARCHITECTURE.md` and `docker/scripts/README.md`

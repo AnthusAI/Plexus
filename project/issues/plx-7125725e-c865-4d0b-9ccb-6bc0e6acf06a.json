@@ -1,0 +1,18 @@
+{
+  "id": "plx-7125725e-c865-4d0b-9ccb-6bc0e6acf06a",
+  "title": "Validate scoring stack on a managed cloud Kubernetes cluster",
+  "description": "Local kind validates Gateway API behavior, chart correctness, and the scoring path, but cannot validate cloud LoadBalancer provisioning, real TLS, registry pulls, or amd64 nodes. Stand up a small short-lived managed Kubernetes cluster on the provider matching the production target, deploy the stack with registry-published amd64 images, and run the end-to-end scoring request through the provisioned load balancer. Pending decision on subscription/account to use; depends on the amd64 image build chore. Tear the cluster down after validation to control cost.",
+  "type": "task",
+  "status": "open",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-10T23:10:06.620349Z",
+  "updated_at": "2026-06-10T23:10:06.620349Z",
+  "closed_at": null,
+  "custom": {}
+}

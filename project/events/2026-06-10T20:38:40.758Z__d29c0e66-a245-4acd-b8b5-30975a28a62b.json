@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d29c0e66-a245-4acd-b8b5-30975a28a62b",
+  "issue_id": "plx-e3a0bfa6-f32c-4232-8b0f-768ee8cdb8a8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-10T20:38:40.758Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Two account-handling defects in plexus/workers/scoring_job.py:\n\n1. `getattr(item, \"accountId\", account_key)` (used in both Score.Input metadata and the createScoreResult input) only falls back when the attribute is *absent*. An item whose accountId attribute exists but is None/empty persists None instead of falling back to the account key. Use a falsy-aware fallback: `getattr(item, \"accountId\", None) or account_key`.\n\n2. A missing PLEXUS_ACCOUNT_KEY environment variable raises ScoringJobError with status 400, but absent server configuration is the server's fault, not the caller's; it should surface as a 5xx.\n\n```gherkin\nFeature: Scoring job account handling\n  Scenario: Item with empty account ID falls back to the account key\n    Given an item whose accountId attribute is present but empty\n    When a scoring job persists its result\n    Then the persisted result uses the request or environment account key\n\n  Scenario: Missing server account key is a server error\n    Given no account key in the request or the environment\n    When a scoring request is processed\n    Then the API responds with a 5xx status\n```",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "priority": 2,
+    "status": "open",
+    "title": "Scoring job account-key handling for empty item account IDs and missing server config"
+  }
+}

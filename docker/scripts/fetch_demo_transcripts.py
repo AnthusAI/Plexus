@@ -25,14 +25,23 @@ def fetch_transcripts_from_huggingface(num_samples: int = 10) -> List[Dict]:
     print(f"📥 Fetching {num_samples} sample transcripts from HuggingFace...")
 
     try:
-        from datasets import load_dataset
+        from datasets import Features, Value, load_dataset
 
         # Load the dataset (test split for demo purposes)
         print("   Loading dataset: apptek-com/apptek_callcenter_dialogues...")
+        # The dataset includes audio, but this seeder only needs transcript text.
+        # Explicit features prevent the datasets library from requiring audio codecs.
+        features = Features({
+            "text": Value("string"),
+            "domain": Value("string"),
+            "gender": Value("string"),
+            "accent": Value("string"),
+        })
         dataset = load_dataset(
             "apptek-com/apptek_callcenter_dialogues",
             split="test",
-            streaming=True  # Stream to avoid downloading entire dataset
+            streaming=True,  # Stream to avoid downloading entire dataset
+            features=features,
         )
 
         transcripts = []
@@ -269,7 +278,7 @@ def main():
 
     print("\n✅ Demo data setup complete!")
     print(f"   {len(item_ids)} items ready for testing")
-    print(f"\n💡 Use these items with: ./demo_k8s.sh <score-name>")
+    print("\nUse these items with docker/scripts/test_envoy_scoring_api.sh")
 
     return 0
 
