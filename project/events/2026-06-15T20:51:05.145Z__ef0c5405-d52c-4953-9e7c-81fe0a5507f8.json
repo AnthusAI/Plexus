@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "ef0c5405-d52c-4953-9e7c-81fe0a5507f8",
+  "issue_id": "plx-ae1de983-8c4f-4b33-9078-716e8f95a594",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-15T20:51:05.145Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-0a3a2b0e-4ad3-409e-80ea-b98b76e1f2b8",
+    "priority": 1,
+    "status": "open",
+    "title": "Switch values-local.yaml to local backend mode with trusted_open auth"
+  }
+}

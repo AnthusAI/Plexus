@@ -1,0 +1,18 @@
+{
+  "id": "plx-ae1de983-8c4f-4b33-9078-716e8f95a594",
+  "title": "Switch values-local.yaml to local backend mode with trusted_open auth",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-0a3a2b0e-4ad3-409e-80ea-b98b76e1f2b8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-15T20:51:05.145769Z",
+  "updated_at": "2026-06-15T21:01:59.109019Z",
+  "closed_at": "2026-06-15T21:01:59.109019Z",
+  "custom": {}
+}

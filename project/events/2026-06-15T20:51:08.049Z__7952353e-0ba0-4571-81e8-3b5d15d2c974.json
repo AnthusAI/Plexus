@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7952353e-0ba0-4571-81e8-3b5d15d2c974",
+  "issue_id": "plx-57e1d061-8dbe-402e-8e68-a070c7228618",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-15T20:51:08.049Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-0a3a2b0e-4ad3-409e-80ea-b98b76e1f2b8",
+    "priority": 2,
+    "status": "open",
+    "title": "Add demo data seeding and smoke verification to setup_envoy_gateway_poc.sh"
+  }
+}

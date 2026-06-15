@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "d55e9e1b-39c2-4904-8799-3da9416a1b42",
+  "issue_id": "plx-e18d6f4c-cb83-4ad1-8455-78ac48b101cd",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-15T20:51:12.317Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "sub-task",
+    "labels": [],
+    "parent": "plx-0a3a2b0e-4ad3-409e-80ea-b98b76e1f2b8",
+    "priority": 3,
+    "status": "open",
+    "title": "Update values-local.yaml.example with local MVP configuration"
+  }
+}
