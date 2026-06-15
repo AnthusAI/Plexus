@@ -25,43 +25,42 @@ class TestScoreIdIntegration:
         # Complete API data as would be returned by dashboard API
         self.complete_api_data = {
             'id': self.scorecard_id,
-            'name': 'Selectquote - MEL HRA v1.0',
-            'key': 'selectquote_mel_hra',
+            'name': 'Example Scorecard',
+            'key': 'example-scorecard',
             'externalId': '1461',
             'sections': {
                 'items': [{
                     'id': 'section-uuid-1',
-                    'name': 'Health Questions',
+                    'name': 'Example Section',
                     'scores': {
                         'items': [{
                             'id': self.score_uuid,
-                            'name': 'Prescriptions Question Repeated - AI',
-                            'key': 'prescriptions-question-repeated',
+                            'name': 'Example Score',
+                            'key': 'example-score',
                             'externalId': None,
                             'championVersionId': self.champion_version_id,
                             'type': 'LangGraphScore',
-                            'description': 'Detects when prescription questions are repeated'
+                            'description': 'Example score for testing'
                         }]
                     }
                 }]
             }
         }
-        
+
         # YAML configuration as would be loaded from API
         self.yaml_config_string = f"""
-name: Prescriptions Question Repeated - AI
-key: prescriptions-question-repeated
+name: Example Score
+key: example-score
 id: {self.external_id}
 class: LangGraphScore
 model_provider: openai
 model_name: gpt-4o-mini
-description: Detects when the agent asks about prescriptions multiple times
+description: Example score for testing
 graph:
   - name: classifier
     type: YesOrNoClassifier
     prompt: |
-      Does the agent ask about prescriptions more than once in this conversation?
-      Look for repeated questions about medications, drugs, or prescriptions.
+      Example classification prompt.
 output:
   type: classification
   classes: ["Yes", "No"]
@@ -90,11 +89,11 @@ data:
         
         # Should use database UUID from API
         assert score_config['id'] == self.score_uuid
-        assert score_config['name'] == 'Prescriptions Question Repeated - AI'
+        assert score_config['name'] == 'Example Score'
         assert score_config['originalExternalId'] == self.external_id
         
         # Step 3: Simulate CLI evaluation command processing
-        # User runs: plexus evaluate accuracy --scorecard selectquote_mel_hra --score 45925
+        # User runs: plexus evaluate accuracy --scorecard example-scorecard --score 45925
         primary_score_identifier = self.external_id  # CLI input "45925"
         
         # Step 4: CLI matching logic (as implemented in EvaluationCommands.py)
@@ -175,9 +174,9 @@ data:
             # By external ID (original problem case)
             self.external_id,
             # By name
-            'Prescriptions Question Repeated - AI',
+            'Example Score',
             # By key
-            'prescriptions-question-repeated', 
+            'example-score',
             # By database UUID
             self.score_uuid
         ]
@@ -203,8 +202,8 @@ data:
         
         # Config already has database UUID (no replacement scenario)
         uuid_config_string = f"""
-name: Prescriptions Question Repeated - AI
-key: prescriptions-question-repeated
+name: Example Score
+key: example-score
 id: {self.score_uuid}
 class: LangGraphScore
 description: Score already has correct UUID
@@ -227,7 +226,7 @@ description: Score already has correct UUID
         # CLI matching should still work by name and UUID
         name_matches = [
             sc for sc in scorecard.scores
-            if sc.get('name') == 'Prescriptions Question Repeated - AI'
+            if sc.get('name') == 'Example Score'
         ]
         assert len(name_matches) == 1
         

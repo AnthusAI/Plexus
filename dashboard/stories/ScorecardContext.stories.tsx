@@ -17,16 +17,16 @@ Default.args = {
   setSelectedScore: () => {},
   useMockData: true,
   availableFields: [
-    { value: 'scorecard-1', label: 'SelectQuote Term Life v1' },
-    { value: 'scorecard-2', label: 'CS3 Nexstar v1' },
+    { value: 'scorecard-1', label: 'Example Scorecard' },
+    { value: 'scorecard-2', label: 'Example Scorecard' },
     { value: 'scorecard-3', label: 'CS3 Services v2' },
-    { value: 'scorecard-4', label: 'CS3 Audigy' },
+    { value: 'scorecard-4', label: 'Example Scorecard' },
   ],
   timeRangeOptions: [
     { value: "good-call", label: "Good Call" },
-    { value: "agent-branding", label: "Agent Branding" },
+    { value: "example-score", label: "Example Score" },
     { value: "temperature-check", label: "Temperature Check" },
-    { value: "assumptive-close", label: "Assumptive Close" },
+    { value: "example-score-2", label: "Example Score" },
   ],
 }
 

@@ -4,9 +4,10 @@ Direct feedback report commands (no report template required).
 
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import nullcontext
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import click
@@ -30,6 +31,7 @@ from plexus.reports.service import (
     run_programmatic_report_and_persist,
 )
 from plexus.runtime_budget import RuntimeBudgetLimitExceeded, RuntimeBudgetMeter, RuntimeBudgetSpec
+from plexus.feedback_integrity import collect_feedback_score_integrity
 
 
 def _print_result(
@@ -85,6 +87,30 @@ def _window_label(days: Optional[int], start_date: Optional[str], end_date: Opti
     if days is not None:
         return f"Last {days} days"
     return "Default window"
+
+
+def _parse_optional_iso_date(date_text: Optional[str], field_name: str) -> Optional[datetime]:
+    if date_text is None:
+        return None
+    normalized = str(date_text).strip()
+    if not normalized:
+        return None
+    try:
+        parsed = datetime.fromisoformat(normalized)
+        parsed_from_date_only = len(normalized) == 10 and normalized.count("-") == 2
+    except ValueError:
+        try:
+            parsed = datetime.strptime(normalized, "%Y-%m-%d")
+            parsed_from_date_only = True
+        except ValueError as exc:
+            raise click.ClickException(
+                f"'{field_name}' must be YYYY-MM-DD or ISO-8601 datetime."
+            ) from exc
+    if parsed_from_date_only and field_name == "end_date":
+        parsed = parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _score_has_nonempty_champion_guidelines(
@@ -1091,6 +1117,67 @@ def overview(
         payload["warnings"] = [contradictions_skip_reason]
     if first_error:
         payload["error"] = first_error
+
+    if output_format == "yaml":
+        console.print(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
+    else:
+        console.print(json.dumps(payload, indent=2, default=str))
+
+
+@report.command(name="integrity")
+@click.option("--days", type=int, required=False, help="Trailing window in days.")
+@click.option("--start-date", required=False, help="Inclusive start date in YYYY-MM-DD.")
+@click.option("--end-date", required=False, help="Inclusive end date in YYYY-MM-DD.")
+@click.option(
+    "--limit",
+    type=int,
+    required=False,
+    help="Optional max feedback-item rows to scan (for quick diagnostics).",
+)
+@click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "yaml"]),
+    default="json",
+    show_default=True,
+)
+def integrity(
+    days: Optional[int],
+    start_date: Optional[str],
+    end_date: Optional[str],
+    limit: Optional[int],
+    account_identifier: Optional[str],
+    output_format: str,
+) -> None:
+    """Report orphaned feedback score references and impact percentages."""
+    window_config = build_window_config(
+        days=_coerce_optional_int(days, "days"),
+        start_date=start_date,
+        end_date=end_date,
+    )
+    client = create_client()
+    if not client:
+        raise click.ClickException("Could not create dashboard client.")
+    account_id = resolve_account_id_for_command(client, account_identifier)
+    start_at: Optional[datetime] = None
+    end_at: Optional[datetime] = None
+    if "start_date" in window_config:
+        start_at = _parse_optional_iso_date(window_config.get("start_date"), "start_date")
+        end_at = _parse_optional_iso_date(window_config.get("end_date"), "end_date")
+    elif "days" in window_config:
+        end_at = datetime.now(timezone.utc)
+        start_at = end_at - timedelta(days=int(window_config["days"]))
+
+    payload = asyncio.run(
+        collect_feedback_score_integrity(
+            api_client=client,
+            account_id=account_id,
+            start_at=start_at,
+            end_at=end_at,
+            limit=limit,
+        )
+    )
 
     if output_format == "yaml":
         console.print(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))

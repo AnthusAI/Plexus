@@ -21,6 +21,10 @@ from .guideline_vetting import GuidelineVettingService
 from .feedback_scope_resolver import resolve_scorecard
 from .score_resolution import resolve_score_for_scorecard
 from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
+from plexus.feedback_analysis_preflight import (
+    FeedbackAnalysisPreflightError,
+    validate_feedback_analysis_preflight,
+)
 from plexus.feedback_item_explanations import hydrate_feedback_item_explanations
 from plexus.rubric_memory import RubricMemoryContextProvider
 
@@ -116,23 +120,31 @@ class FeedbackContradictions(BaseReportBlock):
             score_obj.id,
             str(score_version_param).strip() if score_version_param else None,
         )
+        try:
+            preflight = await validate_feedback_analysis_preflight(
+                api_client=self.api_client,
+                scorecard_id=scorecard_obj.id,
+                score_id=score_obj.id,
+                score_version_id=score_version_id,
+                require_version_configuration=True,
+                require_guidelines_text=True,
+            )
+        except FeedbackAnalysisPreflightError as exc:
+            self._log(
+                "FeedbackContradictions preflight failed: "
+                + json.dumps(exc.diagnostics, sort_keys=True),
+                level="ERROR",
+            )
+            raise
+
+        score_version_id = preflight.score_version_id
         if score_version_param:
             self._log(f"Using explicit score version: {score_version_id}")
-        elif score_version_id:
-            self._log(f"Using champion score version: {score_version_id}")
-
-        guidelines = await self._fetch_guidelines(
-            score_obj.id,
-            score_version_id=score_version_id,
-        )
-        if guidelines:
-            line_count = guidelines.count("\n") + 1
-            self._log(f"Loaded guidelines ({len(guidelines)} chars, {line_count} lines)")
         else:
-            self._log(
-                "WARNING: No guidelines found for this score - contradiction detection will be limited.",
-                level="WARNING",
-            )
+            self._log(f"Using champion score version: {score_version_id}")
+        guidelines = preflight.score_guidelines_text
+        line_count = guidelines.count("\n") + 1
+        self._log(f"Loaded guidelines ({len(guidelines)} chars, {line_count} lines)")
 
         account_id = self._get_account_id()
         self._log(f"Fetching feedback items for score {score_obj.id}...")
@@ -179,11 +191,18 @@ class FeedbackContradictions(BaseReportBlock):
             f"Fetched {len(all_items)} feedback items; {len(valid_items)} eligible "
             f"({invalid_count} excluded as already-invalid, {duplicate_count} duplicate item IDs removed)."
         )
+        diagnostics: Dict[str, Any] = {
+            "feedback_items_fetched": len(all_items),
+            "eligible_items": len(valid_items),
+            "cache_hits": 0,
+            "generated": 0,
+        }
         if max_feedback_items > 0 and len(valid_items) > max_feedback_items:
             valid_items = valid_items[:max_feedback_items]
             self._log(
                 f"Capped eligible feedback items to newest {len(valid_items)} via max_feedback_items={max_feedback_items}."
             )
+            diagnostics["eligible_items"] = len(valid_items)
 
         if not valid_items:
             date_range = {"start": start_date.isoformat(), "end": end_date.isoformat()}
@@ -225,6 +244,7 @@ class FeedbackContradictions(BaseReportBlock):
                     "score_version_id": score_version_id,
                 },
                 "topics": [],
+                "diagnostics": diagnostics,
             }
             if mode == "aligned":
                 base_output.update(
@@ -283,6 +303,10 @@ class FeedbackContradictions(BaseReportBlock):
             1
             for payload in feedback_item_explanations_by_id.values()
             if payload.get("cache_hit") is True
+        )
+        diagnostics["cache_hits"] = explanation_cache_hits
+        diagnostics["generated"] = (
+            len(feedback_item_explanations_by_id) - explanation_cache_hits
         )
         self._log(
             "Feedback explanations ready for "
@@ -369,6 +393,7 @@ class FeedbackContradictions(BaseReportBlock):
                 "enabled": include_rubric_memory and bool(rubric_memory_contexts_by_item),
                 "context_count": len(rubric_memory_contexts_by_item),
             },
+            "diagnostics": diagnostics,
         }
 
         if mode == "aligned":

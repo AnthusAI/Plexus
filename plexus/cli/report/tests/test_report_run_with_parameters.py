@@ -23,9 +23,9 @@ class TestReportParameterRendering:
 ---
 
 # Feedback Alignment Report
-## SelectQuote MEL HRA
+## Example Scorecard
 
-These agreement metrics are based on comparing the feedback edits from Selectquote over the last {{ days }} days.
+These agreement metrics are based on comparing the feedback edits over the last {{ days }} days.
 
 ```block name="Feedback Alignment"
 class: FeedbackAlignment

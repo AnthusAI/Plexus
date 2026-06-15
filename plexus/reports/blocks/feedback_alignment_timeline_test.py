@@ -252,7 +252,7 @@ async def test_resolve_scores_for_mode_uuid_checks_section_scorecard_membership(
 @pytest.mark.asyncio
 async def test_resolve_scorecard_accepts_hyphenated_name(mock_api_client):
     block = FeedbackAlignmentTimeline(
-        config={"scorecard": "Prime - EDU 3rd Party"},
+        config={"scorecard": "Example Scorecard"},
         params={"account_id": "acct-1"},
         api_client=mock_api_client,
     )
@@ -261,14 +261,14 @@ async def test_resolve_scorecard_accepts_hyphenated_name(mock_api_client):
         patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_key", return_value=None),
         patch(
             "plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name",
-            return_value=SimpleNamespace(id="sc-1", name="Prime - EDU 3rd Party"),
+            return_value=SimpleNamespace(id="sc-1", name="Example Scorecard"),
         ),
         patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_external_id", return_value=None),
     ):
-        resolved = await block._resolve_scorecard("Prime - EDU 3rd Party")
+        resolved = await block._resolve_scorecard("Example Scorecard")
 
     assert resolved.id == "sc-1"
-    assert resolved.name == "Prime - EDU 3rd Party"
+    assert resolved.name == "Example Scorecard"
 
 
 @pytest.mark.asyncio

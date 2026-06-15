@@ -12,20 +12,20 @@ export default function EvaluateScorePage() {
           <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
             <code>{`# Build/update dataset for the score
 plexus score dataset-curate \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --max-items 100 \\
   --days 180
 
 # Evaluate against the latest associated dataset
 plexus evaluate accuracy \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --use-score-associated-dataset
 
 # Optional machine-friendly output
 plexus evaluate accuracy \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --use-score-associated-dataset \\
   --json-only`}</code>
@@ -50,14 +50,14 @@ plexus evaluate accuracy \\
           <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
             <code>{`# 1) Build associated dataset from feedback
 plexus score dataset-curate \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --max-items 200 \\
   --days 180
 
 # 2) Evaluate baseline/candidate against dataset
 plexus evaluate accuracy \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --use-score-associated-dataset \\
   --baseline <evaluation-id>`}</code>
@@ -245,34 +245,34 @@ plexus dataset load \\
 
 # Or curate from qualifying feedback labels (newest-first)
 plexus score dataset-curate \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --max-items 100
 
 # Disable balancing when pure recency sampling is preferred
 plexus score dataset-curate \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --max-items 100 \\
   --no-balance
 
 # Or run vetted+balanced curation with report evidence
 plexus score dataset-curate-vetted \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --days 180 \\
   --max-items 100
 
 # Evaluate against latest associated dataset for this score
 plexus evaluate accuracy \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --use-score-associated-dataset \\
   --number-of-samples 200
 
 # Same run with machine-friendly output
 plexus evaluate accuracy \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --use-score-associated-dataset \\
   --number-of-samples 200 \\
@@ -280,7 +280,7 @@ plexus evaluate accuracy \\
 
 # Evaluate across all associated datasets for this score
 plexus evaluate accuracy \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --use-score-associated-dataset \\
   --all-score-associated-datasets \\
@@ -335,7 +335,7 @@ plexus evaluate accuracy \\
           <pre className="bg-muted p-4 rounded-lg overflow-x-auto mb-4">
             <code>{`# Stage A: deterministic associated-dataset check
 plexus evaluate accuracy \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --use-score-associated-dataset \\
   --number-of-samples 200

@@ -432,7 +432,7 @@ async def test_feedback_items_window_uses_composite_index_when_score_is_present(
 @pytest.mark.asyncio
 async def test_feedback_rates_base_resolves_hyphenated_scorecard_name(mock_api_client):
     block = AcceptanceRate(
-        config={"scorecard": "Prime - EDU 3rd Party", "days": 1},
+        config={"scorecard": "Example Scorecard", "days": 1},
         params={"account_id": "acct-1"},
         api_client=mock_api_client,
     )
@@ -441,32 +441,32 @@ async def test_feedback_rates_base_resolves_hyphenated_scorecard_name(mock_api_c
         patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_key", return_value=None),
         patch(
             "plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_name",
-            return_value=SimpleNamespace(id="sc-1", name="Prime - EDU 3rd Party"),
+            return_value=SimpleNamespace(id="sc-1", name="Example Scorecard"),
         ),
         patch("plexus.reports.blocks.feedback_scope_resolver.Scorecard.get_by_external_id", return_value=None),
     ):
-        resolved = await block._resolve_scorecard("Prime - EDU 3rd Party")
+        resolved = await block._resolve_scorecard("Example Scorecard")
 
     assert resolved.id == "sc-1"
-    assert resolved.name == "Prime - EDU 3rd Party"
+    assert resolved.name == "Example Scorecard"
 
 
 @pytest.mark.asyncio
 async def test_feedback_rates_base_resolves_score_by_name(mock_api_client):
     block = AcceptanceRate(
-        config={"scorecard": "sc-1", "score": "Agent Branding", "days": 1},
+        config={"scorecard": "sc-1", "score": "Example Score", "days": 1},
         params={"account_id": "acct-1"},
         api_client=mock_api_client,
     )
 
     with patch(
         "plexus.reports.blocks.feedback_rates_base.resolve_score_for_scorecard",
-        new=AsyncMock(return_value=SimpleNamespace(id="score-1", name="Agent Branding")),
+        new=AsyncMock(return_value=SimpleNamespace(id="score-1", name="Example Score")),
     ):
-        resolved = await block._resolve_score("Agent Branding", "sc-1")
+        resolved = await block._resolve_score("Example Score", "sc-1")
 
     assert resolved.id == "score-1"
-    assert resolved.name == "Agent Branding"
+    assert resolved.name == "Example Score"
 
 
 def test_feedback_rates_base_builds_contiguous_time_shards(mock_api_client):

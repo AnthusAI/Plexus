@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "plexus"
-version = "1.58.0"
+version = "1.59.0"
 description = "A Python module for configuring and managing data scoring"
 readme = "README.md"
 license = "MIT"
@@ -46,8 +46,8 @@ langgraph = "0.6.7"
 psycopg = { version = ">=3.2.0,<4.0.0", extras = ["binary"] }
 lupa = "2.7"
 tactus = [
-    { version = "^0.51.3" },
-    { version = "^0.51.3", extras = ["rca"], markers = "extra == 'ml' or extra == 'all'" },
+    { version = "^0.51.4" },
+    { version = "^0.51.4", extras = ["rca"], markers = "extra == 'ml' or extra == 'all'" },
 ]
 rapidfuzz = "3.9.4"
 watchtower = "*"

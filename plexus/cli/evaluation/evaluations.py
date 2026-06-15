@@ -120,6 +120,10 @@ from plexus.score_rubric_consistency import (
     ScoreRubricConsistencyService,
     merge_consistency_result_into_parameters,
 )
+from plexus.feedback_analysis_preflight import (
+    FeedbackAnalysisPreflightError,
+    validate_feedback_analysis_preflight,
+)
 
 from plexus.utils import truncate_dict_strings_inner
 
@@ -4377,6 +4381,29 @@ def feedback(
             else:
                 console.print("[bold red]Error: No champion version found for this score. Use --version to specify one.[/bold red]")
                 return
+
+        try:
+            preflight_result = asyncio.run(
+                validate_feedback_analysis_preflight(
+                    api_client=client,
+                    scorecard_id=scorecard_id,
+                    score_id=score_id,
+                    score_version_id=version,
+                    require_version_configuration=True,
+                    require_guidelines_text=True,
+                )
+            )
+        except FeedbackAnalysisPreflightError as exc:
+            diagnostics_json = json.dumps(exc.diagnostics, sort_keys=True)
+            remediation = (
+                "Remediation: fix score/version prerequisites (missing score reference, "
+                "missing version configuration, or missing guidelines) and rerun."
+            )
+            raise click.ClickException(
+                f"Feedback evaluation preflight failed: {diagnostics_json}. {remediation}"
+            ) from exc
+
+        version = preflight_result.score_version_id
 
         # If version is specified, use accuracy evaluation with FeedbackItems dataset
         if version:

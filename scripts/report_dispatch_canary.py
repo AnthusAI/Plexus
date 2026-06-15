@@ -40,7 +40,7 @@ def _utc_stamp() -> str:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--scorecard", default="selectquote_hcs_medium_risk")
+    parser.add_argument("--scorecard", default="example-scorecard")
     parser.add_argument("--days", type=int, default=365)
     parser.add_argument("--dispatch-mode", default="celery")
     parser.add_argument("--poll-interval-seconds", type=float, default=5.0)

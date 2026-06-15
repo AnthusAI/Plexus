@@ -1,5 +1,6 @@
 from click.testing import CliRunner
 from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
 
 from plexus.cli.feedback.feedback_report import report
 from plexus.reports.service import encode_programmatic_run_payload
@@ -337,6 +338,44 @@ def test_scorecard_history_supports_single_score_explicit_window_and_summary_mod
     assert kwargs["fresh"] is True
 
 
+@patch("plexus.cli.feedback.feedback_report.collect_feedback_score_integrity")
+@patch("plexus.cli.feedback.feedback_report.resolve_account_id_for_command")
+@patch("plexus.cli.feedback.feedback_report.create_client")
+def test_integrity_command_emits_orphaned_feedback_diagnostics(
+    mock_create_client,
+    mock_resolve_account_id,
+    mock_collect_feedback_score_integrity,
+):
+    runner = CliRunner()
+    mock_create_client.return_value = MagicMock()
+    mock_resolve_account_id.return_value = "acct-1"
+    mock_collect_feedback_score_integrity.return_value = {
+        "account_id": "acct-1",
+        "feedback_total": 10,
+        "orphaned_feedback_items": 4,
+        "orphaned_percentage": 40.0,
+        "orphaned_by_scorecard_score": [],
+    }
+
+    result = runner.invoke(
+        report,
+        [
+            "integrity",
+            "--start-date",
+            "2026-05-01",
+            "--end-date",
+            "2026-05-07",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert '"orphaned_feedback_items": 4' in result.output
+    _, kwargs = mock_collect_feedback_score_integrity.call_args
+    assert kwargs["account_id"] == "acct-1"
+    assert kwargs["start_at"] == datetime(2026, 5, 1, tzinfo=timezone.utc)
+    assert kwargs["end_at"] == datetime(2026, 5, 7, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+
 @patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
 def test_score_results_report_supports_ids_and_repeated_id_flags(mock_run_feedback_report_block):
     runner = CliRunner()
@@ -410,8 +449,8 @@ def test_overview_builds_three_blocks_in_required_order_with_shared_window(
         "scorecard": "1438",
         "score": "45813",
         "days": 90,
-        "scorecard_name": "SelectQuote HCS Medium-Risk",
-        "score_name": "Agent Misrepresentation",
+        "scorecard_name": "Example Scorecard",
+        "score_name": "Example Score",
     }
     mock_run_programmatic_report_and_persist.return_value = ("report-123", None)
 
@@ -446,9 +485,9 @@ def test_overview_builds_three_blocks_in_required_order_with_shared_window(
     assert block_definitions[0]["config"]["show_bucket_details"] is True
     assert block_definitions[0]["config"]["bucket_type"] == "trailing_7d"
     assert "show_bucket_details" not in block_definitions[1]["config"]
-    assert kwargs["display_title"] == "SelectQuote HCS Medium-Risk - Agent Misrepresentation - Feedback Overview"
+    assert kwargs["display_title"] == "Example Scorecard - Example Score - Feedback Overview"
     assert "Includes contradiction analysis." in kwargs["display_description"]
-    assert "SelectQuote HCS Medium-Risk - Agent Misrepresentation - Feedback Overview" in kwargs["report_name"]
+    assert "Example Scorecard - Example Score - Feedback Overview" in kwargs["report_name"]
 
 
 @patch("plexus.cli.feedback.feedback_report.resolve_account_id_for_command")
@@ -478,8 +517,8 @@ def test_overview_skips_contradictions_when_champion_guidelines_missing(
         "scorecard": "1438",
         "score": "45813",
         "days": 90,
-        "scorecard_name": "SelectQuote HCS Medium-Risk",
-        "score_name": "Agent Misrepresentation",
+        "scorecard_name": "Example Scorecard",
+        "score_name": "Example Score",
     }
     mock_score_has_nonempty_champion_guidelines.return_value = (
         False,
@@ -538,8 +577,8 @@ def test_overview_uses_canonical_resolved_ids_in_block_configs(
         "scorecard": "sc-canonical",
         "score": "score-canonical",
         "days": 30,
-        "scorecard_name": "SelectQuote HCS Medium-Risk",
-        "score_name": "Agent Misrepresentation",
+        "scorecard_name": "Example Scorecard",
+        "score_name": "Example Score",
     }
     mock_run_programmatic_report_and_persist.return_value = ("report-123", None)
 
@@ -548,9 +587,9 @@ def test_overview_uses_canonical_resolved_ids_in_block_configs(
         [
             "overview",
             "--scorecard",
-            "SelectQuote HCS Medium-Risk",
+            "Example Scorecard",
             "--score",
-            "Agent Misrepresentation",
+            "Example Score",
             "--days",
             "30",
         ],

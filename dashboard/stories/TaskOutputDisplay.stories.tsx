@@ -50,14 +50,14 @@ const sampleUniversalCode = `# ====================================
 # ====================================
 # This Universal Code was generated from a task execution.
 # Task Type: Prediction Test
-# Command: predict --scorecard "termlifev1" --score "Assumptive Close" --item "276514287" --format json
+# Command: predict --scorecard "example-scorecard" --score "Example Score" --item "000000000" --format json
 # 
 # The structured output below contains the results and context from the task execution.
 
 prediction_results:
-  - item_id: "276514287"
+  - item_id: "000000000"
     text: "I'm looking for a policy that will help secure my family's financial future..."
-    Assumptive Close:
+    Example Score:
       value: "Yes"
       explanation: "The customer's language shows readiness to move forward with a purchase decision. Phrases like 'looking for a policy' and 'secure my family's financial future' indicate strong intent and urgency."
       cost:
@@ -70,15 +70,15 @@ prediction_results:
         max_tokens: 150
 
 task_metadata:
-  scorecard: "termlifev1"
-  score: "Assumptive Close"
-  item_id: "276514287"
+  scorecard: "example-scorecard"
+  score: "Example Score"
+  item_id: "000000000"
   execution_time: "1.2s"
   timestamp: "2025-01-06T15:30:45Z"`
 
-const sampleStdout = `Starting prediction for item: 276514287
-Loading scorecard: termlifev1
-Initializing score: Assumptive Close
+const sampleStdout = `Starting prediction for item: 000000000
+Loading scorecard: example-scorecard
+Initializing score: Example Score
 Processing text input...
 Generating prediction...
 Prediction complete!
@@ -112,7 +112,7 @@ export const Empty: Story = {
 export const UniversalCodeOnly: Story = {
   args: {
     output: sampleUniversalCode,
-    command: 'predict --scorecard "termlifev1" --score "Assumptive Close" --item "276514287" --format json',
+    command: 'predict --scorecard "example-scorecard" --score "Example Score" --item "000000000" --format json',
     taskType: 'Prediction Test'
   },
   parameters: {
@@ -127,7 +127,7 @@ export const UniversalCodeOnly: Story = {
 export const AttachmentsOnly: Story = {
   args: {
     attachedFiles: sampleAttachments,
-    command: 'predict --scorecard "termlifev1" --score "Assumptive Close" --item "276514287"',
+    command: 'predict --scorecard "example-scorecard" --score "Example Score" --item "000000000"',
     taskType: 'Prediction Test'
   },
   parameters: {
@@ -142,7 +142,7 @@ export const AttachmentsOnly: Story = {
 export const StdoutOnly: Story = {
   args: {
     stdout: sampleStdout,
-    command: 'predict --scorecard "termlifev1" --score "Assumptive Close" --item "276514287"',
+    command: 'predict --scorecard "example-scorecard" --score "Example Score" --item "000000000"',
     taskType: 'Prediction Test'
   },
   parameters: {
@@ -157,7 +157,7 @@ export const StdoutOnly: Story = {
 export const StderrOnly: Story = {
   args: {
     stderr: sampleStderr,
-    command: 'predict --scorecard "termlifev1" --score "Assumptive Close" --item "276514287"',
+    command: 'predict --scorecard "example-scorecard" --score "Example Score" --item "000000000"',
     taskType: 'Prediction Test'
   },
   parameters: {
@@ -175,7 +175,7 @@ export const AllOutputTypes: Story = {
     attachedFiles: sampleAttachments,
     stdout: sampleStdout,
     stderr: sampleStderr,
-    command: 'predict --scorecard "termlifev1" --score "Assumptive Close" --item "276514287" --format json',
+    command: 'predict --scorecard "example-scorecard" --score "Example Score" --item "000000000" --format json',
     taskType: 'Prediction Test'
   },
   parameters: {
@@ -193,12 +193,12 @@ export const EvaluationExample: Story = {
 # Evaluation Report Output
 # ====================================
 # Generated evaluation results for accuracy testing
-# Scorecard: termlifev1
+# Scorecard: example-scorecard
 # Sample Size: 100 items
 # Accuracy: 87.5%
 
 evaluation_summary:
-  scorecard: "termlifev1"
+  scorecard: "example-scorecard"
   type: "accuracy"
   total_items: 100
   processed_items: 100
@@ -225,7 +225,7 @@ score_distribution:
       'evaluations/2025-01-06/eval_123456/detailed_results.xlsx',
       'evaluations/2025-01-06/eval_123456/trace_logs.txt'
     ],
-    stdout: `Starting accuracy evaluation for scorecard: termlifev1
+    stdout: `Starting accuracy evaluation for scorecard: example-scorecard
 Loading samples... Found 100 items
 Processing items: 100/100 [████████████████████████████████] 100%
 Calculating metrics...
@@ -237,7 +237,7 @@ Evaluation complete! Results saved to output.json`,
     stderr: `2025-01-06 15:30:12 [WARNING] Item 47 has missing metadata field 'source'
 2025-01-06 15:30:15 [WARNING] Score confidence low (0.3) for item 82
 2025-01-06 15:30:18 [INFO] Batch processing completed with 2 warnings`,
-    command: 'plexus evaluate accuracy --scorecard "termlifev1" --number-of-samples 100',
+    command: 'plexus evaluate accuracy --scorecard "example-scorecard" --number-of-samples 100',
     taskType: 'Accuracy Evaluation'
   },
   parameters: {

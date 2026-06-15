@@ -9368,14 +9368,14 @@ py-cpuinfo = "*"
 
 [[package]]
 name = "tactus"
-version = "0.51.3"
+version = "0.51.4"
 description = "Tactus: Lua-based DSL for agentic workflows"
 optional = false
 python-versions = "<3.14,>=3.10"
 groups = ["main"]
 files = [
-    {file = "tactus-0.51.3-py3-none-any.whl", hash = "sha256:254562fc5938b3e49cfd219aaab72804bdecf83f76ca308607615ede3b2e4c54"},
-    {file = "tactus-0.51.3.tar.gz", hash = "sha256:2a237c832289aa3799cc3c5025084a7304c17ec6e7b3358dc58b313e0a6b459d"},
+    {file = "tactus-0.51.4-py3-none-any.whl", hash = "sha256:dca5354ac7530af56a4b23290f0c33f0cd82e3e6bcbe342f4042caca2f669ce9"},
+    {file = "tactus-0.51.4.tar.gz", hash = "sha256:d6e0da7e92b3fca75318047e69ee5648672e630f62644268557b7cff7dfe1a48"},
 ]
 
 [package.dependencies]
@@ -10883,4 +10883,4 @@ ml = ["bertopic", "contractions", "datasets", "gensim", "graphviz", "hdbscan", "
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "af63d4c4553d75ed9b45644fdd41089b1d1e0dfcc5029e8bc9c8d4e07de56d16"
+content-hash = "6af197cdce37d67759b540833862a55f9fe593d54557d7ff163529c76f970985"

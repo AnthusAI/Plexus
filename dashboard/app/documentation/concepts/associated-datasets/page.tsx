@@ -25,20 +25,20 @@ export default function AssociatedDatasetsPage() {
         <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
           <code>{`# 1) Build associated dataset from recent feedback
 plexus score dataset-curate \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --max-items 100 \\
   --days 180
 
 # 2) Evaluate against latest associated dataset for that score
 plexus evaluate accuracy \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --use-score-associated-dataset
 
 # Optional machine-friendly output
 plexus evaluate accuracy \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --use-score-associated-dataset \\
   --json-only`}</code>
@@ -91,7 +91,7 @@ plexus evaluate accuracy \\
         </p>
         <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
           <code>{`plexus score dataset-curate \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --max-items 100 \\
   --days 180`}</code>
@@ -101,7 +101,7 @@ plexus evaluate accuracy \\
         </p>
         <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
           <code>{`plexus score dataset-curate \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --max-items 100 \\
   --no-balance`}</code>
@@ -111,7 +111,7 @@ plexus evaluate accuracy \\
         </p>
         <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
           <code>{`plexus score dataset-curate-vetted \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --days 180 \\
   --max-items 100`}</code>
@@ -129,7 +129,7 @@ plexus evaluate accuracy \\
         </p>
         <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
           <code>{`plexus evaluate accuracy \\
-  --scorecard "CMG EDU" \\
+  --scorecard "Example Scorecard" \\
   --score "Identify Objections" \\
   --use-score-associated-dataset \\
   --all-score-associated-datasets \\

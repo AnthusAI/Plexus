@@ -558,7 +558,7 @@ export const WithUniversalCode: Story = {
     variant: 'detail',
     task: createTask('with-universal-code', {
       type: 'Prediction Test',
-      command: 'predict --scorecard "termlifev1" --score "Assumptive Close" --item "276514287" --format json',
+      command: 'predict --scorecard "example-scorecard" --score "Example Score" --item "000000000" --format json',
       status: 'COMPLETED',
       stages: sampleStages.map(stage => ({ ...stage, status: 'COMPLETED' as const })),
       output: `# ====================================
@@ -566,14 +566,14 @@ export const WithUniversalCode: Story = {
 # ====================================
 # This Universal Code was generated from a task execution.
 # Task Type: Prediction Test
-# Command: predict --scorecard "termlifev1" --score "Assumptive Close" --item "276514287" --format json
+# Command: predict --scorecard "example-scorecard" --score "Example Score" --item "000000000" --format json
 # 
 # The structured output below contains the results and context from the task execution.
 
 prediction_results:
-  - item_id: "276514287"
+  - item_id: "000000000"
     text: "I'm looking for a policy that will help secure my family's financial future..."
-    Assumptive Close:
+    Example Score:
       value: "Yes"
       explanation: "The customer's language shows readiness to move forward with a purchase decision. Phrases like 'looking for a policy' and 'secure my family's financial future' indicate strong intent and urgency."
       cost:
@@ -586,9 +586,9 @@ prediction_results:
         max_tokens: 150
 
 task_metadata:
-  scorecard: "termlifev1"
-  score: "Assumptive Close"
-  item_id: "276514287"
+  scorecard: "example-scorecard"
+  score: "Example Score"
+  item_id: "000000000"
   execution_time: "1.2s"
   timestamp: "2025-01-06T15:30:45Z"`
     }),
@@ -612,19 +612,19 @@ export const WithAttachmentsAndOutput: Story = {
     variant: 'detail',
     task: createTask('with-attachments-output', {
       type: 'Evaluation Report',
-      command: 'plexus evaluate accuracy --scorecard "termlifev1" --number-of-samples 100',
+      command: 'plexus evaluate accuracy --scorecard "example-scorecard" --number-of-samples 100',
       status: 'COMPLETED',
       stages: sampleStages.map(stage => ({ ...stage, status: 'COMPLETED' as const })),
       output: `# ====================================
 # Evaluation Report Output
 # ====================================
 # Generated evaluation results for accuracy testing
-# Scorecard: termlifev1
+# Scorecard: example-scorecard
 # Sample Size: 100 items
 # Accuracy: 87.5%
 
 evaluation_summary:
-  scorecard: "termlifev1"
+  scorecard: "example-scorecard"
   type: "accuracy"
   total_items: 100
   processed_items: 100
@@ -651,7 +651,7 @@ score_distribution:
         'evaluations/2025-01-06/eval_123456/detailed_results.xlsx',
         'evaluations/2025-01-06/eval_123456/trace_logs.txt'
       ],
-      stdout: `Starting accuracy evaluation for scorecard: termlifev1
+      stdout: `Starting accuracy evaluation for scorecard: example-scorecard
 Loading samples... Found 100 items
 Processing items: 100/100 [████████████████████████████████] 100%
 Calculating metrics...

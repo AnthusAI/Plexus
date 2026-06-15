@@ -137,7 +137,7 @@ $ pytest tests/test_input_sources/
 
 ### Integration Tests ✅
 ```bash
-$ python3 -m plexus.cli predict --scorecard aw_confirmation --score opening_company_name \
+$ python3 -m plexus.cli predict --scorecard example-scorecard --score example_score \
   --item "9c929f25-a91f-4db7-8943-5aa93498b8e9--299298112" --yaml
 ```
 
@@ -160,8 +160,8 @@ $ python3 -m plexus.cli predict --scorecard aw_confirmation --score opening_comp
 3. Run evaluations to verify multi-modal input works in evaluation pipeline:
    ```bash
    python3 -m plexus.cli evaluate accuracy \
-     --scorecard aw_confirmation \
-     --score opening_company_name \
+     --scorecard example-scorecard \
+     --score example_score \
      --number-of-samples 10 \
      --yaml
    ```
@@ -227,9 +227,9 @@ Classifier receives exact text we specified!
 ### Configuration Example
 
 ```yaml
-# scorecards/AW - Confirmation/opening_company_name.yaml
-name: Opening (Company Name)
-key: opening_company_name
+# scorecards/Example Scorecard/example_score.yaml
+name: Example Score
+key: example_score
 class: LangGraphScore
 # ... model config ...
 item:

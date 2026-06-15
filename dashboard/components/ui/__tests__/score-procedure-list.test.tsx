@@ -275,8 +275,8 @@ describe('ScoreProcedureList', () => {
       <ScoreProcedureList
         scoreId="score-1"
         scorecardId="scorecard-1"
-        scoreName="Medication Review: Prescriber"
-        scorecardName="SelectQuote HCS Medium-Risk"
+        scoreName="Example Score"
+        scorecardName="Example Scorecard"
         scope="score"
       />
     )
@@ -320,8 +320,8 @@ describe('ScoreProcedureList', () => {
       <ScoreProcedureList
         scoreId="score-1"
         scorecardId="scorecard-1"
-        scoreName="Medication Review: Prescriber"
-        scorecardName="SelectQuote HCS Medium-Risk"
+        scoreName="Example Score"
+        scorecardName="Example Scorecard"
         scope="version"
         versionId="version-2"
       />
@@ -351,8 +351,8 @@ describe('ScoreProcedureList', () => {
       <ScoreProcedureList
         scoreId="score-1"
         scorecardId="scorecard-1"
-        scoreName="Medication Review: Prescriber"
-        scorecardName="SelectQuote HCS Medium-Risk"
+        scoreName="Example Score"
+        scorecardName="Example Scorecard"
         scope="score"
       />
     )
@@ -417,8 +417,8 @@ describe('ScoreProcedureList', () => {
       <ScoreProcedureList
         scoreId="score-1"
         scorecardId="scorecard-1"
-        scoreName="Medication Review: Prescriber"
-        scorecardName="SelectQuote HCS Medium-Risk"
+        scoreName="Example Score"
+        scorecardName="Example Scorecard"
         scope="score"
       />
     )
@@ -462,8 +462,8 @@ describe('ScoreProcedureList', () => {
       <ScoreProcedureList
         scoreId="score-1"
         scorecardId="scorecard-1"
-        scoreName="Medication Review: Prescriber"
-        scorecardName="SelectQuote HCS Medium-Risk"
+        scoreName="Example Score"
+        scorecardName="Example Scorecard"
         scope="score"
       />
     )
@@ -485,8 +485,8 @@ describe('ScoreProcedureList', () => {
       <ScoreProcedureList
         scoreId="score-1"
         scorecardId="scorecard-1"
-        scoreName="Medication Review: Prescriber"
-        scorecardName="SelectQuote HCS Medium-Risk"
+        scoreName="Example Score"
+        scorecardName="Example Scorecard"
         scope="score"
       />
     )

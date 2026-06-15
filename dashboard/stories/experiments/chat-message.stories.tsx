@@ -304,7 +304,7 @@ export const UserMessage: Story = {
 
 export const AssistantMessage: Story = {
   args: {
-    content: `I'll start by examining the feedback patterns to understand how the current **"Medication Review"** score is performing. Let me get an overview of the confusion matrix and accuracy patterns.
+    content: `I'll start by examining the feedback patterns to understand how the current **"Example Score"** score is performing. Let me get an overview of the confusion matrix and accuracy patterns.
 
 ## Analysis Plan
 
@@ -321,13 +321,13 @@ export const AssistantMessage: Story = {
 
 export const ToolCall: Story = {
   args: {
-    content: 'plexus_feedback_alignment(scorecard_name="SelectQuote HCS Medium-Risk", score_name="Medication Review", days=30, output_format="json")',
+    content: 'plexus_feedback_alignment(scorecard_name="Example Scorecard", score_name="Example Score", days=30, output_format="json")',
     role: 'ASSISTANT',
     messageType: 'TOOL_CALL',
     toolName: 'plexus_feedback_alignment',
     toolParameters: {
-      scorecard_name: "SelectQuote HCS Medium-Risk",
-      score_name: "Medication Review", 
+      scorecard_name: "Example Scorecard",
+      score_name: "Example Score", 
       days: 30,
       output_format: "json"
     },
@@ -339,8 +339,8 @@ export const ToolResponse: Story = {
   args: {
     content: `{
   "context": {
-    "scorecard_name": "SelectQuote HCS Medium-Risk",
-    "score_name": "Medication Review",
+    "scorecard_name": "Example Scorecard",
+    "score_name": "Example Score",
     "analysis_period": "30 days",
     "total_feedback_items": 45
   },
@@ -363,8 +363,8 @@ export const ToolResponse: Story = {
     toolName: 'plexus_feedback_alignment',
     toolResponse: {
       context: {
-        scorecard_name: "SelectQuote HCS Medium-Risk",
-        score_name: "Medication Review",
+        scorecard_name: "Example Scorecard",
+        score_name: "Example Score",
         analysis_period: "30 days",
         total_feedback_items: 45
       },
@@ -417,7 +417,7 @@ export const RichMarkdownMessage: Story = {
   args: {
     content: `# Experiment Analysis Summary
 
-Based on my analysis of the **SelectQuote HCS Medium-Risk** scorecard data, I've identified several key opportunities for improvement:
+Based on my analysis of the **Example Scorecard** scorecard data, I've identified several key opportunities for improvement:
 
 ## Key Findings
 

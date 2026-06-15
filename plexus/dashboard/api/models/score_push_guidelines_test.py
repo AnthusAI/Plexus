@@ -32,8 +32,8 @@ class RecordingClient:
 def make_score(client):
     return Score(
         id="score-1",
-        name="Medication Review: Individual Confirmation",
-        key="medication-review-individual-confirmation",
+        name="Example Score",
+        key="example-score",
         externalId="external-1",
         type="LangGraphScore",
         order=1,
@@ -46,14 +46,14 @@ def test_local_guidelines_path_uses_guidelines_directory(monkeypatch, tmp_path):
     monkeypatch.setenv("SCORECARD_CACHE_DIR", str(tmp_path / "scorecards"))
     score = make_score(RecordingClient())
 
-    path = score.get_local_guidelines_path("SelectQuote HCS Medium-Risk")
+    path = score.get_local_guidelines_path("Example Scorecard")
 
     assert path == (
         tmp_path
         / "scorecards"
-        / "SelectQuote HCS Medium-Risk"
+        / "Example Scorecard"
         / "guidelines"
-        / "Medication Review- Individual Confirmation.md"
+        / "Example Score.md"
     )
 
 
@@ -82,12 +82,12 @@ def test_push_code_and_guidelines_reads_canonical_guidelines_file(monkeypatch, t
     client = RecordingClient(champion_guidelines="Existing guide")
     score = make_score(client)
 
-    yaml_path = get_score_yaml_path("SelectQuote HCS Medium-Risk", score.name)
+    yaml_path = get_score_yaml_path("Example Scorecard", score.name)
     yaml_path.write_text("name: Test\nkey: new\n", encoding="utf-8")
-    guidelines_path = get_score_guidelines_path("SelectQuote HCS Medium-Risk", score.name)
+    guidelines_path = get_score_guidelines_path("Example Scorecard", score.name)
     guidelines_path.write_text("Canonical guide", encoding="utf-8")
 
-    result = score.push_code_and_guidelines("SelectQuote HCS Medium-Risk", note="test")
+    result = score.push_code_and_guidelines("Example Scorecard", note="test")
 
     assert result["success"] is True
     assert client.created_inputs[-1]["guidelines"] == "Canonical guide"

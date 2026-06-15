@@ -53,12 +53,12 @@ export default function RubricMemoryPage() {
           </pre>
           <p className="text-muted-foreground mb-4">
             For example, with <code>SCORECARD_CACHE_DIR=dashboard/scorecards</code>, the score
-            <code> Medication Review: Dosage</code> in <code>SelectQuote HCS Medium-Risk</code>
+            <code> Example Score</code> in <code>Example Scorecard</code>
             uses this score-level knowledge-base folder:
           </p>
           <pre className="bg-muted rounded-lg overflow-x-auto">
             <div className="code-container p-4">
-              <code>{`dashboard/scorecards/SelectQuote HCS Medium-Risk/Medication Review- Dosage.knowledge-base/`}</code>
+              <code>{`dashboard/scorecards/Example Scorecard/Example Score.knowledge-base/`}</code>
             </div>
           </pre>
         </section>
@@ -97,7 +97,7 @@ export default function RubricMemoryPage() {
           </p>
           <pre className="bg-muted rounded-lg mb-4 overflow-x-auto">
             <div className="code-container p-4">
-              <code>{`SelectQuote HCS Medium-Risk/
+              <code>{`Example Scorecard/
   Information Accuracy.knowledge-base/
   Information Accuracy- High-Pressure Sales Tactics.yaml
   Information Accuracy- High-Pressure Sales Tactics.knowledge-base/
@@ -119,7 +119,7 @@ export default function RubricMemoryPage() {
           </p>
           <pre className="bg-muted rounded-lg mb-4 overflow-x-auto">
             <div className="code-container p-4">
-              <code>{`Medication Review- Dosage.knowledge-base/
+              <code>{`Example Score.knowledge-base/
   2026-04-24/
     meeting-notes.md
     client-email.txt
@@ -154,8 +154,8 @@ export default function RubricMemoryPage() {
           <pre className="bg-muted rounded-lg overflow-x-auto">
             <div className="code-container p-4">
               <code>{`SCORECARD_CACHE_DIR=dashboard/scorecards plexus rubric-memory prewarm \\
-  --scorecard "SelectQuote HCS Medium-Risk" \\
-  --score "Medication Review: Dosage"`}</code>
+  --scorecard "Example Scorecard" \\
+  --score "Example Score"`}</code>
             </div>
           </pre>
         </section>

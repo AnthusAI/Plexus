@@ -471,6 +471,7 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("item", "last"): _method_spec("_call_item", planning_allowed=True),
     ("feedback", "find"): _method_spec("_call_feedback", planning_allowed=True),
     ("feedback", "alignment"): _method_spec("_call_feedback", planning_allowed=True),
+    ("feedback", "alignment_batch"): _method_spec("_call_feedback", planning_allowed=True),
     ("feedback", "latest_update"): _method_spec("_call_feedback", planning_allowed=True),
     ("evaluation", "info"): _method_spec("_call_evaluation_read", planning_allowed=True),
     ("evaluation", "find_recent"): _method_spec("_call_evaluation_read", planning_allowed=True),
@@ -494,6 +495,8 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("procedure", "archive"): _method_spec("_call_procedure_write", planning_allowed=False),
     ("procedure", "run"): _method_spec("_call_procedure_run", planning_allowed=False),
     ("procedure", "optimize"): _method_spec("_call_procedure_run", planning_allowed=False),
+    ("procedure", "optimize_batch"): _method_spec("_call_procedure_run", planning_allowed=False),
+    ("procedure", "status_batch"): _method_spec("_call_procedure_read", planning_allowed=True),
     ("procedure", "continue"): _method_spec("_call_procedure_run", planning_allowed=False),
     ("procedure", "branch"): _method_spec("_call_procedure_run", planning_allowed=False),
     ("handle", "peek"): _method_spec("_call_handle", planning_allowed=True),
@@ -824,7 +827,22 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("plexus.scorecards.create requires name")
 
     key = str(args.get("key") or "").strip() or _slugify(name)
-    external_id = str(args.get("external_id") or args.get("externalId") or "").strip() or key
+
+    # Parse external_id - handle both int and string inputs
+    external_id_raw = args.get("external_id") or args.get("externalId")
+    if external_id_raw is not None:
+        # If it's an int, keep it as int; if string, try to parse as int
+        if isinstance(external_id_raw, int):
+            external_id = external_id_raw
+        else:
+            external_id_str = str(external_id_raw).strip()
+            try:
+                external_id = int(external_id_str) if external_id_str else None
+            except ValueError:
+                external_id = external_id_str if external_id_str else None
+    else:
+        external_id = None
+
     description = str(args.get("description") or "").strip() or None
     account_identifier = args.get("account_identifier") or args.get("account") or args.get("account_id") or None
 
@@ -849,30 +867,33 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
     """
 
     # Compatibility strategy:
-    # 1) Try plain CreateScorecardInput variants first (older schemas often reject attribution fields).
-    # 2) If plain variants fail, retry with actor attribution for newer schemas that support it.
-    base_variants: list[dict[str, Any]] = [{"name": name}]
-    if key:
-        base_variants.append({"name": name, "key": key})
-    if external_id:
-        base_variants.append({"name": name, "externalId": external_id})
+    # 1) Try most complete variants first (with all provided fields)
+    # 2) Fall back to simpler variants if complete ones fail
+    # This ensures external_id and other fields are actually used
+    base_variants: list[dict[str, Any]] = []
+
+    # Most complete first
+    if key and external_id and description:
+        base_variants.append({
+            "name": name,
+            "key": key,
+            "externalId": external_id,
+            "description": description,
+        })
     if key and external_id:
         base_variants.append({"name": name, "key": key, "externalId": external_id})
-    if description:
-        base_variants.append({"name": name, "description": description})
-    if key and description:
-        base_variants.append({"name": name, "key": key, "description": description})
     if external_id and description:
         base_variants.append({"name": name, "externalId": external_id, "description": description})
-    if key and external_id and description:
-        base_variants.append(
-            {
-                "name": name,
-                "key": key,
-                "externalId": external_id,
-                "description": description,
-            }
-        )
+    if key and description:
+        base_variants.append({"name": name, "key": key, "description": description})
+    if external_id:
+        base_variants.append({"name": name, "externalId": external_id})
+    if description:
+        base_variants.append({"name": name, "description": description})
+    if key:
+        base_variants.append({"name": name, "key": key})
+    # Simplest last (fallback)
+    base_variants.append({"name": name})
 
     if account_id:
         account_variants: list[dict[str, Any]] = []
@@ -905,12 +926,37 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
                 created = (response or {}).get("createScorecard") or {}
                 created_id = created.get("id")
                 if created_id:
+                    # Create a default section for the scorecard
+                    section_mutation = """
+                    mutation CreateSection($input: CreateScorecardSectionInput!) {
+                        createScorecardSection(input: $input) {
+                            id
+                            name
+                        }
+                    }
+                    """
+                    section_input = {
+                        "scorecardId": created_id,
+                        "name": "Default",
+                        "order": 0,
+                    }
+                    try:
+                        section_response = client.execute(section_mutation, {"input": section_input})
+                        created_section = (section_response or {}).get("createScorecardSection") or {}
+                        section_id = created_section.get("id")
+                    except Exception as section_exc:
+                        logger.warning(
+                            f"Failed to create default section for scorecard {created_id}: {section_exc}"
+                        )
+                        section_id = None
+
                     return {
                         "success": True,
                         "id": created_id,
                         "name": created.get("name"),
                         "key": created.get("key"),
                         "externalId": created.get("externalId"),
+                        "defaultSectionId": section_id,
                     }
                 attempted_errors.append(
                     f"attribution={use_attribution} payload={input_obj!r} -> missing id in response {response!r}"
@@ -1652,6 +1698,168 @@ def _default_feedback_alignment(args: dict[str, Any]) -> dict[str, Any]:
         )
     )
     return FeedbackService.format_summary_result_as_dict(summary)
+
+
+def _default_feedback_alignment_batch(args: dict[str, Any]) -> dict[str, Any]:
+    """
+    Run plexus.feedback.alignment for all scores in a scorecard.
+
+    Returns alignment metrics for each score in a single call, avoiding
+    N separate API calls when analyzing scorecard-wide performance.
+
+    Required args:
+        scorecard (str): Scorecard name, key, or ID.
+
+    Optional args:
+        days (int): Feedback lookback window in days. Default 7.
+        accuracy_threshold (float): If provided, only return scores below this accuracy %.
+        include_scores (list[str]): If provided, only return metrics for these score names.
+        exclude_scores (list[str]): If provided, exclude these score names from results.
+
+    Returns dict with:
+        {
+            "scorecard_id": str,
+            "scorecard_name": str,
+            "days": int,
+            "total_scores": int,
+            "scores_analyzed": int,
+            "scores": [
+                {
+                    "score_id": str,
+                    "score_name": str,
+                    "accuracy": float (0-100),
+                    "ac1": float (0-1),
+                    "total_items": int,
+                    "confusion_matrix": dict,
+                    "precision": float,
+                    "recall": float,
+                    "warning": str | None,
+                },
+                ...
+            ]
+        }
+    """
+    from plexus.cli.feedback.feedback_service import FeedbackService
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.memoized_resolvers import (
+        memoized_resolve_scorecard_identifier,
+    )
+
+    scorecard_name = args.get("scorecard_name") or args.get("scorecard")
+    if not scorecard_name:
+        raise ValueError("plexus.feedback.alignment_batch requires scorecard")
+
+    days = int(float(args.get("days", 7)))
+    accuracy_threshold = args.get("accuracy_threshold")
+    include_scores = args.get("include_scores")
+    exclude_scores = args.get("exclude_scores", [])
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.feedback.alignment_batch: could not create dashboard client")
+
+    account_id = _resolve_runtime_account_id(client, args, "plexus.feedback.alignment_batch")
+    scorecard_id = memoized_resolve_scorecard_identifier(client, str(scorecard_name))
+    if not scorecard_id:
+        raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found")
+
+    # Get all scores via the same GraphQL query pattern used by scorecards.info
+    import json as _json
+    query = (
+        "query GetScorecard { "
+        f'getScorecard(id: "{scorecard_id}") {{ '
+        "id name sections { items { scores { items { id name } } } } "
+        "} }"
+    )
+    response = client.execute(query)
+    if "errors" in response:
+        raise RuntimeError(
+            "plexus.feedback.alignment_batch dashboard error: "
+            + _json.dumps(response["errors"])
+        )
+    data = response.get("getScorecard")
+    if not data:
+        raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found after query")
+
+    # Flatten scores from all sections
+    all_scores = []
+    for section in (data.get("sections") or {}).get("items") or []:
+        for score in (section.get("scores") or {}).get("items") or []:
+            if score.get("id") and score.get("name"):
+                all_scores.append({"id": score["id"], "name": score["name"]})
+
+    if not all_scores:
+        return {
+            "scorecard_id": scorecard_id,
+            "scorecard_name": scorecard_name,
+            "days": days,
+            "total_scores": 0,
+            "scores_analyzed": 0,
+            "scores": [],
+        }
+
+    # Filter scores based on include/exclude lists
+    if include_scores:
+        all_scores = [s for s in all_scores if s["name"] in include_scores]
+    if exclude_scores:
+        all_scores = [s for s in all_scores if s["name"] not in exclude_scores]
+
+    # Run alignment analysis for each score
+    results = []
+    for score in all_scores:
+        score_name = score["name"]
+        score_id = score["id"]
+
+        try:
+            summary = _run_async_from_sync(
+                FeedbackService.summarize_feedback(
+                    client=client,
+                    scorecard_name=str(scorecard_name),
+                    score_name=score_name,
+                    scorecard_id=scorecard_id,
+                    score_id=score_id,
+                    account_id=account_id,
+                    days=days,
+                )
+            )
+            summary_dict = FeedbackService.format_summary_result_as_dict(summary)
+
+            # Extract just the fields we need
+            analysis = summary_dict.get("analysis", {})
+            accuracy = analysis.get("accuracy")
+
+            # Apply accuracy threshold filter if provided
+            if accuracy_threshold is not None and accuracy is not None:
+                if accuracy >= accuracy_threshold:
+                    continue
+
+            results.append({
+                "score_id": score_id,
+                "score_name": score_name,
+                "accuracy": accuracy,
+                "ac1": analysis.get("ac1"),
+                "total_items": analysis.get("total_items"),
+                "confusion_matrix": analysis.get("confusion_matrix"),
+                "precision": analysis.get("precision"),
+                "recall": analysis.get("recall"),
+                "warning": analysis.get("warning"),
+            })
+        except Exception as e:
+            # Include errors in results so caller knows which scores failed
+            results.append({
+                "score_id": score_id,
+                "score_name": score_name,
+                "error": str(e),
+            })
+
+    return {
+        "scorecard_id": scorecard_id,
+        "scorecard_name": scorecard_name,
+        "days": days,
+        "total_scores": len(all_scores),
+        "scores_analyzed": len(results),
+        "scores": results,
+    }
 
 
 def _default_feedback_finder(args: dict[str, Any]) -> dict[str, Any]:
@@ -3881,8 +4089,19 @@ def _default_report_runner(args: dict[str, Any]) -> dict[str, Any]:
         )
         if not isinstance(output_data, dict):
             raise ValueError(log_output or "Report block remote dispatch failed")
+        normalized_output: dict[str, Any] = dict(output_data)
+        if "status" not in normalized_output:
+            if not normalized_output:
+                raise ValueError("Report block remote dispatch returned empty payload")
+            normalized_output = {
+                "status": "completed",
+                "cached": bool(was_cached),
+                "result": normalized_output,
+            }
+        elif was_cached:
+            normalized_output["cached"] = True
         return {
-            **output_data,
+            **normalized_output,
             "block_class": block_class,
             "child_budget": _jsonable(args.get("budget")),
         }
@@ -4172,6 +4391,145 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
             "score": str(score_identifier),
             "dashboard_url": dashboard_url,
         }
+
+
+def _default_procedure_optimize_batch(args: dict[str, Any]) -> dict[str, Any]:
+    """
+    Start multiple Feedback Alignment Optimizer runs for multiple scores in parallel.
+
+    Creates N procedures from the built-in feedback_alignment_optimizer.yaml,
+    one per score, with shared parameters.
+
+    RESOURCE CONSTRAINTS:
+        - Maximum 5 scores per batch to prevent resource exhaustion
+        - Each optimizer consumes ~1-2GB RAM during LLM-intensive phases
+        - Concurrent optimizers can overwhelm shared infrastructure
+        - For larger batches, dispatch in groups of 3-5 with delays between
+
+    Required args:
+        scorecard (str): Scorecard name, key, or ID.
+        scores (list[str]): Array of score names, keys, or IDs (max 5).
+
+    Optional args (applied to all optimizer runs):
+        days (int): Feedback lookback window in days. Default 90.
+        max_iterations (int): Maximum optimization cycles. Default 3.
+        max_samples (int): Max feedback items per evaluation. Default 100.
+        ... (all other optimizer params from _default_procedure_optimize)
+
+    Returns dict with:
+        {
+            "scorecard": str,
+            "total_scores": int,
+            "dispatched": [
+                {
+                    "score": str,
+                    "procedure_id": str,
+                    "status": str,
+                    "dashboard_url": str,
+                },
+                ...
+            ],
+            "failed": [
+                {
+                    "score": str,
+                    "error": str,
+                },
+                ...
+            ]
+        }
+    """
+    MAX_BATCH_SIZE = 5
+
+    scorecard_identifier = args.get("scorecard") or args.get("scorecard_name") or args.get("scorecard_identifier")
+    scores = args.get("scores") or []
+
+    if not scorecard_identifier:
+        raise ValueError("plexus.procedure.optimize_batch requires 'scorecard'")
+    if not scores or not isinstance(scores, list):
+        raise ValueError("plexus.procedure.optimize_batch requires 'scores' as a non-empty array")
+    if len(scores) > MAX_BATCH_SIZE:
+        raise ValueError(
+            f"plexus.procedure.optimize_batch: batch size {len(scores)} exceeds maximum of {MAX_BATCH_SIZE}. "
+            f"Each optimizer consumes 1-2GB RAM during execution. For larger batches, dispatch multiple "
+            f"smaller batches sequentially."
+        )
+
+    # Prepare shared parameters (everything except scorecard/score)
+    shared_params = {k: v for k, v in args.items() if k not in ("scorecard", "scorecard_name", "scorecard_identifier", "scores", "score", "score_name", "score_identifier")}
+
+    dispatched = []
+    failed = []
+
+    for score_identifier in scores:
+        try:
+            # Call the single-score optimizer with shared params
+            single_args = {
+                "scorecard": scorecard_identifier,
+                "score": score_identifier,
+                **shared_params,
+            }
+            result = _default_procedure_optimize(single_args)
+            dispatched.append({
+                "score": score_identifier,
+                "procedure_id": result["procedure_id"],
+                "status": result.get("status", "dispatched"),
+                "dashboard_url": result.get("dashboard_url", ""),
+            })
+        except Exception as e:
+            failed.append({
+                "score": score_identifier,
+                "error": str(e),
+            })
+
+    return {
+        "scorecard": scorecard_identifier,
+        "total_scores": len(scores),
+        "dispatched": dispatched,
+        "failed": failed,
+    }
+
+
+def _default_procedure_status_batch(args: dict[str, Any]) -> dict[str, Any]:
+    """
+    Check status of multiple procedures in a single call.
+
+    Required args:
+        procedure_ids (list[str]): Array of procedure IDs to check.
+
+    Returns dict with:
+        {
+            "total": int,
+            "procedures": [
+                {
+                    "id": str,
+                    "status": str,
+                    "scorecard_name": str,
+                    "score_name": str,
+                    ...
+                },
+                ...
+            ]
+        }
+    """
+    procedure_ids = args.get("procedure_ids") or []
+    if not procedure_ids or not isinstance(procedure_ids, list):
+        raise ValueError("plexus.procedure.status_batch requires 'procedure_ids' as a non-empty array")
+
+    procedures = []
+    for proc_id in procedure_ids:
+        try:
+            info = _default_procedure_info({"procedure_id": str(proc_id)})
+            procedures.append(info)
+        except Exception as e:
+            procedures.append({
+                "procedure_id": proc_id,
+                "error": str(e),
+            })
+
+    return {
+        "total": len(procedure_ids),
+        "procedures": procedures,
+    }
 
 
 def _default_procedure_continue(args: dict[str, Any]) -> dict[str, Any]:
@@ -6513,6 +6871,7 @@ class PlexusRuntimeModule:
         default_procedure_readers = {
             "list": _default_procedure_list,
             "info": _default_procedure_info,
+            "status_batch": _default_procedure_status_batch,
             "chat_sessions": _default_procedure_chat_sessions,
             "chat_messages": _default_procedure_chat_messages,
             "steering_messages": _default_procedure_steering_messages,
@@ -6530,6 +6889,7 @@ class PlexusRuntimeModule:
             if feedback_aligner is not None
             else _default_feedback_alignment
         )
+        self._feedback_aligner_batch = _default_feedback_alignment_batch
         self._evaluation_info = (
             evaluation_info if evaluation_info is not None else _default_evaluation_info
         )
@@ -6589,6 +6949,7 @@ class PlexusRuntimeModule:
             if procedure_optimize is not None
             else _default_procedure_optimize
         )
+        self._procedure_optimize_batch = _default_procedure_optimize_batch
         self._procedure_archive = (
             procedure_archive
             if procedure_archive is not None
@@ -6598,6 +6959,7 @@ class PlexusRuntimeModule:
         self._procedure_branch = _default_procedure_branch
         self._stream_handler = stream_handler
         self._api_calls: list[str] = []
+        self._latest_score_versions: dict[tuple[str, str], dict[str, Any]] = {}
         self.handle_protocol_required: tuple[str, str] | None = None
         methods_by_namespace: dict[str, set[str]] = {}
         for namespace_name, method_name in MCP_TOOL_MAP.keys():
@@ -6641,6 +7003,183 @@ class PlexusRuntimeModule:
         self._api_calls.append(api_call)
         if self._stream_handler is not None:
             self._stream_handler.api_call(api_call)
+
+    def _score_version_cache_key(
+        self, scorecard_id: Any, score_id: Any
+    ) -> tuple[str, str] | None:
+        if not scorecard_id or not score_id:
+            return None
+        return (str(scorecard_id), str(score_id))
+
+    def _cache_latest_score_version(
+        self,
+        *,
+        scorecard_id: Any,
+        score_id: Any,
+        version_id: Any,
+        parent_version_id: Any = None,
+        source: str,
+    ) -> None:
+        key = self._score_version_cache_key(scorecard_id, score_id)
+        if key is None or not version_id:
+            return
+        self._latest_score_versions[key] = {
+            "scorecard_id": key[0],
+            "score_id": key[1],
+            "version_id": str(version_id),
+            "parent_version_id": str(parent_version_id) if parent_version_id else None,
+            "source": source,
+        }
+
+    def _cached_latest_score_version(
+        self, scorecard_id: Any, score_id: Any
+    ) -> dict[str, Any] | None:
+        key = self._score_version_cache_key(scorecard_id, score_id)
+        if key is None:
+            return None
+        return self._latest_score_versions.get(key)
+
+    def _resolve_score_identity_for_latest_cache(
+        self,
+        parsed: dict[str, Any],
+        *,
+        scorecard_arg_names: tuple[str, ...],
+        score_arg_names: tuple[str, ...],
+    ) -> tuple[str, str]:
+        from plexus.cli.shared.client_utils import create_client
+
+        scorecard_id = str(parsed.get("scorecard_id") or "").strip()
+        score_id = str(parsed.get("score_id") or "").strip()
+        if scorecard_id and score_id:
+            return scorecard_id, score_id
+
+        scorecard_identifier = next(
+            (parsed.get(name) for name in scorecard_arg_names if parsed.get(name)),
+            None,
+        )
+        score_identifier = next(
+            (parsed.get(name) for name in score_arg_names if parsed.get(name)),
+            None,
+        )
+        resolver_client = create_client()
+        resolved_scorecard = (
+            {"id": scorecard_id}
+            if scorecard_id
+            else _resolve_scorecard_for_score_edit(resolver_client, scorecard_identifier)
+        )
+        resolved_score = (
+            {"id": score_id}
+            if score_id
+            else _resolve_score_for_score_edit(
+                resolver_client,
+                str(resolved_scorecard["id"]),
+                score_identifier,
+            )
+        )
+        return str(resolved_scorecard["id"]), str(resolved_score["id"])
+
+    def _apply_latest_score_edit_start(
+        self, parsed: dict[str, Any], scorecard_id: str, score_id: str
+    ) -> str:
+        explicit_version = parsed.get("version_id") or parsed.get("version")
+        if explicit_version and str(explicit_version).strip().lower() != "latest":
+            parsed["base_version_source"] = "explicit"
+            return "explicit"
+        if explicit_version and str(explicit_version).strip().lower() == "latest":
+            parsed.pop("version", None)
+            parsed.pop("version_id", None)
+        elif str(parsed.get("start_version") or "").strip().lower() == "champion":
+            parsed["base_version_source"] = "champion"
+            return "champion"
+
+        cached = self._cached_latest_score_version(scorecard_id, score_id)
+        if cached:
+            parsed["version_id"] = cached["version_id"]
+            parsed["base_version_source"] = "session_latest"
+            return "session_latest"
+        parsed["base_version_source"] = "champion"
+        return "champion"
+
+    def _apply_latest_score_update_parent(
+        self, parsed: dict[str, Any], scorecard_id: str, score_id: str
+    ) -> str:
+        explicit_parent = parsed.get("parent_version_id")
+        explicit_version = parsed.get("version_id") or parsed.get("version")
+        if explicit_parent:
+            parsed["base_version_source"] = "explicit"
+            return "explicit"
+        if explicit_version and str(explicit_version).strip().lower() != "latest":
+            parsed["parent_version_id"] = explicit_version
+            parsed["base_version_source"] = "explicit"
+            return "explicit"
+        if explicit_version and str(explicit_version).strip().lower() == "latest":
+            parsed.pop("version", None)
+            parsed.pop("version_id", None)
+        elif str(parsed.get("start_version") or "").strip().lower() == "champion":
+            parsed["base_version_source"] = "champion"
+            return "champion"
+
+        cached = self._cached_latest_score_version(scorecard_id, score_id)
+        if cached:
+            parsed["parent_version_id"] = cached["version_id"]
+            parsed["base_version_source"] = "session_latest"
+            return "session_latest"
+        parsed["base_version_source"] = "champion"
+        return "champion"
+
+    def _apply_latest_score_evaluation_version(self, parsed: dict[str, Any]) -> None:
+        explicit_version = parsed.get("version")
+        explicit_version_id = parsed.get("version_id") or parsed.get("score_version_id")
+        version_value = explicit_version or explicit_version_id
+        if version_value and str(version_value).strip().lower() != "latest":
+            if explicit_version_id and not explicit_version:
+                parsed["version"] = explicit_version_id
+            return
+        if version_value and str(version_value).strip().lower() == "latest":
+            parsed.pop("version", None)
+            parsed.pop("version_id", None)
+            parsed.pop("score_version_id", None)
+
+        scorecard_identifier = (
+            parsed.get("scorecard_name")
+            or parsed.get("scorecard_identifier")
+            or parsed.get("scorecard")
+            or parsed.get("scorecard_id")
+        )
+        score_identifier = (
+            parsed.get("score_name")
+            or parsed.get("score_identifier")
+            or parsed.get("score")
+            or parsed.get("score_id")
+        )
+        if not scorecard_identifier or not score_identifier:
+            return
+        try:
+            scorecard_id, score_id = self._resolve_score_identity_for_latest_cache(
+                parsed,
+                scorecard_arg_names=(
+                    "scorecard_id",
+                    "scorecard_name",
+                    "scorecard_identifier",
+                    "scorecard",
+                ),
+                score_arg_names=(
+                    "score_id",
+                    "score_name",
+                    "score_identifier",
+                    "score",
+                ),
+            )
+        except Exception:
+            if version_value and str(version_value).strip().lower() == "latest":
+                raise
+            return
+        cached = self._cached_latest_score_version(scorecard_id, score_id)
+        if cached:
+            parsed["version"] = cached["version_id"]
+            parsed["scorecard_id"] = scorecard_id
+            parsed["score_id"] = score_id
+            parsed["base_version_source"] = "session_latest"
 
     def _enforce_tool_access(self, namespace: str, method: str) -> None:
         if self._tool_access_mode != "planning":
@@ -6713,7 +7252,45 @@ class PlexusRuntimeModule:
             if method == "pull":
                 return self._score_pull(parsed)
             if method == "update":
-                return self._score_update(parsed)
+                creates_version = bool(
+                    parsed.get("code")
+                    or parsed.get("yaml_content")
+                    or parsed.get("guidelines") is not None
+                )
+                scorecard_id: str | None = None
+                score_id: str | None = None
+                if creates_version:
+                    scorecard_id, score_id = self._resolve_score_identity_for_latest_cache(
+                        parsed,
+                        scorecard_arg_names=(
+                            "scorecard_id",
+                            "scorecard_identifier",
+                            "scorecard",
+                        ),
+                        score_arg_names=("score_id", "score_identifier", "score"),
+                    )
+                    parsed["scorecard_id"] = scorecard_id
+                    parsed["score_id"] = score_id
+                    self._apply_latest_score_update_parent(parsed, scorecard_id, score_id)
+                result = self._score_update(parsed)
+                if (
+                    creates_version
+                    and isinstance(result, dict)
+                    and result.get("success")
+                    and result.get("version_id")
+                ):
+                    result.setdefault("scorecard_id", scorecard_id)
+                    result.setdefault("score_id", score_id)
+                    result.setdefault("parent_version_id", parsed.get("parent_version_id"))
+                    result.setdefault("base_version_source", parsed.get("base_version_source"))
+                    self._cache_latest_score_version(
+                        scorecard_id=result.get("scorecard_id"),
+                        score_id=result.get("score_id"),
+                        version_id=result.get("version_id"),
+                        parent_version_id=result.get("parent_version_id"),
+                        source="score.update",
+                    )
+                return result
             if method == "edit":
                 if not bool(parsed.get("async")):
                     self.handle_protocol_required = ("score", "edit")
@@ -6735,6 +7312,11 @@ class PlexusRuntimeModule:
                 )
                 parsed["scorecard_id"] = str(resolved_scorecard["id"])
                 parsed["score_id"] = str(resolved_score["id"])
+                self._apply_latest_score_edit_start(
+                    parsed,
+                    str(resolved_scorecard["id"]),
+                    str(resolved_score["id"]),
+                )
                 child_budget = self._budget.carve_child("score", "edit", parsed.get("budget"))
                 dispatch_result = self._score_edit_runner(parsed)
                 handle = self._handle_store.create(
@@ -6759,7 +7341,21 @@ class PlexusRuntimeModule:
                 )
                 if await_poll is not None:
                     await_args["poll_interval"] = await_poll
-                return self._call_handle("handle", "await", await_args)
+                completed = self._call_handle("handle", "await", await_args)
+                if isinstance(completed, dict) and completed.get("status") == "completed":
+                    result = completed.get("result") or {}
+                    if isinstance(result, dict) and result.get("version_id"):
+                        result.setdefault("scorecard_id", parsed.get("scorecard_id"))
+                        result.setdefault("score_id", parsed.get("score_id"))
+                        result.setdefault("base_version_source", parsed.get("base_version_source"))
+                        self._cache_latest_score_version(
+                            scorecard_id=result.get("scorecard_id"),
+                            score_id=result.get("score_id"),
+                            version_id=result.get("version_id"),
+                            parent_version_id=result.get("parent_version_id"),
+                            source="score.edit",
+                        )
+                return completed
             if method == "test":
                 return self._score_test(parsed)
             if method == "set_champion":
@@ -6835,7 +7431,7 @@ class PlexusRuntimeModule:
             self._budget.record_after("scorecards", method)
 
     def _call_feedback(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "feedback" or method not in {"find", "alignment", "latest_update"}:
+        if namespace != "feedback" or method not in {"find", "alignment", "alignment_batch", "latest_update"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -6847,6 +7443,8 @@ class PlexusRuntimeModule:
                 return self._feedback_finder(parsed)
             if method == "latest_update":
                 return self._feedback_latest_update(parsed)
+            if method == "alignment_batch":
+                return self._feedback_aligner_batch(parsed)
             return self._feedback_aligner(parsed)
         finally:
             self._budget.record_after("feedback", method)
@@ -6918,6 +7516,7 @@ class PlexusRuntimeModule:
         parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
         if not parsed.get("procedure_id") and self._trace_id:
             parsed["procedure_id"] = self._trace_id
+        self._apply_latest_score_evaluation_version(parsed)
         if not bool(parsed.get("async")):
             self._record_api_call("evaluation", "run")
             self.handle_protocol_required = ("evaluation", "run")
@@ -7168,7 +7767,7 @@ class PlexusRuntimeModule:
             self._budget.record_after("report", "run")
 
     def _call_procedure_run(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "procedure" or method not in {"run", "optimize", "continue", "branch"}:
+        if namespace != "procedure" or method not in {"run", "optimize", "optimize_batch", "continue", "branch"}:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -7178,6 +7777,11 @@ class PlexusRuntimeModule:
             # plexus.procedure.optimize always runs asynchronously — no handle protocol needed.
             self._record_api_call("procedure", "optimize")
             return self._procedure_optimize(parsed)
+
+        if method == "optimize_batch":
+            # plexus.procedure.optimize_batch dispatches multiple optimizers.
+            self._record_api_call("procedure", "optimize_batch")
+            return self._procedure_optimize_batch(parsed)
 
         if method == "continue":
             self._record_api_call("procedure", "continue")
@@ -7952,7 +8556,7 @@ Examples:
 ```tactus
 local cards = scorecards{}
 for _, card in ipairs(cards) do
-  if card.name == "SelectQuote HCS Medium-Risk" then
+  if card.name == "Example Scorecard" then
     return { id = card.id, key = card.key, external_id = card.externalId }
   end
 end
