@@ -236,6 +236,40 @@ helm install plexus-worker-local docker/helm/plexus-worker \
 kind delete cluster --name plexus-test
 ```
 
+## Logging in K8s
+
+The K8s worker uses stdout-based structured logging — no CloudWatch dependency.
+All service logs are captured natively by `kubectl logs`.
+
+### How it works
+
+- `scoring_api.py` configures `logging.basicConfig()` to emit structured lines
+  (`timestamp level logger message`) to stdout.
+- `PLEXUS_DISABLE_CLOUDWATCH_LOGS=1` is set in Helm values to prevent any
+  transitive import from activating the watchtower CloudWatch handler.
+- Uvicorn access logs and application logs both write to stdout/stderr.
+
+### Verifying log visibility
+
+```bash
+# Automated: runs a scoring request and asserts logs are visible
+docker/scripts/smoke_test_k8s_logging.sh
+
+# With LLM-backed score (tests full inference path)
+docker/scripts/smoke_test_k8s_logging.sh --score nira-resolution-quality
+
+# Manual: tail logs from the worker deployment
+kubectl logs -f -n plexus-local deployment/plexus-plexus-worker
+```
+
+### Log format
+
+```
+2026-06-16 17:45:03,123 INFO plexus.workers.scoring_job Processing scoring job: log-test-1
+2026-06-16 17:45:03,456 INFO plexus.workers.scoring_job Fetching item nira-demo-item-1 for scoring job log-test-1
+2026-06-16 17:45:03,789 INFO plexus.workers.scoring_job Storing score result for scoring job log-test-1
+```
+
 ## Testing Without Real AWS/API
 
 If you don't have real credentials or want to test just the Kubernetes parts:
