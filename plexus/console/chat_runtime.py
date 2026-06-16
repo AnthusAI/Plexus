@@ -411,6 +411,10 @@ def maybe_auto_title_session(
     *,
     message: ConsoleMessage,
 ) -> None:
+    auto_title_enabled = str(os.getenv("CONSOLE_AUTO_TITLE_ENABLED", "true")).strip().lower()
+    if auto_title_enabled in {"0", "false", "no", "off"}:
+        return
+
     session = fetch_chat_session(client, message.session_id)
     if not session:
         return

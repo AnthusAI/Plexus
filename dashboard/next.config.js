@@ -1,4 +1,11 @@
 /** @type {import('next').NextConfig} */
+const path = require('path')
+const webpack = require('webpack')
+
+const isLocalBackend =
+    process.env.NEXT_PUBLIC_PLEXUS_BACKEND === 'local' ||
+    process.env.PLEXUS_BACKEND_MODE === 'local'
+
 const nextConfig = {
     serverExternalPackages: ['@aws-crypto'],
     typedRoutes: false,
@@ -30,6 +37,25 @@ const nextConfig = {
             net: false,
             tls: false,
         };
+
+        if (isLocalBackend) {
+            config.resolve.alias = {
+                ...config.resolve.alias,
+                'aws-amplify/data': path.resolve(__dirname, 'lib/local-amplify/data.ts'),
+                'aws-amplify/api': path.resolve(__dirname, 'lib/local-amplify/data.ts'),
+                'aws-amplify/auth': path.resolve(__dirname, 'lib/local-amplify/auth.ts'),
+                'aws-amplify/storage': path.resolve(__dirname, 'lib/local-amplify/storage.ts'),
+                '@aws-amplify/ui-react': path.resolve(__dirname, 'lib/local-amplify/ui-react.tsx'),
+                '@aws-amplify/ui-react/styles.css': path.resolve(__dirname, 'lib/local-amplify/ui-react-styles.css'),
+                '@aws-amplify/ui-react/styles.css$': path.resolve(__dirname, 'lib/local-amplify/ui-react-styles.css'),
+            };
+            config.plugins.push(
+                new webpack.NormalModuleReplacementPlugin(
+                    /^@aws-amplify\/ui-react\/styles\.css$/,
+                    path.resolve(__dirname, 'lib/local-amplify/ui-react-styles.css'),
+                ),
+            );
+        }
 
         config.module.rules.forEach(rule => {
             if (rule.oneOf) {

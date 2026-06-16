@@ -1,0 +1,25 @@
+{
+  "id": "plx-ada583ce-2dae-4e03-8389-058eea1102d0",
+  "title": "Fix local demo data visibility across scorecards/items/evaluations",
+  "description": "Ensure seeded local records are returned by dashboard local-mode queries so lab scorecards, items, and evaluations pages render non-empty demo data.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e1ff40c3-104b-48b4-b746-32875a37dc6e",
+      "author": "ryan.porter",
+      "text": "Implemented compatibility fix for legacy index-root names still used by dashboard queries. Added alias classification in services/private-graphql-proxy/proxy/schema_contract.py so roots like listItemByAccountIdAndCreatedAt and listEvaluationByAccountIdAndUpdatedAt route to local index handlers. Added regression coverage in test_operation_classifier.py and test_app_routing.py. Verified dockerized tests pass and live GraphQL checks now return seeded records for legacy roots (items/evaluations) and scorecards list returns seeded data.",
+      "created_at": "2026-06-04T22:16:36.506977Z"
+    }
+  ],
+  "created_at": "2026-06-04T22:14:23.916075Z",
+  "updated_at": "2026-06-04T22:16:39.074047Z",
+  "closed_at": "2026-06-04T22:16:39.074047Z",
+  "custom": {}
+}

@@ -107,6 +107,10 @@ function displayNameFromAttributes(attributes: UserAttributes, claims: TokenClai
   return email
 }
 
+function shouldUseLocalProfileAvatarFallback(): boolean {
+  return process.env.NEXT_PUBLIC_PLEXUS_BACKEND === "local"
+}
+
 function emailFromCurrentUser(
   attributes: UserAttributes,
   currentUser: Awaited<ReturnType<typeof getCurrentUser>> | null,
@@ -182,7 +186,9 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
     email,
     displayName,
     initials: initialsFrom(displayName, email),
-    gravatarUrl: await gravatarAvatarUrl(email),
+    gravatarUrl: shouldUseLocalProfileAvatarFallback()
+      ? null
+      : await gravatarAvatarUrl(email),
   }
 }
 

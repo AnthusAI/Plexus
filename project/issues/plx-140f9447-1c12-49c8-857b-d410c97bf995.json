@@ -1,0 +1,37 @@
+{
+  "id": "plx-140f9447-1c12-49c8-857b-d410c97bf995",
+  "title": "Audit and consolidate docker/scripts helper scripts",
+  "description": "docker/scripts/ has accumulated overlapping helper scripts across three work waves: quick_test.sh, quick_test_docker.sh, quick_test_k8s.sh, start-full-stack.sh (May 28-29), demo_k8s.sh, demo_k8s_batch.sh (June 5), setup_envoy_gateway_poc.sh, build_k8s_images.sh (June 10+). The three quick_test variants share near-identical purpose and the older scripts predate the Envoy Gateway path.\n\nAudit each script: purpose, which deployment mode it serves (SQS, Celery, scoring-api), whether it still runs against the current chart/values, and overlap with newer scripts. Delete stale ones, merge near-duplicates (e.g. one quick_test with a --target docker|k8s flag), and add a short docker/scripts/README.md inventory so future contributors (human or agent) extend instead of spawning new variants. Keep setup_envoy_gateway_poc.sh and build_k8s_images.sh as-is; they are current.",
+  "type": "chore",
+  "status": "closed",
+  "priority": 3,
+  "assignee": "@codex",
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a4e8ed79-c1a3-4d4f-bf82-6d5420e727b0",
+      "author": "derek.norrbom",
+      "text": "Planned cleanup approach before edits: inventory all docker/scripts helpers and classify each as current Envoy/kind, publish/build, demo-data setup, legacy RabbitMQ/full-stack, or stale duplicate. Current files found: build_k8s_images.sh, setup_envoy_gateway_poc.sh, setup_demo_scorecard.py, fetch_demo_transcripts.py, send_test_job.py, test_scoring_flow.py, start-full-stack.sh, quick_test.sh, quick_test_docker.sh, quick_test_k8s.sh, demo_k8s.sh, demo_k8s_batch.sh. Initial finding: quick_test*, demo_k8s*, and demo_k8s_batch are RabbitMQ/Celery-era scripts and conflict with the current Envoy HTTP scoring-api path; send_test_job.py/test_scoring_flow.py/start-full-stack.sh still map to the separate local RabbitMQ full-stack path and should be documented as legacy/optional rather than presented as current Kubernetes POC tooling. Proposed result: keep build_k8s_images.sh and setup_envoy_gateway_poc.sh as current; add docker/scripts/README.md as the script inventory and decision record; replace scattered current-test guidance with one Envoy HTTP test entry point or documented curl command; remove or move stale duplicate shell scripts after reference audit; update Python helper messages that still point users to retired scripts; validate with rg reference checks, bash -n, focused Python compile/tests, and the existing local Envoy scoring smoke path if cluster state is available.",
+      "created_at": "2026-06-11T02:05:20.832566Z"
+    },
+    {
+      "id": "7be256ee-dc9b-47c4-b37e-97dd65fa8505",
+      "author": "derek.norrbom",
+      "text": "Scope clarification from Derek: Docker Compose/RabbitMQ scripts were starter-phase scaffolding, not a path to preserve for this Kubernetes work. Revised cleanup direction: retire legacy docker/scripts helpers instead of labeling them optional; keep only Kubernetes/Envoy image/setup/test/demo-data helpers relevant to running Plexus in Kubernetes. I will update docs/messages so the visible path is Kubernetes-first and remove stale RabbitMQ/Compose script entry points from docker/scripts.",
+      "created_at": "2026-06-11T02:07:09.850235Z"
+    },
+    {
+      "id": "f583431b-5057-4ae8-964e-1192baacaa38",
+      "author": "derek.norrbom",
+      "text": "Implemented cleanup after scope clarification that Docker Compose/RabbitMQ helpers were starter-phase scaffolding, not a supported path for this Kubernetes work. Removed stale docker/scripts entry points: quick_test.sh, quick_test_docker.sh, quick_test_k8s.sh, demo_k8s.sh, demo_k8s_batch.sh, send_test_job.py, test_scoring_flow.py, and start-full-stack.sh. Removed tracked Compose scaffolding from docker/: docker-compose.yml, docker-compose.full-stack.yml, FULL_STACK_LOCAL.md, .env.example, and .env.full-stack.example. Added docker/scripts/README.md as the script inventory and added docker/scripts/test_envoy_scoring_api.sh as the single current Envoy HTTP scoring test entry point. Updated docker README/quick reference/architecture/stack README and demo helper messages to point at the Kubernetes/Envoy flow. Validation: stale Docker-area references removed, bash -n passed for shell scripts, py_compile passed for Python helpers in py311, test_envoy_scoring_api.sh --help passed, and git diff --check passed.",
+      "created_at": "2026-06-11T02:09:44.831850Z"
+    }
+  ],
+  "created_at": "2026-06-10T23:35:38.203993Z",
+  "updated_at": "2026-06-11T02:09:44.832627Z",
+  "closed_at": "2026-06-11T02:09:44.832627Z",
+  "custom": {}
+}

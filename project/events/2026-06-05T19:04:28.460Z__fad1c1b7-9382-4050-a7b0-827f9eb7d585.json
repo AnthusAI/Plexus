@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "fad1c1b7-9382-4050-a7b0-827f9eb7d585",
+  "issue_id": "plx-efe5bf9f-c3f2-4f4b-8999-4b0aa6261525",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T19:04:28.460Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Qdrant provider adapter for topic memory",
+    "description": "Implement a Qdrant-backed topic memory vector store adapter with parity for health check, rebuild, cluster persistence, metadata updates, list, and nearest-cluster query behaviors used by VectorTopicMemory.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-83e08d42-1182-41d8-aee6-99b97e1e26bb",
+    "labels": []
+  }
+}

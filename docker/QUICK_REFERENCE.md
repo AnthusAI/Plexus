@@ -1,53 +1,41 @@
 # Quick Reference - Plexus Kubernetes Deployment
 
-## TL;DR - Test Locally Right Now
+## TL;DR - Envoy Gateway POC Locally
 
 ```bash
-# 1. Enable Kubernetes in Docker Desktop (Settings → Kubernetes)
+# 1. Create local stack values
+cp docker/helm/plexus-stack/values-local.yaml.example \
+   docker/helm/plexus-stack/values-local.yaml
 
-# 2. Build image
-docker build -f docker/Dockerfile -t plexus-worker:local .
+# 2. Edit values with API/account/LLM keys
+vim docker/helm/plexus-stack/values-local.yaml
 
-# 3. Create local config
-cat > docker/helm/plexus-worker/values-local.yaml <<EOF
-workerType: score-processor
-image:
-  repository: plexus-worker
-  tag: local
-  pullPolicy: IfNotPresent
-replicaCount: 1
-autoscaling:
-  enabled: false
-env:
-  LOG_LEVEL: DEBUG
-plexus:
-  createSecrets: true
-  api:
-    url: "https://your-api-url"
-    key: "your-api-key"
-  account:
-    key: "your-account-key"
-scoreProcessor:
-  aws:
-    region: us-west-2
-    createSecrets: true
-    accessKeyId: "your-aws-key"
-    secretAccessKey: "your-aws-secret"
-  sqs:
-    requestQueueUrl: "https://sqs.../queue"
-    responseQueueUrl: "https://sqs.../response"
-EOF
+# 3. Build, install Envoy Gateway, and deploy to kind
+docker/scripts/setup_envoy_gateway_poc.sh
 
-# 4. Deploy
-helm install plexus-local docker/helm/plexus-worker \
-  -f docker/helm/plexus-worker/values-local.yaml \
-  --namespace plexus-local \
-  --create-namespace
-
-# 5. Check status
+# 4. Check status
 kubectl get pods -n plexus-local
-kubectl logs -f deployment/plexus-local -n plexus-local
+kubectl get gateway,httproute -n plexus-local
+
+# 5. Find and port-forward the Envoy data-plane Service
+kubectl get svc -A \
+  -l gateway.envoyproxy.io/owning-gateway-name=plexus-plexus-worker-gateway
+kubectl port-forward -n <envoy-service-namespace> svc/<envoy-service-name> 8080:80
+
+# 6. Smoke test routing to the scoring API
+curl -i -X POST http://localhost:8080/v1/score \
+  -H 'content-type: application/json' \
+  -d '{"scoring_job_id":"poc-route-test"}'
+
+# 7. Run a real scoring request after seeding/selecting an item
+SCORING_API_KEY=local-scoring-api-key \
+docker/scripts/test_envoy_scoring_api.sh \
+  --scorecard SCORECARD \
+  --score SCORE \
+  --item-id ITEM_ID
 ```
+
+The local kind Service can show `EXTERNAL-IP <pending>` and the Gateway can remain unprogrammed while waiting for a load-balancer address. Port-forward the Envoy data-plane Service for local testing. The smoke test above should return HTTP 422 from FastAPI, proving the request reached the scoring API. A real score requires valid local credentials plus existing `scorecard`, `score`, and `item_id` values.
 
 ## File Structure
 
@@ -69,8 +57,11 @@ docker/
 
 ### Build & Deploy
 ```bash
-# Build
+# Build local native image (kind / local k8s)
 docker build -f docker/Dockerfile -t plexus-worker:VERSION .
+
+# Build/push publishable linux/amd64 worker+proxy images
+REGISTRY=your-registry IMAGE_TAG=VERSION docker/scripts/build_k8s_images.sh
 
 # Deploy to local K8s
 helm install RELEASE docker/helm/plexus-worker -f values-ENV.yaml
@@ -115,6 +106,7 @@ Set via `workerType` in values:
 
 | Type | Purpose | Required Config |
 |------|---------|----------------|
+| `scoring-api` | Envoy-routed synchronous HTTP scoring | Plexus API/account keys |
 | `score-processor` | SQS-based scoring | AWS creds, SQS URLs |
 | `celery` | RabbitMQ tasks | Broker URL |
 | `console-worker` | Console chat | Response target |

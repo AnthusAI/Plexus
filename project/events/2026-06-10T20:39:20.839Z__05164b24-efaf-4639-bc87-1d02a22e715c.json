@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "05164b24-efaf-4639-bc87-1d02a22e715c",
+  "issue_id": "plx-9eb03409-747c-4662-9e81-fbeecc9ed445",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-10T20:39:20.839Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "services/private-graphql-proxy/tests/test_seed_huggingface_items.py asserts that DEFAULT_DATASET and DEFAULT_PREFIX equal string literals. That is a change-detector test: it duplicates the constants and only fails when someone intentionally changes them, while exercising none of the added logic.\n\nReplace it with a behavior test verifying that load_dataset receives the explicit Features schema when loading the default dataset (the actual bug-prone logic added in the seeder), or remove the test. While there, add a one-line comment in seed_huggingface_items.py explaining why the explicit Features schema is required for the default dataset (schema inference is inconsistent without it), so the special case does not read as arbitrary. Same rationale comment applies to docker/scripts/fetch_demo_transcripts.py.",
+    "issue_type": "chore",
+    "labels": [],
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "priority": 3,
+    "status": "open",
+    "title": "Replace constants-only Hugging Face fixture-default test with behavior coverage"
+  }
+}

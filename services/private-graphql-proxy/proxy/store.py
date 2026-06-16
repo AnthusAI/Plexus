@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import psycopg
+from psycopg import sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+
+from .schema_contract import get_schema_contract
 
 
 def utcnow() -> datetime:
@@ -241,6 +246,55 @@ class PostgresStore:
                     """
                 )
                 conn.commit()
+        self.initialize_local_models()
+
+    def initialize_local_models(self) -> None:
+        contract = get_schema_contract()
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("create schema if not exists local_data")
+                for model in contract.models:
+                    table = self._local_table_name(model)
+                    cur.execute(
+                        sql.SQL(
+                            """
+                            create table if not exists local_data.{table} (
+                                pk text primary key,
+                                primary_key jsonb not null,
+                                id text,
+                                account_id text,
+                                created_at timestamptz,
+                                updated_at timestamptz,
+                                doc jsonb not null
+                            )
+                            """
+                        ).format(table=sql.Identifier(table))
+                    )
+                    cur.execute(
+                        sql.SQL(
+                            "create index if not exists {index} on local_data.{table} (account_id)"
+                        ).format(
+                            index=sql.Identifier(f"{table}_account_idx"),
+                            table=sql.Identifier(table),
+                        )
+                    )
+                    cur.execute(
+                        sql.SQL(
+                            "create index if not exists {index} on local_data.{table} (updated_at)"
+                        ).format(
+                            index=sql.Identifier(f"{table}_updated_idx"),
+                            table=sql.Identifier(table),
+                        )
+                    )
+                    cur.execute(
+                        sql.SQL(
+                            "create index if not exists {index} on local_data.{table} using gin (doc)"
+                        ).format(
+                            index=sql.Identifier(f"{table}_doc_gin_idx"),
+                            table=sql.Identifier(table),
+                        )
+                    )
+                conn.commit()
 
     def ready(self) -> bool:
         with self.connect() as conn:
@@ -249,6 +303,9 @@ class PostgresStore:
                 return cur.fetchone()["ready"] == 1
 
     def upsert_private(self, model: str, input_doc: dict[str, Any]) -> dict[str, Any]:
+        if self._uses_local_model_store(model):
+            return self._upsert_local(model, input_doc)
+
         config = MODEL_CONFIGS[model]
         doc = self._normalize_private_doc(model, dict(input_doc))
         columns = list(config.columns.values())
@@ -273,6 +330,15 @@ class PostgresStore:
         return row["doc"]
 
     def update_private(self, model: str, input_doc: dict[str, Any]) -> Optional[dict[str, Any]]:
+        if self._uses_local_model_store(model):
+            existing = self.get_private(model, self._key_from_input(model, input_doc))
+            if not existing:
+                return None
+            merged = {**existing, **input_doc}
+            if "updatedAt" not in input_doc:
+                merged["updatedAt"] = iso_now()
+            return self._upsert_local(model, merged)
+
         existing = self.get_private(model, self._key_from_input(model, input_doc))
         if not existing:
             return None
@@ -282,6 +348,9 @@ class PostgresStore:
         return self.upsert_private(model, merged)
 
     def get_private(self, model: str, key: dict[str, Any]) -> Optional[dict[str, Any]]:
+        if self._uses_local_model_store(model):
+            return self._get_local(model, key)
+
         config = MODEL_CONFIGS[model]
         clauses = []
         values = []
@@ -298,6 +367,9 @@ class PostgresStore:
         return row["doc"] if row else None
 
     def delete_private(self, model: str, key: dict[str, Any]) -> Optional[dict[str, Any]]:
+        if self._uses_local_model_store(model):
+            return self._delete_local(model, key)
+
         config = MODEL_CONFIGS[model]
         clauses = []
         values = []
@@ -321,7 +393,18 @@ class PostgresStore:
         sort_direction: str = "ASC",
         sort_field: Optional[str] = None,
         limit: Optional[int] = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
+        if self._uses_local_model_store(model):
+            return self._list_local(
+                model,
+                filters,
+                sort_direction=sort_direction,
+                sort_field=sort_field,
+                limit=limit,
+                offset=offset,
+            )
+
         config = MODEL_CONFIGS[model]
         clauses = []
         values: list[Any] = []
@@ -336,6 +419,17 @@ class PostgresStore:
                 elif "beginsWith" in expected:
                     clauses.append(f"{column}::text like %s")
                     values.append(f"{expected['beginsWith']}%")
+                elif "between" in expected and isinstance(expected["between"], list) and len(expected["between"]) == 2:
+                    start, end = expected["between"]
+                    clauses.append(f"{column} >= %s and {column} <= %s")
+                    values.extend([start, end])
+                else:
+                    if "ge" in expected:
+                        clauses.append(f"{column} >= %s")
+                        values.append(expected["ge"])
+                    if "le" in expected:
+                        clauses.append(f"{column} <= %s")
+                        values.append(expected["le"])
             else:
                 clauses.append(f"{column} = %s")
                 values.append(expected)
@@ -344,8 +438,11 @@ class PostgresStore:
         order_column = config.column_for(sort_field or "") or config.default_order
         direction = "DESC" if sort_direction.upper() == "DESC" else "ASC"
         limit_sql = "limit %s" if limit else ""
+        offset_sql = "offset %s" if offset else ""
         if limit:
             values.append(limit)
+        if offset:
+            values.append(offset)
 
         with self.connect() as conn:
             with conn.cursor() as cur:
@@ -356,6 +453,7 @@ class PostgresStore:
                     {where_sql}
                     order by {order_column} {direction} nulls last
                     {limit_sql}
+                    {offset_sql}
                     """,
                     tuple(values),
                 )
@@ -468,6 +566,9 @@ class PostgresStore:
                 return cur.fetchall()
 
     def _normalize_private_doc(self, model: str, doc: dict[str, Any]) -> dict[str, Any]:
+        if self._uses_local_model_store(model):
+            return self._normalize_local_doc(model, doc)
+
         if model != "Identifier" and not doc.get("id"):
             doc["id"] = str(uuid.uuid4())
         now = iso_now()
@@ -478,6 +579,12 @@ class PostgresStore:
         return doc
 
     def _key_from_input(self, model: str, input_doc: dict[str, Any]) -> dict[str, Any]:
+        if self._uses_local_model_store(model):
+            return {
+                field: input_doc.get(field)
+                for field in get_schema_contract().primary_key_fields(model)
+            }
+
         config = MODEL_CONFIGS[model]
         return {field: input_doc.get(field) for field in config.pk_fields}
 
@@ -486,6 +593,182 @@ class PostgresStore:
         if field_name in {"createdAt", "updatedAt", "editedAt"}:
             return parse_datetime(value)
         return value
+
+    def _uses_local_model_store(self, model: str) -> bool:
+        return os.getenv("PLEXUS_BACKEND_MODE", "amplify") == "local" or model not in MODEL_CONFIGS
+
+    def _local_table_name(self, model: str) -> str:
+        snake = re.sub(r"(?<!^)(?=[A-Z])", "_", model).lower()
+        return re.sub(r"[^a-z0-9_]", "_", snake)
+
+    def _normalize_local_doc(self, model: str, doc: dict[str, Any]) -> dict[str, Any]:
+        primary_key = get_schema_contract().primary_key_fields(model)
+        if primary_key == ["id"] and not doc.get("id"):
+            doc["id"] = str(uuid.uuid4())
+        now = iso_now()
+        doc.setdefault("createdAt", now)
+        doc.setdefault("updatedAt", now)
+        return doc
+
+    def _local_pk_values(self, model: str, doc_or_key: dict[str, Any]) -> dict[str, Any]:
+        return {
+            field: doc_or_key.get(field)
+            for field in get_schema_contract().primary_key_fields(model)
+        }
+
+    def _local_pk(self, model: str, doc_or_key: dict[str, Any]) -> str:
+        values = self._local_pk_values(model, doc_or_key)
+        missing = [field for field, value in values.items() if value is None]
+        if missing:
+            raise ValueError(f"{model} missing primary key fields: {', '.join(missing)}")
+        return digest(stable_json(values))
+
+    def _upsert_local(self, model: str, input_doc: dict[str, Any]) -> dict[str, Any]:
+        table = self._local_table_name(model)
+        doc = self._normalize_local_doc(model, dict(input_doc))
+        pk_values = self._local_pk_values(model, doc)
+        pk = self._local_pk(model, doc)
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL(
+                        """
+                        insert into local_data.{table} (
+                            pk, primary_key, id, account_id, created_at, updated_at, doc
+                        )
+                        values (%s, %s, %s, %s, %s, %s, %s)
+                        on conflict (pk) do update set
+                            primary_key = excluded.primary_key,
+                            id = excluded.id,
+                            account_id = excluded.account_id,
+                            created_at = excluded.created_at,
+                            updated_at = excluded.updated_at,
+                            doc = excluded.doc
+                        returning doc
+                        """
+                    ).format(table=sql.Identifier(table)),
+                    (
+                        pk,
+                        Jsonb(pk_values),
+                        doc.get("id"),
+                        doc.get("accountId"),
+                        parse_datetime(doc.get("createdAt")),
+                        parse_datetime(doc.get("updatedAt")),
+                        Jsonb(doc),
+                    ),
+                )
+                row = cur.fetchone()
+                conn.commit()
+        return row["doc"]
+
+    def _get_local(self, model: str, key: dict[str, Any]) -> Optional[dict[str, Any]]:
+        table = self._local_table_name(model)
+        pk = self._local_pk(model, key)
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL("select doc from local_data.{table} where pk = %s").format(
+                        table=sql.Identifier(table)
+                    ),
+                    (pk,),
+                )
+                row = cur.fetchone()
+        return row["doc"] if row else None
+
+    def _delete_local(self, model: str, key: dict[str, Any]) -> Optional[dict[str, Any]]:
+        table = self._local_table_name(model)
+        pk = self._local_pk(model, key)
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL("delete from local_data.{table} where pk = %s returning doc").format(
+                        table=sql.Identifier(table)
+                    ),
+                    (pk,),
+                )
+                row = cur.fetchone()
+                conn.commit()
+        return row["doc"] if row else None
+
+    def _list_local(
+        self,
+        model: str,
+        filters: dict[str, Any],
+        sort_direction: str = "ASC",
+        sort_field: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        table = self._local_table_name(model)
+        clauses = []
+        values: list[Any] = []
+        for field_name, expected in filters.items():
+            if expected is None:
+                continue
+            if isinstance(expected, dict):
+                if "eq" in expected:
+                    clauses.append("doc ->> %s = %s")
+                    values.extend([field_name, str(expected["eq"])])
+                elif "beginsWith" in expected:
+                    clauses.append("doc ->> %s like %s")
+                    values.extend([field_name, f"{expected['beginsWith']}%"])
+                elif "between" in expected and isinstance(expected["between"], list) and len(expected["between"]) == 2:
+                    start, end = expected["between"]
+                    if _is_timestamp_field(field_name):
+                        clauses.append("(doc ->> %s)::timestamptz >= %s::timestamptz")
+                        values.extend([field_name, str(start)])
+                        clauses.append("(doc ->> %s)::timestamptz <= %s::timestamptz")
+                        values.extend([field_name, str(end)])
+                    else:
+                        clauses.append("doc ->> %s >= %s")
+                        values.extend([field_name, str(start)])
+                        clauses.append("doc ->> %s <= %s")
+                        values.extend([field_name, str(end)])
+                else:
+                    if "ge" in expected:
+                        if _is_timestamp_field(field_name):
+                            clauses.append("(doc ->> %s)::timestamptz >= %s::timestamptz")
+                            values.extend([field_name, str(expected["ge"])])
+                        else:
+                            clauses.append("doc ->> %s >= %s")
+                            values.extend([field_name, str(expected["ge"])])
+                    if "le" in expected:
+                        if _is_timestamp_field(field_name):
+                            clauses.append("(doc ->> %s)::timestamptz <= %s::timestamptz")
+                            values.extend([field_name, str(expected["le"])])
+                        else:
+                            clauses.append("doc ->> %s <= %s")
+                            values.extend([field_name, str(expected["le"])])
+                continue
+            clauses.append("doc ->> %s = %s")
+            values.extend([field_name, str(expected)])
+
+        where_sql = sql.SQL(" where ") + sql.SQL(" and ").join(sql.SQL(clause) for clause in clauses) if clauses else sql.SQL("")
+        order_field = sort_field or "updatedAt"
+        direction = sql.SQL("DESC") if sort_direction.upper() == "DESC" else sql.SQL("ASC")
+        limit_sql = sql.SQL(" limit %s") if limit else sql.SQL("")
+        offset_sql = sql.SQL(" offset %s") if offset else sql.SQL("")
+
+        query = sql.SQL(
+            "select doc from local_data.{table}{where} order by doc ->> %s {direction} nulls last{limit}{offset}"
+        ).format(
+            table=sql.Identifier(table),
+            where=where_sql,
+            direction=direction,
+            limit=limit_sql,
+            offset=offset_sql,
+        )
+        values.append(order_field)
+        if limit:
+            values.append(limit)
+        if offset:
+            values.append(offset)
+
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, tuple(values))
+                rows = cur.fetchall()
+        return [row["doc"] for row in rows]
 
 
 def cache_key_for(query: str, variables: dict[str, Any], operation_name: Optional[str]) -> str:
@@ -498,3 +781,7 @@ def digest(value: str) -> str:
 
 def stable_json(value: Any) -> str:
     return json.dumps(value or {}, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _is_timestamp_field(field_name: str) -> bool:
+    return field_name.endswith("At")

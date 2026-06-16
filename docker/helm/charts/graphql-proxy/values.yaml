@@ -116,6 +116,11 @@ affinity:
 
 # Proxy configuration
 config:
+  # Backend mode: "amplify" (default, uses AppSync) or "local" (uses PostgreSQL)
+  backendMode: "amplify"
+  # Auth mode: "" (auto-derive from proxyApiKey), "api_key", or "trusted_open"
+  authMode: ""
+
   # Proxy API key - workers use this to authenticate with the proxy
   proxyApiKey: "local-dev-key"
 

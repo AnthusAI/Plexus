@@ -135,7 +135,7 @@ def test_real_prediction_reads_seeded_postgres_items_through_proxy():
     scorecard = required_env("PLEXUS_PROXY_SCORING_SCORECARD")
     score = required_env("PLEXUS_PROXY_SCORING_SCORE")
     fixture_limit = int(os.getenv("PLEXUS_PROXY_SCORING_FIXTURE_LIMIT", "3"))
-    fixture_dataset = os.getenv("PLEXUS_PROXY_SCORING_DATASET", "fancyzhx/ag_news")
+    fixture_dataset = os.getenv("PLEXUS_PROXY_SCORING_DATASET", "apptek-com/apptek_callcenter_dialogues")
     fixture_split = os.getenv("PLEXUS_PROXY_SCORING_SPLIT", "test")
     fixture_start = int(os.getenv("PLEXUS_PROXY_SCORING_START", "0"))
 
@@ -170,7 +170,7 @@ def test_real_prediction_reads_seeded_postgres_items_through_proxy():
             "--limit",
             str(fixture_limit),
             "--prefix",
-            os.getenv("PLEXUS_PROXY_SCORING_FIXTURE_PREFIX", "proxy-scoring-ag-news"),
+            os.getenv("PLEXUS_PROXY_SCORING_FIXTURE_PREFIX", "proxy-scoring-call-center"),
             *(["--score-id", score_id] if score_id else []),
         ],
         common_env,

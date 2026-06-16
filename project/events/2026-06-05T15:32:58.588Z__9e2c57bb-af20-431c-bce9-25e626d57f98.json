@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9e2c57bb-af20-431c-bce9-25e626d57f98",
+  "issue_id": "plx-dd4f39b7-94fb-45d4-8ecc-d299d45c3271",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T15:32:58.588Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Local feedback evaluation contract parity",
+    "description": "Harden local GraphQL routing and resolver behavior for feedback-evaluation flows: feedback item index roots, evaluation roots, score-result-by-evaluation roots, and relationship selections used by FeedbackItems and evaluate feedback.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-89823a02-0f3a-40d5-b59c-a6252f465d4e",
+    "labels": []
+  }
+}

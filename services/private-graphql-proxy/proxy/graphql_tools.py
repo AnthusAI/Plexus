@@ -22,32 +22,7 @@ from graphql.language.ast import (
     VariableNode,
 )
 
-
-PRIVATE_MODELS = {"Item", "ScoreResult", "FeedbackItem", "Identifier"}
-PRIVATE_PLURALS = {
-    "Item": "Items",
-    "ScoreResult": "ScoreResults",
-    "FeedbackItem": "FeedbackItems",
-    "Identifier": "Identifiers",
-}
-CONTROL_MODELS = {
-    "Account",
-    "Scorecard",
-    "Score",
-    "ScoreVersion",
-    "Evaluation",
-    "Task",
-    "TaskStage",
-    "ScoringJob",
-    "BatchJob",
-    "Report",
-    "ReportBlock",
-    "ReportConfiguration",
-    "DataSource",
-    "DataSourceVersion",
-    "Procedure",
-    "ProcedureTemplate",
-}
+from .schema_contract import get_schema_contract
 
 
 @dataclass(frozen=True)
@@ -203,31 +178,16 @@ def project_list_connection(
     return projected
 
 
-def model_from_private_root(root_name: str) -> Optional[str]:
-    for model in sorted(PRIVATE_MODELS, key=len, reverse=True):
-        plural = PRIVATE_PLURALS[model]
-        if root_name in {
-            f"get{model}",
-            f"create{model}",
-            f"update{model}",
-            f"delete{model}",
-            f"list{plural}",
-        }:
-            return model
-        if root_name.startswith(f"list{model}By"):
-            return model
+def model_from_private_root(root_name: str, operation_type: str = "query") -> Optional[str]:
+    classification = get_schema_contract().classify_root(root_name, operation_type)
+    if classification.classification == "private":
+        return classification.model
     return None
 
 
 def is_control_read_root(root_name: str) -> bool:
-    for model in sorted(CONTROL_MODELS, key=len, reverse=True):
-        if root_name == f"get{model}":
-            return True
-        if root_name == f"list{model}s":
-            return True
-        if root_name.startswith(f"list{model}By"):
-            return True
-    return False
+    classification = get_schema_contract().classify_root(root_name, "query")
+    return classification.classification == "control"
 
 
 def _select_operation(
@@ -255,14 +215,14 @@ def _root_field(operation: OperationDefinitionNode, node: Any) -> RootField:
 
     name = node.name.value
     response_key = node.alias.value if node.alias else name
-    private_model = model_from_private_root(name)
-    if private_model:
-        return RootField(node, name, response_key, "private", private_model)
-
-    if operation.operation.value == "query" and is_control_read_root(name):
-        return RootField(node, name, response_key, "control", None)
-
-    return RootField(node, name, response_key, "blocked", None)
+    classification = get_schema_contract().classify_root(name, operation.operation.value)
+    return RootField(
+        node,
+        name,
+        response_key,
+        classification.classification,
+        classification.model,
+    )
 
 
 def _variable_names(node: Any) -> set[str]:

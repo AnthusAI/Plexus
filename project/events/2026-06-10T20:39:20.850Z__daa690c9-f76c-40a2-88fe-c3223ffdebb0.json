@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "daa690c9-f76c-40a2-88fe-c3223ffdebb0",
+  "issue_id": "plx-a3ba1e36-593f-4b54-9123-49a5120018f6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-10T20:39:20.850Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "The local POC reuses the :local image tag plus unconditional kubectl rollout restart in setup_envoy_gateway_poc.sh so kind picks up rebuilt images. That is the standard kind workaround and fine locally.\n\nFor any shared or production environment, build and deploy images tagged with the git SHA (or use digest pinning) so that Helm upgrades drive rollouts deterministically and rollback to a prior tag works. Also consider a small graphql(query, variables) helper in docker/scripts/setup_demo_scorecard.py to collapse the five duplicated requests.post + status-check + GraphQL-error-check blocks, and decide whether a score whose champion-version promotion fails should count as created (currently it is created but skipped from the created list).",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "priority": 3,
+    "status": "open",
+    "title": "Adopt immutable image tags for non-local deployments"
+  }
+}

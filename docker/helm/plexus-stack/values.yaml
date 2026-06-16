@@ -118,8 +118,8 @@ graphql-proxy:
 plexus-worker:
   enabled: true
 
-  # Set to 'celery' for RabbitMQ-based workers
-  workerType: celery
+  # Envoy Gateway POC uses synchronous HTTP scoring instead of RabbitMQ.
+  workerType: scoring-api
 
   replicaCount: 2
 
@@ -158,9 +158,26 @@ plexus-worker:
     account:
       key: ""  # Set in values-{env}.yaml
 
-  # Celery configuration
-  celery:
+  service:
     enabled: true
+    type: ClusterIP
+    port: 8000
+
+  # Synchronous scoring API configuration
+  scoringApi:
+    enabled: true
+    port: 8000
+    gateway:
+      enabled: true
+      createGateway: true
+      gatewayClassName: envoy-gateway
+      listenerName: http
+      port: 80
+      pathPrefix: /v1/score
+
+  # Celery configuration, retained only for explicit RabbitMQ deployments.
+  celery:
+    enabled: false
     app: plexus.workers.celery_app
     queue: scoring-requests
     concurrency: 4

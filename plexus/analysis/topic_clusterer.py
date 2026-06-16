@@ -51,6 +51,31 @@ class TopicClusterer:
         self._cluster_version: Optional[str] = None
         self._topic_model = None
 
+    def _cluster_with_kmeans(
+        self,
+        embeddings: np.ndarray,
+        documents: List[str],
+        *,
+        max_clusters: int = 3,
+    ) -> Tuple[np.ndarray, str]:
+        """Fallback clustering path when BERTopic dependencies are unavailable."""
+        from sklearn.cluster import KMeans
+
+        n = len(embeddings)
+        k = max(1, min(max_clusters, n // 3 if n > 1 else 1))
+        if k <= 1 or n < 2:
+            topics = np.zeros(n, dtype=int)
+        else:
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+            topics = kmeans.fit_predict(embeddings)
+
+        self._topics = np.array(topics)
+        self._embeddings = np.asarray(embeddings, dtype=np.float32)
+        self._documents = documents
+        self._topic_model = None
+        self._cluster_version = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        return self._topics, self._cluster_version
+
     def cluster(
         self,
         embeddings: np.ndarray,
@@ -64,9 +89,16 @@ class TopicClusterer:
         Cluster embeddings via BERTopic. Returns (topic_ids, cluster_version).
         topic_ids: -1 for outliers.
         """
-        from umap import UMAP
-        from bertopic import BERTopic
-        from hdbscan import HDBSCAN
+        try:
+            from umap import UMAP
+            from bertopic import BERTopic
+            from hdbscan import HDBSCAN
+        except ImportError as exc:
+            logger.warning(
+                "BERTopic dependencies unavailable (%s); falling back to KMeans clustering.",
+                exc,
+            )
+            return self._cluster_with_kmeans(embeddings, documents, max_clusters=12)
 
         n = len(embeddings)
         
@@ -74,21 +106,7 @@ class TopicClusterer:
             # Bypass UMAP/HDBSCAN/BERTopic entirely for very small datasets
             # UMAP and BERTopic's c-TF-IDF can crash with "zero-size array to reduction operation maximum"
             # or sparse matrix errors when n is too small.
-            from sklearn.cluster import KMeans
-            
-            k = max(1, min(3, n // 3))
-            if k <= 1 or n < 2:
-                topics = np.zeros(n, dtype=int)
-            else:
-                kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-                topics = kmeans.fit_predict(embeddings)
-                
-            self._topics = np.array(topics)
-            self._embeddings = np.asarray(embeddings, dtype=np.float32)
-            self._documents = documents
-            self._topic_model = None
-            self._cluster_version = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-            return self._topics, self._cluster_version
+            return self._cluster_with_kmeans(embeddings, documents, max_clusters=3)
 
         mt = min(min_topic_size or self.min_topic_size, max(2, n))
         ms = min_samples if min_samples is not None else min(2, mt)

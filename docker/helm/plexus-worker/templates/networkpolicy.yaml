@@ -14,12 +14,20 @@ spec:
   - Egress
   - Ingress
 
-  # Ingress rules - workers typically don't need ingress
+  # Ingress rules
   ingress:
+  {{- if eq .Values.workerType "scoring-api" }}
+  - from:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: {{ .Values.scoringApi.port }}
+  {{- else }}
   {{- if .Values.networkPolicy.ingress }}
   {{- toYaml .Values.networkPolicy.ingress | nindent 2 }}
   {{- else }}
   []  # No ingress by default
+  {{- end }}
   {{- end }}
 
   # Egress rules

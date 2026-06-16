@@ -1,0 +1,133 @@
+{
+  "id": "plx-75e3a735-79e0-42e0-9002-8b58c4b16198",
+  "title": "Implement synchronous scoring API behind Envoy Gateway",
+  "description": "Build a Docker-backed Kubernetes proof of concept for Plexus scoring over HTTP through Envoy Gateway. The POC adds a synchronous scoring API worker mode, Helm resources for Gateway API routing, local bootstrap documentation/scripts, and focused tests/render checks. Existing SQS-based infrastructure remains separate and unchanged.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5b67baf2-20cd-471e-9509-dde0a2211ce6",
+      "author": "derek",
+      "text": "Starting implementation. Scope: synchronous scoring API worker mode, Envoy Gateway Helm resources, local Docker-backed Kubernetes POC docs/scripts, and focused automated validation. Existing SQS infrastructure will not be changed.",
+      "created_at": "2026-06-10T00:45:29.428615295Z"
+    },
+    {
+      "id": "b8777226-50bd-49e4-a453-9768d9955092",
+      "author": "derek",
+      "text": "Implemented synchronous scoring API worker mode and Envoy Gateway POC chart/docs. Validation run in conda py311: focused worker/API/static chart tests passed; poetry check passed with existing metadata deprecation warnings; git diff whitespace check passed. Full kind/Helm/Envoy deployment validation not run on this EC2 environment.",
+      "created_at": "2026-06-10T00:55:07.438642398Z"
+    },
+    {
+      "id": "3729b35f-b9b3-482c-a8e1-b6c1b73241bb",
+      "author": "derek.norrbom",
+      "text": "Resumed Envoy Gateway scoring API POC hardening on branch feature/envoy-gateway-scoring-api-poc. Current focus: re-run focused Python and Helm validations, then exercise local kind/Envoy Gateway deployment and capture any chart or runtime fixes needed. Noted existing unrelated worktree modifications and will leave them untouched.",
+      "created_at": "2026-06-10T01:04:13.961982Z"
+    },
+    {
+      "id": "f3a03f56-1daf-4818-9cca-348c06dc6fac",
+      "author": "derek.norrbom",
+      "text": "Focused validation update: installed the project infra extra into local py311 to satisfy FastAPI imports; reran focused worker/API/chart tests successfully. Helm dependency update and stack lint passed. Standalone worker chart lint exposed an umbrella-helper dependency in the worker secret template; added a worker-local API URL helper and reran worker lint, stack lint, stack template render, and focused tests successfully. Next: run the live kind/Envoy Gateway POC validation.",
+      "created_at": "2026-06-10T01:09:07.405884Z"
+    },
+    {
+      "id": "480b7be7-667e-4981-8420-00ffb5da9466",
+      "author": "derek.norrbom",
+      "text": "Live POC validation update: first setup run created the kind cluster and installed Envoy Gateway, but the worker Docker build began pulling CUDA/GPU Torch wheels through the all-features dependency path. Stopped the build and adjusted the general worker Dockerfile to preinstall CPU Torch while preserving the all-features Plexus install. Next: rerun the setup script and validate Kubernetes resources plus HTTP routing.",
+      "created_at": "2026-06-10T01:13:20.355469Z"
+    },
+    {
+      "id": "ea61ace9-2e85-41eb-881e-cab7feae35cf",
+      "author": "derek.norrbom",
+      "text": "Live POC validation update: setup script completed after the CPU Torch Dockerfile fix, but the existing local values file selected the celery worker image/tag settings. Result: the worker rolled out as celery, no scoring API Service/Gateway/HTTPRoute was rendered, and the pod attempted to reach a RabbitMQ broker. Hardened the POC script to force the local image tags plus scoring-api worker mode, service, and Gateway API settings during Helm upgrade.",
+      "created_at": "2026-06-10T01:20:45.795133Z"
+    },
+    {
+      "id": "3abd8a48-11dc-4de6-924a-f791f75f33ba",
+      "author": "derek.norrbom",
+      "text": "Live kind/Envoy validation completed locally. Results: worker image builds with full Plexus extras after preinstalling CPU Torch; setup deploys scoring-api mode with local images; worker pod runs Uvicorn and direct /healthz and /readyz return 200; Envoy Gateway data-plane Service is created after adding GatewayClass; port-forwarded Envoy /v1/score reaches FastAPI (422 for incomplete request) and a complete sanitized request returns a structured not-found response from the scoring path. Additional hardening: setup script now forces POC image/mode/Gateway values, creates GatewayClass, waits for the Envoy data-plane Service, handles old immutable worker selector migration, and chart selectors no longer include mutable worker-type in the Deployment selector.",
+      "created_at": "2026-06-10T01:33:04.754211Z"
+    },
+    {
+      "id": "49cb4fff-9591-4a55-ae67-2ef6ba3c9976",
+      "author": "derek.norrbom",
+      "text": "Updated Envoy Gateway POC docs and quick references to match live local validation. Documented kind data-plane Service port-forwarding, expected local LoadBalancer pending behavior, route smoke test expectations, and requirements for a real scoring request. Re-ran focused validation: script syntax, Helm lint/template, Python compile, focused pytest, Poetry check, and whitespace check all pass.",
+      "created_at": "2026-06-10T17:10:44.145868Z"
+    },
+    {
+      "id": "24e2b7d2-395f-40b0-8cef-1ad51bf689ad",
+      "author": "derek.norrbom",
+      "text": "Reviewing local setup script after concern about hidden local-only behavior. Goal is to keep the Helm values/chart as the source of truth and limit the script to local cluster bootstrap, local image loading, and validation of the expected Envoy/scoring resources.",
+      "created_at": "2026-06-10T17:12:57.012450Z"
+    },
+    {
+      "id": "be6b89aa-a767-478b-b377-3a3c930c28f8",
+      "author": "derek.norrbom",
+      "text": "Tightened local Envoy setup script to reduce hidden local-only behavior. The values file now remains the source of truth for scoring API, Service, and Gateway settings; the script only overrides local image references for kind and validates that WORKER_TYPE=scoring-api plus the Service/Gateway/HTTPRoute are present. Re-ran script syntax, Helm lint/template, focused Helm tests, and diff whitespace checks.",
+      "created_at": "2026-06-10T17:13:39.512966Z"
+    },
+    {
+      "id": "bc4a7ca2-08c1-4bf8-8b99-7d59c710305e",
+      "author": "derek.norrbom",
+      "text": "While checking the demo-safe sandbox scorecard, found and fixed a scoring-path resolver issue: synchronous scoring now resolves the score within the resolved scorecard instead of using the global score-name lookup. This prevents duplicate demo/client score names from selecting the wrong score during Kubernetes scoring tests.",
+      "created_at": "2026-06-10T17:37:21.133275Z"
+    },
+    {
+      "id": "09121dd4-18eb-4a0c-ab56-b05e5f126fb9",
+      "author": "derek.norrbom",
+      "text": "Progress: completed real local kind/Envoy validation for the scoring API path using public fixture data and a demo-safe score. The POST /v1/score route returned HTTP 200 with a persisted score result ID, and a follow-up GraphQL proxy read confirmed the result was stored. Hardening completed during validation: scoped score resolution to the requested scorecard, fixed result ID parsing from createScoreResult responses, updated the demo setup script to promote created score versions, and made the local setup script restart deployments after loading static local images. Validation passed: focused pytest suite, py_compile, bash -n, helm lint for worker and stack charts, and git diff --check.",
+      "created_at": "2026-06-10T17:56:59.462626Z"
+    },
+    {
+      "id": "58d1120b-2b6b-4720-aac3-3d72fd77c046",
+      "author": "derek.norrbom",
+      "text": "Adjustment: local validation exposed that the manual Envoy scoring request used a public news fixture instead of the existing call-center transcript fixture path. I am updating the local validation flow so future kind/Envoy scoring tests seed and score demo-safe call-center transcript data by default.",
+      "created_at": "2026-06-10T18:56:12.573563Z"
+    },
+    {
+      "id": "0bc482d1-0cab-48ac-b978-a271c1e7fb4e",
+      "author": "derek.norrbom",
+      "text": "Progress: corrected the local scoring fixture source. The private proxy scoring integration and Hugging Face seeding defaults now use the public call-center transcript dataset instead of the old news fixture, with a regression test for the default dataset and prefix. Also hardened transcript loading so the seeders read text fields without requiring audio decoding packages. Re-ran kind/Envoy scoring against a real call-center transcript item; POST /v1/score returned HTTP 200 with a persisted result ID. Validation passed: focused pytest suite including the new fixture-default test, py_compile for changed seeders, bash -n for scripts, rg check for old news defaults, and git diff --check.",
+      "created_at": "2026-06-10T19:00:48.566231Z"
+    },
+    {
+      "id": "0dd536c4-505d-48ec-880a-c4a18c1cfcb9",
+      "author": "derek.norrbom",
+      "text": "Progress: completed a pre-commit security and best-practices audit over the Envoy/scoring working-tree changes. Fixed the actionable API findings: removed exception text exposure from HTTP responses, removed user-controlled scoring IDs from log messages, and added optional separate inbound API-key auth for POST /v1/score with Helm Secret/env wiring and tests. Confirmed the call-center fixture defaults remain in place. Validation passed: focused pytest suite, py_compile, Helm lint/template with scoring auth enabled, bash -n, git diff --check, and narrowed CodeQL report over changed Python files.",
+      "created_at": "2026-06-10T19:50:24.998594Z"
+    },
+    {
+      "id": "1ea338d8-00f8-4d75-8985-de0a32c9ee5d",
+      "author": "derek.norrbom",
+      "text": "Code quality and best-practices audit completed over the current working-tree changes (validation: focused pytest in conda py311, 12 passed). Overall assessment: implementation is sound; findings filed as follow-up issues under epic plx-4586dd rather than left as code TODOs:\n\n- plx-ae1d73 (story, P1): restore injection-safe failure diagnostics to scoring API server logs (response sanitization stays).\n- plx-bcf0c8 (story, P1): make inbound scoring API auth misconfiguration visible / optionally fail-closed; add wrong-key test.\n- plx-e3a0bf (story, P2): falsy-aware accountId fallback; missing PLEXUS_ACCOUNT_KEY should be 5xx not 400.\n- plx-1421d5 (task, P2): resolve dual-shape createScoreResult response handling.\n- plx-7da300 (chore, P2): pin Envoy Gateway chart version and CPU Torch version.\n- plx-a68e1c (task, P2): remove the one-time immutable-selector migration block from the POC setup script before merge.\n- plx-025fa4 (chore, P2): render-based Helm template tests; required api-url at install time.\n- plx-9eb034 (chore, P3): replace constants-only fixture-default test with behavior coverage of the Features schema.\n- plx-a3ba1e (task, P3): immutable image tags for non-local deployments; demo-script GraphQL helper cleanup.\n\nSeparate local-state note (not an issue): the .shared-hooks submodule gitlink showed as deleted in the working tree; restored locally so it does not ride into a commit. Positive audit notes: podLabels/selectorLabels split documented and tested, separate inbound key vs backend key, secrets.compare_digest, auth as FastAPI dependency, post-deploy validation in setup script, honest kind LoadBalancer-pending docs.",
+      "created_at": "2026-06-10T20:39:34.688658Z"
+    },
+    {
+      "id": "82fed1c7-c7a6-420b-b2c8-8d1ed9861f29",
+      "author": "derek.norrbom",
+      "text": "Progress: worked through the nine audit follow-up issues filed under the Envoy Gateway scoring API epic. Implemented all requested code/doc/test changes in the working tree and added per-issue progress notes. Attempted to mark the new issues done, but this repo policy rejected status=done as unknown, so they remain in_progress pending the correct completion/landing workflow. No open questions were left for the other model.",
+      "created_at": "2026-06-10T21:04:28.253679Z"
+    },
+    {
+      "id": "e43616a2-40b9-4cba-b1c2-996ce2ca154b",
+      "author": "derek.norrbom",
+      "text": "Audit follow-up review completed and all nine findings issues closed (plx-ae1d73, plx-bcf0c8, plx-e3a0bf, plx-1421d5, plx-7da300, plx-a68e1c, plx-025fa4, plx-9eb034, plx-a3ba1e). Implementations were verified against each issue's acceptance criteria by reading the working-tree diffs and running validation: 23 focused tests pass in conda py311 (workers API/job, render-based Helm template tests, seeder behavior test), py_compile clean, bash -n clean, helm lint clean, git diff --check clean. One defect found and fixed during review under plx-ae1d73: the log reason-code classifier string-matched user-influenced error message text (score-not-found always classified as scorecard_not_found; identifiers could flip codes). Replaced with explicit constant reason_code values set on ScoringJobError at raise sites, spec-first with failing tests confirmed red before the fix. Remaining branch state: all changes uncommitted on feature/envoy-gateway-scoring-api-poc, ready for commit.",
+      "created_at": "2026-06-10T21:15:20.331133Z"
+    },
+    {
+      "id": "e45a92d5-a986-4df7-98a1-3c163a776285",
+      "author": "derek.norrbom",
+      "text": "Handoff checkpoint after script/build cleanup. Branch: feature/envoy-gateway-scoring-api-poc. Recent commits: 21e0678 added the linux/amd64 buildx image path for worker/proxy images and validated amd64 smoke builds; 087df1a consolidated Docker/Kubernetes helper scripts, removed starter-phase Docker Compose/RabbitMQ helper entry points from docker/, added docker/scripts/README.md, and added docker/scripts/test_envoy_scoring_api.sh as the current Envoy HTTP scoring test command. Current intended workflow: use docker/helm/plexus-stack/values-local.yaml for local settings, run docker/scripts/setup_envoy_gateway_poc.sh for kind/Envoy, port-forward the Envoy data-plane Service, then run docker/scripts/test_envoy_scoring_api.sh with explicit scorecard, score, and item ID; set SCORING_API_KEY when inbound auth is enabled. Key decisions: Kubernetes/Envoy scoring-api is the project direction; Docker Compose/RabbitMQ scripts were starter-phase scaffolding and should not be presented as current; local kind stays native-arch for speed; registry-published images must use linux/amd64 or multi-arch via build_k8s_images.sh. Known remaining work is under the epic: platform prerequisites, TLS/hostname/Gateway listener work, and managed-cluster validation when an environment is available. Latest validation before commit: bash -n for current shell scripts, py_compile for edited Python helpers in py311, test_envoy_scoring_api.sh --help, stale-reference rg checks, git diff --check, plus earlier successful local kind/Envoy scoring with demo-safe call-center data.",
+      "created_at": "2026-06-11T02:41:10.948207Z"
+    }
+  ],
+  "created_at": "2026-06-10T00:45:25.928877026Z",
+  "updated_at": "2026-06-11T02:41:10.948207Z",
+  "closed_at": null,
+  "custom": {}
+}

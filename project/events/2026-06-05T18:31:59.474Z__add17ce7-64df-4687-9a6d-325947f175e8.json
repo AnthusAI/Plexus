@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "add17ce7-64df-4687-9a6d-325947f175e8",
+  "issue_id": "plx-d9992092-f054-4fb0-a702-605c1a09ed75",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T18:31:59.474Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Audit local object-storage surfaces",
+    "description": "Inventory ordinary S3 and Amplify Storage usages for the local control-plane MVP. Classify each surface as MinIO-covered, needs a local adapter, or vector-only/out of MinIO scope.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-4206d89f-35df-45c6-9feb-bff339d0656f",
+    "labels": []
+  }
+}

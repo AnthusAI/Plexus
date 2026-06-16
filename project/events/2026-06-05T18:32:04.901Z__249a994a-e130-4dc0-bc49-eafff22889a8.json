@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "249a994a-e130-4dc0-bc49-eafff22889a8",
+  "issue_id": "plx-76a2740f-5594-4c61-9f27-709c7134aab6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T18:32:04.901Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Unify local object-store client config",
+    "description": "Share MinIO endpoint, path-style, region, bucket, and credential handling across Python object-storage helpers so local mode does not duplicate boto3 setup.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-4206d89f-35df-45c6-9feb-bff339d0656f",
+    "labels": []
+  }
+}

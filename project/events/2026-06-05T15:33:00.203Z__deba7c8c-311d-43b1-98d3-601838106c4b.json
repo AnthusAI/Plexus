@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "deba7c8c-311d-43b1-98d3-601838106c4b",
+  "issue_id": "plx-bfdab001-b025-4b77-b51a-bd526271ee85",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T15:33:00.203Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Extend clean proof harness for feedback evaluation",
+    "description": "Extend prove-local-control-plane harness to include feedback-evaluation smoke, exact proof artifact checks, and no-upstream assertions while keeping scope restricted to smoke stack resources.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-89823a02-0f3a-40d5-b59c-a6252f465d4e",
+    "labels": []
+  }
+}

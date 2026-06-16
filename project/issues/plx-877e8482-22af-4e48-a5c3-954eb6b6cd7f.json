@@ -1,0 +1,37 @@
+{
+  "id": "plx-877e8482-22af-4e48-a5c3-954eb6b6cd7f",
+  "title": "Build linux/amd64 worker and proxy images alongside local arm64",
+  "description": "Local images are built on Apple Silicon, producing linux/arm64. Managed cloud Kubernetes nodes are typically linux/amd64, so current images will fail at pull/exec on the production target. Add a docker buildx multi-arch (or explicit --platform linux/amd64) build path for plexus-worker and the private GraphQL proxy. Keep the local kind flow on native arch for speed; the amd64/multi-arch path is for registry-published images. Validate by building both architectures and running the scoring import smoke test under emulation or on an amd64 host.",
+  "type": "chore",
+  "status": "closed",
+  "priority": 1,
+  "assignee": "@codex",
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d389dbd1-71b9-4cbe-a7c3-233540194216",
+      "author": "derek.norrbom",
+      "text": "Starting implementation. I will add a dedicated linux/amd64 publish path for plexus-worker and graphql-proxy while keeping local kind/native image builds unchanged. Then I will validate image manifests and run focused smoke checks.",
+      "created_at": "2026-06-10T23:23:38.039028Z"
+    },
+    {
+      "id": "bff62939-457b-4a2e-992d-61592156f446",
+      "author": "derek.norrbom",
+      "text": "Reopened: issue was closed without progress log, close summary, or recorded validation. Corrective pass: review found two defects in build_k8s_images.sh — (1) default PUSH=true with empty REGISTRY pushes to docker.io/library and fails access-denied; will require REGISTRY when PUSH=true; (2) 'docker buildx use' permanently switches the machine-global default builder as a side effect; will pass --builder per build instead and restore the user's default. Then run the chore's validation: amd64 build via the script with PUSH=false and a scoring import smoke test under emulation, and close with a proper summary.",
+      "created_at": "2026-06-10T23:33:37.148087Z"
+    },
+    {
+      "id": "4bd429ff-545f-46db-99a0-bba32dead31a",
+      "author": "derek.norrbom",
+      "text": "Completed properly. Fixes applied to build_k8s_images.sh: (1) REGISTRY now required when PUSH=true with a clear error, preventing accidental docker.io/library pushes; (2) builds pass --builder explicitly and the script no longer runs 'docker buildx use', so the machine-global default builder is untouched (user's default restored to desktop-linux). Guard rails verified: PUSH=true without REGISTRY exits with guidance; PUSH=false with multi-platform exits explaining the --load limitation. Chore validation executed: PUSH=false PLATFORMS=linux/amd64 IMAGE_TAG=amd64-validate built both worker and proxy images through the script, and a scoring import smoke test ran under emulation in the amd64 worker image confirming x86_64 and a working scoring import chain. bash -n clean. Docs already updated in docker/README, QUICK_REFERENCE, and stack README by the initial pass.",
+      "created_at": "2026-06-10T23:35:38.172488Z"
+    }
+  ],
+  "created_at": "2026-06-10T23:10:06.583884Z",
+  "updated_at": "2026-06-10T23:35:38.188607Z",
+  "closed_at": "2026-06-10T23:35:38.188607Z",
+  "custom": {}
+}

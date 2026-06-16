@@ -1,0 +1,31 @@
+{
+  "id": "plx-e5297f88-3da6-4f3e-86b4-50b47a1b135b",
+  "title": "Production viability vetting",
+  "description": "Document and test production-readiness risks for the local control plane: auth and tenancy enforcement, schema migration discipline, attachment/storage behavior, realtime/subscription strategy, observability, backup/restore, and performance under high-volume models.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "10647a68-71cc-4728-9176-a2e08f5cc953",
+      "author": "ryan.porter",
+      "text": "Production vetting slice starting. Current local MVP evidence: CLI smoke, prediction writeback, feedback evaluation, report artifact persistence through MinIO, browser smoke coverage, and Qdrant-backed VectorTopicMemory all pass locally with no hosted GraphQL upstream requests. This slice will add executable evidence plus a concise risk register for production blockers rather than implementing full production hardening.",
+      "created_at": "2026-06-05T19:55:18.685721Z"
+    },
+    {
+      "id": "72935a8a-dc35-4091-95c8-125ca43833c4",
+      "author": "ryan.porter",
+      "text": "Production viability vetting evidence implemented. Added executable harness scripts/vet-local-control-plane.sh, focused proxy tests, and documentation/local-control-plane-production-vetting.md. Verification passed: targeted proxy tests, full clean local proof harness, and production vetting harness. Vetting result: pass=1, risk=5, blocked=0. Key surfaced risks are auth/tenancy isolation, schema migration readiness, realtime implementation, high-volume query shape, and operations/backup readiness; MinIO/Qdrant/no-upstream boundary evidence passes.",
+      "created_at": "2026-06-05T20:03:15.768979Z"
+    }
+  ],
+  "created_at": "2026-06-04T22:51:32.910604Z",
+  "updated_at": "2026-06-05T20:03:23.280378Z",
+  "closed_at": "2026-06-05T20:03:23.280378Z",
+  "custom": {}
+}

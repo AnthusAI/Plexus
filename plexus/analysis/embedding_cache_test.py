@@ -61,6 +61,38 @@ class TestCacheKey:
 
 
 class TestEmbeddingCache:
+    def test_uses_default_s3_client_when_object_store_env_not_set(self, monkeypatch):
+        monkeypatch.delenv("PLEXUS_OBJECT_STORE_ENDPOINT", raising=False)
+        mock_client = MagicMock()
+        boto3_client = MagicMock(return_value=mock_client)
+        monkeypatch.setattr("plexus.analysis.embedding_cache.boto3.client", boto3_client)
+
+        cache = EmbeddingCache(bucket_name="test-bucket")
+
+        assert cache._s3 is mock_client
+        boto3_client.assert_called_once_with("s3")
+
+    def test_uses_object_store_client_when_endpoint_set(self, monkeypatch):
+        monkeypatch.setenv("PLEXUS_OBJECT_STORE_ENDPOINT", "http://localhost:19000")
+        monkeypatch.setenv("PLEXUS_OBJECT_STORE_REGION", "us-east-1")
+        monkeypatch.setenv("PLEXUS_OBJECT_STORE_FORCE_PATH_STYLE", "true")
+        monkeypatch.setenv("PLEXUS_OBJECT_STORE_ACCESS_KEY_ID", "local-key")
+        monkeypatch.setenv("PLEXUS_OBJECT_STORE_SECRET_ACCESS_KEY", "local-secret")
+
+        mock_client = MagicMock()
+        boto3_client = MagicMock(return_value=mock_client)
+        monkeypatch.setattr("plexus.analysis.embedding_cache.boto3.client", boto3_client)
+
+        cache = EmbeddingCache(bucket_name="test-bucket")
+
+        assert cache._s3 is mock_client
+        boto3_client.assert_called_once()
+        kwargs = boto3_client.call_args.kwargs
+        assert kwargs["endpoint_url"] == "http://localhost:19000"
+        assert kwargs["aws_access_key_id"] == "local-key"
+        assert kwargs["aws_secret_access_key"] == "local-secret"
+        assert kwargs["region_name"] == "us-east-1"
+
     def test_get_miss_returns_none(self):
         from botocore.exceptions import ClientError
 

@@ -1,0 +1,6 @@
+{{- $environment := default "development" .Values.global.environment -}}
+{{- $localEnvironments := list "local" "development" "dev" "test" -}}
+{{- $tag := .Values.image.tag | default .Chart.AppVersion -}}
+{{- if and (not (has $environment $localEnvironments)) (or (eq $tag "latest") (eq $tag "local")) -}}
+{{- fail (printf "image.tag must be immutable for environment %q; got %q" $environment $tag) -}}
+{{- end -}}

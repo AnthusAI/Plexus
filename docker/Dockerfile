@@ -41,10 +41,12 @@ WORKDIR /app
 # Copy repository for local installation
 COPY --chown=plexus:plexus . /app
 
-# Install Plexus with all dependencies
-# Note: Using [all] to include ML, infra (celery), and all optional deps
+# Install Plexus with the scoring and infrastructure extras only.
+# The ML training stack (torch, transformers, xgboost, ...) is excluded;
+# scoring and the predict CLI do not need it. Use ".[all]" for training images.
+ARG PLEXUS_EXTRAS="scoring,infra"
 RUN python -m pip install --upgrade pip && \
-    python -m pip install --no-cache-dir -e ".[all]"
+    python -m pip install --no-cache-dir -e ".[$PLEXUS_EXTRAS]"
 
 # Download NLTK data during build (required for some scoring operations)
 RUN python -c "import nltk; \

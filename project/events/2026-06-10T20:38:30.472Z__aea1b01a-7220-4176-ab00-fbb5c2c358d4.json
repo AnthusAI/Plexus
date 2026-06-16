@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "aea1b01a-7220-4176-ab00-fbb5c2c358d4",
+  "issue_id": "plx-bcf0c8b4-a575-4a44-a168-ba51b5fb23e2",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-10T20:38:30.472Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "require_scoring_api_key in plexus/workers/scoring_api.py returns early when SCORING_API_KEY is unset, so POST /v1/score silently serves unauthenticated. The Helm path fails closed (a missing secretKeyRef key blocks container start, and the chart `required`s the value), but running the image outside the chart with auth intended yields open auth with no signal.\n\nAdd a startup warning when no inbound key is configured, and consider an explicit opt-in flag (e.g. SCORING_API_AUTH_REQUIRED) that refuses to serve without a key for exposed environments. Test gap: only the missing-key branch is exercised; add a wrong-key test to cover the compare_digest branch.\n\n```gherkin\nFeature: Inbound scoring API authentication configuration\n  Scenario: Missing key is visible at startup\n    Given the scoring API starts without an inbound API key configured\n    Then a startup warning records that inbound auth is disabled\n\n  Scenario: Auth can be made mandatory\n    Given auth is configured as required and no inbound API key is set\n    When the scoring API starts\n    Then it refuses to serve scoring requests\n\n  Scenario: Wrong key is rejected\n    Given an inbound API key is configured\n    When a request sends an incorrect key\n    Then the API responds 401\n```",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "priority": 1,
+    "status": "open",
+    "title": "Scoring API inbound auth misconfiguration is visible and can fail closed"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "991d5744-d3f2-4119-aa60-8c5c40198609",
+  "issue_id": "plx-d513c9a8-4513-4bae-9549-e4444e975cfe",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T15:32:57.835Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Seed 200 local feedback evaluation fixtures",
+    "description": "Extend local deterministic seed data with 200 public-safe Nira call-center Item records and 200 linked FeedbackItem records with balanced Yes/No ground-truth labels, deterministic IDs, and complete feedback metadata required for feedback evaluation.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-89823a02-0f3a-40d5-b59c-a6252f465d4e",
+    "labels": []
+  }
+}

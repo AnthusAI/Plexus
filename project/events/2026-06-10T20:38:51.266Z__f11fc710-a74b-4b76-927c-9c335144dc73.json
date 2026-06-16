@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f11fc710-a74b-4b76-927c-9c335144dc73",
+  "issue_id": "plx-7da30039-dd31-46bf-acda-235a4a589e71",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-10T20:38:51.266Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Two unpinned versions in the deployment path make builds non-reproducible between local POC runs and any future shared environment:\n\n1. docker/scripts/setup_envoy_gateway_poc.sh installs `oci://docker.io/envoyproxy/gateway-helm` with no `--version`; an upstream release can change behavior between runs. Pin the chart version.\n\n2. docker/Dockerfile preinstalls unpinned `torch` from the CPU wheel index. Torch is only a transitive dependency (via transformers / sentence-transformers), so the resolved version floats per build, and a future resolver conflict could reintroduce CUDA wheels. Pin the CPU Torch version next to the index URL.",
+    "issue_type": "chore",
+    "labels": [],
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "priority": 2,
+    "status": "open",
+    "title": "Pin Envoy Gateway chart version and CPU Torch version for reproducible builds"
+  }
+}

@@ -103,3 +103,26 @@ def test_get_cluster_records():
         assert "p95_distance" in r
         assert "label" in r
         assert "member_count" in r
+
+
+def test_cluster_falls_back_to_kmeans_when_bertopic_deps_missing():
+    np.random.seed(42)
+    n = 40
+    dim = 384
+    embeddings = np.random.randn(n, dim).astype(np.float32) * 0.1
+    docs = [f"doc {i}" for i in range(n)]
+    clusterer = TopicClusterer(min_topic_size=5)
+
+    real_import = __import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name in {"umap", "bertopic", "hdbscan"}:
+            raise ImportError(f"missing test dependency: {name}")
+        return real_import(name, globals, locals, fromlist, level)
+
+    with patch("builtins.__import__", side_effect=fake_import):
+        topics, version = clusterer.cluster(embeddings, docs, min_topic_size=5)
+
+    assert len(topics) == n
+    assert version is not None
+    assert len(set(int(t) for t in topics)) >= 1

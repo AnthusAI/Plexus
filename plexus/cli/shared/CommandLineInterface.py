@@ -20,7 +20,6 @@ from plexus.cli.tuning.operations import tuning
 from plexus.cli.training.operations import train
 from plexus.cli.result.results import score_results, score_result, result, results
 from plexus.cli.report.reports import report
-from plexus.cli.data.operations import data
 from plexus.cli.dataset.datasets import dataset
 from plexus.cli.score_chat.chat import score_chat
 from plexus.cli.data_lake.operations import lake_group
@@ -32,6 +31,14 @@ from plexus.cli.procedure.procedures import procedure
 from plexus.cli.rubric_memory.commands import rubric_memory
 from plexus.cli.chat.chats import chat
 from plexus.cli.execute.execute import execute
+
+_OPTIONAL_COMMAND_IMPORT_ERRORS: Dict[str, Exception] = {}
+
+try:
+    from plexus.cli.data.operations import data
+except Exception as exc:  # pragma: no cover - import failure behavior is validated via CLI smoke
+    data = None
+    _OPTIONAL_COMMAND_IMPORT_ERRORS["data"] = exc
 
 # Define OrderCommands class for command ordering
 class OrderCommands(click.Group):
@@ -79,7 +86,6 @@ cli.add_command(score_result)
 cli.add_command(result)
 cli.add_command(results)
 cli.add_command(report)
-cli.add_command(data)
 cli.add_command(score_chat)
 cli.add_command(lake_group)
 cli.add_command(feedback)
@@ -93,6 +99,21 @@ cli.add_command(procedure)
 cli.add_command(rubric_memory)
 cli.add_command(chat)
 cli.add_command(execute)
+
+if data is not None:
+    cli.add_command(data)
+else:
+    @click.command(name="data")
+    def data_unavailable() -> None:
+        error = _OPTIONAL_COMMAND_IMPORT_ERRORS.get("data")
+        detail = f"{error.__class__.__name__}: {error}" if error else "unknown import failure"
+        raise click.ClickException(
+            "The `data` command is unavailable in this environment. "
+            "Install optional data dependencies and retry. "
+            f"Import error: {detail}"
+        )
+
+    cli.add_command(data_unavailable)
 
 def main():
     """

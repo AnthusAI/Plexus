@@ -28,10 +28,6 @@ from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.utils import resample
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-import xgboost as xgb
-from imblearn.over_sampling import RandomOverSampler, SMOTE
-from imblearn.under_sampling import RandomUnderSampler
-
 from dotenv import load_dotenv
 response = load_dotenv('./.env')
 
@@ -347,6 +343,11 @@ def compute_shap_feature_importances(
         top_n_features=10000,
         sample_size=1,
         ngram_range=(2,3)):
+    # Training-only dependencies, imported lazily (like shap below) so that
+    # scoring-only installs can load this module without the training extras.
+    import xgboost as xgb
+    from imblearn.over_sampling import SMOTE
+
     logging.info(f"Computing feature importance for scorecard: {scorecard_id}, score: {score_name}")
 
     # Filter the dataframe to include only the relevant score

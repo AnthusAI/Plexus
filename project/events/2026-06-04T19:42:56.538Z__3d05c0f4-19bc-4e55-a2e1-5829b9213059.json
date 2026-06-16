@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3d05c0f4-19bc-4e55-a2e1-5829b9213059",
+  "issue_id": "plx-a4b4e8cc-bf04-40fc-b10a-fb74ff1318b1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-04T19:42:56.538Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Add strict local CLI prediction smoke roundtrip",
+    "description": "Create scripts/smoke-local-predict.sh that fails hard on missing local roots, runs plexus predict against seeded local data, parses score_result_id, and verifies persisted ScoreResult linkage fields in local GraphQL.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+    "labels": []
+  }
+}

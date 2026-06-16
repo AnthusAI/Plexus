@@ -1,0 +1,31 @@
+{
+  "id": "plx-b80481c7-33fe-4145-9b95-f1fc47da21e5",
+  "title": "Explicit local security modes",
+  "description": "Make the local control-plane security posture explicit. Add trusted-open mode for externally protected local deployments, preserve API-key compatibility mode, expose non-secret readiness metadata, and keep hosted upstream access disabled in trusted-open mode.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "234f2d66-087f-4ceb-99dc-672c5b79bcb6",
+      "author": "ryan.porter",
+      "text": "Starting explicit local security modes slice.\n\nContext:\n- Production vetting under plx-e5297f is complete and shows local MVP proof passes, but auth/tenancy was previously recorded as a production risk.\n- The desired local/K8s deployment model may rely on external access control, such as cluster networking, ingress, VPN, or another perimeter.\n- Fully open trusted mode is therefore an intentional supported mode for externally protected deployments, not an accidental demo shortcut.\n\nImplementation intent:\n- Add explicit `trusted_open` and `api_key` modes.\n- In `trusted_open`, Plexus does not authenticate or authorize callers and does not enforce account tenancy; any reachable caller can access local records.\n- Guard `trusted_open` so it only works in local backend mode and never with hosted upstream forwarding enabled.\n- Keep API-key mode as compatibility boundary only; it must not be described as tenant isolation.\n",
+      "created_at": "2026-06-05T20:38:17.322106Z"
+    },
+    {
+      "id": "2f8ffd24-8c00-4816-969b-d3b0f5057783",
+      "author": "ryan.porter",
+      "text": "Explicit local security modes slice implemented.\n\nWhat changed:\n- Added `PLEXUS_PROXY_AUTH_MODE=trusted_open|api_key`.\n- `trusted_open` is explicit fully open local mode: no Plexus auth, no account authorization, external access control required.\n- `api_key` preserves the existing shared-secret compatibility boundary and is not tenant isolation.\n- `/readyz` now reports non-secret security metadata: backend mode, auth mode, whether auth mode was explicit, upstream-disabled state, and whether external access control is required.\n- Guardrails reject trusted-open readiness/startup unless backend mode is local and hosted upstream forwarding is disabled.\n- Added trusted-open smoke proof and updated production-vetting evidence to distinguish trusted-open from API-key mode.\n\nVerification:\n- Targeted proxy tests passed: 34 passed.\n- Full clean local proof harness passed in default API-key mode.\n- Trusted-open smoke passed: no-key GraphQL read succeeded by design and no hosted upstream requests were recorded.\n- Vetting harness passed in API-key mode with auth/tenancy still recorded as tenant-isolation risk.\n- Vetting harness passed in trusted-open mode with summary pass=2 risk=4 blocked=0.\n\nCurrent local smoke proxy was restored to default API-key mode after trusted-open verification.\n",
+      "created_at": "2026-06-05T20:47:18.546891Z"
+    }
+  ],
+  "created_at": "2026-06-05T20:38:07.772327Z",
+  "updated_at": "2026-06-05T20:47:19.373701Z",
+  "closed_at": "2026-06-05T20:47:19.373701Z",
+  "custom": {}
+}

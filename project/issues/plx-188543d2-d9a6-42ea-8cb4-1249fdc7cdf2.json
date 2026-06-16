@@ -1,0 +1,25 @@
+{
+  "id": "plx-188543d2-d9a6-42ea-8cb4-1249fdc7cdf2",
+  "title": "Verify local stack bring-up and demo seeding",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "904f4adf-e34b-419d-8757-d9f307ae3cc6",
+      "author": "ryan.porter",
+      "text": "Completed. Verified local stack bring-up and seed path in local backend mode: docker compose postgres+proxy up, seed script run against local GraphQL endpoint, and /readyz + seeded records checks passing.",
+      "created_at": "2026-06-04T21:49:39.430404Z"
+    }
+  ],
+  "created_at": "2026-06-04T19:10:54.545821Z",
+  "updated_at": "2026-06-04T21:49:44.377121Z",
+  "closed_at": "2026-06-04T21:49:44.377121Z",
+  "custom": {}
+}

@@ -1,0 +1,25 @@
+{
+  "id": "plx-c37e0c57-2980-4172-9d9e-a1ab72c9dc4b",
+  "title": "Local control-plane MVP: schema, dashboard, and prediction proof",
+  "description": "",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-5b670257-243b-4415-90b1-88418f1df375",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3a23771e-41ba-4d36-80cc-223e15384497",
+      "author": "ryan.porter",
+      "text": "Starting new MVP slice: local worker orchestration proof package. Focus is runnable documentation plus strict smoke evidence for task dispatch and local console/chat worker execution without hosted GraphQL forwarding. AWS mode remains unchanged.",
+      "created_at": "2026-06-06T18:02:36.826300Z"
+    }
+  ],
+  "created_at": "2026-06-04T18:00:17.155886Z",
+  "updated_at": "2026-06-06T18:02:36.826300Z",
+  "closed_at": null,
+  "custom": {}
+}

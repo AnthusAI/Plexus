@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from datetime import datetime, timezone
 from types import SimpleNamespace
+import numpy as np
 
 from plexus.reports.blocks.vector_topic_memory import VectorTopicMemory
 
@@ -63,6 +64,21 @@ def test_vector_topic_memory_resolves_default_s3_vectors_from_environment(
     assert cfg["bucket_name"] == "plexus-vectors-development"
     assert cfg["index_name"] == "topic-memory-idx-development"
     assert cfg["region"] == "us-west-2"
+
+
+def test_vector_topic_memory_resolves_qdrant_provider_from_environment(
+    vector_topic_memory_block, monkeypatch
+):
+    """Vector provider/env config resolves to qdrant when explicitly selected."""
+    monkeypatch.setenv("PLEXUS_VECTOR_STORE_PROVIDER", "qdrant")
+    monkeypatch.setenv("PLEXUS_VECTOR_STORE_URL", "http://localhost:19002")
+    monkeypatch.setenv("PLEXUS_VECTOR_STORE_COLLECTION", "topic-memory-local")
+
+    cfg = vector_topic_memory_block._resolve_vector_store_config()
+
+    assert cfg["provider"] == "qdrant"
+    assert cfg["qdrant"]["url"] == "http://localhost:19002"
+    assert cfg["qdrant"]["collection"] == "topic-memory-local"
 
 
 @pytest.mark.asyncio
@@ -410,3 +426,49 @@ async def test_vector_topic_memory_resolves_score_result_no_explanation_source(
     assert datasets[0]["texts"] == ["Retain this explanation."]
     assert datasets[0]["doc_ids"] == ["sr-keep"]
     assert datasets[0]["timestamps"] == [datetime(2026, 3, 4, 19, 0, tzinfo=timezone.utc)]
+
+
+@pytest.mark.asyncio
+async def test_vector_topic_memory_uses_qdrant_provider_in_local_mode(vector_topic_memory_block):
+    """generate() routes to provider factory and reports qdrant health failures as partial."""
+    vector_topic_memory_block.config = {
+        "scorecard": "nira-call-center-qa",
+        "days": 30,
+        "vector_store": {
+            "provider": "qdrant",
+            "url": "http://localhost:19002",
+            "collection": "topic-memory-local",
+        },
+    }
+
+    vector_topic_memory_block._resolve_feedback_datasets = AsyncMock(
+        return_value=[
+            {
+                "score_id": "44245",
+                "score_name": "Resolution Quality",
+                "texts": ["sample feedback text"],
+                "doc_ids": ["doc-1"],
+                "timestamps": [datetime(2026, 3, 4, 19, 0, tzinfo=timezone.utc)],
+            }
+        ]
+    )
+
+    mock_embedding_service = MagicMock()
+    mock_embedding_service.batch_embed.return_value = [np.zeros(384, dtype=np.float32)]
+    mock_vector_store = MagicMock()
+    mock_vector_store.health_check.return_value = False
+
+    with patch(
+        "plexus.analysis.embedding_cache.EmbeddingService",
+        return_value=mock_embedding_service,
+    ), patch(
+        "plexus.analysis.vector_store_factory.create_topic_memory_vector_store",
+        return_value=mock_vector_store,
+    ) as mock_factory:
+        output_data, _ = await vector_topic_memory_block.generate()
+
+    assert output_data["status"] == "partial"
+    assert "QDRANT unavailable" in output_data["summary"]
+    assert mock_factory.call_count == 1
+    called_config = mock_factory.call_args.args[0]
+    assert called_config["provider"] == "qdrant"
