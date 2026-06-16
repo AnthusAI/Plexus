@@ -152,6 +152,6 @@ Find the Envoy data-plane Service created for the Gateway:
   kubectl get svc -A -l gateway.envoyproxy.io/owning-gateway-name=$RELEASE_NAME-plexus-worker-gateway
 
 Port-forward that Service to test locally, then POST to /v1/score:
-  kubectl port-forward -n <envoy-service-namespace> svc/<envoy-service-name> 8080:80
+  kubectl port-forward -n ${ENVOY_SERVICE%%/*} svc/${ENVOY_SERVICE##*/} 8080:80
 
 EOF
