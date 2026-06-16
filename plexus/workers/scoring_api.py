@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import secrets
+import sys
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from typing import Any, Dict, Optional
@@ -18,6 +19,12 @@ from pydantic import BaseModel, Field
 
 from plexus.workers.scoring_job import ScoringJobError, process_scoring_job_sync
 
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    stream=sys.stdout,
+    force=True,
+)
 logger = logging.getLogger(__name__)
 
 
