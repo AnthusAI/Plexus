@@ -146,6 +146,7 @@ plexus-worker:
   env:
     LOG_LEVEL: INFO
     MAX_JOBS_PER_WORKER: "100"
+    PLEXUS_DISABLE_CLOUDWATCH_LOGS: "1"
 
   # Plexus API configuration (points to proxy)
   plexus:

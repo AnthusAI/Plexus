@@ -81,6 +81,7 @@ plexus-worker:
   env:
     LOG_LEVEL: DEBUG
     MAX_JOBS_PER_WORKER: "10"
+    PLEXUS_DISABLE_CLOUDWATCH_LOGS: "1"
   plexus:
     createSecrets: true
     api:

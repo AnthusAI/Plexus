@@ -164,6 +164,8 @@ env:
   MAX_JOBS_PER_WORKER: "100"
   ERROR_RETRY_DELAY: "5"
   SCORECARD_CACHE_DIR: /app/data/scorecards
+  # Disable CloudWatch log shipping — K8s captures stdout/stderr natively.
+  PLEXUS_DISABLE_CLOUDWATCH_LOGS: "1"
 
 # Plexus API configuration (from secrets)
 plexus:

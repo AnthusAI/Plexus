@@ -1,0 +1,25 @@
+{
+  "id": "plx-3599a71a-52df-4103-b082-c7fecd4a5662",
+  "title": "Replace CloudWatch logging with stdout for K8s log capture",
+  "description": "",
+  "type": "chore",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "60c45b2f-9b22-4d2d-9e2e-5d14f9e1b10d",
+      "author": "derek.norrbom",
+      "text": "**Context:** K8s MVP scoring path (scoring_api.py, scoring_job.py, TactusScore.py) already uses stdlib logging (logging.getLogger) — no CloudWatch dependency was ever wired in. However, best practice requires: (1) explicit PLEXUS_DISABLE_CLOUDWATCH_LOGS=1 in Helm values as defensive guard against transitive imports, (2) explicit logging.basicConfig in scoring_api lifespan for structured output, (3) verification that kubectl logs captures scoring worker output. This is a hardening chore, not a migration — CloudWatch code remains for AWS production path.",
+      "created_at": "2026-06-16T17:31:25.690073Z"
+    }
+  ],
+  "created_at": "2026-06-16T17:31:18.379671Z",
+  "updated_at": "2026-06-16T17:31:28.258758Z",
+  "closed_at": null,
+  "custom": {}
+}
