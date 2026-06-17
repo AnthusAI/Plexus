@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "Plexus": {
+      "command": "/path/to/miniconda3/envs/py311/bin/python",
+      "args": [
+        "/path/to/Projects/Plexus/MCP/plexus_fastmcp_wrapper.py",
+        "--target-cwd", "/path/to/Projects/Plexus",
+        "--transport", "stdio"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "/path/to/Projects/Plexus"
+      }
+    }
+  }
+}
