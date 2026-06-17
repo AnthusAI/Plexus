@@ -109,6 +109,26 @@ Long-running calls such as `plexus.evaluation.run`, `plexus.report.run`, and
 Blocking calls that need handle semantics fail with a structured
 `requires_handle_protocol` error.
 
+## Claude Code Setup
+
+Claude Code discovers MCP servers from `.mcp.json` at the project root.
+This file is gitignored (per-user paths). Copy the example and update paths:
+
+```bash
+cp .mcp.json.example .mcp.json
+# Edit .mcp.json — replace /path/to/ with your actual paths
+```
+
+Then in `.claude/settings.local.json`, enable the server:
+
+```json
+{
+  "enabledMcpjsonServers": ["Plexus"]
+}
+```
+
+Restart Claude Code to connect.
+
 ## Server Entry Points
 
 The main server entry point is `MCP/server.py`. It registers only

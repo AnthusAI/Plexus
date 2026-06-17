@@ -11,6 +11,7 @@ mlruns/
 .DS_Store
 .env
 .env.full-stack
+.mcp.json
 tmp/
 .langchain.db/
 .plexus_training_data_cache/
