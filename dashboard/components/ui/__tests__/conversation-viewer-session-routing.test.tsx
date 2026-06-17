@@ -334,7 +334,8 @@ describe("ConversationViewer session-routing states", () => {
           accountId: "acct-1",
           procedureId: "builtin:console/chat",
           category: "Optimize",
-        })
+        }),
+        expect.anything()
       )
       expect(onSessionSelect).toHaveBeenCalledWith("session-new")
     })
@@ -592,7 +593,8 @@ describe("ConversationViewer session-routing states", () => {
         expect.objectContaining({
           id: "session-1",
           name: "My Renamed Session",
-        })
+        }),
+        expect.anything()
       )
       expect(parsedMetadata).toEqual(
         expect.objectContaining({
