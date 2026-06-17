@@ -3,7 +3,7 @@
   "title": "Replace CloudWatch logging with stdout for K8s log capture",
   "description": "",
   "type": "chore",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -19,7 +19,7 @@
     }
   ],
   "created_at": "2026-06-16T17:31:18.379671Z",
-  "updated_at": "2026-06-16T17:31:28.258758Z",
-  "closed_at": null,
+  "updated_at": "2026-06-17T18:23:42.778774Z",
+  "closed_at": "2026-06-17T18:23:42.778774Z",
   "custom": {}
 }
