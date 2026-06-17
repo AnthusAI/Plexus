@@ -25,14 +25,19 @@ export default function BrandableLogo({
 }: BrandableLogoProps) {
   const { config } = useBrand();
   const logo = config?.logo;
+  const hasVariantPaths = Boolean(
+    logo?.squarePath?.trim()
+    && logo?.widePath?.trim()
+    && logo?.narrowPath?.trim()
+  );
 
-  if (logo) {
+  if (logo && hasVariantPaths) {
     const src =
       variant === LogoVariant.Square
-        ? logo.squarePath
+        ? logo.squarePath!
         : variant === LogoVariant.Wide
-          ? logo.widePath
-          : logo.narrowPath;
+          ? logo.widePath!
+          : logo.narrowPath!;
 
     return (
       <img

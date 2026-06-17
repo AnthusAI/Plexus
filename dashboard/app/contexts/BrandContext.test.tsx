@@ -197,6 +197,32 @@ describe('BrandContext', () => {
     });
   });
 
+  it('should accept componentPath logo brand config', async () => {
+    const componentPathConfig = {
+      name: 'Component Brand',
+      logo: {
+        componentPath: '/brands/component/logo.js',
+      },
+      styles: { cssPath: '/brands/component/styles.css' },
+    };
+
+    process.env.NEXT_PUBLIC_BRAND_CONFIG_URL = '/brands/component/brand.json';
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => componentPathConfig,
+    });
+
+    render(
+      <BrandProvider>
+        <TestComponent />
+      </BrandProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Brand: Component Brand')).toBeInTheDocument();
+    });
+  });
+
   it('should not cause React DOM errors when elements are removed', async () => {
     const mockConfig = {
       name: 'Test Brand',

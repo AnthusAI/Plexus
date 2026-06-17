@@ -3,9 +3,10 @@
  */
 
 export interface BrandLogoConfig {
-  squarePath: string;
-  widePath: string;
-  narrowPath: string;
+  squarePath?: string;
+  widePath?: string;
+  narrowPath?: string;
+  componentPath?: string;
   altText?: string;
 }
 
@@ -39,19 +40,21 @@ export function validateBrandConfig(config: unknown): config is BrandConfig {
     return false;
   }
 
-  // logo is optional, but if present must define all variant paths
+  // logo is optional, but if present must define either:
+  // - all variant paths (square/wide/narrow), or
+  // - a componentPath for custom rendering
   if (cfg.logo !== undefined) {
     if (typeof cfg.logo !== 'object' || cfg.logo === null) {
       return false;
     }
     const logo = cfg.logo as Record<string, unknown>;
-    if (typeof logo.squarePath !== 'string' || logo.squarePath.trim() === '') {
-      return false;
-    }
-    if (typeof logo.widePath !== 'string' || logo.widePath.trim() === '') {
-      return false;
-    }
-    if (typeof logo.narrowPath !== 'string' || logo.narrowPath.trim() === '') {
+    const hasVariantPaths =
+      typeof logo.squarePath === 'string' && logo.squarePath.trim() !== ''
+      && typeof logo.widePath === 'string' && logo.widePath.trim() !== ''
+      && typeof logo.narrowPath === 'string' && logo.narrowPath.trim() !== '';
+    const hasComponentPath =
+      typeof logo.componentPath === 'string' && logo.componentPath.trim() !== '';
+    if (!hasVariantPaths && !hasComponentPath) {
       return false;
     }
     if (logo.altText !== undefined && typeof logo.altText !== 'string') {
