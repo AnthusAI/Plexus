@@ -9,6 +9,7 @@ new one-off variants here without updating this inventory.
 | --- | --- |
 | `setup_envoy_gateway_poc.sh` | Create or reuse a local kind cluster, install Envoy Gateway, build/load local images, and deploy the Plexus stack in `scoring-api` mode. |
 | `test_envoy_scoring_api.sh` | Send a real `POST /v1/score` request through the Envoy listener. Use after port-forwarding the Envoy data-plane Service. |
+| `smoke_test_k8s_logging.sh` | End-to-end smoke test: auto-discovers Envoy service, port-forwards, fires a scoring request, and verifies structured logs appear in `kubectl logs`. |
 | `build_k8s_images.sh` | Build publishable `linux/amd64` or multi-arch worker and GraphQL proxy images for registry-backed cluster deployments. |
 | `setup_demo_scorecard.py` | Create a demo-safe call-center scorecard in the configured backend. |
 | `fetch_demo_transcripts.py` | Seed demo-safe call-center transcript items through the GraphQL proxy. |
@@ -16,8 +17,20 @@ new one-off variants here without updating this inventory.
 ## Local Envoy Flow
 
 ```bash
+# Deploy the full stack (builds images, installs Envoy Gateway, seeds demo data)
 docker/scripts/setup_envoy_gateway_poc.sh
 
+# Run the automated smoke test (handles port-forwarding and log verification)
+docker/scripts/smoke_test_k8s_logging.sh
+
+# Test with the LLM-backed score instead of the default Lua score
+docker/scripts/smoke_test_k8s_logging.sh --score nira-resolution-quality
+```
+
+For manual testing or custom requests, use `test_envoy_scoring_api.sh` after
+port-forwarding the Envoy data-plane Service yourself:
+
+```bash
 kubectl get svc -A \
   -l gateway.envoyproxy.io/owning-gateway-name=plexus-plexus-worker-gateway
 
