@@ -129,6 +129,41 @@ export function ShareResourceModal({
       }
     }
   };
+
+  const handleCopyShareUrl = async () => {
+    if (!shareUrl) {
+      return
+    }
+
+    if (!navigator.clipboard?.writeText) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      const successMsg = document.createElement('div')
+      successMsg.className = 'text-xs text-green-500 mt-1'
+      successMsg.textContent = 'Copied!'
+
+      const container = document.getElementById('shareUrlContainer')
+      if (container) {
+        container.appendChild(successMsg)
+        setTimeout(() => {
+          if (successMsg.parentElement === container) {
+            container.removeChild(successMsg)
+          }
+        }, 2000)
+      }
+    } catch (error) {
+      if (
+        error instanceof DOMException
+        && error.name === 'NotAllowedError'
+      ) {
+        return
+      }
+      console.error('Failed to copy:', error)
+    }
+  }
   
   // Get title and description based on resource type
   const getModalTitle = () => {
@@ -236,25 +271,10 @@ export function ShareResourceModal({
                   className="flex-1 px-3 py-2 text-sm border rounded-md bg-background"
                   onClick={(e) => e.currentTarget.select()}
                 />
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText(shareUrl)
-                      .then(() => {
-                        // Show success message
-                        const successMsg = document.createElement('div');
-                        successMsg.className = 'text-xs text-green-500 mt-1';
-                        successMsg.textContent = 'Copied!';
-                        
-                        const container = document.getElementById('shareUrlContainer');
-                        if (container) {
-                          container.appendChild(successMsg);
-                          setTimeout(() => {
-                            container.removeChild(successMsg);
-                          }, 2000);
-                        }
-                      })
-                      .catch(err => console.error('Failed to copy:', err));
+                    void handleCopyShareUrl()
                   }}
                 >
                   Copy
