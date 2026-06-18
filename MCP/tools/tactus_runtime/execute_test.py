@@ -121,9 +121,13 @@ def test_wrap_tactus_snippet_injects_plexus_helpers_and_capture() -> None:
     assert "function procedures(args)" in wrapped
     assert "function handle_status(args)" in wrapped
     assert "function docs_get(args)" in wrapped
+    assert "function skills_list(args)" in wrapped
+    assert "function skills_get(args)" in wrapped
+    assert "function guidelines_validate(args)" in wrapped
     assert "function api_list(args)" in wrapped
     assert "function scorecards_search(args)" in wrapped
     assert "function score_search(args)" in wrapped
+    assert "function score_resolve(args)" in wrapped
     assert "return __plexus_last_result" in wrapped
     assert "__execute_tactus_user_snippet" in wrapped
 
@@ -172,6 +176,110 @@ def test_plexus_facade_delegates_score_info_call_to_direct_handler() -> None:
     assert info_args == [{"id": "score_compliance_tone"}]
     assert fake_mcp.calls == []
     assert facade.api_calls == ["plexus.score.info"]
+
+
+def test_default_score_info_accepts_version_alias(monkeypatch) -> None:
+    class FakeClient:
+        def execute(self, query: str) -> dict[str, Any]:
+            if "GetScorecardWithScores" in query:
+                return {
+                    "getScorecard": {
+                        "id": "sc-1",
+                        "name": "Example Scorecard",
+                        "key": "example-scorecard",
+                        "sections": {
+                            "items": [
+                                {
+                                    "id": "section-1",
+                                    "name": "Default",
+                                    "scores": {
+                                        "items": [
+                                            {
+                                                "id": "score-1",
+                                                "name": "Example Score",
+                                                "key": "example-score",
+                                                "externalId": "123",
+                                                "description": "Example",
+                                                "type": "STANDARD",
+                                                "championVersionId": "sv-champion",
+                                                "isDisabled": False,
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                }
+            if "GetScoreVersions" in query:
+                return {
+                    "getScore": {
+                        "id": "score-1",
+                        "name": "Example Score",
+                        "key": "example-score",
+                        "externalId": "123",
+                        "championVersionId": "sv-champion",
+                        "versions": {
+                            "items": [
+                                {
+                                    "id": "sv-candidate",
+                                    "createdAt": "2026-01-02T00:00:00Z",
+                                    "isFeatured": False,
+                                    "parentVersionId": "sv-champion",
+                                    "note": "Candidate",
+                                    "metadata": None,
+                                },
+                                {
+                                    "id": "sv-champion",
+                                    "createdAt": "2026-01-01T00:00:00Z",
+                                    "isFeatured": False,
+                                    "parentVersionId": None,
+                                    "note": "Champion",
+                                    "metadata": None,
+                                },
+                            ]
+                        },
+                    }
+                }
+            if "GetScoreVersionForInfo" in query:
+                assert 'getScoreVersion(id: "sv-candidate")' in query
+                return {
+                    "getScoreVersion": {
+                        "id": "sv-candidate",
+                        "configuration": "name: Candidate\n",
+                        "guidelines": "# Candidate guidelines\n",
+                        "createdAt": "2026-01-02T00:00:00Z",
+                        "updatedAt": "2026-01-02T00:00:00Z",
+                        "note": "Candidate",
+                        "isFeatured": False,
+                        "parentVersionId": "sv-champion",
+                        "metadata": None,
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.scorecard.scorecards.resolve_scorecard_identifier",
+        lambda _client, identifier: "sc-1" if identifier == "Example Scorecard" else None,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: FakeClient(),
+    )
+
+    result = execute._default_score_info(
+        {
+            "scorecard_identifier": "Example Scorecard",
+            "score_identifier": "Example Score",
+            "version": "sv-candidate",
+        }
+    )
+
+    assert result["targetVersionId"] == "sv-candidate"
+    assert result["isChampionVersion"] is False
+    assert result["isSpecificVersion"] is True
+    assert result["versionDetails"]["id"] == "sv-candidate"
+    assert result["code"] == "name: Candidate\n"
 
 
 def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> None:
@@ -257,6 +365,13 @@ def test_default_score_update_applies_actor_attribution(monkeypatch) -> None:
         )
 
         def execute(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
+            if "GetParentScoreVersionGuidelines" in query:
+                return {
+                    "getScoreVersion": {
+                        "id": variables["id"],
+                        "guidelines": "# Legacy parent guidelines\n",
+                    }
+                }
             if "createScoreVersion" in query:
                 mutation_inputs.append(variables["input"])
                 return {"createScoreVersion": {"id": "version-123", "createdAt": "now"}}
@@ -710,7 +825,23 @@ def test_default_score_update_serializes_attribution_metadata(monkeypatch) -> No
         {
             "scorecard_identifier": "Scorecard",
             "score_identifier": "Score",
-            "guidelines": "Guidelines",
+            "guidelines": (
+                "# Test Classifier\n\n"
+                "## Objective\n\n"
+                "Classify Yes/No.\n\n"
+                "## Classes\n"
+                "- Valid labels: [Yes, No]\n"
+                "- Target class: Yes\n"
+                "- Default class: No\n\n"
+                "## Definition of Yes\n\n"
+                "Positive class.\n\n"
+                "## Conditions for Yes\n\n"
+                "- Condition.\n\n"
+                "## Definition of No\n\n"
+                "Negative class.\n\n"
+                "## Conditions for No\n\n"
+                "- Condition.\n"
+            ),
             "version_note": "Test version",
         }
     )
@@ -722,6 +853,95 @@ def test_default_score_update_serializes_attribution_metadata(monkeypatch) -> No
     parsed = json.loads(metadata)
     assert parsed["attribution"]["requestUserId"] == "user-1"
     assert parsed["attribution"]["source"] == "execute_tactus"
+    assert result["guidelines_validation"]["is_valid"] is True
+
+
+def test_default_score_update_rejects_invalid_guidelines_before_mutation(monkeypatch) -> None:
+    create_score_version_called = False
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            nonlocal create_score_version_called
+            if "CreateScoreVersion" in query:
+                create_score_version_called = True
+            if "GetScoreChampionId" in query:
+                return {"getScore": {"championVersionId": "version-1"}}
+            return {}
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: FakeClient(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.direct_identifier_resolution.direct_resolve_scorecard_identifier",
+        lambda _client, _identifier: "scorecard-1",
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.direct_identifier_resolution.direct_resolve_score_identifier",
+        lambda _client, _scorecard_id, _identifier: "score-1",
+    )
+
+    result = execute._default_score_update(
+        {
+            "scorecard_identifier": "Scorecard",
+            "score_identifier": "Score",
+            "guidelines": "# Invalid\n\nNo classes section.\n",
+        }
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "guidelines_validation_failed"
+    assert result["guidelines_validation"]["is_valid"] is False
+    assert create_score_version_called is False
+
+
+def test_default_score_update_preserves_parent_guidelines_for_code_only_edits(
+    monkeypatch,
+) -> None:
+    captured_inputs: list[dict] = []
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "GetScoreChampionId" in query:
+                return {
+                    "getScore": {
+                        "championVersionId": "version-parent",
+                        "championVersion": {"guidelines": "# Legacy rubric\n\nFreeform text.\n"},
+                    }
+                }
+            if "CreateScoreVersion" in query:
+                captured_inputs.append(variables["input"])
+                return {"createScoreVersion": {"id": "version-child", "createdAt": "now"}}
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: FakeClient(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.direct_identifier_resolution.direct_resolve_scorecard_identifier",
+        lambda _client, _identifier: "scorecard-1",
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.direct_identifier_resolution.direct_resolve_score_identifier",
+        lambda _client, _scorecard_id, _identifier: "score-1",
+    )
+
+    result = execute._default_score_update(
+        {
+            "scorecard_identifier": "Scorecard",
+            "score_identifier": "Score",
+            "code": "name: updated\n",
+            "version_note": "code-only",
+        }
+    )
+
+    assert result["success"] is True
+    assert result["version_id"] == "version-child"
+    assert result["guidelines_preserved"] is True
+    assert result["guidelines_source"] == "parent_version"
+    assert captured_inputs
+    assert captured_inputs[0]["guidelines"] == "# Legacy rubric\n\nFreeform text.\n"
 
 
 def test_default_score_set_champion_does_not_duplicate_open_history_entry(
@@ -1089,6 +1309,8 @@ async def test_execute_tactus_tool_description_contains_curated_examples() -> No
         "api_list()",
         "docs_list()",
         "docs_get",
+        "skills_list",
+        "skills_get",
         "evaluate{",
         "predict{",
         "scorecards{",
@@ -1170,6 +1392,18 @@ def test_execute_tactus_description_teaches_progressive_disclosure() -> None:
         "tool description should include a concrete docs_list example "
         "filtered by namespace"
     )
+
+
+def test_execute_tactus_description_teaches_skill_progressive_disclosure() -> None:
+    description = execute.EXECUTE_TACTUS_DESCRIPTION
+
+    assert "plexus.skills.list" in description
+    assert "plexus.skills.get" in description
+    assert "skills_list{}" in description
+    assert "metadata only" in description
+    assert "loads one full skill body" in description
+    assert "Cite the skill id" in description
+    assert "Do not preload every skill" in description
 
 
 @pytest.mark.asyncio
@@ -1670,6 +1904,90 @@ async def test_execute_tactus_reports_tactus_syntax_error_as_structured_error() 
     assert result["cost"]["tool_calls"] == 0
 
 
+def test_sanitize_instruction_string_literals_converts_to_lua_long_brackets() -> None:
+    tactus = (
+        "local edit = plexus.score.edit({ scorecard_identifier = \"sc\", "
+        "score_identifier = \"s\", instruction = 'Tighten customer''s evidence requirement', "
+        "async = true })\n"
+    )
+
+    sanitized = execute._sanitize_instruction_string_literals(tactus)
+
+    assert "instruction = [[" in sanitized
+    assert "customer''s evidence requirement" in sanitized
+    assert "async = true" in sanitized
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_retries_once_after_unterminated_string_for_instruction(
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_run_tactus_sync(
+        tactus,
+        mcp,
+        *,
+        trace_id,
+        trace_store,
+        budget=None,
+        **kwargs,
+    ):
+        calls.append(tactus)
+        if len(calls) == 1:
+            return {
+                "ok": False,
+                "value": None,
+                "error": {
+                    "code": "tactus_execution_failed",
+                    "message": "Unterminated string starting at line 2 column 11",
+                    "retryable": False,
+                },
+                "cost": {
+                    "usd": 0.0,
+                    "wallclock_seconds": 0.01,
+                    "tokens": 0,
+                    "llm_calls": 0,
+                    "tool_calls": 0,
+                    "workers": 0,
+                    "depth_max_observed": 0,
+                },
+                "trace_id": trace_id,
+                "partial": False,
+                "api_calls": [],
+            }
+        return {
+            "ok": True,
+            "value": {"ok": True},
+            "error": None,
+            "cost": {
+                "usd": 0.0,
+                "wallclock_seconds": 0.01,
+                "tokens": 0,
+                "llm_calls": 0,
+                "tool_calls": 0,
+                "workers": 0,
+                "depth_max_observed": 0,
+            },
+            "trace_id": trace_id,
+            "partial": False,
+            "api_calls": [],
+        }
+
+    monkeypatch.setattr(execute, "_run_tactus_sync", fake_run_tactus_sync)
+
+    snippet = (
+        "local edit = plexus.score.edit({ scorecard_identifier = \"sc\", "
+        "score_identifier = \"s\", instruction = 'Tighten customer''s evidence requirement', "
+        "async = true })\n"
+    )
+    result = await execute._execute_tactus_tool(snippet, FastMCP("retry-test"))
+
+    assert result["ok"] is True
+    assert len(calls) == 2
+    assert "instruction = [[" in calls[1]
+
+
 def test_plexus_facade_rejects_unsupported_namespace_method() -> None:
     facade = execute.PlexusRuntimeModule(FastMCP("test"))
 
@@ -1683,12 +2001,16 @@ def test_plexus_api_list_advertises_known_namespaces() -> None:
     catalog = facade.api.list()
 
     assert "plexus.docs" in catalog
+    assert "plexus.skills" in catalog
+    assert "plexus.guidelines" in catalog
     assert "plexus.api" in catalog
     assert "plexus.score" in catalog
     assert "info" in catalog["plexus.score"]
     assert "create" in catalog["plexus.score"]
     assert "plexus.scorecards" in catalog
     assert "create" in catalog["plexus.scorecards"]
+    assert catalog["plexus.skills"] == ["get", "list"]
+    assert catalog["plexus.guidelines"] == ["validate"]
     assert facade.api_calls == ["plexus.api.list"]
 
 
@@ -1703,7 +2025,59 @@ def test_plexus_api_list_stays_complete_in_planning_mode() -> None:
     assert "run" in catalog["plexus.report"]
     assert "run" in catalog["plexus.evaluation"]
     assert "optimize" in catalog["plexus.procedure"]
+    assert catalog["plexus.skills"] == ["get", "list"]
+    assert catalog["plexus.guidelines"] == ["validate"]
     assert facade.api_calls == ["plexus.api.list"]
+
+
+def test_guidelines_validate_returns_structured_validation_result() -> None:
+    module = execute.PlexusRuntimeModule(FastMCP("test"))
+
+    result = module.guidelines.validate(
+        {
+            "guidelines": "# Test\n\n"
+            "## Objective\n\nDetect a condition.\n\n"
+            "## Classes\n- Valid labels: [Yes, No]\n- Target class: Yes\n- Default class: No\n\n"
+            "## Definition of Yes\n\nPositive examples.\n\n"
+            "## Conditions for Yes\n\n- Positive condition.\n\n"
+            "## Definition of No\n\nNegative examples.\n\n"
+        }
+    )
+
+    assert result["is_valid"] is False
+    assert result["classifier_type"] == "binary"
+    assert result["missing_sections"] == ["Conditions for No"]
+    assert "found_sections" in result
+    assert module.api_calls == ["plexus.guidelines.validate"]
+
+
+def test_guidelines_validate_accepts_content_alias_and_is_allowed_in_planning_mode() -> None:
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        runtime_context={"tool_access_mode": "planning"},
+    )
+
+    result = module.guidelines.validate(
+        {
+            "content": "# Test\n\n"
+            "## Objective\n\nDetect a condition.\n\n"
+            "## Classes\n- Valid labels: [Yes, No]\n- Target class: Yes\n- Default class: No\n\n"
+            "## Definition of Yes\n\nPositive examples.\n\n"
+            "## Conditions for Yes\n\n- Positive condition.\n\n"
+            "## Definition of No\n\nNegative examples.\n\n"
+            "## Conditions for No\n\n- Negative condition.\n"
+        }
+    )
+
+    assert result["is_valid"] is True
+    assert module.api_calls == ["plexus.guidelines.validate"]
+
+
+def test_guidelines_validate_requires_markdown_text() -> None:
+    module = execute.PlexusRuntimeModule(FastMCP("test"))
+
+    with pytest.raises(ValueError, match="requires guidelines markdown text"):
+        module.guidelines.validate({"guidelines": None})
 
 
 def test_planning_mode_allows_safe_analysis_and_procedure_inspection() -> None:
@@ -1919,6 +2293,35 @@ def _write_doc(
     )
 
 
+def _write_skill(
+    path,
+    *,
+    name: str,
+    description: str,
+    body: str = "# Skill\n",
+    tags: str = "[score-workflow]",
+    applies_to: str = "[score code editing]",
+    console_supported: str = "true",
+    requires_subagent: str = "false",
+    allowed_modes: str = "[planning, execution]",
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "---\n"
+        f"name: {name}\n"
+        f"description: {description}\n"
+        f"tags: {tags}\n"
+        f"applies_to: {applies_to}\n"
+        f"console_supported: {console_supported}\n"
+        f"requires_subagent: {requires_subagent}\n"
+        f"allowed_modes: {allowed_modes}\n"
+        "resources: []\n"
+        "---\n"
+        f"{body}",
+        encoding="utf-8",
+    )
+
+
 @pytest.mark.asyncio
 async def test_execute_tactus_docs_list_and_get_use_repository(tmp_path) -> None:
     mcp = FastMCP("test-execute-tactus-docs")
@@ -1977,6 +2380,107 @@ async def test_execute_tactus_docs_list_and_get_use_repository(tmp_path) -> None
         assert get_result["cost"]["tool_calls"] == 1
     finally:
         execute.PLEXUS_DOCS_DIR = original_docs_dir
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_skills_list_and_get_use_repository(tmp_path) -> None:
+    mcp = FastMCP("test-execute-tactus-skills")
+
+    skills_dir = tmp_path / "skills"
+    _write_skill(
+        skills_dir / "score-code-editor" / "SKILL.md",
+        name="Score Code Editor",
+        description="Edit score Tactus code",
+        body=(
+            "# Score Code Editor\n"
+            "<ide-only>\nUse local file editing.\n</ide-only>\n"
+            "<console-hidden>\nHide this from console.\n</console-hidden>\n"
+            "Console must use score.edit.\n"
+        ),
+        tags="[score-workflow, code]",
+        applies_to="[score code editing]",
+        requires_subagent="true",
+    )
+    _write_skill(
+        skills_dir / "client-redaction" / "SKILL.md",
+        name="Client Redaction",
+        description="Repository-only redaction",
+        body="# Client Redaction\n",
+        tags="[repository-hygiene]",
+        applies_to="[redaction]",
+        console_supported="false",
+        allowed_modes="[ide]",
+    )
+
+    original_skills_dir = execute.PLEXUS_SKILLS_DIR
+    execute.PLEXUS_SKILLS_DIR = str(skills_dir)
+    try:
+        list_result = await execute._execute_tactus_tool(
+            (
+                'return plexus.skills.list({ query = "score", '
+                'tags = {"score-workflow"}, mode = "planning" })'
+            ),
+            mcp,
+        )
+
+        assert list_result["ok"] is True
+        assert [entry["id"] for entry in list_result["value"]] == [
+            "score-code-editor"
+        ]
+        entry = list_result["value"][0]
+        assert entry["requires_subagent"] is True
+        assert entry["console_supported"] is True
+        assert "content" not in entry and "body" not in entry
+        assert list_result["api_calls"] == ["plexus.skills.list"]
+
+        get_result = await execute._execute_tactus_tool(
+            'return skills_get{ id = "score-code-editor", mode = "console" }',
+            mcp,
+        )
+
+        assert get_result["ok"] is True
+        value = get_result["value"]
+        assert value["id"] == "score-code-editor"
+        assert value["metadata"]["id"] == "score-code-editor"
+        assert value["content"].startswith("# Score Code Editor")
+        assert "Use local file editing." not in value["content"]
+        assert "Hide this from console." not in value["content"]
+        assert "Console must use score.edit." in value["content"]
+        assert value["resources"] in ([], {})
+        assert get_result["api_calls"] == ["plexus.skills.get"]
+    finally:
+        execute.PLEXUS_SKILLS_DIR = original_skills_dir
+
+
+@pytest.mark.asyncio
+async def test_planning_mode_allows_skills_list_and_get(tmp_path) -> None:
+    mcp = FastMCP("test-planning-mode-skills")
+    skills_dir = tmp_path / "skills"
+    _write_skill(
+        skills_dir / "score-setup" / "SKILL.md",
+        name="Score Setup",
+        description="Set up score records",
+        body="# Score Setup\n",
+    )
+
+    original_skills_dir = execute.PLEXUS_SKILLS_DIR
+    execute.PLEXUS_SKILLS_DIR = str(skills_dir)
+    try:
+        result = await execute._execute_tactus_tool(
+            (
+                'local index = skills_list{ mode = "planning" }\n'
+                'local skill = skills_get{ id = "score-setup" }\n'
+                'return { count = #index, skill_id = skill["id"] }'
+            ),
+            mcp,
+            runtime_context={"tool_access_mode": "planning"},
+        )
+    finally:
+        execute.PLEXUS_SKILLS_DIR = original_skills_dir
+
+    assert result["ok"] is True
+    assert result["value"] == {"count": 1, "skill_id": "score-setup"}
+    assert result["api_calls"] == ["plexus.skills.list", "plexus.skills.get"]
 
 
 def test_plexus_runtime_module_docs_get_rejects_unsafe_keys(tmp_path) -> None:
@@ -2981,6 +3485,585 @@ def test_score_update_chains_parent_from_session_latest(monkeypatch) -> None:
     assert result["parent_version_id"] == "sv-1"
 
 
+@pytest.mark.asyncio
+async def test_console_origin_score_update_code_returns_structured_guard_error() -> None:
+    result = await execute._execute_tactus_tool(
+        (
+            'return plexus.score.update({ '
+            'scorecard_identifier = "nonexistent-console-skills-smoke", '
+            'score_identifier = "nonexistent-score", '
+            'code = "name: x\\nkey: x" })'
+        ),
+        FastMCP("test-console-score-update-guard"),
+        runtime_context={"chat_session_id": "chat-1"},
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "console_score_code_update_requires_subagent"
+    assert result["api_calls"] == ["plexus.score.update"]
+
+
+def test_console_origin_score_update_yaml_content_is_rejected() -> None:
+    called = False
+
+    def fake_update(_args: dict) -> dict:
+        nonlocal called
+        called = True
+        return {"success": True}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-yaml-content-guard"),
+        score_update=fake_update,
+        runtime_context={"chat_session_id": "chat-1"},
+    )
+
+    with pytest.raises(execute.ConsoleScoreCodeUpdateRequiresSubagent):
+        module.score.update(
+            {
+                "scorecard_identifier": "card",
+                "score_identifier": "score",
+                "yaml_content": "name: score\n",
+            }
+        )
+
+    assert called is False
+
+
+def test_console_origin_score_update_guidelines_only_is_allowed(monkeypatch) -> None:
+    seen_args: dict = {}
+
+    def fake_update(args: dict) -> dict:
+        seen_args.update(args)
+        return {"success": True, "version_id": "sv-guidelines"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-guidelines-only-update"),
+        score_update=fake_update,
+        runtime_context={
+            "chat_session_id": "chat-1",
+            "console_user_message": "Please update this score's guidelines wording.",
+        },
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: {"id": "scorecard-1"},
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_score_for_score_edit",
+        lambda _client, _scorecard_id, _identifier: {"id": "score-1"},
+    )
+
+    result = module.score.update(
+        {
+            "scorecard_identifier": "card",
+            "score_identifier": "score",
+            "guidelines": "# Guidelines\n",
+        }
+    )
+
+    assert result["version_id"] == "sv-guidelines"
+    assert seen_args["guidelines"] == "# Guidelines\n"
+    assert seen_args["scorecard_id"] == "scorecard-1"
+    assert seen_args["score_id"] == "score-1"
+
+
+def test_console_origin_score_update_guidelines_requires_guidelines_intent(monkeypatch) -> None:
+    called = False
+
+    def fake_update(_args: dict) -> dict:
+        nonlocal called
+        called = True
+        return {"success": True, "version_id": "sv-guidelines"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-guidelines-intent-guard"),
+        score_update=fake_update,
+        runtime_context={
+            "chat_session_id": "chat-1",
+            "console_user_message": (
+                "Please make the scoring stricter so Yes requires clear transcript evidence."
+            ),
+        },
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+
+    with pytest.raises(execute.ConsoleGuidelinesUpdateRequiresGuidelinesIntent):
+        module.score.update(
+            {
+                "scorecard_identifier": "card",
+                "score_identifier": "score",
+                "guidelines": "# Guidelines\n",
+            }
+        )
+
+    assert called is False
+
+
+def test_console_origin_score_update_metadata_only_is_allowed() -> None:
+    seen_args: dict = {}
+
+    def fake_update(args: dict) -> dict:
+        seen_args.update(args)
+        return {"success": True, "metadata_updated": True}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-metadata-only-update"),
+        score_update=fake_update,
+        runtime_context={"chat_session_id": "chat-1"},
+    )
+
+    result = module.score.update(
+        {
+            "scorecard_identifier": "card",
+            "score_identifier": "score",
+            "description": "Updated description",
+        }
+    )
+
+    assert result["metadata_updated"] is True
+    assert seen_args["description"] == "Updated description"
+
+
+def test_non_console_score_update_code_is_allowed(monkeypatch) -> None:
+    seen_args: dict = {}
+
+    def fake_update(args: dict) -> dict:
+        seen_args.update(args)
+        return {"success": True, "version_id": "sv-code"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-non-console-score-update-code"),
+        score_update=fake_update,
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: {"id": "scorecard-1"},
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_score_for_score_edit",
+        lambda _client, _scorecard_id, _identifier: {"id": "score-1"},
+    )
+
+    result = module.score.update(
+        {
+            "scorecard_identifier": "card",
+            "score_identifier": "score",
+            "code": "name: score\n",
+        }
+    )
+
+    assert result["version_id"] == "sv-code"
+    assert seen_args["code"] == "name: score\n"
+
+
+def test_console_origin_score_edit_routes_through_worker(tmp_path, monkeypatch) -> None:
+    run_dir = tmp_path / "score-edit-worker"
+    run_dir.mkdir()
+    result_file = run_dir / "result.json"
+    seen_args: dict = {}
+
+    def fake_score_edit_runner(args: dict) -> dict:
+        seen_args.update(args)
+        result_file.write_text(
+            json.dumps(
+                {
+                    "success": True,
+                    "version_id": "sv-candidate",
+                    "parent_version_id": "sv-parent",
+                    "changed_fields": ["code"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return {
+            "status": "dispatched",
+            "run_id": "run-1",
+            "temp_dir": str(run_dir),
+            "result_file": str(result_file),
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-score-edit-routes"),
+        score_edit_runner=fake_score_edit_runner,
+        handle_store=_MemoryHandleStore(),
+        runtime_context={"chat_session_id": "chat-1"},
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: {"id": "scorecard-1"},
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_score_for_score_edit",
+        lambda _client, _scorecard_id, _identifier: {"id": "score-1"},
+    )
+
+    result = module.score.edit(
+        {
+            "scorecard_identifier": "card",
+            "score_identifier": "score",
+            "instruction": "add a harmless test note",
+            "async": True,
+            "budget": _child_budget(),
+            "await_timeout": "PT1S",
+        }
+    )
+
+    assert result["status"] == "completed"
+    assert result["result"]["version_id"] == "sv-candidate"
+    assert result["result"]["parent_version_id"] == "sv-parent"
+    assert result["result"]["changed_fields"] == ["code"]
+    assert seen_args["scorecard_id"] == "scorecard-1"
+    assert seen_args["score_id"] == "score-1"
+
+
+def test_run_score_edit_job_runs_post_submit_smoke_test_for_code_changes(
+    tmp_path, monkeypatch
+) -> None:
+    class FakeOpenAI:
+        def __init__(self, api_key: str | None = None) -> None:
+            self.responses = self
+
+        def create(self, **_kwargs):
+            return SimpleNamespace(
+                output_text=json.dumps(
+                    {
+                        "code": "name: updated\n",
+                        "guidelines": "same guidelines",
+                        "note": "updated",
+                        "summary": "summary",
+                    }
+                )
+            )
+
+    class FakeToolset:
+        def setup(self, _args: dict) -> dict:
+            return {"success": True}
+
+        def str_replace_editor(self, _args: dict) -> str:
+            return "ok"
+
+        async def submit_score_version(self, _args: dict) -> dict:
+            return {
+                "success": True,
+                "version_id": "sv-1",
+                "changed_fields": ["code"],
+            }
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset",
+        FakeToolset,
+    )
+    monkeypatch.setattr(
+        execute,
+        "_default_score_pull",
+        lambda args: (
+            {
+                "yaml_content": "name: updated\n",
+                "guidelines": "same guidelines",
+                "version_id": "sv-1",
+                "parent_version_id": "sv-parent",
+            }
+            if str(args.get("version_id") or "") == "sv-1"
+            else {
+                "yaml_content": "name: base\n",
+                "guidelines": "same guidelines",
+                "version_id": "sv-parent",
+                "parent_version_id": "sv-grandparent",
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        execute,
+        "_default_score_test",
+        lambda args: {
+            "success": True,
+            "version": args.get("version"),
+            "samples": args.get("samples"),
+        },
+    )
+
+    result_path = tmp_path / "result.json"
+    execute._run_score_edit_job(
+        {
+            "scorecard_identifier": "card",
+            "score_identifier": "score",
+            "scorecard_id": "scorecard-1",
+            "score_id": "score-1",
+            "instruction": "update code",
+        },
+        str(result_path),
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["success"] is True
+    assert payload["version_id"] == "sv-1"
+    assert payload["post_submit_test"]["status"] == "passed"
+    assert payload["post_submit_test"]["result"]["success"] is True
+    assert payload["post_submit_test"]["result"]["version"] == "sv-1"
+    assert payload["post_submit_test"]["result"]["samples"] == 3
+    assert payload["post_submit_verification"]["status"] == "passed"
+    assert payload["post_submit_verification"]["guidelines_preserved"] is True
+
+
+def test_run_score_edit_job_ignores_llm_guidelines_edits_by_default(
+    tmp_path, monkeypatch
+) -> None:
+    class FakeOpenAI:
+        def __init__(self, api_key: str | None = None) -> None:
+            self.responses = self
+
+        def create(self, **_kwargs):
+            return SimpleNamespace(
+                output_text=json.dumps(
+                    {
+                        "code": "name: updated\n",
+                        "guidelines": "invalid or unintended guidelines rewrite",
+                        "note": "updated",
+                        "summary": "summary",
+                    }
+                )
+            )
+
+    class FakeToolset:
+        replace_paths: list[str] = []
+
+        def setup(self, _args: dict) -> dict:
+            return {"success": True}
+
+        def str_replace_editor(self, args: dict) -> str:
+            self.replace_paths.append(str(args.get("path")))
+            return "ok"
+
+        async def submit_score_version(self, _args: dict) -> dict:
+            return {
+                "success": True,
+                "version_id": "sv-1",
+                "changed_fields": ["code"],
+            }
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset",
+        FakeToolset,
+    )
+    monkeypatch.setattr(
+        execute,
+        "_default_score_pull",
+        lambda args: (
+            {
+                "yaml_content": "name: updated\n",
+                "guidelines": "base guidelines",
+                "version_id": "sv-1",
+                "parent_version_id": "sv-parent",
+            }
+            if str(args.get("version_id") or "") == "sv-1"
+            else {
+                "yaml_content": "name: base\n",
+                "guidelines": "base guidelines",
+                "version_id": "sv-parent",
+                "parent_version_id": "sv-grandparent",
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        execute,
+        "_default_score_test",
+        lambda _args: {"success": True},
+    )
+
+    result_path = tmp_path / "result.json"
+    execute._run_score_edit_job(
+        {
+            "scorecard_identifier": "card",
+            "score_identifier": "score",
+            "scorecard_id": "scorecard-1",
+            "score_id": "score-1",
+            "instruction": "update code only",
+        },
+        str(result_path),
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["success"] is True
+    assert payload["changed_fields"] == ["code"]
+    assert FakeToolset.replace_paths == ["score_config.yaml"]
+
+
+def test_run_score_edit_job_skips_post_submit_smoke_test_without_code_change(
+    tmp_path, monkeypatch
+) -> None:
+    class FakeOpenAI:
+        def __init__(self, api_key: str | None = None) -> None:
+            self.responses = self
+
+        def create(self, **_kwargs):
+            return SimpleNamespace(
+                output_text=json.dumps(
+                    {
+                        "code": "name: base\n",
+                        "guidelines": "updated guidelines",
+                        "note": "updated",
+                        "summary": "summary",
+                    }
+                )
+            )
+
+    class FakeToolset:
+        def setup(self, _args: dict) -> dict:
+            return {"success": True}
+
+        def str_replace_editor(self, _args: dict) -> str:
+            return "ok"
+
+        async def submit_score_version(self, _args: dict) -> dict:
+            return {
+                "success": True,
+                "version_id": "sv-2",
+                "changed_fields": ["guidelines"],
+            }
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset",
+        FakeToolset,
+    )
+    monkeypatch.setattr(
+        execute,
+        "_default_score_pull",
+        lambda args: (
+            {
+                "yaml_content": "name: base\n",
+                "guidelines": "updated guidelines",
+                "version_id": "sv-2",
+                "parent_version_id": "sv-parent",
+            }
+            if str(args.get("version_id") or "") == "sv-2"
+            else {
+                "yaml_content": "name: base\n",
+                "guidelines": "base guidelines",
+                "version_id": "sv-parent",
+                "parent_version_id": "sv-grandparent",
+            }
+        ),
+    )
+
+    def _unexpected_test_call(_args):
+        raise AssertionError("score.test must not run for guidelines-only edits")
+
+    monkeypatch.setattr(execute, "_default_score_test", _unexpected_test_call)
+
+    result_path = tmp_path / "result.json"
+    execute._run_score_edit_job(
+        {
+            "scorecard_identifier": "card",
+            "score_identifier": "score",
+            "scorecard_id": "scorecard-1",
+            "score_id": "score-1",
+            "instruction": "update guidelines",
+            "allow_guidelines_edit": True,
+        },
+        str(result_path),
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["success"] is True
+    assert payload["version_id"] == "sv-2"
+    assert payload["post_submit_test"]["status"] == "skipped"
+    assert payload["post_submit_test"]["reason"] == "no_code_change"
+    assert payload["post_submit_verification"]["status"] == "passed"
+
+
+def test_run_score_edit_job_fails_when_candidate_guidelines_change_unexpectedly(
+    tmp_path, monkeypatch
+) -> None:
+    class FakeOpenAI:
+        def __init__(self, api_key: str | None = None) -> None:
+            self.responses = self
+
+        def create(self, **_kwargs):
+            return SimpleNamespace(
+                output_text=json.dumps(
+                    {
+                        "code": "name: updated\n",
+                        "guidelines": "llm attempted rewrite",
+                        "note": "updated",
+                        "summary": "summary",
+                    }
+                )
+            )
+
+    class FakeToolset:
+        def setup(self, _args: dict) -> dict:
+            return {"success": True}
+
+        def str_replace_editor(self, _args: dict) -> str:
+            return "ok"
+
+        async def submit_score_version(self, _args: dict) -> dict:
+            return {
+                "success": True,
+                "version_id": "sv-3",
+                "changed_fields": ["code"],
+            }
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset",
+        FakeToolset,
+    )
+    monkeypatch.setattr(
+        execute,
+        "_default_score_pull",
+        lambda args: (
+            {
+                "yaml_content": "name: updated\n",
+                "guidelines": "candidate changed guidelines unexpectedly",
+                "version_id": "sv-3",
+                "parent_version_id": "sv-parent",
+            }
+            if str(args.get("version_id") or "") == "sv-3"
+            else {
+                "yaml_content": "name: base\n",
+                "guidelines": "base guidelines",
+                "version_id": "sv-parent",
+                "parent_version_id": "sv-grandparent",
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        execute,
+        "_default_score_test",
+        lambda _args: {"success": True},
+    )
+
+    result_path = tmp_path / "result.json"
+    execute._run_score_edit_job(
+        {
+            "scorecard_identifier": "card",
+            "score_identifier": "score",
+            "scorecard_id": "scorecard-1",
+            "score_id": "score-1",
+            "instruction": "update code only",
+        },
+        str(result_path),
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["success"] is False
+    assert payload["error_code"] == "score_edit_post_submit_verification_failed"
+    assert payload["post_submit_verification"]["status"] == "failed"
+
+
 def test_evaluation_run_uses_cached_latest_score_version_after_edit(monkeypatch) -> None:
     update_seen: list[dict] = []
     evaluation_seen: dict = {}
@@ -3225,6 +4308,151 @@ def test_score_edit_resolver_accepts_separator_insensitive_identifiers() -> None
 
     assert scorecard["id"] == "sc-1"
     assert score["id"] == "s-1"
+
+
+def test_score_resolve_returns_unique_exact_score_match(monkeypatch) -> None:
+    class FakeClient:
+        def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+            if "GetScorecardById" in query:
+                return {"getScorecard": None}
+            if "ListScorecardsForExactIdentifier" in query:
+                return {
+                    "listScorecards": {
+                        "items": [
+                            {
+                                "id": "sc-1",
+                                "name": "Example Scorecard",
+                                "key": "example_scorecard",
+                                "externalId": "1438",
+                            }
+                        ],
+                        "nextToken": None,
+                    }
+                }
+            if "GetScoreByIdForEdit" in query:
+                return {"getScore": None}
+            if "GetScorecardSectionIdsForEdit" in query:
+                return {
+                    "getScorecard": {
+                        "sections": {
+                            "items": [{"id": "section-1"}],
+                            "nextToken": None,
+                        }
+                    }
+                }
+            if "ListScoresBySectionForEdit" in query:
+                return {
+                    "listScoreBySectionId": {
+                        "items": [
+                            {
+                                "id": "score-1",
+                                "name": "Example Score",
+                                "key": "example-score",
+                                "externalId": "45813",
+                            },
+                            {
+                                "id": "score-2",
+                                "name": "Example Score - With Confidence",
+                                "key": "example-score-confidence",
+                                "externalId": "45814",
+                            },
+                        ],
+                        "nextToken": None,
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: FakeClient(),
+    )
+    module = execute.PlexusRuntimeModule(FastMCP("test"))
+
+    result = module.score.resolve(
+        {
+            "scorecard_identifier": "Example Scorecard",
+            "score_identifier": "Example Score",
+        }
+    )
+
+    assert result["status"] == "resolved"
+    assert result["scorecard_id"] == "sc-1"
+    assert result["score_id"] == "score-1"
+    assert result["score"]["name"] == "Example Score"
+    assert module.api_calls == ["plexus.score.resolve"]
+
+
+def test_score_resolve_returns_ambiguous_score_candidates(monkeypatch) -> None:
+    class FakeClient:
+        def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+            if "GetScorecardById" in query:
+                return {"getScorecard": None}
+            if "ListScorecardsForExactIdentifier" in query:
+                return {
+                    "listScorecards": {
+                        "items": [
+                            {
+                                "id": "sc-1",
+                                "name": "Example Scorecard",
+                                "key": "example_scorecard",
+                                "externalId": "1438",
+                            }
+                        ],
+                        "nextToken": None,
+                    }
+                }
+            if "GetScoreByIdForEdit" in query:
+                return {"getScore": None}
+            if "GetScorecardSectionIdsForEdit" in query:
+                return {
+                    "getScorecard": {
+                        "sections": {
+                            "items": [{"id": "section-1"}],
+                            "nextToken": None,
+                        }
+                    }
+                }
+            if "ListScoresBySectionForEdit" in query:
+                return {
+                    "listScoreBySectionId": {
+                        "items": [
+                            {
+                                "id": "score-1",
+                                "name": "Example Score",
+                                "key": "example",
+                                "externalId": "1",
+                            },
+                            {
+                                "id": "score-2",
+                                "name": "Example-Score",
+                                "key": "example_score",
+                                "externalId": "2",
+                            },
+                        ],
+                        "nextToken": None,
+                    }
+                }
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: FakeClient(),
+    )
+    module = execute.PlexusRuntimeModule(FastMCP("test"))
+
+    result = module.score.resolve(
+        {
+            "scorecard_identifier": "Example Scorecard",
+            "score_identifier": "example score",
+        }
+    )
+
+    assert result["status"] == "ambiguous"
+    assert result["target"] == "score"
+    assert [candidate["id"] for candidate in result["candidates"]] == [
+        "score-1",
+        "score-2",
+    ]
 
 
 def test_score_edit_resolver_paginates_scorecards_and_sections() -> None:
