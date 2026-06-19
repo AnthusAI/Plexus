@@ -87,6 +87,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ConsoleScoreChangeDiff } from "@/components/ui/console-score-change-diff"
 
 const EvaluationToolOutput = React.lazy(() => import('./evaluation-tool-output'))
 const STANDARD_SESSION_CATEGORY = 'Optimize'
@@ -1614,6 +1615,7 @@ const MemoizedMessageRow = React.memo(function MessageRow({
           ) : (
             <div className="text-base space-y-2">
               <CollapsibleText content={message.content} />
+              <ConsoleScoreChangeDiff metadata={message.metadata} />
               {costMetadata && costSummary && hasCostSummary && (
                 <details className="group inline-block w-64 max-w-full rounded-md bg-card/60 text-xs">
                   <summary className="list-none cursor-pointer rounded-md px-3 py-2 text-left text-xs font-medium text-foreground hover:bg-muted/50 [&::-webkit-details-marker]:hidden">

@@ -5,6 +5,12 @@ import ConversationViewer, { type ChatMessage, type ChatSession } from "../conve
 import { getClient } from "@/utils/data-operations"
 import { getCurrentUserAttribution } from "@/utils/user-profile"
 
+jest.mock("@monaco-editor/react", () => ({
+  DiffEditor: ({ language, original, modified }: any) => (
+    <div data-testid={`diff-editor-${language}`} data-original={original} data-modified={modified} />
+  ),
+}))
+
 jest.mock("react-virtuoso", () => {
   const React = require("react")
   const Virtuoso = React.forwardRef(function MockVirtuoso(props: any, ref: any) {
@@ -329,7 +335,8 @@ describe("ConversationViewer session-routing states", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create New Session" }))
 
     await waitFor(() => {
-      expect(createMock).toHaveBeenCalledWith(
+      const createArg = createMock.mock.calls[0]?.[0] || {}
+      expect(createArg).toEqual(
         expect.objectContaining({
           accountId: "acct-1",
           procedureId: "builtin:console/chat",
@@ -366,6 +373,63 @@ describe("ConversationViewer session-routing states", () => {
     expect(screen.getByText("No session selected")).toBeInTheDocument()
     expect(screen.queryByText("hello")).not.toBeInTheDocument()
     expect(screen.queryByText("assistant reply")).not.toBeInTheDocument()
+  })
+
+  it("renders console score-change links and Monaco diff panel from assistant metadata", () => {
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={[
+          ...messages,
+          {
+            id: "msg-assistant-diff",
+            sessionId: "session-1",
+            accountId: "acct-1",
+            procedureId: "builtin:console/chat",
+            role: "ASSISTANT",
+            messageType: "MESSAGE",
+            humanInteraction: "CHAT_ASSISTANT",
+            content: "Updated this score based on your request.",
+            createdAt: "2026-03-27T00:00:02.000Z",
+            metadata: {
+              score_change_audit: {
+                kind: "score_edit",
+                version_id: "version-2",
+                parent_version_id: "version-1",
+                version_url: "/lab/scorecards/sc-1/scores/s-1/versions/version-2",
+                parent_version_url: "/lab/scorecards/sc-1/scores/s-1/versions/version-1",
+                diffs: {
+                  code: {
+                    kind: "code",
+                    language: "yaml",
+                    original: "name: old\n",
+                    modified: "name: new\n",
+                    unified_diff: "--- code:previous\n+++ code:updated\n-name: old\n+name: new\n",
+                    has_changes: true,
+                  },
+                },
+              },
+            },
+          },
+        ]}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    expect(screen.getByTestId("console-score-change-diff")).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId("console-score-change-diff-trigger"))
+
+    expect(screen.getByRole("link", { name: "Open previous score version" })).toHaveAttribute(
+      "href",
+      "/lab/scorecards/sc-1/scores/s-1/versions/version-1"
+    )
+    expect(screen.getByRole("link", { name: "Open updated score version" })).toHaveAttribute(
+      "href",
+      "/lab/scorecards/sc-1/scores/s-1/versions/version-2"
+    )
+    expect(screen.getByTestId("diff-editor-yaml")).toHaveAttribute("data-original", "name: old\n")
+    expect(screen.getByTestId("diff-editor-yaml")).toHaveAttribute("data-modified", "name: new\n")
   })
 
   it("keeps sidebar header fixed height and renders two-row main session header", () => {
@@ -588,7 +652,7 @@ describe("ConversationViewer session-routing states", () => {
       const updateArg = updateMock.mock.calls[0]?.[0] || {}
       const metadataArg = updateArg.metadata
       const parsedMetadata = typeof metadataArg === "string" ? JSON.parse(metadataArg) : metadataArg
-      expect(updateMock).toHaveBeenCalledWith(
+      expect(updateArg).toEqual(
         expect.objectContaining({
           id: "session-1",
           name: "My Renamed Session",

@@ -3,6 +3,12 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import ConversationViewer from "../conversation-viewer"
 
+jest.mock("@monaco-editor/react", () => ({
+  DiffEditor: ({ language, original, modified }: any) => (
+    <div data-testid={`diff-editor-${language}`} data-original={original} data-modified={modified} />
+  ),
+}))
+
 const mockScrollToIndex = jest.fn()
 let latestVirtuosoProps: any = null
 
