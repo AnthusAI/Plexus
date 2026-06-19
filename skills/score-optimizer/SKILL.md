@@ -1,6 +1,21 @@
 ---
 name: score-optimizer
 description: Run, debug, and steer the Plexus feedback-alignment optimizer from the direct CLI, including contradiction analysis, SME rubric questions, and approval-gated feedback invalidation.
+tags:
+  - score-workflow
+  - optimizer
+  - evaluation
+  - feedback
+applies_to:
+  - feedback alignment optimization
+  - optimizer procedures
+  - score performance improvement
+console_supported: partial
+requires_subagent: false
+allowed_modes:
+  - planning
+  - execution
+resources: []
 ---
 
 # Plexus Score Optimizer
@@ -8,6 +23,23 @@ description: Run, debug, and steer the Plexus feedback-alignment optimizer from 
 Use this skill when the task is to run, monitor, debug, or steer a feedback-alignment optimization procedure for a Plexus score.
 
 Examples below assume you are in the repo root and are using `python -m plexus.cli`. If your shell does not provide `python`, replace it with the repo's Python interpreter.
+
+## Console Chat Mode
+
+This skill is partially console-supported. Console chat may inspect optimizer
+docs, recent rubric memory, score versions, feedback reports, evaluations,
+procedure records, and procedure chat history through `execute_tactus`.
+
+Optimizer execution from console should use existing runtime procedure APIs such
+as `plexus.procedure.optimize` only when those APIs cover the requested work and
+the chat is in execution mode. If the task requires direct CLI logs, local
+process control, repository files, or shell-only debugging, route it to an IDE
+or operator workflow instead of simulating the CLI from console chat.
+
+Any score code changes proposed by optimizer work must still go through
+`plexus.score.edit` or an optimizer procedure path that uses the dedicated score
+editor worker. Console chat must not directly call `plexus.score.update` with
+score code or full YAML.
 
 ## Purpose and Optimization Mindset
 

@@ -1,12 +1,33 @@
 ---
 name: client-redaction
 description: Scan the Plexus repository for non-sponsor client names and specific client-work references, then redact or remove sensitive mentions from files, Kanbus issues, commit messages, and related text surfaces.
+tags:
+  - repository-hygiene
+  - confidentiality
+  - redaction
+applies_to:
+  - client reference redaction
+  - repository confidentiality scans
+  - Kanbus issue hygiene
+console_supported: false
+requires_subagent: false
+allowed_modes:
+  - ide
+resources:
+  - scripts/scan_sensitive_refs.py
 ---
 
 # Plexus Client Redaction
 
 Use this skill for repository hygiene passes that identify and remove sensitive
 client references from Plexus.
+
+## Console Chat Mode
+
+This skill is repo/IDE-only for now. Console chat must not run repository scans,
+inspect Kanbus issue files directly, or attempt redaction work from the web
+console. The workflow depends on approved Kanbus commands and local repository
+inspection, and it must preserve the Plexus confidentiality boundary.
 
 Official sponsor names that may remain when context is appropriate:
 

@@ -187,6 +187,8 @@ def _generate_session_title_with_llm(
         "Generate a concise chat session title.",
         "Return only the title text.",
         "Rules: 3-8 words, plain text, no quotes, no punctuation suffix, no prefixes.",
+        "If scorecard and score names are available, include those names in the title.",
+        "Prefer human-readable scorecard/score names over IDs.",
     ]
     for index, message in enumerate(conversation_messages, start=1):
         role = str(message.get("role") or "USER").strip().upper()

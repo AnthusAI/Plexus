@@ -1,6 +1,20 @@
 ---
 name: Score Setup
 description: Standard workflow for creating Plexus scorecard and score records via the GraphQL API. Administrative setup (name, external_id, description) only - NOT guidelines or configuration.
+tags:
+  - score-workflow
+  - setup
+  - console
+applies_to:
+  - scorecard setup
+  - score setup
+  - administrative score metadata
+console_supported: true
+requires_subagent: false
+allowed_modes:
+  - planning
+  - execution
+resources: []
 ---
 
 ## Purpose
@@ -16,21 +30,28 @@ The Plexus MCP server exposes a single tool: `execute_tactus`. All
 Plexus operations go through it via the injected `plexus.*` runtime.
 Do not call the `plexus` CLI for setup.
 
+## Console Chat Mode
+
+This skill is console-friendly. Console chat may use `execute_tactus` directly
+for discovery, scorecard setup, score setup, and verification. Planning mode may
+inspect and prepare exact setup payloads, but record creation requires execution
+mode because it mutates Plexus data.
+
 ```lua
 return plexus.scorecards.list({})
 return plexus.scorecards.info({ name = "<scorecard-name>" })
 return plexus.scorecards.create({
-  name        = "Acme Content Quality",
-  key         = "acme-content-quality",
-  external_id = "acme-content-quality",
+  name        = "Example Operations Quality",
+  key         = "example-operations-quality",
+  external_id = "example-operations-quality",
   description = "Short description.",
 })
 return plexus.score.info({ id = "<score-id>" })
 return plexus.score.create({
-  scorecard_name = "Acme Content Quality",
-  name           = "Medical Advice Detection",
-  external_id    = "medical-advice",
-  description    = "Detects whether content contains medical advice.",
+  scorecard_name = "Example Operations Quality",
+  name           = "Policy Signal Detection",
+  external_id    = "policy-signal",
+  description    = "Detects whether content contains the target policy signal.",
 })
 ```
 
