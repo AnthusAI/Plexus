@@ -161,6 +161,47 @@ class _RuntimeStreamingWithoutTraceParam:
         return {"success": True, "response": "Hello"}
 
 
+class _RuntimeStreamingManyChunksWithoutTraceParam:
+    def __init__(
+        self,
+        procedure_id,
+        storage_backend,
+        hitl_handler,
+        chat_recorder=None,
+        mcp_server=None,
+        openai_api_key=None,
+    ):
+        assert procedure_id
+        assert storage_backend is not None
+        assert hitl_handler is not None
+        self.toolset_registry = {}
+        self.tool_primitive = None
+        self.log_handler = None
+
+    async def execute(self, _source, _context, format="yaml"):
+        assert format == "yaml"
+        from tactus.protocols.models import AgentStreamChunkEvent, AgentTurnEvent
+
+        target = "Streaming bridge should preserve every chunk."
+        partial = ""
+        for char in target:
+            partial += char
+            self.log_handler.log(
+                AgentStreamChunkEvent(
+                    agent_name="assistant",
+                    chunk_text=char,
+                    accumulated_text=partial,
+                )
+            )
+        self.log_handler.log(
+            AgentTurnEvent(
+                agent_name="assistant",
+                stage="completed",
+            )
+        )
+        return {"success": True, "response": target}
+
+
 class _RuntimeWithCostEvents:
     def __init__(
         self,
@@ -1346,10 +1387,73 @@ async def test_execute_tactus_streams_via_log_handler_without_trace_sink_constru
 
     assert result["success"] is True
     assert len(recorder.recorded) == 1
-    assert recorder.recorded[0]["content"] == "Hel"
+    assert recorder.recorded[0]["content"] == "Hello"
     assert len(recorder.updated) >= 1
     assert recorder.updated[-1]["content"] == "Hello"
     assert recorder.fallback_messages == []
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_streams_many_chunks_without_loss(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _StreamingRecorder(SimpleNamespace):
+        def __init__(self):
+            super().__init__()
+            self.session_id = None
+            self.recorded = []
+            self.updated = []
+
+        async def start_session(self, _context=None):
+            self.session_id = "sess-stream-many"
+            return self.session_id
+
+        async def record_message(self, **kwargs):
+            self.recorded.append(kwargs)
+            return "msg-stream-many"
+
+        async def update_message(self, **kwargs):
+            self.updated.append(kwargs)
+            return True
+
+        async def record_assistant_message(self, _content: str):
+            return "msg-fallback"
+
+    recorder = _StreamingRecorder()
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeStreamingManyChunksWithoutTraceParam)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: recorder,
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-stream-many",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={},
+    )
+
+    expected = "Streaming bridge should preserve every chunk."
+    assert result["success"] is True
+    assert len(recorder.recorded) == 1
+    assert recorder.recorded[0]["content"] == expected
+    assert len(recorder.updated) >= 1
+    assert recorder.updated[-1]["content"] == expected
 
 
 @pytest.mark.asyncio

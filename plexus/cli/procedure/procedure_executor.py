@@ -847,6 +847,7 @@ class _PlexusTraceLogBridge:
     """
 
     supports_streaming = True
+    _STREAM_CHUNK_FLUSH_EVENT = "__plexus_flush_agent_stream_chunk__"
 
     def __init__(self, trace_sink: Any, on_cost_event: Optional[Any] = None, cw_logger: Optional[Any] = None):
         self.trace_sink = trace_sink
@@ -854,6 +855,9 @@ class _PlexusTraceLogBridge:
         self._on_cost_event = on_cost_event
         self._cw_logger = cw_logger
         self._events: "queue.Queue[Any]" = queue.Queue()
+        self._pending_stream_chunks: Dict[str, Any] = {}
+        self._queued_stream_flush_agents: set[str] = set()
+        self._stream_chunk_lock = threading.Lock()
         self._closed = threading.Event()
         self._worker = threading.Thread(
             target=self._worker_main,
@@ -861,6 +865,65 @@ class _PlexusTraceLogBridge:
             daemon=True,
         )
         self._worker.start()
+
+    @staticmethod
+    def _event_type_name(event: Any) -> str:
+        value = getattr(event, "event_type", None)
+        if value is None and isinstance(event, dict):
+            value = event.get("event_type")
+        return str(value or "").strip().lower()
+
+    @staticmethod
+    def _event_agent_name(event: Any) -> str:
+        value = getattr(event, "agent_name", None)
+        if value is None and isinstance(event, dict):
+            value = event.get("agent_name")
+        return str(value or "").strip()
+
+    @staticmethod
+    def _event_field(event: Any, key: str, default: Any = None) -> Any:
+        if isinstance(event, dict):
+            return event.get(key, default)
+        return getattr(event, key, default)
+
+    @classmethod
+    def _coalesced_stream_chunk_event(cls, prior: Any, incoming: Any) -> Dict[str, Any]:
+        prior_text = str(cls._event_field(prior, "chunk_text", "") or "")
+        incoming_text = str(cls._event_field(incoming, "chunk_text", "") or "")
+        merged: Dict[str, Any] = {
+            "event_type": "agent_stream_chunk",
+            "agent_name": cls._event_agent_name(incoming) or cls._event_agent_name(prior),
+            "chunk_text": f"{prior_text}{incoming_text}",
+        }
+        incoming_timestamp = cls._event_field(incoming, "timestamp")
+        prior_timestamp = cls._event_field(prior, "timestamp")
+        if incoming_timestamp is not None:
+            merged["timestamp"] = incoming_timestamp
+        elif prior_timestamp is not None:
+            merged["timestamp"] = prior_timestamp
+        return merged
+
+    def _queue_latest_stream_chunk(self, event: Any) -> None:
+        agent_name = self._event_agent_name(event)
+        if not agent_name:
+            self._events.put_nowait(event)
+            return
+        with self._stream_chunk_lock:
+            existing = self._pending_stream_chunks.get(agent_name)
+            if existing is None:
+                self._pending_stream_chunks[agent_name] = event
+            else:
+                self._pending_stream_chunks[agent_name] = self._coalesced_stream_chunk_event(existing, event)
+            if agent_name in self._queued_stream_flush_agents:
+                return
+            self._queued_stream_flush_agents.add(agent_name)
+        self._events.put_nowait((self._STREAM_CHUNK_FLUSH_EVENT, agent_name))
+
+    def _consume_latest_stream_chunk(self, agent_name: str) -> Optional[Any]:
+        with self._stream_chunk_lock:
+            event = self._pending_stream_chunks.pop(agent_name, None)
+            self._queued_stream_flush_agents.discard(agent_name)
+            return event
 
     def log(self, event: Any) -> None:
         try:
@@ -881,7 +944,10 @@ class _PlexusTraceLogBridge:
             # messages can receive live per-turn cost metadata updates.
 
         try:
-            self._events.put_nowait(event)
+            if self._event_type_name(event) == "agent_stream_chunk":
+                self._queue_latest_stream_chunk(event)
+            else:
+                self._events.put_nowait(event)
         except Exception as exc:
             logger.warning("Failed queueing trace event for persistence: %s", exc)
 
@@ -890,11 +956,21 @@ class _PlexusTraceLogBridge:
         try:
             while not self._closed.is_set() or not self._events.empty():
                 try:
-                    event = self._events.get(timeout=0.05)
+                    queued_item = self._events.get(timeout=0.05)
                 except queue.Empty:
                     continue
 
                 try:
+                    event = queued_item
+                    if (
+                        isinstance(queued_item, tuple)
+                        and len(queued_item) == 2
+                        and queued_item[0] == self._STREAM_CHUNK_FLUSH_EVENT
+                    ):
+                        agent_name = str(queued_item[1] or "").strip()
+                        event = self._consume_latest_stream_chunk(agent_name) if agent_name else None
+                        if event is None:
+                            continue
                     try:
                         record_fn = getattr(self.trace_sink, "record", None)
                         if callable(record_fn):

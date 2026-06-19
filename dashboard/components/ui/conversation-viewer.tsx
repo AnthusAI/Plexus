@@ -232,6 +232,9 @@ const CONSOLE_CHAT_MODEL_OPTIONS = [
 const DEFAULT_CONSOLE_CHAT_MODEL = 'gpt-5.4-mini'
 const CONVERSATION_BOTTOM_EPSILON_PX = 2
 const SCROLL_DELTA_EPSILON_PX = 0.1
+const PENDING_ASSISTANT_SESSION_RECONCILE_DELAY_MS = 30_000
+const PENDING_ASSISTANT_SESSION_RECONCILE_RETRY_MS = 5_000
+const PENDING_ASSISTANT_SESSION_RECONCILE_GIVE_UP_MS = 120_000
 const CHAT_SESSION_SELECTION_SET = [
   "id",
   "accountId",
@@ -244,6 +247,24 @@ const CHAT_SESSION_SELECTION_SET = [
   "metadata",
   "createdAt",
   "updatedAt",
+] as const
+
+const CHAT_MESSAGE_SELECTION_SET = [
+  'id',
+  'content',
+  'role',
+  'messageType',
+  'humanInteraction',
+  'toolName',
+  'toolParameters',
+  'toolResponse',
+  'metadata',
+  'parentMessageId',
+  'accountId',
+  'procedureId',
+  'createdAt',
+  'sequenceNumber',
+  'sessionId',
 ] as const
 
 // Types for the conversation data
@@ -746,6 +767,49 @@ const isIgnorableSubscriptionError = (error: unknown): boolean => {
   )
 }
 
+const extractSubscriptionRecord = (payload: any, keys: readonly string[]): any | null => {
+  const directData = payload?.data
+  if (directData && typeof directData === 'object') {
+    for (const key of keys) {
+      if (key in directData) {
+        return directData[key as keyof typeof directData]
+      }
+    }
+    if ('id' in directData) {
+      return directData
+    }
+  }
+  if (payload && typeof payload === 'object' && 'id' in payload) {
+    return payload
+  }
+  return null
+}
+
+const parseRawChatSession = (session: any): ChatSession | null => {
+  if (!session || typeof session !== 'object' || !session.id) {
+    return null
+  }
+
+  const createdAt = typeof session.createdAt === 'string' && session.createdAt.trim()
+    ? session.createdAt
+    : session.updatedAt
+  if (typeof createdAt !== 'string' || !createdAt.trim()) {
+    return null
+  }
+
+  return {
+    id: session.id,
+    accountId: session.accountId,
+    procedureId: session.procedureId,
+    name: session.name,
+    category: session.category,
+    metadata: parseSessionMetadata(session.metadata),
+    createdAt,
+    updatedAt: session.updatedAt,
+    messageCount: typeof session.messageCount === 'number' ? session.messageCount : 0,
+  }
+}
+
 const parseRawChatMessage = (msg: any): ChatMessage | null => {
   if (!msg || typeof msg !== 'object' || !msg.id) {
     return null
@@ -798,6 +862,17 @@ const parseRawChatMessage = (msg: any): ChatMessage | null => {
     sequenceNumber: msg.sequenceNumber,
     sessionId: msg.sessionId
   }
+}
+
+const hasCompleteRealtimeChatMessage = (msg: any): boolean => {
+  if (!msg || typeof msg !== 'object') {
+    return false
+  }
+  const requiredStringFields = ['id', 'procedureId', 'sessionId', 'role', 'messageType', 'createdAt'] as const
+  return requiredStringFields.every((field) => {
+    const value = msg[field]
+    return typeof value === 'string' && value.trim().length > 0
+  })
 }
 
 const isVisibleChatMessage = (msg: ChatMessage): boolean => {
@@ -895,26 +970,16 @@ const areMessagesEquivalent = (left: ChatMessage, right: ChatMessage): boolean =
     && left.accountId === right.accountId
     && left.createdByUserId === right.createdByUserId
     && left.procedureId === right.procedureId
+    && left.responseTarget === right.responseTarget
+    && left.responseStatus === right.responseStatus
+    && left.responseOwner === right.responseOwner
+    && left.responseStartedAt === right.responseStartedAt
+    && left.responseCompletedAt === right.responseCompletedAt
+    && left.responseError === right.responseError
     && left.createdAt === right.createdAt
     && left.sequenceNumber === right.sequenceNumber
     && left.sessionId === right.sessionId
   )
-}
-
-const hasMessageListChanged = (prevMessages: ChatMessage[], nextMessages: ChatMessage[]): boolean => {
-  if (prevMessages.length !== nextMessages.length) {
-    return true
-  }
-
-  for (let i = 0; i < nextMessages.length; i += 1) {
-    const previous = prevMessages[i]
-    const next = nextMessages[i]
-    if (!previous || !next || previous.id !== next.id || !areMessagesEquivalent(previous, next)) {
-      return true
-    }
-  }
-
-  return false
 }
 
 const toEpochMs = (value?: string | null): number | null => {
@@ -1104,6 +1169,42 @@ const getLatestAssistantCreatedAtForSession = (messages: ChatMessage[], sessionI
 
   return latest
 }
+
+const hasAssistantMessageAfterPendingThreshold = (
+  messages: ChatMessage[],
+  sessionId: string,
+  pendingState: PendingAssistantState,
+): boolean => {
+  const baselineMs = toEpochMs(pendingState.baselineAssistantCreatedAt ?? null) ?? -Infinity
+  const requestedMs = toEpochMs(pendingState.requestedAt) ?? -Infinity
+  const threshold = Math.max(baselineMs, requestedMs)
+
+  return messages.some((message) => {
+    if (message.sessionId !== sessionId || !isAssistantChatMessage(message)) {
+      return false
+    }
+    const messageMs = toEpochMs(message.createdAt)
+    return messageMs !== null && messageMs > threshold
+  })
+}
+
+const isAssistantMessageAfterPendingThreshold = (
+  message: ChatMessage,
+  pendingState: PendingAssistantState,
+): boolean => {
+  if (!isAssistantChatMessage(message)) {
+    return false
+  }
+  const baselineMs = toEpochMs(pendingState.baselineAssistantCreatedAt ?? null) ?? -Infinity
+  const requestedMs = toEpochMs(pendingState.requestedAt) ?? -Infinity
+  const threshold = Math.max(baselineMs, requestedMs)
+  const messageMs = toEpochMs(message.createdAt)
+  return messageMs !== null && messageMs > threshold
+}
+
+const isTerminalResponseStatus = (status: ChatMessage['responseStatus'] | undefined): boolean => (
+  status === 'COMPLETED' || status === 'FAILED'
+)
 
 const toToolType = (toolName?: string): string => {
   if (!toolName) {
@@ -1374,16 +1475,29 @@ type MessageCostMetadata = {
   summary?: MessageCostSummary
 }
 
+const toFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+  return null
+}
+
 const hasMeaningfulCostSummary = (summary: MessageCostSummary | null | undefined): boolean => {
   if (!summary || typeof summary !== 'object') {
     return false
   }
-  const totalUsd = typeof summary.total_usd === 'number' ? summary.total_usd : 0
-  const llmCalls = typeof summary.llm_calls === 'number' ? summary.llm_calls : 0
-  const promptTokens = typeof summary.prompt_tokens === 'number' ? summary.prompt_tokens : 0
-  const completionTokens = typeof summary.completion_tokens === 'number' ? summary.completion_tokens : 0
-  const totalTokens = typeof summary.total_tokens === 'number' ? summary.total_tokens : 0
-  const cachedTokens = typeof summary.cached_tokens === 'number' ? summary.cached_tokens : 0
+  const totalUsd = toFiniteNumber(summary.total_usd) ?? 0
+  const llmCalls = toFiniteNumber(summary.llm_calls) ?? 0
+  const promptTokens = toFiniteNumber(summary.prompt_tokens) ?? 0
+  const completionTokens = toFiniteNumber(summary.completion_tokens) ?? 0
+  const totalTokens = toFiniteNumber(summary.total_tokens) ?? 0
+  const cachedTokens = toFiniteNumber(summary.cached_tokens) ?? 0
   const hasBreakdown = Array.isArray(summary.breakdown) && summary.breakdown.length > 0
   return (
     totalUsd > 0
@@ -1408,7 +1522,7 @@ const getMessageCostMetadata = (message: ChatMessage): MessageCostMetadata | nul
   return cost as MessageCostMetadata
 }
 
-const formatUsd = (value: number | undefined): string => `$${(value || 0).toFixed(4)}`
+const formatUsd = (value: unknown): string => `$${(toFiniteNumber(value) ?? 0).toFixed(4)}`
 
 // Props passed into each virtualized row
 interface MessageRowProps {
@@ -1457,14 +1571,29 @@ const MemoizedMessageRow = React.memo(function MessageRow({
   const costMetadata = getMessageCostMetadata(message)
   const costSummary = costMetadata?.summary
   const hasCostSummary = hasMeaningfulCostSummary(costSummary)
-  const costTotal = typeof costSummary?.total_usd === 'number' ? costSummary.total_usd : undefined
-  const showInlineCostBadge = !(
-    message.role === 'ASSISTANT' && message.messageType === 'MESSAGE'
+  const costTotal = toFiniteNumber(costSummary?.total_usd ?? null) ?? undefined
+  const streamingState = getStreamingState(message.metadata)
+  const isCompletedAssistantMessage = (
+    message.role === 'ASSISTANT'
+    && message.messageType === 'MESSAGE'
+    && streamingState === 'complete'
   )
-  const costBadgeLabel = costMetadata && hasCostSummary && showInlineCostBadge
+  const costBadgeLabel = costMetadata && hasCostSummary
     ? `${costMetadata.billing_mode === 'reused' ? 'Reused' : 'Spent'} ${formatUsd(costTotal)}`
     : null
-  const showMetadataBadges = showMessageTypeBadge || showToolNameBadge || Boolean(costBadgeLabel)
+  const showMissingCostBadge = (
+    isCompletedAssistantMessage
+    && (
+      !costMetadata
+      || !hasCostSummary
+    )
+  )
+  const showMetadataBadges = (
+    showMessageTypeBadge
+    || showToolNameBadge
+    || Boolean(costBadgeLabel)
+    || showMissingCostBadge
+  )
   const attributionAvatar = row.from === 'user'
     ? (
       attribution?.kind === 'user' && attributedUserProfile
@@ -1525,6 +1654,11 @@ const MemoizedMessageRow = React.memo(function MessageRow({
               {costBadgeLabel && (
                 <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-info text-primary-foreground">
                   {costBadgeLabel}
+                </Badge>
+              )}
+              {showMissingCostBadge && (
+                <Badge variant="pill" className="text-xs px-1.5 py-0 font-normal bg-neutral text-primary-foreground">
+                  Cost unavailable
                 </Badge>
               )}
             </div>
@@ -1614,7 +1748,10 @@ const MemoizedMessageRow = React.memo(function MessageRow({
             </div>
           ) : (
             <div className="text-base space-y-2">
-              <CollapsibleText content={message.content} />
+              <CollapsibleText
+                content={message.content}
+                enableMarkdown={getStreamingState(message.metadata) !== "streaming"}
+              />
               <ConsoleScoreChangeDiff metadata={message.metadata} />
               {costMetadata && costSummary && hasCostSummary && (
                 <details className="group inline-block w-64 max-w-full rounded-md bg-card/60 text-xs">
@@ -1848,6 +1985,7 @@ function ConversationViewer({
   const [renameSessionValue, setRenameSessionValue] = useState("")
   const [isRenamingSession, setIsRenamingSession] = useState(false)
   const [pendingAssistantBySession, setPendingAssistantBySession] = useState<Record<string, PendingAssistantState>>({})
+  const pendingAssistantBySessionRef = React.useRef<Record<string, PendingAssistantState>>({})
   const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
   const manualScrollLockRef = React.useRef(false)
   const lastScrollerTopRef = React.useRef<number | null>(null)
@@ -1863,6 +2001,11 @@ function ConversationViewer({
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true)
   const [conversationScrollerElement, setConversationScrollerElement] = useState<HTMLDivElement | null>(null)
   const authFailureReportedRef = React.useRef(false)
+  const messageHydrationInFlightRef = React.useRef<Set<string>>(new Set())
+  const pendingAssistantReconcileInFlightRef = React.useRef<Set<string>>(new Set())
+  const pendingAssistantReconciledAtRef = React.useRef<Record<string, string>>({})
+  const pendingAssistantReconcileTimeoutRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const pendingAssistantReconcileScheduledAtRef = React.useRef<Record<string, string>>({})
 
   const markAuthUnavailable = React.useCallback((error: unknown, source: string): boolean => {
     if (!isUnauthorizedError(error)) {
@@ -1957,6 +2100,29 @@ function ConversationViewer({
   }, [selectedSessionId])
 
   useEffect(() => {
+    pendingAssistantBySessionRef.current = pendingAssistantBySession
+  }, [pendingAssistantBySession])
+
+  const clearPendingAssistantReconcileTimeout = React.useCallback((sessionId: string) => {
+    const handle = pendingAssistantReconcileTimeoutRef.current[sessionId]
+    if (handle) {
+      clearTimeout(handle)
+      delete pendingAssistantReconcileTimeoutRef.current[sessionId]
+    }
+    delete pendingAssistantReconcileScheduledAtRef.current[sessionId]
+  }, [])
+
+  useEffect(() => (
+    () => {
+      for (const handle of Object.values(pendingAssistantReconcileTimeoutRef.current)) {
+        clearTimeout(handle)
+      }
+      pendingAssistantReconcileTimeoutRef.current = {}
+      pendingAssistantReconcileScheduledAtRef.current = {}
+    }
+  ), [])
+
+  useEffect(() => {
     if (propMessages) {
       return
     }
@@ -2003,6 +2169,9 @@ function ConversationViewer({
     triggerMessageId?: string,
   ) => {
     setAutoFollowEnabled(true)
+    delete pendingAssistantReconciledAtRef.current[sessionId]
+    pendingAssistantReconcileInFlightRef.current.delete(sessionId)
+    clearPendingAssistantReconcileTimeout(sessionId)
     const baselineAssistantCreatedAt = getLatestAssistantCreatedAtForSession(messages, sessionId)
     setPendingAssistantBySession((prev) => ({
       ...prev,
@@ -2012,9 +2181,12 @@ function ConversationViewer({
         triggerMessageId,
       },
     }))
-  }, [messages])
+  }, [clearPendingAssistantReconcileTimeout, messages])
 
   const clearPendingAssistant = React.useCallback((sessionId: string) => {
+    clearPendingAssistantReconcileTimeout(sessionId)
+    delete pendingAssistantReconciledAtRef.current[sessionId]
+    pendingAssistantReconcileInFlightRef.current.delete(sessionId)
     setPendingAssistantBySession((prev) => {
       if (!prev[sessionId]) {
         return prev
@@ -2023,7 +2195,7 @@ function ConversationViewer({
       delete next[sessionId]
       return next
     })
-  }, [])
+  }, [clearPendingAssistantReconcileTimeout])
 
   useEffect(() => {
     if (isAuthUnavailable) {
@@ -2037,19 +2209,7 @@ function ConversationViewer({
 
     const sessionsToClear: string[] = []
     for (const [sessionId, pendingState] of pendingEntries) {
-      const baselineMs = toEpochMs(pendingState.baselineAssistantCreatedAt ?? null) ?? -Infinity
-      const requestedMs = toEpochMs(pendingState.requestedAt) ?? -Infinity
-      const threshold = Math.max(baselineMs, requestedMs)
-
-      const hasNewAssistantMessage = messages.some((message) => {
-        if (message.sessionId !== sessionId || !isAssistantChatMessage(message)) {
-          return false
-        }
-        const messageMs = toEpochMs(message.createdAt)
-        return messageMs !== null && messageMs > threshold
-      })
-
-      if (hasNewAssistantMessage) {
+      if (hasAssistantMessageAfterPendingThreshold(messages, sessionId, pendingState)) {
         sessionsToClear.push(sessionId)
       }
     }
@@ -2058,18 +2218,51 @@ function ConversationViewer({
       return
     }
 
-    setPendingAssistantBySession((prev) => {
-      let changed = false
-      const next = { ...prev }
-      for (const sessionId of sessionsToClear) {
-        if (next[sessionId]) {
-          delete next[sessionId]
-          changed = true
-        }
+    for (const sessionId of sessionsToClear) {
+      clearPendingAssistant(sessionId)
+    }
+  }, [clearPendingAssistant, messages, pendingAssistantBySession])
+
+  useEffect(() => {
+    if (isAuthUnavailable) {
+      for (const sessionId of Object.keys(pendingAssistantReconcileTimeoutRef.current)) {
+        clearPendingAssistantReconcileTimeout(sessionId)
       }
-      return changed ? next : prev
-    })
-  }, [messages, pendingAssistantBySession])
+      return
+    }
+
+    const activeSessionIds = new Set<string>()
+    for (const [sessionId, pendingState] of Object.entries(pendingAssistantBySession)) {
+      activeSessionIds.add(sessionId)
+      if (pendingAssistantReconcileScheduledAtRef.current[sessionId] === pendingState.requestedAt) {
+        continue
+      }
+
+      clearPendingAssistantReconcileTimeout(sessionId)
+      const requestedAtMs = toEpochMs(pendingState.requestedAt)
+      const elapsedMs = requestedAtMs === null ? Number.POSITIVE_INFINITY : Math.max(0, Date.now() - requestedAtMs)
+      const delayMs = Math.max(0, PENDING_ASSISTANT_SESSION_RECONCILE_DELAY_MS - elapsedMs)
+      pendingAssistantReconcileScheduledAtRef.current[sessionId] = pendingState.requestedAt
+      pendingAssistantReconcileTimeoutRef.current[sessionId] = setTimeout(() => {
+        delete pendingAssistantReconcileTimeoutRef.current[sessionId]
+        delete pendingAssistantReconcileScheduledAtRef.current[sessionId]
+        setPendingAssistantBySession((prev) => {
+          const current = prev[sessionId]
+          if (!current || current.requestedAt !== pendingState.requestedAt) {
+            return prev
+          }
+          // Force a state tick so the reconciliation effect runs even when no subscription event arrives.
+          return { ...prev }
+        })
+      }, delayMs)
+    }
+
+    for (const sessionId of Object.keys(pendingAssistantReconcileTimeoutRef.current)) {
+      if (!activeSessionIds.has(sessionId)) {
+        clearPendingAssistantReconcileTimeout(sessionId)
+      }
+    }
+  }, [clearPendingAssistantReconcileTimeout, isAuthUnavailable, pendingAssistantBySession])
 
   const handleSessionSelect = (sessionId: string) => {
     setInternalSelectedSessionId(sessionId)
@@ -2284,20 +2477,16 @@ function ConversationViewer({
             session?.id && array.findIndex((candidate) => candidate?.id === session.id) === index
           ))
 
-          const formattedSessions: ChatSession[] = dedupedSessions.map((session: any) => ({
-            id: session.id,
-            accountId: session.accountId,
-            procedureId: session.procedureId,
-            name: session.name,
-            category: session.category,
-            metadata: parseSessionMetadata(session.metadata),
-            createdAt: session.createdAt,
-            updatedAt: session.updatedAt,
-            messageCount: 0 // Will be updated when we load messages
-          }))
-          
+          const formattedSessions = dedupedSessions
+            .map(parseRawChatSession)
+            .filter((session): session is ChatSession => Boolean(session))
+            .map((session) => ({
+              ...session,
+              messageCount: 0, // Will be updated when we load messages
+            }))
+
           // Sort sessions by createdAt in descending order (most recent first)
-          const sortedSessions = formattedSessions.sort((a, b) => 
+          const sortedSessions = formattedSessions.sort((a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           )
           
@@ -2321,23 +2510,7 @@ function ConversationViewer({
             limit: 1000,
             nextToken,
           }, {
-            selectionSet: [
-              'id',
-              'content',
-              'role',
-              'messageType',
-              'humanInteraction',
-              'toolName',
-              'toolParameters',
-              'toolResponse',
-              'metadata',
-              'parentMessageId',
-              'accountId',
-              'procedureId',
-              'createdAt',
-              'sequenceNumber',
-              'sessionId'
-            ]
+            selectionSet: CHAT_MESSAGE_SELECTION_SET,
           })
           
           if (response?.data) {
@@ -2376,135 +2549,99 @@ function ConversationViewer({
     loadConversationData()
   }, [effectiveId, isAuthUnavailable, isExternallyControlledSession, markAuthUnavailable])
 
-  // Real-time subscription for new chat sessions - notification-based pattern
+  // Real-time subscription for chat sessions (subscription-only; no polling fallback)
   useEffect(() => {
     if (!effectiveId || isAuthUnavailable) return
 
-    const checkForNewSessions = async () => {
-      try {
-        const client = getClient()
-        
-        // Query for sessions in the current procedure
-        const sessionsResponse = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
-          procedureId: effectiveId,
-          limit: 100,
-          sortDirection: 'DESC',
-        }, {
-          selectionSet: CHAT_SESSION_SELECTION_SET,
-        })
-        const sessionsData = sessionsResponse?.data
-
-        const fetchedSessions = Array.isArray(sessionsData) ? sessionsData : []
-        const selectedId = selectedSessionIdRef.current?.trim()
-        let mergedSessions = fetchedSessions
-
-        if (selectedId && !fetchedSessions.some((session: any) => session?.id === selectedId)) {
-          try {
-            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId }, {
-              selectionSet: CHAT_SESSION_SELECTION_SET,
-            })
-            const selectedSession = selectedSessionResponse?.data
-            if (selectedSession && (!effectiveId || selectedSession.procedureId === effectiveId)) {
-              mergedSessions = [selectedSession, ...fetchedSessions]
-            }
-          } catch (error) {
-            console.warn('Unable to fetch selected session by id during session refresh:', error)
-          }
-        }
-
-        if (mergedSessions.length > 0) {
-          const dedupedSessions = mergedSessions.filter((session: any, index: number, array: any[]) => (
-            session?.id && array.findIndex((candidate) => candidate?.id === session.id) === index
-          ))
-
-          const formattedSessions: ChatSession[] = dedupedSessions.map((session: any) => ({
-            id: session.id,
-            accountId: session.accountId,
-            procedureId: session.procedureId,
-            name: session.name,
-            category: session.category,
-            metadata: parseSessionMetadata(session.metadata),
-            createdAt: session.createdAt,
-            updatedAt: session.updatedAt,
-            messageCount: 0 // Will be updated when we load messages
-          }))
-          
-          // Sort sessions by createdAt in descending order (most recent first)
-          const sortedSessions = formattedSessions.sort((a, b) => 
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          )
-          
-          // Check if we have new sessions compared to current state
-          setInternalSessions(prevSessions => {
-            const previousById = new Map(prevSessions.map(session => [session.id, session]))
-            const mergedSessions = sortedSessions.map((session) => {
-              const previous = previousById.get(session.id)
-              return {
-                ...session,
-                messageCount: previous?.messageCount ?? session.messageCount ?? 0,
-              }
-            })
-
-            const changed =
-              mergedSessions.length !== prevSessions.length
-              || mergedSessions.some((session) => {
-                const previous = previousById.get(session.id)
-                if (!previous) {
-                  return true
-                }
-                return (
-                  previous.updatedAt !== session.updatedAt
-                  || previous.name !== session.name
-                  || previous.category !== session.category
-                  || JSON.stringify(previous.metadata || {}) !== JSON.stringify(session.metadata || {})
-                )
-              })
-
-            if (!changed) {
-              return prevSessions
-            }
-
-            const currentSelectedSessionId = selectedSessionIdRef.current
-            const selectedStillExists = currentSelectedSessionId
-              ? mergedSessions.some(session => session.id === currentSelectedSessionId)
-              : false
-
-            if (!selectedStillExists && !isExternallyControlledSession) {
-              if (currentSelectedSessionId) {
-                // Preserve a neutral sidebar state when the active session is temporarily
-                // unavailable (for example hidden-until-named sessions during refresh lag).
-                setInternalSelectedSessionId(undefined)
-              } else if (mergedSessions.length > 0) {
-                const newestSessionId = mergedSessions[0].id
-                setInternalSelectedSessionId(newestSessionId)
-              }
-            }
-
-            return mergedSessions
-          })
-        } else {
-          setInternalSessions([])
-        }
-      } catch (error) {
-        if (markAuthUnavailable(error, 'session_refresh_poll')) {
-          return
-        }
-        console.error('Error checking for new chat sessions:', error)
-      }
+    const subscriptionFilter = {
+      procedureId: { eq: effectiveId },
     }
 
-    const pollTimer = window.setInterval(checkForNewSessions, 15000)
-    checkForNewSessions()
+    const upsertSessionFromPayload = (rawSession: any, source: 'create' | 'update') => {
+      const parsed = parseRawChatSession(rawSession)
+      if (!parsed) {
+        console.warn(`Ignoring malformed chat session ${source} payload`, rawSession)
+        return
+      }
+      if (!parsed.procedureId || parsed.procedureId !== effectiveId) {
+        return
+      }
+
+      setInternalSessions((prevSessions) => {
+        const existingIndex = prevSessions.findIndex((session) => session.id === parsed.id)
+        const existing = existingIndex >= 0 ? prevSessions[existingIndex] : null
+        const merged: ChatSession = {
+          ...parsed,
+          messageCount: existing?.messageCount ?? parsed.messageCount ?? 0,
+        }
+
+        if (existing && (
+          existing.updatedAt === merged.updatedAt
+          && existing.name === merged.name
+          && existing.category === merged.category
+          && JSON.stringify(existing.metadata || {}) === JSON.stringify(merged.metadata || {})
+        )) {
+          return prevSessions
+        }
+
+        const next = [...prevSessions]
+        if (existingIndex >= 0) {
+          next[existingIndex] = merged
+        } else {
+          next.push(merged)
+        }
+        next.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+        if (!isExternallyControlledSession && !selectedSessionIdRef.current && next.length > 0) {
+          setInternalSelectedSessionId(next[0].id)
+        }
+        return next
+      })
+    }
+
+    const removeSessionFromPayload = (rawSession: any) => {
+      const sessionId = typeof rawSession?.id === 'string' ? rawSession.id : ''
+      if (!sessionId) {
+        console.warn('Ignoring malformed chat session delete payload', rawSession)
+        return
+      }
+      setInternalSessions((prevSessions) => {
+        const index = prevSessions.findIndex((session) => session.id === sessionId)
+        if (index < 0) {
+          return prevSessions
+        }
+        const next = prevSessions.filter((session) => session.id !== sessionId)
+        const currentSelectedSessionId = selectedSessionIdRef.current
+        const selectedStillExists = currentSelectedSessionId
+          ? next.some((session) => session.id === currentSelectedSessionId)
+          : false
+        if (!selectedStillExists && !isExternallyControlledSession) {
+          if (currentSelectedSessionId) {
+            setInternalSelectedSessionId(undefined)
+          } else if (next.length > 0) {
+            setInternalSelectedSessionId(next[0].id)
+          }
+        }
+        return next
+      })
+      setInternalMessages((prevMessages) => prevMessages.filter((message) => message.sessionId !== sessionId))
+    }
 
     let createSubscription: { unsubscribe: () => void } | null = null
     let updateSubscription: { unsubscribe: () => void } | null = null
+    let deleteSubscription: { unsubscribe: () => void } | null = null
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      createSubscription = getClient().models.ChatSession.onCreate().subscribe({
-        next: () => {
-          // Don't rely on the subscription data, just use it as a notification
-          checkForNewSessions()
+      createSubscription = (getClient().models.ChatSession.onCreate as any)({
+        filter: subscriptionFilter,
+        selectionSet: CHAT_SESSION_SELECTION_SET,
+      }).subscribe({
+        next: (payload: any) => {
+          const incoming = extractSubscriptionRecord(payload, ['onCreateChatSession'])
+          if (incoming) {
+            upsertSessionFromPayload(incoming, 'create')
+          }
         },
         error: (error: unknown) => {
           if (markAuthUnavailable(error, 'session_on_create_subscription')) {
@@ -2513,23 +2650,27 @@ function ConversationViewer({
           if (isIgnorableSubscriptionError(error)) {
             return
           }
-          console.warn('Chat session create subscription issue; relying on poll fallback.', error)
+          console.warn('Chat session create subscription issue.', error)
         }
       })
     } catch (error) {
       if (markAuthUnavailable(error, 'session_create_subscription_setup')) {
-        return () => {
-          window.clearInterval(pollTimer)
-        }
+        return
       }
       console.error('Error setting up chat session create notification:', error)
     }
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      updateSubscription = getClient().models.ChatSession.onUpdate().subscribe({
-        next: () => {
-          checkForNewSessions()
+      updateSubscription = (getClient().models.ChatSession.onUpdate as any)({
+        filter: subscriptionFilter,
+        selectionSet: CHAT_SESSION_SELECTION_SET,
+      }).subscribe({
+        next: (payload: any) => {
+          const incoming = extractSubscriptionRecord(payload, ['onUpdateChatSession'])
+          if (incoming) {
+            upsertSessionFromPayload(incoming, 'update')
+          }
         },
         error: (error: unknown) => {
           if (markAuthUnavailable(error, 'session_on_update_subscription')) {
@@ -2538,23 +2679,50 @@ function ConversationViewer({
           if (isIgnorableSubscriptionError(error)) {
             return
           }
-          console.warn('Chat session update subscription issue; relying on poll fallback.', error)
+          console.warn('Chat session update subscription issue.', error)
         }
       })
     } catch (error) {
       if (markAuthUnavailable(error, 'session_update_subscription_setup')) {
-        return () => {
-          window.clearInterval(pollTimer)
-        }
+        return
       }
       console.error('Error setting up chat session update notification:', error)
     }
+
+    try {
+      // @ts-ignore - Amplify Gen2 typing issue with subscriptions
+      deleteSubscription = (getClient().models.ChatSession.onDelete as any)({
+        filter: subscriptionFilter,
+        selectionSet: ['id'],
+      }).subscribe({
+        next: (payload: any) => {
+          const incoming = extractSubscriptionRecord(payload, ['onDeleteChatSession'])
+          if (incoming) {
+            removeSessionFromPayload(incoming)
+          }
+        },
+        error: (error: unknown) => {
+          if (markAuthUnavailable(error, 'session_on_delete_subscription')) {
+            return
+          }
+          if (isIgnorableSubscriptionError(error)) {
+            return
+          }
+          console.warn('Chat session delete subscription issue.', error)
+        },
+      })
+    } catch (error) {
+      if (!markAuthUnavailable(error, 'session_delete_subscription_setup')) {
+        console.error('Error setting up chat session delete subscription:', error)
+      }
+    }
+
     return () => {
-      window.clearInterval(pollTimer)
       createSubscription?.unsubscribe()
       updateSubscription?.unsubscribe()
+      deleteSubscription?.unsubscribe()
     }
-  }, [effectiveId, isAuthUnavailable, isExternallyControlledSession, markAuthUnavailable, onSessionSelect])
+  }, [effectiveId, isAuthUnavailable, isExternallyControlledSession, markAuthUnavailable])
 
   const applyRealtimeMessageMutation = React.useCallback((rawMessage: any) => {
     const parsed = parseRawChatMessage(rawMessage)
@@ -2562,20 +2730,16 @@ function ConversationViewer({
       return
     }
 
-    if (parsed.procedureId && parsed.procedureId !== effectiveId) {
+    if (!parsed.procedureId || parsed.procedureId !== effectiveId) {
       return
     }
 
     const parsedSessionId = parsed.sessionId
     if (parsedSessionId && isAssistantChatMessage(parsed)) {
-      setPendingAssistantBySession((prev) => {
-        if (!prev[parsedSessionId]) {
-          return prev
-        }
-        const next = { ...prev }
-        delete next[parsedSessionId]
-        return next
-      })
+      const pendingState = pendingAssistantBySessionRef.current[parsedSessionId]
+      if (pendingState && isAssistantMessageAfterPendingThreshold(parsed, pendingState)) {
+        clearPendingAssistant(parsedSessionId)
+      }
     }
 
     setInternalMessages((prevMessages) => {
@@ -2590,6 +2754,13 @@ function ConversationViewer({
       }
 
       if (existingIndex === -1) {
+        if (prevMessages.length === 0) {
+          return [parsed]
+        }
+        const last = prevMessages[prevMessages.length - 1]
+        if (compareChatMessages(last, parsed) <= 0) {
+          return [...prevMessages, parsed]
+        }
         return sortChatMessages([...prevMessages, parsed])
       }
 
@@ -2603,109 +2774,269 @@ function ConversationViewer({
 
       const next = [...prevMessages]
       next[existingIndex] = parsed
-      return sortChatMessages(next)
+      const previousNeighbor = existingIndex > 0 ? next[existingIndex - 1] : null
+      const nextNeighbor = existingIndex < next.length - 1 ? next[existingIndex + 1] : null
+      const keepsOrder = (
+        (!previousNeighbor || compareChatMessages(previousNeighbor, parsed) <= 0)
+        && (!nextNeighbor || compareChatMessages(parsed, nextNeighbor) <= 0)
+      )
+      return keepsOrder ? next : sortChatMessages(next)
     })
-  }, [effectiveId])
+  }, [clearPendingAssistant, effectiveId])
 
-  // Real-time subscription for chat messages. onCreate/onUpdate are primary; polling is fallback.
+  const reconcileSessionMessagesAfterTerminalResponse = React.useCallback(async (
+    sessionId: string,
+    pendingState: PendingAssistantState,
+    triggerResponseStatus: ChatMessage['responseStatus'] | undefined,
+  ) => {
+    const requestedAtMs = toEpochMs(pendingState.requestedAt)
+    const elapsedMs = requestedAtMs === null ? Number.POSITIVE_INFINITY : Math.max(0, Date.now() - requestedAtMs)
+    const hasTerminalTriggerStatus = isTerminalResponseStatus(triggerResponseStatus)
+    const shouldGiveUp = (
+      triggerResponseStatus === 'FAILED'
+      || (hasTerminalTriggerStatus && elapsedMs >= PENDING_ASSISTANT_SESSION_RECONCILE_GIVE_UP_MS)
+    )
+    const scheduleRetry = () => {
+      delete pendingAssistantReconciledAtRef.current[sessionId]
+      clearPendingAssistantReconcileTimeout(sessionId)
+      pendingAssistantReconcileTimeoutRef.current[sessionId] = setTimeout(() => {
+        delete pendingAssistantReconcileTimeoutRef.current[sessionId]
+        delete pendingAssistantReconcileScheduledAtRef.current[sessionId]
+        setPendingAssistantBySession((prev) => {
+          const current = prev[sessionId]
+          if (!current || current.requestedAt !== pendingState.requestedAt) {
+            return prev
+          }
+          return { ...prev }
+        })
+      }, PENDING_ASSISTANT_SESSION_RECONCILE_RETRY_MS)
+    }
+
+    try {
+      const listBySession = (getClient().models.ChatMessage as any).listChatMessageBySessionIdAndCreatedAt
+      const listByProcedure = (getClient().models.ChatMessage as any).listChatMessageByProcedureIdAndCreatedAt
+
+      let hydratedRows: any[] = []
+      let sessionListError: unknown = null
+      let procedureListError: unknown = null
+      let loadedFrom: 'session' | 'procedure' | null = null
+
+      if (typeof listBySession === 'function') {
+        try {
+          const response: { data?: any[] } = await listBySession({
+            sessionId,
+            sortDirection: 'DESC',
+            limit: 50,
+          }, {
+            selectionSet: CHAT_MESSAGE_SELECTION_SET,
+          })
+          hydratedRows = Array.isArray(response?.data) ? response.data : []
+          loadedFrom = 'session'
+        } catch (error) {
+          sessionListError = error
+        }
+      }
+
+      if (!loadedFrom && typeof listByProcedure === 'function' && effectiveId) {
+        try {
+          const response: { data?: any[] } = await listByProcedure({
+            procedureId: effectiveId,
+            sortDirection: 'DESC',
+            limit: 200,
+          }, {
+            selectionSet: CHAT_MESSAGE_SELECTION_SET,
+          })
+          hydratedRows = Array.isArray(response?.data)
+            ? response.data.filter((row) => row?.sessionId === sessionId)
+            : []
+          loadedFrom = 'procedure'
+        } catch (error) {
+          procedureListError = error
+        }
+      }
+
+      if (!loadedFrom) {
+        // If the runtime client lacks session/procedure listing APIs, avoid indefinite "Thinking".
+        clearPendingAssistant(sessionId)
+        console.warn('Chat message session reconciliation unavailable', {
+          hasListBySession: typeof listBySession === 'function',
+          hasListByProcedure: typeof listByProcedure === 'function',
+          hasEffectiveId: Boolean(effectiveId),
+          sessionId,
+          triggerMessageId: pendingState.triggerMessageId,
+          sessionListError,
+          procedureListError,
+        })
+        return
+      }
+
+      for (const row of hydratedRows) {
+        applyRealtimeMessageMutation(row)
+      }
+
+      const hydratedMessages = normalizeAndSortVisibleMessages(hydratedRows)
+      if (hasAssistantMessageAfterPendingThreshold(hydratedMessages, sessionId, pendingState)) {
+        clearPendingAssistant(sessionId)
+        return
+      }
+
+      if (!shouldGiveUp) {
+        // Assistant persistence/subscription can lag terminal state updates.
+        // Keep pending state and retry hydration instead of dropping the response.
+        scheduleRetry()
+        return
+      }
+
+      // Give-up window reached (or explicit failure) without assistant row; clear stale pending state.
+      clearPendingAssistant(sessionId)
+      console.warn('Clearing pending assistant after terminal response without assistant message', {
+        sessionId,
+        triggerMessageId: pendingState.triggerMessageId,
+        triggerResponseStatus,
+        elapsedMs,
+      })
+    } catch (error) {
+      if (markAuthUnavailable(error, 'pending_assistant_session_reconcile')) {
+        return
+      }
+      if (!shouldGiveUp) {
+        scheduleRetry()
+        return
+      }
+      clearPendingAssistant(sessionId)
+      console.warn('Failed pending assistant session reconciliation', {
+        sessionId,
+        triggerMessageId: pendingState.triggerMessageId,
+        triggerResponseStatus,
+        elapsedMs,
+        error,
+      })
+    }
+  }, [
+    applyRealtimeMessageMutation,
+    clearPendingAssistant,
+    clearPendingAssistantReconcileTimeout,
+    effectiveId,
+    markAuthUnavailable,
+  ])
+
+  useEffect(() => {
+    if (isAuthUnavailable) {
+      return
+    }
+
+    const nowMs = Date.now()
+    for (const [sessionId, pendingState] of Object.entries(pendingAssistantBySession)) {
+      const triggerMessageId = pendingState.triggerMessageId
+      const triggerMessage = triggerMessageId
+        ? messages.find((message) => message.id === triggerMessageId)
+        : undefined
+      const triggerResponseStatus = triggerMessage?.responseStatus
+      const hasTerminalTriggerStatus = Boolean(triggerMessage && isTerminalResponseStatus(triggerResponseStatus))
+      const requestedAtMs = toEpochMs(pendingState.requestedAt)
+      const elapsedMs = requestedAtMs === null ? Number.POSITIVE_INFINITY : nowMs - requestedAtMs
+
+      if (!hasTerminalTriggerStatus && elapsedMs < PENDING_ASSISTANT_SESSION_RECONCILE_DELAY_MS) {
+        continue
+      }
+      if (hasAssistantMessageAfterPendingThreshold(messages, sessionId, pendingState)) {
+        clearPendingAssistant(sessionId)
+        continue
+      }
+      if (pendingAssistantReconciledAtRef.current[sessionId] === pendingState.requestedAt) {
+        continue
+      }
+      const inFlight = pendingAssistantReconcileInFlightRef.current
+      if (inFlight.has(sessionId)) {
+        continue
+      }
+
+      pendingAssistantReconciledAtRef.current[sessionId] = pendingState.requestedAt
+      inFlight.add(sessionId)
+      void reconcileSessionMessagesAfterTerminalResponse(sessionId, pendingState, triggerResponseStatus)
+        .finally(() => {
+          inFlight.delete(sessionId)
+        })
+    }
+  }, [
+    clearPendingAssistant,
+    isAuthUnavailable,
+    messages,
+    pendingAssistantBySession,
+    reconcileSessionMessagesAfterTerminalResponse,
+  ])
+
+  // Real-time subscription for chat messages (subscription-only; no polling fallback).
   useEffect(() => {
     if (!effectiveId || isAuthUnavailable) return
 
-    let isCancelled = false
-
-    const checkForNewMessages = async () => {
-      try {
-        const client = getClient()
-
-        // Load ALL messages for this experiment with proper pagination
-        let allMessages: any[] = []
-        let nextToken: string | null = null
-
-        do {
-          const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByProcedureIdAndCreatedAt as any)({
-            procedureId: effectiveId,
-            limit: 1000,
-            nextToken,
-          }, {
-            selectionSet: [
-              'id',
-              'content',
-              'role',
-              'messageType',
-              'humanInteraction',
-              'toolName',
-              'toolParameters',
-              'toolResponse',
-              'metadata',
-              'parentMessageId',
-              'accountId',
-              'procedureId',
-              'createdAt',
-              'sequenceNumber',
-              'sessionId'
-            ]
-          })
-
-          if (response?.data) {
-            allMessages = [...allMessages, ...response.data]
-          }
-
-          nextToken = response.nextToken || null
-        } while (nextToken)
-
-        if (isCancelled) {
-          return
-        }
-
-        const sortedMessages = normalizeAndSortVisibleMessages(allMessages)
-        setInternalMessages((prevMessages) => (
-          hasMessageListChanged(prevMessages, sortedMessages)
-            ? sortedMessages
-            : prevMessages
-        ))
-      } catch (error) {
-        if (markAuthUnavailable(error, 'message_refresh_poll')) {
-          return
-        }
-        console.error('Error checking for new messages:', error)
-      }
+    const subscriptionFilter = {
+      procedureId: { eq: effectiveId },
     }
+    let isDisposed = false
 
-    const extractSubscriptionMessage = (payload: any): any | null => {
-      const directData = payload?.data
-      if (directData && typeof directData === 'object') {
-        if ('onCreateChatMessage' in directData) {
-          return directData.onCreateChatMessage
-        }
-        if ('onUpdateChatMessage' in directData) {
-          return directData.onUpdateChatMessage
-        }
-        if ('id' in directData) {
-          return directData
-        }
+    const hydrateRealtimeMessageById = async (messageId: string, source: 'create' | 'update') => {
+      const normalizedMessageId = messageId.trim()
+      if (!normalizedMessageId) {
+        return
       }
-      if (payload && typeof payload === 'object' && 'id' in payload) {
-        return payload
+      const inFlight = messageHydrationInFlightRef.current
+      if (inFlight.has(normalizedMessageId)) {
+        return
       }
-      return null
+      inFlight.add(normalizedMessageId)
+      try {
+        const response = await (getClient().models.ChatMessage.get as any)({ id: normalizedMessageId }, {
+          selectionSet: CHAT_MESSAGE_SELECTION_SET,
+        })
+        if (isDisposed) {
+          return
+        }
+        const hydrated = response?.data
+        if (!hydrated) {
+          console.warn(`Unable to hydrate chat message ${source} payload by id`, { messageId: normalizedMessageId })
+          return
+        }
+        applyRealtimeMessageMutation(hydrated)
+      } catch (error) {
+        if (markAuthUnavailable(error, `message_${source}_hydrate_get`)) {
+          return
+        }
+        console.warn(`Failed hydrating chat message ${source} payload by id`, {
+          messageId: normalizedMessageId,
+          error,
+        })
+      } finally {
+        inFlight.delete(normalizedMessageId)
+      }
     }
 
     let createSubscription: { unsubscribe: () => void } | null = null
     let updateSubscription: { unsubscribe: () => void } | null = null
-    const pollTimer = window.setInterval(() => {
-      checkForNewMessages()
-    }, 15000)
+    let deleteSubscription: { unsubscribe: () => void } | null = null
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      createSubscription = getClient().models.ChatMessage.onCreate().subscribe({
+      createSubscription = (getClient().models.ChatMessage.onCreate as any)({
+        filter: subscriptionFilter,
+        selectionSet: CHAT_MESSAGE_SELECTION_SET,
+      }).subscribe({
         next: (payload: any) => {
-          const incoming = extractSubscriptionMessage(payload)
-          if (incoming) {
-            applyRealtimeMessageMutation(incoming)
+          const incoming = extractSubscriptionRecord(payload, ['onCreateChatMessage'])
+          if (!incoming) {
+            console.warn('Ignoring malformed chat message create payload', payload)
             return
           }
-          checkForNewMessages()
+          if (!hasCompleteRealtimeChatMessage(incoming)) {
+            const messageId = typeof incoming.id === 'string' ? incoming.id : ''
+            if (!messageId) {
+              console.warn('Ignoring chat message create payload missing id', payload)
+              return
+            }
+            void hydrateRealtimeMessageById(messageId, 'create')
+            return
+          }
+          applyRealtimeMessageMutation(incoming)
         },
         error: (error: unknown) => {
           if (markAuthUnavailable(error, 'message_on_create_subscription')) {
@@ -2725,14 +3056,26 @@ function ConversationViewer({
 
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
-      updateSubscription = getClient().models.ChatMessage.onUpdate().subscribe({
+      updateSubscription = (getClient().models.ChatMessage.onUpdate as any)({
+        filter: subscriptionFilter,
+        selectionSet: CHAT_MESSAGE_SELECTION_SET,
+      }).subscribe({
         next: (payload: any) => {
-          const incoming = extractSubscriptionMessage(payload)
-          if (incoming) {
-            applyRealtimeMessageMutation(incoming)
+          const incoming = extractSubscriptionRecord(payload, ['onUpdateChatMessage'])
+          if (!incoming) {
+            console.warn('Ignoring malformed chat message update payload', payload)
             return
           }
-          checkForNewMessages()
+          if (!hasCompleteRealtimeChatMessage(incoming)) {
+            const messageId = typeof incoming.id === 'string' ? incoming.id : ''
+            if (!messageId) {
+              console.warn('Ignoring chat message update payload missing id', payload)
+              return
+            }
+            void hydrateRealtimeMessageById(messageId, 'update')
+            return
+          }
+          applyRealtimeMessageMutation(incoming)
         },
         error: (error: unknown) => {
           if (markAuthUnavailable(error, 'message_on_update_subscription')) {
@@ -2750,14 +3093,49 @@ function ConversationViewer({
       }
     }
 
-    // Initial load + reconciliation on mount.
-    checkForNewMessages()
+    try {
+      // @ts-ignore - Amplify Gen2 typing issue with subscriptions
+      deleteSubscription = (getClient().models.ChatMessage.onDelete as any)({
+        filter: subscriptionFilter,
+        selectionSet: ['id', 'procedureId'],
+      }).subscribe({
+        next: (payload: any) => {
+          const incoming = extractSubscriptionRecord(payload, ['onDeleteChatMessage'])
+          const deletedMessageId = typeof incoming?.id === 'string' ? incoming.id : null
+          if (!deletedMessageId) {
+            console.warn('Ignoring malformed chat message delete payload', payload)
+            return
+          }
+          if (!incoming?.procedureId || incoming.procedureId !== effectiveId) {
+            return
+          }
+          setInternalMessages((prevMessages) => (
+            prevMessages.some((message) => message.id === deletedMessageId)
+              ? prevMessages.filter((message) => message.id !== deletedMessageId)
+              : prevMessages
+          ))
+        },
+        error: (error: unknown) => {
+          if (markAuthUnavailable(error, 'message_on_delete_subscription')) {
+            return
+          }
+          if (isIgnorableSubscriptionError(error)) {
+            return
+          }
+          console.error('Chat message delete subscription error:', error)
+        },
+      })
+    } catch (error) {
+      if (!markAuthUnavailable(error, 'message_delete_subscription_setup')) {
+        console.error('Error setting up chat message delete notification:', error)
+      }
+    }
 
     return () => {
-      isCancelled = true
-      window.clearInterval(pollTimer)
+      isDisposed = true
       createSubscription?.unsubscribe()
       updateSubscription?.unsubscribe()
+      deleteSubscription?.unsubscribe()
     }
   }, [applyRealtimeMessageMutation, effectiveId, isAuthUnavailable, markAuthUnavailable])
   
@@ -4087,6 +4465,7 @@ function ConversationViewer({
                 ref={virtuosoRef}
                 className="h-full"
                 data={renderRows}
+                computeItemKey={(_index, row) => row.id}
                 followOutput={(isAtBottom) => (shouldForceFollow || isAtBottom ? "auto" : false)}
                 initialTopMostItemIndex={Math.max(0, renderRows.length - 1)}
                 atBottomStateChange={handleAtBottomStateChange}
