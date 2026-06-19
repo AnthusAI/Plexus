@@ -1,0 +1,49 @@
+{
+  "id": "plx-f0a5d96b-b6eb-4ae8-b025-fc1a8aafa9b3",
+  "title": "Deterministic Console score-edit audit message block",
+  "description": "Implement deterministic Console score-edit audit rendering so candidate version details and link are always present without relying on model prose. Add runtime audit payload, deterministic postprocessing message injection, and focused tests.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "0172d970-e222-4f9d-b37c-420733765f3b",
+      "author": "ryan.porter",
+      "text": "Starting implementation: add deterministic score-edit audit summary (including relative version link path), capture via runtime context from execute_tactus, and inject a fixed audit block into the final Console assistant message. Then add regression tests.",
+      "created_at": "2026-06-18T20:10:26.912701Z"
+    },
+    {
+      "id": "e0900ee2-42d5-42d2-811c-a971d2bdfa9f",
+      "author": "ryan.porter",
+      "text": "Integration run (local console worker + Chrome): (1) underspecified user prompt now asks for scorecard/score clarification instead of guessing; (2) deterministic score-edit audit block appears in assistant response with candidate version link and compact audit metadata in execute_tactus tool response; (3) guidelines update request was blocked by automatic guidelines validation and did not mutate. Next: improve guidelines update path so a high-level wording tweak can auto-preserve existing rubric structure while still validating before save.",
+      "created_at": "2026-06-18T21:26:00.855452Z"
+    },
+    {
+      "id": "3e20a6d4-0e8f-42fc-acb7-47996b0fa855",
+      "author": "ryan.porter",
+      "text": "Implemented console auto-title prompt tweak to favor scorecard/score names over IDs when available. Updated  title prompt rules and added test  in . Verification: ============================= test session starts ==============================\nplatform darwin -- Python 3.11.15, pytest-8.2.2, pluggy-1.6.0\nrootdir: /Users/ryan.porter/Projects/Plexus\nconfigfile: pytest.ini\nplugins: asyncio-0.23.5, cov-5.0.0, langsmith-0.8.1, pyfakefs-6.2.0, logfire-4.32.1, anyio-4.13.0\nasyncio: mode=Mode.STRICT\ncollected 31 items / 24 deselected / 7 selected\n\nplexus/console/test_chat_runtime.py .......                              [100%]\n\n======================= 7 passed, 24 deselected in 0.36s ======================= (7 passed).",
+      "created_at": "2026-06-18T21:28:41.481651Z"
+    },
+    {
+      "id": "fc4e1357-7146-45c9-912d-04dbc1517b6f",
+      "author": "ryan.porter",
+      "text": "Implemented console auto-title prompt tweak to favor scorecard and score names over IDs when available. Updated plexus/console/chat_runtime.py title prompt rules and added test test_generate_session_title_with_llm_prefers_names_over_ids in plexus/console/test_chat_runtime.py. Verification command: poetry run pytest plexus/console/test_chat_runtime.py -k title, result: 7 passed.",
+      "created_at": "2026-06-18T21:28:48.641644Z"
+    },
+    {
+      "id": "b298ee82-eced-459b-841d-fd8bac5061a9",
+      "author": "ryan.porter",
+      "text": "Addressed candidate-version link gap in assistant body text. Root cause: deterministic score-edit block already had a link, but model-generated prose line like \"New candidate version: `...`\" stayed plain text. Fix in plexus/cli/procedure/procedure_executor.py: added _linkify_score_edit_version_mentions() and applied it when updating streamed assistant content and fallback assistant text. Added assertion in test_execute_tactus_injects_deterministic_score_edit_audit_block to verify body mention is linkified. Verification: poetry run pytest plexus/cli/procedure/test_procedure_executor_compat.py -k deterministic_score_edit_audit (2 passed).",
+      "created_at": "2026-06-18T21:30:33.678569Z"
+    }
+  ],
+  "created_at": "2026-06-18T20:10:22.719140Z",
+  "updated_at": "2026-06-18T21:30:33.678569Z",
+  "closed_at": null,
+  "custom": {}
+}

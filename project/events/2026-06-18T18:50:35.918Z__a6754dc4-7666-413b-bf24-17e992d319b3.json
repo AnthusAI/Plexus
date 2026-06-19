@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a6754dc4-7666-413b-bf24-17e992d319b3",
+  "issue_id": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-18T18:50:35.918Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Improve Console target resolution",
+    "description": "Improve Plexus Console score workflow reliability for ambiguous score targets.\n\nIntent: As a Console user, I want follow-up target choices to resolve deterministically, so that score and guideline workflow requests do not loop or guess.\n\nDefinition of Done:\n- Console can ask one disambiguation question and consume the follow-up answer.\n- Runtime exposes a reusable score target resolver.\n- Code edits remain routed through the score edit worker.\n- Guidelines updates remain validation-gated.\n- Targeted tests and live Console smoke evidence pass.\n\nConfidentiality: this issue intentionally omits client-specific names, scorecard names, score names, evaluation names, and incidents.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}
