@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import logging
 import os
@@ -35,6 +36,8 @@ _EVALUATION_PROCESSES: dict[int, Any] = {}
 CONSOLE_AUDIT_EVENTS_KEY = "console_audit_events"
 SCORE_EDIT_AUDIT_EVENT_KEY = "score_edit_audit"
 SCORE_EDIT_AUDIT_COMPACT_KEY = "score_edit_audit_compact"
+SCORE_AUDIT_DIFF_TEXT_MAX_CHARS = 20_000
+SCORE_AUDIT_UNIFIED_DIFF_MAX_CHARS = 20_000
 
 
 PLEXUS_DOCS_DIR = os.path.normpath(
@@ -151,6 +154,133 @@ def _score_version_relative_path(
     return f"/lab/scorecards/{scorecard}/scores/{score}/versions/{version}"
 
 
+def _truncate_for_score_audit_diff(
+    value: Any, *, limit: int = SCORE_AUDIT_DIFF_TEXT_MAX_CHARS
+) -> tuple[str, bool]:
+    text = str(value or "")
+    if len(text) <= limit:
+        return text, False
+    return text[:limit], True
+
+
+def _build_unified_diff(
+    *,
+    original_text: str,
+    modified_text: str,
+    fromfile: str,
+    tofile: str,
+) -> str:
+    diff = "".join(
+        difflib.unified_diff(
+            original_text.splitlines(keepends=True),
+            modified_text.splitlines(keepends=True),
+            fromfile=fromfile,
+            tofile=tofile,
+        )
+    )
+    if len(diff) <= SCORE_AUDIT_UNIFIED_DIFF_MAX_CHARS:
+        return diff
+    return diff[:SCORE_AUDIT_UNIFIED_DIFF_MAX_CHARS]
+
+
+def _build_score_diff_entry(
+    *,
+    kind: str,
+    language: str,
+    original_text: Any,
+    modified_text: Any,
+    original_version_id: Any,
+    modified_version_id: Any,
+    original_url: str | None,
+    modified_url: str | None,
+) -> dict[str, Any]:
+    original, original_truncated = _truncate_for_score_audit_diff(original_text)
+    modified, modified_truncated = _truncate_for_score_audit_diff(modified_text)
+    unified = _build_unified_diff(
+        original_text=original,
+        modified_text=modified,
+        fromfile=f"{kind}:previous",
+        tofile=f"{kind}:updated",
+    )
+    return {
+        "kind": kind,
+        "language": language,
+        "has_changes": original != modified,
+        "original": original,
+        "modified": modified,
+        "unified_diff": unified,
+        "original_label": "Previous score version",
+        "modified_label": "Updated score version",
+        "original_version_id": str(original_version_id or "").strip() or None,
+        "modified_version_id": str(modified_version_id or "").strip() or None,
+        "original_url": original_url,
+        "modified_url": modified_url,
+        "truncated": bool(original_truncated or modified_truncated),
+    }
+
+
+def _build_score_change_diffs(
+    *,
+    scorecard_id: Any,
+    score_id: Any,
+    parent_version_id: Any,
+    version_id: Any,
+    changed_fields: list[str] | None,
+    original_code: Any,
+    modified_code: Any,
+    original_guidelines: Any,
+    modified_guidelines: Any,
+) -> dict[str, Any]:
+    changed = {
+        str(field).strip().lower()
+        for field in list(changed_fields or [])
+        if str(field).strip()
+    }
+
+    parent_url = _score_version_relative_path(
+        scorecard_id=scorecard_id,
+        score_id=score_id,
+        version_id=parent_version_id,
+    )
+    version_url = _score_version_relative_path(
+        scorecard_id=scorecard_id,
+        score_id=score_id,
+        version_id=version_id,
+    )
+
+    diffs: dict[str, Any] = {}
+    original_code_text = str(original_code or "")
+    modified_code_text = str(modified_code or "")
+    original_guidelines_text = str(original_guidelines or "")
+    modified_guidelines_text = str(modified_guidelines or "")
+
+    if "code" in changed or original_code_text != modified_code_text:
+        diffs["code"] = _build_score_diff_entry(
+            kind="code",
+            language="yaml",
+            original_text=original_code_text,
+            modified_text=modified_code_text,
+            original_version_id=parent_version_id,
+            modified_version_id=version_id,
+            original_url=parent_url,
+            modified_url=version_url,
+        )
+
+    if "guidelines" in changed or original_guidelines_text != modified_guidelines_text:
+        diffs["guidelines"] = _build_score_diff_entry(
+            kind="guidelines",
+            language="markdown",
+            original_text=original_guidelines_text,
+            modified_text=modified_guidelines_text,
+            original_version_id=parent_version_id,
+            modified_version_id=version_id,
+            original_url=parent_url,
+            modified_url=version_url,
+        )
+
+    return diffs
+
+
 def _extract_console_audit_events(runtime_context: Any) -> list[dict[str, Any]]:
     if not isinstance(runtime_context, dict):
         return []
@@ -173,12 +303,21 @@ def _extract_score_edit_audit_events_from_value(value: Any) -> list[dict[str, An
         kind = str(event.get("kind") or event.get("k") or "").strip().lower()
         if kind == "score_edit":
             if "kind" not in event and "k" in event:
+                error_text = str(event.get("e") or "").strip()
+                handle_status = str(event.get("hs") or "").strip().lower()
+                success_value = event.get("s")
+                if isinstance(success_value, bool):
+                    success = success_value
+                else:
+                    success = handle_status == "completed" and not error_text
                 return [
                     {
                         "kind": "score_edit",
+                        "success": success,
                         "version_id": event.get("v"),
                         "parent_version_id": event.get("p"),
                         "version_url": event.get("u"),
+                        "parent_version_url": event.get("pu"),
                         "handle_status": event.get("hs"),
                         "post_submit_test": {"status": event.get("ss")},
                         "post_submit_verification": {"status": event.get("vs")},
@@ -189,7 +328,7 @@ def _extract_score_edit_audit_events_from_value(value: Any) -> list[dict[str, An
                             if event.get("cf")
                             else []
                         ),
-                        "error": event.get("e"),
+                        "error": error_text or None,
                     }
                 ]
             return [_jsonable(event)]
@@ -203,9 +342,11 @@ def _compact_score_edit_audit_event(latest: dict[str, Any]) -> dict[str, Any]:
         # Keep this payload intentionally tiny so ChatMessage slimming
         # (512-byte nested cap) preserves it in tool_response storage.
         "k": "score_edit",
+        "s": bool(latest.get("success")),
         "v": str(latest.get("version_id") or "").strip() or None,
         "p": str(latest.get("parent_version_id") or "").strip() or None,
         "u": str(latest.get("version_url") or "").strip() or None,
+        "pu": str(latest.get("parent_version_url") or "").strip() or None,
         "hs": str(latest.get("handle_status") or "").strip() or "unknown",
         "ss": (
             str(smoke.get("status") or "").strip() if isinstance(smoke, dict) else "unknown"
@@ -582,7 +723,7 @@ class ConsoleScoreCodeUpdateRequiresSubagent(PermissionError):
         super().__init__(
             "Console chat cannot call plexus.score.update with direct score code "
             "or YAML content. Use plexus.score.edit with a concrete instruction so "
-            "the dedicated score editor worker creates the candidate version."
+            "the dedicated score editor worker creates the updated score version."
         )
 
 
@@ -6141,6 +6282,31 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
 
     result: dict[str, Any] = {"success": True, "score_id": score_id, "scorecard_id": scorecard_id}
 
+    def _load_score_version_snapshot(version_id: Any) -> dict[str, str]:
+        normalized_version_id = str(version_id or "").strip()
+        if not normalized_version_id:
+            return {}
+        query = """
+        query GetScoreVersionForConsoleAudit($id: ID!) {
+            getScoreVersion(id: $id) {
+                id
+                configuration
+                guidelines
+                parentVersionId
+            }
+        }
+        """
+        response = client.execute(query, {"id": normalized_version_id})
+        score_version = (response or {}).get("getScoreVersion") or {}
+        if not isinstance(score_version, dict):
+            return {}
+        return {
+            "id": str(score_version.get("id") or normalized_version_id),
+            "configuration": str(score_version.get("configuration") or ""),
+            "guidelines": str(score_version.get("guidelines") or ""),
+            "parent_version_id": str(score_version.get("parentVersionId") or ""),
+        }
+
     # --- Metadata-only update (Score record fields) ---
     if metadata_updates:
         _FIELD_MAP = {
@@ -6167,6 +6333,11 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
     new_version_id: str | None = None
     if code or guidelines_provided:
         should_preserve_guidelines = bool(code) and not guidelines_provided and guidelines is None
+        changed_fields: list[str] = []
+        if code:
+            changed_fields.append("code")
+        if guidelines_provided:
+            changed_fields.append("guidelines")
 
         # Validate YAML if code provided
         if code:
@@ -6244,6 +6415,10 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
                     "guidelines_validation": guidelines_validation,
                 }
 
+        parent_snapshot: dict[str, str] = {}
+        if parent_version_id:
+            parent_snapshot = _load_score_version_snapshot(parent_version_id)
+
         version_mutation = """
         mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
             createScoreVersion(input: $input) { id createdAt }
@@ -6295,6 +6470,42 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
         result["version_id"] = new_version_id
         result["parent_version_id"] = parent_version_id
         result["version_created"] = True
+        result["changed_fields"] = changed_fields
+        result["version_url"] = _score_version_relative_path(
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            version_id=new_version_id,
+        )
+        result["parent_version_url"] = _score_version_relative_path(
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            version_id=parent_version_id,
+        )
+
+        try:
+            candidate_snapshot = _load_score_version_snapshot(new_version_id)
+            if not parent_snapshot and parent_version_id:
+                parent_snapshot = _load_score_version_snapshot(parent_version_id)
+            diffs = _build_score_change_diffs(
+                scorecard_id=scorecard_id,
+                score_id=score_id,
+                parent_version_id=parent_version_id,
+                version_id=new_version_id,
+                changed_fields=changed_fields,
+                original_code=parent_snapshot.get("configuration") or "",
+                modified_code=candidate_snapshot.get("configuration") or "",
+                original_guidelines=parent_snapshot.get("guidelines") or "",
+                modified_guidelines=candidate_snapshot.get("guidelines") or "",
+            )
+            if diffs:
+                result["diffs"] = diffs
+        except Exception as diff_error:  # noqa: BLE001
+            logger.warning(
+                "Could not generate score.update diff payload for %s/%s: %s",
+                scorecard_id,
+                score_id,
+                diff_error,
+            )
 
     result["message"] = (
         f"Score updated: version {new_version_id}" if new_version_id
@@ -6316,6 +6527,119 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValueError("LLM response must be a JSON object")
     return parsed
+
+
+@dataclass
+class _ScoreEditAttemptError(Exception):
+    error_code: str
+    stage: str
+    message: str
+    details: dict[str, Any] | None = None
+
+    def __str__(self) -> str:
+        return self.message
+
+
+def _score_edit_model_sequence(args: dict[str, Any]) -> list[str]:
+    def _clean(value: Any) -> str:
+        return str(value or "").strip()
+
+    primary = _clean(args.get("model")) or _clean(
+        os.environ.get("PLEXUS_SCORE_EDIT_MODEL")
+    ) or "gpt-5.3-codex"
+    fallback = _clean(args.get("fallback_model")) or _clean(
+        os.environ.get("PLEXUS_SCORE_EDIT_FALLBACK_MODEL")
+    ) or "gpt-5.4"
+
+    raw_max_attempts = args.get("max_attempts")
+    if raw_max_attempts is None:
+        raw_max_attempts = os.environ.get("PLEXUS_SCORE_EDIT_MAX_ATTEMPTS")
+    try:
+        max_attempts = int(raw_max_attempts) if raw_max_attempts is not None else 2
+    except (TypeError, ValueError):
+        max_attempts = 2
+    max_attempts = max(1, min(max_attempts, 4))
+
+    models = [primary]
+    if max_attempts > 1:
+        models.append(fallback or primary)
+    while len(models) < max_attempts:
+        models.append(models[-1])
+    return models
+
+
+def _score_edit_llm_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "code": {"type": "string"},
+            "guidelines": {"type": "string"},
+            "note": {"type": "string"},
+            "summary": {"type": "string"},
+        },
+        "required": ["code", "note", "summary"],
+    }
+
+
+def _create_score_edit_response(
+    *,
+    client: Any,
+    model: str,
+    prompt: str,
+    max_output_tokens: int = 5000,
+) -> tuple[dict[str, Any], bool]:
+    request_args: dict[str, Any] = {
+        "model": model,
+        "reasoning": {"effort": "low"},
+        "input": [{"role": "user", "content": prompt}],
+        "max_output_tokens": max_output_tokens,
+    }
+
+    try:
+        structured = client.responses.create(
+            **request_args,
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "score_edit_payload",
+                    "schema": _score_edit_llm_schema(),
+                    "strict": True,
+                }
+            },
+        )
+        return _extract_json_object(getattr(structured, "output_text", "") or ""), True
+    except Exception as exc:
+        message = str(exc).lower()
+        if not any(
+            token in message
+            for token in (
+                "json_schema",
+                "text.format",
+                "response_format",
+                "unknown parameter",
+                "unsupported",
+            )
+        ):
+            raise
+        logger.info(
+            "Structured score.edit output unavailable for model %s; using text JSON fallback: %s",
+            model,
+            exc,
+        )
+
+    fallback = client.responses.create(**request_args)
+    return _extract_json_object(getattr(fallback, "output_text", "") or ""), False
+
+
+def _validate_score_edit_payload(payload: dict[str, Any]) -> None:
+    for key in ("code", "note", "summary"):
+        value = payload.get(key)
+        if not isinstance(value, str):
+            raise ValueError(f"score.edit model payload missing string `{key}`")
+    guidelines_value = payload.get("guidelines")
+    if guidelines_value is not None and not isinstance(guidelines_value, str):
+        raise ValueError("score.edit model payload `guidelines` must be a string when present")
 
 
 def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
@@ -6369,7 +6693,6 @@ def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
         base_guidelines = str(pull_data.get("guidelines") or "")
         parent_version_id = str(pull_data.get("version_id") or "")
 
-        model = str(args.get("model") or "gpt-5.3-codex")
         client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         allow_guidelines_edit = bool(args.get("allow_guidelines_edit", False))
         prompt = (
@@ -6387,228 +6710,298 @@ def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
             f"Current YAML:\n{base_code}\n\n"
             f"Current Guidelines:\n{base_guidelines}\n"
         )
-        response = client.responses.create(
-            model=model,
-            reasoning={"effort": "low"},
-            input=[{"role": "user", "content": prompt}],
-            max_output_tokens=5000,
-        )
-        parsed = _extract_json_object(response.output_text or "")
-        candidate_code = str(parsed.get("code") or base_code)
-        candidate_guidelines = (
-            str(parsed.get("guidelines"))
-            if parsed.get("guidelines") is not None
-            else base_guidelines
-        )
-        if not allow_guidelines_edit:
-            candidate_guidelines = base_guidelines
-        note = str(parsed.get("note") or f"Edited via plexus.score.edit: {instruction[:180]}")
-        summary = str(parsed.get("summary") or "")
-
-        toolset = ScoreEditorToolset()
-        setup_result = toolset.setup(
-            {
-                "scorecard_identifier": resolved_scorecard["id"],
-                "score_identifier": resolved_score["id"],
-                "yaml_content": base_code,
-                "guidelines_content": base_guidelines,
-                "parent_version_id": parent_version_id or None,
-                "hypothesis": instruction[:200],
-            }
-        )
-        if not setup_result.get("success"):
-            raise RuntimeError(str(setup_result.get("message") or "score editor setup failed"))
-
-        if candidate_code != base_code:
-            toolset.str_replace_editor(
-                {"command": "create", "path": VIRTUAL_PATH, "new_str": candidate_code}
-            )
-        if candidate_guidelines != base_guidelines:
-            toolset.str_replace_editor(
-                {
-                    "command": "create",
-                    "path": GUIDELINES_PATH,
-                    "new_str": candidate_guidelines,
-                }
-            )
-        submit = asyncio.run(toolset.submit_score_version({"version_note": note}))
-        if not submit.get("success"):
-            raise RuntimeError(str(submit.get("error") or "score edit submit failed"))
-
-        changed_fields = list(submit.get("changed_fields") or [])
-        submitted_parent_version_id = str(
-            submit.get("parent_version_id") or parent_version_id or ""
-        )
-        post_submit_test: dict[str, Any]
-        if "code" in changed_fields:
-            raw_test = args.get("test")
-            test_config = raw_test if isinstance(raw_test, dict) else {}
-            test_args: dict[str, Any] = {
-                "scorecard_identifier": str(resolved_scorecard["id"]),
-                "score_identifier": str(resolved_score["id"]),
-                "version": submit.get("version_id"),
-                "samples": int(test_config.get("samples") or 3),
-                "days": int(test_config.get("days") or 90),
-            }
-            if test_config.get("item_ids") is not None:
-                test_args["item_ids"] = test_config.get("item_ids")
-            if test_config.get("fallback_scorecard_identifier") is not None:
-                test_args["fallback_scorecard_identifier"] = test_config.get(
-                    "fallback_scorecard_identifier"
+        attempts: list[dict[str, Any]] = []
+        models = _score_edit_model_sequence(args)
+        output = {
+            "success": False,
+            "error_code": "score_edit_no_attempts",
+            "error": "No score edit attempts were executed.",
+        }
+        for attempt_index, model in enumerate(models, start=1):
+            attempt: dict[str, Any] = {"attempt": attempt_index, "model": model}
+            try:
+                parsed, structured_output = _create_score_edit_response(
+                    client=client,
+                    model=model,
+                    prompt=prompt,
                 )
+                attempt["structured_output"] = structured_output
+                _validate_score_edit_payload(parsed)
+            except Exception as exc:
+                attempt.update(
+                    {
+                        "status": "failed",
+                        "stage": "model_parse",
+                        "error_code": "score_edit_model_parse_failed",
+                        "error": str(exc),
+                    }
+                )
+                attempts.append(attempt)
+                continue
+
+            candidate_code = str(parsed.get("code") or base_code)
+            candidate_guidelines = (
+                str(parsed.get("guidelines"))
+                if parsed.get("guidelines") is not None
+                else base_guidelines
+            )
+            if not allow_guidelines_edit:
+                candidate_guidelines = base_guidelines
+            note = str(
+                parsed.get("note") or f"Edited via plexus.score.edit: {instruction[:180]}"
+            )
+            summary = str(parsed.get("summary") or "")
 
             try:
-                smoke_result = _default_score_test(test_args)
-            except Exception as exc:
-                output = {
-                    "success": False,
-                    "error": f"Post-submit score smoke test failed: {exc}",
-                    "error_code": "score_edit_post_submit_test_failed",
-                    "version_id": submit.get("version_id"),
-                    "parent_version_id": parent_version_id or None,
-                    "changed_fields": changed_fields,
-                    "note": note,
-                    "summary": summary,
-                    "scorecard_identifier": scorecard_identifier,
-                    "score_identifier": score_identifier,
-                    "scorecard_id": resolved_scorecard["id"],
-                    "score_id": resolved_score["id"],
-                    "post_submit_test": {
-                        "status": "failed",
-                        "error": str(exc),
-                    },
+                toolset = ScoreEditorToolset()
+                setup_result = toolset.setup(
+                    {
+                        "scorecard_identifier": resolved_scorecard["id"],
+                        "score_identifier": resolved_score["id"],
+                        "yaml_content": base_code,
+                        "guidelines_content": base_guidelines,
+                        "parent_version_id": parent_version_id or None,
+                        "hypothesis": instruction[:200],
+                    }
+                )
+                if not setup_result.get("success"):
+                    raise _ScoreEditAttemptError(
+                        "score_edit_setup_failed",
+                        "setup",
+                        str(setup_result.get("message") or "score editor setup failed"),
+                    )
+
+                if candidate_code != base_code:
+                    toolset.str_replace_editor(
+                        {"command": "create", "path": VIRTUAL_PATH, "new_str": candidate_code}
+                    )
+                if candidate_guidelines != base_guidelines:
+                    toolset.str_replace_editor(
+                        {
+                            "command": "create",
+                            "path": GUIDELINES_PATH,
+                            "new_str": candidate_guidelines,
+                        }
+                    )
+                submit = asyncio.run(toolset.submit_score_version({"version_note": note}))
+                if not submit.get("success"):
+                    raise _ScoreEditAttemptError(
+                        "score_edit_submit_failed",
+                        "submit",
+                        str(submit.get("error") or "score edit submit failed"),
+                    )
+
+                changed_fields = list(submit.get("changed_fields") or [])
+                submitted_parent_version_id = str(
+                    submit.get("parent_version_id") or parent_version_id or ""
+                )
+                version_id = str(submit.get("version_id") or "")
+                attempt["version_id"] = version_id or None
+                attempt["parent_version_id"] = submitted_parent_version_id or None
+                attempt["changed_fields"] = changed_fields
+
+                if not version_id:
+                    raise _ScoreEditAttemptError(
+                        "score_edit_missing_version_id",
+                        "submit",
+                        "Score edit did not return an updated score version_id",
+                        details={
+                            "post_submit_test": {"status": "skipped", "reason": "missing_version_id"}
+                        },
+                    )
+
+                post_submit_test: dict[str, Any]
+                if "code" in changed_fields:
+                    raw_test = args.get("test")
+                    test_config = raw_test if isinstance(raw_test, dict) else {}
+                    test_args: dict[str, Any] = {
+                        "scorecard_identifier": str(resolved_scorecard["id"]),
+                        "score_identifier": str(resolved_score["id"]),
+                        "version": version_id,
+                        "samples": int(test_config.get("samples") or 3),
+                        "days": int(test_config.get("days") or 90),
+                    }
+                    if test_config.get("item_ids") is not None:
+                        test_args["item_ids"] = test_config.get("item_ids")
+                    if test_config.get("fallback_scorecard_identifier") is not None:
+                        test_args["fallback_scorecard_identifier"] = test_config.get(
+                            "fallback_scorecard_identifier"
+                        )
+                    try:
+                        smoke_result = _default_score_test(test_args)
+                    except Exception as exc:
+                        raise _ScoreEditAttemptError(
+                            "score_edit_post_submit_test_failed",
+                            "post_submit_test",
+                            f"Post-submit score smoke test failed: {exc}",
+                            details={
+                                "post_submit_test": {"status": "failed", "error": str(exc)},
+                            },
+                        ) from exc
+
+                    post_submit_test = {"status": "passed", "result": smoke_result}
+                    if isinstance(smoke_result, dict) and smoke_result.get("success") is False:
+                        raise _ScoreEditAttemptError(
+                            "score_edit_post_submit_test_failed",
+                            "post_submit_test",
+                            "Post-submit score smoke test reported failure",
+                            details={
+                                "post_submit_test": {"status": "failed", "result": smoke_result},
+                            },
+                        )
+                else:
+                    post_submit_test = {
+                        "status": "skipped",
+                        "reason": "no_code_change",
+                    }
+
+                try:
+                    candidate_pull = _default_score_pull(
+                        {
+                            "scorecard_id": resolved_scorecard["id"],
+                            "score_id": resolved_score["id"],
+                            "version_id": version_id,
+                        }
+                    )
+                    persisted_code = str(candidate_pull.get("yaml_content") or "")
+                    persisted_guidelines = str(candidate_pull.get("guidelines") or "")
+                    actual_parent_version_id = str(
+                        candidate_pull.get("parent_version_id") or ""
+                    )
+
+                    if (
+                        submitted_parent_version_id
+                        and actual_parent_version_id
+                        and actual_parent_version_id != submitted_parent_version_id
+                    ):
+                        raise ValueError(
+                            "Updated score version parent_version_id mismatch: "
+                            f"expected {submitted_parent_version_id}, got {actual_parent_version_id}"
+                        )
+                    if "code" in changed_fields and persisted_code == base_code:
+                        raise ValueError(
+                            "Updated score version code matches parent code; expected a code change."
+                        )
+                    if not allow_guidelines_edit and persisted_guidelines != base_guidelines:
+                        raise ValueError(
+                            "Unexpected guidelines change detected in updated score version."
+                        )
+                except Exception as exc:
+                    raise _ScoreEditAttemptError(
+                        "score_edit_post_submit_verification_failed",
+                        "post_submit_verification",
+                        f"Post-submit score version verification failed: {exc}",
+                        details={
+                            "post_submit_verification": {
+                                "status": "failed",
+                                "error": str(exc),
+                            },
+                        },
+                    ) from exc
+
+                post_submit_verification = {
+                    "status": "passed",
+                    "expected_parent_version_id": submitted_parent_version_id or None,
+                    "actual_parent_version_id": actual_parent_version_id or None,
+                    "guidelines_preserved": persisted_guidelines == base_guidelines,
                 }
-                with open(result_path, "w", encoding="utf-8") as handle:
-                    json.dump(output, handle, indent=2, sort_keys=True, default=str)
-                return
-
-            post_submit_test = {"status": "passed", "result": smoke_result}
-            if isinstance(smoke_result, dict) and smoke_result.get("success") is False:
+                attempt["status"] = "succeeded"
+                attempts.append(attempt)
                 output = {
-                    "success": False,
-                    "error": "Post-submit score smoke test reported failure",
-                    "error_code": "score_edit_post_submit_test_failed",
-                    "version_id": submit.get("version_id"),
-                    "parent_version_id": parent_version_id or None,
-                    "changed_fields": changed_fields,
-                    "note": note,
-                    "summary": summary,
-                    "scorecard_identifier": scorecard_identifier,
-                    "score_identifier": score_identifier,
-                    "scorecard_id": resolved_scorecard["id"],
-                    "score_id": resolved_score["id"],
-                    "post_submit_test": {
-                        "status": "failed",
-                        "result": smoke_result,
-                    },
-                }
-                with open(result_path, "w", encoding="utf-8") as handle:
-                    json.dump(output, handle, indent=2, sort_keys=True, default=str)
-                return
-        else:
-            post_submit_test = {
-                "status": "skipped",
-                "reason": "no_code_change",
-            }
-
-        # Deterministic post-submit verification for candidate integrity.
-        version_id = str(submit.get("version_id") or "")
-        if not version_id:
-            output = {
-                "success": False,
-                "error": "Score edit did not return a candidate version_id",
-                "error_code": "score_edit_missing_version_id",
-                "version_id": None,
-                "parent_version_id": submitted_parent_version_id or None,
-                "changed_fields": changed_fields,
-                "note": note,
-                "summary": summary,
-                "scorecard_identifier": scorecard_identifier,
-                "score_identifier": score_identifier,
-                "scorecard_id": resolved_scorecard["id"],
-                "score_id": resolved_score["id"],
-                "post_submit_test": post_submit_test,
-            }
-            with open(result_path, "w", encoding="utf-8") as handle:
-                json.dump(output, handle, indent=2, sort_keys=True, default=str)
-            return
-
-        try:
-            candidate_pull = _default_score_pull(
-                {
-                    "scorecard_id": resolved_scorecard["id"],
-                    "score_id": resolved_score["id"],
+                    "success": True,
                     "version_id": version_id,
+                    "parent_version_id": submitted_parent_version_id or None,
+                    "changed_fields": changed_fields,
+                    "note": note,
+                    "summary": summary,
+                    "scorecard_identifier": scorecard_identifier,
+                    "score_identifier": score_identifier,
+                    "scorecard_id": resolved_scorecard["id"],
+                    "score_id": resolved_score["id"],
+                    "version_url": _score_version_relative_path(
+                        scorecard_id=resolved_scorecard["id"],
+                        score_id=resolved_score["id"],
+                        version_id=version_id,
+                    ),
+                    "parent_version_url": _score_version_relative_path(
+                        scorecard_id=resolved_scorecard["id"],
+                        score_id=resolved_score["id"],
+                        version_id=submitted_parent_version_id or None,
+                    ),
+                    "diffs": _build_score_change_diffs(
+                        scorecard_id=resolved_scorecard["id"],
+                        score_id=resolved_score["id"],
+                        parent_version_id=submitted_parent_version_id or None,
+                        version_id=version_id,
+                        changed_fields=changed_fields,
+                        original_code=base_code,
+                        modified_code=persisted_code,
+                        original_guidelines=base_guidelines,
+                        modified_guidelines=persisted_guidelines,
+                    ),
+                    "post_submit_test": post_submit_test,
+                    "post_submit_verification": post_submit_verification,
+                    "attempts": attempts,
                 }
-            )
-            candidate_code = str(candidate_pull.get("yaml_content") or "")
-            candidate_guidelines = str(candidate_pull.get("guidelines") or "")
-            actual_parent_version_id = str(candidate_pull.get("parent_version_id") or "")
-
-            if (
-                submitted_parent_version_id
-                and actual_parent_version_id
-                and actual_parent_version_id != submitted_parent_version_id
-            ):
-                raise ValueError(
-                    "Candidate parent_version_id mismatch: "
-                    f"expected {submitted_parent_version_id}, got {actual_parent_version_id}"
+                break
+            except _ScoreEditAttemptError as exc:
+                attempt.update(
+                    {
+                        "status": "failed",
+                        "stage": exc.stage,
+                        "error_code": exc.error_code,
+                        "error": str(exc),
+                    }
                 )
-
-            if "code" in changed_fields and candidate_code == base_code:
-                raise ValueError(
-                    "Candidate version code matches parent code; expected a code change."
-                )
-
-            if not allow_guidelines_edit and candidate_guidelines != base_guidelines:
-                raise ValueError(
-                    "Unexpected guidelines change detected in candidate version."
-                )
-
-            post_submit_verification = {
-                "status": "passed",
-                "expected_parent_version_id": submitted_parent_version_id or None,
-                "actual_parent_version_id": actual_parent_version_id or None,
-                "guidelines_preserved": candidate_guidelines == base_guidelines,
-            }
-        except Exception as exc:
-            output = {
-                "success": False,
-                "error": f"Post-submit candidate verification failed: {exc}",
-                "error_code": "score_edit_post_submit_verification_failed",
-                "version_id": version_id,
-                "parent_version_id": submitted_parent_version_id or None,
-                "changed_fields": changed_fields,
-                "note": note,
-                "summary": summary,
-                "scorecard_identifier": scorecard_identifier,
-                "score_identifier": score_identifier,
-                "scorecard_id": resolved_scorecard["id"],
-                "score_id": resolved_score["id"],
-                "post_submit_test": post_submit_test,
-                "post_submit_verification": {
-                    "status": "failed",
+                details = exc.details or {}
+                if isinstance(details.get("post_submit_test"), dict):
+                    attempt["post_submit_test"] = details["post_submit_test"]
+                if isinstance(details.get("post_submit_verification"), dict):
+                    attempt["post_submit_verification"] = details[
+                        "post_submit_verification"
+                    ]
+                attempts.append(attempt)
+                output = {
+                    "success": False,
                     "error": str(exc),
-                },
-            }
-            with open(result_path, "w", encoding="utf-8") as handle:
-                json.dump(output, handle, indent=2, sort_keys=True, default=str)
-            return
+                    "error_code": exc.error_code,
+                    "version_id": attempt.get("version_id"),
+                    "parent_version_id": attempt.get("parent_version_id"),
+                    "changed_fields": attempt.get("changed_fields") or [],
+                    "note": note,
+                    "summary": summary,
+                    "scorecard_identifier": scorecard_identifier,
+                    "score_identifier": score_identifier,
+                    "scorecard_id": resolved_scorecard["id"],
+                    "score_id": resolved_score["id"],
+                    "post_submit_test": attempt.get("post_submit_test"),
+                    "post_submit_verification": attempt.get("post_submit_verification"),
+                    "attempts": attempts,
+                }
+                continue
+            except Exception as exc:
+                attempt.update(
+                    {
+                        "status": "failed",
+                        "stage": "worker",
+                        "error_code": "score_edit_worker_failed",
+                        "error": str(exc),
+                    }
+                )
+                attempts.append(attempt)
+                output = {
+                    "success": False,
+                    "error": str(exc),
+                    "error_code": "score_edit_worker_failed",
+                    "scorecard_identifier": scorecard_identifier,
+                    "score_identifier": score_identifier,
+                    "scorecard_id": resolved_scorecard["id"],
+                    "score_id": resolved_score["id"],
+                    "attempts": attempts,
+                }
+                continue
 
-        output = {
-            "success": True,
-            "version_id": version_id,
-            "parent_version_id": submitted_parent_version_id or None,
-            "changed_fields": changed_fields,
-            "note": note,
-            "summary": summary,
-            "scorecard_identifier": scorecard_identifier,
-            "score_identifier": score_identifier,
-            "scorecard_id": resolved_scorecard["id"],
-            "score_id": resolved_score["id"],
-            "post_submit_test": post_submit_test,
-            "post_submit_verification": post_submit_verification,
-        }
+        output.setdefault("attempts", attempts)
     except Exception as exc:  # noqa: BLE001
         output = {"success": False, "error": str(exc)}
 
@@ -7748,10 +8141,16 @@ class PlexusRuntimeModule:
         score_id = str(result.get("score_id") or parsed.get("score_id") or "").strip()
         smoke = result.get("post_submit_test")
         verification = result.get("post_submit_verification")
+        attempts = result.get("attempts")
         version_url = _score_version_relative_path(
             scorecard_id=scorecard_id,
             score_id=score_id,
             version_id=version_id,
+        )
+        parent_version_url = _score_version_relative_path(
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            version_id=parent_version_id,
         )
         return {
             "kind": "score_edit",
@@ -7763,11 +8162,15 @@ class PlexusRuntimeModule:
             "scorecard_id": scorecard_id or None,
             "score_id": score_id or None,
             "version_url": version_url,
+            "parent_version_url": parent_version_url,
             "changed_fields": list(result.get("changed_fields") or []),
+            "diffs": _jsonable(result.get("diffs")) if isinstance(result.get("diffs"), dict) else None,
             "post_submit_test": _compact_step(smoke),
             "post_submit_verification": _compact_step(verification),
-            "push_outcome": "not_pushed",
-            "promoted": False,
+            "push_outcome": str(result.get("push_outcome") or "not_pushed"),
+            "promoted": bool(result.get("promoted")),
+            "error_code": str(result.get("error_code") or "").strip() or None,
+            "attempts": _jsonable(attempts) if isinstance(attempts, list) else None,
             "base_version_source": str(
                 result.get("base_version_source")
                 or parsed.get("base_version_source")
@@ -7922,6 +8325,35 @@ class PlexusRuntimeModule:
                     result.setdefault("scorecard_id", scorecard_id)
                     result.setdefault("score_id", score_id)
                     result.setdefault("parent_version_id", parsed.get("parent_version_id"))
+                    result.setdefault(
+                        "changed_fields",
+                        [
+                            field
+                            for field in ("code", "guidelines")
+                            if (
+                                (field == "code" and bool(parsed.get("code") or parsed.get("yaml_content")))
+                                or (field == "guidelines" and parsed.get("guidelines") is not None)
+                            )
+                        ],
+                    )
+                    result.setdefault(
+                        "version_url",
+                        _score_version_relative_path(
+                            scorecard_id=result.get("scorecard_id"),
+                            score_id=result.get("score_id"),
+                            version_id=result.get("version_id"),
+                        ),
+                    )
+                    result.setdefault(
+                        "parent_version_url",
+                        _score_version_relative_path(
+                            scorecard_id=result.get("scorecard_id"),
+                            score_id=result.get("score_id"),
+                            version_id=result.get("parent_version_id"),
+                        ),
+                    )
+                    result.setdefault("promoted", False)
+                    result.setdefault("push_outcome", "not_pushed")
                     result.setdefault("base_version_source", parsed.get("base_version_source"))
                     self._cache_latest_score_version(
                         scorecard_id=result.get("scorecard_id"),
@@ -7930,6 +8362,14 @@ class PlexusRuntimeModule:
                         parent_version_id=result.get("parent_version_id"),
                         source="score.update",
                     )
+                    score_edit_audit_event = self._build_score_edit_audit_event(
+                        parsed,
+                        {"status": "completed", "result": result},
+                    )
+                    result[SCORE_EDIT_AUDIT_EVENT_KEY] = _compact_score_edit_audit_event(
+                        score_edit_audit_event
+                    )
+                    self._append_console_audit_event(score_edit_audit_event)
                 return result
             if method == "edit":
                 if not bool(parsed.get("async")):
@@ -7993,6 +8433,14 @@ class PlexusRuntimeModule:
                                 scorecard_id=result.get("scorecard_id"),
                                 score_id=result.get("score_id"),
                                 version_id=result.get("version_id"),
+                            ),
+                        )
+                        result.setdefault(
+                            "parent_version_url",
+                            _score_version_relative_path(
+                                scorecard_id=result.get("scorecard_id"),
+                                score_id=result.get("score_id"),
+                                version_id=result.get("parent_version_id"),
                             ),
                         )
                         result.setdefault("promoted", False)

@@ -106,7 +106,7 @@ def test_builtin_console_procedure_prompt_teaches_guidelines_validation_runtime_
     assert "deterministically validates guidelines" in system_prompt
     assert "Invalid guidelines are rejected and not saved" in system_prompt
     assert "omit code and yaml_content" in system_prompt
-    assert "no candidate version was saved" in system_prompt
+    assert "no score version was saved" in system_prompt
 
 
 def test_builtin_console_procedure_prompt_teaches_report_dispatch_contract():
@@ -161,9 +161,9 @@ def test_builtin_console_procedure_prompt_enforces_score_edit_completion_contrac
     assert "status is `completed` with result `version_id`" in system_prompt
     assert "version_id" in system_prompt
     assert "without asking for another confirmation" in system_prompt
-    assert "latest candidate version created in this chat" in system_prompt
+    assert "latest updated score version created in this chat" in system_prompt
     assert "Do not restart from champion" in system_prompt
-    assert "worker status, candidate version_id, parent version, changed fields" in system_prompt
+    assert "worker status, updated score version_id, parent version, changed fields" in system_prompt
 
 
 def test_builtin_console_procedure_prompt_blocks_direct_score_code_update():

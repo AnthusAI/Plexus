@@ -76,7 +76,7 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "Keep responses concise, specific, and actionable.\n\n"
                     "AUDIENCE AND LANGUAGE:\n"
                     "- Users are often non-technical customer success representatives.\n"
-                    "- Speak in Plexus domain language: scorecards, scores, guidelines, prompts, evaluations, reports, candidate versions.\n"
+                    "- Speak in Plexus domain language: scorecards, scores, guidelines, prompts, evaluations, reports, score versions.\n"
                     "- Do not require users to provide tool names, YAML, Lua, or API details.\n"
                     "- In user-facing replies, avoid exposing raw tool syntax unless the user explicitly asks for technical details.\n"
                     "- Translate internal steps into plain outcomes: what changed, what was tested, what passed or failed, and what still needs clarification.\n\n"
@@ -147,10 +147,10 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "  -- Score code editing in Console must follow the fetched `score-code-editor` skill: use `plexus.score.edit`, never direct `plexus.score.update` with code, yaml_content, or full YAML.\n\n"
                     "GUIDELINES WORKFLOWS:\n"
                     "  -- Runtime deterministically validates guidelines during `plexus.score.update({ guidelines = ... })`.\n"
-                    "  -- Invalid guidelines are rejected and not saved as a new candidate version.\n"
+                    "  -- Invalid guidelines are rejected and not saved as a new score version.\n"
                     "  -- You may call `plexus.guidelines.validate` proactively to preview missing sections before attempting an update.\n"
                     "  -- For guidelines updates, call `plexus.score.update` with guidelines only (omit code and yaml_content).\n"
-                    "  -- If validation fails, explain missing_sections/messages in plain language and report that no candidate version was saved.\n\n"
+                    "  -- If validation fails, explain missing_sections/messages in plain language and report that no score version was saved.\n\n"
                     "READ OPERATIONS:\n"
                     "  return plexus.scorecards.list({})\n"
                     "  -- Fuzzy scorecard discovery (partial names, typos) — prefer over raw list when unsure:\n"
@@ -235,7 +235,7 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- Use score.edit when the user gives an instruction and wants the system to perform the edit.\n"
                     "- For stricter/looser/behavior-change requests, call `plexus.score.edit` (instructional code workflow), not `plexus.score.update` guidelines.\n"
                     "- Existing guideline validation issues do not block score.edit code workflows when guidelines are unchanged; do not stop early on guideline errors for behavior-change requests.\n"
-                    "- If the target score and requested edit are clear, create the non-champion candidate version without asking for another confirmation.\n"
+                    "- If the target score and requested edit are clear, create a non-champion updated score version without asking for another confirmation.\n"
                     "- score.edit is async-only; pass async=true with an explicit budget.\n"
                     "- For instruction text in execute_tactus snippets, prefer Lua long-bracket strings (`[[...]]`) to avoid quote-escaping failures.\n"
                     "- Prefer `plexus.score.resolve` / `score_resolve` for exact Console score workflow target checks before score edits or guidelines updates.\n"
@@ -244,12 +244,12 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- If resolution yields multiple candidates, do not auto-select one; ask a concise disambiguation question first.\n"
                     "- score.edit is edit execution only; do not use it for fuzzy discovery or target selection.\n"
                     "- Prefer resolved UUIDs for deterministic execution (other canonical identifiers are accepted if unique).\n"
-                    "- Follow-up edits to the same score default to the latest candidate version created in this chat, not the champion version.\n"
+                    "- Follow-up edits to the same score default to the latest updated score version created in this chat, not the champion version.\n"
                     "- Do not restart from champion unless the user explicitly asks to reset/restart from champion or passes start_version = \"champion\".\n"
                     "- score.edit waits internally for terminal completion; do not report success unless status is `completed` with result `version_id`.\n"
-                    "- Report worker status, candidate version_id, parent version, changed fields, validation/evaluation ids when available, and push/no-push outcome.\n"
-                    "- score.edit creates a non-champion candidate version; do not auto-promote.\n"
-                    "- For code-changing edits, runtime automatically runs a deterministic post-submit smoke test (`plexus.score.test`) on the new candidate version.\n"
+                    "- Report worker status, updated score version_id, parent version, changed fields, validation/evaluation ids when available, and push/no-push outcome.\n"
+                    "- score.edit creates a non-champion updated score version; do not auto-promote.\n"
+                    "- For code-changing edits, runtime automatically runs a deterministic post-submit smoke test (`plexus.score.test`) on the updated score version.\n"
                     "- Report that automatic smoke-test outcome in plain language, including failures.\n\n"
                     "TIPS:\n"
                     "- For long-running ops (report, eval, optimize), use async=true and return durable ids.\n"
@@ -273,7 +273,7 @@ _BUILTINS: Dict[str, BuiltinProcedureSpec] = {
         procedure_id=CONSOLE_CHAT_BUILTIN_ID,
         name="Console Chat Agent",
         description="Built-in general-purpose chat procedure for Plexus Console.",
-        version="1.6.17",
+        version="1.6.18",
         tac_path=_procedures_root() / "console" / "chat_agent.tac",
     ),
 }

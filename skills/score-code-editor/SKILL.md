@@ -24,24 +24,24 @@ This skill helps edit the `code:` field of a Plexus score configuration. Score c
 
 **Before making any code changes**, use the Plexus documentation tool to understand the DSL constructs involved. This is not optional — the DSL has specific semantics that are easy to get wrong.
 
-After any code change you must create a candidate version and verify the version was created with the correct content.
+After any code change you must create an updated score version and verify the version was created with the correct content.
 
 ## Console Chat Mode
 
-Console chat may inspect score data, docs, versions, predictions, evaluations, and candidate results through `execute_tactus`.
+Console chat may inspect score data, docs, versions, predictions, evaluations, and results through `execute_tactus`.
 
-Console chat must use `plexus.score.edit({ scorecard_identifier = ..., score_identifier = ..., instruction = "...", async = true, budget = { ... } })` for score code changes. The console assistant supplies the instruction and target; the dedicated score editor worker performs the code edit and candidate-version creation.
+Console chat must use `plexus.score.edit({ scorecard_identifier = ..., score_identifier = ..., instruction = "...", async = true, budget = { ... } })` for score code changes. The console assistant supplies the instruction and target; the dedicated score editor worker performs the code edit and updated-score-version creation.
 
 Console chat must not call `plexus.score.update` with direct `code`, `yaml_content`, or full YAML for score code edits. Guidelines-only or metadata-only `score.update` calls are separate flows and are allowed only when the relevant skill and validation rules permit them.
 
-Candidate versions created from console score edits are non-champion by default. Champion promotion is always explicit and separately validated.
+Updated score versions created from console score edits are non-champion by default. Champion promotion is always explicit and separately validated.
 
 For code-changing edits, runtime now automatically runs a deterministic
-post-submit smoke test (`plexus.score.test`) on the new candidate version and
+post-submit smoke test (`plexus.score.test`) on the new updated score version and
 returns the result. Console chat should report that result; it should not
 re-implement this policy flow manually.
 
-When reporting a console score edit, include the worker status, candidate `version_id` when one exists, parent version, changed fields, validation or evaluation ids, and the push/no-push outcome. Do not report success before a completed candidate `version_id` is available.
+When reporting a console score edit, include the worker status, updated score `version_id` when one exists, parent version, changed fields, validation or evaluation ids, and the push/no-push outcome. Do not report success before a completed updated score `version_id` is available.
 
 ---
 
@@ -88,12 +88,12 @@ to edit. Console chat should skip local-file editing and use
 
 Make targeted changes. See the patterns section below.
 
-### 5. Create the candidate version
+### 5. Create the updated score version
 
 In console chat, use `plexus.score.edit` with a concrete instruction and
 explicit async budget. In IDE/local editor mode, use
 `plexus.score.update({ scorecard = ..., score = ..., code = "<yaml>" })`
-to publish a new non-champion version. Include a concise `version_note`
+to publish a new non-champion updated score version. Include a concise `version_note`
 describing what changed and why.
 
 After pushing, call `plexus.score.info({ id = ..., version = "<new-version-id>" })`

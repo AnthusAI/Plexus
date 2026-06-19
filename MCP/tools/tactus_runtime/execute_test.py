@@ -141,7 +141,9 @@ def test_attach_console_audit_events_adds_events_to_envelope() -> None:
     assert attached["console_audit_events"][0]["kind"] == "score_edit"
     assert attached["console_audit_events"][0]["version_id"] == "v-1"
     assert attached["console_audit_events"][1]["version_id"] == "v-2"
+    assert attached["score_edit_audit_compact"]["s"] is False
     assert attached["score_edit_audit_compact"]["v"] == "v-2"
+    assert "pu" in attached["score_edit_audit_compact"]
 
 
 def test_extract_score_edit_audit_events_from_value_returns_event() -> None:
@@ -149,14 +151,16 @@ def test_extract_score_edit_audit_events_from_value_returns_event() -> None:
         {
             "status": "completed",
             "score_edit_audit": {
-                "kind": "score_edit",
-                "version_id": "v-1",
+                "k": "score_edit",
+                "s": True,
+                "v": "v-1",
             },
         }
     )
 
     assert len(events) == 1
     assert events[0]["kind"] == "score_edit"
+    assert events[0]["success"] is True
     assert events[0]["version_id"] == "v-1"
 
 
@@ -453,6 +457,22 @@ def test_default_score_update_applies_actor_attribution(monkeypatch) -> None:
                         "guidelines": "# Legacy parent guidelines\n",
                     }
                 }
+            if "GetScoreVersionForConsoleAudit" in query:
+                if variables["id"] == "parent-123":
+                    return {
+                        "getScoreVersion": {
+                            "id": "parent-123",
+                            "configuration": "name: old\n",
+                            "guidelines": "# Legacy parent guidelines\n",
+                        }
+                    }
+                return {
+                    "getScoreVersion": {
+                        "id": "version-123",
+                        "configuration": "name: Test\nkey: test\nclass: LangGraphScore\n",
+                        "guidelines": "# Legacy parent guidelines\n",
+                    }
+                }
             if "createScoreVersion" in query:
                 mutation_inputs.append(variables["input"])
                 return {"createScoreVersion": {"id": "version-123", "createdAt": "now"}}
@@ -500,6 +520,10 @@ def test_default_score_update_applies_actor_attribution(monkeypatch) -> None:
         "source": "agent",
         "requestUserId": "user-123",
     }
+    assert result["changed_fields"] == ["code"]
+    assert result["version_url"] == "/lab/scorecards/scorecard-123/scores/score-123/versions/version-123"
+    assert result["parent_version_url"] == "/lab/scorecards/scorecard-123/scores/score-123/versions/parent-123"
+    assert result["diffs"]["code"]["has_changes"] is True
 
 
 def test_default_rubric_memory_recent_entries_runs_provider_awaitable(monkeypatch) -> None:
@@ -878,6 +902,22 @@ def test_default_score_update_serializes_attribution_metadata(monkeypatch) -> No
         def execute(self, query: str, variables: dict | None = None) -> dict:
             if "GetScoreChampionId" in query:
                 return {"getScore": {"championVersionId": "version-1"}}
+            if "GetScoreVersionForConsoleAudit" in query:
+                if variables["id"] == "version-1":
+                    return {
+                        "getScoreVersion": {
+                            "id": "version-1",
+                            "configuration": "name: old\n",
+                            "guidelines": "# old\n",
+                        }
+                    }
+                return {
+                    "getScoreVersion": {
+                        "id": "version-2",
+                        "configuration": "name: old\n",
+                        "guidelines": "# new\n",
+                    }
+                }
             if "CreateScoreVersion" in query:
                 captured_inputs.append(variables["input"])
                 return {
@@ -935,6 +975,10 @@ def test_default_score_update_serializes_attribution_metadata(monkeypatch) -> No
     assert parsed["attribution"]["requestUserId"] == "user-1"
     assert parsed["attribution"]["source"] == "execute_tactus"
     assert result["guidelines_validation"]["is_valid"] is True
+    assert result["changed_fields"] == ["guidelines"]
+    assert result["diffs"]["guidelines"]["has_changes"] is True
+    assert result["version_url"] == "/lab/scorecards/scorecard-1/scores/score-1/versions/version-2"
+    assert result["parent_version_url"] == "/lab/scorecards/scorecard-1/scores/score-1/versions/version-1"
 
 
 def test_default_score_update_rejects_invalid_guidelines_before_mutation(monkeypatch) -> None:
@@ -990,6 +1034,22 @@ def test_default_score_update_preserves_parent_guidelines_for_code_only_edits(
                         "championVersion": {"guidelines": "# Legacy rubric\n\nFreeform text.\n"},
                     }
                 }
+            if "GetScoreVersionForConsoleAudit" in query:
+                if variables["id"] == "version-parent":
+                    return {
+                        "getScoreVersion": {
+                            "id": "version-parent",
+                            "configuration": "name: baseline\n",
+                            "guidelines": "# Legacy rubric\n\nFreeform text.\n",
+                        }
+                    }
+                return {
+                    "getScoreVersion": {
+                        "id": "version-child",
+                        "configuration": "name: updated\n",
+                        "guidelines": "# Legacy rubric\n\nFreeform text.\n",
+                    }
+                }
             if "CreateScoreVersion" in query:
                 captured_inputs.append(variables["input"])
                 return {"createScoreVersion": {"id": "version-child", "createdAt": "now"}}
@@ -1023,6 +1083,8 @@ def test_default_score_update_preserves_parent_guidelines_for_code_only_edits(
     assert result["guidelines_source"] == "parent_version"
     assert captured_inputs
     assert captured_inputs[0]["guidelines"] == "# Legacy rubric\n\nFreeform text.\n"
+    assert result["changed_fields"] == ["code"]
+    assert result["diffs"]["code"]["has_changes"] is True
 
 
 def test_default_score_set_champion_does_not_duplicate_open_history_entry(
@@ -3649,6 +3711,11 @@ def test_console_origin_score_update_guidelines_only_is_allowed(monkeypatch) -> 
     assert seen_args["guidelines"] == "# Guidelines\n"
     assert seen_args["scorecard_id"] == "scorecard-1"
     assert seen_args["score_id"] == "score-1"
+    assert result["version_url"] == "/lab/scorecards/scorecard-1/scores/score-1/versions/sv-guidelines"
+    assert result["score_edit_audit"]["k"] == "score_edit"
+    runtime_events = module._runtime_context.get("console_audit_events")
+    assert isinstance(runtime_events, list) and len(runtime_events) == 1
+    assert runtime_events[0]["version_id"] == "sv-guidelines"
 
 
 def test_console_origin_score_update_guidelines_requires_guidelines_intent(monkeypatch) -> None:
@@ -3806,6 +3873,9 @@ def test_console_origin_score_edit_routes_through_worker(tmp_path, monkeypatch) 
     assert result["result"]["version_url"] == (
         "/lab/scorecards/scorecard-1/scores/score-1/versions/sv-candidate"
     )
+    assert result["result"]["parent_version_url"] == (
+        "/lab/scorecards/scorecard-1/scores/score-1/versions/sv-parent"
+    )
     assert result["result"]["promoted"] is False
     assert result["result"]["push_outcome"] == "not_pushed"
     assert result["score_edit_audit"]["k"] == "score_edit"
@@ -3906,6 +3976,9 @@ def test_run_score_edit_job_runs_post_submit_smoke_test_for_code_changes(
     assert payload["post_submit_test"]["result"]["samples"] == 3
     assert payload["post_submit_verification"]["status"] == "passed"
     assert payload["post_submit_verification"]["guidelines_preserved"] is True
+    assert payload["version_url"] == "/lab/scorecards/scorecard-1/scores/score-1/versions/sv-1"
+    assert payload["parent_version_url"] == "/lab/scorecards/scorecard-1/scores/score-1/versions/sv-parent"
+    assert payload["diffs"]["code"]["has_changes"] is True
 
 
 def test_run_score_edit_job_ignores_llm_guidelines_edits_by_default(
@@ -3989,6 +4062,7 @@ def test_run_score_edit_job_ignores_llm_guidelines_edits_by_default(
     payload = json.loads(result_path.read_text(encoding="utf-8"))
     assert payload["success"] is True
     assert payload["changed_fields"] == ["code"]
+    assert payload["diffs"]["code"]["has_changes"] is True
     assert FakeToolset.replace_paths == ["score_config.yaml"]
 
 
@@ -4074,6 +4148,7 @@ def test_run_score_edit_job_skips_post_submit_smoke_test_without_code_change(
     assert payload["post_submit_test"]["status"] == "skipped"
     assert payload["post_submit_test"]["reason"] == "no_code_change"
     assert payload["post_submit_verification"]["status"] == "passed"
+    assert payload["diffs"]["guidelines"]["has_changes"] is True
 
 
 def test_run_score_edit_job_fails_when_candidate_guidelines_change_unexpectedly(
@@ -4155,6 +4230,198 @@ def test_run_score_edit_job_fails_when_candidate_guidelines_change_unexpectedly(
     assert payload["success"] is False
     assert payload["error_code"] == "score_edit_post_submit_verification_failed"
     assert payload["post_submit_verification"]["status"] == "failed"
+
+
+def test_run_score_edit_job_retries_with_fallback_model_after_parse_failure(
+    tmp_path, monkeypatch
+) -> None:
+    model_calls: list[str] = []
+
+    class FakeOpenAI:
+        def __init__(self, api_key: str | None = None) -> None:
+            self.responses = self
+
+        def create(self, **kwargs):
+            if kwargs.get("text") is not None:
+                raise RuntimeError("unknown parameter: text.format")
+            model = str(kwargs.get("model"))
+            model_calls.append(model)
+            if model == "primary-model":
+                return SimpleNamespace(output_text="not-json")
+            return SimpleNamespace(
+                output_text=json.dumps(
+                    {
+                        "code": "name: updated\n",
+                        "guidelines": "same guidelines",
+                        "note": "updated",
+                        "summary": "summary",
+                    }
+                )
+            )
+
+    class FakeToolset:
+        def setup(self, _args: dict) -> dict:
+            return {"success": True}
+
+        def str_replace_editor(self, _args: dict) -> str:
+            return "ok"
+
+        async def submit_score_version(self, _args: dict) -> dict:
+            return {
+                "success": True,
+                "version_id": "sv-2",
+                "changed_fields": ["code"],
+                "parent_version_id": "sv-parent",
+            }
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset",
+        FakeToolset,
+    )
+    monkeypatch.setattr(
+        execute,
+        "_default_score_pull",
+        lambda args: (
+            {
+                "yaml_content": "name: updated\n",
+                "guidelines": "same guidelines",
+                "version_id": "sv-2",
+                "parent_version_id": "sv-parent",
+            }
+            if str(args.get("version_id") or "") == "sv-2"
+            else {
+                "yaml_content": "name: base\n",
+                "guidelines": "same guidelines",
+                "version_id": "sv-parent",
+                "parent_version_id": "sv-grandparent",
+            }
+        ),
+    )
+    monkeypatch.setattr(execute, "_default_score_test", lambda _args: {"success": True})
+
+    result_path = tmp_path / "result.json"
+    execute._run_score_edit_job(
+        {
+            "scorecard_identifier": "card",
+            "score_identifier": "score",
+            "scorecard_id": "scorecard-1",
+            "score_id": "score-1",
+            "instruction": "update code",
+            "model": "primary-model",
+            "fallback_model": "fallback-model",
+            "max_attempts": 2,
+        },
+        str(result_path),
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["success"] is True
+    assert payload["version_id"] == "sv-2"
+    assert model_calls == ["primary-model", "fallback-model"]
+    assert len(payload["attempts"]) == 2
+    assert payload["attempts"][0]["status"] == "failed"
+    assert payload["attempts"][0]["error_code"] == "score_edit_model_parse_failed"
+    assert payload["attempts"][1]["status"] == "succeeded"
+    assert payload["attempts"][1]["model"] == "fallback-model"
+
+
+def test_run_score_edit_job_retries_after_post_save_smoke_failure(
+    tmp_path, monkeypatch
+) -> None:
+    class FakeOpenAI:
+        def __init__(self, api_key: str | None = None) -> None:
+            self.responses = self
+
+        def create(self, **kwargs):
+            if kwargs.get("text") is not None:
+                raise RuntimeError("unknown parameter: text.format")
+            return SimpleNamespace(
+                output_text=json.dumps(
+                    {
+                        "code": "name: updated\n",
+                        "guidelines": "same guidelines",
+                        "note": "updated",
+                        "summary": "summary",
+                    }
+                )
+            )
+
+    class FakeToolset:
+        submits = 0
+
+        def setup(self, _args: dict) -> dict:
+            return {"success": True}
+
+        def str_replace_editor(self, _args: dict) -> str:
+            return "ok"
+
+        async def submit_score_version(self, _args: dict) -> dict:
+            FakeToolset.submits += 1
+            return {
+                "success": True,
+                "version_id": f"sv-{FakeToolset.submits}",
+                "changed_fields": ["code"],
+                "parent_version_id": "sv-parent",
+            }
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.score_editor_toolset.ScoreEditorToolset",
+        FakeToolset,
+    )
+    monkeypatch.setattr(
+        execute,
+        "_default_score_pull",
+        lambda args: (
+            {
+                "yaml_content": "name: updated\n",
+                "guidelines": "same guidelines",
+                "version_id": "sv-2",
+                "parent_version_id": "sv-parent",
+            }
+            if str(args.get("version_id") or "") == "sv-2"
+            else {
+                "yaml_content": "name: base\n",
+                "guidelines": "same guidelines",
+                "version_id": "sv-parent",
+                "parent_version_id": "sv-grandparent",
+            }
+        ),
+    )
+
+    def _smoke(args: dict[str, Any]) -> dict[str, Any]:
+        version = str(args.get("version") or "")
+        if version == "sv-1":
+            return {"success": False, "reason": "simulated failure"}
+        return {"success": True, "version": version}
+
+    monkeypatch.setattr(execute, "_default_score_test", _smoke)
+
+    result_path = tmp_path / "result.json"
+    execute._run_score_edit_job(
+        {
+            "scorecard_identifier": "card",
+            "score_identifier": "score",
+            "scorecard_id": "scorecard-1",
+            "score_id": "score-1",
+            "instruction": "update code",
+            "model": "primary-model",
+            "fallback_model": "fallback-model",
+            "max_attempts": 2,
+        },
+        str(result_path),
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["success"] is True
+    assert payload["version_id"] == "sv-2"
+    assert len(payload["attempts"]) == 2
+    assert payload["attempts"][0]["status"] == "failed"
+    assert payload["attempts"][0]["error_code"] == "score_edit_post_submit_test_failed"
+    assert payload["attempts"][0]["version_id"] == "sv-1"
+    assert payload["attempts"][1]["status"] == "succeeded"
+    assert payload["attempts"][1]["version_id"] == "sv-2"
 
 
 def test_evaluation_run_uses_cached_latest_score_version_after_edit(monkeypatch) -> None:
