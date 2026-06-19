@@ -145,6 +145,110 @@ local function find_last_numeric_reference()
   return nil
 end
 
+local function normalized_choice_text(value)
+  local text = string.lower(_trim(tostring(value or "")))
+  text = text:gsub("^use%s+", "")
+  text = text:gsub("^choose%s+", "")
+  text = text:gsub("^select%s+", "")
+  text = text:gsub("^the%s+", "")
+  text = text:gsub("%s+score$", "")
+  text = text:gsub("[%.,;:!?]+$", "")
+  text = _trim(text)
+  return text
+end
+
+local function find_pending_score_disambiguation()
+  for i = #history, 1, -1 do
+    local msg = history[i]
+    local role = string.upper(tostring((msg and msg.role) or ""))
+    local content = (msg and msg.content) or nil
+    if role == "ASSISTANT"
+      and type(content) == "string"
+      and string.find(content, "matching scores", 1, true)
+      and string.find(content, "Which one", 1, true) then
+      local scorecard = string.match(content, "on%s+%*%*(.-)%*%*")
+      local candidates = {}
+      for candidate in string.gmatch(content, "%-%s+%*%*(.-)%*%*") do
+        table.insert(candidates, _trim(candidate))
+      end
+      if #candidates > 0 then
+        local pending_user_request = nil
+        for j = i - 1, 1, -1 do
+          local prior = history[j]
+          local prior_role = string.upper(tostring((prior and prior.role) or ""))
+          local prior_content = (prior and prior.content) or nil
+          if prior_role == "USER" and type(prior_content) == "string" and prior_content ~= "" then
+            pending_user_request = prior_content
+            break
+          end
+        end
+        return {
+          scorecard = scorecard,
+          candidates = candidates,
+          pending_user_request = pending_user_request,
+        }
+      end
+    end
+  end
+  return nil
+end
+
+local function resolve_pending_score_choice(pending, latest)
+  if pending == nil or type(pending.candidates) ~= "table" then
+    return nil, nil
+  end
+
+  local lower_latest = string.lower(latest or "")
+  local ordinal = nil
+  if string.find(lower_latest, "first", 1, true) or string.find(lower_latest, "1st", 1, true) then
+    ordinal = 1
+  elseif string.find(lower_latest, "second", 1, true) or string.find(lower_latest, "2nd", 1, true) then
+    ordinal = 2
+  elseif string.find(lower_latest, "third", 1, true) or string.find(lower_latest, "3rd", 1, true) then
+    ordinal = 3
+  end
+  if ordinal ~= nil and pending.candidates[ordinal] ~= nil then
+    return pending.candidates[ordinal], nil
+  end
+
+  local normalized_latest = normalized_choice_text(latest)
+  local exact_matches = {}
+  for _, candidate in ipairs(pending.candidates) do
+    if normalized_choice_text(candidate) == normalized_latest then
+      table.insert(exact_matches, candidate)
+    end
+  end
+  if #exact_matches == 1 then
+    return exact_matches[1], nil
+  elseif #exact_matches > 1 then
+    return nil, "I still need one exact score name from the list before I can apply the change."
+  end
+
+  if string.find(lower_latest, "without confidence", 1, true) then
+    local matches = {}
+    for _, candidate in ipairs(pending.candidates) do
+      if not string.find(string.lower(candidate), "confidence", 1, true) then
+        table.insert(matches, candidate)
+      end
+    end
+    if #matches == 1 then
+      return matches[1], nil
+    end
+  elseif string.find(lower_latest, "with confidence", 1, true) then
+    local matches = {}
+    for _, candidate in ipairs(pending.candidates) do
+      if string.find(string.lower(candidate), "confidence", 1, true) then
+        table.insert(matches, candidate)
+      end
+    end
+    if #matches == 1 then
+      return matches[1], nil
+    end
+  end
+
+  return nil, nil
+end
+
 local deterministic_response = nil
 do
   local lower_latest = string.lower(latest_user_prompt or "")
@@ -192,6 +296,23 @@ do
   end
 end
 
+local disambiguation_context = ""
+do
+  local pending = find_pending_score_disambiguation()
+  local selected_score, selection_error = resolve_pending_score_choice(pending, latest_user_prompt)
+  if selection_error ~= nil then
+    deterministic_response = deterministic_response or selection_error
+  elseif selected_score ~= nil and pending ~= nil then
+    disambiguation_context =
+      "Resolved follow-up target selection:\n" ..
+      "- The latest user message is a response to your prior score disambiguation question.\n" ..
+      "- Continue the pending user request; do not ask the same disambiguation question again.\n" ..
+      "- Use scorecard_identifier exactly: " .. tostring(pending.scorecard or "") .. "\n" ..
+      "- Use score_identifier exactly: " .. tostring(selected_score) .. "\n" ..
+      "- Pending user request to complete:\n" .. tostring(pending.pending_user_request or "") .. "\n\n"
+  end
+end
+
 State.set("stage", "responding")
 
 local assistant_prompt = "You are the Plexus Console assistant in an ongoing engineering chat.\n" ..
@@ -203,6 +324,7 @@ local assistant_prompt = "You are the Plexus Console assistant in an ongoing eng
                          "Latest user message:\n" .. latest_user_prompt .. "\n\n" ..
                          "Previous user message before latest (if any):\n" .. (previous_user_prompt or "") .. "\n\n" ..
                          "Recent conversation context (oldest to newest):\n" .. history_context .. "\n\n" ..
+                         disambiguation_context ..
                          "Respond to the latest user message now."
 
 local function extract_text(value)
@@ -243,6 +365,88 @@ local function looks_like_uuid(value)
     return false
   end
   return string.match(trimmed, "^[0-9a-fA-F]{8}%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") ~= nil
+end
+
+local function contains_score_link(value)
+  if type(value) ~= "string" then
+    return false
+  end
+  local lowered = string.lower(value)
+  return string.find(lowered, "/scorecards/", 1, true) ~= nil
+    and string.find(lowered, "/scores/", 1, true) ~= nil
+end
+
+local function extract_score_target_key(value)
+  if type(value) ~= "string" then
+    return nil
+  end
+
+  local lowered = string.lower(value)
+  local scorecard_id, score_id = string.match(lowered, "/scorecards/([0-9a-f%-]+)/scores/([0-9a-f%-]+)")
+  if scorecard_id ~= nil and score_id ~= nil and looks_like_uuid(scorecard_id) and looks_like_uuid(score_id) then
+    return string.lower(scorecard_id) .. "|" .. string.lower(score_id)
+  end
+
+  local uuids = {}
+  for token in string.gmatch(value, "[0-9a-fA-F%-]+") do
+    if looks_like_uuid(token) then
+      table.insert(uuids, string.lower(_trim(token)))
+    end
+  end
+
+  if #uuids >= 2 then
+    return uuids[1] .. "|" .. uuids[2]
+  end
+
+  return nil
+end
+
+local function has_explicit_score_target(value)
+  return extract_score_target_key(value) ~= nil
+end
+
+local function collect_active_score_targets()
+  local seen = {}
+  local ordered = {}
+
+  local function remember(value)
+    local key = extract_score_target_key(value)
+    if key ~= nil and seen[key] == nil then
+      seen[key] = true
+      table.insert(ordered, key)
+    end
+  end
+
+  remember(latest_user_prompt)
+  for i = #history, 1, -1 do
+    local msg = history[i]
+    local content = (msg and msg.content) or nil
+    remember(content)
+  end
+
+  return ordered
+end
+
+if deterministic_response == nil then
+  local lower_latest = string.lower(latest_user_prompt or "")
+  local has_deictic_score_ref = (
+    string.find(lower_latest, "this score", 1, true)
+    or string.find(lower_latest, "that score", 1, true)
+    or string.find(lower_latest, "this scorecard", 1, true)
+    or string.find(lower_latest, "that scorecard", 1, true)
+    or string.find(lower_latest, "same score", 1, true)
+  ) ~= nil
+  local explicit_target_key = extract_score_target_key(latest_user_prompt)
+  local active_targets = collect_active_score_targets()
+  local active_target_count = #active_targets
+
+  if has_deictic_score_ref and explicit_target_key == nil then
+    if active_target_count == 0 then
+      deterministic_response = "I can do that, but I need the exact target first. Please share the scorecard and score (name or link), and I’ll apply the change."
+    elseif active_target_count > 1 then
+      deterministic_response = "I can do that, but this chat has more than one possible score target. Please share the exact scorecard and score (name or link), and I’ll apply the change."
+    end
+  end
 end
 
 local assistant_result = nil

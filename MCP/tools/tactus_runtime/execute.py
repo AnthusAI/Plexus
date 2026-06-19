@@ -32,6 +32,9 @@ logger = logging.getLogger(__name__)
 
 _EVALUATION_PROCESS_LOCK = threading.Lock()
 _EVALUATION_PROCESSES: dict[int, Any] = {}
+CONSOLE_AUDIT_EVENTS_KEY = "console_audit_events"
+SCORE_EDIT_AUDIT_EVENT_KEY = "score_edit_audit"
+SCORE_EDIT_AUDIT_COMPACT_KEY = "score_edit_audit_compact"
 
 
 PLEXUS_DOCS_DIR = os.path.normpath(
@@ -135,6 +138,126 @@ def _local_procedure_env() -> dict[str, str]:
         else os.pathsep.join([PLEXUS_PROJECT_ROOT, existing_pythonpath])
     )
     return apply_actor_context_to_env(env)
+
+
+def _score_version_relative_path(
+    *, scorecard_id: Any, score_id: Any, version_id: Any
+) -> str | None:
+    scorecard = str(scorecard_id or "").strip()
+    score = str(score_id or "").strip()
+    version = str(version_id or "").strip()
+    if not scorecard or not score or not version:
+        return None
+    return f"/lab/scorecards/{scorecard}/scores/{score}/versions/{version}"
+
+
+def _extract_console_audit_events(runtime_context: Any) -> list[dict[str, Any]]:
+    if not isinstance(runtime_context, dict):
+        return []
+    raw_events = runtime_context.get(CONSOLE_AUDIT_EVENTS_KEY)
+    if not isinstance(raw_events, list):
+        return []
+    events: list[dict[str, Any]] = []
+    for event in raw_events:
+        if not isinstance(event, dict):
+            continue
+        events.append(_jsonable(event))
+    return events
+
+
+def _extract_score_edit_audit_events_from_value(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, dict):
+        return []
+    event = value.get(SCORE_EDIT_AUDIT_EVENT_KEY)
+    if isinstance(event, dict):
+        kind = str(event.get("kind") or event.get("k") or "").strip().lower()
+        if kind == "score_edit":
+            if "kind" not in event and "k" in event:
+                return [
+                    {
+                        "kind": "score_edit",
+                        "version_id": event.get("v"),
+                        "parent_version_id": event.get("p"),
+                        "version_url": event.get("u"),
+                        "handle_status": event.get("hs"),
+                        "post_submit_test": {"status": event.get("ss")},
+                        "post_submit_verification": {"status": event.get("vs")},
+                        "push_outcome": event.get("po"),
+                        "promoted": event.get("pm"),
+                        "changed_fields": (
+                            [part for part in str(event.get("cf") or "").split(",") if part]
+                            if event.get("cf")
+                            else []
+                        ),
+                        "error": event.get("e"),
+                    }
+                ]
+            return [_jsonable(event)]
+    return []
+
+
+def _compact_score_edit_audit_event(latest: dict[str, Any]) -> dict[str, Any]:
+    smoke = latest.get("post_submit_test")
+    verification = latest.get("post_submit_verification")
+    compact: dict[str, Any] = {
+        # Keep this payload intentionally tiny so ChatMessage slimming
+        # (512-byte nested cap) preserves it in tool_response storage.
+        "k": "score_edit",
+        "v": str(latest.get("version_id") or "").strip() or None,
+        "p": str(latest.get("parent_version_id") or "").strip() or None,
+        "u": str(latest.get("version_url") or "").strip() or None,
+        "hs": str(latest.get("handle_status") or "").strip() or "unknown",
+        "ss": (
+            str(smoke.get("status") or "").strip() if isinstance(smoke, dict) else "unknown"
+        )
+        or "unknown",
+        "vs": (
+            str(verification.get("status") or "").strip()
+            if isinstance(verification, dict)
+            else "unknown"
+        )
+        or "unknown",
+        "po": str(latest.get("push_outcome") or "").strip() or "not_pushed",
+        "pm": bool(latest.get("promoted")),
+        "cf": ",".join(str(field) for field in list(latest.get("changed_fields") or [])[:4]),
+    }
+    error_text = str(latest.get("error") or "").strip()
+    if error_text:
+        compact["e"] = error_text[:80]
+    return compact
+
+
+def _attach_console_audit_events(
+    envelope: dict[str, Any],
+    runtime_context: Any,
+    *,
+    score_edit_events: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    if not isinstance(envelope, dict):
+        return envelope
+
+    events = _extract_console_audit_events(runtime_context)
+    if isinstance(score_edit_events, list):
+        for event in score_edit_events:
+            if isinstance(event, dict):
+                events.append(event)
+
+    if events:
+        deduped: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for event in events:
+            marker = json.dumps(event, sort_keys=True, default=str)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            deduped.append(event)
+        envelope["console_audit_events"] = deduped
+        latest = deduped[-1]
+        if isinstance(latest, dict):
+            envelope[SCORE_EDIT_AUDIT_COMPACT_KEY] = _compact_score_edit_audit_event(
+                latest
+            )
+    return envelope
 
 
 def _launch_local_procedure_subprocess(cmd: list[str], procedure_id: str) -> tuple[Any, str]:
@@ -7153,6 +7276,9 @@ class PlexusRuntimeModule:
         self._docs_dir = docs_dir if docs_dir is not None else PLEXUS_DOCS_DIR
         self._skills_dir = skills_dir if skills_dir is not None else PLEXUS_SKILLS_DIR
         self._budget = budget if budget is not None else BudgetGate()
+        self._shared_runtime_context = (
+            runtime_context if isinstance(runtime_context, dict) else None
+        )
         self._runtime_context = dict(runtime_context or {})
         self._tool_access_mode = _normalize_tool_access_mode(
             self._runtime_context.get("tool_access_mode")
@@ -7555,6 +7681,101 @@ class PlexusRuntimeModule:
             )
         )
 
+    def _append_console_audit_event(self, event: dict[str, Any]) -> None:
+        targets = [self._runtime_context]
+        if isinstance(self._shared_runtime_context, dict):
+            targets.append(self._shared_runtime_context)
+
+        for target in targets:
+            existing = target.get(CONSOLE_AUDIT_EVENTS_KEY)
+            if isinstance(existing, list):
+                existing.append(event)
+            elif existing is None:
+                target[CONSOLE_AUDIT_EVENTS_KEY] = [event]
+
+    def _build_score_edit_audit_event(
+        self, parsed: dict[str, Any], completed: dict[str, Any]
+    ) -> dict[str, Any]:
+        def _compact_step(step_value: Any) -> dict[str, Any]:
+            if not isinstance(step_value, dict):
+                return {"status": "unknown"}
+
+            status = str(step_value.get("status") or "").strip().lower() or "unknown"
+            compact: dict[str, Any] = {"status": status}
+
+            for source in (step_value, step_value.get("result")):
+                if not isinstance(source, dict):
+                    continue
+                for key in ("evaluation_id", "evaluationId"):
+                    value = str(source.get(key) or "").strip()
+                    if value and "evaluation_id" not in compact:
+                        compact["evaluation_id"] = value
+                for key in ("validation_id", "validationId"):
+                    value = str(source.get(key) or "").strip()
+                    if value and "validation_id" not in compact:
+                        compact["validation_id"] = value
+                for key in ("task_id", "taskId"):
+                    value = str(source.get(key) or "").strip()
+                    if value and "task_id" not in compact:
+                        compact["task_id"] = value
+                for key in ("run_id", "runId"):
+                    value = str(source.get(key) or "").strip()
+                    if value and "run_id" not in compact:
+                        compact["run_id"] = value
+
+            reason = str(step_value.get("reason") or "").strip()
+            if reason:
+                compact["reason"] = reason
+
+            guidelines_preserved = step_value.get("guidelines_preserved")
+            if isinstance(guidelines_preserved, bool):
+                compact["guidelines_preserved"] = guidelines_preserved
+
+            error_text = str(
+                step_value.get("error") or step_value.get("message") or ""
+            ).strip()
+            if error_text:
+                compact["error"] = error_text[:240]
+            return compact
+
+        result = completed.get("result")
+        if not isinstance(result, dict):
+            result = {}
+        error_text = str(completed.get("error") or result.get("error") or "").strip()
+        version_id = str(result.get("version_id") or "").strip()
+        parent_version_id = str(result.get("parent_version_id") or "").strip()
+        scorecard_id = str(result.get("scorecard_id") or parsed.get("scorecard_id") or "").strip()
+        score_id = str(result.get("score_id") or parsed.get("score_id") or "").strip()
+        smoke = result.get("post_submit_test")
+        verification = result.get("post_submit_verification")
+        version_url = _score_version_relative_path(
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            version_id=version_id,
+        )
+        return {
+            "kind": "score_edit",
+            "handle_status": str(completed.get("status") or "").strip().lower(),
+            "success": bool(result.get("success", completed.get("status") == "completed")),
+            "error": error_text or None,
+            "version_id": version_id or None,
+            "parent_version_id": parent_version_id or None,
+            "scorecard_id": scorecard_id or None,
+            "score_id": score_id or None,
+            "version_url": version_url,
+            "changed_fields": list(result.get("changed_fields") or []),
+            "post_submit_test": _compact_step(smoke),
+            "post_submit_verification": _compact_step(verification),
+            "push_outcome": "not_pushed",
+            "promoted": False,
+            "base_version_source": str(
+                result.get("base_version_source")
+                or parsed.get("base_version_source")
+                or ""
+            ).strip()
+            or None,
+        }
+
     def _console_user_request_text(self) -> str:
         parts: list[str] = []
         latest = self._runtime_context.get("console_user_message")
@@ -7766,6 +7987,16 @@ class PlexusRuntimeModule:
                     if isinstance(result, dict) and result.get("version_id"):
                         result.setdefault("scorecard_id", parsed.get("scorecard_id"))
                         result.setdefault("score_id", parsed.get("score_id"))
+                        result.setdefault(
+                            "version_url",
+                            _score_version_relative_path(
+                                scorecard_id=result.get("scorecard_id"),
+                                score_id=result.get("score_id"),
+                                version_id=result.get("version_id"),
+                            ),
+                        )
+                        result.setdefault("promoted", False)
+                        result.setdefault("push_outcome", "not_pushed")
                         result.setdefault("base_version_source", parsed.get("base_version_source"))
                         self._cache_latest_score_version(
                             scorecard_id=result.get("scorecard_id"),
@@ -7774,6 +8005,14 @@ class PlexusRuntimeModule:
                             parent_version_id=result.get("parent_version_id"),
                             source="score.edit",
                         )
+                if isinstance(completed, dict):
+                    score_edit_audit_event = self._build_score_edit_audit_event(
+                        parsed, completed
+                    )
+                    completed[SCORE_EDIT_AUDIT_EVENT_KEY] = _compact_score_edit_audit_event(
+                        score_edit_audit_event
+                    )
+                    self._append_console_audit_event(score_edit_audit_event)
                 return completed
             if method == "test":
                 return self._score_test(parsed)
@@ -8846,6 +9085,17 @@ def _run_tactus_sync(
                         error=_structured_error("tactus_execution_failed", message),
                         budget=gate,
                     )
+            envelope = _attach_console_audit_events(
+                envelope,
+                (
+                    runtime_context
+                    if isinstance(runtime_context, dict)
+                    else getattr(plexus, "_runtime_context", None)
+                ),
+                score_edit_events=_extract_score_edit_audit_events_from_value(
+                    envelope.get("value")
+                ),
+            )
         finally:
             ended_wall = time.time()
             record = _build_trace_record(

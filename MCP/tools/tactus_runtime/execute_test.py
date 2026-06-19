@@ -106,6 +106,87 @@ def _child_budget() -> dict:
     return {"usd": 0.01, "wallclock_seconds": 10, "depth": 1, "tool_calls": 2}
 
 
+def test_attach_console_audit_events_adds_events_to_envelope() -> None:
+    envelope = {
+        "ok": True,
+        "value": {"status": "completed"},
+        "error": None,
+        "cost": {"usd": 0},
+        "trace_id": "trace-1",
+        "partial": False,
+        "api_calls": ["plexus.score.edit"],
+    }
+    runtime_context = {
+        "console_audit_events": [
+            {
+                "kind": "score_edit",
+                "version_id": "v-1",
+                "version_url": "/lab/scorecards/sc-1/scores/s-1/versions/v-1",
+            }
+        ]
+    }
+
+    attached = execute._attach_console_audit_events(
+        envelope,
+        runtime_context,
+        score_edit_events=[
+            {
+                "kind": "score_edit",
+                "version_id": "v-2",
+                "version_url": "/lab/scorecards/sc-2/scores/s-2/versions/v-2",
+            }
+        ],
+    )
+
+    assert attached["console_audit_events"][0]["kind"] == "score_edit"
+    assert attached["console_audit_events"][0]["version_id"] == "v-1"
+    assert attached["console_audit_events"][1]["version_id"] == "v-2"
+    assert attached["score_edit_audit_compact"]["v"] == "v-2"
+
+
+def test_extract_score_edit_audit_events_from_value_returns_event() -> None:
+    events = execute._extract_score_edit_audit_events_from_value(
+        {
+            "status": "completed",
+            "score_edit_audit": {
+                "kind": "score_edit",
+                "version_id": "v-1",
+            },
+        }
+    )
+
+    assert len(events) == 1
+    assert events[0]["kind"] == "score_edit"
+    assert events[0]["version_id"] == "v-1"
+
+
+def test_truncate_envelope_preserves_console_audit_events() -> None:
+    envelope = {
+        "ok": True,
+        "value": {"payload": "x" * 50000},
+        "error": None,
+        "cost": {"usd": 0},
+        "trace_id": "trace-1",
+        "partial": False,
+        "api_calls": ["plexus.score.edit"],
+        "console_audit_events": [
+            {
+                "kind": "score_edit",
+                "version_id": "v-1",
+                "version_url": "/lab/scorecards/sc-1/scores/s-1/versions/v-1",
+            }
+        ],
+        "score_edit_audit_compact": {"k": "score_edit", "v": "v-1"},
+    }
+
+    truncated = execute._truncate_envelope(envelope)
+
+    assert isinstance(truncated["value"], dict)
+    assert truncated["value"].get("__truncated__") is True
+    assert truncated["console_audit_events"][0]["version_id"] == "v-1"
+    assert truncated["score_edit_audit_compact"]["v"] == "v-1"
+
+
 def test_wrap_tactus_snippet_injects_plexus_helpers_and_capture() -> None:
     wrapped = execute._wrap_tactus_snippet(
         'evaluate{ score_id = "score_compliance_tone", item_count = 200 }'
@@ -3667,6 +3748,7 @@ def test_console_origin_score_edit_routes_through_worker(tmp_path, monkeypatch) 
     run_dir.mkdir()
     result_file = run_dir / "result.json"
     seen_args: dict = {}
+    runtime_context = {"chat_session_id": "chat-1"}
 
     def fake_score_edit_runner(args: dict) -> dict:
         seen_args.update(args)
@@ -3692,7 +3774,7 @@ def test_console_origin_score_edit_routes_through_worker(tmp_path, monkeypatch) 
         FastMCP("test-console-score-edit-routes"),
         score_edit_runner=fake_score_edit_runner,
         handle_store=_MemoryHandleStore(),
-        runtime_context={"chat_session_id": "chat-1"},
+        runtime_context=runtime_context,
     )
     monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
     monkeypatch.setattr(
@@ -3721,8 +3803,19 @@ def test_console_origin_score_edit_routes_through_worker(tmp_path, monkeypatch) 
     assert result["result"]["version_id"] == "sv-candidate"
     assert result["result"]["parent_version_id"] == "sv-parent"
     assert result["result"]["changed_fields"] == ["code"]
+    assert result["result"]["version_url"] == (
+        "/lab/scorecards/scorecard-1/scores/score-1/versions/sv-candidate"
+    )
+    assert result["result"]["promoted"] is False
+    assert result["result"]["push_outcome"] == "not_pushed"
+    assert result["score_edit_audit"]["k"] == "score_edit"
+    assert result["score_edit_audit"]["v"] == "sv-candidate"
     assert seen_args["scorecard_id"] == "scorecard-1"
     assert seen_args["score_id"] == "score-1"
+    audit_events = runtime_context.get("console_audit_events")
+    assert isinstance(audit_events, list) and len(audit_events) == 1
+    assert audit_events[0]["kind"] == "score_edit"
+    assert audit_events[0]["version_id"] == "sv-candidate"
 
 
 def test_run_score_edit_job_runs_post_submit_smoke_test_for_code_changes(
