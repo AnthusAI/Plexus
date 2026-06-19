@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "63ece434-f6a5-4892-9554-36c9fd69c49d",
+  "issue_id": "plx-645cc765-9ea9-4b7c-b7f9-3ea49a16ea14",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-19T13:28:33.402Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Ensure console score-change responses include version links and diffs",
+    "description": "Make score/guideline change responses deterministic in console chat metadata so UI can render previous/updated score version links and inline diffs, and normalize user-facing wording to avoid technical jargon.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+    "labels": []
+  }
+}
