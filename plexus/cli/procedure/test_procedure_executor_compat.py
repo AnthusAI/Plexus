@@ -1030,6 +1030,232 @@ async def test_execute_tactus_does_not_record_result_response_when_trace_has_dif
 
 
 @pytest.mark.asyncio
+async def test_execute_tactus_injects_deterministic_score_edit_audit_block(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _RecordingChatRecorder(SimpleNamespace):
+        def __init__(self):
+            super().__init__()
+            self.updated_messages = []
+            self.recorded_messages = []
+
+        async def update_message(
+            self,
+            message_id: str,
+            content: str | None = None,
+            metadata: dict | None = None,
+            human_interaction: str | None = None,
+            tool_response: object | None = None,
+        ) -> bool:
+            self.updated_messages.append(
+                {
+                    "message_id": message_id,
+                    "content": content,
+                    "metadata": metadata,
+                    "human_interaction": human_interaction,
+                    "tool_response": tool_response,
+                }
+            )
+            return True
+
+        async def record_assistant_message(self, content: str):
+            self.recorded_messages.append(content)
+            return "msg-recorded"
+
+    class _TraceSinkWithAssistant(SimpleNamespace):
+        def __init__(self):
+            super().__init__()
+            self.assistant_message_texts = [
+                "Done. I made a small scoring tweak.\n\n"
+                "New candidate version: `v-1`\n"
+                "- **New candidate version:** `v-1`\n"
+                "- **New candidate version created:** `v-1`"
+            ]
+            self._recent_finalized_message_ids = {"assistant": ("msg-streamed", 12.0)}
+
+    recorder = _RecordingChatRecorder()
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithTraceNoMessages)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: _TraceSinkWithAssistant(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: recorder,
+    )
+
+    result = await _execute_tactus(
+        procedure_id="builtin:console/chat",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={
+            "console_audit_events": [
+                {
+                    "kind": "score_edit",
+                    "success": True,
+                    "version_id": "v-1",
+                    "parent_version_id": "v-0",
+                    "scorecard_id": "sc-1",
+                    "score_id": "s-1",
+                    "version_url": "/lab/scorecards/sc-1/scores/s-1/versions/v-1",
+                    "changed_fields": ["code"],
+                    "post_submit_test": {"status": "passed"},
+                    "post_submit_verification": {"status": "passed"},
+                }
+            ]
+        },
+    )
+
+    assert result["success"] is True
+    assert len(recorder.updated_messages) == 1
+    update_payload = recorder.updated_messages[0]
+    assert update_payload["message_id"] == "msg-streamed"
+    assert "**Score edit saved**" in (update_payload["content"] or "")
+    assert (
+        "[Updated score version](/lab/scorecards/sc-1/scores/s-1/versions/v-1)"
+        in (update_payload["content"] or "")
+    )
+    assert (
+        "New candidate version: [`v-1`](/lab/scorecards/sc-1/scores/s-1/versions/v-1)"
+        in (update_payload["content"] or "")
+    )
+    assert (
+        "- **New candidate version:** [`v-1`](/lab/scorecards/sc-1/scores/s-1/versions/v-1)"
+        in (update_payload["content"] or "")
+    )
+    assert (
+        "- **New candidate version created:** "
+        "[`v-1`](/lab/scorecards/sc-1/scores/s-1/versions/v-1)"
+        in (update_payload["content"] or "")
+    )
+    assert "Done. I made a small scoring tweak." in (update_payload["content"] or "")
+    assert recorder.recorded_messages == []
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_injects_deterministic_score_edit_audit_from_trace_sink(
+    monkeypatch,
+):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _RecordingChatRecorder(SimpleNamespace):
+        def __init__(self):
+            super().__init__()
+            self.updated_messages = []
+
+        async def update_message(
+            self,
+            message_id: str,
+            content: str | None = None,
+            metadata: dict | None = None,
+            human_interaction: str | None = None,
+            tool_response: object | None = None,
+        ) -> bool:
+            self.updated_messages.append(
+                {
+                    "message_id": message_id,
+                    "content": content,
+                    "metadata": metadata,
+                    "human_interaction": human_interaction,
+                    "tool_response": tool_response,
+                }
+            )
+            return True
+
+        async def record_assistant_message(self, _content: str):
+            return "msg-recorded"
+
+    class _TraceSinkWithScoreEditAudit(SimpleNamespace):
+        def __init__(self):
+            super().__init__()
+            self.assistant_message_texts = ["Done. I applied your requested score tweak."]
+            self._recent_finalized_message_ids = {"assistant": ("msg-streamed", 12.0)}
+            self.console_audit_events = [
+                {
+                    "kind": "score_edit",
+                    "success": True,
+                    "version_id": "v-2",
+                    "parent_version_id": "v-1",
+                    "scorecard_id": "sc-2",
+                    "score_id": "s-2",
+                    "version_url": "/lab/scorecards/sc-2/scores/s-2/versions/v-2",
+                    "changed_fields": ["code"],
+                    "post_submit_test": {
+                        "status": "passed",
+                        "evaluation_id": "ev-2",
+                    },
+                    "post_submit_verification": {
+                        "status": "passed",
+                        "validation_id": "val-2",
+                    },
+                    "push_outcome": "not_pushed",
+                    "promoted": False,
+                }
+            ]
+
+    recorder = _RecordingChatRecorder()
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithTraceNoMessages)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: _TraceSinkWithScoreEditAudit(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: recorder,
+    )
+
+    result = await _execute_tactus(
+        procedure_id="builtin:console/chat",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={},
+    )
+
+    assert result["success"] is True
+    assert len(recorder.updated_messages) == 1
+    update_payload = recorder.updated_messages[0]
+    assert update_payload["message_id"] == "msg-streamed"
+    assert "**Score edit saved**" in (update_payload["content"] or "")
+    assert (
+        "[Updated score version](/lab/scorecards/sc-2/scores/s-2/versions/v-2)"
+        in (update_payload["content"] or "")
+    )
+    assert "- Smoke test: `passed`" in (update_payload["content"] or "")
+    assert "- Post-submit verification: `passed`" in (update_payload["content"] or "")
+    assert "Done. I applied your requested score tweak." in (update_payload["content"] or "")
+
+
+@pytest.mark.asyncio
 async def test_execute_tactus_streams_via_log_handler_without_trace_sink_constructor(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
