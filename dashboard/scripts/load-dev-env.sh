@@ -24,7 +24,7 @@ import os
 import shlex
 import sys
 
-from plexus.config.loader import load_config
+from plexus.config.loader import ConfigLoader, load_config
 
 try:
     load_config()
@@ -43,15 +43,17 @@ def pick(primary: str, fallback: str | None = None) -> str:
     return ""
 
 values = {
-    "PLEXUS_API_URL": pick("PLEXUS_API_URL"),
-    "PLEXUS_API_KEY": pick("PLEXUS_API_KEY"),
-    "PLEXUS_ACCOUNT_KEY": pick("PLEXUS_ACCOUNT_KEY"),
-    "PLEXUS_API_REGION": pick("PLEXUS_API_REGION"),
+    env_var: env.get(env_var, "")
+    for env_var in sorted(set(ConfigLoader.ENV_VAR_MAPPING.values()))
+    if not env_var.startswith("_")
+}
+
+values.update({
     "NEXT_PUBLIC_PLEXUS_API_URL": pick("NEXT_PUBLIC_PLEXUS_API_URL", "PLEXUS_API_URL"),
     "NEXT_PUBLIC_PLEXUS_API_KEY": pick("NEXT_PUBLIC_PLEXUS_API_KEY", "PLEXUS_API_KEY"),
     "NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY": pick("NEXT_PUBLIC_PLEXUS_ACCOUNT_KEY", "PLEXUS_ACCOUNT_KEY"),
     "NEXT_PUBLIC_PLEXUS_API_REGION": pick("NEXT_PUBLIC_PLEXUS_API_REGION", "PLEXUS_API_REGION"),
-}
+})
 
 for key, value in values.items():
     if value:
