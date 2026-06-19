@@ -328,22 +328,58 @@ class PlexusTraceSink:
                 compact["reason"] = reason_text[:240]
             return compact
 
+        def _normalize_diff_entry(value: Any) -> Dict[str, Any] | None:
+            if not isinstance(value, dict):
+                return None
+            normalized_entry: Dict[str, Any] = {
+                "kind": str(value.get("kind") or "").strip() or None,
+                "language": str(value.get("language") or "").strip() or None,
+                "has_changes": bool(value.get("has_changes")),
+                "original_label": str(value.get("original_label") or "").strip() or None,
+                "modified_label": str(value.get("modified_label") or "").strip() or None,
+                "original_version_id": str(value.get("original_version_id") or "").strip() or None,
+                "modified_version_id": str(value.get("modified_version_id") or "").strip() or None,
+                "original_url": str(value.get("original_url") or "").strip() or None,
+                "modified_url": str(value.get("modified_url") or "").strip() or None,
+                "truncated": bool(value.get("truncated")),
+            }
+            for key in ("original", "modified", "unified_diff"):
+                normalized_entry[key] = str(value.get(key) or "")
+            return normalized_entry
+
+        handle_status = str(event.get("handle_status") or "").strip().lower() or "unknown"
+        error_text = str(event.get("error") or "").strip()
+        raw_success = event.get("success")
+        if isinstance(raw_success, bool):
+            success = raw_success
+        else:
+            success = handle_status == "completed" and not error_text
+
         normalized: Dict[str, Any] = {
             "kind": "score_edit",
-            "success": bool(event.get("success")),
-            "handle_status": str(event.get("handle_status") or "").strip().lower() or "unknown",
+            "success": success,
+            "handle_status": handle_status,
             "version_id": str(event.get("version_id") or "").strip() or None,
             "parent_version_id": str(event.get("parent_version_id") or "").strip() or None,
             "scorecard_id": str(event.get("scorecard_id") or "").strip() or None,
             "score_id": str(event.get("score_id") or "").strip() or None,
             "version_url": str(event.get("version_url") or "").strip() or None,
+            "parent_version_url": str(event.get("parent_version_url") or "").strip() or None,
             "changed_fields": normalized_changed_fields,
             "post_submit_test": _status_step(event.get("post_submit_test")),
             "post_submit_verification": _status_step(event.get("post_submit_verification")),
             "push_outcome": str(event.get("push_outcome") or "").strip() or "not_pushed",
             "promoted": bool(event.get("promoted")),
         }
-        error_text = str(event.get("error") or "").strip()
+        diffs = event.get("diffs")
+        if isinstance(diffs, dict):
+            normalized_diffs: Dict[str, Any] = {}
+            for key in ("code", "guidelines"):
+                normalized_entry = _normalize_diff_entry(diffs.get(key))
+                if normalized_entry is not None:
+                    normalized_diffs[key] = normalized_entry
+            if normalized_diffs:
+                normalized["diffs"] = normalized_diffs
         if error_text:
             normalized["error"] = error_text[:240]
         base_source = str(event.get("base_version_source") or "").strip()
@@ -389,7 +425,11 @@ class PlexusTraceSink:
             events_to_capture.append(
                 {
                     "kind": compact_event.get("kind") or compact_event.get("k") or "score_edit",
-                    "success": compact_event.get("success"),
+                    "success": (
+                        compact_event.get("success")
+                        if compact_event.get("success") is not None
+                        else compact_event.get("s")
+                    ),
                     "handle_status": compact_event.get("handle_status")
                     or compact_event.get("hs"),
                     "version_id": compact_event.get("version_id")
@@ -400,6 +440,8 @@ class PlexusTraceSink:
                     "score_id": compact_event.get("score_id"),
                     "version_url": compact_event.get("version_url")
                     or compact_event.get("u"),
+                    "parent_version_url": compact_event.get("parent_version_url")
+                    or compact_event.get("pu"),
                     "changed_fields": compact_changed_fields,
                     "post_submit_test": {
                         "status": compact_event.get("smoke_status")
@@ -426,7 +468,11 @@ class PlexusTraceSink:
                         "kind": nested_compact.get("kind")
                         or nested_compact.get("k")
                         or "score_edit",
-                        "success": nested_compact.get("success"),
+                        "success": (
+                            nested_compact.get("success")
+                            if nested_compact.get("success") is not None
+                            else nested_compact.get("s")
+                        ),
                         "handle_status": nested_compact.get("handle_status")
                         or nested_compact.get("hs"),
                         "version_id": nested_compact.get("version_id")
@@ -435,6 +481,8 @@ class PlexusTraceSink:
                         or nested_compact.get("p"),
                         "version_url": nested_compact.get("version_url")
                         or nested_compact.get("u"),
+                        "parent_version_url": nested_compact.get("parent_version_url")
+                        or nested_compact.get("pu"),
                         "changed_fields": [
                             part.strip()
                             for part in str(nested_compact.get("cf") or "").split(",")

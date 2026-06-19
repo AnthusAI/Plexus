@@ -226,6 +226,52 @@ def _trace_sink_score_edit_audit_events(trace_sink: Any) -> List[Dict[str, Any]]
     return events
 
 
+def _score_edit_event_rank(event: Dict[str, Any], index: int) -> tuple[int, int]:
+    score = 0
+    diffs = event.get("diffs")
+    if isinstance(diffs, dict) and any(
+        isinstance(diffs.get(key), dict) for key in ("code", "guidelines")
+    ):
+        score += 100
+    if str(event.get("version_url") or "").strip():
+        score += 20
+    if str(event.get("parent_version_url") or "").strip():
+        score += 20
+    if str(event.get("version_id") or "").strip():
+        score += 10
+    if str(event.get("parent_version_id") or "").strip():
+        score += 5
+    changed_fields = event.get("changed_fields")
+    if isinstance(changed_fields, list) and any(str(field).strip() for field in changed_fields):
+        score += 3
+    for key in ("post_submit_test", "post_submit_verification"):
+        step = event.get(key)
+        if isinstance(step, dict):
+            status = str(step.get("status") or "").strip().lower()
+            if status and status != "unknown":
+                score += 2
+    if event.get("success") is True:
+        score += 4
+    elif event.get("success") is False:
+        score += 2
+    if str(event.get("error") or "").strip():
+        score += 1
+    return score, index
+
+
+def _preferred_score_edit_audit_event(events: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    best_event: Optional[Dict[str, Any]] = None
+    best_rank: tuple[int, int] | None = None
+    for index, event in enumerate(events):
+        if not isinstance(event, dict):
+            continue
+        rank = _score_edit_event_rank(event, index)
+        if best_rank is None or rank > best_rank:
+            best_event = event
+            best_rank = rank
+    return best_event
+
+
 def _latest_trace_assistant_message(trace_sink: Any) -> tuple[Optional[str], str]:
     message_id: Optional[str] = None
     newest_ts = -1.0
@@ -258,6 +304,7 @@ def _score_edit_audit_markdown(event: Dict[str, Any]) -> str:
     version_id = str(event.get("version_id") or "").strip()
     parent_version_id = str(event.get("parent_version_id") or "").strip()
     version_url = str(event.get("version_url") or "").strip()
+    parent_version_url = str(event.get("parent_version_url") or "").strip()
     error_text = str(event.get("error") or "").strip()
     changed_fields = event.get("changed_fields")
     changed_fields_text = ", ".join(str(field) for field in changed_fields or [] if field) or "unknown"
@@ -283,18 +330,21 @@ def _score_edit_audit_markdown(event: Dict[str, Any]) -> str:
         title = "**Score edit not saved**"
 
     lines: List[str] = [title, ""]
+    if parent_version_url and parent_version_id:
+        lines.append(f"[Previous score version]({parent_version_url})")
     if version_url and version_id:
         lines.append(f"[Updated score version]({version_url})")
+    if (parent_version_url and parent_version_id) or (version_url and version_id):
         lines.append("")
 
     if version_id:
-        lines.append(f"- Candidate version: `{version_id}`")
+        lines.append(f"- Updated score version id: `{version_id}`")
     if parent_version_id:
-        lines.append(f"- Parent version: `{parent_version_id}`")
+        lines.append(f"- Previous score version id: `{parent_version_id}`")
     lines.append(f"- Changed fields: `{changed_fields_text}`")
     lines.append(f"- Smoke test: `{smoke_status}`")
     lines.append(f"- Post-submit verification: `{verification_status}`")
-    lines.append("- Candidate status: `not promoted`")
+    lines.append("- Updated score version status: `not promoted`")
     if error_text:
         lines.append(f"- Error: `{error_text}`")
 
@@ -333,7 +383,74 @@ def _linkify_score_edit_version_mentions(
             rf"\1{linked_version}",
             updated,
         )
+
+    updated_label_prefixes = (
+        r"(?:-\s*)?(?:\*\*)?updated score version(?: id)?(?:\*\*)?(?:\*\*:|:\*\*|:)\s*",
+        r"(?:-\s*)?(?:\*\*)?new score version(?: created)?(?:\*\*)?(?:\*\*:|:\*\*|:)\s*",
+    )
+    for prefix in updated_label_prefixes:
+        updated = re.sub(
+            rf"(?i)({prefix})`{escaped_version}`",
+            rf"\1{linked_version}",
+            updated,
+        )
+        updated = re.sub(
+            rf"(?i)({prefix}){escaped_version}\b",
+            rf"\1{linked_version}",
+            updated,
+        )
+    updated = re.sub(
+        r"(?i)\bnew candidate version(?: created)?\b",
+        "Updated score version",
+        updated,
+    )
+    updated = re.sub(
+        r"(?i)\bcandidate version\b",
+        "Updated score version",
+        updated,
+    )
     return updated
+
+
+def _score_change_audit_metadata(event: Dict[str, Any]) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "kind": "score_edit",
+        "success": bool(event.get("success")),
+        "version_id": str(event.get("version_id") or "").strip() or None,
+        "parent_version_id": str(event.get("parent_version_id") or "").strip() or None,
+        "scorecard_id": str(event.get("scorecard_id") or "").strip() or None,
+        "score_id": str(event.get("score_id") or "").strip() or None,
+        "version_url": str(event.get("version_url") or "").strip() or None,
+        "parent_version_url": str(event.get("parent_version_url") or "").strip() or None,
+        "changed_fields": list(event.get("changed_fields") or []),
+        "post_submit_test": event.get("post_submit_test"),
+        "post_submit_verification": event.get("post_submit_verification"),
+        "push_outcome": event.get("push_outcome"),
+        "promoted": bool(event.get("promoted")),
+    }
+    if isinstance(event.get("diffs"), dict):
+        payload["diffs"] = event.get("diffs")
+    error_text = str(event.get("error") or "").strip()
+    if error_text:
+        payload["error"] = error_text
+    return payload
+
+
+def _merge_trace_message_metadata(
+    trace_sink: Any, message_id: Optional[str], patch: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(patch, dict) or not patch:
+        return None
+    merged: Dict[str, Any] = {}
+    cache = getattr(trace_sink, "_message_metadata_cache", None)
+    if isinstance(cache, dict) and isinstance(message_id, str) and message_id:
+        cached = cache.get(message_id)
+        if isinstance(cached, dict):
+            merged.update(cached)
+    merged.update(patch)
+    if isinstance(cache, dict) and isinstance(message_id, str) and message_id:
+        cache[message_id] = merged
+    return merged
 
 
 def _persist_inference_costs_to_state(storage: Any, procedure_id: str, cost_events: List[Any]) -> None:
@@ -1661,6 +1778,7 @@ async def _execute_tactus(
         score_edit_audit_block = ""
         score_edit_audit_applied = False
         latest_score_edit_audit_event: Optional[Dict[str, Any]] = None
+        score_edit_audit_patch: Optional[Dict[str, Any]] = None
         if procedure_id == CONSOLE_CHAT_BUILTIN_ID:
             audit_events = []
             audit_events.extend(_trace_sink_score_edit_audit_events(trace_sink))
@@ -1668,7 +1786,15 @@ async def _execute_tactus(
             if context is not runtime_context:
                 audit_events.extend(_console_score_edit_audit_events(context))
             if audit_events:
-                latest_score_edit_audit_event = audit_events[-1]
+                latest_score_edit_audit_event = _preferred_score_edit_audit_event(
+                    audit_events
+                )
+            if latest_score_edit_audit_event:
+                score_edit_audit_patch = {
+                    "score_change_audit": _score_change_audit_metadata(
+                        latest_score_edit_audit_event
+                    )
+                }
                 score_edit_audit_block = _score_edit_audit_markdown(
                     latest_score_edit_audit_event
                 )
@@ -1678,6 +1804,27 @@ async def _execute_tactus(
                 )
                 if score_edit_audit_block and existing_text and score_edit_audit_block in existing_text:
                     score_edit_audit_applied = True
+                    if (
+                        supports_chat_recorder
+                        and message_id
+                        and callable(getattr(chat_recorder, "update_message", None))
+                        and score_edit_audit_patch
+                    ):
+                        try:
+                            merged_metadata = _merge_trace_message_metadata(
+                                trace_sink,
+                                message_id,
+                                score_edit_audit_patch,
+                            )
+                            await chat_recorder.update_message(
+                                message_id=message_id,
+                                metadata=merged_metadata,
+                            )
+                        except Exception as metadata_error:
+                            logger.warning(
+                                "Could not update Console assistant message metadata with score-change audit: %s",
+                                metadata_error,
+                            )
                 elif (
                     supports_chat_recorder
                     and score_edit_audit_block
@@ -1690,9 +1837,15 @@ async def _execute_tactus(
                         else f"{score_edit_audit_block}\n\n{existing_text}"
                     )
                     try:
+                        merged_metadata = _merge_trace_message_metadata(
+                            trace_sink,
+                            message_id,
+                            score_edit_audit_patch or {},
+                        )
                         updated = await chat_recorder.update_message(
                             message_id=message_id,
                             content=combined_text,
+                            metadata=merged_metadata,
                             human_interaction="CHAT_ASSISTANT",
                         )
                         if updated:
@@ -1730,7 +1883,15 @@ async def _execute_tactus(
                     for message in trace_messages
                 )
                 if not has_meaningful_trace_assistant:
-                    await chat_recorder.record_assistant_message(assistant_text)
+                    if callable(getattr(chat_recorder, "record_message", None)):
+                        await chat_recorder.record_message(
+                            role="ASSISTANT",
+                            content=assistant_text,
+                            human_interaction="CHAT_ASSISTANT",
+                            metadata=score_edit_audit_patch,
+                        )
+                    else:
+                        await chat_recorder.record_assistant_message(assistant_text)
 
         if log_bridge:
             try:

@@ -1130,19 +1130,22 @@ async def test_execute_tactus_injects_deterministic_score_edit_audit_block(monke
         "[Updated score version](/lab/scorecards/sc-1/scores/s-1/versions/v-1)"
         in (update_payload["content"] or "")
     )
+    assert update_payload["metadata"]["score_change_audit"]["version_id"] == "v-1"
+    assert update_payload["metadata"]["score_change_audit"]["changed_fields"] == ["code"]
     assert (
-        "New candidate version: [`v-1`](/lab/scorecards/sc-1/scores/s-1/versions/v-1)"
+        "Updated score version: [`v-1`](/lab/scorecards/sc-1/scores/s-1/versions/v-1)"
         in (update_payload["content"] or "")
     )
     assert (
-        "- **New candidate version:** [`v-1`](/lab/scorecards/sc-1/scores/s-1/versions/v-1)"
+        "- **Updated score version:** [`v-1`](/lab/scorecards/sc-1/scores/s-1/versions/v-1)"
         in (update_payload["content"] or "")
     )
     assert (
-        "- **New candidate version created:** "
+        "- **Updated score version:** "
         "[`v-1`](/lab/scorecards/sc-1/scores/s-1/versions/v-1)"
         in (update_payload["content"] or "")
     )
+    assert "candidate version" not in (update_payload["content"] or "").lower()
     assert "Done. I made a small scoring tweak." in (update_payload["content"] or "")
     assert recorder.recorded_messages == []
 
@@ -1194,6 +1197,7 @@ async def test_execute_tactus_injects_deterministic_score_edit_audit_from_trace_
                     "scorecard_id": "sc-2",
                     "score_id": "s-2",
                     "version_url": "/lab/scorecards/sc-2/scores/s-2/versions/v-2",
+                    "parent_version_url": "/lab/scorecards/sc-2/scores/s-2/versions/v-1",
                     "changed_fields": ["code"],
                     "post_submit_test": {
                         "status": "passed",
@@ -1205,6 +1209,27 @@ async def test_execute_tactus_injects_deterministic_score_edit_audit_from_trace_
                     },
                     "push_outcome": "not_pushed",
                     "promoted": False,
+                    "diffs": {
+                        "code": {
+                            "kind": "code",
+                            "language": "yaml",
+                            "original": "name: old\n",
+                            "modified": "name: new\n",
+                            "unified_diff": "--- code:previous\n+++ code:updated\n",
+                            "has_changes": True,
+                        }
+                    },
+                },
+                {
+                    "kind": "score_edit",
+                    "handle_status": "completed",
+                    "version_id": "v-2",
+                    "parent_version_id": "v-1",
+                    "version_url": "/lab/scorecards/sc-2/scores/s-2/versions/v-2",
+                    "parent_version_url": "/lab/scorecards/sc-2/scores/s-2/versions/v-1",
+                    "changed_fields": ["code"],
+                    "post_submit_test": {"status": "passed"},
+                    "post_submit_verification": {"status": "passed"},
                 }
             ]
 
@@ -1247,12 +1272,19 @@ async def test_execute_tactus_injects_deterministic_score_edit_audit_from_trace_
     assert update_payload["message_id"] == "msg-streamed"
     assert "**Score edit saved**" in (update_payload["content"] or "")
     assert (
+        "[Previous score version](/lab/scorecards/sc-2/scores/s-2/versions/v-1)"
+        in (update_payload["content"] or "")
+    )
+    assert (
         "[Updated score version](/lab/scorecards/sc-2/scores/s-2/versions/v-2)"
         in (update_payload["content"] or "")
     )
     assert "- Smoke test: `passed`" in (update_payload["content"] or "")
     assert "- Post-submit verification: `passed`" in (update_payload["content"] or "")
     assert "Done. I applied your requested score tweak." in (update_payload["content"] or "")
+    assert update_payload["metadata"]["score_change_audit"]["version_id"] == "v-2"
+    assert update_payload["metadata"]["score_change_audit"]["success"] is True
+    assert update_payload["metadata"]["score_change_audit"]["diffs"]["code"]["language"] == "yaml"
 
 
 @pytest.mark.asyncio

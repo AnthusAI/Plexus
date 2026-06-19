@@ -97,7 +97,18 @@ async def test_trace_sink_captures_console_score_edit_audit_events_from_execute_
                     "scorecard_id": "sc-1",
                     "score_id": "s-1",
                     "version_url": "/lab/scorecards/sc-1/scores/s-1/versions/v-1",
+                    "parent_version_url": "/lab/scorecards/sc-1/scores/s-1/versions/v-0",
                     "changed_fields": ["code"],
+                    "diffs": {
+                        "code": {
+                            "kind": "code",
+                            "language": "yaml",
+                            "original": "name: old\n",
+                            "modified": "name: new\n",
+                            "unified_diff": "--- code:previous\n+++ code:updated\n",
+                            "has_changes": True,
+                        }
+                    },
                     "post_submit_test": {
                         "status": "passed",
                         "evaluation_id": "ev-1",
@@ -120,10 +131,12 @@ async def test_trace_sink_captures_console_score_edit_audit_events_from_execute_
     captured = sink.console_audit_events[0]
     assert captured["kind"] == "score_edit"
     assert captured["version_id"] == "v-1"
+    assert captured["parent_version_url"] == "/lab/scorecards/sc-1/scores/s-1/versions/v-0"
     assert captured["post_submit_test"]["evaluation_id"] == "ev-1"
     assert captured["post_submit_verification"]["validation_id"] == "val-1"
     assert captured["push_outcome"] == "not_pushed"
     assert captured["promoted"] is False
+    assert captured["diffs"]["code"]["language"] == "yaml"
 
 
 @pytest.mark.asyncio
@@ -145,13 +158,14 @@ async def test_trace_sink_captures_compact_score_edit_audit_event():
             "api_calls": ["plexus.score.edit", "plexus.handle.await"],
             "score_edit_audit_compact": {
                 "kind": "score_edit",
-                "success": True,
+                "s": True,
                 "handle_status": "completed",
                 "version_id": "v-2",
                 "parent_version_id": "v-1",
                 "scorecard_id": "sc-2",
                 "score_id": "s-2",
                 "version_url": "/lab/scorecards/sc-2/scores/s-2/versions/v-2",
+                "parent_version_url": "/lab/scorecards/sc-2/scores/s-2/versions/v-1",
                 "changed_fields": ["code"],
                 "smoke_status": "passed",
                 "verification_status": "passed",
@@ -166,6 +180,8 @@ async def test_trace_sink_captures_compact_score_edit_audit_event():
     assert len(sink.console_audit_events) == 1
     captured = sink.console_audit_events[0]
     assert captured["version_id"] == "v-2"
+    assert captured["success"] is True
+    assert captured["parent_version_url"] == "/lab/scorecards/sc-2/scores/s-2/versions/v-1"
     assert captured["post_submit_test"]["status"] == "passed"
     assert captured["post_submit_verification"]["status"] == "passed"
 
@@ -191,9 +207,11 @@ async def test_trace_sink_captures_nested_value_score_edit_audit_event():
                 "status": "completed",
                 "score_edit_audit": {
                     "k": "score_edit",
+                    "s": True,
                     "v": "v-3",
                     "p": "v-2",
                     "u": "/lab/scorecards/sc-3/scores/s-3/versions/v-3",
+                    "pu": "/lab/scorecards/sc-3/scores/s-3/versions/v-2",
                     "hs": "completed",
                     "ss": "passed",
                     "vs": "passed",
@@ -210,7 +228,9 @@ async def test_trace_sink_captures_nested_value_score_edit_audit_event():
     assert len(sink.console_audit_events) == 1
     captured = sink.console_audit_events[0]
     assert captured["version_id"] == "v-3"
+    assert captured["success"] is True
     assert captured["parent_version_id"] == "v-2"
+    assert captured["parent_version_url"] == "/lab/scorecards/sc-3/scores/s-3/versions/v-2"
     assert captured["changed_fields"] == ["code"]
 
 
