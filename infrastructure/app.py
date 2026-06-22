@@ -3,6 +3,7 @@ import os
 import aws_cdk as cdk
 from stacks.ecr_repositories_stack import EcrRepositoriesStack
 from stacks.app_deployment_pipeline_stack import AppDeploymentPipelineStack
+from stacks.console_worker_image_pipeline_stack import ConsoleWorkerImagePipelineStack
 from stacks.lambda_score_processor_stack import LambdaScoreProcessorStack
 from stacks.score_processor_image_pipeline_stack import ScoreProcessorImagePipelineStack
 from stacks.shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
@@ -55,6 +56,16 @@ AppDeploymentPipelineStack(
     description="Pipeline for deploying Plexus application code to staging"
 )
 
+# Create staging console worker image pipeline
+ConsoleWorkerImagePipelineStack(
+    app,
+    "plexus-console-worker-staging-pipeline",
+    environment="staging",
+    branch="staging",
+    env=env,
+    description="Manual pipeline for building the staging Amplify console worker image"
+)
+
 # Create production app deployment pipeline
 AppDeploymentPipelineStack(
     app,
@@ -63,6 +74,16 @@ AppDeploymentPipelineStack(
     branch="main",
     env=env,
     description="Pipeline for deploying Plexus application code to production"
+)
+
+# Create production console worker image pipeline
+ConsoleWorkerImagePipelineStack(
+    app,
+    "plexus-console-worker-production-pipeline",
+    environment="production",
+    branch="main",
+    env=env,
+    description="Manual pipeline for building the production Amplify console worker image"
 )
 
 ScoreProcessorImagePipelineStack(

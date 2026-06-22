@@ -13,10 +13,7 @@ if os.path.exists(env_path):
             line = line.strip()
             if line and not line.startswith('#') and '=' in line:
                 key, value = line.split('=', 1)
-                os.environ[key] = value
-
-# Hardcode the stack pattern for production deployment
-os.environ['AMPLIFY_STACK_PATTERN'] = 'amplify-d1cegb1ft4iove-main-branch'
+                os.environ.setdefault(key, value)
 
 # Build Lambda functions before deploying
 print("Building Lambda functions...")
@@ -30,8 +27,7 @@ print()
 app = cdk.App()
 
 account = os.environ.get('CDK_DEFAULT_ACCOUNT')
-# Use AWS_REGION from .env, fallback to CDK_DEFAULT_REGION, then us-west-2
-region = os.environ.get('AWS_REGION') or os.environ.get('CDK_DEFAULT_REGION', 'us-west-2')
+region = os.environ.get('CDK_DEFAULT_REGION') or os.environ.get('AWS_REGION', 'us-west-2')
 env = cdk.Environment(account=account, region=region)
 
 print(f"Deploying to region: {region}")

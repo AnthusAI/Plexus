@@ -33,7 +33,7 @@ for function_dir in "$LAMBDA_FUNCTIONS_DIR"/*; do
         # Install dependencies if requirements.txt exists
         if [ -f "$function_dir/requirements.txt" ]; then
             echo "  Installing dependencies..."
-            pip install -r "$function_dir/requirements.txt" -t "$function_build_dir" --upgrade --quiet
+            "${PYTHON:-python3}" -m pip install -r "$function_dir/requirements.txt" -t "$function_build_dir" --upgrade --quiet
         fi
         
         echo "  ✓ Built $function_name"
@@ -42,4 +42,3 @@ done
 
 echo ""
 echo "✓ All Lambda functions built successfully in $BUILD_DIR"
-

@@ -25,6 +25,9 @@ This creates a secret named `plexus/production/config` with the following keys:
 - `openai-api-key`
 - `score-result-attachments-bucket`
 - `report-block-details-bucket`
+- `table-*-name`
+- `table-*-arn`
+- `table-*-stream-arn`
 
 ### For Staging Environment
 
@@ -51,7 +54,25 @@ AWS Secrets Manager
 │         "postgres-uri": "...",
 │         "openai-api-key": "...",
 │         "score-result-attachments-bucket": "...",
-│         "report-block-details-bucket": "..."
+│         "report-block-details-bucket": "...",
+│         "table-item-name": "...",
+│         "table-item-arn": "...",
+│         "table-item-stream-arn": "...",
+│         "table-scoreresult-name": "...",
+│         "table-scoreresult-arn": "...",
+│         "table-scoreresult-stream-arn": "...",
+│         "table-task-name": "...",
+│         "table-task-arn": "...",
+│         "table-task-stream-arn": "...",
+│         "table-evaluation-name": "...",
+│         "table-evaluation-arn": "...",
+│         "table-evaluation-stream-arn": "...",
+│         "table-procedure-name": "...",
+│         "table-procedure-arn": "...",
+│         "table-procedure-stream-arn": "...",
+│         "table-feedbackitem-name": "...",
+│         "table-feedbackitem-arn": "...",
+│         "table-feedbackitem-stream-arn": "..."
 │       }
 └── plexus/production/config (JSON secret)
     └── {
@@ -61,7 +82,25 @@ AWS Secrets Manager
           "postgres-uri": "...",
           "openai-api-key": "...",
           "score-result-attachments-bucket": "...",
-          "report-block-details-bucket": "..."
+          "report-block-details-bucket": "...",
+          "table-item-name": "...",
+          "table-item-arn": "...",
+          "table-item-stream-arn": "...",
+          "table-scoreresult-name": "...",
+          "table-scoreresult-arn": "...",
+          "table-scoreresult-stream-arn": "...",
+          "table-task-name": "...",
+          "table-task-arn": "...",
+          "table-task-stream-arn": "...",
+          "table-evaluation-name": "...",
+          "table-evaluation-arn": "...",
+          "table-evaluation-stream-arn": "...",
+          "table-procedure-name": "...",
+          "table-procedure-arn": "...",
+          "table-procedure-stream-arn": "...",
+          "table-feedbackitem-name": "...",
+          "table-feedbackitem-arn": "...",
+          "table-feedbackitem-stream-arn": "..."
         }
 ```
 
@@ -76,6 +115,9 @@ AWS Secrets Manager
 | `openai-api-key` | `OPENAI_API_KEY` | OpenAI API key |
 | `score-result-attachments-bucket` | `AMPLIFY_STORAGE_SCORERESULTATTACHMENTS_BUCKET_NAME` | S3 bucket |
 | `report-block-details-bucket` | `AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME` | S3 bucket |
+| `table-<table>-name` | `TABLE_<TABLE>_NAME` | DynamoDB table name used by metrics aggregation |
+| `table-<table>-arn` | `TABLE_<TABLE>_ARN` | DynamoDB table ARN used by metrics aggregation |
+| `table-<table>-stream-arn` | `TABLE_<TABLE>_STREAM_ARN` | DynamoDB stream ARN used by metrics aggregation |
 
 ## Verification
 
