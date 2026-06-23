@@ -24,14 +24,31 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
       throw new Error('PLEXUS_API_URL not found in environment variables');
     }
     
-    // Create a signer for AWS Signature v4
     const endpoint = new URL(GRAPHQL_ENDPOINT);
-    const signer = new SignatureV4({
-      credentials: defaultProvider(),
-      region: AWS_REGION,
-      service: 'appsync',
-      sha256: Sha256
-    });
+
+    const executeGraphql = async (query: string, variables: Record<string, any>) => {
+      const signer = new SignatureV4({
+        credentials: defaultProvider(),
+        region: AWS_REGION,
+        service: 'appsync',
+        sha256: Sha256
+      });
+
+      const request = new HttpRequest({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          host: endpoint.host
+        },
+        hostname: endpoint.host,
+        body: JSON.stringify({ query, variables }),
+        path: endpoint.pathname
+      });
+
+      const signedRequest = await signer.sign(request);
+      const fetchRequest = new Request(GRAPHQL_ENDPOINT, signedRequest);
+      return fetch(fetchRequest).then((response) => response.json());
+    };
     
     // Get ShareLink by token using the dedicated GSI for better reliability
     const shareLinkQuery = `
@@ -52,30 +69,7 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
       }
     `;
     
-    // Prepare the request to be signed
-    const shareLinkRequest = new HttpRequest({
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        host: endpoint.host
-      },
-      hostname: endpoint.host,
-      body: JSON.stringify({ 
-        query: shareLinkQuery,
-        variables: { token }
-      }),
-      path: endpoint.pathname
-    });
-    
-    // Sign and execute the request
-    const signedShareLinkRequest = await signer.sign(shareLinkRequest);
-    
-    // Log the request details for debugging
-    console.log('Request Headers:', JSON.stringify(signedShareLinkRequest.headers));
-    
-    const shareLinkFetchRequest = new Request(GRAPHQL_ENDPOINT, signedShareLinkRequest);
-    const shareLinkFetchResponse = await fetch(shareLinkFetchRequest);
-    const shareLinkResponse = await shareLinkFetchResponse.json() as any;
+    const shareLinkResponse = await executeGraphql(shareLinkQuery, { token }) as any;
     
     // Check for errors
     if (shareLinkResponse.errors && shareLinkResponse.errors.length > 0) {
@@ -118,29 +112,11 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
       }
     `;
     
-    // Prepare the update request to be signed
-    const updateShareLinkRequest = new HttpRequest({
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        host: endpoint.host
-      },
-      hostname: endpoint.host,
-      body: JSON.stringify({ 
-        query: updateShareLinkQuery,
-        variables: {
-          id: shareLink.id,
-          lastAccessedAt: new Date().toISOString(),
-          accessCount: currentCount + 1
-        }
-      }),
-      path: endpoint.pathname
+    await executeGraphql(updateShareLinkQuery, {
+      id: shareLink.id,
+      lastAccessedAt: new Date().toISOString(),
+      accessCount: currentCount + 1
     });
-    
-    // Sign and execute the update request
-    const signedUpdateRequest = await signer.sign(updateShareLinkRequest);
-    const updateFetchRequest = new Request(GRAPHQL_ENDPOINT, signedUpdateRequest);
-    await fetch(updateFetchRequest);
     
     // Fetch the actual resource based on resourceType
     let resourceQuery;
@@ -246,8 +222,10 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
               updatedAt
               parameters
               output
+              metadata
               accountId
               reportConfigurationId
+              createdByUserId
               reportConfiguration {
                 id
                 name
@@ -293,6 +271,9 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
                   type
                   output
                   log
+                  warning
+                  error
+                  attachedFiles
                   reportId
                 }
               }
@@ -307,26 +288,7 @@ export const handler: Schema["getResourceByShareToken"]["functionHandler"] = asy
     }
     
     // Execute the resource query
-    // Prepare the resource request to be signed
-    const resourceRequest = new HttpRequest({
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        host: endpoint.host
-      },
-      hostname: endpoint.host,
-      body: JSON.stringify({ 
-        query: resourceQuery,
-        variables: resourceVariables
-      }),
-      path: endpoint.pathname
-    });
-    
-    // Sign and execute the resource request
-    const signedResourceRequest = await signer.sign(resourceRequest);
-    const resourceFetchRequest = new Request(GRAPHQL_ENDPOINT, signedResourceRequest);
-    const resourceFetchResponse = await fetch(resourceFetchRequest);
-    const resourceResponse = await resourceFetchResponse.json() as any;
+    const resourceResponse = await executeGraphql(resourceQuery, resourceVariables) as any;
     
     // Check for errors
     if (resourceResponse.errors && resourceResponse.errors.length > 0) {
@@ -469,4 +431,4 @@ function applyViewOptions(data: any, resourceType: string, viewOptions: any): an
     console.error('Error applying view options:', error);
     return data;
   }
-} 
+}
