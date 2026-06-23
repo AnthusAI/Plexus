@@ -1,0 +1,18 @@
+{
+  "id": "plx-840e9be0-b74e-4f28-9eb4-b5cee7bb8b39",
+  "title": "Audit non-CloudWatch AWS static-key integrations",
+  "description": "Follow-up from keyless CloudWatch work. Audit and refactor non-CloudWatch AWS integrations that still support or require static AWS access keys, including SQS/Celery dispatch and object-store helpers. Keep CloudWatch logging changes scoped and release independently.",
+  "type": "chore",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-80653be7-0865-4ec7-b29f-9016798f66a2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-23T22:34:27.981921716Z",
+  "updated_at": "2026-06-23T22:34:27.981921716Z",
+  "closed_at": null,
+  "custom": {}
+}
