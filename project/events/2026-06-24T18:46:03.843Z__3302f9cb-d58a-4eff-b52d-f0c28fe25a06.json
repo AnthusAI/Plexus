@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "3302f9cb-d58a-4eff-b52d-f0c28fe25a06",
+  "issue_id": "plx-b0cab64a-ee96-4136-bcab-1ab8fe5b5cdb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-24T18:46:03.843Z",
+  "actor_id": "ec2-user",
+  "payload": {
+    "assignee": null,
+    "description": "As a scoring platform operator, I want timestamp enrichment to use transcript artifacts attached to an Item, so that asynchronous scoring preserves evidence positions without embedding large transcript payloads in metadata.\n\nFeature: Evidence timestamp enrichment from Item attachments\n\nScenario: Deepgram is available only as an Item attachment\nGiven a score explanation contains quoted evidence\nAnd the score metadata does not embed a Deepgram payload\nAnd the Item has an attached Deepgram JSON file\nWhen timestamp enrichment runs\nThen the explanation is enriched with timestamp brackets\nAnd the resulting score result exposes start and end time seconds.\n\nOut of scope:\n- Changing score prompt behavior.\n- Re-embedding raw Deepgram payloads in Item metadata.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-cf9c8bd5-c6a3-4f71-896b-3b849c027677",
+    "priority": 2,
+    "status": "open",
+    "title": "Score evidence timestamps from attached transcript artifacts"
+  }
+}
