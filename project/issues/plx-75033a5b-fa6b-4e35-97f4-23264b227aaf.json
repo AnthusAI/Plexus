@@ -1,0 +1,31 @@
+{
+  "id": "plx-75033a5b-fa6b-4e35-97f4-23264b227aaf",
+  "title": "Remove derived DeepGram key fallback",
+  "description": "Update timestamp enrichment code and tests so DeepGram is loaded only from explicit payloads or attachment keys.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-2c9588f3-ac3c-460b-abe7-afb45e5ba2f6",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f613ad5b-9f82-4323-ba48-9b2600a5065b",
+      "author": "ec2-user",
+      "text": "Investigation found timestamp enrichment still derives a DeepGram attachment key from item metadata when no explicit attachment is present. Updating specs first so enrichment only uses embedded payloads or recorded attachment keys.",
+      "created_at": "2026-06-24T23:04:21.995976481Z"
+    },
+    {
+      "id": "41c9a364-1e85-447b-b46f-2bb77916bc39",
+      "author": "ec2-user",
+      "text": "Implemented scoring-side behavior: LangGraph timestamp enrichment no longer derives a DeepGram object key from item metadata when no explicit payload or attachment key is present. Verification: focused LangGraph attachment/no-attachment specs passed; Tactus runtime-control tests passed. Full LangGraphScore_test.py still has unrelated local environment failures requiring Azure credentials and async fixture cleanup.",
+      "created_at": "2026-06-24T23:07:28.533103491Z"
+    }
+  ],
+  "created_at": "2026-06-24T23:04:14.277084467Z",
+  "updated_at": "2026-06-24T23:07:50.669529630Z",
+  "closed_at": "2026-06-24T23:07:50.669529630Z",
+  "custom": {}
+}

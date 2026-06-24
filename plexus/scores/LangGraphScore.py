@@ -1549,22 +1549,6 @@ class LangGraphScore(Score, LangChainUser):
         if not deepgram_data and metadata:
             deepgram_data = await self._load_deepgram_from_attachment_metadata(metadata)
 
-        # Legacy fallback: older callers only provided an item_id and relied on
-        # the historic items/{item_id}/deepgram.json convention.
-        if not deepgram_data and metadata and 'item_id' in metadata:
-            try:
-                from plexus.utils.score_result_s3_utils import download_score_result_trace_file
-
-                item_id = metadata['item_id']
-                deepgram_key = f"items/{item_id.split('--')[-1]}/deepgram.json"
-
-                deepgram_data, _ = download_score_result_trace_file(deepgram_key)
-
-                if deepgram_data:
-                    logging.debug(f"Auto-loaded deepgram data from legacy path {deepgram_key}")
-            except Exception as e:
-                logging.debug(f"Could not auto-load deepgram data: {e}")
-
         if not deepgram_data:
             logging.debug(f"No deepgram data found for score '{self.parameters.name}', skipping timestamp enrichment")
             return explanation

@@ -154,6 +154,27 @@ async def test_timestamp_enrichment_uses_recorded_deepgram_attachment_key():
     assert enriched == 'The customer said "I need transportation." [0:01.20-0:02.40]'
 
 @pytest.mark.asyncio
+async def test_timestamp_enrichment_does_not_derive_legacy_deepgram_key_without_attachment():
+    score = LangGraphScore.__new__(LangGraphScore)
+    score.parameters = SimpleNamespace(name="Evidence Timestamp Test")
+    explanation = 'The customer said "I need transportation."'
+
+    with patch(
+        "plexus.utils.score_result_s3_utils.download_score_result_trace_file",
+        side_effect=AssertionError("legacy DeepGram key should not be requested"),
+    ) as download, patch(
+        "plexus.scores.LangGraphScore.TactusRuntime",
+    ) as runtime:
+        enriched = await score._enrich_explanation_with_timestamps(
+            explanation,
+            {"item_id": "score-result-record--item-uuid"},
+        )
+
+    download.assert_not_called()
+    runtime.assert_not_called()
+    assert enriched == explanation
+
+@pytest.mark.asyncio
 async def test_create_instance(basic_graph_config, mock_azure_openai, mock_yes_no_classifier):
     with patch('plexus.LangChainUser.LangChainUser._initialize_model', return_value=mock_azure_openai):
         instance = await LangGraphScore.create(**basic_graph_config)

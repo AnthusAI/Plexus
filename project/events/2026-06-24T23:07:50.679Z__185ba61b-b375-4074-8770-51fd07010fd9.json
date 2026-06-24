@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "event_id": "185ba61b-b375-4074-8770-51fd07010fd9",
+  "issue_id": "plx-b2b5421e-4f8e-4565-a94a-7009952ebdf4",
+  "event_type": "state_transition",
+  "occurred_at": "2026-06-24T23:07:50.679Z",
+  "actor_id": "ec2-user",
+  "payload": {
+    "from_status": "open",
+    "to_status": "closed"
+  }
+}
