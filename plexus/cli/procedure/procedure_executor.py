@@ -11,6 +11,7 @@ import json
 import inspect
 import asyncio
 import queue
+import re
 import threading
 import uuid
 import yaml
@@ -193,6 +194,263 @@ def _mcp_tool_result_to_text(result: Any) -> str:
         return _content_to_text(result)
 
     return str(result)
+
+
+def _console_score_edit_audit_events(context: Any) -> List[Dict[str, Any]]:
+    if not isinstance(context, dict):
+        return []
+    raw_events = context.get("console_audit_events")
+    if not isinstance(raw_events, list):
+        return []
+    events: List[Dict[str, Any]] = []
+    for event in raw_events:
+        if not isinstance(event, dict):
+            continue
+        if str(event.get("kind") or "").strip().lower() != "score_edit":
+            continue
+        events.append(event)
+    return events
+
+
+def _trace_sink_score_edit_audit_events(trace_sink: Any) -> List[Dict[str, Any]]:
+    raw_events = getattr(trace_sink, "console_audit_events", None)
+    if not isinstance(raw_events, list):
+        return []
+    events: List[Dict[str, Any]] = []
+    for event in raw_events:
+        if not isinstance(event, dict):
+            continue
+        if str(event.get("kind") or "").strip().lower() != "score_edit":
+            continue
+        events.append(event)
+    return events
+
+
+def _score_edit_event_rank(event: Dict[str, Any], index: int) -> tuple[int, int]:
+    score = 0
+    diffs = event.get("diffs")
+    if isinstance(diffs, dict) and any(
+        isinstance(diffs.get(key), dict) for key in ("code", "guidelines")
+    ):
+        score += 100
+    if str(event.get("version_url") or "").strip():
+        score += 20
+    if str(event.get("parent_version_url") or "").strip():
+        score += 20
+    if str(event.get("version_id") or "").strip():
+        score += 10
+    if str(event.get("parent_version_id") or "").strip():
+        score += 5
+    changed_fields = event.get("changed_fields")
+    if isinstance(changed_fields, list) and any(str(field).strip() for field in changed_fields):
+        score += 3
+    for key in ("post_submit_test", "post_submit_verification"):
+        step = event.get(key)
+        if isinstance(step, dict):
+            status = str(step.get("status") or "").strip().lower()
+            if status and status != "unknown":
+                score += 2
+    if event.get("success") is True:
+        score += 4
+    elif event.get("success") is False:
+        score += 2
+    if str(event.get("error") or "").strip():
+        score += 1
+    return score, index
+
+
+def _preferred_score_edit_audit_event(events: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    best_event: Optional[Dict[str, Any]] = None
+    best_rank: tuple[int, int] | None = None
+    for index, event in enumerate(events):
+        if not isinstance(event, dict):
+            continue
+        rank = _score_edit_event_rank(event, index)
+        if best_rank is None or rank > best_rank:
+            best_event = event
+            best_rank = rank
+    return best_event
+
+
+def _latest_trace_assistant_message(trace_sink: Any) -> tuple[Optional[str], str]:
+    message_id: Optional[str] = None
+    newest_ts = -1.0
+    for attr_name in ("_recent_finalized_message_ids", "_recent_assistant_message_ids"):
+        bucket = getattr(trace_sink, attr_name, None)
+        if not isinstance(bucket, dict):
+            continue
+        for value in bucket.values():
+            if not isinstance(value, tuple) or len(value) < 2:
+                continue
+            candidate_id, timestamp = value[0], value[1]
+            if not isinstance(candidate_id, str) or not candidate_id.strip():
+                continue
+            try:
+                ts = float(timestamp)
+            except (TypeError, ValueError):
+                ts = -1.0
+            if ts >= newest_ts:
+                newest_ts = ts
+                message_id = candidate_id
+    texts = getattr(trace_sink, "assistant_message_texts", None)
+    if isinstance(texts, list):
+        for candidate in reversed(texts):
+            if isinstance(candidate, str) and candidate.strip():
+                return message_id, candidate.strip()
+    return message_id, ""
+
+
+def _score_edit_audit_markdown(event: Dict[str, Any]) -> str:
+    version_id = str(event.get("version_id") or "").strip()
+    parent_version_id = str(event.get("parent_version_id") or "").strip()
+    version_url = str(event.get("version_url") or "").strip()
+    parent_version_url = str(event.get("parent_version_url") or "").strip()
+    error_text = str(event.get("error") or "").strip()
+    changed_fields = event.get("changed_fields")
+    changed_fields_text = ", ".join(str(field) for field in changed_fields or [] if field) or "unknown"
+    smoke = event.get("post_submit_test")
+    smoke_status = (
+        str(smoke.get("status") or "").strip().lower()
+        if isinstance(smoke, dict)
+        else "unknown"
+    )
+    verification = event.get("post_submit_verification")
+    verification_status = (
+        str(verification.get("status") or "").strip().lower()
+        if isinstance(verification, dict)
+        else "unknown"
+    )
+    success = bool(event.get("success"))
+
+    if success and version_id:
+        title = "**Score edit saved**"
+    elif version_id:
+        title = "**Score edit needs review**"
+    else:
+        title = "**Score edit not saved**"
+
+    lines: List[str] = [title, ""]
+    if parent_version_url and parent_version_id:
+        lines.append(f"[Previous score version]({parent_version_url})")
+    if version_url and version_id:
+        lines.append(f"[Updated score version]({version_url})")
+    if (parent_version_url and parent_version_id) or (version_url and version_id):
+        lines.append("")
+
+    if version_id:
+        lines.append(f"- Updated score version id: `{version_id}`")
+    if parent_version_id:
+        lines.append(f"- Previous score version id: `{parent_version_id}`")
+    lines.append(f"- Changed fields: `{changed_fields_text}`")
+    lines.append(f"- Smoke test: `{smoke_status}`")
+    lines.append(f"- Post-submit verification: `{verification_status}`")
+    lines.append("- Updated score version status: `not promoted`")
+    if error_text:
+        lines.append(f"- Error: `{error_text}`")
+
+    return "\n".join(lines).strip()
+
+
+def _linkify_score_edit_version_mentions(
+    text: str, event: Dict[str, Any]
+) -> str:
+    if not isinstance(text, str) or not text.strip():
+        return text
+    if not isinstance(event, dict):
+        return text
+
+    version_id = str(event.get("version_id") or "").strip()
+    version_url = str(event.get("version_url") or "").strip()
+    if not version_id or not version_url:
+        return text
+
+    linked_version = f"[`{version_id}`]({version_url})"
+    escaped_version = re.escape(version_id)
+    label_prefixes = (
+        r"(?:-\s*)?(?:\*\*)?new candidate version(?: created)?(?:\*\*)?(?:\*\*:|:\*\*|:)\s*",
+        r"(?:-\s*)?(?:\*\*)?candidate version(?:\*\*)?(?:\*\*:|:\*\*|:)\s*",
+    )
+
+    updated = text
+    for prefix in label_prefixes:
+        updated = re.sub(
+            rf"(?i)({prefix})`{escaped_version}`",
+            rf"\1{linked_version}",
+            updated,
+        )
+        updated = re.sub(
+            rf"(?i)({prefix}){escaped_version}\b",
+            rf"\1{linked_version}",
+            updated,
+        )
+
+    updated_label_prefixes = (
+        r"(?:-\s*)?(?:\*\*)?updated score version(?: id)?(?:\*\*)?(?:\*\*:|:\*\*|:)\s*",
+        r"(?:-\s*)?(?:\*\*)?new score version(?: created)?(?:\*\*)?(?:\*\*:|:\*\*|:)\s*",
+    )
+    for prefix in updated_label_prefixes:
+        updated = re.sub(
+            rf"(?i)({prefix})`{escaped_version}`",
+            rf"\1{linked_version}",
+            updated,
+        )
+        updated = re.sub(
+            rf"(?i)({prefix}){escaped_version}\b",
+            rf"\1{linked_version}",
+            updated,
+        )
+    updated = re.sub(
+        r"(?i)\bnew candidate version(?: created)?\b",
+        "Updated score version",
+        updated,
+    )
+    updated = re.sub(
+        r"(?i)\bcandidate version\b",
+        "Updated score version",
+        updated,
+    )
+    return updated
+
+
+def _score_change_audit_metadata(event: Dict[str, Any]) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "kind": "score_edit",
+        "success": bool(event.get("success")),
+        "version_id": str(event.get("version_id") or "").strip() or None,
+        "parent_version_id": str(event.get("parent_version_id") or "").strip() or None,
+        "scorecard_id": str(event.get("scorecard_id") or "").strip() or None,
+        "score_id": str(event.get("score_id") or "").strip() or None,
+        "version_url": str(event.get("version_url") or "").strip() or None,
+        "parent_version_url": str(event.get("parent_version_url") or "").strip() or None,
+        "changed_fields": list(event.get("changed_fields") or []),
+        "post_submit_test": event.get("post_submit_test"),
+        "post_submit_verification": event.get("post_submit_verification"),
+        "push_outcome": event.get("push_outcome"),
+        "promoted": bool(event.get("promoted")),
+    }
+    if isinstance(event.get("diffs"), dict):
+        payload["diffs"] = event.get("diffs")
+    error_text = str(event.get("error") or "").strip()
+    if error_text:
+        payload["error"] = error_text
+    return payload
+
+
+def _merge_trace_message_metadata(
+    trace_sink: Any, message_id: Optional[str], patch: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(patch, dict) or not patch:
+        return None
+    merged: Dict[str, Any] = {}
+    cache = getattr(trace_sink, "_message_metadata_cache", None)
+    if isinstance(cache, dict) and isinstance(message_id, str) and message_id:
+        cached = cache.get(message_id)
+        if isinstance(cached, dict):
+            merged.update(cached)
+    merged.update(patch)
+    if isinstance(cache, dict) and isinstance(message_id, str) and message_id:
+        cache[message_id] = merged
+    return merged
 
 
 def _persist_inference_costs_to_state(storage: Any, procedure_id: str, cost_events: List[Any]) -> None:
@@ -589,6 +847,7 @@ class _PlexusTraceLogBridge:
     """
 
     supports_streaming = True
+    _STREAM_CHUNK_FLUSH_EVENT = "__plexus_flush_agent_stream_chunk__"
 
     def __init__(self, trace_sink: Any, on_cost_event: Optional[Any] = None, cw_logger: Optional[Any] = None):
         self.trace_sink = trace_sink
@@ -596,6 +855,9 @@ class _PlexusTraceLogBridge:
         self._on_cost_event = on_cost_event
         self._cw_logger = cw_logger
         self._events: "queue.Queue[Any]" = queue.Queue()
+        self._pending_stream_chunks: Dict[str, Any] = {}
+        self._queued_stream_flush_agents: set[str] = set()
+        self._stream_chunk_lock = threading.Lock()
         self._closed = threading.Event()
         self._worker = threading.Thread(
             target=self._worker_main,
@@ -603,6 +865,65 @@ class _PlexusTraceLogBridge:
             daemon=True,
         )
         self._worker.start()
+
+    @staticmethod
+    def _event_type_name(event: Any) -> str:
+        value = getattr(event, "event_type", None)
+        if value is None and isinstance(event, dict):
+            value = event.get("event_type")
+        return str(value or "").strip().lower()
+
+    @staticmethod
+    def _event_agent_name(event: Any) -> str:
+        value = getattr(event, "agent_name", None)
+        if value is None and isinstance(event, dict):
+            value = event.get("agent_name")
+        return str(value or "").strip()
+
+    @staticmethod
+    def _event_field(event: Any, key: str, default: Any = None) -> Any:
+        if isinstance(event, dict):
+            return event.get(key, default)
+        return getattr(event, key, default)
+
+    @classmethod
+    def _coalesced_stream_chunk_event(cls, prior: Any, incoming: Any) -> Dict[str, Any]:
+        prior_text = str(cls._event_field(prior, "chunk_text", "") or "")
+        incoming_text = str(cls._event_field(incoming, "chunk_text", "") or "")
+        merged: Dict[str, Any] = {
+            "event_type": "agent_stream_chunk",
+            "agent_name": cls._event_agent_name(incoming) or cls._event_agent_name(prior),
+            "chunk_text": f"{prior_text}{incoming_text}",
+        }
+        incoming_timestamp = cls._event_field(incoming, "timestamp")
+        prior_timestamp = cls._event_field(prior, "timestamp")
+        if incoming_timestamp is not None:
+            merged["timestamp"] = incoming_timestamp
+        elif prior_timestamp is not None:
+            merged["timestamp"] = prior_timestamp
+        return merged
+
+    def _queue_latest_stream_chunk(self, event: Any) -> None:
+        agent_name = self._event_agent_name(event)
+        if not agent_name:
+            self._events.put_nowait(event)
+            return
+        with self._stream_chunk_lock:
+            existing = self._pending_stream_chunks.get(agent_name)
+            if existing is None:
+                self._pending_stream_chunks[agent_name] = event
+            else:
+                self._pending_stream_chunks[agent_name] = self._coalesced_stream_chunk_event(existing, event)
+            if agent_name in self._queued_stream_flush_agents:
+                return
+            self._queued_stream_flush_agents.add(agent_name)
+        self._events.put_nowait((self._STREAM_CHUNK_FLUSH_EVENT, agent_name))
+
+    def _consume_latest_stream_chunk(self, agent_name: str) -> Optional[Any]:
+        with self._stream_chunk_lock:
+            event = self._pending_stream_chunks.pop(agent_name, None)
+            self._queued_stream_flush_agents.discard(agent_name)
+            return event
 
     def log(self, event: Any) -> None:
         try:
@@ -623,7 +944,10 @@ class _PlexusTraceLogBridge:
             # messages can receive live per-turn cost metadata updates.
 
         try:
-            self._events.put_nowait(event)
+            if self._event_type_name(event) == "agent_stream_chunk":
+                self._queue_latest_stream_chunk(event)
+            else:
+                self._events.put_nowait(event)
         except Exception as exc:
             logger.warning("Failed queueing trace event for persistence: %s", exc)
 
@@ -632,11 +956,21 @@ class _PlexusTraceLogBridge:
         try:
             while not self._closed.is_set() or not self._events.empty():
                 try:
-                    event = self._events.get(timeout=0.05)
+                    queued_item = self._events.get(timeout=0.05)
                 except queue.Empty:
                     continue
 
                 try:
+                    event = queued_item
+                    if (
+                        isinstance(queued_item, tuple)
+                        and len(queued_item) == 2
+                        and queued_item[0] == self._STREAM_CHUNK_FLUSH_EVENT
+                    ):
+                        agent_name = str(queued_item[1] or "").strip()
+                        event = self._consume_latest_stream_chunk(agent_name) if agent_name else None
+                        if event is None:
+                            continue
                     try:
                         record_fn = getattr(self.trace_sink, "record", None)
                         if callable(record_fn):
@@ -1517,18 +1851,123 @@ async def _execute_tactus(
             except Exception as _ce:
                 logger.warning("Could not finalize task stages after execution: %s", _ce, exc_info=True)
 
+        score_edit_audit_block = ""
+        score_edit_audit_applied = False
+        latest_score_edit_audit_event: Optional[Dict[str, Any]] = None
+        score_edit_audit_patch: Optional[Dict[str, Any]] = None
+        if procedure_id == CONSOLE_CHAT_BUILTIN_ID:
+            audit_events = []
+            audit_events.extend(_trace_sink_score_edit_audit_events(trace_sink))
+            audit_events.extend(_console_score_edit_audit_events(runtime_context))
+            if context is not runtime_context:
+                audit_events.extend(_console_score_edit_audit_events(context))
+            if audit_events:
+                latest_score_edit_audit_event = _preferred_score_edit_audit_event(
+                    audit_events
+                )
+            if latest_score_edit_audit_event:
+                score_edit_audit_patch = {
+                    "score_change_audit": _score_change_audit_metadata(
+                        latest_score_edit_audit_event
+                    )
+                }
+                score_edit_audit_block = _score_edit_audit_markdown(
+                    latest_score_edit_audit_event
+                )
+                message_id, existing_text = _latest_trace_assistant_message(trace_sink)
+                existing_text = _linkify_score_edit_version_mentions(
+                    existing_text, latest_score_edit_audit_event
+                )
+                if score_edit_audit_block and existing_text and score_edit_audit_block in existing_text:
+                    score_edit_audit_applied = True
+                    if (
+                        supports_chat_recorder
+                        and message_id
+                        and callable(getattr(chat_recorder, "update_message", None))
+                        and score_edit_audit_patch
+                    ):
+                        try:
+                            merged_metadata = _merge_trace_message_metadata(
+                                trace_sink,
+                                message_id,
+                                score_edit_audit_patch,
+                            )
+                            await chat_recorder.update_message(
+                                message_id=message_id,
+                                metadata=merged_metadata,
+                            )
+                        except Exception as metadata_error:
+                            logger.warning(
+                                "Could not update Console assistant message metadata with score-change audit: %s",
+                                metadata_error,
+                            )
+                elif (
+                    supports_chat_recorder
+                    and score_edit_audit_block
+                    and message_id
+                    and callable(getattr(chat_recorder, "update_message", None))
+                ):
+                    combined_text = (
+                        score_edit_audit_block
+                        if not existing_text
+                        else f"{score_edit_audit_block}\n\n{existing_text}"
+                    )
+                    try:
+                        merged_metadata = _merge_trace_message_metadata(
+                            trace_sink,
+                            message_id,
+                            score_edit_audit_patch or {},
+                        )
+                        updated = await chat_recorder.update_message(
+                            message_id=message_id,
+                            content=combined_text,
+                            metadata=merged_metadata,
+                            human_interaction="CHAT_ASSISTANT",
+                        )
+                        if updated:
+                            score_edit_audit_applied = True
+                            sink_messages = getattr(trace_sink, "assistant_message_texts", None)
+                            if isinstance(sink_messages, list):
+                                if sink_messages and isinstance(sink_messages[-1], str):
+                                    sink_messages[-1] = combined_text
+                                else:
+                                    sink_messages.append(combined_text)
+                    except Exception as audit_error:
+                        logger.warning(
+                            "Could not update Console assistant message with deterministic score-edit audit summary: %s",
+                            audit_error,
+                        )
+
         # Ensure Console receives a meaningful assistant message from procedure output.
         # Some runtime/trace combinations emit only placeholder completion events.
         if supports_chat_recorder and isinstance(result, dict):
             assistant_text = _extract_assistant_text(result)
             if assistant_text:
+                if latest_score_edit_audit_event:
+                    assistant_text = _linkify_score_edit_version_mentions(
+                        assistant_text, latest_score_edit_audit_event
+                    )
+                if (
+                    score_edit_audit_block
+                    and not score_edit_audit_applied
+                    and score_edit_audit_block not in assistant_text
+                ):
+                    assistant_text = f"{score_edit_audit_block}\n\n{assistant_text}"
                 trace_messages = getattr(trace_sink, "assistant_message_texts", [])
                 has_meaningful_trace_assistant = any(
                     isinstance(message, str) and message.strip()
                     for message in trace_messages
                 )
                 if not has_meaningful_trace_assistant:
-                    await chat_recorder.record_assistant_message(assistant_text)
+                    if callable(getattr(chat_recorder, "record_message", None)):
+                        await chat_recorder.record_message(
+                            role="ASSISTANT",
+                            content=assistant_text,
+                            human_interaction="CHAT_ASSISTANT",
+                            metadata=score_edit_audit_patch,
+                        )
+                    else:
+                        await chat_recorder.record_assistant_message(assistant_text)
 
         if log_bridge:
             try:

@@ -7,7 +7,9 @@ The function uses a container image built from the score-processor-lambda direct
 
 import os
 from datetime import datetime, timezone
+from typing import Optional
 from aws_cdk import (
+    CfnOutput,
     Stack,
     Duration,
     Tags,
@@ -38,8 +40,12 @@ class LambdaScoreProcessorStack(Stack):
         construct_id: str,
         environment: str,
         ecr_repository_name: str,
-        standard_request_queue: sqs.IQueue,
         response_queue_url: str,
+        standard_request_queue: Optional[sqs.IQueue] = None,
+        standard_request_queue_arn: Optional[str] = None,
+        standard_request_queue_url: Optional[str] = None,
+        reserved_concurrency: Optional[int] = None,
+        max_event_source_concurrency: int = 5,
         **kwargs
     ) -> None:
         """
@@ -52,6 +58,10 @@ class LambdaScoreProcessorStack(Stack):
             ecr_repository_name: Name of ECR repository containing Lambda container image
             standard_request_queue: SQS queue for incoming requests
             response_queue_url: SQS queue URL for responses
+            standard_request_queue_arn: ARN for an existing request queue to import
+            standard_request_queue_url: URL for an existing request queue to import
+            reserved_concurrency: Initial concurrency cap. Keep low until quota is raised.
+            max_event_source_concurrency: SQS event source concurrency cap.
             **kwargs: Additional stack properties
         """
         super().__init__(scope, construct_id, **kwargs)
@@ -72,6 +82,19 @@ class LambdaScoreProcessorStack(Stack):
             "ScoreProcessorRepository",
             repository_name=ecr_repository_name
         )
+
+        if standard_request_queue is None:
+            if not standard_request_queue_arn or not standard_request_queue_url:
+                raise ValueError(
+                    "Provide standard_request_queue or both standard_request_queue_arn "
+                    "and standard_request_queue_url."
+                )
+            standard_request_queue = sqs.Queue.from_queue_attributes(
+                self,
+                "ImportedStandardRequestQueue",
+                queue_arn=standard_request_queue_arn,
+                queue_url=standard_request_queue_url,
+            )
 
         # Create IAM role for Lambda
         lambda_role = iam.Role(
@@ -113,13 +136,44 @@ class LambdaScoreProcessorStack(Stack):
                 ],
                 resources=[
                     # Allow access to all Bedrock foundation models
-                    f"arn:aws:bedrock:*::foundation-model/*"
+                    "arn:aws:bedrock:*::foundation-model/*",
+                    "arn:aws:bedrock:*:*:inference-profile/*",
+                    "arn:aws:bedrock:*:*:application-inference-profile/*",
                 ]
             )
         )
 
         # Grant read access to Secrets Manager
         config.secret.grant_read(lambda_role)
+        ecr_repository.grant_pull(lambda_role)
+
+        lambda_environment = {
+            "environment": self.env_name,
+            # SQS Queue URLs
+            "PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL": standard_request_queue.queue_url,
+            "PLEXUS_RESPONSE_WORKER_QUEUE_URL": response_queue_url,
+
+            # Plexus API Configuration (from Secrets Manager)
+            "PLEXUS_ACCOUNT_KEY": config.get_value("account-key"),
+            "PLEXUS_API_KEY": config.get_value("api-key"),
+            "PLEXUS_API_URL": config.get_value("api-url"),
+
+            # S3 Bucket Names (from Secrets Manager)
+            "AMPLIFY_STORAGE_SCORERESULTATTACHMENTS_BUCKET_NAME": config.get_value("score-result-attachments-bucket"),
+            "AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME": config.get_value("report-block-details-bucket"),
+
+            # OpenAI Configuration (from Secrets Manager)
+            "OPENAI_API_KEY": config.get_value("openai-api-key"),
+
+            # GraphQL Schema Configuration (hardcoded - not environment-specific)
+            "FETCH_SCHEMA_FROM_TRANSPORT": "false",
+            "PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT": "0",
+            "GQL_FETCH_SCHEMA_FROM_TRANSPORT": "0",
+
+            # Matplotlib Configuration (hardcoded - Lambda /tmp directory)
+            "MPLBACKEND": "Agg",
+            "MPLCONFIGDIR": "/tmp/mpl",
+        }
 
         # Create Lambda function with container image
         # Note: The image must be built and pushed to ECR before deployment
@@ -135,37 +189,8 @@ class LambdaScoreProcessorStack(Stack):
             role=lambda_role,
             timeout=Duration.seconds(300),  # 5 minutes
             memory_size=2048,
-            reserved_concurrent_executions=500,  # Reserve 500 slots (leaves 500 for other Lambdas)
-            environment={
-                "environment": self.env_name,
-                # SQS Queue URLs (from ScoringWorkerStack)
-                "PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL": standard_request_queue.queue_url,
-                "PLEXUS_RESPONSE_WORKER_QUEUE_URL": response_queue_url,
-
-                # Plexus API Configuration (from Secrets Manager)
-                "PLEXUS_ACCOUNT_KEY": config.get_value("account-key"),
-                "PLEXUS_API_KEY": config.get_value("api-key"),
-                "PLEXUS_API_URL": config.get_value("api-url"),
-
-                # Database Configuration (from Secrets Manager)
-                "PLEXUS_LANGGRAPH_CHECKPOINTER_POSTGRES_URI": config.get_value("postgres-uri"),
-
-                # S3 Bucket Names (from Secrets Manager)
-                "AMPLIFY_STORAGE_SCORERESULTATTACHMENTS_BUCKET_NAME": config.get_value("score-result-attachments-bucket"),
-                "AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME": config.get_value("report-block-details-bucket"),
-
-                # OpenAI Configuration (from Secrets Manager)
-                "OPENAI_API_KEY": config.get_value("openai-api-key"),
-
-                # GraphQL Schema Configuration (hardcoded - not environment-specific)
-                "FETCH_SCHEMA_FROM_TRANSPORT": "false",
-                "PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT": "0",
-                "GQL_FETCH_SCHEMA_FROM_TRANSPORT": "0",
-
-                # Matplotlib Configuration (hardcoded - Lambda /tmp directory)
-                "MPLBACKEND": "Agg",
-                "MPLCONFIGDIR": "/tmp/mpl",
-            },
+            reserved_concurrent_executions=reserved_concurrency,
+            environment=lambda_environment,
             description=f"Processes scoring jobs from SQS queue ({environment})"
         )
 
@@ -202,8 +227,13 @@ class LambdaScoreProcessorStack(Stack):
             lambda_events.SqsEventSource(
                 queue=standard_request_queue,
                 batch_size=1,  # Process one message per Lambda invocation
-                max_concurrency=500,  # Max 500 concurrent pollers (leaves 500 for other Lambdas)
+                max_concurrency=max_event_source_concurrency,
                 # report_batch_item_failures=False (default) - Lambda handles deletion manually
                 # On exception, SQS returns message to queue for retry
             )
         )
+
+        CfnOutput(self, "ScoreProcessorFunctionName", value=self.lambda_function.function_name)
+        CfnOutput(self, "ScoreProcessorQueueUrl", value=standard_request_queue.queue_url)
+        CfnOutput(self, "ScoreProcessorReservedConcurrency", value=str(reserved_concurrency or "unreserved"))
+        CfnOutput(self, "ScoreProcessorMaxEventSourceConcurrency", value=str(max_event_source_concurrency))

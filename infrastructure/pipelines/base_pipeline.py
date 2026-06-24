@@ -6,13 +6,13 @@ This provides shared pipeline logic for both staging and production environments
 
 import aws_cdk as cdk
 import os
-import boto3
 from aws_cdk import (
     Stack,
     pipelines as pipelines,
     aws_codebuild as codebuild,
     aws_ecr as ecr,
     aws_iam as iam,
+    aws_ssm as ssm,
 )
 from constructs import Construct
 from stacks.scoring_worker_stack import ScoringWorkerStack
@@ -54,19 +54,14 @@ class BasePipelineStack(Stack):
         """
         super().__init__(scope, construct_id, **kwargs)
 
-        # Fetch GitHub CodeConnection ARN from SSM Parameter Store at synth time
-        # This avoids storing the ARN in the repository
-        # Create the parameter with: aws ssm put-parameter --name /plexus/github-connection-arn --value "arn:aws:..." --type String
-        ssm = boto3.client('ssm', region_name=kwargs.get('env').region if kwargs.get('env') else 'us-west-2')
-        try:
-            response = ssm.get_parameter(Name='/plexus/github-connection-arn')
-            connection_arn = response['Parameter']['Value']
-        except Exception as e:
-            raise ValueError(
-                f"Failed to fetch GitHub connection ARN from SSM Parameter Store: {e}\n"
-                "Create it with: aws ssm put-parameter --name /plexus/github-connection-arn "
-                "--value 'arn:aws:codeconnections:us-west-2:ACCOUNT:connection/ID' --type String"
+        # Resolve the GitHub CodeConnection ARN from SSM at deploy time.
+        connection_arn = (
+            os.environ.get("PLEXUS_GITHUB_CONNECTION_ARN")
+            or ssm.StringParameter.value_for_string_parameter(
+                self,
+                "/plexus/github-connection-arn",
             )
+        )
 
         # Use CodeConnection for GitHub source (no automatic webhook triggers)
         # Pipeline will only run when manually triggered (e.g., by GitHub Actions)

@@ -188,6 +188,42 @@ async def test_submit_score_version_rejects_semantically_unchanged_yaml():
     assert mcp_client.calls == []
 
 
+@pytest.mark.asyncio
+async def test_submit_score_version_omits_unchanged_guidelines_from_update_payload(monkeypatch):
+    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import (
+        GUIDELINES_PATH,
+        ScoreEditorToolset,
+        VIRTUAL_PATH,
+    )
+    import tools.tactus_runtime.execute as _exec  # type: ignore
+
+    seen_args: dict = {}
+
+    def fake_score_update(args: dict) -> dict:
+        seen_args.update(args)
+        return {"success": True, "version_id": "v-1"}
+
+    monkeypatch.setattr(_exec, "_default_score_update", fake_score_update)
+
+    toolset = ScoreEditorToolset()
+    toolset._scorecard = "sc-1"
+    toolset._score = "score-1"
+    toolset._iteration = 1
+    toolset._hypothesis = "h"
+    toolset._dry_run = False
+    toolset._original_files[VIRTUAL_PATH] = "a: 1\n"
+    toolset._files[VIRTUAL_PATH] = "a: 2\n"
+    toolset._original_files[GUIDELINES_PATH] = "same guidelines"
+    toolset._files[GUIDELINES_PATH] = "same guidelines"
+
+    result = await toolset.submit_score_version({"version_note": "update code only"})
+
+    assert result["success"] is True
+    assert result["version_id"] == "v-1"
+    assert seen_args["code"] == "a: 2\n"
+    assert "guidelines" not in seen_args
+
+
 def test_setup_normalizes_direct_yaml_content_to_block_scalars():
     from plexus.cli.procedure.tactus_adapters.score_editor_toolset import ScoreEditorToolset
 

@@ -1,0 +1,31 @@
+{
+  "id": "plx-05653b63-e508-4c3a-8205-c4b91f421d50",
+  "title": "Add deterministic Console score version diffs and dual links",
+  "description": "Add deterministic score-change diff payloads for Console chat responses and render them with a dedicated inline diff component. Include both previous and updated score version links in structured audit output. Ensure behavior covers score.edit and guidelines updates through score.update while preserving existing validation/guard rails.\n\nDefinition of Done:\n- Audit event carries previous/updated version links and diff payloads for changed fields.\n- Console assistant message metadata stores diff payloads for UI rendering.\n- Console UI renders a Monaco-based inline diff panel for code/guidelines when metadata exists.\n- Targeted backend and frontend tests pass for links + diff rendering paths.\n- No client-specific data is included in issue text or logs.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e5e0eabe-b38f-49c5-a635-9f0596e68ea6",
+      "author": "ryan.porter",
+      "text": "Work started: implementing deterministic console score-change diffs and previous/updated score version links in runtime audit metadata + chat UI renderer. Plan includes backend audit event extension, assistant message metadata plumbing, Monaco diff component in conversation viewer, and targeted tests for score.edit + guidelines update flows.",
+      "created_at": "2026-06-19T12:50:18.411807Z"
+    },
+    {
+      "id": "e9462e12-7226-4c07-afa8-d3de8d7866fe",
+      "author": "ryan.porter",
+      "text": "Implemented deterministic Console score-change diff payloads and dual score-version links.\n\nBackend:\n- Added reusable score diff builders in execute runtime (code/guidelines entries with Monaco-ready original/modified + unified diff, truncation flags, version links).\n- score.edit worker now returns version_url, parent_version_url, and diffs derived from verified persisted candidate content.\n- score.update version-creating path now emits changed_fields, version links, diff payloads, and score_edit_audit compact+runtime audit event for deterministic Console handling.\n- Audit compact payload now includes parent version link key (pu).\n- Trace normalizer now preserves parent_version_url and structured diffs.\n\nProcedure/UI:\n- Procedure executor deterministic summary now includes both Previous/Updated score version links and non-candidate wording.\n- Added score_change_audit metadata patching when updating/recording assistant messages.\n- Added Console inline diff component using Monaco DiffEditor and wired it into conversation-viewer for assistant messages with score_change_audit metadata.\n\nTests run:\n- poetry run pytest MCP/tools/tactus_runtime/execute_test.py plexus/cli/procedure/test_trace_sink.py plexus/cli/procedure/test_procedure_executor_compat.py -q (236 passed)\n- npm test -- --runTestsByPath components/ui/__tests__/conversation-viewer-session-routing.test.tsx components/ui/__tests__/conversation-viewer-streaming-updates.test.tsx --watch=false (41 passed)\n\nNotes:\n- Jest run includes existing console.warn/act warnings in these suites; no test failures.",
+      "created_at": "2026-06-19T13:00:25.635445Z"
+    }
+  ],
+  "created_at": "2026-06-19T12:50:14.184895Z",
+  "updated_at": "2026-06-19T13:00:25.635445Z",
+  "closed_at": null,
+  "custom": {}
+}

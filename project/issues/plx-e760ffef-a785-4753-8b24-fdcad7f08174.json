@@ -1,0 +1,37 @@
+{
+  "id": "plx-e760ffef-a785-4753-8b24-fdcad7f08174",
+  "title": "Implement Console target resolver",
+  "description": "Implement deterministic Console score target resolution and tests.\n\nImplementation notes:\n- Add a runtime score resolve API for unique, ambiguous, and missing targets.\n- Teach Console orchestration to consume a prior disambiguation answer once.\n- Preserve score edit and guidelines validation safety boundaries.\n- Prove with targeted tests and live Console smoke evidence.\n\nNo client-specific names or score identifiers are stored here.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "9be40cb7-21ec-4183-a3aa-8b8c2beb3980",
+      "author": "ryan.porter",
+      "text": "Starting implementation. Current focus: add a deterministic runtime target resolver, update Console follow-up handling, and verify with targeted tests plus a live Console smoke run. No client-specific target names will be recorded in Kanbus.",
+      "created_at": "2026-06-18T18:50:53.098662Z"
+    },
+    {
+      "id": "83cd1b66-4dde-4d6a-883a-c1cca98a7fd5",
+      "author": "ryan.porter",
+      "text": "Implemented deterministic Console target/version fixes and verified with local runtime plus Chrome Console smoke. Added guard so Console guidelines-only score.update requires explicit guidelines intent, updated Console prompt to use score.resolve before score.edit, fixed score.info version alias handling, and confirmed a non-champion candidate edit path with automatic smoke testing. No client-specific details recorded.",
+      "created_at": "2026-06-18T19:12:39.330149Z"
+    },
+    {
+      "id": "068a15e5-d719-4341-9197-28de1f4778d5",
+      "author": "ryan.porter",
+      "text": "Additional realistic Chrome integration run completed with local console worker. Verified three user-style scenarios: (1) missing target -> assistant asked for scorecard/score and did not guess, (2) explicit guidelines wording request -> attempted guidelines update and validation blocked save, (3) explicit scoring-behavior request -> routed through resolve then score.edit and created a non-champion candidate version with expected parent linkage. Also verified score.info(version=...) now resolves specific versions correctly.",
+      "created_at": "2026-06-18T19:21:27.262207Z"
+    }
+  ],
+  "created_at": "2026-06-18T18:50:47.856727Z",
+  "updated_at": "2026-06-18T19:21:27.262207Z",
+  "closed_at": null,
+  "custom": {}
+}

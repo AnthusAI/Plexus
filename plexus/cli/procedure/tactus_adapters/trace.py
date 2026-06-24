@@ -32,6 +32,8 @@ class PlexusTraceSink:
         self.chat_recorder = chat_recorder
         self.session_id: Optional[str] = None
         self.assistant_message_texts: list[str] = []
+        self.console_audit_events: list[Dict[str, Any]] = []
+        self._console_audit_event_keys: set[str] = set()
         self._active_stream_message_ids: Dict[str, str] = {}
         self._active_stream_texts: Dict[str, str] = {}
         self._active_stream_last_persisted_texts: Dict[str, str] = {}
@@ -293,6 +295,222 @@ class PlexusTraceSink:
             return f"{resolved_name} failed: {error_message}"
 
         return None
+
+    def _normalize_console_score_edit_event(self, event: Any) -> Optional[Dict[str, Any]]:
+        if not isinstance(event, dict):
+            return None
+        if str(event.get("kind") or "").strip().lower() != "score_edit":
+            return None
+
+        changed_fields = event.get("changed_fields")
+        if isinstance(changed_fields, list):
+            normalized_changed_fields = [
+                str(field).strip() for field in changed_fields if str(field).strip()
+            ]
+        else:
+            normalized_changed_fields = []
+
+        def _status_step(value: Any) -> Dict[str, Any]:
+            if not isinstance(value, dict):
+                return {"status": "unknown"}
+            compact: Dict[str, Any] = {
+                "status": str(value.get("status") or "").strip().lower() or "unknown"
+            }
+            for field in ("evaluation_id", "validation_id", "task_id", "run_id"):
+                field_value = str(value.get(field) or "").strip()
+                if field_value:
+                    compact[field] = field_value
+            error_text = str(value.get("error") or "").strip()
+            if error_text:
+                compact["error"] = error_text[:240]
+            reason_text = str(value.get("reason") or "").strip()
+            if reason_text:
+                compact["reason"] = reason_text[:240]
+            return compact
+
+        def _normalize_diff_entry(value: Any) -> Dict[str, Any] | None:
+            if not isinstance(value, dict):
+                return None
+            normalized_entry: Dict[str, Any] = {
+                "kind": str(value.get("kind") or "").strip() or None,
+                "language": str(value.get("language") or "").strip() or None,
+                "has_changes": bool(value.get("has_changes")),
+                "original_label": str(value.get("original_label") or "").strip() or None,
+                "modified_label": str(value.get("modified_label") or "").strip() or None,
+                "original_version_id": str(value.get("original_version_id") or "").strip() or None,
+                "modified_version_id": str(value.get("modified_version_id") or "").strip() or None,
+                "original_url": str(value.get("original_url") or "").strip() or None,
+                "modified_url": str(value.get("modified_url") or "").strip() or None,
+                "truncated": bool(value.get("truncated")),
+            }
+            for key in ("original", "modified", "unified_diff"):
+                normalized_entry[key] = str(value.get(key) or "")
+            return normalized_entry
+
+        handle_status = str(event.get("handle_status") or "").strip().lower() or "unknown"
+        error_text = str(event.get("error") or "").strip()
+        raw_success = event.get("success")
+        if isinstance(raw_success, bool):
+            success = raw_success
+        else:
+            success = handle_status == "completed" and not error_text
+
+        normalized: Dict[str, Any] = {
+            "kind": "score_edit",
+            "success": success,
+            "handle_status": handle_status,
+            "version_id": str(event.get("version_id") or "").strip() or None,
+            "parent_version_id": str(event.get("parent_version_id") or "").strip() or None,
+            "scorecard_id": str(event.get("scorecard_id") or "").strip() or None,
+            "score_id": str(event.get("score_id") or "").strip() or None,
+            "version_url": str(event.get("version_url") or "").strip() or None,
+            "parent_version_url": str(event.get("parent_version_url") or "").strip() or None,
+            "changed_fields": normalized_changed_fields,
+            "post_submit_test": _status_step(event.get("post_submit_test")),
+            "post_submit_verification": _status_step(event.get("post_submit_verification")),
+            "push_outcome": str(event.get("push_outcome") or "").strip() or "not_pushed",
+            "promoted": bool(event.get("promoted")),
+        }
+        diffs = event.get("diffs")
+        if isinstance(diffs, dict):
+            normalized_diffs: Dict[str, Any] = {}
+            for key in ("code", "guidelines"):
+                normalized_entry = _normalize_diff_entry(diffs.get(key))
+                if normalized_entry is not None:
+                    normalized_diffs[key] = normalized_entry
+            if normalized_diffs:
+                normalized["diffs"] = normalized_diffs
+        if error_text:
+            normalized["error"] = error_text[:240]
+        base_source = str(event.get("base_version_source") or "").strip()
+        if base_source:
+            normalized["base_version_source"] = base_source
+        return normalized
+
+    def _capture_console_audit_events_from_tool_result(self, tool_result: Any) -> None:
+        normalized_result = tool_result
+        if isinstance(tool_result, str):
+            stripped = tool_result.strip()
+            if not stripped:
+                return
+            if stripped.startswith("{") or stripped.startswith("["):
+                try:
+                    normalized_result = json.loads(stripped)
+                except Exception:
+                    return
+            else:
+                return
+        if not isinstance(normalized_result, dict):
+            return
+
+        raw_events = normalized_result.get("console_audit_events")
+        events_to_capture: list[Any] = []
+        if isinstance(raw_events, list):
+            events_to_capture.extend(raw_events)
+        compact_event = normalized_result.get("score_edit_audit_compact")
+        if isinstance(compact_event, dict):
+            changed_fields_value = compact_event.get("changed_fields")
+            if changed_fields_value is None:
+                changed_fields_value = compact_event.get("cf")
+            if isinstance(changed_fields_value, str):
+                compact_changed_fields = [
+                    part.strip()
+                    for part in changed_fields_value.split(",")
+                    if part.strip()
+                ]
+            elif isinstance(changed_fields_value, list):
+                compact_changed_fields = changed_fields_value
+            else:
+                compact_changed_fields = []
+            events_to_capture.append(
+                {
+                    "kind": compact_event.get("kind") or compact_event.get("k") or "score_edit",
+                    "success": (
+                        compact_event.get("success")
+                        if compact_event.get("success") is not None
+                        else compact_event.get("s")
+                    ),
+                    "handle_status": compact_event.get("handle_status")
+                    or compact_event.get("hs"),
+                    "version_id": compact_event.get("version_id")
+                    or compact_event.get("v"),
+                    "parent_version_id": compact_event.get("parent_version_id")
+                    or compact_event.get("p"),
+                    "scorecard_id": compact_event.get("scorecard_id"),
+                    "score_id": compact_event.get("score_id"),
+                    "version_url": compact_event.get("version_url")
+                    or compact_event.get("u"),
+                    "parent_version_url": compact_event.get("parent_version_url")
+                    or compact_event.get("pu"),
+                    "changed_fields": compact_changed_fields,
+                    "post_submit_test": {
+                        "status": compact_event.get("smoke_status")
+                        or compact_event.get("ss")
+                    },
+                    "post_submit_verification": {
+                        "status": compact_event.get("verification_status")
+                        or compact_event.get("vs")
+                    },
+                    "push_outcome": compact_event.get("push_outcome")
+                    or compact_event.get("po"),
+                    "promoted": compact_event.get("promoted")
+                    if compact_event.get("promoted") is not None
+                    else compact_event.get("pm"),
+                    "error": compact_event.get("error") or compact_event.get("e"),
+                }
+            )
+        nested_value = normalized_result.get("value")
+        if isinstance(nested_value, dict):
+            nested_compact = nested_value.get("score_edit_audit")
+            if isinstance(nested_compact, dict):
+                events_to_capture.append(
+                    {
+                        "kind": nested_compact.get("kind")
+                        or nested_compact.get("k")
+                        or "score_edit",
+                        "success": (
+                            nested_compact.get("success")
+                            if nested_compact.get("success") is not None
+                            else nested_compact.get("s")
+                        ),
+                        "handle_status": nested_compact.get("handle_status")
+                        or nested_compact.get("hs"),
+                        "version_id": nested_compact.get("version_id")
+                        or nested_compact.get("v"),
+                        "parent_version_id": nested_compact.get("parent_version_id")
+                        or nested_compact.get("p"),
+                        "version_url": nested_compact.get("version_url")
+                        or nested_compact.get("u"),
+                        "parent_version_url": nested_compact.get("parent_version_url")
+                        or nested_compact.get("pu"),
+                        "changed_fields": [
+                            part.strip()
+                            for part in str(nested_compact.get("cf") or "").split(",")
+                            if part.strip()
+                        ],
+                        "post_submit_test": {
+                            "status": nested_compact.get("ss")
+                        },
+                        "post_submit_verification": {
+                            "status": nested_compact.get("vs")
+                        },
+                        "push_outcome": nested_compact.get("po"),
+                        "promoted": nested_compact.get("pm"),
+                        "error": nested_compact.get("e"),
+                    }
+                )
+        if not events_to_capture:
+            return
+
+        for event in events_to_capture:
+            normalized_event = self._normalize_console_score_edit_event(event)
+            if normalized_event is None:
+                continue
+            dedupe_key = json.dumps(normalized_event, sort_keys=True, default=str)
+            if dedupe_key in self._console_audit_event_keys:
+                continue
+            self._console_audit_event_keys.add(dedupe_key)
+            self.console_audit_events.append(normalized_event)
 
     async def _record_tool_failure_notice(self, tool_name: Any, tool_result: Any) -> None:
         failure_message = self._tool_failure_message(tool_name, tool_result)
@@ -781,6 +999,7 @@ class PlexusTraceSink:
         if event_kind == "TOOL_CALL":
             tool_parameters = _event_field(event, "tool_parameters", "tool_args")
             tool_result = _event_field(event, "tool_response", "tool_result")
+            self._capture_console_audit_events_from_tool_result(tool_result)
             tool_metadata_patch = self._tool_metadata_patch(tool_result)
 
             # Check if we have an in-progress record to update
