@@ -264,6 +264,80 @@ async def test_tactus_score_enriches_explanation_with_timestamps_when_deepgram_p
 
 
 @pytest.mark.asyncio
+async def test_tactus_score_enriches_explanation_with_recorded_deepgram_attachment_key(monkeypatch):
+    """TactusScore should load Deepgram data from item attachment metadata."""
+
+    execution_count = []
+    download_calls = []
+    deepgram_key = "items/report-123/deepgram.json"
+    deepgram_payload = {
+        "results": {
+            "channels": [{
+                "alternatives": [{
+                    "words": [
+                        {"word": "need", "punctuated_word": "need", "start": 1.2, "end": 1.5},
+                        {"word": "transportation", "punctuated_word": "transportation", "start": 1.5, "end": 2.4},
+                    ]
+                }]
+            }]
+        }
+    }
+
+    def download_only_recorded_key(path):
+        download_calls.append(path)
+        if path != deepgram_key:
+            raise FileNotFoundError(path)
+        return deepgram_payload, None
+
+    class FakeRuntime:
+        def __init__(self, **kwargs):
+            self.log_handler = None
+
+        async def execute(self, code, context, format):
+            execution_count.append(len(execution_count) + 1)
+
+            if len(execution_count) == 1:
+                return {
+                    "result": {
+                        "value": "Yes",
+                        "explanation": 'The customer said "need transportation".',
+                    }
+                }
+
+            assert context["data"] == deepgram_payload
+            return {
+                "result": 'The customer said "need transportation" [0:01.20-0:02.40].'
+            }
+
+    module = importlib.import_module("plexus.scores.TactusScore")
+    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(
+        "plexus.utils.score_result_s3_utils.download_score_result_trace_file",
+        download_only_recorded_key,
+    )
+
+    score = TactusScore(
+        name="Test Score",
+        code='ClassifyProcedure { classes = {"Yes", "No"} }',
+        valid_classes=["Yes", "No"],
+    )
+
+    result = await score.predict(Score.Input(
+        text="transcript text",
+        metadata={
+            "item_id": "score-result-record--item-uuid",
+            "attachedFiles": [deepgram_key],
+        },
+    ))
+
+    assert download_calls == [deepgram_key]
+    assert result.value == "Yes"
+    assert "[0:01.20-0:02.40]" in result.explanation
+    assert result.start_time_seconds == 1.2
+    assert result.end_time_seconds == 2.4
+
+
+@pytest.mark.asyncio
 async def test_tactus_score_skips_enrichment_when_no_deepgram_data(monkeypatch):
     """Test that enrichment is skipped gracefully when no deepgram data present."""
 
