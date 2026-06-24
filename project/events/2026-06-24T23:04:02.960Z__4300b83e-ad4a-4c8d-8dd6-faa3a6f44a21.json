@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "4300b83e-ad4a-4c8d-8dd6-faa3a6f44a21",
+  "issue_id": "plx-2c9588f3-ac3c-460b-abe7-afb45e5ba2f6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-24T23:04:02.960Z",
+  "actor_id": "ec2-user",
+  "payload": {
+    "assignee": null,
+    "description": "Purpose: ensure scoring enrichment only uses DeepGram payloads explicitly supplied through item metadata or posted attachments.\n\nDefinition of Done:\n- Behavior is specified without client-specific details.\n- Timestamp enrichment does not derive legacy object-store keys when no DeepGram attachment is present.\n- Existing explicit attachment behavior remains covered by tests.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Disable implicit DeepGram attachment lookups"
+  }
+}

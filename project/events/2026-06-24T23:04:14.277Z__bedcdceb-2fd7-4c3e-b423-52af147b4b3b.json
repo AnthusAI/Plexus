@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "bedcdceb-2fd7-4c3e-b423-52af147b4b3b",
+  "issue_id": "plx-75033a5b-fa6b-4e35-97f4-23264b227aaf",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-24T23:04:14.277Z",
+  "actor_id": "ec2-user",
+  "payload": {
+    "assignee": null,
+    "description": "Update timestamp enrichment code and tests so DeepGram is loaded only from explicit payloads or attachment keys.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-2c9588f3-ac3c-460b-abe7-afb45e5ba2f6",
+    "priority": 1,
+    "status": "open",
+    "title": "Remove derived DeepGram key fallback"
+  }
+}
