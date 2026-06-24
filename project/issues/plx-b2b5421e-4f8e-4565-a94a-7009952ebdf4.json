@@ -3,7 +3,7 @@
   "title": "Use only explicit DeepGram attachments",
   "description": "As a scoring runtime operator, I want timestamp enrichment to use only explicitly supplied DeepGram attachments, so that retired storage locations are not queried implicitly.\n\nFeature: Explicit DeepGram attachment enrichment\n\nScenario: Metadata includes an explicit DeepGram attachment key\nGiven scoring metadata contains an attached DeepGram JSON key\nWhen timestamp enrichment runs\nThen it loads DeepGram from that key\nAnd uses it for enrichment\n\nScenario: Metadata has no DeepGram payload or attachment key\nGiven scoring metadata has no DeepGram payload\nAnd no attached DeepGram JSON key\nWhen timestamp enrichment runs\nThen it returns the original explanation\nAnd no derived legacy object-store key is requested.",
   "type": "story",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -12,7 +12,7 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-06-24T23:04:07.825923898Z",
-  "updated_at": "2026-06-24T23:04:07.825923898Z",
-  "closed_at": null,
+  "updated_at": "2026-06-24T23:07:50.679799866Z",
+  "closed_at": "2026-06-24T23:07:50.679799866Z",
   "custom": {}
 }

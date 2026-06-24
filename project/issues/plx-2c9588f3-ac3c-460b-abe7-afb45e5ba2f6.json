@@ -3,7 +3,7 @@
   "title": "Disable implicit DeepGram attachment lookups",
   "description": "Purpose: ensure scoring enrichment only uses DeepGram payloads explicitly supplied through item metadata or posted attachments.\n\nDefinition of Done:\n- Behavior is specified without client-specific details.\n- Timestamp enrichment does not derive legacy object-store keys when no DeepGram attachment is present.\n- Existing explicit attachment behavior remains covered by tests.",
   "type": "epic",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -12,7 +12,7 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-06-24T23:04:02.959799198Z",
-  "updated_at": "2026-06-24T23:04:14.288706936Z",
-  "closed_at": null,
+  "updated_at": "2026-06-24T23:07:50.687211267Z",
+  "closed_at": "2026-06-24T23:07:50.687211267Z",
   "custom": {}
 }

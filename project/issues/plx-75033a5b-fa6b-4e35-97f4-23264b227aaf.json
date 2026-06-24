@@ -3,7 +3,7 @@
   "title": "Remove derived DeepGram key fallback",
   "description": "Update timestamp enrichment code and tests so DeepGram is loaded only from explicit payloads or attachment keys.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -25,7 +25,7 @@
     }
   ],
   "created_at": "2026-06-24T23:04:14.277084467Z",
-  "updated_at": "2026-06-24T23:07:28.533103491Z",
-  "closed_at": null,
+  "updated_at": "2026-06-24T23:07:50.669529630Z",
+  "closed_at": "2026-06-24T23:07:50.669529630Z",
   "custom": {}
 }
