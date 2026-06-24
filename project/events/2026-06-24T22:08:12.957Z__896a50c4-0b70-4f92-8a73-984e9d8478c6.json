@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "event_id": "896a50c4-0b70-4f92-8a73-984e9d8478c6",
+  "issue_id": "plx-293f6784-787e-4633-be38-7539f811b297",
+  "event_type": "state_transition",
+  "occurred_at": "2026-06-24T22:08:12.957Z",
+  "actor_id": "ec2-user",
+  "payload": {
+    "from_status": "open",
+    "to_status": "in_progress"
+  }
+}
