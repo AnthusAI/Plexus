@@ -1,0 +1,37 @@
+{
+  "id": "plx-8d7df194-c1a5-470f-bb90-24f20e52a6f6",
+  "title": "Implement Plexus protected keyless CloudWatch utilities",
+  "description": "Implementation task for the Plexus CloudWatch logging story.\n\nWork items:\n- Add shared redaction and CloudWatch helper utilities.\n- Update metrics, direct CloudWatch Logs writer, and watchtower setup to use default AWS credentials.\n- Fail closed for CloudWatch log shipping when protection setup fails.\n- Add targeted unit tests.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-80653be7-0865-4ec7-b29f-9016798f66a2",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1ae5a34a-f0eb-4f1f-be17-3876df1035a4",
+      "author": "ec2-user",
+      "text": "Starting implementation. Scope is CloudWatch logging and metrics only: default AWS credential chain, app-side redaction, and CloudWatch Logs data protection fail-closed behavior. Broader static-key AWS integrations will be tracked separately.",
+      "created_at": "2026-06-23T22:29:20.583740233Z"
+    },
+    {
+      "id": "a4cbc507-71a9-4525-aefb-0f9007a514eb",
+      "author": "ec2-user",
+      "text": "Implemented keyless CloudWatch logging changes. Verification: /home/ec2-user/miniconda3/envs/py311/bin/python -m pytest plexus/plexus_logging/Cloudwatch_test.py plexus/logging/cloudwatch_logger_test.py plexus/CustomLogging_test.py passed (15 tests).",
+      "created_at": "2026-06-23T22:35:15.869786921Z"
+    },
+    {
+      "id": "e0073d99-2909-45a0-881a-8b92efc69e2e",
+      "author": "ec2-user",
+      "text": "Closing summary: Implemented app-side redaction, keyless CloudWatch metrics/log clients, fail-closed CloudWatch log policy setup, and focused tests.",
+      "created_at": "2026-06-23T22:35:21.257942550Z"
+    }
+  ],
+  "created_at": "2026-06-23T22:29:13.716913946Z",
+  "updated_at": "2026-06-23T22:35:21.264431150Z",
+  "closed_at": "2026-06-23T22:35:21.264431150Z",
+  "custom": {}
+}

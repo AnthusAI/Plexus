@@ -153,6 +153,8 @@ jobs:
         
     - name: Run TypeScript Type Check
       working-directory: ./dashboard
+      env:
+        NODE_OPTIONS: --max-old-space-size=4096
       run: npm run ci:typecheck
       
     - name: Run Unit Tests

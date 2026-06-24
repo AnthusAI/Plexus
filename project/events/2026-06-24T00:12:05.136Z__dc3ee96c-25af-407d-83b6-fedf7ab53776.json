@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "dc3ee96c-25af-407d-83b6-fedf7ab53776",
+  "issue_id": "plx-382fbd85-9745-4c70-b6c9-c190d82dc10f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-24T00:12:05.136Z",
+  "actor_id": "ec2-user",
+  "payload": {
+    "assignee": null,
+    "description": "Plexus CustomLogging currently attaches CloudWatch/redaction handlers only to the plexus logger. Host apps such as Call-Criteria import the stdlib logging module from plexus.CustomLogging and call logging.info on the root logger, which used to ship to CloudWatch. Add an explicit opt-in compatibility mode to attach the redacting CloudWatch handler to root/app logging without changing the safer default.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-80653be7-0865-4ec7-b29f-9016798f66a2",
+    "priority": 0,
+    "status": "open",
+    "title": "Restore root logger CloudWatch shipping for host apps"
+  }
+}
