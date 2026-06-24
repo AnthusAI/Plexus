@@ -209,48 +209,50 @@ jobs:
           "npx http-server storybook-static --port 6006 --address 127.0.0.1" \
           "npx wait-on --verbose --interval 1000 --timeout 30000 http-get://127.0.0.1:6006 && echo 'Server ready' && npm run test-storybook -- --url http://127.0.0.1:6006 --verbose"
 
-  trigger-deployment:
-    name: Trigger AWS Infrastructure CodePipeline
-    needs:
-      - python-tests
-      - dashboard-unit-tests
-      - dashboard-storybook-tests
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
-    # Required for OIDC authentication
-    permissions:
-      id-token: write
-      contents: read
+  # Temporarily disabled: trigger-deployment is not valid after AWS account migration.
+  # Re-enable once the new account pipeline/role mapping is configured.
+  # trigger-deployment:
+  #   name: Trigger AWS Infrastructure CodePipeline
+  #   needs:
+  #     - python-tests
+  #     - dashboard-unit-tests
+  #     - dashboard-storybook-tests
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+  #   # Required for OIDC authentication
+  #   permissions:
+  #     id-token: write
+  #     contents: read
 
-    steps:
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
-        with:
-          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
-          aws-region: us-west-2
+  #   steps:
+  #     - name: Configure AWS credentials via OIDC
+  #       uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+  #         aws-region: us-west-2
 
-      - name: Trigger Infrastructure CodePipeline
-        run: |
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            INFRA_PIPELINE="plexus-infrastructure-production-pipeline"
-            ENVIRONMENT="production"
-          elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
-            INFRA_PIPELINE=""
-            ENVIRONMENT="staging"
-          fi
+  #     - name: Trigger Infrastructure CodePipeline
+  #       run: |
+  #         if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+  #           INFRA_PIPELINE="plexus-infrastructure-production-pipeline"
+  #           ENVIRONMENT="production"
+  #         elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
+  #           INFRA_PIPELINE=""
+  #           ENVIRONMENT="staging"
+  #         fi
 
-          echo "Evaluating infrastructure pipeline trigger for environment: $ENVIRONMENT"
-          echo ""
+  #         echo "Evaluating infrastructure pipeline trigger for environment: $ENVIRONMENT"
+  #         echo ""
 
-          if [ -n "$INFRA_PIPELINE" ]; then
-            echo "Triggering infrastructure pipeline: $INFRA_PIPELINE"
-            INFRA_EXEC_ID=$(aws codepipeline start-pipeline-execution \
-              --name "$INFRA_PIPELINE" \
-              --query 'pipelineExecutionId' \
-              --output text)
-            echo "Infrastructure pipeline execution: $INFRA_EXEC_ID"
-            echo "Monitor at: https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${INFRA_PIPELINE}/view?region=us-west-2"
-            echo ""
-          else
-            echo "No infrastructure pipeline configured for environment: $ENVIRONMENT"
-          fi
+  #         if [ -n "$INFRA_PIPELINE" ]; then
+  #           echo "Triggering infrastructure pipeline: $INFRA_PIPELINE"
+  #           INFRA_EXEC_ID=$(aws codepipeline start-pipeline-execution \
+  #             --name "$INFRA_PIPELINE" \
+  #             --query 'pipelineExecutionId' \
+  #             --output text)
+  #           echo "Infrastructure pipeline execution: $INFRA_EXEC_ID"
+  #           echo "Monitor at: https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${INFRA_PIPELINE}/view?region=us-west-2"
+  #           echo ""
+  #         else
+  #           echo "No infrastructure pipeline configured for environment: $ENVIRONMENT"
+  #         fi
