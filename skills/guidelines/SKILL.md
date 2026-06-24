@@ -1,6 +1,21 @@
 ---
 name: Classifier Guidelines Management
 description: The format for guidelines documents for Plexus scorecard scores and the validation tool.
+tags:
+  - score-workflow
+  - guidelines
+  - validation
+  - console
+applies_to:
+  - classifier guidelines
+  - guidelines validation
+  - score rubric updates
+console_supported: partial
+requires_subagent: true
+allowed_modes:
+  - planning
+  - execution
+resources: []
 ---
 
 ## Instructions
@@ -19,6 +34,20 @@ This skill helps create and update classifier guidelines documents for Plexus sc
 After you make any change to the guidelines you need to use the tool to validate the guidelines file.
 
 You can use the Plexus MCP tools to pull score versions, including either the champion or specific versions.  And you can use the MCP tool for pushing new score versions with updated guidelines, after you make changes to the guidelines and validate the changes using the tool in this skill.  You may NOT push updates without first validating them, and you may not push guidelines documents that are invalid.  Making changes to the score configuration is out of scope for this skill, this is all about the guidelines.
+
+## Console Chat Mode
+
+Console chat may inspect existing guidelines, docs, versions, predictions, and
+evaluations through `execute_tactus`.
+
+Console chat must not assume direct shell or repository script access.
+
+`execute_tactus` runtime now enforces deterministic validation for
+`plexus.score.update({ guidelines = ... })`. The update is rejected unless
+`plexus.guidelines.validate` passes, and invalid guidelines are never saved.
+
+Console chat should still report the validator output to the user, but it does
+not need to manually orchestrate a separate validation step to enforce policy.
 
 ## Context
 
@@ -90,7 +119,7 @@ When creating or updating guidelines:
 
 ## Validation Tool
 
-Use the `validate_guidelines.py` tool to check guidelines documents for compliance. The tool:
+Use the `validate_guidelines.py` tool to check guidelines documents for compliance in IDE/local workflows. The tool:
 - Detects classifier type automatically
 - Checks for all required sections
 - Reports missing or malformed sections
@@ -98,6 +127,7 @@ Use the `validate_guidelines.py` tool to check guidelines documents for complian
 
 Always run this tool after creating or updating guidelines documents.
 
+<ide-only>
 **Usage:**
 ```bash
 python validate_guidelines.py guidelines.md
@@ -106,6 +136,7 @@ python validate_guidelines.py guidelines.md
 **Exit codes:**
 - 0: Validation passed
 - 1: Validation failed
+</ide-only>
 
 **Example output:**
 ```

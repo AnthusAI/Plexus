@@ -13,7 +13,10 @@ from aws_cdk import (
     aws_ecr as ecr,
 )
 from constructs import Construct
-from .shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
+from .shared.constants import (
+    CONSOLE_WORKER_REPOSITORY_BASE,
+    LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE,
+)
 
 
 class EcrRepositoriesStack(Stack):
@@ -44,11 +47,13 @@ class EcrRepositoriesStack(Stack):
         Tags.of(self).add("Service", "ecr-repositories")
         Tags.of(self).add("ManagedBy", "CDK")
 
-        # Create ECR repository for staging
+        # Create ECR repositories for staging
         self.staging_repository = self._create_repository("staging")
+        self.console_worker_staging_repository = self._create_console_worker_repository("staging")
 
-        # Create ECR repository for production
+        # Create ECR repositories for production
         self.production_repository = self._create_repository("production")
+        self.console_worker_production_repository = self._create_console_worker_repository("production")
 
     def _create_repository(self, environment: str) -> ecr.Repository:
         """
@@ -81,4 +86,35 @@ class EcrRepositoriesStack(Stack):
                 )
             ],
             removal_policy=RemovalPolicy.RETAIN,  # Keep repo if stack is deleted
+        )
+
+    def _create_console_worker_repository(self, environment: str) -> ecr.Repository:
+        """
+        Create an ECR repository for the Amplify console worker image.
+
+        Args:
+            environment: Environment name ('staging' or 'production')
+
+        Returns:
+            ECR repository
+        """
+        return ecr.Repository(
+            self,
+            f"ConsoleWorker{environment.title()}Repository",
+            repository_name=f"{CONSOLE_WORKER_REPOSITORY_BASE}-{environment}",
+            image_scan_on_push=True,
+            lifecycle_rules=[
+                ecr.LifecycleRule(
+                    description="Remove untagged images after 1 day",
+                    max_image_age=Duration.days(1),
+                    rule_priority=1,
+                    tag_status=ecr.TagStatus.UNTAGGED
+                ),
+                ecr.LifecycleRule(
+                    description="Keep last 10 images",
+                    max_image_count=10,
+                    rule_priority=2
+                )
+            ],
+            removal_policy=RemovalPolicy.RETAIN,
         )

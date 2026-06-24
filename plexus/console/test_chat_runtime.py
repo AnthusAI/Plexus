@@ -845,6 +845,48 @@ def test_maybe_auto_title_session_respects_manual_title_lock(monkeypatch):
     assert generator_calls == []
 
 
+def test_generate_session_title_with_llm_prefers_names_over_ids(monkeypatch):
+    captured = {}
+
+    class FakeResponses:
+        def create(self, **kwargs):
+            captured["request"] = kwargs
+
+            class _Response:
+                output_text = "SelectQuote HCS Agent Misrepresentation"
+
+            return _Response()
+
+    class FakeOpenAI:
+        def __init__(self, api_key):
+            captured["api_key"] = api_key
+            self.responses = FakeResponses()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(chat_runtime, "OpenAI", FakeOpenAI)
+
+    result = chat_runtime._generate_session_title_with_llm(
+        conversation_messages=[
+            {
+                "role": "USER",
+                "content": (
+                    "Update score 69e2adba-553e-49a3-9ede-7f9a679a08f3 in "
+                    "SelectQuote HCS Medium-Risk (Agent Misrepresentation - With Confidence)"
+                ),
+            }
+        ],
+        selected_model="gpt-5.4-mini",
+    )
+
+    assert result == "SelectQuote HCS Agent Misrepresentation"
+    assert captured["api_key"] == "test-key"
+    request = captured["request"]
+    assert request["model"] == "gpt-5.4-mini"
+    prompt = request["input"][0]["content"]
+    assert "If scorecard and score names are available, include those names in the title." in prompt
+    assert "Prefer human-readable scorecard/score names over IDs." in prompt
+
+
 def test_fetch_session_history_filters_and_sorts_messages():
     client = FakeHistoryClient([
         {

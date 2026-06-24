@@ -71,6 +71,170 @@ async def test_trace_sink_records_modern_tool_call_event_shape():
 
 
 @pytest.mark.asyncio
+async def test_trace_sink_captures_console_score_edit_audit_events_from_execute_tactus():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-3"
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    event = {
+        "event_type": "tool_call",
+        "agent_name": "assistant",
+        "tool_name": "execute_tactus",
+        "tool_args": {"tactus": "return 1"},
+        "tool_result": {
+            "ok": True,
+            "api_calls": ["plexus.score.edit", "plexus.handle.await"],
+            "console_audit_events": [
+                {
+                    "kind": "score_edit",
+                    "success": True,
+                    "handle_status": "completed",
+                    "version_id": "v-1",
+                    "parent_version_id": "v-0",
+                    "scorecard_id": "sc-1",
+                    "score_id": "s-1",
+                    "version_url": "/lab/scorecards/sc-1/scores/s-1/versions/v-1",
+                    "parent_version_url": "/lab/scorecards/sc-1/scores/s-1/versions/v-0",
+                    "changed_fields": ["code"],
+                    "diffs": {
+                        "code": {
+                            "kind": "code",
+                            "language": "yaml",
+                            "original": "name: old\n",
+                            "modified": "name: new\n",
+                            "unified_diff": "--- code:previous\n+++ code:updated\n",
+                            "has_changes": True,
+                        }
+                    },
+                    "post_submit_test": {
+                        "status": "passed",
+                        "evaluation_id": "ev-1",
+                    },
+                    "post_submit_verification": {
+                        "status": "passed",
+                        "validation_id": "val-1",
+                    },
+                    "push_outcome": "not_pushed",
+                    "promoted": False,
+                }
+            ],
+        },
+    }
+
+    message_id = await sink.record(event)
+
+    assert message_id == "msg-3"
+    assert len(sink.console_audit_events) == 1
+    captured = sink.console_audit_events[0]
+    assert captured["kind"] == "score_edit"
+    assert captured["version_id"] == "v-1"
+    assert captured["parent_version_url"] == "/lab/scorecards/sc-1/scores/s-1/versions/v-0"
+    assert captured["post_submit_test"]["evaluation_id"] == "ev-1"
+    assert captured["post_submit_verification"]["validation_id"] == "val-1"
+    assert captured["push_outcome"] == "not_pushed"
+    assert captured["promoted"] is False
+    assert captured["diffs"]["code"]["language"] == "yaml"
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_captures_compact_score_edit_audit_event():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-4"
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    event = {
+        "event_type": "tool_call",
+        "agent_name": "assistant",
+        "tool_name": "execute_tactus",
+        "tool_args": {"tactus": "return 1"},
+        "tool_result": {
+            "ok": True,
+            "api_calls": ["plexus.score.edit", "plexus.handle.await"],
+            "score_edit_audit_compact": {
+                "kind": "score_edit",
+                "s": True,
+                "handle_status": "completed",
+                "version_id": "v-2",
+                "parent_version_id": "v-1",
+                "scorecard_id": "sc-2",
+                "score_id": "s-2",
+                "version_url": "/lab/scorecards/sc-2/scores/s-2/versions/v-2",
+                "parent_version_url": "/lab/scorecards/sc-2/scores/s-2/versions/v-1",
+                "changed_fields": ["code"],
+                "smoke_status": "passed",
+                "verification_status": "passed",
+                "push_outcome": "not_pushed",
+                "promoted": False,
+            },
+        },
+    }
+
+    await sink.record(event)
+
+    assert len(sink.console_audit_events) == 1
+    captured = sink.console_audit_events[0]
+    assert captured["version_id"] == "v-2"
+    assert captured["success"] is True
+    assert captured["parent_version_url"] == "/lab/scorecards/sc-2/scores/s-2/versions/v-1"
+    assert captured["post_submit_test"]["status"] == "passed"
+    assert captured["post_submit_verification"]["status"] == "passed"
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_captures_nested_value_score_edit_audit_event():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-5"
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    event = {
+        "event_type": "tool_call",
+        "agent_name": "assistant",
+        "tool_name": "execute_tactus",
+        "tool_args": {"tactus": "return 1"},
+        "tool_result": {
+            "ok": True,
+            "api_calls": ["plexus.score.edit", "plexus.handle.await"],
+            "value": {
+                "status": "completed",
+                "score_edit_audit": {
+                    "k": "score_edit",
+                    "s": True,
+                    "v": "v-3",
+                    "p": "v-2",
+                    "u": "/lab/scorecards/sc-3/scores/s-3/versions/v-3",
+                    "pu": "/lab/scorecards/sc-3/scores/s-3/versions/v-2",
+                    "hs": "completed",
+                    "ss": "passed",
+                    "vs": "passed",
+                    "po": "not_pushed",
+                    "pm": False,
+                    "cf": "code",
+                },
+            },
+        },
+    }
+
+    await sink.record(event)
+
+    assert len(sink.console_audit_events) == 1
+    captured = sink.console_audit_events[0]
+    assert captured["version_id"] == "v-3"
+    assert captured["success"] is True
+    assert captured["parent_version_id"] == "v-2"
+    assert captured["parent_version_url"] == "/lab/scorecards/sc-3/scores/s-3/versions/v-2"
+    assert captured["changed_fields"] == ["code"]
+
+
+@pytest.mark.asyncio
 async def test_trace_sink_ends_session_with_status():
     recorder = AsyncMock()
     recorder.start_session.return_value = "sess-1"

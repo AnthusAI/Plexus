@@ -20,8 +20,8 @@ if os.path.exists(env_path):
 # Discover tables
 print("Discovering Amplify tables...")
 tables = discover_tables_for_metrics_aggregation(
-    region='us-west-2',
-    stack_pattern='amplify-d1cegb1ft4iove-main-branch'
+    region=os.environ.get('CDK_DEFAULT_REGION') or os.environ.get('AWS_REGION', 'us-west-2'),
+    stack_pattern=os.environ.get('AMPLIFY_STACK_PATTERN')
 )
 
 if not tables:
@@ -46,4 +46,3 @@ with open(env_path, 'w') as f:
 
 print(f"\nSaved table ARNs to {env_path}")
 print("You can now deploy with: npx cdk deploy plexus-metrics-aggregation-production")
-

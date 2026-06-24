@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import logging
 import os
@@ -32,6 +33,11 @@ logger = logging.getLogger(__name__)
 
 _EVALUATION_PROCESS_LOCK = threading.Lock()
 _EVALUATION_PROCESSES: dict[int, Any] = {}
+CONSOLE_AUDIT_EVENTS_KEY = "console_audit_events"
+SCORE_EDIT_AUDIT_EVENT_KEY = "score_edit_audit"
+SCORE_EDIT_AUDIT_COMPACT_KEY = "score_edit_audit_compact"
+SCORE_AUDIT_DIFF_TEXT_MAX_CHARS = 20_000
+SCORE_AUDIT_UNIFIED_DIFF_MAX_CHARS = 20_000
 
 
 PLEXUS_DOCS_DIR = os.path.normpath(
@@ -42,6 +48,16 @@ PLEXUS_DOCS_DIR = os.path.normpath(
         "..",
         "documentation",
         "agent",
+    )
+)
+
+PLEXUS_SKILLS_DIR = os.path.normpath(
+    os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "..",
+        "skills",
     )
 )
 
@@ -125,6 +141,264 @@ def _local_procedure_env() -> dict[str, str]:
         else os.pathsep.join([PLEXUS_PROJECT_ROOT, existing_pythonpath])
     )
     return apply_actor_context_to_env(env)
+
+
+def _score_version_relative_path(
+    *, scorecard_id: Any, score_id: Any, version_id: Any
+) -> str | None:
+    scorecard = str(scorecard_id or "").strip()
+    score = str(score_id or "").strip()
+    version = str(version_id or "").strip()
+    if not scorecard or not score or not version:
+        return None
+    return f"/lab/scorecards/{scorecard}/scores/{score}/versions/{version}"
+
+
+def _truncate_for_score_audit_diff(
+    value: Any, *, limit: int = SCORE_AUDIT_DIFF_TEXT_MAX_CHARS
+) -> tuple[str, bool]:
+    text = str(value or "")
+    if len(text) <= limit:
+        return text, False
+    return text[:limit], True
+
+
+def _build_unified_diff(
+    *,
+    original_text: str,
+    modified_text: str,
+    fromfile: str,
+    tofile: str,
+) -> str:
+    diff = "".join(
+        difflib.unified_diff(
+            original_text.splitlines(keepends=True),
+            modified_text.splitlines(keepends=True),
+            fromfile=fromfile,
+            tofile=tofile,
+        )
+    )
+    if len(diff) <= SCORE_AUDIT_UNIFIED_DIFF_MAX_CHARS:
+        return diff
+    return diff[:SCORE_AUDIT_UNIFIED_DIFF_MAX_CHARS]
+
+
+def _build_score_diff_entry(
+    *,
+    kind: str,
+    language: str,
+    original_text: Any,
+    modified_text: Any,
+    original_version_id: Any,
+    modified_version_id: Any,
+    original_url: str | None,
+    modified_url: str | None,
+) -> dict[str, Any]:
+    original, original_truncated = _truncate_for_score_audit_diff(original_text)
+    modified, modified_truncated = _truncate_for_score_audit_diff(modified_text)
+    unified = _build_unified_diff(
+        original_text=original,
+        modified_text=modified,
+        fromfile=f"{kind}:previous",
+        tofile=f"{kind}:updated",
+    )
+    return {
+        "kind": kind,
+        "language": language,
+        "has_changes": original != modified,
+        "original": original,
+        "modified": modified,
+        "unified_diff": unified,
+        "original_label": "Previous score version",
+        "modified_label": "Updated score version",
+        "original_version_id": str(original_version_id or "").strip() or None,
+        "modified_version_id": str(modified_version_id or "").strip() or None,
+        "original_url": original_url,
+        "modified_url": modified_url,
+        "truncated": bool(original_truncated or modified_truncated),
+    }
+
+
+def _build_score_change_diffs(
+    *,
+    scorecard_id: Any,
+    score_id: Any,
+    parent_version_id: Any,
+    version_id: Any,
+    changed_fields: list[str] | None,
+    original_code: Any,
+    modified_code: Any,
+    original_guidelines: Any,
+    modified_guidelines: Any,
+) -> dict[str, Any]:
+    changed = {
+        str(field).strip().lower()
+        for field in list(changed_fields or [])
+        if str(field).strip()
+    }
+
+    parent_url = _score_version_relative_path(
+        scorecard_id=scorecard_id,
+        score_id=score_id,
+        version_id=parent_version_id,
+    )
+    version_url = _score_version_relative_path(
+        scorecard_id=scorecard_id,
+        score_id=score_id,
+        version_id=version_id,
+    )
+
+    diffs: dict[str, Any] = {}
+    original_code_text = str(original_code or "")
+    modified_code_text = str(modified_code or "")
+    original_guidelines_text = str(original_guidelines or "")
+    modified_guidelines_text = str(modified_guidelines or "")
+
+    if "code" in changed or original_code_text != modified_code_text:
+        diffs["code"] = _build_score_diff_entry(
+            kind="code",
+            language="yaml",
+            original_text=original_code_text,
+            modified_text=modified_code_text,
+            original_version_id=parent_version_id,
+            modified_version_id=version_id,
+            original_url=parent_url,
+            modified_url=version_url,
+        )
+
+    if "guidelines" in changed or original_guidelines_text != modified_guidelines_text:
+        diffs["guidelines"] = _build_score_diff_entry(
+            kind="guidelines",
+            language="markdown",
+            original_text=original_guidelines_text,
+            modified_text=modified_guidelines_text,
+            original_version_id=parent_version_id,
+            modified_version_id=version_id,
+            original_url=parent_url,
+            modified_url=version_url,
+        )
+
+    return diffs
+
+
+def _extract_console_audit_events(runtime_context: Any) -> list[dict[str, Any]]:
+    if not isinstance(runtime_context, dict):
+        return []
+    raw_events = runtime_context.get(CONSOLE_AUDIT_EVENTS_KEY)
+    if not isinstance(raw_events, list):
+        return []
+    events: list[dict[str, Any]] = []
+    for event in raw_events:
+        if not isinstance(event, dict):
+            continue
+        events.append(_jsonable(event))
+    return events
+
+
+def _extract_score_edit_audit_events_from_value(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, dict):
+        return []
+    event = value.get(SCORE_EDIT_AUDIT_EVENT_KEY)
+    if isinstance(event, dict):
+        kind = str(event.get("kind") or event.get("k") or "").strip().lower()
+        if kind == "score_edit":
+            if "kind" not in event and "k" in event:
+                error_text = str(event.get("e") or "").strip()
+                handle_status = str(event.get("hs") or "").strip().lower()
+                success_value = event.get("s")
+                if isinstance(success_value, bool):
+                    success = success_value
+                else:
+                    success = handle_status == "completed" and not error_text
+                return [
+                    {
+                        "kind": "score_edit",
+                        "success": success,
+                        "version_id": event.get("v"),
+                        "parent_version_id": event.get("p"),
+                        "version_url": event.get("u"),
+                        "parent_version_url": event.get("pu"),
+                        "handle_status": event.get("hs"),
+                        "post_submit_test": {"status": event.get("ss")},
+                        "post_submit_verification": {"status": event.get("vs")},
+                        "push_outcome": event.get("po"),
+                        "promoted": event.get("pm"),
+                        "changed_fields": (
+                            [part for part in str(event.get("cf") or "").split(",") if part]
+                            if event.get("cf")
+                            else []
+                        ),
+                        "error": error_text or None,
+                    }
+                ]
+            return [_jsonable(event)]
+    return []
+
+
+def _compact_score_edit_audit_event(latest: dict[str, Any]) -> dict[str, Any]:
+    smoke = latest.get("post_submit_test")
+    verification = latest.get("post_submit_verification")
+    compact: dict[str, Any] = {
+        # Keep this payload intentionally tiny so ChatMessage slimming
+        # (512-byte nested cap) preserves it in tool_response storage.
+        "k": "score_edit",
+        "s": bool(latest.get("success")),
+        "v": str(latest.get("version_id") or "").strip() or None,
+        "p": str(latest.get("parent_version_id") or "").strip() or None,
+        "u": str(latest.get("version_url") or "").strip() or None,
+        "pu": str(latest.get("parent_version_url") or "").strip() or None,
+        "hs": str(latest.get("handle_status") or "").strip() or "unknown",
+        "ss": (
+            str(smoke.get("status") or "").strip() if isinstance(smoke, dict) else "unknown"
+        )
+        or "unknown",
+        "vs": (
+            str(verification.get("status") or "").strip()
+            if isinstance(verification, dict)
+            else "unknown"
+        )
+        or "unknown",
+        "po": str(latest.get("push_outcome") or "").strip() or "not_pushed",
+        "pm": bool(latest.get("promoted")),
+        "cf": ",".join(str(field) for field in list(latest.get("changed_fields") or [])[:4]),
+    }
+    error_text = str(latest.get("error") or "").strip()
+    if error_text:
+        compact["e"] = error_text[:80]
+    return compact
+
+
+def _attach_console_audit_events(
+    envelope: dict[str, Any],
+    runtime_context: Any,
+    *,
+    score_edit_events: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    if not isinstance(envelope, dict):
+        return envelope
+
+    events = _extract_console_audit_events(runtime_context)
+    if isinstance(score_edit_events, list):
+        for event in score_edit_events:
+            if isinstance(event, dict):
+                events.append(event)
+
+    if events:
+        deduped: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for event in events:
+            marker = json.dumps(event, sort_keys=True, default=str)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            deduped.append(event)
+        envelope["console_audit_events"] = deduped
+        latest = deduped[-1]
+        if isinstance(latest, dict):
+            envelope[SCORE_EDIT_AUDIT_COMPACT_KEY] = _compact_score_edit_audit_event(
+                latest
+            )
+    return envelope
 
 
 def _launch_local_procedure_subprocess(cmd: list[str], procedure_id: str) -> tuple[Any, str]:
@@ -329,6 +603,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("score_predict", "score", "predict"),
     ("score_contradictions", "score", "contradictions"),
     ("score_pull", "score", "pull"),
+    ("score_resolve", "score", "resolve"),
     ("score_update", "score", "update"),
     ("score_edit", "score", "edit"),
     ("score_test", "score", "test"),
@@ -337,6 +612,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("item_last", "item", "last"),
     ("feedback_find", "feedback", "find"),
     ("feedback_alignment", "feedback", "alignment"),
+    ("feedback_alignment_batch", "feedback", "alignment_batch"),
     ("feedback_latest_update", "feedback", "latest_update"),
     ("acceptance_rate", "report", "acceptance_rate"),
     ("report_acceptance_rate", "report", "acceptance_rate"),
@@ -365,6 +641,8 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("procedure_steering_messages", "procedure", "steering_messages"),
     ("procedure_run", "procedure", "run"),
     ("procedure_optimize", "procedure", "optimize"),
+    ("procedure_optimize_batch", "procedure", "optimize_batch"),
+    ("procedure_status_batch", "procedure", "status_batch"),
     ("procedure_continue", "procedure", "continue"),
     ("procedure_branch", "procedure", "branch"),
     ("handle_peek", "handle", "peek"),
@@ -373,6 +651,9 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("handle_cancel", "handle", "cancel"),
     ("docs_list", "docs", "list"),
     ("docs_get", "docs", "get"),
+    ("skills_list", "skills", "list"),
+    ("skills_get", "skills", "get"),
+    ("guidelines_validate", "guidelines", "validate"),
     ("api_list", "api", "list"),
     ("model_frontier_plan", "model_frontier", "plan"),
     ("model_frontier_build_result_row", "model_frontier", "build_result_row"),
@@ -435,6 +716,29 @@ class PlanningModeToolNotAllowed(PermissionError):
         self.method = method
 
 
+class ConsoleScoreCodeUpdateRequiresSubagent(PermissionError):
+    """Raised when console chat tries to update score code directly."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Console chat cannot call plexus.score.update with direct score code "
+            "or YAML content. Use plexus.score.edit with a concrete instruction so "
+            "the dedicated score editor worker creates the updated score version."
+        )
+
+
+class ConsoleGuidelinesUpdateRequiresGuidelinesIntent(PermissionError):
+    """Raised when console chat tries a guidelines update for a behavior request."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Console chat can use plexus.score.update with guidelines only when "
+            "the current user request is explicitly about guidelines, rubric, or "
+            "policy wording. For scoring behavior, classifier logic, prompt, or "
+            "stricter/looser scoring requests, use plexus.score.edit instead."
+        )
+
+
 @dataclass(frozen=True)
 class RuntimeMethodSpec:
     handler: str
@@ -463,6 +767,7 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("score", "predict"): _method_spec("_call_score", planning_allowed=True),
     ("score", "contradictions"): _method_spec("_call_score", planning_allowed=True),
     ("score", "pull"): _method_spec("_call_score", planning_allowed=True),
+    ("score", "resolve"): _method_spec("_call_score", planning_allowed=True),
     ("score", "update"): _method_spec("_call_score", planning_allowed=False),
     ("score", "edit"): _method_spec("_call_score", planning_allowed=False),
     ("score", "test"): _method_spec("_call_score", planning_allowed=True),
@@ -503,6 +808,9 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("handle", "status"): _method_spec("_call_handle", planning_allowed=True),
     ("handle", "await"): _method_spec("_call_handle", planning_allowed=True),
     ("handle", "cancel"): _method_spec("_call_handle", planning_allowed=False),
+    ("skills", "list"): _method_spec("_call_skills", planning_allowed=True),
+    ("skills", "get"): _method_spec("_call_skills", planning_allowed=True),
+    ("guidelines", "validate"): _method_spec("_call_guidelines", planning_allowed=True),
     ("rubric_memory", "recent_entries"): _method_spec("_call_rubric_memory", planning_allowed=True),
     ("rubric_memory", "evidence_pack"): _method_spec("_call_rubric_memory", planning_allowed=True),
     ("rubric_memory", "sme_question_gate"): _method_spec("_call_rubric_memory", planning_allowed=True),
@@ -2059,7 +2367,12 @@ def _default_score_info(args: dict[str, Any]) -> dict[str, Any]:
         or args.get("scorecard")
         or args.get("scorecard_id")
     )
-    version_id = args.get("version_id")
+    version_id = (
+        args.get("version_id")
+        or args.get("version")
+        or args.get("score_version_id")
+        or args.get("scoreVersionId")
+    )
 
     plexus_url_base = _os.environ.get("PLEXUS_APP_URL", "https://capacity-plexus.anth.us").rstrip("/")
 
@@ -4943,6 +5256,10 @@ def _exception_error_code(exc: BaseException) -> str:
         return "account_context_required"
     if isinstance(exc, PlanningModeToolNotAllowed):
         return "tool_not_allowed_in_planning_mode"
+    if isinstance(exc, ConsoleScoreCodeUpdateRequiresSubagent):
+        return "console_score_code_update_requires_subagent"
+    if isinstance(exc, ConsoleGuidelinesUpdateRequiresGuidelinesIntent):
+        return "console_guidelines_update_requires_guidelines_intent"
     if isinstance(exc, BudgetExceeded):
         return "budget_exceeded"
     if isinstance(exc, ChildBudgetRequired):
@@ -5520,7 +5837,7 @@ def _score_edit_matches_identifier(
     return False
 
 
-def _resolve_scorecard_for_score_edit(client: Any, identifier: Any) -> dict[str, Any]:
+def _score_edit_scorecard_candidates(client: Any, identifier: Any) -> list[dict[str, Any]]:
     needle = str(identifier or "").strip()
     variants = _score_edit_identifier_variants(identifier)
     if not needle:
@@ -5582,7 +5899,12 @@ def _resolve_scorecard_for_score_edit(client: Any, identifier: Any) -> dict[str,
         if not next_token:
             break
 
-    resolved = list(candidates.values())
+    return list(candidates.values())
+
+
+def _resolve_scorecard_for_score_edit(client: Any, identifier: Any) -> dict[str, Any]:
+    needle = str(identifier or "").strip()
+    resolved = _score_edit_scorecard_candidates(client, identifier)
     if not resolved:
         raise ValueError(
             "plexus.score.edit could not resolve scorecard_identifier "
@@ -5601,6 +5923,27 @@ def _resolve_scorecard_for_score_edit(client: Any, identifier: Any) -> dict[str,
 def _resolve_score_for_score_edit(
     client: Any, scorecard_id: str, score_identifier: Any
 ) -> dict[str, Any]:
+    needle = str(score_identifier or "").strip()
+    resolved = _score_edit_score_candidates(client, scorecard_id, score_identifier)
+    if not resolved:
+        raise ValueError(
+            "plexus.score.edit could not resolve score_identifier "
+            f"{needle!r} in scorecard {scorecard_id!r}. Resolve it first with "
+            "plexus.score.info and retry."
+        )
+    if len(resolved) > 1:
+        raise ValueError(
+            "Clarification required before plexus.score.edit: score_identifier is ambiguous for "
+            f"{needle!r} in scorecard {scorecard_id!r}. Reply with one exact target from candidates: "
+            f"{_score_edit_format_candidates(resolved)}"
+        )
+
+    return resolved[0]
+
+
+def _score_edit_score_candidates(
+    client: Any, scorecard_id: str, score_identifier: Any
+) -> list[dict[str, Any]]:
     needle = str(score_identifier or "").strip()
     variants = _score_edit_identifier_variants(score_identifier)
     if not needle:
@@ -5710,21 +6053,74 @@ def _resolve_score_for_score_edit(
             if not score_next_token:
                 break
 
-    resolved = list(candidates.values())
-    if not resolved:
-        raise ValueError(
-            "plexus.score.edit could not resolve score_identifier "
-            f"{needle!r} in scorecard {scorecard_id!r}. Resolve it first with "
-            "plexus.score.info and retry."
-        )
-    if len(resolved) > 1:
-        raise ValueError(
-            "Clarification required before plexus.score.edit: score_identifier is ambiguous for "
-            f"{needle!r} in scorecard {scorecard_id!r}. Reply with one exact target from candidates: "
-            f"{_score_edit_format_candidates(resolved)}"
-        )
+    return list(candidates.values())
 
-    return resolved[0]
+
+def _default_score_resolve(args: dict[str, Any]) -> dict[str, Any]:
+    """Resolve scorecard/score identifiers without mutating anything."""
+    from plexus.cli.shared.client_utils import create_client
+
+    scorecard_identifier = args.get("scorecard_identifier") or args.get("scorecard")
+    score_identifier = args.get("score_identifier") or args.get("score")
+    if not scorecard_identifier:
+        raise ValueError("plexus.score.resolve requires scorecard_identifier")
+    if not score_identifier:
+        raise ValueError("plexus.score.resolve requires score_identifier")
+
+    client = create_client()
+    scorecard_candidates = _score_edit_scorecard_candidates(client, scorecard_identifier)
+    if not scorecard_candidates:
+        return {
+            "status": "not_found",
+            "target": "scorecard",
+            "scorecard_identifier": scorecard_identifier,
+            "score_identifier": score_identifier,
+            "candidates": [],
+        }
+    if len(scorecard_candidates) > 1:
+        return {
+            "status": "ambiguous",
+            "target": "scorecard",
+            "scorecard_identifier": scorecard_identifier,
+            "score_identifier": score_identifier,
+            "candidates": scorecard_candidates,
+        }
+
+    scorecard = scorecard_candidates[0]
+    score_candidates = _score_edit_score_candidates(
+        client,
+        str(scorecard["id"]),
+        score_identifier,
+    )
+    if not score_candidates:
+        return {
+            "status": "not_found",
+            "target": "score",
+            "scorecard": scorecard,
+            "scorecard_identifier": scorecard_identifier,
+            "score_identifier": score_identifier,
+            "candidates": [],
+        }
+    if len(score_candidates) > 1:
+        return {
+            "status": "ambiguous",
+            "target": "score",
+            "scorecard": scorecard,
+            "scorecard_identifier": scorecard_identifier,
+            "score_identifier": score_identifier,
+            "candidates": score_candidates,
+        }
+
+    score = score_candidates[0]
+    return {
+        "status": "resolved",
+        "scorecard": scorecard,
+        "score": score,
+        "scorecard_id": scorecard["id"],
+        "score_id": score["id"],
+        "scorecard_identifier": scorecard_identifier,
+        "score_identifier": score_identifier,
+    }
 
 
 def _default_score_pull(args: dict[str, Any]) -> dict[str, Any]:
@@ -5766,6 +6162,7 @@ def _default_score_pull(args: dict[str, Any]) -> dict[str, Any]:
                 id
                 configuration
                 guidelines
+                parentVersionId
                 note
                 createdAt
                 isFeatured
@@ -5787,6 +6184,7 @@ def _default_score_pull(args: dict[str, Any]) -> dict[str, Any]:
                     id
                     configuration
                     guidelines
+                    parentVersionId
                     note
                     createdAt
                     isFeatured
@@ -5826,6 +6224,7 @@ def _default_score_pull(args: dict[str, Any]) -> dict[str, Any]:
         "version_id": resolved_version_id,
         "yaml_content": yaml_content,
         "guidelines": guidelines,
+        "parent_version_id": sv.get("parentVersionId") or "",
         "note": sv.get("note") or "",
         "created_at": sv.get("createdAt") or "",
         "is_featured": bool(sv.get("isFeatured")),
@@ -5854,6 +6253,7 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
     scorecard_identifier = args.get("scorecard_identifier") or args.get("scorecard")
     score_identifier = args.get("score_identifier") or args.get("score")
     code = args.get("code") or args.get("yaml_content")
+    guidelines_provided = "guidelines" in args and args.get("guidelines") is not None
     guidelines = args.get("guidelines")
     parent_version_id = args.get("parent_version_id")
     version_note = args.get("version_note") or args.get("note") or "Updated via plexus.score.update"
@@ -5866,7 +6266,7 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("plexus.score.update requires scorecard_identifier")
     if not score_identifier:
         raise ValueError("plexus.score.update requires score_identifier")
-    if not code and guidelines is None and not metadata_updates:
+    if not code and not guidelines_provided and not metadata_updates:
         raise ValueError(
             "plexus.score.update requires at least one of: code, guidelines, or a metadata field "
             "(description, name, key, external_id, ai_provider, ai_model)"
@@ -5881,6 +6281,31 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"Score not found: {score_identifier!r}")
 
     result: dict[str, Any] = {"success": True, "score_id": score_id, "scorecard_id": scorecard_id}
+
+    def _load_score_version_snapshot(version_id: Any) -> dict[str, str]:
+        normalized_version_id = str(version_id or "").strip()
+        if not normalized_version_id:
+            return {}
+        query = """
+        query GetScoreVersionForConsoleAudit($id: ID!) {
+            getScoreVersion(id: $id) {
+                id
+                configuration
+                guidelines
+                parentVersionId
+            }
+        }
+        """
+        response = client.execute(query, {"id": normalized_version_id})
+        score_version = (response or {}).get("getScoreVersion") or {}
+        if not isinstance(score_version, dict):
+            return {}
+        return {
+            "id": str(score_version.get("id") or normalized_version_id),
+            "configuration": str(score_version.get("configuration") or ""),
+            "guidelines": str(score_version.get("guidelines") or ""),
+            "parent_version_id": str(score_version.get("parentVersionId") or ""),
+        }
 
     # --- Metadata-only update (Score record fields) ---
     if metadata_updates:
@@ -5906,7 +6331,14 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
 
     # --- Version update (code / guidelines) ---
     new_version_id: str | None = None
-    if code or guidelines is not None:
+    if code or guidelines_provided:
+        should_preserve_guidelines = bool(code) and not guidelines_provided and guidelines is None
+        changed_fields: list[str] = []
+        if code:
+            changed_fields.append("code")
+        if guidelines_provided:
+            changed_fields.append("guidelines")
+
         # Validate YAML if code provided
         if code:
             try:
@@ -5928,11 +6360,64 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
         if not parent_version_id:
             q = """
             query GetScoreChampionId($id: ID!) {
-                getScore(id: $id) { championVersionId }
+                getScore(id: $id) {
+                    championVersionId
+                    championVersion { guidelines }
+                }
             }
             """
             resp = client.execute(q, {"id": score_id})
-            parent_version_id = ((resp or {}).get("getScore") or {}).get("championVersionId")
+            score_data = (resp or {}).get("getScore") or {}
+            parent_version_id = score_data.get("championVersionId")
+            if should_preserve_guidelines:
+                champion_version = score_data.get("championVersion") or {}
+                preserved_guidelines = champion_version.get("guidelines")
+                if preserved_guidelines is not None:
+                    guidelines = str(preserved_guidelines)
+                    result["guidelines_preserved"] = True
+                    result["guidelines_source"] = "parent_version"
+        elif should_preserve_guidelines:
+            q = """
+            query GetParentScoreVersionGuidelines($id: ID!) {
+                getScoreVersion(id: $id) {
+                    id
+                    guidelines
+                }
+            }
+            """
+            resp = client.execute(q, {"id": parent_version_id})
+            parent_version = (resp or {}).get("getScoreVersion") or {}
+            preserved_guidelines = parent_version.get("guidelines")
+            if preserved_guidelines is not None:
+                guidelines = str(preserved_guidelines)
+                result["guidelines_preserved"] = True
+                result["guidelines_source"] = "parent_version"
+
+        if should_preserve_guidelines and guidelines is None:
+            return {
+                "success": False,
+                "error": "Unable to preserve guidelines for code-only score update",
+                "error_code": "score_update_guidelines_preservation_failed",
+                "parent_version_id": parent_version_id,
+            }
+
+        # Validate guidelines only when caller explicitly provided new guidelines.
+        if guidelines_provided and guidelines is not None:
+            from plexus.guidelines.validator import validate_guidelines_content
+
+            guidelines_validation = validate_guidelines_content(str(guidelines)).to_dict()
+            result["guidelines_validation"] = guidelines_validation
+            if not guidelines_validation.get("is_valid"):
+                return {
+                    "success": False,
+                    "error": "Guidelines validation failed",
+                    "error_code": "guidelines_validation_failed",
+                    "guidelines_validation": guidelines_validation,
+                }
+
+        parent_snapshot: dict[str, str] = {}
+        if parent_version_id:
+            parent_snapshot = _load_score_version_snapshot(parent_version_id)
 
         version_mutation = """
         mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
@@ -5985,6 +6470,42 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
         result["version_id"] = new_version_id
         result["parent_version_id"] = parent_version_id
         result["version_created"] = True
+        result["changed_fields"] = changed_fields
+        result["version_url"] = _score_version_relative_path(
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            version_id=new_version_id,
+        )
+        result["parent_version_url"] = _score_version_relative_path(
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            version_id=parent_version_id,
+        )
+
+        try:
+            candidate_snapshot = _load_score_version_snapshot(new_version_id)
+            if not parent_snapshot and parent_version_id:
+                parent_snapshot = _load_score_version_snapshot(parent_version_id)
+            diffs = _build_score_change_diffs(
+                scorecard_id=scorecard_id,
+                score_id=score_id,
+                parent_version_id=parent_version_id,
+                version_id=new_version_id,
+                changed_fields=changed_fields,
+                original_code=parent_snapshot.get("configuration") or "",
+                modified_code=candidate_snapshot.get("configuration") or "",
+                original_guidelines=parent_snapshot.get("guidelines") or "",
+                modified_guidelines=candidate_snapshot.get("guidelines") or "",
+            )
+            if diffs:
+                result["diffs"] = diffs
+        except Exception as diff_error:  # noqa: BLE001
+            logger.warning(
+                "Could not generate score.update diff payload for %s/%s: %s",
+                scorecard_id,
+                score_id,
+                diff_error,
+            )
 
     result["message"] = (
         f"Score updated: version {new_version_id}" if new_version_id
@@ -6006,6 +6527,119 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValueError("LLM response must be a JSON object")
     return parsed
+
+
+@dataclass
+class _ScoreEditAttemptError(Exception):
+    error_code: str
+    stage: str
+    message: str
+    details: dict[str, Any] | None = None
+
+    def __str__(self) -> str:
+        return self.message
+
+
+def _score_edit_model_sequence(args: dict[str, Any]) -> list[str]:
+    def _clean(value: Any) -> str:
+        return str(value or "").strip()
+
+    primary = _clean(args.get("model")) or _clean(
+        os.environ.get("PLEXUS_SCORE_EDIT_MODEL")
+    ) or "gpt-5.3-codex"
+    fallback = _clean(args.get("fallback_model")) or _clean(
+        os.environ.get("PLEXUS_SCORE_EDIT_FALLBACK_MODEL")
+    ) or "gpt-5.4"
+
+    raw_max_attempts = args.get("max_attempts")
+    if raw_max_attempts is None:
+        raw_max_attempts = os.environ.get("PLEXUS_SCORE_EDIT_MAX_ATTEMPTS")
+    try:
+        max_attempts = int(raw_max_attempts) if raw_max_attempts is not None else 2
+    except (TypeError, ValueError):
+        max_attempts = 2
+    max_attempts = max(1, min(max_attempts, 4))
+
+    models = [primary]
+    if max_attempts > 1:
+        models.append(fallback or primary)
+    while len(models) < max_attempts:
+        models.append(models[-1])
+    return models
+
+
+def _score_edit_llm_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "code": {"type": "string"},
+            "guidelines": {"type": "string"},
+            "note": {"type": "string"},
+            "summary": {"type": "string"},
+        },
+        "required": ["code", "note", "summary"],
+    }
+
+
+def _create_score_edit_response(
+    *,
+    client: Any,
+    model: str,
+    prompt: str,
+    max_output_tokens: int = 5000,
+) -> tuple[dict[str, Any], bool]:
+    request_args: dict[str, Any] = {
+        "model": model,
+        "reasoning": {"effort": "low"},
+        "input": [{"role": "user", "content": prompt}],
+        "max_output_tokens": max_output_tokens,
+    }
+
+    try:
+        structured = client.responses.create(
+            **request_args,
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "score_edit_payload",
+                    "schema": _score_edit_llm_schema(),
+                    "strict": True,
+                }
+            },
+        )
+        return _extract_json_object(getattr(structured, "output_text", "") or ""), True
+    except Exception as exc:
+        message = str(exc).lower()
+        if not any(
+            token in message
+            for token in (
+                "json_schema",
+                "text.format",
+                "response_format",
+                "unknown parameter",
+                "unsupported",
+            )
+        ):
+            raise
+        logger.info(
+            "Structured score.edit output unavailable for model %s; using text JSON fallback: %s",
+            model,
+            exc,
+        )
+
+    fallback = client.responses.create(**request_args)
+    return _extract_json_object(getattr(fallback, "output_text", "") or ""), False
+
+
+def _validate_score_edit_payload(payload: dict[str, Any]) -> None:
+    for key in ("code", "note", "summary"):
+        value = payload.get(key)
+        if not isinstance(value, str):
+            raise ValueError(f"score.edit model payload missing string `{key}`")
+    guidelines_value = payload.get("guidelines")
+    if guidelines_value is not None and not isinstance(guidelines_value, str):
+        raise ValueError("score.edit model payload `guidelines` must be a string when present")
 
 
 def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
@@ -6059,71 +6693,315 @@ def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
         base_guidelines = str(pull_data.get("guidelines") or "")
         parent_version_id = str(pull_data.get("version_id") or "")
 
-        model = str(args.get("model") or "gpt-5.3-codex")
         client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        allow_guidelines_edit = bool(args.get("allow_guidelines_edit", False))
         prompt = (
             "You are editing a Plexus score version.\n"
-            "Apply the user instruction to the score YAML and guidelines.\n"
+            "Apply the user instruction to the score YAML.\n"
             "Return ONLY JSON with keys: code, guidelines, note, summary.\n"
-            "Keep YAML valid and preserve behavior unless the instruction requires change.\n\n"
+            "Keep YAML valid and preserve behavior unless the instruction requires change.\n"
+            + (
+                "Guidelines edits are allowed only when explicitly requested.\n"
+                if allow_guidelines_edit
+                else "Do not change guidelines; keep them exactly as-is.\n"
+            )
+            + "\n"
             f"Instruction:\n{instruction}\n\n"
             f"Current YAML:\n{base_code}\n\n"
             f"Current Guidelines:\n{base_guidelines}\n"
         )
-        response = client.responses.create(
-            model=model,
-            reasoning={"effort": "low"},
-            input=[{"role": "user", "content": prompt}],
-            max_output_tokens=5000,
-        )
-        parsed = _extract_json_object(response.output_text or "")
-        candidate_code = str(parsed.get("code") or base_code)
-        candidate_guidelines = str(parsed.get("guidelines") if parsed.get("guidelines") is not None else base_guidelines)
-        note = str(parsed.get("note") or f"Edited via plexus.score.edit: {instruction[:180]}")
-        summary = str(parsed.get("summary") or "")
-
-        toolset = ScoreEditorToolset()
-        setup_result = toolset.setup(
-            {
-                "scorecard_identifier": resolved_scorecard["id"],
-                "score_identifier": resolved_score["id"],
-                "yaml_content": base_code,
-                "guidelines_content": base_guidelines,
-                "parent_version_id": parent_version_id or None,
-                "hypothesis": instruction[:200],
-            }
-        )
-        if not setup_result.get("success"):
-            raise RuntimeError(str(setup_result.get("message") or "score editor setup failed"))
-
-        if candidate_code != base_code:
-            toolset.str_replace_editor(
-                {"command": "create", "path": VIRTUAL_PATH, "new_str": candidate_code}
-            )
-        if candidate_guidelines != base_guidelines:
-            toolset.str_replace_editor(
-                {
-                    "command": "create",
-                    "path": GUIDELINES_PATH,
-                    "new_str": candidate_guidelines,
-                }
-            )
-        submit = asyncio.run(toolset.submit_score_version({"version_note": note}))
-        if not submit.get("success"):
-            raise RuntimeError(str(submit.get("error") or "score edit submit failed"))
-
+        attempts: list[dict[str, Any]] = []
+        models = _score_edit_model_sequence(args)
         output = {
-            "success": True,
-            "version_id": submit.get("version_id"),
-            "parent_version_id": parent_version_id or None,
-            "changed_fields": submit.get("changed_fields") or [],
-            "note": note,
-            "summary": summary,
-            "scorecard_identifier": scorecard_identifier,
-            "score_identifier": score_identifier,
-            "scorecard_id": resolved_scorecard["id"],
-            "score_id": resolved_score["id"],
+            "success": False,
+            "error_code": "score_edit_no_attempts",
+            "error": "No score edit attempts were executed.",
         }
+        for attempt_index, model in enumerate(models, start=1):
+            attempt: dict[str, Any] = {"attempt": attempt_index, "model": model}
+            try:
+                parsed, structured_output = _create_score_edit_response(
+                    client=client,
+                    model=model,
+                    prompt=prompt,
+                )
+                attempt["structured_output"] = structured_output
+                _validate_score_edit_payload(parsed)
+            except Exception as exc:
+                attempt.update(
+                    {
+                        "status": "failed",
+                        "stage": "model_parse",
+                        "error_code": "score_edit_model_parse_failed",
+                        "error": str(exc),
+                    }
+                )
+                attempts.append(attempt)
+                continue
+
+            candidate_code = str(parsed.get("code") or base_code)
+            candidate_guidelines = (
+                str(parsed.get("guidelines"))
+                if parsed.get("guidelines") is not None
+                else base_guidelines
+            )
+            if not allow_guidelines_edit:
+                candidate_guidelines = base_guidelines
+            note = str(
+                parsed.get("note") or f"Edited via plexus.score.edit: {instruction[:180]}"
+            )
+            summary = str(parsed.get("summary") or "")
+
+            try:
+                toolset = ScoreEditorToolset()
+                setup_result = toolset.setup(
+                    {
+                        "scorecard_identifier": resolved_scorecard["id"],
+                        "score_identifier": resolved_score["id"],
+                        "yaml_content": base_code,
+                        "guidelines_content": base_guidelines,
+                        "parent_version_id": parent_version_id or None,
+                        "hypothesis": instruction[:200],
+                    }
+                )
+                if not setup_result.get("success"):
+                    raise _ScoreEditAttemptError(
+                        "score_edit_setup_failed",
+                        "setup",
+                        str(setup_result.get("message") or "score editor setup failed"),
+                    )
+
+                if candidate_code != base_code:
+                    toolset.str_replace_editor(
+                        {"command": "create", "path": VIRTUAL_PATH, "new_str": candidate_code}
+                    )
+                if candidate_guidelines != base_guidelines:
+                    toolset.str_replace_editor(
+                        {
+                            "command": "create",
+                            "path": GUIDELINES_PATH,
+                            "new_str": candidate_guidelines,
+                        }
+                    )
+                submit = asyncio.run(toolset.submit_score_version({"version_note": note}))
+                if not submit.get("success"):
+                    raise _ScoreEditAttemptError(
+                        "score_edit_submit_failed",
+                        "submit",
+                        str(submit.get("error") or "score edit submit failed"),
+                    )
+
+                changed_fields = list(submit.get("changed_fields") or [])
+                submitted_parent_version_id = str(
+                    submit.get("parent_version_id") or parent_version_id or ""
+                )
+                version_id = str(submit.get("version_id") or "")
+                attempt["version_id"] = version_id or None
+                attempt["parent_version_id"] = submitted_parent_version_id or None
+                attempt["changed_fields"] = changed_fields
+
+                if not version_id:
+                    raise _ScoreEditAttemptError(
+                        "score_edit_missing_version_id",
+                        "submit",
+                        "Score edit did not return an updated score version_id",
+                        details={
+                            "post_submit_test": {"status": "skipped", "reason": "missing_version_id"}
+                        },
+                    )
+
+                post_submit_test: dict[str, Any]
+                if "code" in changed_fields:
+                    raw_test = args.get("test")
+                    test_config = raw_test if isinstance(raw_test, dict) else {}
+                    test_args: dict[str, Any] = {
+                        "scorecard_identifier": str(resolved_scorecard["id"]),
+                        "score_identifier": str(resolved_score["id"]),
+                        "version": version_id,
+                        "samples": int(test_config.get("samples") or 3),
+                        "days": int(test_config.get("days") or 90),
+                    }
+                    if test_config.get("item_ids") is not None:
+                        test_args["item_ids"] = test_config.get("item_ids")
+                    if test_config.get("fallback_scorecard_identifier") is not None:
+                        test_args["fallback_scorecard_identifier"] = test_config.get(
+                            "fallback_scorecard_identifier"
+                        )
+                    try:
+                        smoke_result = _default_score_test(test_args)
+                    except Exception as exc:
+                        raise _ScoreEditAttemptError(
+                            "score_edit_post_submit_test_failed",
+                            "post_submit_test",
+                            f"Post-submit score smoke test failed: {exc}",
+                            details={
+                                "post_submit_test": {"status": "failed", "error": str(exc)},
+                            },
+                        ) from exc
+
+                    post_submit_test = {"status": "passed", "result": smoke_result}
+                    if isinstance(smoke_result, dict) and smoke_result.get("success") is False:
+                        raise _ScoreEditAttemptError(
+                            "score_edit_post_submit_test_failed",
+                            "post_submit_test",
+                            "Post-submit score smoke test reported failure",
+                            details={
+                                "post_submit_test": {"status": "failed", "result": smoke_result},
+                            },
+                        )
+                else:
+                    post_submit_test = {
+                        "status": "skipped",
+                        "reason": "no_code_change",
+                    }
+
+                try:
+                    candidate_pull = _default_score_pull(
+                        {
+                            "scorecard_id": resolved_scorecard["id"],
+                            "score_id": resolved_score["id"],
+                            "version_id": version_id,
+                        }
+                    )
+                    persisted_code = str(candidate_pull.get("yaml_content") or "")
+                    persisted_guidelines = str(candidate_pull.get("guidelines") or "")
+                    actual_parent_version_id = str(
+                        candidate_pull.get("parent_version_id") or ""
+                    )
+
+                    if (
+                        submitted_parent_version_id
+                        and actual_parent_version_id
+                        and actual_parent_version_id != submitted_parent_version_id
+                    ):
+                        raise ValueError(
+                            "Updated score version parent_version_id mismatch: "
+                            f"expected {submitted_parent_version_id}, got {actual_parent_version_id}"
+                        )
+                    if "code" in changed_fields and persisted_code == base_code:
+                        raise ValueError(
+                            "Updated score version code matches parent code; expected a code change."
+                        )
+                    if not allow_guidelines_edit and persisted_guidelines != base_guidelines:
+                        raise ValueError(
+                            "Unexpected guidelines change detected in updated score version."
+                        )
+                except Exception as exc:
+                    raise _ScoreEditAttemptError(
+                        "score_edit_post_submit_verification_failed",
+                        "post_submit_verification",
+                        f"Post-submit score version verification failed: {exc}",
+                        details={
+                            "post_submit_verification": {
+                                "status": "failed",
+                                "error": str(exc),
+                            },
+                        },
+                    ) from exc
+
+                post_submit_verification = {
+                    "status": "passed",
+                    "expected_parent_version_id": submitted_parent_version_id or None,
+                    "actual_parent_version_id": actual_parent_version_id or None,
+                    "guidelines_preserved": persisted_guidelines == base_guidelines,
+                }
+                attempt["status"] = "succeeded"
+                attempts.append(attempt)
+                output = {
+                    "success": True,
+                    "version_id": version_id,
+                    "parent_version_id": submitted_parent_version_id or None,
+                    "changed_fields": changed_fields,
+                    "note": note,
+                    "summary": summary,
+                    "scorecard_identifier": scorecard_identifier,
+                    "score_identifier": score_identifier,
+                    "scorecard_id": resolved_scorecard["id"],
+                    "score_id": resolved_score["id"],
+                    "version_url": _score_version_relative_path(
+                        scorecard_id=resolved_scorecard["id"],
+                        score_id=resolved_score["id"],
+                        version_id=version_id,
+                    ),
+                    "parent_version_url": _score_version_relative_path(
+                        scorecard_id=resolved_scorecard["id"],
+                        score_id=resolved_score["id"],
+                        version_id=submitted_parent_version_id or None,
+                    ),
+                    "diffs": _build_score_change_diffs(
+                        scorecard_id=resolved_scorecard["id"],
+                        score_id=resolved_score["id"],
+                        parent_version_id=submitted_parent_version_id or None,
+                        version_id=version_id,
+                        changed_fields=changed_fields,
+                        original_code=base_code,
+                        modified_code=persisted_code,
+                        original_guidelines=base_guidelines,
+                        modified_guidelines=persisted_guidelines,
+                    ),
+                    "post_submit_test": post_submit_test,
+                    "post_submit_verification": post_submit_verification,
+                    "attempts": attempts,
+                }
+                break
+            except _ScoreEditAttemptError as exc:
+                attempt.update(
+                    {
+                        "status": "failed",
+                        "stage": exc.stage,
+                        "error_code": exc.error_code,
+                        "error": str(exc),
+                    }
+                )
+                details = exc.details or {}
+                if isinstance(details.get("post_submit_test"), dict):
+                    attempt["post_submit_test"] = details["post_submit_test"]
+                if isinstance(details.get("post_submit_verification"), dict):
+                    attempt["post_submit_verification"] = details[
+                        "post_submit_verification"
+                    ]
+                attempts.append(attempt)
+                output = {
+                    "success": False,
+                    "error": str(exc),
+                    "error_code": exc.error_code,
+                    "version_id": attempt.get("version_id"),
+                    "parent_version_id": attempt.get("parent_version_id"),
+                    "changed_fields": attempt.get("changed_fields") or [],
+                    "note": note,
+                    "summary": summary,
+                    "scorecard_identifier": scorecard_identifier,
+                    "score_identifier": score_identifier,
+                    "scorecard_id": resolved_scorecard["id"],
+                    "score_id": resolved_score["id"],
+                    "post_submit_test": attempt.get("post_submit_test"),
+                    "post_submit_verification": attempt.get("post_submit_verification"),
+                    "attempts": attempts,
+                }
+                continue
+            except Exception as exc:
+                attempt.update(
+                    {
+                        "status": "failed",
+                        "stage": "worker",
+                        "error_code": "score_edit_worker_failed",
+                        "error": str(exc),
+                    }
+                )
+                attempts.append(attempt)
+                output = {
+                    "success": False,
+                    "error": str(exc),
+                    "error_code": "score_edit_worker_failed",
+                    "scorecard_identifier": scorecard_identifier,
+                    "score_identifier": score_identifier,
+                    "scorecard_id": resolved_scorecard["id"],
+                    "score_id": resolved_score["id"],
+                    "attempts": attempts,
+                }
+                continue
+
+        output.setdefault("attempts", attempts)
     except Exception as exc:  # noqa: BLE001
         output = {"success": False, "error": str(exc)}
 
@@ -6743,6 +7621,7 @@ class PlexusRuntimeModule:
         mcp: "FastMCP | None" = None,
         trace_id: str | None = None,
         docs_dir: str | None = None,
+        skills_dir: str | None = None,
         budget: BudgetGate | None = None,
         handle_store: TactusHandleStore | None = None,
         scorecards_lister: Callable[[dict[str, Any]], Any] | None = None,
@@ -6788,7 +7667,11 @@ class PlexusRuntimeModule:
         self._mcp = mcp
         self._trace_id = trace_id or str(uuid.uuid4())
         self._docs_dir = docs_dir if docs_dir is not None else PLEXUS_DOCS_DIR
+        self._skills_dir = skills_dir if skills_dir is not None else PLEXUS_SKILLS_DIR
         self._budget = budget if budget is not None else BudgetGate()
+        self._shared_runtime_context = (
+            runtime_context if isinstance(runtime_context, dict) else None
+        )
         self._runtime_context = dict(runtime_context or {})
         self._tool_access_mode = _normalize_tool_access_mode(
             self._runtime_context.get("tool_access_mode")
@@ -7181,6 +8064,162 @@ class PlexusRuntimeModule:
             parsed["score_id"] = score_id
             parsed["base_version_source"] = "session_latest"
 
+    def _is_console_runtime(self) -> bool:
+        return any(
+            key in self._runtime_context
+            for key in (
+                "console_tool_access_mode",
+                "console_trigger_message_id",
+                "chat_session_id",
+            )
+        )
+
+    def _append_console_audit_event(self, event: dict[str, Any]) -> None:
+        targets = [self._runtime_context]
+        if isinstance(self._shared_runtime_context, dict):
+            targets.append(self._shared_runtime_context)
+
+        for target in targets:
+            existing = target.get(CONSOLE_AUDIT_EVENTS_KEY)
+            if isinstance(existing, list):
+                existing.append(event)
+            elif existing is None:
+                target[CONSOLE_AUDIT_EVENTS_KEY] = [event]
+
+    def _build_score_edit_audit_event(
+        self, parsed: dict[str, Any], completed: dict[str, Any]
+    ) -> dict[str, Any]:
+        def _compact_step(step_value: Any) -> dict[str, Any]:
+            if not isinstance(step_value, dict):
+                return {"status": "unknown"}
+
+            status = str(step_value.get("status") or "").strip().lower() or "unknown"
+            compact: dict[str, Any] = {"status": status}
+
+            for source in (step_value, step_value.get("result")):
+                if not isinstance(source, dict):
+                    continue
+                for key in ("evaluation_id", "evaluationId"):
+                    value = str(source.get(key) or "").strip()
+                    if value and "evaluation_id" not in compact:
+                        compact["evaluation_id"] = value
+                for key in ("validation_id", "validationId"):
+                    value = str(source.get(key) or "").strip()
+                    if value and "validation_id" not in compact:
+                        compact["validation_id"] = value
+                for key in ("task_id", "taskId"):
+                    value = str(source.get(key) or "").strip()
+                    if value and "task_id" not in compact:
+                        compact["task_id"] = value
+                for key in ("run_id", "runId"):
+                    value = str(source.get(key) or "").strip()
+                    if value and "run_id" not in compact:
+                        compact["run_id"] = value
+
+            reason = str(step_value.get("reason") or "").strip()
+            if reason:
+                compact["reason"] = reason
+
+            guidelines_preserved = step_value.get("guidelines_preserved")
+            if isinstance(guidelines_preserved, bool):
+                compact["guidelines_preserved"] = guidelines_preserved
+
+            error_text = str(
+                step_value.get("error") or step_value.get("message") or ""
+            ).strip()
+            if error_text:
+                compact["error"] = error_text[:240]
+            return compact
+
+        result = completed.get("result")
+        if not isinstance(result, dict):
+            result = {}
+        error_text = str(completed.get("error") or result.get("error") or "").strip()
+        version_id = str(result.get("version_id") or "").strip()
+        parent_version_id = str(result.get("parent_version_id") or "").strip()
+        scorecard_id = str(result.get("scorecard_id") or parsed.get("scorecard_id") or "").strip()
+        score_id = str(result.get("score_id") or parsed.get("score_id") or "").strip()
+        smoke = result.get("post_submit_test")
+        verification = result.get("post_submit_verification")
+        attempts = result.get("attempts")
+        version_url = _score_version_relative_path(
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            version_id=version_id,
+        )
+        parent_version_url = _score_version_relative_path(
+            scorecard_id=scorecard_id,
+            score_id=score_id,
+            version_id=parent_version_id,
+        )
+        return {
+            "kind": "score_edit",
+            "handle_status": str(completed.get("status") or "").strip().lower(),
+            "success": bool(result.get("success", completed.get("status") == "completed")),
+            "error": error_text or None,
+            "version_id": version_id or None,
+            "parent_version_id": parent_version_id or None,
+            "scorecard_id": scorecard_id or None,
+            "score_id": score_id or None,
+            "version_url": version_url,
+            "parent_version_url": parent_version_url,
+            "changed_fields": list(result.get("changed_fields") or []),
+            "diffs": _jsonable(result.get("diffs")) if isinstance(result.get("diffs"), dict) else None,
+            "post_submit_test": _compact_step(smoke),
+            "post_submit_verification": _compact_step(verification),
+            "push_outcome": str(result.get("push_outcome") or "not_pushed"),
+            "promoted": bool(result.get("promoted")),
+            "error_code": str(result.get("error_code") or "").strip() or None,
+            "attempts": _jsonable(attempts) if isinstance(attempts, list) else None,
+            "base_version_source": str(
+                result.get("base_version_source")
+                or parsed.get("base_version_source")
+                or ""
+            ).strip()
+            or None,
+        }
+
+    def _console_user_request_text(self) -> str:
+        parts: list[str] = []
+        latest = self._runtime_context.get("console_user_message")
+        if isinstance(latest, str):
+            parts.append(latest)
+        history = self._runtime_context.get("console_session_history")
+        if isinstance(history, list):
+            for message in reversed(history):
+                if not isinstance(message, dict):
+                    continue
+                if str(message.get("role") or "").upper() != "USER":
+                    continue
+                content = message.get("content")
+                if isinstance(content, str):
+                    parts.append(content)
+                    break
+        return "\n".join(part for part in parts if part).lower()
+
+    def _console_request_allows_guidelines_update(self) -> bool:
+        text = self._console_user_request_text()
+        if not text:
+            return False
+        explicit_guidelines_markers = (
+            "guideline",
+            "guidelines",
+            "rubric",
+            "policy wording",
+            "wording",
+            "criteria document",
+            "guidance text",
+        )
+        return any(marker in text for marker in explicit_guidelines_markers)
+
+    def _enforce_console_score_update_policy(self, parsed: dict[str, Any]) -> None:
+        if not self._is_console_runtime():
+            return
+        if parsed.get("code") or parsed.get("yaml_content"):
+            raise ConsoleScoreCodeUpdateRequiresSubagent()
+        if parsed.get("guidelines") is not None and not self._console_request_allows_guidelines_update():
+            raise ConsoleGuidelinesUpdateRequiresGuidelinesIntent()
+
     def _enforce_tool_access(self, namespace: str, method: str) -> None:
         if self._tool_access_mode != "planning":
             return
@@ -7225,6 +8264,7 @@ class PlexusRuntimeModule:
             "predict",
             "contradictions",
             "pull",
+            "resolve",
             "update",
             "edit",
             "test",
@@ -7251,7 +8291,10 @@ class PlexusRuntimeModule:
                 return self._score_contradictions(parsed)
             if method == "pull":
                 return self._score_pull(parsed)
+            if method == "resolve":
+                return _default_score_resolve(parsed)
             if method == "update":
+                self._enforce_console_score_update_policy(parsed)
                 creates_version = bool(
                     parsed.get("code")
                     or parsed.get("yaml_content")
@@ -7282,6 +8325,35 @@ class PlexusRuntimeModule:
                     result.setdefault("scorecard_id", scorecard_id)
                     result.setdefault("score_id", score_id)
                     result.setdefault("parent_version_id", parsed.get("parent_version_id"))
+                    result.setdefault(
+                        "changed_fields",
+                        [
+                            field
+                            for field in ("code", "guidelines")
+                            if (
+                                (field == "code" and bool(parsed.get("code") or parsed.get("yaml_content")))
+                                or (field == "guidelines" and parsed.get("guidelines") is not None)
+                            )
+                        ],
+                    )
+                    result.setdefault(
+                        "version_url",
+                        _score_version_relative_path(
+                            scorecard_id=result.get("scorecard_id"),
+                            score_id=result.get("score_id"),
+                            version_id=result.get("version_id"),
+                        ),
+                    )
+                    result.setdefault(
+                        "parent_version_url",
+                        _score_version_relative_path(
+                            scorecard_id=result.get("scorecard_id"),
+                            score_id=result.get("score_id"),
+                            version_id=result.get("parent_version_id"),
+                        ),
+                    )
+                    result.setdefault("promoted", False)
+                    result.setdefault("push_outcome", "not_pushed")
                     result.setdefault("base_version_source", parsed.get("base_version_source"))
                     self._cache_latest_score_version(
                         scorecard_id=result.get("scorecard_id"),
@@ -7290,6 +8362,14 @@ class PlexusRuntimeModule:
                         parent_version_id=result.get("parent_version_id"),
                         source="score.update",
                     )
+                    score_edit_audit_event = self._build_score_edit_audit_event(
+                        parsed,
+                        {"status": "completed", "result": result},
+                    )
+                    result[SCORE_EDIT_AUDIT_EVENT_KEY] = _compact_score_edit_audit_event(
+                        score_edit_audit_event
+                    )
+                    self._append_console_audit_event(score_edit_audit_event)
                 return result
             if method == "edit":
                 if not bool(parsed.get("async")):
@@ -7347,6 +8427,24 @@ class PlexusRuntimeModule:
                     if isinstance(result, dict) and result.get("version_id"):
                         result.setdefault("scorecard_id", parsed.get("scorecard_id"))
                         result.setdefault("score_id", parsed.get("score_id"))
+                        result.setdefault(
+                            "version_url",
+                            _score_version_relative_path(
+                                scorecard_id=result.get("scorecard_id"),
+                                score_id=result.get("score_id"),
+                                version_id=result.get("version_id"),
+                            ),
+                        )
+                        result.setdefault(
+                            "parent_version_url",
+                            _score_version_relative_path(
+                                scorecard_id=result.get("scorecard_id"),
+                                score_id=result.get("score_id"),
+                                version_id=result.get("parent_version_id"),
+                            ),
+                        )
+                        result.setdefault("promoted", False)
+                        result.setdefault("push_outcome", "not_pushed")
                         result.setdefault("base_version_source", parsed.get("base_version_source"))
                         self._cache_latest_score_version(
                             scorecard_id=result.get("scorecard_id"),
@@ -7355,6 +8453,14 @@ class PlexusRuntimeModule:
                             parent_version_id=result.get("parent_version_id"),
                             source="score.edit",
                         )
+                if isinstance(completed, dict):
+                    score_edit_audit_event = self._build_score_edit_audit_event(
+                        parsed, completed
+                    )
+                    completed[SCORE_EDIT_AUDIT_EVENT_KEY] = _compact_score_edit_audit_event(
+                        score_edit_audit_event
+                    )
+                    self._append_console_audit_event(score_edit_audit_event)
                 return completed
             if method == "test":
                 return self._score_test(parsed)
@@ -8100,6 +9206,66 @@ class PlexusRuntimeModule:
             }
         raise ValueError(f"Unsupported Plexus runtime API: plexus.docs.{method}")
 
+    def _call_skills(self, namespace: str, method: str, args: Any = None) -> Any:
+        if method == "list":
+            parsed = _args(args) if args else {}
+            tags_value = parsed.get("tags") if isinstance(parsed, dict) else None
+            if isinstance(tags_value, str):
+                tags = [tags_value]
+            elif isinstance(tags_value, list):
+                tags = tags_value
+            else:
+                tags = []
+            self._budget.check_before("skills", "list")
+            self._record_api_call("skills", "list")
+            try:
+                return self._skills_list(
+                    query=parsed.get("query") if isinstance(parsed, dict) else None,
+                    tags=tags,
+                    mode=parsed.get("mode") if isinstance(parsed, dict) else None,
+                )
+            finally:
+                self._budget.record_after("skills", "list")
+        if method == "get":
+            parsed = _args(args)
+            skill_id = parsed.get("id") or parsed.get("key") or parsed.get("name")
+            if not skill_id:
+                raise ValueError("plexus.skills.get requires id, key, or name")
+            mode = parsed.get("mode")
+            self._budget.check_before("skills", "get")
+            self._record_api_call("skills", "get")
+            try:
+                metadata, body, resources = self._skills_read(str(skill_id), mode=mode)
+            finally:
+                self._budget.record_after("skills", "get")
+            return {
+                "id": metadata.get("id", skill_id),
+                "metadata": metadata,
+                "content": body,
+                "resources": resources,
+            }
+        raise ValueError(f"Unsupported Plexus runtime API: plexus.skills.{method}")
+
+    def _call_guidelines(self, namespace: str, method: str, args: Any = None) -> Any:
+        if namespace != "guidelines" or method != "validate":
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        parsed = _args(args)
+        guidelines = parsed.get("guidelines")
+        if guidelines is None:
+            guidelines = parsed.get("content")
+        if not isinstance(guidelines, str):
+            raise ValueError("plexus.guidelines.validate requires guidelines markdown text")
+        self._budget.check_before("guidelines", "validate")
+        self._record_api_call("guidelines", "validate")
+        try:
+            from plexus.guidelines.validator import validate_guidelines_content
+
+            return validate_guidelines_content(guidelines).to_dict()
+        finally:
+            self._budget.record_after("guidelines", "validate")
+
     def _call_api(self, namespace: str, method: str, args: Any = None) -> Any:
         if method != "list":
             raise ValueError(f"Unsupported Plexus runtime API: plexus.api.{method}")
@@ -8112,6 +9278,7 @@ class PlexusRuntimeModule:
             for namespace_name, method_name in DIRECT_HANDLERS:
                 api.setdefault(f"plexus.{namespace_name}", []).append(method_name)
             api.setdefault("plexus.docs", []).extend(["list", "get"])
+            api.setdefault("plexus.skills", []).extend(["list", "get"])
             api.setdefault("plexus.api", []).append("list")
             return {key: sorted(set(values)) for key, values in sorted(api.items())}
         finally:
@@ -8143,6 +9310,41 @@ class PlexusRuntimeModule:
                 raise FileNotFoundError(message) from exc
             raise ValueError(f"Invalid plexus.docs key: {key!r}") from exc
         return doc.metadata, doc.body
+
+    def _skills_list(
+        self,
+        *,
+        query: str | None = None,
+        tags: list[Any] | None = None,
+        mode: str | None = None,
+    ) -> list[dict[str, Any]]:
+        from plexus.skills.repository import SkillRepository
+
+        if not os.path.isdir(self._skills_dir):
+            raise FileNotFoundError(
+                f"Plexus skills directory not found: {self._skills_dir}"
+            )
+        repo = SkillRepository(self._skills_dir)
+        result = repo.list_skills(query=query, tags=tags or [], mode=mode)
+        return list(result.entries)
+
+    def _skills_read(
+        self,
+        skill_id: str,
+        *,
+        mode: str | None = None,
+    ) -> tuple[dict[str, Any], str, list[str]]:
+        from plexus.skills.repository import InvalidSkillKeyError, SkillRepository
+
+        repo = SkillRepository(self._skills_dir)
+        try:
+            skill = repo.get_skill(skill_id, mode=mode)
+        except InvalidSkillKeyError as exc:
+            message = str(exc)
+            if "Unknown" in message:
+                raise FileNotFoundError(message) from exc
+            raise ValueError(f"Invalid plexus.skills id: {skill_id!r}") from exc
+        return skill.metadata, skill.body, skill.resources
 
 
 def _wrap_tactus_snippet(tactus: str) -> str:
@@ -8331,6 +9533,17 @@ def _run_tactus_sync(
                         error=_structured_error("tactus_execution_failed", message),
                         budget=gate,
                     )
+            envelope = _attach_console_audit_events(
+                envelope,
+                (
+                    runtime_context
+                    if isinstance(runtime_context, dict)
+                    else getattr(plexus, "_runtime_context", None)
+                ),
+                score_edit_events=_extract_score_edit_audit_events_from_value(
+                    envelope.get("value")
+                ),
+            )
         finally:
             ended_wall = time.time()
             record = _build_trace_record(
@@ -8408,6 +9621,59 @@ def _truncate_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
         return envelope
 
 
+_UNTERMINATED_STRING_MARKERS = (
+    "unterminated string",
+    "unfinished string",
+)
+
+
+def _is_unterminated_string_error(envelope: dict[str, Any]) -> bool:
+    error = envelope.get("error")
+    if not isinstance(error, dict):
+        return False
+    if str(error.get("code") or "").strip().lower() != "tactus_execution_failed":
+        return False
+    message = str(error.get("message") or "").strip().lower()
+    return any(marker in message for marker in _UNTERMINATED_STRING_MARKERS)
+
+
+def _to_lua_long_bracket_string(value: str) -> str:
+    equals = ""
+    while f"]{equals}]" in value:
+        equals += "="
+    return f"[{equals}[{value}]{equals}]"
+
+
+def _sanitize_instruction_string_literals(tactus: str) -> str:
+    """Normalize `instruction = '...'` / `"..."` to Lua long-bracket strings.
+
+    This avoids quote-escaping parse failures in generated execute_tactus snippets.
+    """
+
+    assignment_re = re.compile(
+        r'(?P<prefix>\binstruction\s*=\s*)(?P<quote>[\'"])(?P<body>.*)(?P=quote)(?P<suffix>\s*(?:,.*|}.*)?)$'
+    )
+    changed = False
+    out_lines: list[str] = []
+    for line in tactus.splitlines(keepends=True):
+        match = assignment_re.search(line)
+        if not match:
+            out_lines.append(line)
+            continue
+        replacement = (
+            f"{match.group('prefix')}"
+            f"{_to_lua_long_bracket_string(match.group('body'))}"
+            f"{match.group('suffix')}"
+        )
+        out_lines.append(
+            f"{line[: match.start()]}{replacement}{line[match.end() :]}"
+        )
+        changed = True
+    if not changed:
+        return tactus
+    return "".join(out_lines)
+
+
 async def _execute_tactus_tool(
     tactus: str,
     mcp: FastMCP,
@@ -8459,45 +9725,64 @@ async def _execute_tactus_tool(
 
     try:
         with set_runtime_actor_context(actor_context):
-            stream_handler = (
-                _MCPStreamEmitter(trace_id=trace_id, loop=asyncio.get_running_loop())
-                if ctx is not None
-                else None
-            )
-            run_task = asyncio.create_task(
-                asyncio.to_thread(
-                    _run_tactus_sync,
-                    tactus,
-                    mcp,
-                    trace_id=trace_id,
-                    trace_store=store,
-                    budget=budget,
-                    handle_store=handle_store,
-                    feedback_finder=feedback_finder,
-                    evaluation_info=evaluation_info,
-                    evaluation_runner=evaluation_runner,
-                    report_runner=report_runner,
-                    procedure_runner=procedure_runner,
-                    stream_handler=stream_handler,
-                    score_info=score_info,
-                    runtime_context=runtime_context,
+            stream_handler = None
+            if ctx is not None:
+                stream_handler = _MCPStreamEmitter(
+                    trace_id=trace_id, loop=asyncio.get_running_loop()
                 )
-            )
-            if stream_handler is None:
+
+            async def _run_once(snippet: str) -> dict[str, Any]:
+                run_task = asyncio.create_task(
+                    asyncio.to_thread(
+                        _run_tactus_sync,
+                        snippet,
+                        mcp,
+                        trace_id=trace_id,
+                        trace_store=store,
+                        budget=budget,
+                        handle_store=handle_store,
+                        feedback_finder=feedback_finder,
+                        evaluation_info=evaluation_info,
+                        evaluation_runner=evaluation_runner,
+                        report_runner=report_runner,
+                        procedure_runner=procedure_runner,
+                        stream_handler=stream_handler,
+                        score_info=score_info,
+                        runtime_context=runtime_context,
+                    )
+                )
+                if stream_handler is None:
+                    return _truncate_envelope(await run_task)
+
+                while True:
+                    if run_task.done():
+                        await asyncio.sleep(0)
+                        if stream_handler.empty():
+                            break
+                    try:
+                        event = await asyncio.wait_for(
+                            stream_handler.get(), timeout=0.05
+                        )
+                    except asyncio.TimeoutError:
+                        continue
+                    await _send_mcp_stream_event(ctx, event)
+
                 return _truncate_envelope(await run_task)
 
-            while True:
-                if run_task.done():
-                    await asyncio.sleep(0)
-                    if stream_handler.empty():
-                        break
-                try:
-                    event = await asyncio.wait_for(stream_handler.get(), timeout=0.05)
-                except asyncio.TimeoutError:
-                    continue
-                await _send_mcp_stream_event(ctx, event)
-
-            return _truncate_envelope(await run_task)
+            result = await _run_once(tactus)
+            if _is_unterminated_string_error(result):
+                sanitized_tactus = _sanitize_instruction_string_literals(tactus)
+                if sanitized_tactus != tactus:
+                    if stream_handler is not None:
+                        stream_handler.emit(
+                            kind="execution",
+                            message="Retrying after quote-safe instruction rewrite",
+                            payload={"stage": "retrying_quote_safe_instruction"},
+                            progress=0,
+                            total=1,
+                        )
+                    result = await _run_once(sanitized_tactus)
+            return result
     except Exception as exc:
         logger.error("execute_tactus failed: %s", exc, exc_info=True)
         envelope = _response_envelope(
@@ -8545,9 +9830,10 @@ Helper aliases injected before your snippet runs:
   `procedure`, `procedures`, `procedure_sessions`, `procedure_messages`,
   `procedure_continue`, `procedure_branch`.
 - Canonical `namespace_method`: `scorecards_list`, `scorecards_search`,
-  `score_info`, `score_search`, `evaluation_info`, `evaluation_run`,
+  `score_info`, `score_search`, `score_resolve`, `evaluation_info`, `evaluation_run`,
   `handle_status`, `handle_await`, `handle_cancel`, `docs_list`, `docs_get`,
-  `api_list`, plus one helper per advertised API.
+  `skills_list`, `skills_get`, `guidelines_validate`, `api_list`, plus one
+  helper per advertised API.
 - Fall back to `plexus.<namespace>.<method>{...}` for anything else.
 
 Examples:
@@ -8566,7 +9852,7 @@ return { error = { code = "SCORECARD_NOT_FOUND", retryable = false } }
 Fuzzy discovery (RapidFuzz `WRatio` — use when names are partial, typo-prone,
 or you need scores ranked across every scorecard):
 ```tactus
-return scorecards_search{ query = "HCS medium", limit = 10, min_score = 55 }
+return scorecards_search{ query = "operations quality", limit = 10, min_score = 55 }
 return score_search{ query = "refund", limit = 20, min_score = 55 }
 return score_search{ query = "tone", scorecard = "My Scorecard", limit = 10 }
 ```
@@ -8615,6 +9901,41 @@ return { apis = apis, overview = overview.content,
          index = index, topic = topic.content }
 ```
 
+6b) Operational skill lookup for Console workflows:
+Skills are operational instructions, separate from reference docs. Use the same
+progressive disclosure pattern: `skills_list{}` returns metadata only, then
+`skills_get{ id = "..." }` loads exactly one skill body. Use skills for how to
+run a workflow; use docs for API/YAML/reference details.
+```tactus
+local skill_index = skills_list{ query = "score edit", mode = "execution" }
+local skill = skills_get{ id = "score-code-editor" }
+return { index = skill_index, skill_id = skill.id, body = skill.content }
+```
+
+6c) Guidelines validation before guidelines-only updates:
+```tactus
+local pulled = plexus.score.pull{
+  scorecard_identifier = "<scorecard-id>",
+  score_identifier = "<score-id>",
+  version = "<version-id>",
+}
+return guidelines_validate{ guidelines = pulled.guidelines }
+```
+
+6d) Resolve score workflow targets before editing:
+```tactus
+local target = score_resolve{
+  scorecard_identifier = "Example Scorecard",
+  score_identifier = "Example Score",
+}
+if target.status ~= "resolved" then return target end
+return {
+  scorecard_id = target.scorecard_id,
+  score_id = target.score_id,
+  score_name = target.score.name,
+}
+```
+
 7) Dispatch a long-running report (fire-and-forget, returns a handle immediately):
 ```tactus
 local handle = plexus.report.run{
@@ -8645,6 +9966,14 @@ namespaces: `mcp`, `score-authoring`, `evaluation-feedback`,
 `procedures`, `reports`, `optimizer`, `repo-workflows`. Cite the topic
 ids you used in your reply so the user can re-fetch them.
 
+Operational skills also use PROGRESSIVE DISCLOSURE:
+1. `plexus.skills.list{}` (or `skills_list{}`) returns only skill metadata:
+   `id`, `name`, `description`, `tags`, `applies_to`, `console_supported`,
+   `requires_subagent`, and `allowed_modes`.
+2. `plexus.skills.get{ id = "<skill-id>" }` (or `skills_get{ id = "..." }`)
+   loads one full skill body plus resource references. Cite the skill id(s)
+   you used. Do not preload every skill.
+
 The response envelope always has `ok`, `value`, `error`, `cost`, `trace_id`,
 `partial`, and `api_calls`.
 """
@@ -8662,7 +9991,8 @@ def register_tactus_tools(mcp: FastMCP) -> None:
                     "Tactus (Lua) snippet to execute. `plexus` is global; helper "
                     "aliases like `evaluate`, `predict`, `score`, `item`, "
                     "`scorecards`, `api_list`, `docs_list`, `docs_get`, "
-                    "`handle_status` are injected. Async long-running calls "
+                    "`skills_list`, `skills_get`, `handle_status` are injected. "
+                    "Async long-running calls "
                     "(`evaluation.run`, `report.run`, `procedure.run` with "
                     "`async = true`) require an explicit child `budget = { usd, "
                     "wallclock_seconds, depth, tool_calls }`. Read "

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "38cbd62f-5eaa-4aa1-8c1c-6f42fe56d802",
+  "issue_id": "plx-e760ffef-a785-4753-8b24-fdcad7f08174",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-18T18:50:47.856Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Implement Console target resolver",
+    "description": "Implement deterministic Console score target resolution and tests.\n\nImplementation notes:\n- Add a runtime score resolve API for unique, ambiguous, and missing targets.\n- Teach Console orchestration to consume a prior disambiguation answer once.\n- Preserve score edit and guidelines validation safety boundaries.\n- Prove with targeted tests and live Console smoke evidence.\n\nNo client-specific names or score identifiers are stored here.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 2,
+    "assignee": null,
+    "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+    "labels": []
+  }
+}

@@ -1,6 +1,21 @@
 ---
 name: score-code-editor
 description: Edit and update the Tactus DSL code for a Plexus scorecard score. Covers the modern ClassifyProcedure style, the pull/push workflow, and key patterns and pitfalls.
+tags:
+  - score-workflow
+  - score-code
+  - tactus
+  - console
+applies_to:
+  - score code editing
+  - score YAML editing
+  - Tactus DSL score configuration
+console_supported: true
+requires_subagent: true
+allowed_modes:
+  - planning
+  - execution
+resources: []
 ---
 
 ## Instructions
@@ -9,7 +24,24 @@ This skill helps edit the `code:` field of a Plexus score configuration. Score c
 
 **Before making any code changes**, use the Plexus documentation tool to understand the DSL constructs involved. This is not optional — the DSL has specific semantics that are easy to get wrong.
 
-After any code change you must push a new version and verify the version was created with the correct content.
+After any code change you must create an updated score version and verify the version was created with the correct content.
+
+## Console Chat Mode
+
+Console chat may inspect score data, docs, versions, predictions, evaluations, and results through `execute_tactus`.
+
+Console chat must use `plexus.score.edit({ scorecard_identifier = ..., score_identifier = ..., instruction = "...", async = true, budget = { ... } })` for score code changes. The console assistant supplies the instruction and target; the dedicated score editor worker performs the code edit and updated-score-version creation.
+
+Console chat must not call `plexus.score.update` with direct `code`, `yaml_content`, or full YAML for score code edits. Guidelines-only or metadata-only `score.update` calls are separate flows and are allowed only when the relevant skill and validation rules permit them.
+
+Updated score versions created from console score edits are non-champion by default. Champion promotion is always explicit and separately validated.
+
+For code-changing edits, runtime now automatically runs a deterministic
+post-submit smoke test (`plexus.score.test`) on the new updated score version and
+returns the result. Console chat should report that result; it should not
+re-implement this policy flow manually.
+
+When reporting a console score edit, include the worker status, updated score `version_id` when one exists, parent version, changed fields, validation or evaluation ids, and the push/no-push outcome. Do not report success before a completed updated score `version_id` is available.
 
 ---
 
@@ -43,22 +75,26 @@ Do not skip this step. The DSL has quirks (`system_message` is static,
 `user_message` is a Jinja2 template, `ClassifyProcedure` classes must
 be a Lua table).
 
-### 3. Pull the local file (optional)
+<ide-only>
+### 3. Pull the local file (IDE/local editor mode only, optional)
 
 Run `plexus.score.pull({ scorecard = ..., score = ... })` to get the
 current champion YAML to a local file. This gives you a working copy
-to edit. Alternatively, pass the full updated YAML content directly to
-`plexus.score.update`.
+to edit. Console chat should skip local-file editing and use
+`plexus.score.edit` instead.
+</ide-only>
 
 ### 4. Edit the code
 
 Make targeted changes. See the patterns section below.
 
-### 5. Push the new version
+### 5. Create the updated score version
 
-Use `plexus.score.update({ scorecard = ..., score = ..., config = "<yaml>" })`
-to publish a new version. Include a concise `version_note` describing
-what changed and why.
+In console chat, use `plexus.score.edit` with a concrete instruction and
+explicit async budget. In IDE/local editor mode, use
+`plexus.score.update({ scorecard = ..., score = ..., code = "<yaml>" })`
+to publish a new non-champion updated score version. Include a concise `version_note`
+describing what changed and why.
 
 After pushing, call `plexus.score.info({ id = ..., version = "<new-version-id>" })`
 to verify the version was created with the correct code (and
@@ -241,6 +277,7 @@ it, the relevant runtime calls are:
 | Look up a DSL or YAML topic | `plexus.docs.get({ key = "<id>" })` |
 | Get current score code | `plexus.score.info({ id = ..., version = "..." })` |
 | Pull champion to a local file | `plexus.score.pull({ scorecard = ..., score = ... })` |
-| Push code content directly | `plexus.score.update({ scorecard = ..., score = ..., config = "..." })` |
+| Request a console-safe score code edit | `plexus.score.edit({ scorecard_identifier = ..., score_identifier = ..., instruction = "...", async = true, budget = { ... } })` |
+| Push code content directly (IDE/local mode only) | `plexus.score.update({ scorecard = ..., score = ..., code = "..." })` |
 | Verify the pushed version | `plexus.score.info({ id = ..., version = "<new-version-id>" })` |
 | Promote a version to champion | `plexus.score.set_champion({ ... })` |

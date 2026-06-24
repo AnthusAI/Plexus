@@ -1,21 +1,33 @@
 #!/bin/bash
 set -e
 
-# Load environment variables
-export $(cat .env | grep -v '^#' | xargs)
+# Load environment variables without overriding explicitly supplied values.
+if [ -f .env ]; then
+    while IFS='=' read -r key value; do
+        [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+        key="${key%%[[:space:]]*}"
+        if [ -z "${!key+x}" ]; then
+            export "$key=${value%$'\r'}"
+        fi
+    done < .env
+fi
+
+: "${AWS_REGION:=${CDK_DEFAULT_REGION:-us-west-2}}"
+: "${AMPLIFY_STACK_PATTERN:?Set AMPLIFY_STACK_PATTERN to the target Amplify root stack pattern}"
 
 echo "Discovering Amplify tables..."
 
 # Run discovery script and capture output as JSON
 python3 << 'PYTHON_SCRIPT' > /tmp/tables.json
 import json
+import os
 import sys
 sys.path.insert(0, '.')
 from stacks.shared.amplify_discovery import discover_tables_for_metrics_aggregation
 
 tables = discover_tables_for_metrics_aggregation(
-    region='us-west-2',
-    stack_pattern='amplify-d1cegb1ft4iove-main-branch'
+    region=os.environ.get('CDK_DEFAULT_REGION') or os.environ.get('AWS_REGION', 'us-west-2'),
+    stack_pattern=os.environ.get('AMPLIFY_STACK_PATTERN')
 )
 
 # Convert to format suitable for CDK context
@@ -46,4 +58,3 @@ npx cdk deploy \
     --require-approval never
 
 rm /tmp/tables.json
-

@@ -3,6 +3,12 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 
 import ConversationViewer from "../conversation-viewer"
 
+jest.mock("@monaco-editor/react", () => ({
+  DiffEditor: ({ language, original, modified }: any) => (
+    <div data-testid={`diff-editor-${language}`} data-original={original} data-modified={modified} />
+  ),
+}))
+
 const mockScrollToIndex = jest.fn()
 let latestVirtuosoProps: any = null
 
@@ -47,11 +53,15 @@ jest.mock("react-virtuoso", () => {
 const mockChatSessionList = jest.fn()
 const mockChatSessionGet = jest.fn()
 const mockChatMessageList = jest.fn()
+const mockChatMessageListBySession = jest.fn()
+const mockChatMessageGet = jest.fn()
 const mockChatMessageCreate = jest.fn()
 const mockChatSessionOnCreate = jest.fn()
 const mockChatSessionOnUpdate = jest.fn()
+const mockChatSessionOnDelete = jest.fn()
 const mockChatMessageOnCreate = jest.fn()
 const mockChatMessageOnUpdate = jest.fn()
+const mockChatMessageOnDelete = jest.fn()
 const mockUserGet = jest.fn()
 const mockGraphql = jest.fn()
 
@@ -63,12 +73,16 @@ const mockClient = {
       get: mockChatSessionGet,
       onCreate: mockChatSessionOnCreate,
       onUpdate: mockChatSessionOnUpdate,
+      onDelete: mockChatSessionOnDelete,
     },
     ChatMessage: {
       listChatMessageByProcedureIdAndCreatedAt: mockChatMessageList,
+      listChatMessageBySessionIdAndCreatedAt: mockChatMessageListBySession,
+      get: mockChatMessageGet,
       create: mockChatMessageCreate,
       onCreate: mockChatMessageOnCreate,
       onUpdate: mockChatMessageOnUpdate,
+      onDelete: mockChatMessageOnDelete,
     },
     User: {
       get: mockUserGet,
@@ -240,26 +254,36 @@ if (typeof window !== "undefined" && !("ResizeObserver" in window)) {
 
 describe("ConversationViewer streaming updates", () => {
   const subscriptions = {
+    sessionCreate: null as null | { next: (payload: any) => void; error?: (error: Error) => void },
     sessionUpdate: null as null | { next: (payload: any) => void; error?: (error: Error) => void },
+    sessionDelete: null as null | { next: (payload: any) => void; error?: (error: Error) => void },
     messageCreate: null as null | { next: (payload: any) => void; error?: (error: Error) => void },
     messageUpdate: null as null | { next: (payload: any) => void; error?: (error: Error) => void },
+    messageDelete: null as null | { next: (payload: any) => void; error?: (error: Error) => void },
   }
 
   beforeEach(() => {
     mockScrollToIndex.mockReset()
     latestVirtuosoProps = null
+    subscriptions.sessionCreate = null
     subscriptions.sessionUpdate = null
+    subscriptions.sessionDelete = null
     subscriptions.messageCreate = null
     subscriptions.messageUpdate = null
+    subscriptions.messageDelete = null
 
     mockChatSessionList.mockReset()
     mockChatMessageList.mockReset()
+    mockChatMessageListBySession.mockReset()
+    mockChatMessageGet.mockReset()
     mockChatMessageCreate.mockReset()
     mockChatSessionGet.mockReset()
     mockChatSessionOnCreate.mockReset()
     mockChatSessionOnUpdate.mockReset()
+    mockChatSessionOnDelete.mockReset()
     mockChatMessageOnCreate.mockReset()
     mockChatMessageOnUpdate.mockReset()
+    mockChatMessageOnDelete.mockReset()
     mockUserGet.mockReset()
     mockGraphql.mockReset()
     delete process.env.NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET
@@ -296,6 +320,24 @@ describe("ConversationViewer streaming updates", () => {
       ],
       nextToken: null,
     })
+    mockChatMessageListBySession.mockResolvedValue({
+      data: [],
+      nextToken: null,
+    })
+    mockChatMessageGet.mockResolvedValue({
+      data: {
+        id: "msg-assistant-1",
+        accountId: "acct-1",
+        procedureId: "proc-1",
+        sessionId: "sess-1",
+        role: "ASSISTANT",
+        messageType: "MESSAGE",
+        humanInteraction: "CHAT_ASSISTANT",
+        content: "Hel",
+        createdAt: "2026-03-27T00:00:01.000Z",
+        sequenceNumber: 1,
+      },
+    })
 
     mockChatMessageCreate.mockResolvedValue({
       data: {
@@ -305,11 +347,20 @@ describe("ConversationViewer streaming updates", () => {
     })
 
     mockChatSessionOnCreate.mockReturnValue({
-      subscribe: () => ({ unsubscribe: jest.fn() }),
+      subscribe: (handlers: { next: (payload: any) => void; error?: (error: Error) => void }) => {
+        subscriptions.sessionCreate = handlers
+        return { unsubscribe: jest.fn() }
+      },
     })
     mockChatSessionOnUpdate.mockReturnValue({
       subscribe: (handlers: { next: (payload: any) => void; error?: (error: Error) => void }) => {
         subscriptions.sessionUpdate = handlers
+        return { unsubscribe: jest.fn() }
+      },
+    })
+    mockChatSessionOnDelete.mockReturnValue({
+      subscribe: (handlers: { next: (payload: any) => void; error?: (error: Error) => void }) => {
+        subscriptions.sessionDelete = handlers
         return { unsubscribe: jest.fn() }
       },
     })
@@ -324,6 +375,12 @@ describe("ConversationViewer streaming updates", () => {
     mockChatMessageOnUpdate.mockReturnValue({
       subscribe: (handlers: { next: (payload: any) => void; error?: (error: Error) => void }) => {
         subscriptions.messageUpdate = handlers
+        return { unsubscribe: jest.fn() }
+      },
+    })
+    mockChatMessageOnDelete.mockReturnValue({
+      subscribe: (handlers: { next: (payload: any) => void; error?: (error: Error) => void }) => {
+        subscriptions.messageDelete = handlers
         return { unsubscribe: jest.fn() }
       },
     })
@@ -345,7 +402,7 @@ describe("ConversationViewer streaming updates", () => {
       />
     )
 
-    await screen.findByText("Hel")
+    await screen.findByPlaceholderText("Type a message")
     expect(container.querySelectorAll('[data-message-id="msg-assistant-1"]')).toHaveLength(1)
     for (const call of mockChatMessageList.mock.calls) {
       expect(call[1]?.selectionSet || []).not.toContain("createdByUserId")
@@ -425,7 +482,7 @@ describe("ConversationViewer streaming updates", () => {
       />
     )
 
-    await screen.findByText("Hel")
+    await screen.findByPlaceholderText("Type a message")
 
     await act(async () => {
       subscriptions.messageUpdate?.next({
@@ -487,7 +544,7 @@ describe("ConversationViewer streaming updates", () => {
       />
     )
 
-    await screen.findByText("Hel")
+    await screen.findByPlaceholderText("Type a message")
     mockScrollToIndex.mockClear()
 
     await act(async () => {
@@ -531,7 +588,7 @@ describe("ConversationViewer streaming updates", () => {
       />
     )
 
-    await screen.findByText("Hel")
+    await screen.findByPlaceholderText("Type a message")
     mockScrollToIndex.mockClear()
 
     await act(async () => {
@@ -603,6 +660,109 @@ describe("ConversationViewer streaming updates", () => {
     expect(messageContent).not.toHaveClass("overflow-hidden")
   })
 
+  it("shows assistant cost badges for completed responses and a fallback when cost is unavailable", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-assistant-cost",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "Costed response",
+          createdAt: "2026-03-27T00:00:01.000Z",
+          sequenceNumber: 1,
+          metadata: JSON.stringify({
+            streaming: {
+              state: "complete",
+            },
+            cost: {
+              billing_mode: "spent",
+              summary: {
+                total_usd: "0.0021",
+                llm_calls: "1",
+                prompt_tokens: "120",
+                completion_tokens: "30",
+                total_tokens: "150",
+              },
+            },
+          }),
+        },
+        {
+          id: "msg-assistant-no-cost",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "No cost metadata response",
+          createdAt: "2026-03-27T00:00:02.000Z",
+          sequenceNumber: 2,
+          metadata: JSON.stringify({
+            streaming: {
+              state: "complete",
+            },
+          }),
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    const spentBadges = await screen.findAllByText("Spent $0.0021")
+    expect(spentBadges.length).toBeGreaterThan(0)
+    await screen.findByText("Cost unavailable")
+  })
+
+  it("renders streaming assistant chunks as plain text until completion", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-assistant-streaming-markdown",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "_Still streaming_",
+          createdAt: "2026-03-27T00:00:01.000Z",
+          sequenceNumber: 1,
+          metadata: JSON.stringify({
+            streaming: {
+              state: "streaming",
+            },
+          }),
+        },
+      ],
+      nextToken: null,
+    })
+
+    const { container } = render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      const messageContent = container.querySelector(
+        '[data-message-id="msg-assistant-streaming-markdown"] [data-testid="message-content"]'
+      )
+      expect(messageContent).not.toBeNull()
+      expect(messageContent?.textContent).toContain("_Still streaming_")
+    })
+  })
+
   it("pauses auto-follow after an upward user scroll and resumes at the bottom", async () => {
     render(
       <ConversationViewer
@@ -643,7 +803,7 @@ describe("ConversationViewer streaming updates", () => {
       />
     )
 
-    await screen.findByText("Hel")
+    await screen.findByPlaceholderText("Type a message")
 
     fireEvent.change(screen.getByPlaceholderText("Type a message"), {
       target: { value: "Test thinking state" },
@@ -691,6 +851,68 @@ describe("ConversationViewer streaming updates", () => {
     await waitFor(() => {
       expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
       expect(screen.getByText("Streaming reply")).toBeInTheDocument()
+    })
+  })
+
+  it("does not clear thinking when only a stale assistant update arrives", async () => {
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByPlaceholderText("Type a message")
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Test stale update handling" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageCreate).toHaveBeenCalled()
+      expect(screen.getByText("Thinking")).toBeInTheDocument()
+    })
+
+    await act(async () => {
+      subscriptions.messageUpdate?.next({
+        data: {
+          id: "msg-assistant-1",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "Older assistant update",
+          createdAt: "2026-03-27T00:00:01.000Z",
+          sequenceNumber: 1,
+        },
+      })
+    })
+
+    expect(screen.getByText("Thinking")).toBeInTheDocument()
+
+    await act(async () => {
+      subscriptions.messageCreate?.next({
+        data: {
+          id: "msg-assistant-new",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "Fresh assistant reply",
+          createdAt: "2099-03-27T00:00:04.000Z",
+          sequenceNumber: 3,
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
+      expect(screen.getByText("Fresh assistant reply")).toBeInTheDocument()
     })
   })
 
@@ -753,7 +975,7 @@ describe("ConversationViewer streaming updates", () => {
       />
     )
 
-    await screen.findByText("Hel")
+    await screen.findByPlaceholderText("Type a message")
 
     fireEvent.change(screen.getByPlaceholderText("Type a message"), {
       target: { value: "Use my local worker." },
@@ -787,7 +1009,7 @@ describe("ConversationViewer streaming updates", () => {
       />
     )
 
-    await screen.findByText("Hel")
+    await screen.findByPlaceholderText("Type a message")
 
     expect(screen.queryByText("Model")).not.toBeInTheDocument()
 
@@ -827,7 +1049,7 @@ describe("ConversationViewer streaming updates", () => {
       />
     )
 
-    await screen.findByText("Hel")
+    await screen.findByPlaceholderText("Type a message")
     fireEvent.click(screen.getByRole("button", { name: "Select GPT-5.3" }))
 
     fireEvent.change(screen.getByPlaceholderText("Type a message"), {
@@ -887,7 +1109,11 @@ describe("ConversationViewer streaming updates", () => {
     ]
 
     await act(async () => {
-      subscriptions.sessionUpdate?.next({ data: { id: "sess-hidden" } })
+      subscriptions.sessionUpdate?.next({
+        data: {
+          onUpdateChatSession: currentSessionRows[0],
+        },
+      })
     })
 
     await waitFor(() => {
@@ -924,26 +1150,446 @@ describe("ConversationViewer streaming updates", () => {
       expect(screen.getAllByText("Current Session").length).toBeGreaterThan(0)
     })
 
-    currentSessionRows = [
-      {
-        id: "sess-2",
-        accountId: "acct-1",
-        procedureId: "proc-1",
-        name: "Different Session",
-        category: "Optimize",
-        createdAt: "2026-03-27T00:01:00.000Z",
-        updatedAt: "2026-03-27T00:01:00.000Z",
-      },
-    ]
-
     await act(async () => {
-      subscriptions.sessionUpdate?.next({ data: { id: "sess-2" } })
+      subscriptions.sessionCreate?.next({
+        data: {
+          onCreateChatSession: {
+            id: "sess-2",
+            accountId: "acct-1",
+            procedureId: "proc-1",
+            name: "Different Session",
+            category: "Optimize",
+            createdAt: "2026-03-27T00:01:00.000Z",
+            updatedAt: "2026-03-27T00:01:00.000Z",
+          },
+        },
+      })
+      subscriptions.sessionDelete?.next({
+        data: {
+          onDeleteChatSession: { id: "sess-1", procedureId: "proc-1" },
+        },
+      })
     })
 
     await waitFor(() => {
       expect(screen.getByText("No session selected")).toBeInTheDocument()
       expect(screen.getByText("Chat Sessions (1)")).toBeInTheDocument()
       expect(screen.queryByText("Different Session")).toBeInTheDocument()
+    })
+  })
+
+  it("hydrates malformed message subscription payloads without polling", async () => {
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByText("Hel")
+    const initialSessionListCalls = mockChatSessionList.mock.calls.length
+    const initialMessageListCalls = mockChatMessageList.mock.calls.length
+
+    mockChatMessageGet.mockResolvedValueOnce({
+      data: {
+        id: "msg-assistant-1",
+        accountId: "acct-1",
+        procedureId: "proc-1",
+        sessionId: "sess-1",
+        role: "ASSISTANT",
+        messageType: "MESSAGE",
+        humanInteraction: "CHAT_ASSISTANT",
+        content: "Hello hydrated",
+        createdAt: "2026-03-27T00:00:01.000Z",
+        sequenceNumber: 1,
+      },
+    })
+
+    await act(async () => {
+      subscriptions.sessionUpdate?.next({ data: { onUpdateChatSession: { id: "sess-1" } } })
+      subscriptions.messageUpdate?.next({ data: { onUpdateChatMessage: { id: "msg-assistant-1" } } })
+    })
+
+    await waitFor(() => {
+      expect(mockChatSessionList).toHaveBeenCalledTimes(initialSessionListCalls)
+      expect(mockChatMessageList).toHaveBeenCalledTimes(initialMessageListCalls)
+      expect(mockChatMessageGet).toHaveBeenCalledTimes(1)
+      expect(screen.getByText("Hello hydrated")).toBeInTheDocument()
+    })
+  })
+
+  it("reconciles pending thinking state when terminal user update arrives but assistant event is missed", async () => {
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByText("Hel")
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Test reconcile path" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageCreate).toHaveBeenCalled()
+      expect(screen.getByText("Thinking")).toBeInTheDocument()
+    })
+
+    mockChatMessageListBySession.mockResolvedValueOnce({
+      data: [
+        {
+          id: "msg-assistant-recovered",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "Recovered assistant response",
+          createdAt: "2099-03-27T00:00:04.000Z",
+          sequenceNumber: 3,
+          metadata: JSON.stringify({
+            streaming: {
+              state: "complete",
+            },
+          }),
+        },
+      ],
+      nextToken: null,
+    })
+
+    await act(async () => {
+      subscriptions.messageUpdate?.next({
+        data: {
+          id: "msg-user-2",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "USER",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT",
+          content: "Test reconcile path",
+          createdAt: "2099-03-27T00:00:02.000Z",
+          responseStatus: "COMPLETED",
+          responseCompletedAt: "2099-03-27T00:00:05.000Z",
+          sequenceNumber: 2,
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(mockChatMessageListBySession).toHaveBeenCalled()
+      expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
+    })
+  })
+
+  it("reconciles pending thinking state after timeout when no terminal status update arrives", async () => {
+    mockChatMessageCreate.mockResolvedValueOnce({
+      data: {
+        id: "msg-user-timeout",
+        createdAt: "2000-01-01T00:00:00.000Z",
+      },
+    })
+
+    mockChatMessageListBySession.mockResolvedValueOnce({
+      data: [
+        {
+          id: "msg-assistant-timeout-recovered",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "Recovered after timeout reconcile",
+          createdAt: "2099-03-27T00:00:04.000Z",
+          sequenceNumber: 3,
+          metadata: JSON.stringify({
+            streaming: {
+              state: "complete",
+            },
+          }),
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByText("Hel")
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Test timeout reconcile path" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageCreate).toHaveBeenCalled()
+      expect(screen.getByText("Thinking")).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(mockChatMessageListBySession).toHaveBeenCalledTimes(1)
+      expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
+      expect(screen.getByText("Recovered after timeout reconcile")).toBeInTheDocument()
+    })
+  })
+
+  it("keeps thinking state when timeout reconcile finds no assistant, then recovers after terminal update", async () => {
+    mockChatMessageCreate.mockResolvedValueOnce({
+      data: {
+        id: "msg-user-timeout-missing-assistant",
+        createdAt: "2000-01-01T00:00:00.000Z",
+      },
+    })
+
+    mockChatMessageListBySession
+      .mockResolvedValueOnce({
+        data: [],
+        nextToken: null,
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: "msg-assistant-timeout-delayed",
+            accountId: "acct-1",
+            procedureId: "proc-1",
+            sessionId: "sess-1",
+            role: "ASSISTANT",
+            messageType: "MESSAGE",
+            humanInteraction: "CHAT_ASSISTANT",
+            content: "Recovered after delayed assistant row",
+            createdAt: "2099-03-27T00:00:04.000Z",
+            sequenceNumber: 3,
+            metadata: JSON.stringify({
+              streaming: {
+                state: "complete",
+              },
+            }),
+          },
+        ],
+        nextToken: null,
+      })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByText("Hel")
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Test delayed assistant reconcile path" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageCreate).toHaveBeenCalled()
+      expect(screen.getByText("Thinking")).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(mockChatMessageListBySession).toHaveBeenCalledTimes(1)
+      expect(screen.getByText("Thinking")).toBeInTheDocument()
+    })
+
+    await act(async () => {
+      subscriptions.messageUpdate?.next({
+        data: {
+          id: "msg-user-timeout-missing-assistant",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "USER",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT",
+          content: "Test delayed assistant reconcile path",
+          createdAt: "2099-03-27T00:00:02.000Z",
+          responseStatus: "COMPLETED",
+          responseCompletedAt: "2099-03-27T00:00:05.000Z",
+          sequenceNumber: 2,
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(mockChatMessageListBySession).toHaveBeenCalledTimes(2)
+      expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
+      expect(screen.getByText("Recovered after delayed assistant row")).toBeInTheDocument()
+    })
+  })
+
+  it("reconciles pending thinking via procedure-list fallback when session list API is unavailable", async () => {
+    const chatMessageModel = mockClient.models.ChatMessage as any
+    const originalListBySession = chatMessageModel.listChatMessageBySessionIdAndCreatedAt
+    chatMessageModel.listChatMessageBySessionIdAndCreatedAt = undefined
+
+    try {
+      mockChatMessageCreate.mockResolvedValueOnce({
+        data: {
+          id: "msg-user-procedure-fallback",
+          createdAt: "2000-01-01T00:00:00.000Z",
+        },
+      })
+
+      render(
+        <ConversationViewer
+          experimentId="proc-1"
+          defaultSidebarCollapsed={false}
+        />
+      )
+
+      await screen.findByText("Hel")
+
+      mockChatMessageList.mockResolvedValueOnce({
+        data: [
+          {
+            id: "msg-assistant-procedure-fallback",
+            accountId: "acct-1",
+            procedureId: "proc-1",
+            sessionId: "sess-1",
+            role: "ASSISTANT",
+            messageType: "MESSAGE",
+            humanInteraction: "CHAT_ASSISTANT",
+            content: "Recovered via procedure fallback",
+            createdAt: "2099-03-27T00:00:04.000Z",
+            sequenceNumber: 3,
+            metadata: JSON.stringify({
+              streaming: {
+                state: "complete",
+              },
+            }),
+          },
+        ],
+        nextToken: null,
+      })
+
+      fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+        target: { value: "Test procedure fallback reconcile" },
+      })
+      fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+      await waitFor(() => {
+        expect(mockChatMessageCreate).toHaveBeenCalled()
+        expect(screen.getByText("Thinking")).toBeInTheDocument()
+      })
+
+      await waitFor(() => {
+        expect(mockChatMessageList).toHaveBeenCalledTimes(2)
+        expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
+        expect(screen.getByText("Recovered via procedure fallback")).toBeInTheDocument()
+      })
+    } finally {
+      chatMessageModel.listChatMessageBySessionIdAndCreatedAt = originalListBySession
+    }
+  })
+
+  it("reconciles pending thinking via procedure-list fallback when session list call fails", async () => {
+    mockChatMessageCreate.mockResolvedValueOnce({
+      data: {
+        id: "msg-user-procedure-fallback-error",
+        createdAt: "2000-01-01T00:00:00.000Z",
+      },
+    })
+
+    mockChatMessageListBySession.mockRejectedValueOnce(new Error("session list unavailable"))
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByPlaceholderText("Type a message")
+    mockChatMessageList.mockResolvedValueOnce({
+      data: [
+        {
+          id: "msg-assistant-procedure-fallback-error",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "Recovered via procedure fallback after session list error",
+          createdAt: "2099-03-27T00:00:04.000Z",
+          sequenceNumber: 3,
+          metadata: JSON.stringify({
+            streaming: {
+              state: "complete",
+            },
+          }),
+        },
+      ],
+      nextToken: null,
+    })
+    const sessionListCallsBeforeSubmit = mockChatMessageListBySession.mock.calls.length
+    const procedureListCallsBeforeSubmit = mockChatMessageList.mock.calls.length
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Test procedure fallback error path" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageCreate).toHaveBeenCalled()
+      expect(screen.getByText("Thinking")).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(mockChatMessageListBySession.mock.calls.length).toBeGreaterThan(sessionListCallsBeforeSubmit)
+      expect(mockChatMessageList.mock.calls.length).toBeGreaterThan(procedureListCallsBeforeSubmit)
+      expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
+      expect(screen.getByText("Recovered via procedure fallback after session list error")).toBeInTheDocument()
+    })
+  })
+
+  it("clears pending thinking when reconciliation list calls fail", async () => {
+    mockChatMessageCreate.mockResolvedValueOnce({
+      data: {
+        id: "msg-user-reconcile-failure",
+        createdAt: "2000-01-01T00:00:00.000Z",
+      },
+    })
+
+    mockChatMessageListBySession.mockRejectedValueOnce(new Error("session list unavailable"))
+    mockChatMessageList.mockRejectedValueOnce(new Error("procedure list unavailable"))
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByPlaceholderText("Type a message")
+    const sessionListCallsBeforeSubmit = mockChatMessageListBySession.mock.calls.length
+    const procedureListCallsBeforeSubmit = mockChatMessageList.mock.calls.length
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Test reconcile failure clear path" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageCreate).toHaveBeenCalled()
+      expect(screen.getByText("Thinking")).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(mockChatMessageListBySession.mock.calls.length).toBeGreaterThan(sessionListCallsBeforeSubmit)
+      expect(mockChatMessageList.mock.calls.length).toBeGreaterThan(procedureListCallsBeforeSubmit)
+      expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
     })
   })
 

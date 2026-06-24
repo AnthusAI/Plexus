@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "85ea951d-7ee1-43f4-abf3-a5de0f16b801",
+  "issue_id": "plx-05653b63-e508-4c3a-8205-c4b91f421d50",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-19T12:50:14.185Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Add deterministic Console score version diffs and dual links",
+    "description": "Add deterministic score-change diff payloads for Console chat responses and render them with a dedicated inline diff component. Include both previous and updated score version links in structured audit output. Ensure behavior covers score.edit and guidelines updates through score.update while preserving existing validation/guard rails.\n\nDefinition of Done:\n- Audit event carries previous/updated version links and diff payloads for changed fields.\n- Console assistant message metadata stores diff payloads for UI rendering.\n- Console UI renders a Monaco-based inline diff panel for code/guidelines when metadata exists.\n- Targeted backend and frontend tests pass for links + diff rendering paths.\n- No client-specific data is included in issue text or logs.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+    "labels": []
+  }
+}

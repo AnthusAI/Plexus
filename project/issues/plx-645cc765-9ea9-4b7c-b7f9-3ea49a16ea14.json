@@ -1,0 +1,37 @@
+{
+  "id": "plx-645cc765-9ea9-4b7c-b7f9-3ea49a16ea14",
+  "title": "Ensure console score-change responses include version links and diffs",
+  "description": "Make score/guideline change responses deterministic in console chat metadata so UI can render previous/updated score version links and inline diffs, and normalize user-facing wording to avoid technical jargon.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "a88cff74-e6f3-4fd8-8745-396b7892a205",
+      "author": "ryan.porter",
+      "text": "Starting implementation: tracing score-edit and guideline-update audit metadata path to ensure links and diffs are always included for console rendering. Also normalizing user-facing version language to 'previous score version' and 'updated score version'.",
+      "created_at": "2026-06-19T13:28:38.758904Z"
+    },
+    {
+      "id": "0075bcec-5847-4e9e-9c8d-68080de9e7b1",
+      "author": "ryan.porter",
+      "text": "Implementing reliability hardening for console score edits: strict structured output path, deterministic retry/fallback policy, and attempt-level audit metadata; then updating prompt/skill wording and tests.",
+      "created_at": "2026-06-19T14:35:36.787475Z"
+    },
+    {
+      "id": "baf43308-f72d-4baf-934c-1828c12f2958",
+      "author": "ryan.porter",
+      "text": "Implemented score.edit reliability upgrades in MCP runtime: schema-constrained model output with compatibility fallback, deterministic multi-attempt model retry (primary + fallback), post-save retry support after smoke/verification failure, and attempts/error_code metadata in result/audit payloads. Updated console prompt + skill wording to use 'updated score version' language. Added unit tests for fallback retry and post-save retry, and all targeted suites pass.",
+      "created_at": "2026-06-19T14:39:41.878285Z"
+    }
+  ],
+  "created_at": "2026-06-19T13:28:33.402543Z",
+  "updated_at": "2026-06-19T14:39:41.878285Z",
+  "closed_at": null,
+  "custom": {}
+}

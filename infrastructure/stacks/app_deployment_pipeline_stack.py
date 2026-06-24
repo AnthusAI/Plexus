@@ -8,7 +8,7 @@ uses native CodeDeployServerDeployAction which properly waits for deployment com
 This stack is self-contained and creates its own CodeDeploy application and deployment group.
 """
 
-import boto3
+import os
 from aws_cdk import (
     Stack,
     aws_codepipeline as codepipeline,
@@ -16,6 +16,7 @@ from aws_cdk import (
     aws_codebuild as codebuild,
     aws_codedeploy as codedeploy,
     aws_iam as iam,
+    aws_ssm as ssm,
     Tags,
 )
 from constructs import Construct
@@ -66,17 +67,14 @@ class AppDeploymentPipelineStack(Stack):
         Tags.of(self).add("Service", "app-deployment")
         Tags.of(self).add("ManagedBy", "CDK")
 
-        # Fetch GitHub CodeConnection ARN from SSM Parameter Store
-        ssm = boto3.client('ssm', region_name=kwargs.get('env').region if kwargs.get('env') else 'us-west-2')
-        try:
-            response = ssm.get_parameter(Name='/plexus/github-connection-arn')
-            connection_arn = response['Parameter']['Value']
-        except Exception as e:
-            raise ValueError(
-                f"Failed to fetch GitHub connection ARN from SSM Parameter Store: {e}\n"
-                "Create it with: aws ssm put-parameter --name /plexus/github-connection-arn "
-                "--value 'arn:aws:codeconnections:us-west-2:ACCOUNT:connection/ID' --type String"
+        # Resolve the GitHub CodeConnection ARN from SSM at deploy time.
+        connection_arn = (
+            os.environ.get("PLEXUS_GITHUB_CONNECTION_ARN")
+            or ssm.StringParameter.value_for_string_parameter(
+                self,
+                "/plexus/github-connection-arn",
             )
+        )
 
         # Create CodeDeploy service role
         codedeploy_service_role = iam.Role(

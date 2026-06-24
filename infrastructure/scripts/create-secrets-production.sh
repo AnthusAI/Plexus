@@ -51,7 +51,10 @@ SECRET_VALUE=$(cat <<EOF
   "table-evaluation-stream-arn": "${TABLE_EVALUATION_STREAM_ARN:-}",
   "table-procedure-name": "${TABLE_PROCEDURE_NAME:-}",
   "table-procedure-arn": "${TABLE_PROCEDURE_ARN:-}",
-  "table-procedure-stream-arn": "${TABLE_PROCEDURE_STREAM_ARN:-}"
+  "table-procedure-stream-arn": "${TABLE_PROCEDURE_STREAM_ARN:-}",
+  "table-feedbackitem-name": "${TABLE_FEEDBACKITEM_NAME:-}",
+  "table-feedbackitem-arn": "${TABLE_FEEDBACKITEM_ARN:-}",
+  "table-feedbackitem-stream-arn": "${TABLE_FEEDBACKITEM_STREAM_ARN:-}"
 }
 EOF
 )

@@ -660,14 +660,17 @@ class ScoreEditorToolset:
 
             from tools.tactus_runtime.execute import _default_score_update  # type: ignore
 
-            payload = _default_score_update({
+            update_args = {
                 "scorecard_identifier": self._scorecard,
                 "score_identifier": self._score,
                 "code": self._files[VIRTUAL_PATH],
-                "guidelines": self._files[GUIDELINES_PATH],
                 "parent_version_id": self._parent_version_id,
                 "version_note": note,
-            })
+            }
+            if guidelines_changed:
+                update_args["guidelines"] = self._files[GUIDELINES_PATH]
+
+            payload = _default_score_update(update_args)
 
             if payload.get("success") is False:
                 err = payload.get("error") or "plexus.score.update failed"
@@ -680,9 +683,11 @@ class ScoreEditorToolset:
             version_id = payload.get("version_id")
             if version_id:
                 self._last_version_id = version_id
+                payload_parent_version_id = payload.get("parent_version_id")
                 return {
                     "success": True,
                     "version_id": version_id,
+                    "parent_version_id": payload_parent_version_id,
                     "changed_fields": [
                         field
                         for field, changed in (
@@ -691,6 +696,7 @@ class ScoreEditorToolset:
                         )
                         if changed
                     ],
+                    "guidelines_preserved": bool(payload.get("guidelines_preserved")),
                     "message": f"Score version created: {version_id}",
                 }
 
