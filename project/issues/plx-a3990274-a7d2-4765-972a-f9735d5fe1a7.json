@@ -3,7 +3,7 @@
   "title": "Increase dashboard typecheck Node heap",
   "description": "Dashboard TypeScript CI can exhaust the default Node heap before reporting diagnostics. Make the CI typecheck heap budget explicit so unrelated backend changes are not blocked by runner defaults.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -12,7 +12,7 @@
   "dependencies": [],
   "comments": [],
   "created_at": "2026-06-24T01:00:25.846985732Z",
-  "updated_at": "2026-06-24T01:00:34.129911997Z",
-  "closed_at": null,
+  "updated_at": "2026-06-24T01:00:51.645130638Z",
+  "closed_at": "2026-06-24T01:00:51.645130638Z",
   "custom": {}
 }
