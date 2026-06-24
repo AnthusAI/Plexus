@@ -321,6 +321,11 @@ class TactusScore(Score):
             elif 'metadata' in metadata and isinstance(metadata['metadata'], dict):
                 deepgram_data = metadata['metadata'].get('deepgram')
 
+        if not deepgram_data and metadata:
+            from plexus.utils.deepgram_attachments import load_deepgram_from_attachment_metadata
+
+            deepgram_data = load_deepgram_from_attachment_metadata(metadata)
+
         if not deepgram_data:
             logger.debug("No deepgram data found in metadata, skipping timestamp enrichment")
             return explanation

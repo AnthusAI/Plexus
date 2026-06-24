@@ -1,0 +1,31 @@
+{
+  "id": "plx-7ef06477-deb8-4bd4-af6b-a2cc1a485580",
+  "title": "Load Deepgram attachments in TactusScore",
+  "description": "Add TactusScore support for resolving Deepgram payloads from attachment metadata, matching the existing LangGraphScore behavior, and cover it with focused tests.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-293f6784-787e-4633-be38-7539f811b297",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ba9c5a2a-6faa-411f-b77c-8d9102d5adf9",
+      "author": "ec2-user",
+      "text": "Starting with a failing focused test for TactusScore attachment-key timestamp enrichment. No client-specific data is recorded; fixtures use synthetic generic keys and transcript text.",
+      "created_at": "2026-06-24T22:08:12.974283817Z"
+    },
+    {
+      "id": "97bcd6d5-ab4c-45df-9344-55e8932c86b1",
+      "author": "ec2-user",
+      "text": "Implemented shared Deepgram attachment loading for score timestamp enrichment and wired TactusScore to use attached Deepgram JSON metadata. Local focused regression reproduced the pre-fix failure; full local verification deferred to GitHub CI after the staging instance became unstable.",
+      "created_at": "2026-06-24T22:46:40.599127321Z"
+    }
+  ],
+  "created_at": "2026-06-24T22:08:07.510554548Z",
+  "updated_at": "2026-06-24T22:46:56.164432188Z",
+  "closed_at": "2026-06-24T22:46:56.164432188Z",
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "500977b7-4680-4f98-98d9-cee37287c179",
+  "issue_id": "plx-293f6784-787e-4633-be38-7539f811b297",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-24T22:08:02.342Z",
+  "actor_id": "ec2-user",
+  "payload": {
+    "assignee": null,
+    "description": "Purpose: make Tactus-based scoring preserve evidence timestamps when Deepgram data is supplied as an item attachment key rather than inline metadata. Definition of Done: Tactus timestamp enrichment loads recorded Deepgram attachment keys, focused tests pass, and Kanbus artifacts are committed with the branch.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Preserve Tactus evidence timestamps from attachments"
+  }
+}
