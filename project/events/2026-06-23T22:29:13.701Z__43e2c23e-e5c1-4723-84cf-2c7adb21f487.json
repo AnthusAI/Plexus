@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "43e2c23e-e5c1-4723-84cf-2c7adb21f487",
+  "issue_id": "plx-5e341495-8a8e-43b3-a625-6d92a0a3bf46",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-23T22:29:13.701Z",
+  "actor_id": "ec2-user",
+  "payload": {
+    "assignee": null,
+    "description": "As a platform operator, I want Plexus CloudWatch logging to use IAM role credentials and redact sensitive values before log emission, so that new-account logging can be enabled without static keys or unprotected PII.\n\nFeature: Protected CloudWatch logging\n\nScenario: CloudWatch log shipping starts with role credentials\nGiven AWS region is configured and no static AWS keys are required\nWhen Plexus initializes CloudWatch logging\nThen the CloudWatch Logs client is created through the default credential provider chain\nAnd app-side redaction is active before any CloudWatch handler receives log text\nAnd the CloudWatch data protection policy is applied before log shipping is enabled.\n\nScenario: Protection cannot be established\nGiven AWS region is configured\nWhen the data protection policy cannot be applied\nThen Plexus does not attach a CloudWatch log handler\nAnd local logging continues.",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-80653be7-0865-4ec7-b29f-9016798f66a2",
+    "priority": 1,
+    "status": "open",
+    "title": "CloudWatch logs are redacted and keyless"
+  }
+}

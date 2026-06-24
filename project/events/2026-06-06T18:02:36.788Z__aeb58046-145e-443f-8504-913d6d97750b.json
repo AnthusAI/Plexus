@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "aeb58046-145e-443f-8504-913d6d97750b",
+  "issue_id": "plx-918d57f7-ed5c-4a83-accc-9f74c86729d7",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-06T18:02:36.788Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Local worker orchestration MVP: docs and proof",
+    "description": "Deliver executable proof and documentation for local worker orchestration in local control-plane mode. Scope: local task dispatch worker path, local console/chat worker path, deterministic smoke scripts, and runbook updates. Out of scope: OIDC, autoscaling, and production observability implementation.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-c37e0c57-2980-4172-9d9e-a1ab72c9dc4b",
+    "labels": []
+  }
+}

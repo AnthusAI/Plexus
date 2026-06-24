@@ -1,0 +1,18 @@
+{
+  "id": "plx-5b670257-243b-4415-90b1-88418f1df375",
+  "title": "Non-AWS control plane migration",
+  "description": "Program-level initiative for replacing hosted control-plane dependencies with a local, controlled GraphQL backend and validating milestone epics from MVP proof through production readiness.",
+  "type": "initiative",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-05T15:32:42.699442Z",
+  "updated_at": "2026-06-05T15:32:42.699442Z",
+  "closed_at": null,
+  "custom": {}
+}

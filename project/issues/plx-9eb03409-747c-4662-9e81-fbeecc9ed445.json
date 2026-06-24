@@ -1,0 +1,31 @@
+{
+  "id": "plx-9eb03409-747c-4662-9e81-fbeecc9ed445",
+  "title": "Replace constants-only Hugging Face fixture-default test with behavior coverage",
+  "description": "services/private-graphql-proxy/tests/test_seed_huggingface_items.py asserts that DEFAULT_DATASET and DEFAULT_PREFIX equal string literals. That is a change-detector test: it duplicates the constants and only fails when someone intentionally changes them, while exercising none of the added logic.\n\nReplace it with a behavior test verifying that load_dataset receives the explicit Features schema when loading the default dataset (the actual bug-prone logic added in the seeder), or remove the test. While there, add a one-line comment in seed_huggingface_items.py explaining why the explicit Features schema is required for the default dataset (schema inference is inconsistent without it), so the special case does not read as arbitrary. Same rationale comment applies to docker/scripts/fetch_demo_transcripts.py.",
+  "type": "chore",
+  "status": "closed",
+  "priority": 3,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7fbefd62-5a0e-447a-8dee-a47b0aee16ec",
+      "author": "derek.norrbom",
+      "text": "Progress: replaced the constants-only Hugging Face fixture test with behavior coverage. The test now stubs the datasets module and verifies load_rows passes an explicit text-only Features schema when loading the default call-center dataset. Added rationale comments in both Hugging Face seeders explaining that the explicit schema avoids audio codec requirements because only transcript text is needed. Validation passed: focused pytest, py_compile, git diff --check, and rcql --scan-files for the changed seeder/test files returned Total: 0.",
+      "created_at": "2026-06-10T21:01:52.979427Z"
+    },
+    {
+      "id": "22b71485-f661-4cf3-96bd-1c94516a7161",
+      "author": "derek.norrbom",
+      "text": "Verified and closed. The constants-only test is replaced with behavior coverage: it stubs the datasets module and asserts load_rows passes an explicit text-only Features schema (text/domain/gender/accent as strings) for the default dataset with correct split slicing. Rationale comments added in both seeders explaining the explicit schema avoids audio codec requirements since only transcript text is needed. Test green.",
+      "created_at": "2026-06-10T21:15:06.678153Z"
+    }
+  ],
+  "created_at": "2026-06-10T20:39:20.838973Z",
+  "updated_at": "2026-06-10T21:15:06.689094Z",
+  "closed_at": "2026-06-10T21:15:06.689094Z",
+  "custom": {}
+}

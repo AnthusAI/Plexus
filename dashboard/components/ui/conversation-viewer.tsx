@@ -231,6 +231,19 @@ const CONSOLE_CHAT_MODEL_OPTIONS = [
 const DEFAULT_CONSOLE_CHAT_MODEL = 'gpt-5.4-mini'
 const CONVERSATION_BOTTOM_EPSILON_PX = 2
 const SCROLL_DELTA_EPSILON_PX = 0.1
+const CHAT_SESSION_SELECTION_SET = [
+  "id",
+  "accountId",
+  "scorecardId",
+  "scoreId",
+  "procedureId",
+  "name",
+  "category",
+  "status",
+  "metadata",
+  "createdAt",
+  "updatedAt",
+] as const
 
 // Types for the conversation data
 export interface ChatMessage {
@@ -434,7 +447,11 @@ const isPrivateConsoleMetadata = (metadata: unknown): boolean => (
 )
 
 const getPrivacyOwnerUserId = (metadata: unknown): string | null => {
-  const owner = getConsoleMetadata(metadata).privacy_owner_user_id
+  const consoleMetadata = getConsoleMetadata(metadata)
+  const owner = (
+    consoleMetadata.private_owner_user_id
+    ?? consoleMetadata.privacy_owner_user_id
+  )
   return typeof owner === "string" && owner.trim() ? owner.trim() : null
 }
 
@@ -445,6 +462,10 @@ const getPrivacySpanId = (metadata: unknown): string | null => {
 
 const canViewPrivateConsoleMetadata = (metadata: unknown, currentUserId: string | null): boolean => {
   if (!isPrivateConsoleMetadata(metadata)) {
+    return true
+  }
+  if (!currentUserId) {
+    // If attribution resolution is unavailable, avoid hiding all private console content.
     return true
   }
   const ownerUserId = getPrivacyOwnerUserId(metadata)
@@ -459,9 +480,15 @@ const canViewSessionForCurrentUser = (
   if (!Boolean(consoleMetadata.private_only)) {
     return true
   }
-  const ownerUserId = typeof consoleMetadata.private_owner_user_id === "string"
-    ? consoleMetadata.private_owner_user_id.trim()
-    : ""
+  if (!currentUserId) {
+    // Avoid blank session sidebars when user attribution cannot be resolved.
+    return true
+  }
+  const ownerRaw = (
+    consoleMetadata.private_owner_user_id
+    ?? consoleMetadata.privacy_owner_user_id
+  )
+  const ownerUserId = typeof ownerRaw === "string" ? ownerRaw.trim() : ""
   return Boolean(ownerUserId && currentUserId && ownerUserId === currentUserId)
 }
 
@@ -519,6 +546,11 @@ const SessionLabel = ({
 const isHiddenUntilNamedSession = (session: Pick<ChatSession, "name" | "metadata">): boolean => {
   const explicitName = String(session.name || "").trim()
   if (explicitName) {
+    return false
+  }
+  const messageCount = Number((session as { messageCount?: unknown }).messageCount || 0)
+  if (messageCount > 0) {
+    // Only hide truly empty draft sessions.
     return false
   }
   const metadata = parseSessionMetadata(session.metadata)
@@ -609,6 +641,107 @@ const isUnauthorizedError = (error: unknown): boolean => {
     || normalized.includes("unauthenticated")
     || normalized.includes("forbidden")
     || normalized.includes("401")
+  )
+}
+
+const isNonInformativeSubscriptionMessage = (rawMessage: string): boolean => {
+  const message = rawMessage.trim()
+  if (!message) {
+    return true
+  }
+
+  const normalized = message.toLowerCase()
+  if (
+    normalized === "{}"
+    || normalized === "[]"
+    || normalized === "[object object]"
+    || normalized === "unknown error"
+    || normalized === "error"
+  ) {
+    return true
+  }
+
+  if (message.startsWith("{") || message.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(message)
+      if (Array.isArray(parsed)) {
+        return parsed.length === 0
+      }
+      if (parsed && typeof parsed === "object") {
+        return Object.keys(parsed as Record<string, unknown>).length === 0
+      }
+    } catch {
+      // Ignore JSON parse errors and treat the message as informative.
+    }
+  }
+
+  return false
+}
+
+const isIgnorableSubscriptionError = (error: unknown): boolean => {
+  if (!error) {
+    return true
+  }
+
+  if (isUnauthorizedError(error)) {
+    return false
+  }
+
+  const hasMeaningfulDetails = (() => {
+    if (error instanceof Error) {
+      return !isNonInformativeSubscriptionMessage(error.message)
+    }
+    if (typeof error !== "object" || error === null) {
+      return false
+    }
+    const record = error as Record<string, unknown>
+    if (
+      typeof record.message === "string"
+      && !isNonInformativeSubscriptionMessage(record.message)
+    ) {
+      return true
+    }
+    if (typeof record.statusCode === "number" || typeof record.status === "number") {
+      return true
+    }
+    if (Array.isArray(record.errors)) {
+      return record.errors.some((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return false
+        }
+        const msg = (entry as { message?: unknown }).message
+        return typeof msg === "string" && !isNonInformativeSubscriptionMessage(msg)
+      })
+    }
+    return false
+  })()
+
+  if (!hasMeaningfulDetails) {
+    return true
+  }
+
+  if (typeof error === "object" && error !== null && !(error instanceof Error)) {
+    const record = error as Record<string, unknown>
+    if (Object.keys(record).length === 0) {
+      return true
+    }
+    const errors = record.errors
+    if (Array.isArray(errors) && errors.length === 0) {
+      return true
+    }
+  }
+
+  const message = getErrorMessage(error, "").trim().toLowerCase()
+  if (!message || isNonInformativeSubscriptionMessage(message)) {
+    return true
+  }
+
+  return (
+    message.includes("aborterror")
+    || message.includes("aborted")
+    || message.includes("connection closed")
+    || message.includes("socket closed")
+    || message.includes("websocket is closed")
   )
 }
 
@@ -2115,11 +2248,14 @@ function ConversationViewer({
         const client = getClient()
         
         // Load chat sessions for the procedure
-        const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
+        const sessionsResponse = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
           procedureId: effectiveId,
           limit: 100,
           sortDirection: 'DESC',
+        }, {
+          selectionSet: CHAT_SESSION_SELECTION_SET,
         })
+        const sessionsData = sessionsResponse?.data
 
         const fetchedSessions = Array.isArray(sessionsData) ? sessionsData : []
         const selectedId = selectedSessionIdRef.current?.trim()
@@ -2129,7 +2265,9 @@ function ConversationViewer({
         // that's not in the index list yet, fetch by id and inject it.
         if (selectedId && !fetchedSessions.some((session: any) => session?.id === selectedId)) {
           try {
-            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId })
+            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId }, {
+              selectionSet: CHAT_SESSION_SELECTION_SET,
+            })
             const selectedSession = selectedSessionResponse?.data
             if (selectedSession && (!effectiveId || selectedSession.procedureId === effectiveId)) {
               mergedSessions = [selectedSession, ...fetchedSessions]
@@ -2245,11 +2383,14 @@ function ConversationViewer({
         const client = getClient()
         
         // Query for sessions in the current procedure
-        const { data: sessionsData } = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
+        const sessionsResponse = await (client.models.ChatSession.listChatSessionByProcedureIdAndCreatedAt as any)({
           procedureId: effectiveId,
           limit: 100,
           sortDirection: 'DESC',
+        }, {
+          selectionSet: CHAT_SESSION_SELECTION_SET,
         })
+        const sessionsData = sessionsResponse?.data
 
         const fetchedSessions = Array.isArray(sessionsData) ? sessionsData : []
         const selectedId = selectedSessionIdRef.current?.trim()
@@ -2257,7 +2398,9 @@ function ConversationViewer({
 
         if (selectedId && !fetchedSessions.some((session: any) => session?.id === selectedId)) {
           try {
-            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId })
+            const selectedSessionResponse = await (client.models.ChatSession.get as any)({ id: selectedId }, {
+              selectionSet: CHAT_SESSION_SELECTION_SET,
+            })
             const selectedSession = selectedSessionResponse?.data
             if (selectedSession && (!effectiveId || selectedSession.procedureId === effectiveId)) {
               mergedSessions = [selectedSession, ...fetchedSessions]
@@ -2361,11 +2504,14 @@ function ConversationViewer({
           // Don't rely on the subscription data, just use it as a notification
           checkForNewSessions()
         },
-        error: (error: Error) => {
+        error: (error: unknown) => {
           if (markAuthUnavailable(error, 'session_on_create_subscription')) {
             return
           }
-          console.error('Chat session create subscription error:', error)
+          if (isIgnorableSubscriptionError(error)) {
+            return
+          }
+          console.warn('Chat session create subscription issue; relying on poll fallback.', error)
         }
       })
     } catch (error) {
@@ -2383,11 +2529,14 @@ function ConversationViewer({
         next: () => {
           checkForNewSessions()
         },
-        error: (error: Error) => {
+        error: (error: unknown) => {
           if (markAuthUnavailable(error, 'session_on_update_subscription')) {
             return
           }
-          console.error('Chat session update subscription error:', error)
+          if (isIgnorableSubscriptionError(error)) {
+            return
+          }
+          console.warn('Chat session update subscription issue; relying on poll fallback.', error)
         }
       })
     } catch (error) {
@@ -2556,8 +2705,11 @@ function ConversationViewer({
           }
           checkForNewMessages()
         },
-        error: (error: Error) => {
+        error: (error: unknown) => {
           if (markAuthUnavailable(error, 'message_on_create_subscription')) {
+            return
+          }
+          if (isIgnorableSubscriptionError(error)) {
             return
           }
           console.error('Chat message create subscription error:', error)
@@ -2580,8 +2732,11 @@ function ConversationViewer({
           }
           checkForNewMessages()
         },
-        error: (error: Error) => {
+        error: (error: unknown) => {
           if (markAuthUnavailable(error, 'message_on_update_subscription')) {
+            return
+          }
+          if (isIgnorableSubscriptionError(error)) {
             return
           }
           console.error('Chat message update subscription error:', error)
@@ -2830,6 +2985,8 @@ function ConversationViewer({
         id: selectedSession.id,
         metadata: serializeSessionMetadata(nextMetadata),
         updatedAt,
+      }, {
+        selectionSet: CHAT_SESSION_SELECTION_SET,
       })
       setInternalSessions(prev => prev.map(session => (
         session.id === selectedSession.id
@@ -3061,6 +3218,8 @@ function ConversationViewer({
         name: nextName,
         metadata: serializeSessionMetadata(nextMetadata),
         updatedAt,
+      }, {
+        selectionSet: CHAT_SESSION_SELECTION_SET,
       })
       setInternalSessions(prev => prev.map(session => (
         session.id === selectedSession.id
@@ -3269,6 +3428,8 @@ function ConversationViewer({
       metadata: serializeSessionMetadata(sessionMetadata),
       createdAt,
       updatedAt: createdAt,
+    }, {
+      selectionSet: CHAT_SESSION_SELECTION_SET,
     })
 
     const sessionId = created?.data?.id
@@ -3466,6 +3627,8 @@ function ConversationViewer({
               id: targetSessionId,
               metadata: serializeSessionMetadata(nextSessionMetadata),
               updatedAt,
+            }, {
+              selectionSet: CHAT_SESSION_SELECTION_SET,
             })
             setInternalSessions(prev => prev.map(session => (
               session.id === targetSessionId

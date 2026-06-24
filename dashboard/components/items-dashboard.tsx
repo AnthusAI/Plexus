@@ -802,80 +802,24 @@ function ItemsDashboardInner() {
     requestAnimationFrame(attemptScroll);
   }, []);
 
-  // Search for item by identifier
-  const handleSearch = useCallback(async (identifier: string) => {
-    if (!identifier.trim()) return;
-    if (!selectedAccount?.id) {
-      setSearchError('Select an account before searching');
-      return;
-    }
-    
-    setIsSearching(true);
-    setSearchError(null);
-    
-    try {
-      const response = await graphqlRequest<ItemIdentifierSearchResponse['data']>(
-        ITEM_IDENTIFIER_SEARCH_QUERY,
-        buildItemIdentifierSearchVariables(selectedAccount.id, identifier)
-      );
-      
-      const itemId = firstItemIdFromIdentifierSearchResponse(response);
-      
-      if (itemId) {
-        // Navigate to the item without remount
-        window.history.pushState({}, '', `/lab/items/${itemId}`)
-        setSelectedItem(itemId)
-        setSearchValue(''); // Clear search on success
-      } else {
-        setSearchError('No item found with this identifier');
-        // Set timeout to clear error after 5 seconds
-        if (searchErrorTimeoutRef.current) {
-          clearTimeout(searchErrorTimeoutRef.current);
-        }
-        searchErrorTimeoutRef.current = setTimeout(() => {
-          setSearchError(null);
-        }, 5000);
-      }
-    } catch (error) {
-      console.error('Search error:', error);
-      setSearchError('Error searching for item');
-      // Set timeout to clear error after 5 seconds
-      if (searchErrorTimeoutRef.current) {
-        clearTimeout(searchErrorTimeoutRef.current);
-      }
-      searchErrorTimeoutRef.current = setTimeout(() => {
-        setSearchError(null);
-      }, 5000);
-    } finally {
-      setIsSearching(false);
-    }
-  }, [selectedAccount?.id]);
-
-  // Handle search form submission
-  const handleSearchSubmit = useCallback((e: React.FormEvent) => {
-    e.preventDefault();
-    handleSearch(searchValue);
-  }, [handleSearch, searchValue]);
-  
-  // Function to fetch a specific item by ID
   const fetchSpecificItem = useCallback(async (itemId: string) => {
     if (!selectedAccount) {
       return null;
     }
-    
+
     // Check one more time if the item is now available before fetching
     if (items.some(item => item.id === itemId)) {
       return items.find(item => item.id === itemId) || null;
     }
-    
+
     setSpecificItemLoading(true);
-    
+
     // Add a timeout to prevent hanging forever
     const timeoutId = setTimeout(() => {
       setSpecificItemLoading(false);
       setFailedItemFetches(prev => new Set(prev).add(itemId));
     }, 30000); // 30 second timeout
-    
+
     try {
       const response = await graphqlRequest<{
         getItem: {
@@ -920,13 +864,13 @@ function ItemsDashboardInner() {
       `, {
         id: itemId
       });
-      
+
       if (response.data?.getItem) {
         const item = response.data.getItem;
-        
+
         // Transform the item to match our expected format
         const transformedItem = transformItem(item, { isNew: false });
-        
+
         // Add the item to the beginning of the list if it's not already there
         setItems(prevItems => {
           const exists = prevItems.some(existingItem => existingItem.id === item.id);
@@ -935,13 +879,13 @@ function ItemsDashboardInner() {
           }
           return prevItems;
         });
-        
+
         // Track that this item was specifically fetched (not naturally in first page)
         setSpecificallyFetchedItems(prev => new Set(prev).add(item.id));
-        
+
         return transformedItem;
       }
-      
+
       // Item not found, mark as failed
       setFailedItemFetches(prev => new Set(prev).add(itemId));
       return null;
@@ -954,8 +898,71 @@ function ItemsDashboardInner() {
       clearTimeout(timeoutId);
       setSpecificItemLoading(false);
     }
-  }, [selectedAccount, items]); // Include items to check if item is now available
-  
+  }, [selectedAccount, items]);
+
+  // Search for item by identifier
+  const handleSearch = useCallback(async (identifier: string) => {
+    if (!identifier.trim()) return;
+    if (!selectedAccount?.id) {
+      setSearchError('Select an account before searching');
+      return;
+    }
+    
+    setIsSearching(true);
+    setSearchError(null);
+    
+    try {
+      const response = await graphqlRequest<ItemIdentifierSearchResponse['data']>(
+        ITEM_IDENTIFIER_SEARCH_QUERY,
+        buildItemIdentifierSearchVariables(selectedAccount.id, identifier)
+      );
+      
+      let itemId = firstItemIdFromIdentifierSearchResponse(response);
+
+      // Fallback: try direct item ID lookup if identifier search returned nothing
+      if (!itemId) {
+        const directItem = await fetchSpecificItem(identifier.trim());
+        if (directItem) {
+          itemId = directItem.id;
+        }
+      }
+
+      if (itemId) {
+        // Navigate to the item without remount
+        window.history.pushState({}, '', `/lab/items/${itemId}`)
+        setSelectedItem(itemId)
+        setSearchValue(''); // Clear search on success
+      } else {
+        setSearchError('No item found with this identifier');
+        // Set timeout to clear error after 5 seconds
+        if (searchErrorTimeoutRef.current) {
+          clearTimeout(searchErrorTimeoutRef.current);
+        }
+        searchErrorTimeoutRef.current = setTimeout(() => {
+          setSearchError(null);
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchError('Error searching for item');
+      // Set timeout to clear error after 5 seconds
+      if (searchErrorTimeoutRef.current) {
+        clearTimeout(searchErrorTimeoutRef.current);
+      }
+      searchErrorTimeoutRef.current = setTimeout(() => {
+        setSearchError(null);
+      }, 5000);
+    } finally {
+      setIsSearching(false);
+    }
+  }, [selectedAccount?.id, fetchSpecificItem]);
+
+  // Handle search form submission
+  const handleSearchSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    handleSearch(searchValue);
+  }, [handleSearch, searchValue]);
+
   // Clear failed fetches and specifically fetched items when account changes
   useEffect(() => {
     if (selectedAccount) {

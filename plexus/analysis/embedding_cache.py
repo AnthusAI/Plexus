@@ -14,6 +14,7 @@ from typing import List, Optional, cast
 
 import boto3
 import numpy as np
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,37 @@ class EmbeddingCache:
         self.bucket_name = bucket_name or os.environ.get(
             "EMBEDDING_CACHE_BUCKET", DEFAULT_EMBEDDING_BUCKET
         )
-        self._s3 = s3_client or boto3.client("s3")
+        self._s3 = s3_client or self._create_s3_client()
+
+    @staticmethod
+    def _create_s3_client():
+        """Create an S3 client with optional local object-store compatibility."""
+        endpoint = os.environ.get("PLEXUS_OBJECT_STORE_ENDPOINT")
+        if not endpoint:
+            return boto3.client("s3")
+
+        region = (
+            os.environ.get("PLEXUS_OBJECT_STORE_REGION")
+            or os.environ.get("AWS_REGION")
+            or os.environ.get("AWS_DEFAULT_REGION")
+            or "us-east-1"
+        )
+        force_path_style = (
+            os.environ.get("PLEXUS_OBJECT_STORE_FORCE_PATH_STYLE", "false").lower()
+            == "true"
+        )
+
+        return boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            aws_access_key_id=os.environ.get("PLEXUS_OBJECT_STORE_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.environ.get("PLEXUS_OBJECT_STORE_SECRET_ACCESS_KEY"),
+            region_name=region,
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "path" if force_path_style else "virtual"},
+            ),
+        )
 
     def get(self, model_id: str, key: str) -> Optional[np.ndarray]:
         """

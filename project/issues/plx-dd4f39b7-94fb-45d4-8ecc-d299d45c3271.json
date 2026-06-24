@@ -1,0 +1,25 @@
+{
+  "id": "plx-dd4f39b7-94fb-45d4-8ecc-d299d45c3271",
+  "title": "Local feedback evaluation contract parity",
+  "description": "Harden local GraphQL routing and resolver behavior for feedback-evaluation flows: feedback item index roots, evaluation roots, score-result-by-evaluation roots, and relationship selections used by FeedbackItems and evaluate feedback.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-89823a02-0f3a-40d5-b59c-a6252f465d4e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "f37735f2-09ef-45ba-b61a-310e345b47d1",
+      "author": "ryan.porter",
+      "text": "Implemented local contract-parity hardening for feedback flows: legacy feedback composite index alias classification, alias routing tests, list pagination nextToken support in local mode, and composite between-filter handling (including timestamp range semantics). Verified with proxy tests and local feedback smoke using max-items=200.",
+      "created_at": "2026-06-05T16:04:11.396595Z"
+    }
+  ],
+  "created_at": "2026-06-05T15:32:58.588292Z",
+  "updated_at": "2026-06-05T16:04:16.822013Z",
+  "closed_at": "2026-06-05T16:04:16.822013Z",
+  "custom": {}
+}

@@ -18,6 +18,8 @@ import threading
 import time
 from typing import Any, Dict
 
+from plexus.logging.redaction import redact_text
+
 logger = logging.getLogger(__name__)
 
 _POLICY_APPLIED_LOG_GROUPS: set[str] = set()
@@ -314,18 +316,7 @@ class PlexusCloudWatchLogger:
             return
         try:
             import boto3
-            is_lambda = os.getenv("AWS_EXECUTION_ENV") or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
-            aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
-            aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-            if is_lambda or not (aws_access_key and aws_secret_key):
-                self._logs_client = boto3.client("logs", region_name=aws_region)
-            else:
-                self._logs_client = boto3.client(
-                    "logs",
-                    region_name=aws_region,
-                    aws_access_key_id=aws_access_key,
-                    aws_secret_access_key=aws_secret_key,
-                )
+            self._logs_client = boto3.client("logs", region_name=aws_region)
         except Exception as exc:
             logger.debug("Could not initialize CloudWatch Logs client: %s", exc)
 
@@ -354,7 +345,13 @@ class PlexusCloudWatchLogger:
 
             # Apply data protection policy for PII/PHI masking
             policy_started = time.perf_counter()
-            self._apply_data_protection_policy_once()
+            if not self._apply_data_protection_policy_once():
+                self._logs_client = None
+                logger.error(
+                    "CloudWatch logging disabled for %s because data protection policy was not applied",
+                    self.log_group,
+                )
+                return
             timing_ms["apply_policy_ms"] = round(
                 (time.perf_counter() - policy_started) * 1000, 2
             )
@@ -411,9 +408,9 @@ class PlexusCloudWatchLogger:
         except Exception as exc:
             logger.debug("CloudWatch open failed: %s", exc)
 
-    def _apply_data_protection_policy_once(self) -> None:
+    def _apply_data_protection_policy_once(self) -> bool:
         if not self._logs_client:
-            return
+            return False
 
         with _POLICY_APPLY_LOCK:
             if self.log_group in _POLICY_APPLIED_LOG_GROUPS:
@@ -421,7 +418,7 @@ class PlexusCloudWatchLogger:
                     "Skipping CloudWatch data protection policy apply for %s (already applied in-process)",
                     self.log_group,
                 )
-                return
+                return True
             try:
                 response = self._logs_client.put_data_protection_policy(
                     logGroupIdentifier=self.log_group,
@@ -437,21 +434,22 @@ class PlexusCloudWatchLogger:
                     status_code,
                 )
                 _POLICY_APPLIED_LOG_GROUPS.add(self.log_group)
+                return True
             except Exception as exc:
-                # Non-fatal: log group is still usable, just without PII protection.
                 logger.error(
                     "Could not apply data protection policy to %s: %s",
                     self.log_group,
                     exc,
                     exc_info=True,
                 )
+                return False
 
     def _put(self, stream_name: str, message: str) -> None:
         try:
             self._logs_client.put_log_events(
                 logGroupName=self.log_group,
                 logStreamName=stream_name,
-                logEvents=[{"timestamp": _epoch_ms(), "message": message}],
+                logEvents=[{"timestamp": _epoch_ms(), "message": redact_text(message)}],
             )
         except Exception as exc:
             logger.debug("put_log_events(%s) failed: %s", stream_name, exc)

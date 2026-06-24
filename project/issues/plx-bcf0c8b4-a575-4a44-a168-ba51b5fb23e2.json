@@ -1,0 +1,31 @@
+{
+  "id": "plx-bcf0c8b4-a575-4a44-a168-ba51b5fb23e2",
+  "title": "Scoring API inbound auth misconfiguration is visible and can fail closed",
+  "description": "require_scoring_api_key in plexus/workers/scoring_api.py returns early when SCORING_API_KEY is unset, so POST /v1/score silently serves unauthenticated. The Helm path fails closed (a missing secretKeyRef key blocks container start, and the chart `required`s the value), but running the image outside the chart with auth intended yields open auth with no signal.\n\nAdd a startup warning when no inbound key is configured, and consider an explicit opt-in flag (e.g. SCORING_API_AUTH_REQUIRED) that refuses to serve without a key for exposed environments. Test gap: only the missing-key branch is exercised; add a wrong-key test to cover the compare_digest branch.\n\n```gherkin\nFeature: Inbound scoring API authentication configuration\n  Scenario: Missing key is visible at startup\n    Given the scoring API starts without an inbound API key configured\n    Then a startup warning records that inbound auth is disabled\n\n  Scenario: Auth can be made mandatory\n    Given auth is configured as required and no inbound API key is set\n    When the scoring API starts\n    Then it refuses to serve scoring requests\n\n  Scenario: Wrong key is rejected\n    Given an inbound API key is configured\n    When a request sends an incorrect key\n    Then the API responds 401\n```",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "2cc3745a-4208-4e7e-abfc-d05745f121da",
+      "author": "derek.norrbom",
+      "text": "Progress: implemented visible and fail-closed inbound auth behavior for the scoring API. Startup now logs whether inbound auth is enabled, disabled, or required without a key. SCORING_API_AUTH_REQUIRED=true now makes POST /v1/score fail closed with 503 when SCORING_API_KEY is missing. Added wrong-key, fail-closed, and auth-disabled logging coverage. Helm now renders SCORING_API_AUTH_REQUIRED for scoring-api workers and sets it true when scoringApi.auth.enabled=true, while still wiring the separate SCORING_API_KEY secret. Validation passed: focused pytest suite, py_compile, helm lint/render with auth enabled, git diff --check, and rcql --scan-files for plexus/workers/scoring_api.py returned Total: 0.",
+      "created_at": "2026-06-10T20:55:41.996180Z"
+    },
+    {
+      "id": "a4299e45-613d-44e8-8548-c84d2ef466c7",
+      "author": "derek.norrbom",
+      "text": "Verified and closed. Startup lifespan hook logs enabled/disabled/required-without-key states; SCORING_API_AUTH_REQUIRED=true makes POST /v1/score fail closed with 503 when no key is configured (health probes intentionally stay up for Kubernetes liveness/readiness, which satisfies the refuses-to-serve scenario without crash-looping the pod). Wrong-key 401 test covers the compare_digest branch; fail-closed and disabled-warning tests present. Helm renders SCORING_API_AUTH_REQUIRED from scoringApi.auth.required or auth.enabled and wires the separate inbound key secret. All Gherkin scenarios covered by passing tests.",
+      "created_at": "2026-06-10T21:14:46.195984Z"
+    }
+  ],
+  "created_at": "2026-06-10T20:38:30.471983Z",
+  "updated_at": "2026-06-10T21:14:46.205819Z",
+  "closed_at": "2026-06-10T21:14:46.205819Z",
+  "custom": {}
+}

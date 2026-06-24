@@ -1,0 +1,43 @@
+{
+  "id": "plx-242cabe5-4663-4f29-a5c7-406466eca177",
+  "title": "Local contract fidelity hardening",
+  "description": "Expand local GraphQL and dashboard-shim tests for Amplify/AppSync contract fidelity: required primary keys, generated index roots, relationship selections, connection shape, and regression coverage for missing model identifiers.",
+  "type": "sub-task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d3ff577b-a991-4b92-bf2d-ec61a4a5f6b9",
+      "author": "ryan.porter",
+      "text": "Starting contract hardening slice. Goal: expand manifest-driven tests so local mode recognizes generated CRUD/list/index/subscription roots and dashboard local shims always request primary-key fields.",
+      "created_at": "2026-06-04T22:59:48.262229Z"
+    },
+    {
+      "id": "b2c575c1-ff36-42ba-8353-7b239469bb46",
+      "author": "ryan.porter",
+      "text": "Added first contract hardening slice for local mode. Dashboard local shim tests now assert generated list selections include manifest primary-key fields, and subscription client.graphql calls return a synchronous no-op subscription object. Proxy tests now assert manifest subscription/custom roots classify locally, composite legacy index-root aliases classify and route, and the AggregatedMetrics accountId/recordType/timeRangeStart alias reaches local storage. Remaining hardening should expand relationship and connection-shape coverage across more models.",
+      "created_at": "2026-06-04T23:11:19.358424Z"
+    },
+    {
+      "id": "55619bf4-74fa-4b53-a74d-b73de5e27e15",
+      "author": "ryan.porter",
+      "text": "Extended contract fidelity hardening with item/task legacy index alias coverage and a local-mode no-upstream resolver test. This closes the immediate CLI list/last fallback gap; remaining contract hardening should still expand relationship, pagination, and connection-shape coverage across more models.",
+      "created_at": "2026-06-05T00:50:36.346101Z"
+    },
+    {
+      "id": "c908abd9-fd40-4716-9dd7-cf95e5aa010d",
+      "author": "ryan.porter",
+      "text": "Feedback-evaluation contract parity for local roots/relationships now has dedicated tracking under epic plx-89823a task plx-dd4f39. Keep this issue focused on cross-cutting contract hardening and regression coverage.",
+      "created_at": "2026-06-05T15:33:12.660580Z"
+    }
+  ],
+  "created_at": "2026-06-04T22:51:28.029408Z",
+  "updated_at": "2026-06-05T15:33:12.660580Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -48,7 +48,7 @@ def resolve_account_identifier(client, identifier):
         if result.get('getAccount'):
             return identifier
     except Exception:
-        pass
+        pass  # Not a valid ID — fall through to key/name lookup
 
     # Try lookup by key
     try:
@@ -66,7 +66,7 @@ def resolve_account_identifier(client, identifier):
         if items and len(items) > 0:
             return items[0]['id']
     except Exception:
-        pass
+        pass  # Key lookup failed — fall through to name lookup
 
     # Try lookup by name
     try:
@@ -84,8 +84,8 @@ def resolve_account_identifier(client, identifier):
         if items and len(items) > 0:
             return items[0]['id']
     except Exception:
-        pass
-    
+        pass  # Name lookup failed — all strategies exhausted, return None
+
     return None
 
 # Configure ruamel.yaml for better multi-line string handling

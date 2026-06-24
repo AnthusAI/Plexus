@@ -24,11 +24,25 @@ case "$WORKER_TYPE" in
         CELERY_QUEUE="${CELERY_QUEUE:-scoring-requests}"
         CELERY_CONCURRENCY="${CELERY_CONCURRENCY:-4}"
         LOG_LEVEL="${LOG_LEVEL:-info}"
+        LOG_LEVEL="${LOG_LEVEL,,}"
 
         exec celery -A "$CELERY_APP" worker \
             --loglevel="$LOG_LEVEL" \
             --concurrency="$CELERY_CONCURRENCY" \
             --queues="$CELERY_QUEUE"
+        ;;
+
+    scoring-api)
+        echo "🌐 Starting synchronous scoring API"
+        API_HOST="${SCORING_API_HOST:-0.0.0.0}"
+        API_PORT="${SCORING_API_PORT:-8000}"
+        LOG_LEVEL="${LOG_LEVEL:-info}"
+        LOG_LEVEL="${LOG_LEVEL,,}"
+
+        exec uvicorn plexus.workers.scoring_api:app \
+            --host "$API_HOST" \
+            --port "$API_PORT" \
+            --log-level "$LOG_LEVEL"
         ;;
 
     console-worker)
@@ -39,7 +53,7 @@ case "$WORKER_TYPE" in
 
     *)
         echo "❌ Unknown worker type: $WORKER_TYPE"
-        echo "Valid types: score-processor, celery, console-worker"
+        echo "Valid types: score-processor, celery, scoring-api, console-worker"
         exit 1
         ;;
 esac

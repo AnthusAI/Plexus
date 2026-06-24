@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authRules": {
+      "type": "object"
+    },
+    "contractVersion": {
+      "type": "string"
+    },
+    "customOperations": {
+      "type": "object"
+    },
+    "customTypes": {
+      "type": "object"
+    },
+    "generator": {
+      "type": "object"
+    },
+    "indexes": {
+      "type": "object"
+    },
+    "models": {
+      "type": "object"
+    },
+    "relationships": {
+      "type": "array"
+    },
+    "sources": {
+      "type": "object"
+    },
+    "storage": {
+      "type": "object"
+    },
+    "subscriptions": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "contractVersion",
+    "generator",
+    "sources",
+    "models",
+    "indexes",
+    "relationships",
+    "customTypes",
+    "customOperations",
+    "authRules",
+    "subscriptions",
+    "storage"
+  ],
+  "type": "object"
+}

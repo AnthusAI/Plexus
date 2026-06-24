@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "602d8fa8-427b-48c1-a2a8-1aca8e63203c",
+  "issue_id": "plx-3599a71a-52df-4103-b082-c7fecd4a5662",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-16T17:31:18.379Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "chore",
+    "labels": [],
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "priority": 2,
+    "status": "open",
+    "title": "Replace CloudWatch logging with stdout for K8s log capture"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "388452e2-7dfd-4f8a-94c4-b5485c701e41",
+  "issue_id": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "event_type": "field_updated",
+  "occurred_at": "2026-06-04T18:09:55.508Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "Implement local GraphQL/auth/storage control-plane foundation",
+        "to": "Implement Amplify-controlled local schema contract"
+      }
+    }
+  }
+}

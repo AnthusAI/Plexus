@@ -2,6 +2,7 @@ import boto3
 import logging
 from botocore.exceptions import ClientError
 import os
+from plexus.logging.redaction import redact_text
 
 class CloudWatchLogger:
     _shared_clients = {}
@@ -17,17 +18,9 @@ class CloudWatchLogger:
             logging.warning("AWS region not set, CloudWatch metrics disabled")
             return
 
-        # Check if we're running in Lambda (should always use IAM role)
-        is_lambda = os.getenv('AWS_EXECUTION_ENV') or os.getenv('AWS_LAMBDA_FUNCTION_NAME')
-
         try:
-            aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
-            aws_secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
             cache_key = (
-                bool(is_lambda),
                 aws_region,
-                aws_access_key or "",
-                aws_secret_key or "",
                 id(boto3.client),
             )
             cached_client = self._shared_clients.get(cache_key)
@@ -36,22 +29,8 @@ class CloudWatchLogger:
                 logging.debug(f"Reusing cached CloudWatch client in region {aws_region}")
                 return
 
-            # In Lambda, always use IAM role (never explicit credentials)
-            # In EC2, use explicit credentials if provided, otherwise use instance profile
-            if is_lambda:
-                logging.info("Running in Lambda - using IAM role credentials")
-                self.cloudwatch_client = boto3.client('cloudwatch', region_name=aws_region)
-            else:
-                # Check if explicit credentials are provided (EC2 workers)
-                if aws_access_key and aws_secret_key:
-                    logging.info("Using explicit AWS credentials from environment")
-                    self.cloudwatch_client = boto3.client('cloudwatch',
-                                                        region_name=aws_region,
-                                                        aws_access_key_id=aws_access_key,
-                                                        aws_secret_access_key=aws_secret_key)
-                else:
-                    logging.info("Using default AWS credentials (IAM role/instance profile)")
-                    self.cloudwatch_client = boto3.client('cloudwatch', region_name=aws_region)
+            logging.info("Using default AWS credentials for CloudWatch metrics")
+            self.cloudwatch_client = boto3.client('cloudwatch', region_name=aws_region)
 
             self._shared_clients[cache_key] = self.cloudwatch_client
             logging.info(f"Successfully initialized CloudWatch client in region {aws_region}")
@@ -77,7 +56,10 @@ class CloudWatchLogger:
                 'MetricName': metric_name,
                 'Value': float(metric_value),
                 'Unit': 'None',
-                'Dimensions': [{'Name': k, 'Value': str(v)} for k, v in dimensions.items()]
+                'Dimensions': [
+                    {'Name': redact_text(str(k)), 'Value': redact_text(str(v))}
+                    for k, v in dimensions.items()
+                ]
             }
             logging.debug(f"Prepared metric data: {metric_data}")
 

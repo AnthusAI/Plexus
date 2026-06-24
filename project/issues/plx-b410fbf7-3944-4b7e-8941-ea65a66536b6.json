@@ -1,0 +1,25 @@
+{
+  "id": "plx-b410fbf7-3944-4b7e-8941-ea65a66536b6",
+  "title": "Add legacy score/section index compatibility for local dashboard MVP",
+  "description": "Support legacy listScoreByScorecardIdAndOrder and listScorecardSectionByScorecardIdAndOrder roots in local mode so scorecards dashboard can render scores/sections against the local control plane.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "fd89e483-49c5-4004-9ab1-e1304cdfd493",
+      "author": "ryan.porter",
+      "text": "Implemented synthetic legacy index-root fallback in services/private-graphql-proxy/proxy/schema_contract.py for local mode query roots of the form list<Model>By<Partition>And<Sort> when those fields exist on the model. This enables dashboard roots like listScoreByScorecardIdAndOrder and listScorecardSectionByScorecardIdAndOrder even when not present in current manifest indexes. Added regression coverage in test_operation_classifier.py and test_app_routing.py; dockerized proxy tests pass; live GraphQL checks now return seeded scorecard sections/scores/score versions for legacy root names.",
+      "created_at": "2026-06-04T22:19:19.314156Z"
+    }
+  ],
+  "created_at": "2026-06-04T22:19:14.703113Z",
+  "updated_at": "2026-06-04T22:19:21.946413Z",
+  "closed_at": "2026-06-04T22:19:21.946413Z",
+  "custom": {}
+}

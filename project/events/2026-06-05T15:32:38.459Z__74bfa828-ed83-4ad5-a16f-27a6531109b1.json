@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "event_id": "74bfa828-ed83-4ad5-a16f-27a6531109b1",
+  "issue_id": "plx-c37e0c57-2980-4172-9d9e-a1ab72c9dc4b",
+  "event_type": "field_updated",
+  "occurred_at": "2026-06-05T15:32:38.459Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "Non-AWS control plane migration",
+        "to": "Local control-plane MVP: schema, dashboard, and prediction proof"
+      }
+    }
+  }
+}

@@ -26,7 +26,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "plexus-worker.selectorLabels" . | nindent 8 }}
+        {{- include "plexus-worker.podLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -124,6 +124,29 @@ spec:
               key: celery-concurrency
         {{- end }}
 
+        {{- if eq .Values.workerType "scoring-api" }}
+        # Scoring API specific config
+        - name: SCORING_API_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: scoring-api-host
+        - name: SCORING_API_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "plexus-worker.fullname" . }}-config
+              key: scoring-api-port
+        - name: SCORING_API_AUTH_REQUIRED
+          value: {{ or .Values.scoringApi.auth.required .Values.scoringApi.auth.enabled | quote }}
+        {{- if .Values.scoringApi.auth.enabled }}
+        - name: SCORING_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ default (include "plexus-worker.secretName" .) .Values.scoringApi.auth.existingSecret }}
+              key: {{ .Values.scoringApi.auth.secretKey | quote }}
+        {{- end }}
+        {{- end }}
+
         {{- if eq .Values.workerType "console-worker" }}
         # Console worker specific config
         - name: CONSOLE_RESPONSE_TARGET
@@ -159,6 +182,13 @@ spec:
               name: {{ if .Values.llm.existingSecret }}{{ .Values.llm.existingSecret }}{{ else }}{{ include "plexus-worker.fullname" . }}-llm-keys{{ end }}
               key: anthropic-api-key
         {{- end }}
+        {{- end }}
+
+        {{- if eq .Values.workerType "scoring-api" }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.scoringApi.port }}
+          protocol: TCP
         {{- end }}
 
         resources:

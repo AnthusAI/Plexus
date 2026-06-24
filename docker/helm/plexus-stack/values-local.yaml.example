@@ -50,17 +50,29 @@ graphql-proxy:
     tag: "local"
     pullPolicy: IfNotPresent
   config:
-    proxyApiKey: "your-proxy-api-key-here"
-    upstreamApiUrl: "https://your-appsync-endpoint.appsync-api.us-west-2.amazonaws.com/graphql"
-    upstreamApiKey: "your-appsync-api-key-here"
+    # --- Option A: Local MVP (no auth, no upstream) ---
+    backendMode: "local"
+    authMode: "trusted_open"
+    proxyApiKey: ""
+    upstreamApiUrl: ""
+    upstreamApiKey: ""
+    upstreamDisabled: true
     enableDebug: true
+    # --- Option B: AppSync upstream (original) ---
+    # backendMode: "amplify"
+    # authMode: ""
+    # proxyApiKey: "your-proxy-api-key-here"
+    # upstreamApiUrl: "https://your-appsync-endpoint.appsync-api.us-west-2.amazonaws.com/graphql"
+    # upstreamApiKey: "your-appsync-api-key-here"
+    # upstreamDisabled: false
+    # enableDebug: true
   createSecrets: true
   postgresql:
     username: "plexus_proxy"  # Set username explicitly
 
 plexus-worker:
   enabled: true
-  workerType: celery
+  workerType: scoring-api
   replicaCount: 1
   image:
     repository: plexus-worker
@@ -69,14 +81,29 @@ plexus-worker:
   env:
     LOG_LEVEL: DEBUG
     MAX_JOBS_PER_WORKER: "10"
+    PLEXUS_DISABLE_CLOUDWATCH_LOGS: "1"
   plexus:
     createSecrets: true
     api:
       key: "local-dev-key"
     account:
-      key: "call-criteria"
-  celery:
+      key: "local-demo"
+  service:
     enabled: true
+    type: ClusterIP
+    port: 8000
+  scoringApi:
+    enabled: true
+    port: 8000
+    gateway:
+      enabled: true
+      createGateway: true
+      gatewayClassName: envoy-gateway
+      listenerName: http
+      port: 80
+      pathPrefix: /v1/score
+  celery:
+    enabled: false
     app: plexus.workers.celery_app
     queue: scoring-requests
     concurrency: 2

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "a6d37baf-595b-41d5-a62a-85f9f6050aea",
+  "issue_id": "plx-397d8e6c-6877-4319-a287-e1c0eaa9cfec",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-05T19:04:28.460Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Local compose and smoke integration for Qdrant",
+    "description": "Extend local smoke compose and startup scripts to run Qdrant with deterministic local defaults and include vector-store env surfaces for local control-plane proof runs.",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-83e08d42-1182-41d8-aee6-99b97e1e26bb",
+    "labels": []
+  }
+}

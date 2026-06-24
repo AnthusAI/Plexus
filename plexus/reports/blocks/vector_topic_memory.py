@@ -1,8 +1,8 @@
 """
 VectorTopicMemory ReportBlock — full orchestration.
 
-Rebuilds topic memory by re-indexing datasets into S3 Vectors.
-Uses S3 embedding cache, global clustering, and memory weights.
+Rebuilds topic memory by re-indexing datasets into a configurable vector store.
+Uses S3-compatible embedding cache, global clustering, and memory weights.
 
 Supports two data sources:
 - Feedback items: scorecard + days (same as FeedbackAlignment) — uses transcript text from Items
@@ -41,6 +41,7 @@ class VectorTopicMemory(BaseReportBlock):
             - transcript: Item transcript text linked from feedback items
             - score_result_no_explanation: ScoreResult.explanation for normal production predictions with value='No'
         s3_vectors: { bucket_name: str, index_name: str, index_arn?: str, region?: str }
+        vector_store: { provider?: "s3vectors"|"qdrant", url?: str, collection?: str }
         embedding: { model_id?: str, preprocessing_version?: str }
         clustering: { min_topic_size?: int }
           coarse_min_topic_fraction?: float   # default 0.02 when min_topic_fraction is not set
@@ -55,7 +56,7 @@ class VectorTopicMemory(BaseReportBlock):
     """
 
     DEFAULT_NAME = "Vector Topic Memory"
-    DEFAULT_DESCRIPTION = "Persistent vector-based topic memory from S3 Vectors index"
+    DEFAULT_DESCRIPTION = "Persistent vector-based topic memory from configurable vector index"
     SHORT_TERM_DAYS = 14
     MEDIUM_TERM_DAYS = 30
 
@@ -95,6 +96,58 @@ class VectorTopicMemory(BaseReportBlock):
             "region": region,
         }
 
+    def _resolve_vector_store_config(self) -> Dict[str, Any]:
+        """
+        Resolve vector-store provider configuration.
+
+        Resolution order:
+        1) explicit block config (vector_store.*)
+        2) environment variables
+        3) defaults (s3vectors provider)
+        """
+        vector_store_config = self.config.get("vector_store", {})
+        provider = (
+            vector_store_config.get("provider")
+            or os.environ.get("PLEXUS_VECTOR_STORE_PROVIDER")
+            or "s3vectors"
+        )
+        provider = str(provider).strip().lower()
+
+        if provider == "s3vectors":
+            s3_vectors_config = self._resolve_s3_vectors_config()
+        else:
+            s3_vectors_config = {
+                "bucket_name": self.config.get("s3_vectors", {}).get("bucket_name")
+                or os.environ.get("S3_VECTOR_BUCKET_NAME"),
+                "index_name": self.config.get("s3_vectors", {}).get("index_name")
+                or os.environ.get("S3_VECTOR_INDEX_NAME"),
+                "index_arn": self.config.get("s3_vectors", {}).get("index_arn")
+                or os.environ.get("S3_VECTOR_INDEX_ARN"),
+                "region": self.config.get("s3_vectors", {}).get("region")
+                or os.environ.get("AWS_REGION", "us-west-2"),
+            }
+
+        qdrant_url = (
+            vector_store_config.get("url")
+            or os.environ.get("PLEXUS_VECTOR_STORE_URL")
+            or "http://localhost:6333"
+        )
+        qdrant_collection = (
+            vector_store_config.get("collection")
+            or os.environ.get("PLEXUS_VECTOR_STORE_COLLECTION")
+            or os.environ.get("S3_VECTOR_INDEX_NAME")
+            or "topic-memory-local"
+        )
+
+        return {
+            "provider": provider,
+            "s3_vectors": s3_vectors_config,
+            "qdrant": {
+                "url": qdrant_url,
+                "collection": qdrant_collection,
+            },
+        }
+
     async def generate(self) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
         Orchestrates: resolve dataset -> embed -> index -> cluster -> memory weights.
@@ -116,17 +169,18 @@ class VectorTopicMemory(BaseReportBlock):
         try:
             # 1. Config validation
             data_config = self.config.get("data", {})
-            vectors_config = self._resolve_s3_vectors_config()
-            vector_bucket = vectors_config.get("bucket_name")
-            vector_index = vectors_config.get("index_name")
-            vector_index_arn = vectors_config.get("index_arn")
-            region = vectors_config.get("region")
+            vector_store_config = self._resolve_vector_store_config()
+            provider = vector_store_config["provider"]
 
-            if not vector_bucket or not vector_index:
-                self._log("S3 Vectors bucket/index not configured. Skipping full pipeline.")
-                output_data["status"] = "shell"
-                output_data["message"] = "S3 Vectors not configured — set s3_vectors.bucket_name and s3_vectors.index_name."
-                return output_data, self._get_log_string()
+            if provider == "s3vectors":
+                s3_vectors = vector_store_config["s3_vectors"]
+                vector_bucket = s3_vectors.get("bucket_name")
+                vector_index = s3_vectors.get("index_name")
+                if not vector_bucket or not vector_index:
+                    self._log("S3 Vectors bucket/index not configured. Skipping full pipeline.")
+                    output_data["status"] = "shell"
+                    output_data["message"] = "S3 Vectors not configured — set s3_vectors.bucket_name and s3_vectors.index_name."
+                    return output_data, self._get_log_string()
 
             # 2. Resolve datasets
             scorecard_param = self.config.get("scorecard")
@@ -194,19 +248,17 @@ class VectorTopicMemory(BaseReportBlock):
             embeddings = svc.batch_embed(all_texts, model_id=model_id, preprocessing_version=version)
             output_data["items_processed"] = len(embeddings)
 
-            # 4. S3 Vectors index
-            from plexus.analysis.s3vectors_client import TopicMemoryVectorStore
+            # 4. Vector-store indexing (S3 Vectors or Qdrant)
+            from plexus.analysis.vector_store_factory import create_topic_memory_vector_store
 
-            idx_client = TopicMemoryVectorStore(
-                bucket_name=vector_bucket,
-                index_name=vector_index,
-                index_arn=vector_index_arn,
-                region=region,
-            )
+            idx_client = create_topic_memory_vector_store(vector_store_config)
             if not idx_client.health_check():
-                self._log("S3 Vectors health check failed.", level="WARNING")
+                provider_name = provider.upper()
+                self._log(f"{provider_name} health check failed.", level="WARNING")
                 output_data["status"] = "partial"
-                output_data["summary"] = "S3 Vectors unavailable — embeddings computed but not indexed."
+                output_data["summary"] = (
+                    f"{provider_name} unavailable — embeddings computed but not indexed."
+                )
                 return output_data, self._get_log_string()
 
             import numpy as np
@@ -233,6 +285,7 @@ class VectorTopicMemory(BaseReportBlock):
             build_result = idx_client.build_index(documents)
             index_name = build_result.get("new_index_name")
             output_data["index_name"] = index_name
+            output_data["vector_store_provider"] = provider
             output_data["indexed_doc_count"] = len(documents)
             output_data["indexed_doc_ids_sample"] = [d["doc_id"] for d in documents[:25]]
             self._log(f"Indexed {build_result['success_count']} documents.")

@@ -1,0 +1,18 @@
+{
+  "id": "plx-4f0c6c8d-6671-4510-bdde-c2051d2c21f4",
+  "title": "Implement local GraphQL MVP storage and resolvers",
+  "description": "",
+  "type": "sub-task",
+  "status": "in_progress",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-04T18:33:59.254663Z",
+  "updated_at": "2026-06-04T18:34:06.837016Z",
+  "closed_at": null,
+  "custom": {}
+}

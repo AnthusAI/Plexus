@@ -1,0 +1,18 @@
+{
+  "id": "plx-80653be7-0865-4ec7-b29f-9016798f66a2",
+  "title": "Keyless CloudWatch logging with redaction",
+  "description": "Purpose: Standardize Plexus CloudWatch logging so application logs and metrics use IAM role/default AWS credentials and CloudWatch log shipping is gated by app-side redaction plus CloudWatch data protection policy.\n\nDefinition of Done:\n- CloudWatch clients used by Plexus logging utilities do not pass static AWS access keys.\n- CloudWatch application logging fails closed unless redaction and data protection policy setup are active.\n- Existing public imports remain compatible.\n- Unit tests cover keyless clients and redaction behavior.",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-23T22:29:02.462956075Z",
+  "updated_at": "2026-06-23T22:29:20.566878780Z",
+  "closed_at": null,
+  "custom": {}
+}

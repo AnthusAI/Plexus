@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "8b8e93d9-8a55-4782-b442-fb96fb56056d",
+  "issue_id": "plx-140f9447-1c12-49c8-857b-d410c97bf995",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-10T23:35:38.204Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "docker/scripts/ has accumulated overlapping helper scripts across three work waves: quick_test.sh, quick_test_docker.sh, quick_test_k8s.sh, start-full-stack.sh (May 28-29), demo_k8s.sh, demo_k8s_batch.sh (June 5), setup_envoy_gateway_poc.sh, build_k8s_images.sh (June 10+). The three quick_test variants share near-identical purpose and the older scripts predate the Envoy Gateway path.\n\nAudit each script: purpose, which deployment mode it serves (SQS, Celery, scoring-api), whether it still runs against the current chart/values, and overlap with newer scripts. Delete stale ones, merge near-duplicates (e.g. one quick_test with a --target docker|k8s flag), and add a short docker/scripts/README.md inventory so future contributors (human or agent) extend instead of spawning new variants. Keep setup_envoy_gateway_poc.sh and build_k8s_images.sh as-is; they are current.",
+    "issue_type": "chore",
+    "labels": [],
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "priority": 3,
+    "status": "open",
+    "title": "Audit and consolidate docker/scripts helper scripts"
+  }
+}

@@ -60,8 +60,8 @@ PostgreSQL through the proxy.
 ## Scoring Integration
 
 The scoring integration harness starts PostgreSQL, the proxy, and a full Plexus
-dependency runner. It seeds public Hugging Face text-classification examples as
-local private `Item` and `Identifier` rows, then runs the normal Plexus
+dependency runner. It seeds public Hugging Face call-center transcript examples
+as local private `Item` and `Identifier` rows, then runs the normal Plexus
 prediction CLI through the proxy.
 
 Required control-plane and score configuration values:
@@ -77,7 +77,7 @@ export PLEXUS_PROXY_SCORING_SCORE=...
 Optional fixture controls:
 
 ```bash
-export PLEXUS_PROXY_SCORING_DATASET=fancyzhx/ag_news
+export PLEXUS_PROXY_SCORING_DATASET=apptek-com/apptek_callcenter_dialogues
 export PLEXUS_PROXY_SCORING_SPLIT=test
 export PLEXUS_PROXY_SCORING_FIXTURE_LIMIT=3
 ```

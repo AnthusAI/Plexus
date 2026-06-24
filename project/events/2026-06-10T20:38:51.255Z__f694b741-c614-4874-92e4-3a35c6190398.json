@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "f694b741-c614-4874-92e4-3a35c6190398",
+  "issue_id": "plx-1421d593-4fa8-4d2c-81cb-4f2525c428e0",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-10T20:38:51.255Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "process_scoring_job_sync uses `result_response.get(\"data\", result_response)` to accept both a GraphQL-wrapped payload and an unwrapped one. The updated unit test encodes the unwrapped shape, which suggests PlexusDashboardClient.execute returns unwrapped data and the \"data\" fallback is dead code papering over uncertainty about the client contract.\n\nConfirm the actual contract of PlexusDashboardClient.execute, handle exactly one response shape, and remove the fallback. If both shapes genuinely occur across client versions, keep the handling but document precisely which caller returns which shape.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "priority": 2,
+    "status": "open",
+    "title": "Resolve dual-shape createScoreResult response handling in scoring job"
+  }
+}

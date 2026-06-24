@@ -2,6 +2,7 @@ import os
 import logging
 import tempfile
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 from datetime import datetime
 
@@ -17,6 +18,37 @@ def get_bucket_name():
     or fall back to the default.
     """
     return os.environ.get("AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME", DEFAULT_BUCKET_NAME)
+
+def _truthy(value):
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+def create_s3_client():
+    """
+    Create an S3 client. In local control-plane mode, the PLEXUS_OBJECT_STORE_*
+    variables point this at MinIO. Without those envs, boto3 uses its normal AWS
+    credential and region resolution.
+    """
+    endpoint_url = os.environ.get("PLEXUS_OBJECT_STORE_ENDPOINT")
+    if not endpoint_url:
+        return boto3.client("s3")
+
+    region_name = os.environ.get("PLEXUS_OBJECT_STORE_REGION") or os.environ.get("AWS_REGION") or "us-east-1"
+    client_kwargs = {
+        "endpoint_url": endpoint_url,
+        "region_name": region_name,
+    }
+
+    access_key = os.environ.get("PLEXUS_OBJECT_STORE_ACCESS_KEY_ID")
+    secret_key = os.environ.get("PLEXUS_OBJECT_STORE_SECRET_ACCESS_KEY")
+    if access_key:
+        client_kwargs["aws_access_key_id"] = access_key
+    if secret_key:
+        client_kwargs["aws_secret_access_key"] = secret_key
+
+    if _truthy(os.environ.get("PLEXUS_OBJECT_STORE_FORCE_PATH_STYLE")):
+        client_kwargs["config"] = Config(s3={"addressing_style": "path"})
+
+    return boto3.client("s3", **client_kwargs)
 
 def upload_report_block_file(report_block_id, file_name, content, content_type=None):
     """
@@ -45,7 +77,7 @@ def upload_report_block_file(report_block_id, file_name, content, content_type=N
     if not content:
         logger.warning(f"Content for file {file_name} is empty or None!")
     
-    s3_client = boto3.client('s3')
+    s3_client = create_s3_client()
     
     # Format path according to Amplify Gen2 expectations
     # The path should match what's defined in amplify/storage/resource.ts
@@ -184,7 +216,7 @@ def download_report_block_file(s3_path, local_path=None):
         The content of the file as a string, and the local path if saved
     """
     bucket_name = get_bucket_name()
-    s3_client = boto3.client('s3')
+    s3_client = create_s3_client()
     
     # Create a temporary file if no local path provided
     if not local_path:
@@ -233,7 +265,7 @@ def check_s3_bucket_access(bucket_name=None):
     logger.info(f"Running S3 bucket access check for: {bucket_name}")
     
     try:
-        s3_client = boto3.client('s3')
+        s3_client = create_s3_client()
         
         # Check if we can list the bucket
         logger.info("Attempting to list objects in bucket...")
@@ -363,7 +395,7 @@ def upload_procedure_file(procedure_id: str, file_name: str, content, content_ty
     Returns the S3 key.
     """
     bucket_name = get_bucket_name()
-    s3_client = boto3.client('s3')
+    s3_client = create_s3_client()
     s3_key = f"procedures/{procedure_id}/{file_name}"
 
     with tempfile.NamedTemporaryFile(mode='wb+', suffix=f"_{file_name}", delete=False) as tmp:
@@ -424,7 +456,7 @@ def download_procedure_code(procedure_id: str, attached_files: list[str]) -> str
         return None
 
     bucket_name = get_bucket_name()
-    s3_client = boto3.client('s3')
+    s3_client = create_s3_client()
 
     with tempfile.NamedTemporaryFile(mode='wb', delete=False) as tmp:
         tmp_path = tmp.name

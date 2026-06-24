@@ -1,0 +1,26 @@
+{{- if and (eq .Values.workerType "scoring-api") .Values.scoringApi.gateway.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "plexus-worker.routeName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "plexus-worker.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+  - name: {{ include "plexus-worker.gatewayName" . }}
+    namespace: {{ default .Release.Namespace .Values.scoringApi.gateway.gatewayNamespace | quote }}
+    sectionName: {{ .Values.scoringApi.gateway.listenerName | quote }}
+  {{- if .Values.scoringApi.gateway.hostname }}
+  hostnames:
+  - {{ .Values.scoringApi.gateway.hostname | quote }}
+  {{- end }}
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: {{ .Values.scoringApi.gateway.pathPrefix | quote }}
+    backendRefs:
+    - name: {{ include "plexus-worker.fullname" . }}
+      port: {{ .Values.service.port }}
+{{- end }}

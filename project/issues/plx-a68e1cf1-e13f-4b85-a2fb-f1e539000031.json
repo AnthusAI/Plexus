@@ -1,0 +1,31 @@
+{
+  "id": "plx-a68e1cf1-e13f-4b85-a2fb-f1e539000031",
+  "title": "Remove one-time worker selector migration block from POC setup script",
+  "description": "docker/scripts/setup_envoy_gateway_poc.sh contains a block that checks whether an existing worker Deployment still has the old immutable label selector (the one that included `worker-type`, from an earlier chart revision on this branch) and deletes that Deployment so Helm can recreate it with the new selector.\n\nThat migration only ever applies to local kind POC clusters created from earlier revisions of this branch; nothing with the old selector has shipped anywhere else. Keeping the block means permanent dead scaffolding in the setup script.\n\nRemove the block now, before the branch merges. Recovery for anyone holding an old local cluster is a documented one-time manual step: delete the worker Deployment (or simply delete and recreate the disposable kind cluster) and re-run the setup script.",
+  "type": "task",
+  "status": "closed",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5e05aff9-b325-4046-925c-99538395e120",
+      "author": "derek.norrbom",
+      "text": "Progress: removed the one-time local worker selector migration block from setup_envoy_gateway_poc.sh. Added a short manual stale-kind-cluster recovery note to the stack README: delete the stale local worker Deployment or recreate the disposable kind cluster, then rerun the script. Validation passed: bash -n for setup_envoy_gateway_poc.sh, helm lint/template for the stack, and git diff --check.",
+      "created_at": "2026-06-10T20:58:16.384215Z"
+    },
+    {
+      "id": "e18020b2-3cc0-48c1-bb14-3edb48f35ffb",
+      "author": "derek.norrbom",
+      "text": "Verified and closed. The one-time immutable-selector migration block is gone from setup_envoy_gateway_poc.sh (confirmed by grep), and the stack README documents the one-time manual recovery for stale local kind clusters: delete the stale worker Deployment or recreate the disposable cluster, then rerun the script. bash -n passes.",
+      "created_at": "2026-06-10T21:14:54.590263Z"
+    }
+  ],
+  "created_at": "2026-06-10T20:39:06.326517Z",
+  "updated_at": "2026-06-10T21:14:54.599607Z",
+  "closed_at": "2026-06-10T21:14:54.599607Z",
+  "custom": {}
+}

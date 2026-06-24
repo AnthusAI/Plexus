@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "28726b4c-45d1-4051-a738-c607490bfddd",
+  "issue_id": "plx-ae1d7386-dc34-4381-9f23-1178a9b77646",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-10T20:38:18.725Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "The pre-commit security audit intentionally removed user-controlled scoring IDs and exception text from log messages (log-injection / information-exposure mitigation). The HTTP response sanitization in plexus/workers/scoring_api.py is correct and must stay, but the server-side warning log now records only the status code. Operators can no longer correlate a failed request with a scoring job or see which resource was missing.\n\nRestore operator diagnostics in server logs using injection-safe encoding (strip/escape newlines, or structured log fields) while keeping HTTP responses sanitized. Also: the generic handler binds an unused exception variable (`except Exception as exc:`), and consider letting self-authored static 4xx validation messages (e.g. 'scorecard is required') pass through to callers since they are not internal state.\n\n```gherkin\nFeature: Scoring API failure diagnostics\n  Scenario: Known scoring failure is traceable in server logs\n    Given a scoring request that references a missing resource\n    When POST /v1/score returns a sanitized 4xx response\n    Then the server log records the failure reason and a request correlation identifier in injection-safe form\n\n  Scenario: Responses remain sanitized\n    Given a scoring request that fails unexpectedly\n    When the API responds\n    Then the response body contains no internal exception text\n```",
+    "issue_type": "story",
+    "labels": [],
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "priority": 1,
+    "status": "open",
+    "title": "Scoring API error logs include sanitized failure diagnostics"
+  }
+}

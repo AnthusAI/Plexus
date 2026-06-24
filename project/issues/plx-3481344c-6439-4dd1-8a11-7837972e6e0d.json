@@ -1,0 +1,18 @@
+{
+  "id": "plx-3481344c-6439-4dd1-8a11-7837972e6e0d",
+  "title": "Document platform prerequisites for deploying the scoring stack into an existing cluster",
+  "description": "The POC setup script assumes cluster-admin: it installs the Envoy Gateway controller, CRDs, and GatewayClass cluster-wide. In a customer-managed cluster those are typically owned by the platform team. Write a prerequisites document separating 'what the platform must provide' from 'what our Helm release deploys':\n\n- Gateway API CRDs and a GatewayClass (or a shared platform-managed Gateway; chart already supports createGateway: false with gatewayName/gatewayNamespace)\n- Namespace, resource quotas, pod security expectations\n- LoadBalancer or ingress policy for the Envoy data plane\n- Private registry access for our images\n- Secret management: chart-created Secrets vs existingSecret references populated by the platform's secret store\n- Outbound network access required by scoring (LLM APIs, backend GraphQL)\n\nDeliverable: a markdown doc in docker/ referenced from the chart READMEs.",
+  "type": "chore",
+  "status": "open",
+  "priority": 2,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-10T23:10:06.595812Z",
+  "updated_at": "2026-06-10T23:10:06.595812Z",
+  "closed_at": null,
+  "custom": {}
+}

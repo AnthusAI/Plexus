@@ -1,0 +1,18 @@
+{
+  "id": "plx-91bb3e48-2878-4eb2-a3c7-9d9802d580d1",
+  "title": "Add backendMode and authMode to graphql-proxy Helm chart ConfigMap and values",
+  "description": "",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-0a3a2b0e-4ad3-409e-80ea-b98b76e1f2b8",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-06-15T20:51:01.740257Z",
+  "updated_at": "2026-06-15T21:01:47.727991Z",
+  "closed_at": "2026-06-15T21:01:47.727991Z",
+  "custom": {}
+}

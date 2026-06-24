@@ -1,0 +1,37 @@
+{
+  "id": "plx-ae1d7386-dc34-4381-9f23-1178a9b77646",
+  "title": "Scoring API error logs include sanitized failure diagnostics",
+  "description": "The pre-commit security audit intentionally removed user-controlled scoring IDs and exception text from log messages (log-injection / information-exposure mitigation). The HTTP response sanitization in plexus/workers/scoring_api.py is correct and must stay, but the server-side warning log now records only the status code. Operators can no longer correlate a failed request with a scoring job or see which resource was missing.\n\nRestore operator diagnostics in server logs using injection-safe encoding (strip/escape newlines, or structured log fields) while keeping HTTP responses sanitized. Also: the generic handler binds an unused exception variable (`except Exception as exc:`), and consider letting self-authored static 4xx validation messages (e.g. 'scorecard is required') pass through to callers since they are not internal state.\n\n```gherkin\nFeature: Scoring API failure diagnostics\n  Scenario: Known scoring failure is traceable in server logs\n    Given a scoring request that references a missing resource\n    When POST /v1/score returns a sanitized 4xx response\n    Then the server log records the failure reason and a request correlation identifier in injection-safe form\n\n  Scenario: Responses remain sanitized\n    Given a scoring request that fails unexpectedly\n    When the API responds\n    Then the response body contains no internal exception text\n```",
+  "type": "story",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "42bbc751-63df-489c-be61-2241c451553e",
+      "author": "derek.norrbom",
+      "text": "Progress: implemented injection-safe scoring API failure diagnostics. Error responses remain sanitized, and the API now emits a server-generated request_id in error responses and logs so operators can correlate failures without logging user-controlled identifiers. Known scoring failures log status_code plus a constant reason_code; unexpected failures log request_id without request-derived fields. Validation passed: focused API tests, py_compile, git diff --check, and rcql with --scan-files for plexus/workers/scoring_api.py returned Total: 0.",
+      "created_at": "2026-06-10T20:53:24.920096Z"
+    },
+    {
+      "id": "3407d6c2-d37e-4c2b-87b4-c76324c3a6fb",
+      "author": "derek.norrbom",
+      "text": "Review finding during close-out verification: scoring_error_reason_code derives the reason from string-matching the error message. Two defects confirmed empirically: (1) score-not-found messages contain the word 'scorecard', so they always classify as scorecard_not_found; (2) user-controlled identifiers inside messages can flip the code (a scorecard named with 'item' in it classifies as item_not_found), which reintroduces user influence over the logged diagnostic. Fix in progress: carry an explicit reason_code on ScoringJobError set at each raise site, with a status-code-only fallback, removing message string-matching entirely. Failing spec first per The Way.",
+      "created_at": "2026-06-10T21:12:09.814320Z"
+    },
+    {
+      "id": "7a27babb-8263-4945-b908-242177de2967",
+      "author": "derek.norrbom",
+      "text": "Verified and completed. Codex implementation reviewed: server-generated request_id correlates sanitized error responses with logs, responses contain no internal exception text, unused exception binding removed, and log-line coverage exists including a log-injection attempt case. One defect found during review and fixed: the reason-code classifier string-matched user-influenced message text, so score-not-found always classified as scorecard_not_found and identifiers containing 'item' could flip the code. Fixed by carrying an explicit constant reason_code on ScoringJobError at each raise site with a status-code-only fallback; no message parsing remains. Spec-first: new failing tests for content-independent reason codes were added and confirmed red before the fix. Validation: 23 focused tests pass (workers, Helm render, seeder), py_compile clean, git diff --check clean.",
+      "created_at": "2026-06-10T21:14:36.296825Z"
+    }
+  ],
+  "created_at": "2026-06-10T20:38:18.725363Z",
+  "updated_at": "2026-06-10T21:14:36.306589Z",
+  "closed_at": "2026-06-10T21:14:36.306589Z",
+  "custom": {}
+}

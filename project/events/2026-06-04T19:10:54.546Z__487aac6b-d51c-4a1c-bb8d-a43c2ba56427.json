@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "487aac6b-d51c-4a1c-bb8d-a43c2ba56427",
+  "issue_id": "plx-afd15ff3-eac1-4e7d-8f18-10bfd32c745b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-04T19:10:54.546Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Add and validate CLI smoke checks against local GraphQL",
+    "description": "",
+    "issue_type": "sub-task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+    "labels": []
+  }
+}

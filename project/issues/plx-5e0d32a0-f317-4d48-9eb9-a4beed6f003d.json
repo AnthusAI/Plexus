@@ -1,0 +1,25 @@
+{
+  "id": "plx-5e0d32a0-f317-4d48-9eb9-a4beed6f003d",
+  "title": "Clean local proof harness",
+  "description": "Build a clean-start local control-plane proof harness that resets only the smoke stack/database, seeds deterministic demo data, runs strict CLI and prediction smoke, verifies exact prediction readback, asserts no upstream proxy calls, and runs browser smoke when the local dashboard is reachable.",
+  "type": "sub-task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-ef3c7e1f-4109-4853-9f88-ba60ef091caa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "90cdb289-de13-4fb2-8b74-5927a50fb49f",
+      "author": "ryan.porter",
+      "text": "Implemented clean local proof harness in scripts/prove-local-control-plane.sh. It resets only the smoke compose stack and volumes, starts PostgreSQL and local GraphQL with upstream disabled, seeds deterministic demo data, runs strict CLI smoke, runs exact prediction smoke, asserts no upstream proxy requests, and runs browser smoke when the dashboard is reachable. Latest run passed end to end from a clean smoke database.",
+      "created_at": "2026-06-05T00:50:34.894020Z"
+    }
+  ],
+  "created_at": "2026-06-05T00:45:26.926540Z",
+  "updated_at": "2026-06-05T00:50:35.617355Z",
+  "closed_at": "2026-06-05T00:50:35.617355Z",
+  "custom": {}
+}

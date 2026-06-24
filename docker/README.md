@@ -6,12 +6,66 @@ Production-ready Kubernetes deployment for Plexus workers using Helm charts and 
 
 This directory contains everything needed to deploy Plexus workers to Kubernetes:
 
-- **Dockerfile** - Multi-worker container image (score-processor, celery, console-worker)
+- **Dockerfile** - Multi-worker container image (score-processor, celery, scoring-api, console-worker)
 - **helm/plexus-worker/** - Helm chart for Kubernetes deployment
-- **docker-compose.yml** - Local testing environment
+- **scripts/** - Kubernetes image build, Envoy setup, and scoring smoke-test helpers
 - **SECURITY.md** - Security best practices and hardening guide
 
 ## Quick Start
+
+### Envoy Gateway Scoring API POC
+
+For the Docker-backed Kubernetes proof of concept, use the umbrella stack and Envoy Gateway bootstrap script:
+
+```bash
+cp docker/helm/plexus-stack/values-local.yaml.example \
+   docker/helm/plexus-stack/values-local.yaml
+
+# Edit values-local.yaml with API and LLM keys, then run:
+docker/scripts/setup_envoy_gateway_poc.sh
+```
+
+This path creates or reuses a local kind cluster, installs Envoy Gateway, creates the local `GatewayClass`, builds and loads local images, deploys `workerType: scoring-api`, exposes `POST /v1/score`, and routes traffic through Envoy Gateway. The local values file is the source of truth for scoring API, Service, and Gateway settings; the script only overrides image references so kind uses the locally built images, then validates that the expected scoring API resources exist. Existing SQS and Celery modes remain available as separate deployment paths.
+
+The script pins the Envoy Gateway Helm chart for reproducibility. Override
+`ENVOY_GATEWAY_CHART_VERSION` only when intentionally validating a newer
+Gateway release.
+
+In kind, the Envoy data-plane Service usually remains `EXTERNAL-IP <pending>` because there is no cloud load balancer. Use the Service printed by the script, or find it again with:
+
+```bash
+kubectl get svc -A \
+  -l gateway.envoyproxy.io/owning-gateway-name=plexus-plexus-worker-gateway
+```
+
+Then port-forward that Envoy Service and smoke test the route:
+
+```bash
+kubectl port-forward -n <envoy-service-namespace> svc/<envoy-service-name> 8080:80
+
+# Missing required fields should return HTTP 422 from the scoring API.
+curl -i -X POST http://localhost:8080/v1/score \
+  -H 'content-type: application/json' \
+  -d '{"scoring_job_id":"poc-route-test"}'
+```
+
+A complete scoring request reaches the real scoring code path. To get a successful score result, use valid API/LLM credentials in `values-local.yaml` and real existing `scorecard`, `score`, and `item_id` values:
+
+```bash
+curl -X POST http://localhost:8080/v1/score \
+  -H 'content-type: application/json' \
+  -d '{
+    "scoring_job_id": "poc-job-1",
+    "scorecard": "scorecard-key-or-name",
+    "score": "score-key-or-name",
+    "item_id": "item-id"
+  }'
+```
+
+For exposed environments, configure a separate inbound scoring API key with
+`plexus-worker.scoringApi.auth.enabled=true` and send it as
+`x-plexus-scoring-api-key`. Do not reuse the worker's backend `PLEXUS_API_KEY`
+for external callers.
 
 ### 1. Configure Environment
 
@@ -36,8 +90,16 @@ Available templates:
 ### 2. Build Docker Image
 
 ```bash
-docker build -f docker/Dockerfile -t your-registry/plexus-worker:1.52.0 .
-docker push your-registry/plexus-worker:1.52.0
+# Publish linux/amd64 images for real cluster deploys.
+REGISTRY=your-registry \
+IMAGE_TAG=1.52.0 \
+docker/scripts/build_k8s_images.sh
+
+# Optional: add linux/arm64 for a multi-arch manifest list.
+REGISTRY=your-registry \
+IMAGE_TAG=1.52.0 \
+PLATFORMS=linux/amd64,linux/arm64 \
+docker/scripts/build_k8s_images.sh
 ```
 
 ### 3. Deploy with Helm
@@ -162,9 +224,21 @@ Integrate with GitHub Actions:
 
 ## Worker Types
 
-The image supports three worker modes via `workerType` value:
+The image supports four worker modes via `workerType` value:
 
-### 1. Score Processor (`score-processor`)
+### 1. Scoring API (`scoring-api`)
+Exposes synchronous HTTP scoring for Envoy Gateway deployments.
+
+**Required Config**:
+- `PLEXUS_API_URL`
+- `PLEXUS_API_KEY`
+- `PLEXUS_ACCOUNT_KEY`
+- Optional: `SCORING_API_HOST`, `SCORING_API_PORT`
+
+**Endpoint**:
+- `POST /v1/score`
+
+### 2. Score Processor (`score-processor`)
 Polls SQS queues and processes scoring jobs.
 
 **Required Config**:
@@ -172,14 +246,14 @@ Polls SQS queues and processes scoring jobs.
 - `PLEXUS_RESPONSE_WORKER_QUEUE_URL`
 - AWS credentials (or IRSA)
 
-### 2. Celery Worker (`celery`)
+### 3. Celery Worker (`celery`)
 Processes async tasks from RabbitMQ/Redis.
 
 **Required Config**:
 - `CELERY_BROKER_URL`
 - `CELERY_APP`, `CELERY_QUEUE`, `CELERY_CONCURRENCY`
 
-### 3. Console Worker (`console-worker`)
+### 4. Console Worker (`console-worker`)
 Polls for console chat messages.
 
 **Required Config**:
@@ -267,24 +341,18 @@ serviceAccount:
 
 ## Local Testing
 
-Use Docker Compose for local development:
+Use the kind/Envoy Gateway path for local Kubernetes validation:
 
 ```bash
-# Copy environment template
-cp docker/.env.example docker/.env
+cp docker/helm/plexus-stack/values-local.yaml.example \
+   docker/helm/plexus-stack/values-local.yaml
 
-# Edit with your credentials
-vim docker/.env
-
-# Start services
-docker-compose -f docker/docker-compose.yml up
-
-# View logs
-docker-compose -f docker/docker-compose.yml logs -f
-
-# Clean up
-docker-compose -f docker/docker-compose.yml down
+# Edit values-local.yaml with API/account/LLM keys, then run:
+docker/scripts/setup_envoy_gateway_poc.sh
 ```
+
+After port-forwarding the Envoy data-plane Service, run a real scoring request
+with `docker/scripts/test_envoy_scoring_api.sh`.
 
 ## Security
 
@@ -324,7 +392,8 @@ kubectl logs -f deployment/plexus-worker-score-processor -n plexus-prod
 - **CPU/Memory usage** - For autoscaling
 - **Job processing rate** - Jobs per minute
 - **Error rate** - Failed jobs percentage
-- **Queue depth** - SQS queue size
+- **HTTP request rate/latency** - For `scoring-api`
+- **Queue depth** - SQS queue size for `score-processor`
 
 ## Scaling
 
@@ -344,7 +413,7 @@ Enabled by default in staging/production:
 
 ### Queue-Based Autoscaling (Advanced)
 
-Use [KEDA](https://keda.sh/) for SQS queue depth-based scaling:
+Use [KEDA](https://keda.sh/) for SQS queue depth-based scaling in the `score-processor` deployment path:
 
 ```yaml
 apiVersion: keda.sh/v1alpha1
@@ -379,7 +448,26 @@ kubectl describe pod <pod-name> -n plexus-prod
 # - Insufficient resources
 ```
 
-### Workers Not Processing Jobs
+### Scoring API Not Responding
+
+```bash
+# Check worker logs
+kubectl logs -f deployment/plexus-worker -n plexus-prod | grep ERROR
+
+# Verify Service and Gateway API resources
+kubectl get svc,gateway,httproute -n plexus-prod
+
+# Bypass Envoy to isolate worker health
+kubectl port-forward -n plexus-prod svc/plexus-worker 8000:8000
+curl http://localhost:8000/readyz
+
+# For local kind POCs, find and port-forward the Envoy data-plane Service.
+kubectl get svc -A \
+  -l gateway.envoyproxy.io/owning-gateway-name=plexus-plexus-worker-gateway
+kubectl port-forward -n <envoy-service-namespace> svc/<envoy-service-name> 8080:80
+```
+
+### Score Processor Not Processing Jobs
 
 ```bash
 # Check worker logs
@@ -463,9 +551,8 @@ This Kubernetes deployment complements the existing Lambda setup in `score-proce
 docker/
 ├── Dockerfile                    # Multi-worker container image
 ├── entrypoint.sh                 # Worker type selector
-├── docker-compose.yml            # Local testing
+├── scripts/                      # Kubernetes helper scripts
 ├── .dockerignore                 # Build optimization
-├── .env.example                  # Environment template
 ├── .gitignore                    # Protect secrets
 ├── README.md                     # This file
 ├── SECURITY.md                   # Security guide
