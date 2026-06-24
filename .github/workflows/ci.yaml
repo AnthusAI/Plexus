@@ -6,12 +6,11 @@ on:
       - "main"
       - "develop"
       - "staging"
-      - "dev"
-      - "feature/**"
-      - "fix/**"
   pull_request:
     branches:
-      - "**"
+      - "main"
+      - "develop"
+      - "staging"
 
 permissions:
   contents: write
