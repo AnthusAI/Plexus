@@ -1502,90 +1502,6 @@ class LangGraphScore(Score, LangChainUser):
             
         return value_setter
 
-    @staticmethod
-    def _is_deepgram_attachment_key(value: Any) -> bool:
-        if not isinstance(value, str) or not value.strip():
-            return False
-        filename = os.path.basename(value).lower()
-        return "deepgram" in filename and filename.endswith(".json")
-
-    @classmethod
-    def _deepgram_attachment_keys_from_metadata(cls, metadata: Dict[str, Any]) -> List[str]:
-        if not isinstance(metadata, dict):
-            return []
-
-        keys: List[str] = []
-
-        def add_key(value: Any, *, require_deepgram_filename: bool = True) -> None:
-            if not isinstance(value, str) or not value.strip():
-                return
-            key = value.strip()
-            if require_deepgram_filename and not cls._is_deepgram_attachment_key(key):
-                return
-            if key not in keys:
-                keys.append(key)
-
-        for pointer_key in (
-            "deepgram_attachment_key",
-            "deepgramAttachmentKey",
-            "deepgram_s3_key",
-            "deepgramS3Key",
-        ):
-            add_key(metadata.get(pointer_key), require_deepgram_filename=False)
-
-        for pointer_key in ("attachment_key", "attachmentKey"):
-            add_key(metadata.get(pointer_key))
-
-        for collection_key in ("attachedFiles", "attached_files", "attachments"):
-            value = metadata.get(collection_key)
-            if isinstance(value, str):
-                try:
-                    parsed_value = json.loads(value)
-                except json.JSONDecodeError:
-                    add_key(value)
-                    continue
-                value = parsed_value
-
-            if not isinstance(value, list):
-                continue
-
-            for item in value:
-                if isinstance(item, str):
-                    add_key(item)
-                elif isinstance(item, dict):
-                    for item_key in (
-                        "key",
-                        "path",
-                        "s3_key",
-                        "s3Key",
-                        "attachment_key",
-                        "attachmentKey",
-                    ):
-                        add_key(item.get(item_key))
-
-        return keys
-
-    async def _load_deepgram_from_attachment_metadata(
-        self,
-        metadata: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
-        attachment_keys = self._deepgram_attachment_keys_from_metadata(metadata)
-        if not attachment_keys:
-            return None
-
-        from plexus.utils.score_result_s3_utils import download_score_result_trace_file
-
-        for attachment_key in attachment_keys:
-            try:
-                deepgram_data, _ = download_score_result_trace_file(attachment_key)
-                if deepgram_data:
-                    logging.debug("Loaded deepgram data from item attachment %s", attachment_key)
-                    return deepgram_data
-            except Exception as e:
-                logging.debug("Could not load deepgram data from %s: %s", attachment_key, e)
-
-        return None
-
     async def _enrich_explanation_with_timestamps(
         self,
         explanation: Optional[str],
@@ -1609,23 +1525,20 @@ class LangGraphScore(Score, LangChainUser):
             elif 'metadata' in metadata and isinstance(metadata['metadata'], dict):
                 deepgram_data = metadata['metadata'].get('deepgram')
 
-        # If no deepgram in metadata, use the Item's recorded attachment key(s).
-        if not deepgram_data and metadata:
-            deepgram_data = await self._load_deepgram_from_attachment_metadata(metadata)
-
-        # Legacy fallback: older callers only provided an item_id and relied on
-        # the historic items/{item_id}/deepgram.json convention.
+        # If no deepgram in metadata but we have an item_id, try to load it from attached files
         if not deepgram_data and metadata and 'item_id' in metadata:
             try:
                 from plexus.utils.score_result_s3_utils import download_score_result_trace_file
 
+                # Try to load deepgram.json from S3
                 item_id = metadata['item_id']
                 deepgram_key = f"items/{item_id.split('--')[-1]}/deepgram.json"
 
+                # Use same method as DeepgramInputSource
                 deepgram_data, _ = download_score_result_trace_file(deepgram_key)
 
                 if deepgram_data:
-                    logging.debug(f"Auto-loaded deepgram data from legacy path {deepgram_key}")
+                    logging.debug(f"Auto-loaded deepgram data from {deepgram_key}")
             except Exception as e:
                 logging.debug(f"Could not auto-load deepgram data: {e}")
 

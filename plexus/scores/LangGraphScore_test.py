@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
 from plexus.scores.Score import Score
 from typing import Optional
-from types import SimpleNamespace
 from pydantic import BaseModel, Field, ConfigDict
 import logging
 import os
@@ -97,61 +96,6 @@ def mock_workflow():
         "explanation": "Test explanation"
     })
     return mock
-
-@pytest.mark.asyncio
-async def test_timestamp_enrichment_uses_recorded_deepgram_attachment_key():
-    score = LangGraphScore.__new__(LangGraphScore)
-    score.parameters = SimpleNamespace(name="Evidence Timestamp Test")
-    explanation = 'The customer said "I need transportation."'
-    deepgram_key = "items/report-123/deepgram.json"
-    deepgram_payload = {
-        "results": {
-            "channels": [
-                {
-                    "alternatives": [
-                        {
-                            "transcript": "I need transportation.",
-                            "words": [
-                                {"word": "i", "start": 1.2, "end": 1.3},
-                                {"word": "need", "start": 1.3, "end": 1.6},
-                                {"word": "transportation", "start": 1.6, "end": 2.4},
-                            ],
-                        }
-                    ]
-                }
-            ]
-        }
-    }
-
-    def download_only_recorded_key(path):
-        if path != deepgram_key:
-            raise FileNotFoundError(path)
-        return deepgram_payload, None
-
-    runtime = MagicMock()
-    runtime.execute = AsyncMock(
-        return_value={
-            "result": 'The customer said "I need transportation." [0:01.20-0:02.40]'
-        }
-    )
-
-    with patch(
-        "plexus.utils.score_result_s3_utils.download_score_result_trace_file",
-        side_effect=download_only_recorded_key,
-    ) as download, patch(
-        "plexus.scores.LangGraphScore.TactusRuntime",
-        return_value=runtime,
-    ):
-        enriched = await score._enrich_explanation_with_timestamps(
-            explanation,
-            {
-                "item_id": "score-result-record--item-uuid",
-                "attachedFiles": [deepgram_key],
-            },
-        )
-
-    download.assert_called_once_with(deepgram_key)
-    assert enriched == 'The customer said "I need transportation." [0:01.20-0:02.40]'
 
 @pytest.mark.asyncio
 async def test_create_instance(basic_graph_config, mock_azure_openai, mock_yes_no_classifier):
