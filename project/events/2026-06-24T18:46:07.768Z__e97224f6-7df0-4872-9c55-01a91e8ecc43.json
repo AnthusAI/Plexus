@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e97224f6-7df0-4872-9c55-01a91e8ecc43",
+  "issue_id": "plx-4c0454f1-4041-4044-8a16-30966ff4e2a8",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-24T18:46:07.768Z",
+  "actor_id": "ec2-user",
+  "payload": {
+    "assignee": null,
+    "description": "Implement the behavior specified by story plx-b0cab6.\n\nPlan:\n- Add a focused failing test around LangGraph timestamp enrichment when Deepgram exists only as an Item attachment key.\n- Update enrichment to resolve a Deepgram attachment from explicit metadata/attached files before falling back to legacy key guessing.\n- Run the focused test and relevant timestamp tests.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-cf9c8bd5-c6a3-4f71-896b-3b849c027677",
+    "priority": 2,
+    "status": "open",
+    "title": "Load timestamp enrichment data from recorded item attachments"
+  }
+}
