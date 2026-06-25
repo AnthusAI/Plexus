@@ -338,6 +338,50 @@ async def test_tactus_score_enriches_explanation_with_recorded_deepgram_attachme
 
 
 @pytest.mark.asyncio
+async def test_tactus_score_enriches_explanation_with_real_runtime_from_attachment(monkeypatch):
+    """Real Tactus runtime should execute timestamp enrichment Procedure code."""
+
+    deepgram_key = "items/report-123/deepgram.json"
+    deepgram_payload = {
+        "results": {
+            "channels": [{
+                "alternatives": [{
+                    "words": [
+                        {"word": "need", "punctuated_word": "need", "start": 1.2, "end": 1.5},
+                        {"word": "transportation", "punctuated_word": "transportation", "start": 1.5, "end": 2.4},
+                    ]
+                }]
+            }]
+        }
+    }
+
+    def download_only_recorded_key(path):
+        if path != deepgram_key:
+            raise FileNotFoundError(path)
+        return deepgram_payload, None
+
+    monkeypatch.setattr(
+        "plexus.utils.score_result_s3_utils.download_score_result_trace_file",
+        download_only_recorded_key,
+    )
+
+    score = TactusScore(
+        name="Test Score",
+        code='ClassifyProcedure { classes = {"Yes", "No"} }',
+        valid_classes=["Yes", "No"],
+    )
+    runtime = await score._acquire_runtime()
+
+    enriched = await score._enrich_explanation_with_timestamps(
+        runtime,
+        'The customer said "need transportation".',
+        {"attachedFiles": [deepgram_key]},
+    )
+
+    assert "[0:01.20-0:02.40]" in enriched
+
+
+@pytest.mark.asyncio
 async def test_tactus_score_skips_enrichment_when_no_deepgram_data(monkeypatch):
     """Test that enrichment is skipped gracefully when no deepgram data present."""
 

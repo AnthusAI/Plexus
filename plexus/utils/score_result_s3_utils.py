@@ -35,6 +35,50 @@ def get_datasources_bucket_name():
     """
     return os.environ.get("DATASOURCES_BUCKET", DEFAULT_DATASOURCES_BUCKET)
 
+
+def _bucket_candidates_for_path(s3_path):
+    if not s3_path.startswith('items/'):
+        return [get_bucket_name()]
+
+    candidates = [get_datasources_bucket_name(), get_bucket_name()]
+    return list(dict.fromkeys(bucket for bucket in candidates if bucket))
+
+
+def _is_not_found_error(error):
+    error_code = str(error.response.get('Error', {}).get('Code', ''))
+    return error_code in {'404', 'NoSuchKey', 'NotFound'}
+
+
+def _download_file_with_bucket_fallback(s3_client, s3_path, local_path):
+    bucket_candidates = _bucket_candidates_for_path(s3_path)
+    last_error = None
+
+    for index, bucket_name in enumerate(bucket_candidates):
+        try:
+            s3_client.download_file(
+                Bucket=bucket_name,
+                Key=s3_path,
+                Filename=local_path
+            )
+            return bucket_name
+        except ClientError as e:
+            last_error = e
+            has_fallback = index < len(bucket_candidates) - 1
+            if has_fallback and _is_not_found_error(e):
+                logger.info(
+                    "Attachment %s was not found in bucket %s; trying fallback bucket",
+                    s3_path,
+                    bucket_name,
+                )
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+                continue
+            raise
+
+    if last_error:
+        raise last_error
+    raise ValueError(f"No S3 bucket configured for path: {s3_path}")
+
 def upload_score_result_trace_file(score_result_id, trace_data, file_name="trace.json"):
     """
     Upload trace data as a JSON file to the score result attachments S3 bucket.
@@ -200,7 +244,8 @@ def download_score_result_trace_file(s3_path, local_path=None):
     Download a trace file from S3.
 
     Automatically detects the correct bucket based on the path:
-    - Paths starting with 'items/' use the datasources bucket (item attachments)
+    - Paths starting with 'items/' use the datasources bucket first and fall
+      back to the score result attachments bucket for API-posted attachments
     - Other paths use the score result attachments bucket
 
     Args:
@@ -210,11 +255,6 @@ def download_score_result_trace_file(s3_path, local_path=None):
     Returns:
         The content of the file as a dictionary (parsed JSON), and the local path if saved
     """
-    # Determine which bucket to use based on path
-    if s3_path.startswith('items/'):
-        bucket_name = get_datasources_bucket_name()
-    else:
-        bucket_name = get_bucket_name()
     s3_client = boto3.client('s3')
     
     # Create a temporary file if no local path provided
@@ -223,12 +263,7 @@ def download_score_result_trace_file(s3_path, local_path=None):
             local_path = temp_file.name
             
     try:
-        # Download the file
-        s3_client.download_file(
-            Bucket=bucket_name,
-            Key=s3_path,
-            Filename=local_path
-        )
+        bucket_name = _download_file_with_bucket_fallback(s3_client, s3_path, local_path)
         
         # Read and parse the JSON file contents
         with open(local_path, 'r') as f:
@@ -477,7 +512,8 @@ def download_score_result_log_file(s3_path, local_path=None):
     Download a log file from S3.
 
     Automatically detects the correct bucket based on the path:
-    - Paths starting with 'items/' use the datasources bucket (item attachments)
+    - Paths starting with 'items/' use the datasources bucket first and fall
+      back to the score result attachments bucket for API-posted attachments
     - Other paths use the score result attachments bucket
 
     Args:
@@ -487,11 +523,6 @@ def download_score_result_log_file(s3_path, local_path=None):
     Returns:
         The content of the file as a string, and the local path if saved
     """
-    # Determine which bucket to use based on path
-    if s3_path.startswith('items/'):
-        bucket_name = get_datasources_bucket_name()
-    else:
-        bucket_name = get_bucket_name()
     s3_client = boto3.client('s3')
     
     # Create a temporary file if no local path provided
@@ -500,12 +531,7 @@ def download_score_result_log_file(s3_path, local_path=None):
             local_path = temp_file.name
             
     try:
-        # Download the file
-        s3_client.download_file(
-            Bucket=bucket_name,
-            Key=s3_path,
-            Filename=local_path
-        )
+        bucket_name = _download_file_with_bucket_fallback(s3_client, s3_path, local_path)
         
         # Read the text file contents
         with open(local_path, 'r') as f:

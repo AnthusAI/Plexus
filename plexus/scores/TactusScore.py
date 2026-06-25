@@ -335,15 +335,20 @@ class TactusScore(Score):
         # Normalize quotes so Tactus can match them against the transcript
         explanation_normalized = normalize_quotes(explanation)
 
-        # Call Tactus deepgram.enrich_timestamps() via runtime
+        # Call Tactus deepgram.enrich_timestamps() via runtime.
         enrichment_code = """
+Procedure {
+    input = {
+        text = field.string{required = true},
+        data = field.object{required = true}
+    },
+    output = field.string{},
+    function(input)
         local deepgram = require("tactus.deepgram")
-        local input_text = context.text
-        local data = context.data
-
-        -- enrich_timestamps may throw if quotes aren't found - let it propagate
-        return deepgram.enrich_timestamps(input_text, data)
-        """
+        return deepgram.enrich_timestamps(input.text, input.data)
+    end
+}
+"""
 
         try:
             enrichment_context = {
