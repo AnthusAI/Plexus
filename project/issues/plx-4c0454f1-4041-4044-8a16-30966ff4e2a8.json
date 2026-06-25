@@ -3,7 +3,7 @@
   "title": "Load timestamp enrichment data from recorded item attachments",
   "description": "Implement the behavior specified by story plx-b0cab6.\n\nPlan:\n- Add a focused failing test around LangGraph timestamp enrichment when Deepgram exists only as an Item attachment key.\n- Update enrichment to resolve a Deepgram attachment from explicit metadata/attached files before falling back to legacy key guessing.\n- Run the focused test and relevant timestamp tests.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "assignee": null,
   "creator": null,
@@ -34,10 +34,28 @@
       "author": "ec2-user",
       "text": "Ran Docker lambda smoke test locally with Docker requiring sudo.\n\nCommands:\n- `sudo docker buildx build --platform linux/amd64 --load -f score-processor-lambda/Dockerfile -t score-processor-lambda:latest .`\n- `sudo docker run --rm -v /home/ec2-user/projects/Plexus/score-processor-lambda/tests/smoke_test.py:/var/task/smoke_test.py --entrypoint python score-processor-lambda:latest smoke_test.py`\n\nResult: container smoke test passed, 10 passed / 0 failed. Noted non-fatal CloudWatch warning from intentionally fake AWS test credentials during import.",
       "created_at": "2026-06-24T19:02:55.030778044Z"
+    },
+    {
+      "id": "074f901f-e4f2-4a09-946f-559ba06e587f",
+      "author": "ec2-user",
+      "text": "Implementing follow-up fallback for recorded attachment reads when an item-style attachment key is stored in the score-result attachments bucket rather than the datasource bucket. No client-specific identifiers included.",
+      "created_at": "2026-06-25T01:44:28.509773598Z"
+    },
+    {
+      "id": "a6c19e7d-7934-4bf2-8cf4-004fd174bb4f",
+      "author": "ec2-user",
+      "text": "Added fallback behavior for item-style attachment reads: the downloader now tries the datasource bucket first, then the score-result attachments bucket when the datasource bucket returns not found. Focused utility tests cover fallback, non-item routing, and non-not-found errors. Tactus and LangGraph attachment regressions passed locally; a read-only live SDK spot check was blocked by the local conda boto credential dependency, while AWS CLI verified the production object exists.",
+      "created_at": "2026-06-25T01:46:21.412937447Z"
+    },
+    {
+      "id": "8b6c30fe-4cd2-4d77-91d6-225ef638e065",
+      "author": "ec2-user",
+      "text": "Local timestamp proof with a real Deepgram JSON fixture exposed an additional Tactus runtime issue: enrichment Lua needed to be wrapped as a Procedure. Updated TactusScore enrichment accordingly and added a real-runtime regression. Verified local enrichment returns bracketed spans and parsed seconds, and focused Tactus/LangGraph/bucket-routing tests pass.",
+      "created_at": "2026-06-25T01:52:34.086039009Z"
     }
   ],
   "created_at": "2026-06-24T18:46:07.768361447Z",
-  "updated_at": "2026-06-24T19:02:55.030778044Z",
-  "closed_at": null,
+  "updated_at": "2026-06-25T01:53:17.342099306Z",
+  "closed_at": "2026-06-25T01:53:17.342099306Z",
   "custom": {}
 }
