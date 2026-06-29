@@ -64,8 +64,9 @@ def main():
         # Determine target working directory - use command line arg if provided, otherwise use current directory
         target_cwd = get_default_cwd(args)
         
-        # Path to the FastMCP server script
-        server_script = os.path.join(script_dir, "plexus_fastmcp_server.py")
+        # Use the stable MCP entrypoint and keep stdout filtering in this wrapper.
+        # The server can emit non-JSON banners/logs on stdout in stdio mode.
+        server_script = os.path.join(script_dir, "main.py")
         
         # Prepare arguments for the server process
         server_args = []
@@ -79,6 +80,8 @@ def main():
             server_args.extend(["--port", str(args.port)])
         if args.transport:
             server_args.extend(["--transport", args.transport])
+        if target_cwd:
+            server_args.extend(["--env-dir", target_cwd])
         
         # Add any unknown arguments
         server_args.extend(unknown_args)
@@ -95,6 +98,7 @@ def main():
         env["RICH_FORCE_TERMINAL"] = "0"
         env["RICH_DISABLE"] = "1"
         env["TERM"] = "dumb"
+        env["PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT"] = "false"
         
         # Credentials are now handled by Plexus config files and environment variables
         # No need for manual .env file loading in the wrapper
@@ -124,47 +128,46 @@ def main():
             return 1
         
         try:
-            # Use Popen to connect I/O streams properly
             process = subprocess.Popen(
                 cmd,
                 stdin=sys.stdin,
-                stdout=subprocess.PIPE,  # Capture output to filter it
+                stdout=subprocess.PIPE,
                 stderr=sys.stderr,
                 env=env,
-                cwd=target_cwd, 
-                bufsize=0  # Unbuffered
+                cwd=target_cwd,
+                bufsize=1,
+                universal_newlines=True,
             )
-            
-            # Filter stdout to ensure only valid JSON-RPC messages pass through
-            # while trapping any unexpected text output
+
+            # Pass through only valid JSON-RPC lines.
             while process.poll() is None:
+                line = process.stdout.readline()
+                if not line:
+                    continue
+                stripped = line.strip()
+                if not stripped:
+                    continue
                 try:
-                    line = process.stdout.readline().decode('utf-8')
-                    if line:
-                        # Check if the line starts with valid JSON (object or array)
-                        stripped = line.strip()
-                        if stripped and stripped[0] in ['{', '[']:
-                            # This looks like valid JSON, pass it through
-                            sys.stdout.write(line)
-                            sys.stdout.flush()
-                        else:
-                            # This is not JSON, redirect to stderr
-                            print(f"wrapper filtered non-JSON stdout: {stripped}", file=sys.stderr)
-                except Exception as read_err:
-                    print(f"wrapper: Error reading from subprocess: {read_err}", file=sys.stderr)
-            
-            # Process any remaining output after process ends
-            remaining_output = process.stdout.read().decode('utf-8')
-            if remaining_output:
-                for line in remaining_output.splitlines(True):  # Keep line endings
-                    stripped = line.strip()
-                    if stripped and stripped[0] in ['{', '[']:
-                        sys.stdout.write(line)
-                        sys.stdout.flush()
-                    else:
-                        print(f"wrapper filtered remaining non-JSON: {stripped}", file=sys.stderr)
-            
-            # Wait for the process to complete
+                    json.loads(stripped)
+                except Exception:
+                    print(f"wrapper filtered non-JSON stdout: {stripped}", file=sys.stderr)
+                    continue
+                sys.stdout.write(line)
+                sys.stdout.flush()
+
+            # Drain trailing output after process exit.
+            for line in process.stdout:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    json.loads(stripped)
+                except Exception:
+                    print(f"wrapper filtered remaining non-JSON: {stripped}", file=sys.stderr)
+                    continue
+                sys.stdout.write(line)
+                sys.stdout.flush()
+
             return_code = process.wait()
             print(f"wrapper: server process exited with code {return_code}", file=sys.stderr)
             return return_code
