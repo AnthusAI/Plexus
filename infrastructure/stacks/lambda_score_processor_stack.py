@@ -44,8 +44,8 @@ class LambdaScoreProcessorStack(Stack):
         standard_request_queue: Optional[sqs.IQueue] = None,
         standard_request_queue_arn: Optional[str] = None,
         standard_request_queue_url: Optional[str] = None,
-        reserved_concurrency: Optional[int] = None,
-        max_event_source_concurrency: int = 5,
+        reserved_concurrency: Optional[int] = 500,
+        max_event_source_concurrency: int = 500,
         **kwargs
     ) -> None:
         """
@@ -60,7 +60,7 @@ class LambdaScoreProcessorStack(Stack):
             response_queue_url: SQS queue URL for responses
             standard_request_queue_arn: ARN for an existing request queue to import
             standard_request_queue_url: URL for an existing request queue to import
-            reserved_concurrency: Initial concurrency cap. Keep low until quota is raised.
+            reserved_concurrency: Reserved Lambda concurrency for production backlog processing.
             max_event_source_concurrency: SQS event source concurrency cap.
             **kwargs: Additional stack properties
         """
@@ -170,6 +170,12 @@ class LambdaScoreProcessorStack(Stack):
             "PLEXUS_FETCH_SCHEMA_FROM_TRANSPORT": "0",
             "GQL_FETCH_SCHEMA_FROM_TRANSPORT": "0",
 
+            # Prevent native libraries from exhausting Lambda thread limits under high concurrency.
+            "OPENBLAS_NUM_THREADS": "1",
+            "OMP_NUM_THREADS": "1",
+            "MKL_NUM_THREADS": "1",
+            "NUMEXPR_NUM_THREADS": "1",
+
             # Matplotlib Configuration (hardcoded - Lambda /tmp directory)
             "MPLBACKEND": "Agg",
             "MPLCONFIGDIR": "/tmp/mpl",
@@ -188,7 +194,7 @@ class LambdaScoreProcessorStack(Stack):
             ),
             role=lambda_role,
             timeout=Duration.seconds(300),  # 5 minutes
-            memory_size=2048,
+            memory_size=3008,
             reserved_concurrent_executions=reserved_concurrency,
             environment=lambda_environment,
             description=f"Processes scoring jobs from SQS queue ({environment})"

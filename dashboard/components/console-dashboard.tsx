@@ -54,6 +54,11 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
   const selectedAccountId = selectedAccount?.id?.trim() || null
   const normalizedRouteSessionId = routeSessionId?.trim() || undefined
   const [selectedSessionId, setSelectedSessionId] = React.useState<string | undefined>(normalizedRouteSessionId)
+  const [isHydrated, setIsHydrated] = React.useState(false)
+
+  React.useEffect(() => {
+    setIsHydrated(true)
+  }, [])
 
   React.useEffect(() => {
     setSelectedSessionId(normalizedRouteSessionId)
@@ -289,6 +294,10 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
 
     return null
   }, [artifact.kind, selectedScore, selectedScorecard])
+
+  if (!isHydrated) {
+    return <div className="@container flex h-full flex-col overflow-hidden p-3" aria-busy="true" />
+  }
 
   return (
     <div className="@container flex h-full flex-col overflow-hidden p-3">

@@ -150,7 +150,12 @@ export function resolveMessageAttribution(message: {
 }
 
 async function fetchAttributedUserProfile(userId: string): Promise<AttributedUserProfile | null> {
-  const response = await (getClient().models.User.get as any)(
+  const userModel = (getClient().models as Record<string, any>).User
+  if (!userModel || typeof userModel.get !== "function") {
+    return null
+  }
+
+  const response = await (userModel.get as any)(
     { id: userId },
     userAuthOptions,
   )

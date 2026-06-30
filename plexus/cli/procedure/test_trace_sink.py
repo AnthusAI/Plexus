@@ -6,6 +6,13 @@ import pytest
 from plexus.cli.procedure.tactus_adapters.trace import PlexusTraceSink
 
 
+def test_trace_sink_stream_update_defaults_are_responsive():
+    assert PlexusTraceSink.STREAM_UPDATE_MAX_INTERVAL_SECONDS <= 0.25
+    assert PlexusTraceSink.STREAM_UPDATE_MIN_CHARS_DELTA <= 16
+    assert PlexusTraceSink.STREAM_UPDATE_MAX_INTERVAL_SECONDS > 0
+    assert PlexusTraceSink.STREAM_UPDATE_MIN_CHARS_DELTA > 0
+
+
 @pytest.mark.asyncio
 async def test_trace_sink_records_tool_call_with_structured_payloads():
     recorder = AsyncMock()
@@ -298,8 +305,47 @@ async def test_trace_sink_stream_chunk_upserts_single_assistant_message():
     assert second_message_id == "msg-stream-1"
     recorder.record_message.assert_awaited_once()
     recorder.update_message.assert_awaited_once()
+    update_call = recorder.update_message.await_args_list[-1]
+    update_metadata = update_call.kwargs.get("metadata")
+    assert isinstance(update_metadata, dict)
+    streaming = update_metadata.get("streaming")
+    assert isinstance(streaming, dict)
+    assert streaming.get("state") == "streaming"
+    assert "timings" not in streaming
     assert sink._active_stream_message_ids["assistant"] == "msg-stream-1"
     assert sink._active_stream_texts["assistant"] == "Hel this is a longer chunk update that should exceed the persistence threshold."
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_does_not_repersist_identical_punctuation_terminated_chunk():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+    recorder.record_message.return_value = "msg-stream-1"
+    recorder.update_message.return_value = True
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    await sink.record(
+        {
+            "event_type": "agent_stream_chunk",
+            "agent_name": "assistant",
+            "chunk_text": "Hello.",
+            "accumulated_text": "Hello.",
+        }
+    )
+    await sink.record(
+        {
+            "event_type": "agent_stream_chunk",
+            "agent_name": "assistant",
+            "chunk_text": "",
+            "accumulated_text": "Hello.",
+        }
+    )
+
+    # First chunk creates the message; second identical chunk should be ignored.
+    recorder.record_message.assert_awaited_once()
+    recorder.update_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -417,6 +463,9 @@ async def test_trace_sink_stream_metadata_contains_latency_markers():
     assert timings.get("backend_runtime_execute_started_at") == "2026-03-28T01:00:01+00:00"
     assert timings.get("first_chunk_received_at") == "2026-03-28T01:00:02+00:00"
     assert timings.get("chunk_count") == 1
+    assert timings.get("persist_write_count") == 1
+    assert timings.get("persist_write_average_ms") is not None
+    assert timings.get("persist_write_max_ms") is not None
 
 
 @pytest.mark.asyncio
