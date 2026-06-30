@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from plexus.cli.procedure.mcp_transport import create_procedure_mcp_server
 from plexus.cli.procedure.procedure_executor import _PlexusTraceLogBridge, _execute_tactus
@@ -70,6 +71,34 @@ class _RuntimeWithChatRecorder:
     async def execute(self, _source, _context, format="yaml"):
         assert format == "yaml"
         _RuntimeWithChatRecorder.last_context = _context
+        return {"success": True, "status": "planned"}
+
+
+class _RuntimeWithSourceCapture:
+    last_context = None
+    last_source = None
+
+    def __init__(
+        self,
+        procedure_id,
+        storage_backend,
+        hitl_handler,
+        chat_recorder=None,
+        mcp_server=None,
+        openai_api_key=None,
+    ):
+        assert procedure_id
+        assert storage_backend is not None
+        assert hitl_handler is not None
+        assert chat_recorder is not None
+        self.toolset_registry = {}
+        self.tool_primitive = None
+        self.log_handler = None
+
+    async def execute(self, _source, _context, format="yaml"):
+        assert format == "yaml"
+        _RuntimeWithSourceCapture.last_source = _source
+        _RuntimeWithSourceCapture.last_context = _context
         return {"success": True, "status": "planned"}
 
 
@@ -730,6 +759,57 @@ async def test_execute_tactus_injects_console_session_history_into_runtime_conte
             {"role": "ASSISTANT", "content": "How about 7?"},
         ],
     }
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_applies_agent_model_overrides_from_context(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithSourceCapture)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-model-override",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "agents:\n"
+            "  assistant:\n"
+            "    model: gpt-5.4-mini\n"
+            "    system_prompt: |\n"
+            "      test system prompt\n"
+            "    initial_message: Ready.\n"
+            "    tools:\n"
+            "      - plexus\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={"agent_models": {"assistant": "gpt-4.1-mini"}},
+    )
+
+    assert result["success"] is True
+    assert _RuntimeWithSourceCapture.last_context["agent_models_applied"] == {
+        "assistant": "gpt-4.1-mini"
+    }
+    parsed_source = yaml.safe_load(_RuntimeWithSourceCapture.last_source)
+    assert parsed_source["agents"]["assistant"]["model"] == "gpt-4.1-mini"
 
 
 @pytest.mark.asyncio

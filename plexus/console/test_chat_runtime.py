@@ -538,10 +538,10 @@ def test_process_pending_local_messages_uses_response_status_sort_key(monkeypatc
         "limit": 5,
         "nextToken": None,
     }
-    assert calls[0][1] == {
-        "expected_target": "local:ryan",
-        "owner": "local:ryan:test",
-    }
+    call_kwargs = calls[0][1]
+    assert call_kwargs["expected_target"] == "local:ryan"
+    assert call_kwargs["owner"] == "local:ryan:test"
+    assert isinstance(call_kwargs.get("poll_context"), dict)
 
 
 def test_process_pending_local_messages_paginates_until_limit(monkeypatch):
@@ -1041,3 +1041,122 @@ def test_fetch_session_history_includes_same_owner_private_context():
         {"role": "USER", "content": "public"},
         {"role": "USER", "content": "private same owner"},
     ]
+
+
+def test_fetch_session_history_limits_to_recent_messages_and_clips_content(monkeypatch):
+    monkeypatch.setattr(chat_runtime, "CONSOLE_HISTORY_MAX_CHARS", 10)
+    client = FakeHistoryClient([
+        {
+            "items": [
+                {
+                    "id": "msg-new",
+                    "role": "USER",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "new message that should be clipped",
+                    "createdAt": "2026-04-27T00:00:03.000Z",
+                },
+                {
+                    "id": "msg-placeholder",
+                    "role": "ASSISTANT",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT_ASSISTANT",
+                    "content": "Assistant turn completed.",
+                    "createdAt": "2026-04-27T00:00:02.500Z",
+                },
+            ],
+            "nextToken": "page-2",
+        },
+        {
+            "items": [
+                {
+                    "id": "msg-old",
+                    "role": "USER",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "older message",
+                    "createdAt": "2026-04-27T00:00:02.000Z",
+                },
+            ],
+            "nextToken": None,
+        },
+    ])
+
+    history = chat_runtime.fetch_session_history(client, "sess-1", limit=2)
+
+    assert history == [
+        {"role": "USER", "content": "older mess..."},
+        {"role": "USER", "content": "new messag..."},
+    ]
+
+
+def test_fetch_first_assistant_chunk_details_includes_model_and_tokens():
+    class FakeAssistantChunkClient(FakeClient):
+        def __init__(self, pages):
+            super().__init__()
+            self.pages = list(pages)
+
+        def execute(self, query, variables=None, **_kwargs):
+            if "ListAssistantChunks" in query:
+                self.executed.append((query, variables or {}))
+                page = self.pages.pop(0) if self.pages else {"items": [], "nextToken": None}
+                return {"data": {"listChatMessageBySessionIdAndCreatedAt": page}}
+            return super().execute(query, variables, **_kwargs)
+
+    client = FakeAssistantChunkClient([
+        {
+            "items": [
+                {
+                    "id": "assistant-1",
+                    "role": "ASSISTANT",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT_ASSISTANT",
+                    "content": "Hello",
+                    "metadata": json.dumps(
+                        {
+                            "streaming": {
+                                "state": "complete",
+                                "timings": {
+                                    "first_chunk_received_at": "2026-04-27T00:00:05.000Z",
+                                    "first_chunk_persisted_at": "2026-04-27T00:00:05.100Z",
+                                    "chunk_count": 3,
+                                    "persisted_update_count": 2,
+                                },
+                            },
+                            "cost": {
+                                "summary": {
+                                    "prompt_tokens": 123,
+                                    "completion_tokens": 45,
+                                    "total_tokens": 168,
+                                    "breakdown": [{"model": "openai/gpt-5.4-mini"}],
+                                }
+                            },
+                        }
+                    ),
+                    "createdAt": "2026-04-27T00:00:05.000Z",
+                }
+            ],
+            "nextToken": None,
+        }
+    ])
+
+    details = chat_runtime.fetch_first_assistant_chunk_details(
+        client,
+        "sess-1",
+        after_iso="2026-04-27T00:00:04.000Z",
+    )
+
+    assert details is not None
+    assert details["timestamp"] == "2026-04-27T00:00:05.000Z"
+    assert details["assistant_message_id"] == "assistant-1"
+    assert details["resolved_model"] == "openai/gpt-5.4-mini"
+    assert details["assistant_prompt_tokens"] == 123
+    assert details["assistant_completion_tokens"] == 45
+    assert details["assistant_total_tokens"] == 168
+    assert details["assistant_chunk_count"] == 3
+    assert details["assistant_persisted_update_count"] == 2
+
+
+def test_model_ids_match_ignores_provider_prefix():
+    assert chat_runtime._model_ids_match("gpt-5.4-mini", "openai/gpt-5.4-mini") is True
+    assert chat_runtime._model_ids_match("gpt-4.1-mini", "openai/gpt-5.4-mini") is False

@@ -20,6 +20,28 @@ from plexus.dashboard.api.client import (
 
 logger = logging.getLogger(__name__)
 
+def _positive_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        parsed = int(raw)
+        if parsed > 0:
+            return parsed
+    except (TypeError, ValueError):
+        pass
+    logger.warning("Invalid %s=%r; using default %d", name, raw, default)
+    return default
+
+CONSOLE_SESSION_HISTORY_DEFAULT_LIMIT = _positive_int_env(
+    "PLEXUS_CONSOLE_SESSION_HISTORY_LIMIT",
+    8,
+)
+CONSOLE_SESSION_HISTORY_MAX_CHARS = _positive_int_env(
+    "PLEXUS_CONSOLE_SESSION_HISTORY_MAX_CHARS",
+    220,
+)
+
 
 def truncate_for_log(content: str, max_length: int = 200) -> str:
     """Truncate content for logging purposes."""
@@ -104,6 +126,16 @@ class ProcedureChatRecorder:
                 return {}
             return parsed if isinstance(parsed, dict) else {}
         return {}
+
+    @staticmethod
+    def _clip_console_history_content(content: str) -> str:
+        text = (content or "").strip()
+        if (
+            CONSOLE_SESSION_HISTORY_MAX_CHARS > 0
+            and len(text) > CONSOLE_SESSION_HISTORY_MAX_CHARS
+        ):
+            return text[:CONSOLE_SESSION_HISTORY_MAX_CHARS] + "..."
+        return text
 
     def _response_target(self) -> str:
         """Return the target used by response-status GraphQL indexes."""
@@ -437,8 +469,8 @@ class ProcedureChatRecorder:
     def _normalize_console_history_snapshot(
         raw_snapshot: Any,
         *,
-        limit: int = 40,
-        max_content_chars: int = 800,
+        limit: int = CONSOLE_SESSION_HISTORY_DEFAULT_LIMIT,
+        max_content_chars: int = CONSOLE_SESSION_HISTORY_MAX_CHARS,
     ) -> List[Dict[str, str]]:
         """Normalize client-provided history snapshots into USER/ASSISTANT message turns."""
         if not isinstance(raw_snapshot, list):
@@ -453,10 +485,10 @@ class ProcedureChatRecorder:
             if role not in {"USER", "ASSISTANT"}:
                 continue
 
-            content = entry.get("content")
-            if not isinstance(content, str):
+            raw_content = entry.get("content")
+            if not isinstance(raw_content, str):
                 continue
-            content = content.strip()
+            content = raw_content.strip()
             if not content:
                 continue
 
@@ -789,7 +821,7 @@ class ProcedureChatRecorder:
     def get_console_session_history(
         self,
         account_id: Optional[str] = None,
-        limit: int = 40,
+        limit: int = CONSOLE_SESSION_HISTORY_DEFAULT_LIMIT,
     ) -> List[Dict[str, str]]:
         """
         Return normalized USER/ASSISTANT chat history for the active console session.
@@ -839,10 +871,10 @@ class ProcedureChatRecorder:
                 if role == 'ASSISTANT' and human_interaction == 'INTERNAL':
                     continue
 
-                content = message.get('content')
-                if not isinstance(content, str):
+                raw_content = message.get('content')
+                if not isinstance(raw_content, str):
                     continue
-                content = content.strip()
+                content = self._clip_console_history_content(raw_content)
                 if not content:
                     continue
 
@@ -861,7 +893,10 @@ class ProcedureChatRecorder:
                         last_user_content = entry.get('content')
                         break
                 if last_user_content != latest_trigger_message:
-                    normalized.append({'role': 'USER', 'content': latest_trigger_message})
+                    normalized.append({
+                        'role': 'USER',
+                        'content': self._clip_console_history_content(latest_trigger_message),
+                    })
 
             if limit > 0 and len(normalized) > limit:
                 normalized = normalized[-limit:]
@@ -878,7 +913,10 @@ class ProcedureChatRecorder:
                             last_snapshot_user = entry.get('content')
                             break
                     if last_snapshot_user != latest_trigger_message:
-                        effective_snapshot.append({'role': 'USER', 'content': latest_trigger_message})
+                        effective_snapshot.append({
+                            'role': 'USER',
+                            'content': self._clip_console_history_content(latest_trigger_message),
+                        })
 
                 if limit > 0 and len(effective_snapshot) > limit:
                     effective_snapshot = effective_snapshot[-limit:]
@@ -1352,9 +1390,6 @@ class ProcedureChatRecorder:
         mutation UpdateChatMessage($input: UpdateChatMessageInput!) {
             updateChatMessage(input: $input) {
                 id
-                content
-                humanInteraction
-                metadata
             }
         }
         """

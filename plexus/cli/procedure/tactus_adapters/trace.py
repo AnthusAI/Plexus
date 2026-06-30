@@ -6,6 +6,7 @@ import logging
 import inspect
 import time
 import json
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
@@ -22,11 +23,39 @@ def _event_field(event: Any, *names: str, default: Any = None) -> Any:
     return default
 
 
+def _float_env(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        parsed = float(raw)
+        if parsed > 0:
+            return parsed
+    except (TypeError, ValueError):
+        pass
+    logger.warning("Invalid %s=%r; using default %.3f", name, raw, default)
+    return default
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        parsed = int(raw)
+        if parsed > 0:
+            return parsed
+    except (TypeError, ValueError):
+        pass
+    logger.warning("Invalid %s=%r; using default %d", name, raw, default)
+    return default
+
+
 class PlexusTraceSink:
     """Persist Tactus trace records into Plexus ChatSession/ChatMessage models."""
 
-    STREAM_UPDATE_MAX_INTERVAL_SECONDS = 1.2
-    STREAM_UPDATE_MIN_CHARS_DELTA = 48
+    STREAM_UPDATE_MAX_INTERVAL_SECONDS = _float_env("PLEXUS_STREAM_UPDATE_MAX_INTERVAL_SECONDS", 0.25)
+    STREAM_UPDATE_MIN_CHARS_DELTA = _int_env("PLEXUS_STREAM_UPDATE_MIN_CHARS_DELTA", 16)
 
     def __init__(self, chat_recorder):
         self.chat_recorder = chat_recorder
@@ -50,6 +79,10 @@ class PlexusTraceSink:
         self._active_stream_persist_gap_sum_ms: Dict[str, float] = {}
         self._active_stream_persist_gap_max_ms: Dict[str, float] = {}
         self._active_stream_last_persisted_at_iso: Dict[str, str] = {}
+        self._active_stream_persist_write_count: Dict[str, int] = {}
+        self._active_stream_persist_write_sum_ms: Dict[str, float] = {}
+        self._active_stream_persist_write_max_ms: Dict[str, float] = {}
+        self._active_stream_last_persist_write_ms: Dict[str, float] = {}
         self._recent_finalized_streams: Dict[str, tuple[str, float]] = {}
         self._pending_tool_call_ids: Dict[str, list] = {}  # tool_name -> FIFO queue of message IDs
         self._in_progress_tool_calls: Dict[str, list] = {}  # tool_name -> FIFO queue of in-progress message IDs
@@ -641,12 +674,31 @@ class PlexusTraceSink:
         self._console_dispatch_metadata = False  # cache negative result
         return None
 
-    def _mark_persisted_update(self, agent_name: str, persisted_at_iso: str) -> None:
+    def _mark_persisted_update(
+        self,
+        agent_name: str,
+        persisted_at_iso: str,
+        persist_write_ms: Optional[float] = None,
+    ) -> None:
         persisted_epoch_ms = self._iso_to_epoch_ms(persisted_at_iso)
         previous_persisted_epoch_ms = self._active_stream_prev_persisted_epoch_ms.get(agent_name)
         next_count = self._active_stream_persist_update_counts.get(agent_name, 0) + 1
         self._active_stream_persist_update_counts[agent_name] = next_count
         self._active_stream_last_persisted_at_iso[agent_name] = persisted_at_iso
+
+        if isinstance(persist_write_ms, (int, float)) and persist_write_ms >= 0:
+            self._active_stream_last_persist_write_ms[agent_name] = float(persist_write_ms)
+            self._active_stream_persist_write_count[agent_name] = (
+                self._active_stream_persist_write_count.get(agent_name, 0) + 1
+            )
+            self._active_stream_persist_write_sum_ms[agent_name] = (
+                self._active_stream_persist_write_sum_ms.get(agent_name, 0.0)
+                + float(persist_write_ms)
+            )
+            self._active_stream_persist_write_max_ms[agent_name] = max(
+                self._active_stream_persist_write_max_ms.get(agent_name, 0.0),
+                float(persist_write_ms),
+            )
 
         if persisted_epoch_ms is None:
             return
@@ -672,6 +724,11 @@ class PlexusTraceSink:
         persisted_average_gap_ms = (
             persisted_gap_sum / persisted_gap_events
         ) if persisted_gap_events > 0 else None
+        persist_write_count = self._active_stream_persist_write_count.get(agent_name, 0)
+        persist_write_sum_ms = self._active_stream_persist_write_sum_ms.get(agent_name, 0.0)
+        persist_write_avg_ms = (
+            persist_write_sum_ms / persist_write_count
+        ) if persist_write_count > 0 else None
         dispatch_meta = self._get_console_dispatch_metadata() or {}
         dispatch_instrumentation = dispatch_meta.get("instrumentation") if isinstance(dispatch_meta, dict) else None
 
@@ -692,6 +749,22 @@ class PlexusTraceSink:
             "persisted_inter_update_max_ms": (
                 round(self._active_stream_persist_gap_max_ms.get(agent_name, 0.0), 2)
                 if persisted_gap_events > 0
+                else None
+            ),
+            "persist_write_count": persist_write_count,
+            "persist_write_average_ms": (
+                round(persist_write_avg_ms, 2)
+                if isinstance(persist_write_avg_ms, (int, float))
+                else None
+            ),
+            "persist_write_max_ms": (
+                round(self._active_stream_persist_write_max_ms.get(agent_name, 0.0), 2)
+                if persist_write_count > 0
+                else None
+            ),
+            "persist_write_last_ms": (
+                round(self._active_stream_last_persist_write_ms.get(agent_name, 0.0), 2)
+                if persist_write_count > 0
                 else None
             ),
             "backend_execution_started_at": self._backend_execution_started_at,
@@ -754,6 +827,9 @@ class PlexusTraceSink:
             last_persisted_at = self._active_stream_last_persisted_at.get(agent_name, 0.0)
             now = time.monotonic()
             grew_by = max(0, len(accumulated_text) - len(last_persisted_text))
+            if grew_by == 0:
+                self._active_stream_texts[agent_name] = accumulated_text
+                return message_id
             punctuation_flush = accumulated_text.endswith(("\n", ".", "!", "?"))
             should_persist = (
                 grew_by >= self.STREAM_UPDATE_MIN_CHARS_DELTA
@@ -770,7 +846,6 @@ class PlexusTraceSink:
                     "state": "streaming",
                     "agent_name": agent_name,
                     "last_chunk_at": timestamp,
-                    "timings": self._build_stream_timing_metadata(agent_name),
                 }
             }
             cost_patch = self._agent_cost_metadata(agent_name, live=True)
@@ -778,12 +853,14 @@ class PlexusTraceSink:
                 metadata_patch.update(cost_patch)
             metadata = self._merged_metadata(message_id, metadata_patch)
 
+            write_started_at = time.monotonic()
             updated = await self.chat_recorder.update_message(
                 message_id=message_id,
                 content=accumulated_text,
                 metadata=metadata,
                 human_interaction="CHAT_ASSISTANT",
             )
+            write_elapsed_ms = max(0.0, (time.monotonic() - write_started_at) * 1000.0)
             if not updated:
                 logger.warning("Failed updating streamed assistant message %s for %s", message_id, agent_name)
                 return None
@@ -792,7 +869,7 @@ class PlexusTraceSink:
             persisted_at_iso = datetime.now(timezone.utc).isoformat()
             if agent_name not in self._active_stream_first_chunk_persisted_at:
                 self._active_stream_first_chunk_persisted_at[agent_name] = persisted_at_iso
-            self._mark_persisted_update(agent_name, persisted_at_iso)
+            self._mark_persisted_update(agent_name, persisted_at_iso, persist_write_ms=write_elapsed_ms)
         else:
             # Build metadata for the CREATE (first chunk)
             metadata = {
@@ -800,12 +877,12 @@ class PlexusTraceSink:
                     "state": "streaming",
                     "agent_name": agent_name,
                     "last_chunk_at": timestamp,
-                    "timings": self._build_stream_timing_metadata(agent_name),
                 }
             }
             cost_patch = self._agent_cost_metadata(agent_name, live=True)
             if cost_patch:
                 metadata.update(cost_patch)
+            write_started_at = time.monotonic()
             message_id = await self.chat_recorder.record_message(
                 role="ASSISTANT",
                 content=accumulated_text,
@@ -813,6 +890,7 @@ class PlexusTraceSink:
                 human_interaction="CHAT_ASSISTANT",
                 metadata=metadata,
             )
+            write_elapsed_ms = max(0.0, (time.monotonic() - write_started_at) * 1000.0)
             if not message_id:
                 logger.warning("Failed creating streamed assistant message for %s", agent_name)
                 return None
@@ -822,7 +900,7 @@ class PlexusTraceSink:
             self._active_stream_last_persisted_at[agent_name] = time.monotonic()
             persisted_at_iso = datetime.now(timezone.utc).isoformat()
             self._active_stream_first_chunk_persisted_at[agent_name] = persisted_at_iso
-            self._mark_persisted_update(agent_name, persisted_at_iso)
+            self._mark_persisted_update(agent_name, persisted_at_iso, persist_write_ms=write_elapsed_ms)
 
         self._active_stream_texts[agent_name] = accumulated_text
         return message_id
@@ -873,6 +951,10 @@ class PlexusTraceSink:
         self._active_stream_persist_gap_sum_ms.pop(agent_name, None)
         self._active_stream_persist_gap_max_ms.pop(agent_name, None)
         self._active_stream_last_persisted_at_iso.pop(agent_name, None)
+        self._active_stream_persist_write_count.pop(agent_name, None)
+        self._active_stream_persist_write_sum_ms.pop(agent_name, None)
+        self._active_stream_persist_write_max_ms.pop(agent_name, None)
+        self._active_stream_last_persist_write_ms.pop(agent_name, None)
 
         return message_id
 

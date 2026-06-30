@@ -1,14 +1,18 @@
 {
   "mcpServers": {
     "plexus": {
-      "command": "/Users/ryan/miniconda3/bin/python",
+      "command": "/Users/ryan.porter/Projects/Plexus/.venv/bin/python",
       "args": [
-        "/Users/ryan/Projects/Plexus-4/MCP/plexus_fastmcp_wrapper.py",
+        "/Users/ryan.porter/Projects/Plexus/MCP/plexus_fastmcp_wrapper.py",
         "--target-cwd",
-        "/Users/ryan/Projects/Plexus-4",
+        "/Users/ryan.porter/Projects/Plexus",
         "--transport",
         "stdio"
-      ]
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "/Users/ryan.porter/Projects/Plexus"
+      }
     }
   }
 }

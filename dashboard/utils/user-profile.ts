@@ -127,6 +127,11 @@ function emailFromCurrentUser(
 
 async function syncUserModelProfile(profile: CurrentUserProfile): Promise<void> {
   const client = getAmplifyClient()
+  const userModel = (client.models as Record<string, any>).User
+  if (!userModel || typeof userModel.get !== "function") {
+    // Older deployed schemas may not include the User model yet.
+    return
+  }
   const now = new Date().toISOString()
   const userPayload = {
     id: profile.id,
@@ -135,7 +140,7 @@ async function syncUserModelProfile(profile: CurrentUserProfile): Promise<void> 
     updatedAt: now,
   }
 
-  const existing = await (client.models.User.get as any)(
+  const existing = await (userModel.get as any)(
     { id: profile.id },
     userAuthOptions,
   )
@@ -146,12 +151,12 @@ async function syncUserModelProfile(profile: CurrentUserProfile): Promise<void> 
       existingUser.email !== profile.email ||
       existingUser.displayName !== profile.displayName
     ) {
-      await (client.models.User.update as any)(userPayload, userAuthOptions)
+      await (userModel.update as any)(userPayload, userAuthOptions)
     }
     return
   }
 
-  await (client.models.User.create as any)(
+  await (userModel.create as any)(
     {
       ...userPayload,
       createdAt: now,

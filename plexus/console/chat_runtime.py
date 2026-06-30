@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import socket
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
@@ -25,10 +26,27 @@ RUNNING = "RUNNING"
 COMPLETED = "COMPLETED"
 FAILED = "FAILED"
 HANDLED_HUMAN_INTERACTIONS = {"CHAT"}
-CONSOLE_HISTORY_LIMIT = 500  # Fetch extensive history for 128K+ context models; token budgeting in TAC
 DEFAULT_SESSION_TITLE_MODEL = "gpt-5.4-mini"
 SESSION_TITLE_MAX_WORDS = 8
 _PROCEDURE_SERVICE_CACHE: Dict[int, ProcedureService] = {}
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        parsed = int(raw)
+        if parsed > 0:
+            return parsed
+    except (TypeError, ValueError):
+        pass
+    logger.warning("Invalid %s=%r; using default %d", name, raw, default)
+    return default
+
+
+CONSOLE_HISTORY_LIMIT = _positive_int_env("PLEXUS_CONSOLE_SESSION_HISTORY_LIMIT", 8)
+CONSOLE_HISTORY_MAX_CHARS = _positive_int_env("PLEXUS_CONSOLE_SESSION_HISTORY_MAX_CHARS", 220)
 
 
 @dataclass(frozen=True)
@@ -49,6 +67,7 @@ class ConsoleMessage:
     private: bool = False
     privacy_owner_user_id: Optional[str] = None
     privacy_span_id: Optional[str] = None
+    client_send_started_at: Optional[str] = None
 
 
 def utc_now() -> str:
@@ -132,6 +151,18 @@ def _extract_privacy_span_id(raw_metadata: Any) -> Optional[str]:
         return None
     span_id = span_id.strip()
     return span_id or None
+
+
+def _extract_client_send_started_at(raw_metadata: Any) -> Optional[str]:
+    metadata = _parse_metadata_object(raw_metadata)
+    instrumentation = metadata.get("instrumentation")
+    if not isinstance(instrumentation, dict):
+        return None
+    started_at = instrumentation.get("client_send_started_at")
+    if not isinstance(started_at, str):
+        return None
+    normalized = started_at.strip()
+    return normalized or None
 
 
 def _is_private_metadata(raw_metadata: Any) -> bool:
@@ -491,25 +522,81 @@ def _duration_ms(start: Optional[str], end: Optional[str]) -> Optional[int]:
     return int(duration)
 
 
+def _as_int(value: Any) -> Optional[int]:
+    try:
+        if value is None:
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_model_id_for_compare(value: Any) -> Optional[str]:
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    if "/" in text:
+        text = text.split("/", 1)[1].strip()
+    return text or None
+
+
+def _model_ids_match(selected: Any, resolved: Any) -> Optional[bool]:
+    selected_normalized = _normalize_model_id_for_compare(selected)
+    resolved_normalized = _normalize_model_id_for_compare(resolved)
+    if not selected_normalized or not resolved_normalized:
+        return None
+    return selected_normalized == resolved_normalized
+
+
 def _build_latency_summary(trace: Dict[str, Any], *, status: str) -> Dict[str, Any]:
+    resolved_model = trace.get("resolved_model")
+    selected_model = trace.get("selected_model")
     summary: Dict[str, Any] = {
         "event": "console_chat_latency",
         "status": status,
         "message_id": trace.get("message_id"),
         "session_id": trace.get("session_id"),
         "response_target": trace.get("response_target"),
-        "selected_model": trace.get("selected_model"),
+        "selected_model": selected_model,
+        "resolved_model": resolved_model,
+        "resolved_model_matches_selected": _model_ids_match(selected_model, resolved_model),
+        "assistant_message_id": trace.get("assistant_message_id"),
+        "assistant_prompt_tokens": trace.get("assistant_prompt_tokens"),
+        "assistant_completion_tokens": trace.get("assistant_completion_tokens"),
+        "assistant_total_tokens": trace.get("assistant_total_tokens"),
+        "assistant_chunk_count": trace.get("assistant_chunk_count"),
+        "assistant_persisted_update_count": trace.get("assistant_persisted_update_count"),
+        "poll_query_ms": trace.get("poll_query_ms"),
+        "poll_batch_size": trace.get("poll_batch_size"),
+        "poll_oldest_pending_ms": trace.get("poll_oldest_pending_ms"),
+        "client_send_started_at": trace.get("t_client_send_started"),
         "t_received": trace.get("t_received"),
+        "t_worker_started": trace.get("t_worker_started"),
+        "t_claim_attempt_started": trace.get("t_claim_attempt_started"),
+        "t_claim_attempt_completed": trace.get("t_claim_attempt_completed"),
         "t_claimed": trace.get("t_claimed"),
+        "t_history_load_started": trace.get("t_history_load_started"),
         "t_history_loaded": trace.get("t_history_loaded"),
         "t_run_started": trace.get("t_run_started"),
+        "t_run_completed": trace.get("t_run_completed"),
         "t_first_assistant_chunk": trace.get("t_first_assistant_chunk"),
+        "t_first_chunk_lookup_completed": trace.get("t_first_chunk_lookup_completed"),
         "t_completed": trace.get("t_completed"),
+        "queue_to_worker_ms": _duration_ms(trace.get("t_received"), trace.get("t_worker_started")),
+        "queue_to_claim_ms": _duration_ms(trace.get("t_received"), trace.get("t_claimed")),
+        "client_to_claim_ms": _duration_ms(trace.get("t_client_send_started"), trace.get("t_claimed")),
         "claim_ms": _duration_ms(trace.get("t_received"), trace.get("t_claimed")),
+        "claim_roundtrip_ms": trace.get("claim_roundtrip_ms"),
+        "history_load_ms": _duration_ms(trace.get("t_history_load_started"), trace.get("t_history_loaded")),
         "history_ms": _duration_ms(trace.get("t_claimed"), trace.get("t_history_loaded")),
         "startup_ms": _duration_ms(trace.get("t_history_loaded"), trace.get("t_run_started")),
         "first_token_ms": _duration_ms(trace.get("t_run_started"), trace.get("t_first_assistant_chunk")),
+        "claim_to_first_token_ms": _duration_ms(trace.get("t_claimed"), trace.get("t_first_assistant_chunk")),
+        "client_to_first_token_ms": _duration_ms(trace.get("t_client_send_started"), trace.get("t_first_assistant_chunk")),
+        "first_chunk_lookup_ms": trace.get("first_chunk_lookup_ms"),
+        "run_ms": _duration_ms(trace.get("t_run_started"), trace.get("t_run_completed")),
         "total_ms": _duration_ms(trace.get("t_received"), trace.get("t_completed")),
+        "client_total_ms": _duration_ms(trace.get("t_client_send_started"), trace.get("t_completed")),
     }
     error = trace.get("error")
     if isinstance(error, str) and error:
@@ -551,6 +638,7 @@ def parse_chat_message(raw: Dict[str, Any]) -> Optional[ConsoleMessage]:
         private=_extract_private(raw.get("metadata")),
         privacy_owner_user_id=_extract_privacy_owner_user_id(raw.get("metadata")),
         privacy_span_id=_extract_privacy_span_id(raw.get("metadata")),
+        client_send_started_at=_extract_client_send_started_at(raw.get("metadata")),
     )
 
 
@@ -596,6 +684,7 @@ def claim_message(
     *,
     expected_target: str,
     owner: str,
+    latency_trace: Optional[Dict[str, Any]] = None,
 ) -> bool:
     if not should_handle_message(message, expected_target):
         return False
@@ -613,6 +702,9 @@ def claim_message(
       }
     }
     """
+    claim_started_monotonic = time.monotonic()
+    if latency_trace is not None:
+        latency_trace["t_claim_attempt_started"] = utc_now()
     try:
         result = client.execute(
             mutation,
@@ -641,6 +733,9 @@ def claim_message(
         return False
     if isinstance(result, dict) and result.get("errors"):
         raise RuntimeError(f"Failed to claim console message {message.id}: {result['errors']}")
+    if latency_trace is not None:
+        latency_trace["t_claim_attempt_completed"] = utc_now()
+        latency_trace["claim_roundtrip_ms"] = int(max(0.0, (time.monotonic() - claim_started_monotonic) * 1000.0))
     claimed = _graphql_field(result, "updateChatMessage")
     return isinstance(claimed, dict) and claimed.get("id") == message.id
 
@@ -726,6 +821,13 @@ def fetch_message(client: PlexusDashboardClient, message_id: str) -> Optional[Co
     return parse_chat_message(raw) if isinstance(raw, dict) else None
 
 
+def _clip_history_content(content: str) -> str:
+    text = (content or "").strip()
+    if CONSOLE_HISTORY_MAX_CHARS > 0 and len(text) > CONSOLE_HISTORY_MAX_CHARS:
+        return f"{text[:CONSOLE_HISTORY_MAX_CHARS]}..."
+    return text
+
+
 def fetch_session_history(
     client: PlexusDashboardClient,
     session_id: str,
@@ -737,6 +839,7 @@ def fetch_session_history(
     query ListConsoleSessionHistory($sessionId: String!, $limit: Int, $nextToken: String) {
       listChatMessageBySessionIdAndCreatedAt(
         sessionId: $sessionId
+        sortDirection: DESC
         limit: $limit
         nextToken: $nextToken
       ) {
@@ -754,20 +857,24 @@ def fetch_session_history(
     }
     """
     items: List[Dict[str, Any]] = []
+    max_items = max(limit * 3, limit)
     next_token: Optional[str] = None
-    while len(items) < limit:
+    while len(items) < max_items:
+        page_limit = min(100, max_items - len(items))
         result = client.execute(
             query,
-            {"sessionId": session_id, "limit": min(100, limit), "nextToken": next_token},
+            {"sessionId": session_id, "limit": page_limit, "nextToken": next_token},
         )
         page = _graphql_field(result, "listChatMessageBySessionIdAndCreatedAt")
         if not isinstance(page, dict):
             break
         page_items = page.get("items") or []
         if isinstance(page_items, list):
-            items.extend(item for item in page_items if isinstance(item, dict))
+            remaining = max(0, max_items - len(items))
+            if remaining:
+                items.extend(item for item in page_items[:remaining] if isinstance(item, dict))
         next_token = page.get("nextToken")
-        if not next_token:
+        if not next_token or len(items) >= max_items:
             break
 
     normalized: List[Dict[str, str]] = []
@@ -785,19 +892,25 @@ def fetch_session_history(
         human_interaction = str(item.get("humanInteraction") or "").upper()
         if human_interaction not in {"CHAT", "CHAT_ASSISTANT"}:
             continue
-        content = item.get("content")
-        if isinstance(content, str) and content.strip():
-            normalized.append({"role": role, "content": content.strip()})
+        raw_content = item.get("content")
+        if not isinstance(raw_content, str):
+            continue
+        if raw_content.strip() == "Assistant turn completed.":
+            continue
+        content = _clip_history_content(raw_content)
+        if not content:
+            continue
+        normalized.append({"role": role, "content": content})
     return normalized[-limit:]
 
 
-def fetch_first_assistant_chunk_timestamp(
+def fetch_first_assistant_chunk_details(
     client: PlexusDashboardClient,
     session_id: str,
     *,
     after_iso: Optional[str],
     max_items: int = 300,
-) -> Optional[str]:
+) -> Optional[Dict[str, Any]]:
     query = """
     query ListAssistantChunks($sessionId: String!, $limit: Int, $nextToken: String) {
       listChatMessageBySessionIdAndCreatedAt(
@@ -807,6 +920,7 @@ def fetch_first_assistant_chunk_timestamp(
         nextToken: $nextToken
       ) {
         items {
+          id
           role
           humanInteraction
           messageType
@@ -860,17 +974,96 @@ def fetch_first_assistant_chunk_timestamp(
             if isinstance(timings, dict)
             else ""
         )
+        first_chunk_persisted_at = (
+            str(timings.get("first_chunk_persisted_at") or "").strip()
+            if isinstance(timings, dict)
+            else ""
+        )
+        chunk_count = (
+            _as_int(timings.get("chunk_count"))
+            if isinstance(timings, dict)
+            else None
+        )
+        persisted_update_count = (
+            _as_int(timings.get("persisted_update_count"))
+            if isinstance(timings, dict)
+            else None
+        )
+        cost = metadata.get("cost") if isinstance(metadata, dict) else None
+        cost_summary = cost.get("summary") if isinstance(cost, dict) else None
+        breakdown = cost_summary.get("breakdown") if isinstance(cost_summary, dict) else None
+        resolved_model = None
+        if isinstance(breakdown, list) and breakdown:
+            first_row = breakdown[0]
+            if isinstance(first_row, dict):
+                resolved_model = str(first_row.get("model") or "").strip() or None
+        prompt_tokens = (
+            _as_int(cost_summary.get("prompt_tokens"))
+            if isinstance(cost_summary, dict)
+            else None
+        )
+        completion_tokens = (
+            _as_int(cost_summary.get("completion_tokens"))
+            if isinstance(cost_summary, dict)
+            else None
+        )
+        total_tokens = (
+            _as_int(cost_summary.get("total_tokens"))
+            if isinstance(cost_summary, dict)
+            else None
+        )
+        message_id = str(item.get("id") or "").strip() or None
+        created_at = str(item.get("createdAt") or "").strip() or None
         if first_chunk_received_at:
             first_chunk_dt = _parse_iso_datetime(first_chunk_received_at)
             if not after_dt or (first_chunk_dt and first_chunk_dt >= after_dt):
-                return first_chunk_received_at
-        created_at = str(item.get("createdAt") or "").strip()
+                return {
+                    "timestamp": first_chunk_received_at,
+                    "assistant_message_id": message_id,
+                    "resolved_model": resolved_model,
+                    "assistant_prompt_tokens": prompt_tokens,
+                    "assistant_completion_tokens": completion_tokens,
+                    "assistant_total_tokens": total_tokens,
+                    "assistant_chunk_count": chunk_count,
+                    "assistant_persisted_update_count": persisted_update_count,
+                    "assistant_first_chunk_persisted_at": first_chunk_persisted_at or None,
+                }
         if not created_at:
             continue
         created_dt = _parse_iso_datetime(created_at)
         if after_dt and created_dt and created_dt < after_dt:
             continue
-        return created_at
+        return {
+            "timestamp": created_at,
+            "assistant_message_id": message_id,
+            "resolved_model": resolved_model,
+            "assistant_prompt_tokens": prompt_tokens,
+            "assistant_completion_tokens": completion_tokens,
+            "assistant_total_tokens": total_tokens,
+            "assistant_chunk_count": chunk_count,
+            "assistant_persisted_update_count": persisted_update_count,
+            "assistant_first_chunk_persisted_at": first_chunk_persisted_at or None,
+        }
+    return None
+
+
+def fetch_first_assistant_chunk_timestamp(
+    client: PlexusDashboardClient,
+    session_id: str,
+    *,
+    after_iso: Optional[str],
+    max_items: int = 300,
+) -> Optional[str]:
+    details = fetch_first_assistant_chunk_details(
+        client,
+        session_id,
+        after_iso=after_iso,
+        max_items=max_items,
+    )
+    if isinstance(details, dict):
+        timestamp = details.get("timestamp")
+        if isinstance(timestamp, str) and timestamp.strip():
+            return timestamp
     return None
 
 
@@ -894,6 +1087,9 @@ async def run_console_chat_response_async(
         cw_logger.open()
     except Exception as exc:
         logger.debug("Could not create CloudWatch logger for console chat: %s", exc)
+
+    if latency_trace is not None:
+        latency_trace["t_history_load_started"] = utc_now()
 
     history = fetch_session_history(
         client,
@@ -972,11 +1168,35 @@ async def run_console_chat_response_async(
             context=context,
         )
         if latency_trace is not None:
-            latency_trace["t_first_assistant_chunk"] = fetch_first_assistant_chunk_timestamp(
-                client,
-                message.session_id,
-                after_iso=run_started,
-            )
+            latency_trace["t_run_completed"] = utc_now()
+        first_chunk_lookup_started = time.monotonic()
+        first_chunk_details = fetch_first_assistant_chunk_details(
+            client,
+            message.session_id,
+            after_iso=run_started,
+        )
+        first_chunk_lookup_ms = int(max(0.0, (time.monotonic() - first_chunk_lookup_started) * 1000.0))
+        first_chunk_received_at = (
+            str(first_chunk_details.get("timestamp") or "").strip()
+            if isinstance(first_chunk_details, dict)
+            else None
+        )
+        if latency_trace is not None:
+            latency_trace["t_first_assistant_chunk"] = first_chunk_received_at
+            latency_trace["t_first_chunk_lookup_completed"] = utc_now()
+            latency_trace["first_chunk_lookup_ms"] = first_chunk_lookup_ms
+            if isinstance(first_chunk_details, dict):
+                for key in (
+                    "assistant_message_id",
+                    "resolved_model",
+                    "assistant_prompt_tokens",
+                    "assistant_completion_tokens",
+                    "assistant_total_tokens",
+                    "assistant_chunk_count",
+                    "assistant_persisted_update_count",
+                    "assistant_first_chunk_persisted_at",
+                ):
+                    latency_trace[key] = first_chunk_details.get(key)
 
         # Log successful completion
         if cw_logger:
@@ -1011,6 +1231,7 @@ def process_console_message(
     *,
     expected_target: str,
     owner: str,
+    poll_context: Optional[Dict[str, Any]] = None,
 ) -> bool:
     message = parse_chat_message(raw_message)
     if not message:
@@ -1022,9 +1243,21 @@ def process_console_message(
         "session_id": message.session_id,
         "response_target": message.response_target,
         "selected_model": message.selected_model,
+        "t_client_send_started": message.client_send_started_at,
         "t_received": message.created_at or None,
+        "t_worker_started": utc_now(),
     }
-    if not claim_message(client, message, expected_target=expected_target, owner=owner):
+    if isinstance(poll_context, dict):
+        latency_trace["poll_query_ms"] = poll_context.get("poll_query_ms")
+        latency_trace["poll_batch_size"] = poll_context.get("poll_batch_size")
+        latency_trace["poll_oldest_pending_ms"] = poll_context.get("poll_oldest_pending_ms")
+    if not claim_message(
+        client,
+        message,
+        expected_target=expected_target,
+        owner=owner,
+        latency_trace=latency_trace,
+    ):
         return False
     latency_trace["t_claimed"] = utc_now()
 
@@ -1092,6 +1325,7 @@ def process_pending_local_messages(
     processed = 0
     next_token: Optional[str] = None
     while processed < limit:
+        poll_started = time.monotonic()
         result = client.execute(
             query,
             {
@@ -1100,14 +1334,32 @@ def process_pending_local_messages(
                 "nextToken": next_token,
             },
         )
+        poll_query_ms = int(max(0.0, (time.monotonic() - poll_started) * 1000.0))
         page = _graphql_field(result, "listChatMessageByResponseTargetAndResponseStatusAndCreatedAt")
         items: Iterable[Any] = page.get("items") if isinstance(page, dict) else []
-        for item in items or []:
+        item_list = list(items or [])
+        poll_oldest_pending_ms: Optional[int] = None
+        now_iso = utc_now()
+        for item in item_list:
+            if not isinstance(item, dict):
+                continue
+            pending_age_ms = _duration_ms(str(item.get("createdAt") or "").strip() or None, now_iso)
+            if pending_age_ms is None:
+                continue
+            if poll_oldest_pending_ms is None or pending_age_ms > poll_oldest_pending_ms:
+                poll_oldest_pending_ms = pending_age_ms
+        poll_context = {
+            "poll_query_ms": poll_query_ms,
+            "poll_batch_size": len(item_list),
+            "poll_oldest_pending_ms": poll_oldest_pending_ms,
+        }
+        for item in item_list:
             if isinstance(item, dict) and process_console_message(
                 client,
                 item,
                 expected_target=response_target,
                 owner=owner,
+                poll_context=poll_context,
             ):
                 processed += 1
                 if processed >= limit:

@@ -81,10 +81,18 @@ def _install_tactus_dspy_context_capture_patch() -> None:
             )
 
     def patched_streaming(self, opts: Dict[str, Any], prompt_context: Dict[str, Any]):
+        logger.info(
+            "Tactus DSPy streaming call path selected for agent=%s",
+            getattr(self, "name", "unknown"),
+        )
         _capture(self, prompt_context, "tactus_dspy_agent_streaming")
         return original_streaming(self, opts, prompt_context)
 
     def patched_non_streaming(self, opts: Dict[str, Any], prompt_context: Dict[str, Any]):
+        logger.info(
+            "Tactus DSPy non-streaming call path selected for agent=%s",
+            getattr(self, "name", "unknown"),
+        )
         _capture(self, prompt_context, "tactus_dspy_agent_non_streaming")
         return original_non_streaming(self, opts, prompt_context)
 
@@ -1171,6 +1179,62 @@ async def _execute_tactus(
                     return nested_response.strip()
             return None
 
+        def _normalize_agent_model_overrides(raw_overrides: Any) -> Dict[str, str]:
+            if not isinstance(raw_overrides, dict):
+                return {}
+            normalized: Dict[str, str] = {}
+            for agent_name, model_name in raw_overrides.items():
+                if not isinstance(agent_name, str):
+                    continue
+                agent_key = agent_name.strip()
+                if not agent_key:
+                    continue
+                model = str(model_name or "").strip()
+                if not model:
+                    continue
+                normalized[agent_key] = model
+            return normalized
+
+        def _apply_agent_model_overrides_to_source(
+            source_text: str,
+            overrides: Dict[str, str],
+        ) -> tuple[str, Dict[str, str]]:
+            if not overrides:
+                return source_text, {}
+            try:
+                parsed = yaml.safe_load(source_text)
+            except Exception:
+                return source_text, {}
+            if not isinstance(parsed, dict):
+                return source_text, {}
+            agents = parsed.get("agents")
+            if not isinstance(agents, dict):
+                return source_text, {}
+
+            updated_agents = dict(agents)
+            applied: Dict[str, str] = {}
+            changed = False
+            for agent_name, requested_model in overrides.items():
+                agent_config = updated_agents.get(agent_name)
+                if not isinstance(agent_config, dict):
+                    continue
+                current_model = str(agent_config.get("model") or "").strip()
+                if current_model == requested_model:
+                    applied[agent_name] = requested_model
+                    continue
+                next_agent_config = dict(agent_config)
+                next_agent_config["model"] = requested_model
+                updated_agents[agent_name] = next_agent_config
+                applied[agent_name] = requested_model
+                changed = True
+
+            if not changed:
+                return source_text, applied
+
+            updated = dict(parsed)
+            updated["agents"] = updated_agents
+            return yaml.safe_dump(updated, sort_keys=False), applied
+
         # Backward compatibility: older Plexus templates use `code:` for Lua source.
         # Current Tactus parser expects `procedure:` as the required field.
         try:
@@ -1434,6 +1498,24 @@ async def _execute_tactus(
                         logger.info(
                             "Adapted Tactus config: replaced legacy Procedure block with direct run(input)"
                         )
+
+                if isinstance(context, dict):
+                    model_overrides = _normalize_agent_model_overrides(context.get("agent_models"))
+                    if model_overrides:
+                        procedure_source, applied_model_overrides = _apply_agent_model_overrides_to_source(
+                            procedure_source,
+                            model_overrides,
+                        )
+                        if applied_model_overrides:
+                            context = dict(context)
+                            context["agent_models_applied"] = applied_model_overrides
+                            logger.info(
+                                "Applied Tactus agent model overrides: %s",
+                                ", ".join(
+                                    f"{agent}={model}"
+                                    for agent, model in sorted(applied_model_overrides.items())
+                                ),
+                            )
         except Exception:  # noqa: BLE001
             # Let runtime report parse errors with full context if adaptation fails.
             pass
