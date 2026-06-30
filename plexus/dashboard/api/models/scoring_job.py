@@ -231,7 +231,11 @@ class ScoringJob(BaseModel):
             }
         }
         
-        result = self._client.execute(mutation, variables)
+        result = self._client.execute(
+            mutation,
+            variables,
+            retry_policy="long_running_write",
+        )
         return self.from_dict(result['updateScoringJob'], self._client)
 
     @classmethod

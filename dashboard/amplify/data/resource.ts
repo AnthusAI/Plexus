@@ -51,7 +51,10 @@ type ProcedureIndexFields = "accountId" | "scorecardId" | "scoreId" | "scoreVers
 
 // Define the share token handler function
 const getResourceByShareTokenHandler = defineFunction({
-    entry: './resolvers/getResourceByShareToken.ts'
+    entry: './resolvers/getResourceByShareToken.ts',
+    environment: {
+        PLEXUS_API_URL: process.env.PLEXUS_API_URL || ''
+    }
 });
 
 const schema = a.schema({
@@ -959,7 +962,9 @@ const schema = a.schema({
             idx("accountId").sortKeys(["createdAt"]),
             idx("responseTarget").sortKeys(["responseStatus", "createdAt"])
         ]),
-});
+}).authorization((allow) => [
+    allow.resource(getResourceByShareTokenHandler).to(['query', 'mutate'])
+]);
 
 export type Schema = ClientSchema<typeof schema>;
 

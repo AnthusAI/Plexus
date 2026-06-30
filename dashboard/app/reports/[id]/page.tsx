@@ -236,11 +236,13 @@ export class ReportService {
           reportData = result.data;
         }
       } else {
-        reportData = result.data;
+        reportData = result.data?.getReport || result.data;
       }
       
-      // If we have a reportId, fetch the full report data to ensure we have attachedFiles
-      if (reportId) {
+      // Public share views should not depend on a direct getReport call. The
+      // custom share resolver is the authoritative public data path.
+      const hasReportBlocks = Array.isArray(reportData?.reportBlocks?.items);
+      if (reportId && !hasReportBlocks) {
         try {
           const fullReportResponse = await this.client.graphql({
             query: `
@@ -431,6 +433,7 @@ export function PublicReport({
       const blockType = block.type || outputData.class || 'unknown'; 
       
       return {
+        id: block.id,
         type: blockType,
         config: outputData, // Config is often the same as output for many blocks
         output: outputData,
@@ -438,6 +441,8 @@ export function PublicReport({
         name: block.name || undefined, // Use API block name if available
         position: block.position,
         attachedFiles: block.attachedFiles,
+        warning: block.warning,
+        error: block.error,
         // Pass the original block ID as well, might be useful for keys or debugging
         originalBlockId: block.id 
       };
