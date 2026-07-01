@@ -9,86 +9,7 @@ import { Amplify } from "aws-amplify";
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Toaster } from "sonner";
-
-function inferRegionFromGraphqlUrl(url: string): string | null {
-  try {
-    const hostname = new URL(url).hostname
-    const match = hostname.match(/appsync-api\.([a-z0-9-]+)\.amazonaws\.com$/i)
-    return match?.[1] ?? null
-  } catch {
-    return null
-  }
-}
-
-function loadLocalAmplifyOutputs(): Record<string, any> | null {
-  try {
-    return require('../amplify_outputs.json')
-  } catch {
-    return null
-  }
-}
-
-function resolveAmplifyOutputs(): Record<string, any> | null {
-  if (process.env.NEXT_PUBLIC_PLEXUS_BACKEND === 'local') {
-    return {
-      data: {
-        url: process.env.NEXT_PUBLIC_PLEXUS_API_URL || 'http://localhost:18080/graphql',
-        api_key: process.env.NEXT_PUBLIC_PLEXUS_API_KEY || 'local-smoke-key',
-        aws_region: process.env.NEXT_PUBLIC_PLEXUS_API_REGION || 'local',
-        default_authorization_type: 'API_KEY',
-        authorization_types: ['API_KEY'],
-      },
-      auth: {
-        user_pool_id: 'local-demo-user-pool',
-        user_pool_client_id: 'local-demo-client',
-        aws_region: process.env.NEXT_PUBLIC_PLEXUS_API_REGION || 'local',
-      },
-      storage: {
-        aws_region: process.env.NEXT_PUBLIC_PLEXUS_API_REGION || 'local',
-        bucket_name: 'local-demo',
-      },
-    }
-  }
-
-  const outputs = loadLocalAmplifyOutputs()
-  const endpointOverride = process.env.NEXT_PUBLIC_PLEXUS_API_URL?.trim()
-  const apiKeyOverride = process.env.NEXT_PUBLIC_PLEXUS_API_KEY?.trim()
-  const regionOverride = process.env.NEXT_PUBLIC_PLEXUS_API_REGION?.trim()
-
-  if (!endpointOverride && !apiKeyOverride) {
-    return outputs
-  }
-
-  if (!endpointOverride || !apiKeyOverride) {
-    throw new Error(
-      'Partial Amplify data override detected. Both NEXT_PUBLIC_PLEXUS_API_URL and NEXT_PUBLIC_PLEXUS_API_KEY are required.',
-    )
-  }
-
-  const resolvedRegion = regionOverride || inferRegionFromGraphqlUrl(endpointOverride) || outputs?.data?.aws_region
-  if (!resolvedRegion) {
-    throw new Error(
-      'Unable to determine Amplify GraphQL region. Set NEXT_PUBLIC_PLEXUS_API_REGION or provide a standard AppSync URL.',
-    )
-  }
-
-  const configuredData = outputs?.data || {}
-
-  return {
-    ...(outputs || {}),
-    data: {
-      ...configuredData,
-      url: endpointOverride,
-      api_key: apiKeyOverride,
-      aws_region: resolvedRegion,
-      // Local endpoint/key overrides must use API key mode end-to-end.
-      // Keeping Cognito default auth here causes browser preflight to include
-      // Authorization headers that AppSync rejects for this API key flow.
-      default_authorization_type: "API_KEY",
-      authorization_types: ["API_KEY"],
-    },
-  }
-}
+import { resolveAmplifyOutputs } from "./amplify-config";
 
 // Only configure Amplify if we're not in a CI environment
 if (process.env.NODE_ENV !== 'test') {
@@ -96,7 +17,7 @@ if (process.env.NODE_ENV !== 'test') {
     const outputs = resolveAmplifyOutputs()
     if (!outputs) {
       throw new Error(
-        'Amplify outputs not found. Provide dashboard/amplify_outputs.json or set NEXT_PUBLIC_PLEXUS_API_URL and NEXT_PUBLIC_PLEXUS_API_KEY.',
+        'Amplify outputs not found. Provide dashboard/amplify_outputs.json for this environment.',
       )
     }
     Amplify.configure(outputs);

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "e6745b99-c5d7-41d0-84be-2de84116aed9",
+  "issue_id": "plx-f793ccd1-f79b-43d3-b85b-70c929223b89",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-29T19:59:52.627Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Increase the local MCP execute_tactus parent budget defaults and make them configurable via environment variables so async child operations can request practical budgets without pre-dispatch failures.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": null,
+    "priority": 2,
+    "status": "open",
+    "title": "Raise execute_tactus runtime budget defaults"
+  }
+}

@@ -896,25 +896,29 @@ class ProcedureService:
                         if task_id_for_tracking:
                             context['task_id'] = task_id_for_tracking
 
-                        recent_rubric_memory_briefing = await self._build_optimizer_recent_rubric_memory_briefing(
-                            context
-                        )
-                        if recent_rubric_memory_briefing:
-                            context['recent_rubric_memory_briefing'] = recent_rubric_memory_briefing
-                        rubric_memory_briefing = await self._build_optimizer_rubric_memory_briefing(
-                            context
-                        )
-                        if rubric_memory_briefing:
-                            context['rubric_memory_briefing'] = rubric_memory_briefing
+                        if context.get('is_optimizer_procedure'):
+                            recent_rubric_memory_briefing = await self._build_optimizer_recent_rubric_memory_briefing(
+                                context
+                            )
+                            if recent_rubric_memory_briefing:
+                                context['recent_rubric_memory_briefing'] = recent_rubric_memory_briefing
+                            rubric_memory_briefing = await self._build_optimizer_rubric_memory_briefing(
+                                context
+                            )
+                            if rubric_memory_briefing:
+                                context['rubric_memory_briefing'] = rubric_memory_briefing
 
                         from .procedure_executor import execute_procedure
                         enable_mcp = bool(options.pop('enable_mcp', True))
-                        mcp_server = None
+                        mcp_server = options.pop('mcp_server', None)
                         if enable_mcp:
-                            from .mcp_transport import create_procedure_mcp_server
-                            mcp_server = await create_procedure_mcp_server(
-                                experiment_context=context
-                            )
+                            if mcp_server is None:
+                                from .mcp_transport import create_procedure_mcp_server
+                                mcp_server = await create_procedure_mcp_server(
+                                    experiment_context=context
+                                )
+                            elif hasattr(mcp_server, "experiment_context"):
+                                mcp_server.experiment_context = context
 
                         client_context = getattr(self.client, "context", None)
                         actor_context = resolve_actor_context(
