@@ -3,6 +3,8 @@ import re
 import yaml
 import logging
 import importlib.util
+import json
+import hashlib
 from decimal import Decimal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, List, Dict, Any
@@ -16,6 +18,197 @@ from plexus.Registries import scorecard_registry
 from plexus.scores.Score import Score
 from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
 from plexus.scores.LangGraphScore import BatchProcessingPause, LangGraphScore
+
+SCORE_RESULT_TRACE_SCHEMA_VERSION = "score_result_dependency_v1"
+DEFAULT_TRACE_SCORE_IDENTIFIERS = {
+    "information accuracy (composite)",
+    "information-accuracy-composite",
+    "258bee07-c6c0-492d-b95f-96581a5cfc6c",
+    "48813",
+    "910707",
+}
+
+
+def _normalize_trace_identifier(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _stable_fingerprint(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def _excerpt(value: Any, limit: int = 500) -> Optional[str]:
+    if value is None:
+        return None
+    text_value = str(value)
+    if len(text_value) <= limit:
+        return text_value
+    return f"{text_value[:limit]}... [truncated {len(text_value) - limit} chars]"
+
+
+def _metadata_dict(result: Any) -> dict:
+    metadata = getattr(result, "metadata", {}) or {}
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _score_version_id(score_props: Optional[dict]) -> Optional[str]:
+    if not score_props:
+        return None
+    for key in ("scoreVersionId", "version", "championVersionId", "version_id"):
+        value = score_props.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+def _score_config_fingerprint(score_props: Optional[dict]) -> Optional[str]:
+    if not score_props:
+        return None
+    return _stable_fingerprint(score_props)
+
+
+def _summarize_metadata_results(metadata_results: Any) -> Any:
+    if not metadata_results:
+        return None
+    if isinstance(metadata_results, list):
+        return [
+            {
+                "name": item.get("name") if isinstance(item, dict) else None,
+                "value": item.get("value") if isinstance(item, dict) else None,
+                "explanation_excerpt": _excerpt(
+                    item.get("explanation") if isinstance(item, dict) else item
+                ),
+            }
+            for item in metadata_results
+        ]
+    if isinstance(metadata_results, dict):
+        return {
+            str(key): {
+                "value": value.get("value") if isinstance(value, dict) else None,
+                "explanation_excerpt": _excerpt(
+                    value.get("explanation") if isinstance(value, dict) else value
+                ),
+            }
+            for key, value in metadata_results.items()
+        }
+    return _excerpt(metadata_results)
+
+
+def _summarize_score_result(result: Any, *, score_name: Optional[str] = None) -> dict:
+    metadata = _metadata_dict(result)
+    explanation = metadata.get("explanation") or getattr(result, "explanation", None)
+    return {
+        "name": score_name or getattr(getattr(result, "parameters", None), "name", None),
+        "id": getattr(getattr(result, "parameters", None), "id", None),
+        "key": getattr(getattr(result, "parameters", None), "key", None),
+        "value": getattr(result, "value", None),
+        "explanation_excerpt": _excerpt(explanation),
+        "explanation_hash": _stable_fingerprint(explanation) if explanation else None,
+        "failed_elements": metadata.get("failed_elements"),
+        "metadata_results_summary": _summarize_metadata_results(metadata.get("results")),
+        "error": getattr(result, "error", None),
+    }
+
+
+def _should_capture_dependency_trace(score_name: str, score_id: str, score_props: Optional[dict]) -> bool:
+    if os.getenv("PLEXUS_SCORE_TRACE_ALL", "").lower() in {"1", "true", "yes"}:
+        return True
+
+    configured = os.getenv("PLEXUS_SCORE_TRACE_ALLOWLIST", "")
+    allowlist = set(DEFAULT_TRACE_SCORE_IDENTIFIERS)
+    allowlist.update(
+        _normalize_trace_identifier(token)
+        for token in configured.split(",")
+        if token.strip()
+    )
+    candidates = {
+        _normalize_trace_identifier(score_name),
+        _normalize_trace_identifier(score_id),
+        _normalize_trace_identifier((score_props or {}).get("id")),
+        _normalize_trace_identifier((score_props or {}).get("key")),
+        _normalize_trace_identifier((score_props or {}).get("name")),
+    }
+    return bool(candidates & allowlist)
+
+
+def _build_dependency_trace(
+    *,
+    caller_path: str,
+    scorecard_properties: Optional[dict],
+    target_score_id: str,
+    target_score_name: str,
+    target_score_props: Optional[dict],
+    dependency_graph: dict,
+    execution_order: List[str],
+    executed_scores: List[dict],
+    composite_input_results: List[dict],
+    final_result: Score.Result,
+) -> dict:
+    failed_elements = _metadata_dict(final_result).get("failed_elements") or []
+    child_no_roots = [
+        item.get("name")
+        for item in composite_input_results
+        if str(item.get("value", "")).lower() == "no"
+    ]
+    failed_set = {str(item) for item in failed_elements}
+    child_no_set = {str(item) for item in child_no_roots}
+    target_deps = dependency_graph.get(target_score_id, {}).get("deps", [])
+    composite_input_names = {item.get("name") for item in composite_input_results}
+
+    return {
+        "trace_schema_version": SCORE_RESULT_TRACE_SCHEMA_VERSION,
+        "caller_path": caller_path,
+        "generated_at": datetime.now().isoformat(),
+        "scorecard": {
+            "id": (scorecard_properties or {}).get("id"),
+            "key": (scorecard_properties or {}).get("key"),
+            "name": (scorecard_properties or {}).get("name"),
+        },
+        "target_score": {
+            "id": (target_score_props or {}).get("id", target_score_id),
+            "name": target_score_name,
+            "key": (target_score_props or {}).get("key"),
+            "display_name": (target_score_props or {}).get("name"),
+            "scoreVersionId": _score_version_id(target_score_props),
+            "score_config_fingerprint": _score_config_fingerprint(target_score_props),
+        },
+        "dependency_graph": {
+            "target": target_score_name,
+            "execution_order": execution_order,
+            "edges": {
+                node_id: {
+                    "name": node_data.get("name"),
+                    "deps": node_data.get("deps", []),
+                    "dependency_names": [
+                        dependency_graph.get(dep_id, {}).get("name", dep_id)
+                        for dep_id in node_data.get("deps", [])
+                    ],
+                }
+                for node_id, node_data in dependency_graph.items()
+            },
+        },
+        "executed_scores": executed_scores,
+        "composite_input_results": composite_input_results,
+        "composite_output": _summarize_score_result(final_result, score_name=target_score_name),
+        "integrity_checks": {
+            "child_no_roots": child_no_roots,
+            "failed_elements": failed_elements,
+            "failed_elements_match_child_no_roots": failed_set == child_no_set,
+            "symmetric_diff": sorted(failed_set.symmetric_difference(child_no_set)),
+            "missing_required_dependencies": sorted(
+                dependency_graph.get(dep_id, {}).get("name", dep_id)
+                for dep_id in target_deps
+                if dependency_graph.get(dep_id, {}).get("name", dep_id) not in composite_input_names
+            ),
+        },
+        "memoization": {
+            "lookup_performed": False,
+            "cache_hit": False,
+            "reason": "evaluation_path_executes_same_run_scores",
+        },
+    }
 
 
 class Scorecard:
@@ -1088,6 +1281,8 @@ class Scorecard:
 
         results_by_score_id = {}
         results = []
+        execution_order_trace = []
+        executed_score_traces = []
 
         async def process_score(score_id: str):
             score_name = dependency_graph[score_id]["name"]
@@ -1123,6 +1318,7 @@ class Scorecard:
 
                 # Detailed logging of dependency results
                 dependency_details = []
+                previous_result_summaries = []
                 for dep_id in score_deps:
                     if dep_id in results_by_score_id:
                         dep_result = results_by_score_id[dep_id]
@@ -1133,6 +1329,12 @@ class Scorecard:
                             previous_results.append(dep_result)
                             dep_name = dependency_graph.get(dep_id, {}).get(
                                 "name", dep_id
+                            )
+                            previous_result_summaries.append(
+                                _summarize_score_result(
+                                    dep_result,
+                                    score_name=dep_name,
+                                )
                             )
                             dep_value = (
                                 getattr(dep_result, "value", "unknown")
@@ -1191,10 +1393,43 @@ class Scorecard:
                 else:
                     result = score_result
 
+                score_config = self.score_registry.get_properties(score_name) or {}
+                execution_order_trace.append(score_name)
+                executed_score_traces.append({
+                    "score": {
+                        "id": score_config.get("id", score_id),
+                        "name": score_name,
+                        "key": score_config.get("key"),
+                        "display_name": score_config.get("name"),
+                        "scoreVersionId": _score_version_id(score_config),
+                        "score_config_fingerprint": _score_config_fingerprint(score_config),
+                    },
+                    "skipped": False,
+                    "input_dependency_names": [
+                        item.get("name") for item in previous_result_summaries
+                    ],
+                    "input_dependencies": previous_result_summaries,
+                    "output": _summarize_score_result(result, score_name=score_name),
+                })
+
+                if _should_capture_dependency_trace(score_name, score_id, score_config):
+                    result.metadata = dict(result.metadata or {})
+                    result.metadata["trace"] = _build_dependency_trace(
+                        caller_path="scorecard.score_entire_text",
+                        scorecard_properties=getattr(self, "properties", {}),
+                        target_score_id=score_id,
+                        target_score_name=score_name,
+                        target_score_props=score_config,
+                        dependency_graph=dependency_graph,
+                        execution_order=list(execution_order_trace),
+                        executed_scores=list(executed_score_traces),
+                        composite_input_results=previous_result_summaries,
+                        final_result=result,
+                    )
+
                 # Cost/token metrics are already recorded in get_score_result().
                 # Avoid re-instantiating the score here because it can trigger expensive setup
                 # (e.g., LangGraph workflow compilation) for every item.
-                score_config = self.score_registry.get_properties(score_name) or {}
                 dimensions = {
                     "ScoreCardID": str(self.properties.get("id", "unknown")),
                     "ScoreCardName": str(self.properties.get("name", "unknown")),

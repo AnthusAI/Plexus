@@ -399,6 +399,103 @@ class TestScorecard:
         assert result['3'].value == 'Great'
 
     @pytest.mark.asyncio
+    async def test_score_entire_text_adds_dependency_trace_for_information_accuracy_composite(self):
+        """Evaluation-path composite results should persist same-run dependency payloads."""
+        from plexus.scores.Score import Score
+
+        child_scores = [
+            {
+                "name": "Information Accuracy: Copay Guarantees",
+                "id": "child-1",
+                "key": "copay",
+            },
+            {
+                "name": "Information Accuracy: Savings Promises",
+                "id": "child-2",
+                "key": "savings",
+            },
+        ]
+        composite_name = "Information Accuracy (Composite)"
+        dependency_config = {
+            "name": "SelectQuote HCS Medium-Risk",
+            "id": "59125ba2-670c-4aa5-b796-c2085cf38a0c",
+            "key": "selectquote-hcs-medium-risk",
+            "scores": [
+                *child_scores,
+                {
+                    "name": composite_name,
+                    "id": "258bee07-c6c0-492d-b95f-96581a5cfc6c",
+                    "key": "information-accuracy-composite",
+                    "version": "version-1",
+                    "depends_on": [score["name"] for score in child_scores],
+                },
+            ],
+        }
+        self.scorecard.properties = dependency_config
+        self.scorecard.scores = dependency_config["scores"]
+
+        def get_properties(score_name):
+            for score in dependency_config["scores"]:
+                if score["name"] == score_name:
+                    return score
+            return None
+
+        self.scorecard.score_registry = MagicMock()
+        self.scorecard.score_registry.get_properties.side_effect = get_properties
+
+        async def mock_get_score_result(*, scorecard, score, text, metadata, modality, results, item=None):
+            if score == "Information Accuracy: Savings Promises":
+                return Score.Result(
+                    value="No",
+                    metadata={"explanation": "Savings promise failed"},
+                    parameters=Score.Parameters(name=score),
+                )
+            if score == composite_name:
+                failed = [
+                    result.parameters.name
+                    for result in results
+                    if result.value == "No"
+                ]
+                return Score.Result(
+                    value="No" if failed else "Yes",
+                    metadata={
+                        "explanation": f"Failed: {', '.join(failed)}",
+                        "failed_elements": failed,
+                    },
+                    parameters=Score.Parameters(name=score),
+                )
+            return Score.Result(
+                value="Yes",
+                metadata={"explanation": f"{score} passed"},
+                parameters=Score.Parameters(name=score),
+            )
+
+        self.scorecard.get_score_result = mock_get_score_result
+
+        result = await self.scorecard.score_entire_text(
+            text="Sample text",
+            metadata={},
+            modality="test",
+            subset_of_score_names=[composite_name],
+        )
+
+        composite_result = result["258bee07-c6c0-492d-b95f-96581a5cfc6c"]
+        trace = composite_result.metadata["trace"]
+        assert trace["trace_schema_version"] == "score_result_dependency_v1"
+        assert trace["caller_path"] == "scorecard.score_entire_text"
+        assert [
+            {"name": item["name"], "value": item["value"]}
+            for item in trace["composite_input_results"]
+        ] == [
+            {"name": "Information Accuracy: Copay Guarantees", "value": "Yes"},
+            {"name": "Information Accuracy: Savings Promises", "value": "No"},
+        ]
+        assert trace["integrity_checks"]["child_no_roots"] == [
+            "Information Accuracy: Savings Promises"
+        ]
+        assert trace["integrity_checks"]["failed_elements_match_child_no_roots"] is True
+
+    @pytest.mark.asyncio
     async def test_score_entire_text_skips_failed_conditions(self):
         """Test that scores are skipped when their dependency conditions are not met"""
         # Create the test configuration with a conditional dependency
