@@ -80,6 +80,7 @@ def test_main_uses_next_public_response_target_from_env(monkeypatch):
     monkeypatch.setenv("CONSOLE_LOCAL_WORKER_IDLE_POLL_SECONDS", "0")
     monkeypatch.setattr(worker, "_resolve_client", SimpleNamespace)
     monkeypatch.setattr(worker, "_load_local_env", lambda: None)
+    monkeypatch.setattr(worker, "warm_console_runtime", lambda _client: None)
     monkeypatch.setattr(
         worker,
         "process_pending_local_messages",
@@ -106,6 +107,7 @@ def test_main_processes_pending_messages_with_local_owner(monkeypatch):
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "local:ryan")
     monkeypatch.setenv("CONSOLE_LOCAL_WORKER_IDLE_POLL_SECONDS", "0")
     monkeypatch.setattr(worker, "_resolve_client", SimpleNamespace)
+    monkeypatch.setattr(worker, "warm_console_runtime", lambda _client: None)
     monkeypatch.setattr(
         worker,
         "process_pending_local_messages",
@@ -134,6 +136,7 @@ def test_main_drain_mode_only_sleeps_when_no_work(monkeypatch):
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "local:ryan")
     monkeypatch.setenv("CONSOLE_LOCAL_WORKER_IDLE_POLL_SECONDS", "0")
     monkeypatch.setattr(worker, "_resolve_client", SimpleNamespace)
+    monkeypatch.setattr(worker, "warm_console_runtime", lambda _client: None)
     monkeypatch.setattr(
         worker,
         "process_pending_local_messages",
@@ -149,3 +152,58 @@ def test_main_drain_mode_only_sleeps_when_no_work(monkeypatch):
         raise AssertionError("expected SystemExit from patched sleep")
 
     assert len(calls) == 3
+
+
+def test_main_warms_console_runtime_before_polling(monkeypatch):
+    worker = _load_local_worker_module()
+    calls = []
+    fake_client = SimpleNamespace(name="client")
+
+    monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "local:ryan")
+    monkeypatch.setattr(worker, "_load_local_env", lambda: None)
+    monkeypatch.setattr(worker, "_resolve_client", lambda: fake_client)
+    monkeypatch.setattr(worker, "_resolve_api_url_for_log", lambda: "https://sandbox.example/graphql")
+    monkeypatch.setattr(worker, "_current_git_sha", lambda: "abc123")
+    monkeypatch.setattr(worker, "warm_console_runtime", lambda client: calls.append(("warm", client)))
+    monkeypatch.setattr(
+        worker,
+        "process_pending_local_messages",
+        lambda client, **_kwargs: calls.append(("poll", client)) or 0,
+    )
+
+    worker.main(once=True)
+
+    assert calls == [
+        ("warm", fake_client),
+        ("poll", fake_client),
+    ]
+
+
+def test_main_startup_log_includes_worker_identity(monkeypatch):
+    worker = _load_local_worker_module()
+    log_calls = []
+
+    monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "local:ryan")
+    monkeypatch.setattr(worker, "_load_local_env", lambda: None)
+    monkeypatch.setattr(worker, "_resolve_client", SimpleNamespace)
+    monkeypatch.setattr(worker, "warm_console_runtime", lambda _client: None)
+    monkeypatch.setattr(worker, "_resolve_api_url_for_log", lambda: "https://sandbox.example/graphql")
+    monkeypatch.setattr(worker, "_current_git_sha", lambda: "abc123")
+    monkeypatch.setattr(worker.os, "getpid", lambda: 12345)
+    monkeypatch.setattr(worker.os, "getcwd", lambda: "/tmp/plexus")
+    monkeypatch.setattr(worker.logger, "info", lambda message, *args: log_calls.append((message, args)))
+    monkeypatch.setattr(worker, "process_pending_local_messages", lambda *_args, **_kwargs: 0)
+
+    worker.main(once=True)
+
+    assert log_calls
+    message, args = log_calls[0]
+    assert "pid=%s" in message
+    assert "cwd=%s" in message
+    assert "api_url=%s" in message
+    assert "code_sha=%s" in message
+    assert args[0] == "local:ryan"
+    assert args[2] == 12345
+    assert args[3] == "/tmp/plexus"
+    assert args[4] == "https://sandbox.example/graphql"
+    assert args[5] == "abc123"

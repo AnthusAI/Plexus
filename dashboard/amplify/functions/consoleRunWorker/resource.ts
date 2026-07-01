@@ -47,6 +47,8 @@ export class ConsoleChatResponderStack extends NestedStack {
       PLEXUS_CONFIG_SECRET_NAME: configSecretName,
       PYTHONUNBUFFERED: "1",
       CONSOLE_RESPONSE_TARGET: "cloud",
+      DSPY_DISABLE_DISK_CACHE: "true",
+      DSPY_CACHEDIR: "/tmp/.dspy_cache",
     };
 
     if (props.reportBlockDetailsBucket) {
