@@ -381,6 +381,7 @@ def test_process_console_message_ignores_auto_title_failures(monkeypatch):
 def test_process_console_message_logs_latency_summary(monkeypatch):
     client = FakeClient()
     info_logs = []
+    monkeypatch.setattr(chat_runtime, "_current_code_sha", lambda: "test-sha")
 
     def fake_run_console_chat_response(_client, _message, *, owner, latency_trace=None):
         assert owner == "cloud:test"
@@ -388,7 +389,10 @@ def test_process_console_message_logs_latency_summary(monkeypatch):
         now = chat_runtime.utc_now()
         latency_trace["t_history_loaded"] = now
         latency_trace["t_run_started"] = now
+        latency_trace["t_backend_execution_started"] = now
         latency_trace["t_first_assistant_chunk"] = now
+        latency_trace["t_last_assistant_chunk"] = now
+        latency_trace["t_run_completed"] = now
         return {"success": True}
 
     monkeypatch.setattr(
@@ -400,7 +404,7 @@ def test_process_console_message_logs_latency_summary(monkeypatch):
 
     assert chat_runtime.process_console_message(
         client,
-        _raw_message(),
+        _raw_message(metadata='{"instrumentation":{"client_send_started_at":"2026-04-27T00:00:00.000Z"}}'),
         expected_target="cloud",
         owner="cloud:test",
     ) is True
@@ -423,12 +427,51 @@ def test_process_console_message_logs_latency_summary(monkeypatch):
     assert isinstance(summary["history_ms"], int)
     assert isinstance(summary["startup_ms"], int)
     assert isinstance(summary["first_token_ms"], int)
+    assert isinstance(summary["pre_model_ms"], int)
+    assert isinstance(summary["model_first_chunk_ms"], int)
+    assert isinstance(summary["model_stream_ms"], int)
+    assert isinstance(summary["post_model_persist_ms"], int)
     assert isinstance(summary["total_ms"], int)
     assert summary["claim_ms"] >= 0
     assert summary["history_ms"] >= 0
     assert summary["startup_ms"] >= 0
     assert summary["first_token_ms"] >= 0
+    assert summary["pre_model_ms"] >= 0
+    assert summary["model_first_chunk_ms"] >= 0
+    assert summary["model_stream_ms"] >= 0
+    assert summary["post_model_persist_ms"] >= 0
+    assert summary["first_token_ms"] == summary["pre_model_ms"] + summary["model_first_chunk_ms"]
     assert summary["total_ms"] >= 0
+    assert isinstance(summary["client_to_claim_ms"], int)
+    assert isinstance(summary["client_total_ms"], int)
+
+    complete_call = next(
+        variables
+        for query, variables in client.executed
+        if "CompleteConsoleChatMessage" in query
+    )
+    metadata = json.loads(complete_call["input"]["metadata"])
+    server_latency = metadata["instrumentation"]["server_latency"]
+    assert server_latency["response_owner"] == "cloud:test"
+    assert server_latency["response_target"] == "cloud"
+    assert server_latency["code_sha"] == "test-sha"
+    assert isinstance(server_latency["client_to_claim_ms"], int)
+    assert isinstance(server_latency["pre_model_ms"], int)
+    assert isinstance(server_latency["model_first_chunk_ms"], int)
+    assert isinstance(server_latency["model_stream_ms"], int)
+    assert isinstance(server_latency["post_model_persist_ms"], int)
+    assert isinstance(server_latency["client_total_ms"], int)
+
+
+def test_local_targets_skip_cloudwatch_logging_by_default(monkeypatch):
+    message = chat_runtime.parse_chat_message(_raw_message(responseTarget="local:ryan"))
+    assert message is not None
+
+    monkeypatch.delenv("PLEXUS_CONSOLE_LOCAL_CLOUDWATCH", raising=False)
+    assert chat_runtime._should_log_cloudwatch_for_message(message) is False
+
+    monkeypatch.setenv("PLEXUS_CONSOLE_LOCAL_CLOUDWATCH", "true")
+    assert chat_runtime._should_log_cloudwatch_for_message(message) is True
 
 
 def test_process_console_message_marks_failed_when_harness_raises(monkeypatch):
@@ -538,10 +581,15 @@ def test_process_pending_local_messages_uses_response_status_sort_key(monkeypatc
         "limit": 5,
         "nextToken": None,
     }
-    call_kwargs = calls[0][1]
-    assert call_kwargs["expected_target"] == "local:ryan"
-    assert call_kwargs["owner"] == "local:ryan:test"
-    assert isinstance(call_kwargs.get("poll_context"), dict)
+    assert calls[0][1]["expected_target"] == "local:ryan"
+    assert calls[0][1]["owner"] == "local:ryan:test"
+    assert calls[0][1]["poll_context"] == {
+        "poll_query_ms": 0,
+        "poll_batch_size": 1,
+        "poll_oldest_pending_ms": calls[0][1]["poll_context"]["poll_oldest_pending_ms"],
+    }
+    assert isinstance(calls[0][1]["poll_context"]["poll_oldest_pending_ms"], int)
+    assert calls[0][1]["poll_context"]["poll_oldest_pending_ms"] >= 0
 
 
 def test_process_pending_local_messages_paginates_until_limit(monkeypatch):

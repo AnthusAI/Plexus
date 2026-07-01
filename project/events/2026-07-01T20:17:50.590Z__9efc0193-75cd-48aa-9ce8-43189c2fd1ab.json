@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "9efc0193-75cd-48aa-9ce8-43189c2fd1ab",
+  "issue_id": "plx-b29336ca-384f-4a6d-9cf6-7c8ea3cc82b3",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-01T20:17:50.590Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Apply the dashboard frontend auth fallback fix into main Plexus, run web/chat from main Plexus instead of Plexus-2, and verify latency instrumentation fields are visible in active chat responses.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+    "priority": 1,
+    "status": "open",
+    "title": "Align active dashboard runtime to main Plexus chat fixes"
+  }
+}

@@ -232,8 +232,10 @@ const CONSOLE_CHAT_MODEL_OPTIONS = [
 const DEFAULT_CONSOLE_CHAT_MODEL = 'gpt-5.4-mini'
 const CONVERSATION_BOTTOM_EPSILON_PX = 2
 const SCROLL_DELTA_EPSILON_PX = 0.1
-const PENDING_ASSISTANT_SESSION_RECONCILE_DELAY_MS = 30_000
-const PENDING_ASSISTANT_SESSION_RECONCILE_RETRY_MS = 5_000
+const PENDING_ASSISTANT_SESSION_RECONCILE_INITIAL_DELAY_MS = 500
+const PENDING_ASSISTANT_SESSION_RECONCILE_FAST_RETRY_MS = 1_000
+const PENDING_ASSISTANT_SESSION_RECONCILE_SLOW_RETRY_MS = 5_000
+const PENDING_ASSISTANT_SESSION_RECONCILE_FAST_WINDOW_MS = 10_000
 const PENDING_ASSISTANT_SESSION_RECONCILE_GIVE_UP_MS = 120_000
 const CHAT_SESSION_SELECTION_SET = [
   "id",
@@ -2045,6 +2047,8 @@ function ConversationViewer({
   const [conversationScrollerElement, setConversationScrollerElement] = useState<HTMLDivElement | null>(null)
   const authFailureReportedRef = React.useRef(false)
   const messageHydrationInFlightRef = React.useRef<Set<string>>(new Set())
+  const selectedSessionHydrationInFlightRef = React.useRef<Set<string>>(new Set())
+  const selectedSessionHydratedForUpdateRef = React.useRef<Record<string, string>>({})
   const pendingAssistantReconcileInFlightRef = React.useRef<Set<string>>(new Set())
   const pendingAssistantReconciledAtRef = React.useRef<Record<string, string>>({})
   const pendingAssistantReconcileTimeoutRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -2120,6 +2124,26 @@ function ConversationViewer({
 
     for (const message of messages) {
       if (!message.sessionId || !message.createdAt) {
+        continue
+      }
+      const messageTime = new Date(message.createdAt).getTime()
+      if (Number.isNaN(messageTime)) {
+        continue
+      }
+
+      const existing = latestBySession.get(message.sessionId)
+      if (!existing || messageTime > new Date(existing).getTime()) {
+        latestBySession.set(message.sessionId, message.createdAt)
+      }
+    }
+
+    return latestBySession
+  }, [messages])
+  const latestVisibleMessageAtBySession = React.useMemo(() => {
+    const latestBySession = new Map<string, string>()
+
+    for (const message of messages) {
+      if (!message.sessionId || !message.createdAt || !isVisibleChatMessage(message)) {
         continue
       }
       const messageTime = new Date(message.createdAt).getTime()
@@ -2291,7 +2315,7 @@ function ConversationViewer({
       clearPendingAssistantReconcileTimeout(sessionId)
       const requestedAtMs = toEpochMs(pendingState.requestedAt)
       const elapsedMs = requestedAtMs === null ? Number.POSITIVE_INFINITY : Math.max(0, Date.now() - requestedAtMs)
-      const delayMs = Math.max(0, PENDING_ASSISTANT_SESSION_RECONCILE_DELAY_MS - elapsedMs)
+      const delayMs = Math.max(0, PENDING_ASSISTANT_SESSION_RECONCILE_INITIAL_DELAY_MS - elapsedMs)
       pendingAssistantReconcileScheduledAtRef.current[sessionId] = pendingState.requestedAt
       pendingAssistantReconcileTimeoutRef.current[sessionId] = setTimeout(() => {
         delete pendingAssistantReconcileTimeoutRef.current[sessionId]
@@ -2865,6 +2889,108 @@ function ConversationViewer({
     })
   }, [clearPendingAssistant, effectiveId])
 
+  useEffect(() => {
+    if (propMessages || isAuthUnavailable || isLoading || !selectedSessionId) {
+      return
+    }
+
+    const selectedSession = sessions.find((session) => session.id === selectedSessionId)
+    if (!selectedSession) {
+      return
+    }
+    if (pendingAssistantBySession[selectedSessionId]) {
+      return
+    }
+
+    const sessionUpdatedAt = selectedSession.updatedAt || selectedSession.createdAt
+    const sessionUpdatedMs = toEpochMs(sessionUpdatedAt)
+    const latestVisibleMs = toEpochMs(latestVisibleMessageAtBySession.get(selectedSessionId) || null)
+
+    if (latestVisibleMs === null) {
+      return
+    }
+
+    if (
+      sessionUpdatedMs !== null
+      && sessionUpdatedMs <= latestVisibleMs + 500
+    ) {
+      return
+    }
+
+    const hydrationKey = `${selectedSessionId}:${sessionUpdatedAt || 'unknown'}`
+    if (selectedSessionHydratedForUpdateRef.current[selectedSessionId] === hydrationKey) {
+      return
+    }
+
+    const listBySession = (getClient().models.ChatMessage as any).listChatMessageBySessionIdAndCreatedAt
+    if (typeof listBySession !== 'function') {
+      return
+    }
+
+    const inFlight = selectedSessionHydrationInFlightRef.current
+    if (inFlight.has(hydrationKey)) {
+      return
+    }
+
+    let isDisposed = false
+    inFlight.add(hydrationKey)
+    selectedSessionHydratedForUpdateRef.current[selectedSessionId] = hydrationKey
+
+    const hydrateSelectedSession = async () => {
+      try {
+        let nextToken: string | null = null
+        do {
+          const response: { data?: any[], nextToken?: string | null } = await listBySession({
+            sessionId: selectedSessionId,
+            sortDirection: 'ASC',
+            limit: 200,
+            nextToken,
+          }, {
+            selectionSet: CHAT_MESSAGE_SELECTION_SET,
+          })
+
+          if (isDisposed) {
+            return
+          }
+
+          const rows = Array.isArray(response?.data) ? response.data : []
+          for (const row of rows) {
+            applyRealtimeMessageMutation(row)
+          }
+
+          nextToken = response?.nextToken || null
+        } while (nextToken)
+      } catch (error) {
+        if (markAuthUnavailable(error, 'selected_session_message_hydration')) {
+          return
+        }
+        delete selectedSessionHydratedForUpdateRef.current[selectedSessionId]
+        console.warn('Failed hydrating selected chat session messages', {
+          sessionId: selectedSessionId,
+          error,
+        })
+      } finally {
+        inFlight.delete(hydrationKey)
+      }
+    }
+
+    void hydrateSelectedSession()
+
+    return () => {
+      isDisposed = true
+    }
+  }, [
+    applyRealtimeMessageMutation,
+    isAuthUnavailable,
+    isLoading,
+    latestVisibleMessageAtBySession,
+    markAuthUnavailable,
+    pendingAssistantBySession,
+    propMessages,
+    selectedSessionId,
+    sessions,
+  ])
+
   const reconcileSessionMessagesAfterTerminalResponse = React.useCallback(async (
     sessionId: string,
     pendingState: PendingAssistantState,
@@ -2878,6 +3004,9 @@ function ConversationViewer({
       || (hasTerminalTriggerStatus && elapsedMs >= PENDING_ASSISTANT_SESSION_RECONCILE_GIVE_UP_MS)
     )
     const scheduleRetry = () => {
+      const retryDelayMs = elapsedMs < PENDING_ASSISTANT_SESSION_RECONCILE_FAST_WINDOW_MS
+        ? PENDING_ASSISTANT_SESSION_RECONCILE_FAST_RETRY_MS
+        : PENDING_ASSISTANT_SESSION_RECONCILE_SLOW_RETRY_MS
       delete pendingAssistantReconciledAtRef.current[sessionId]
       clearPendingAssistantReconcileTimeout(sessionId)
       pendingAssistantReconcileTimeoutRef.current[sessionId] = setTimeout(() => {
@@ -2890,7 +3019,7 @@ function ConversationViewer({
           }
           return { ...prev }
         })
-      }, PENDING_ASSISTANT_SESSION_RECONCILE_RETRY_MS)
+      }, retryDelayMs)
     }
 
     try {
@@ -3016,8 +3145,19 @@ function ConversationViewer({
       const hasTerminalTriggerStatus = Boolean(triggerMessage && isTerminalResponseStatus(triggerResponseStatus))
       const requestedAtMs = toEpochMs(pendingState.requestedAt)
       const elapsedMs = requestedAtMs === null ? Number.POSITIVE_INFINITY : nowMs - requestedAtMs
+      const session = sessions.find((candidate) => candidate.id === sessionId)
+      const sessionUpdatedMs = toEpochMs(session?.updatedAt || null)
+      const sessionAdvancedSinceRequest = (
+        requestedAtMs !== null
+        && sessionUpdatedMs !== null
+        && sessionUpdatedMs > requestedAtMs + 500
+      )
 
-      if (!hasTerminalTriggerStatus && elapsedMs < PENDING_ASSISTANT_SESSION_RECONCILE_DELAY_MS) {
+      if (
+        !hasTerminalTriggerStatus
+        && !sessionAdvancedSinceRequest
+        && elapsedMs < PENDING_ASSISTANT_SESSION_RECONCILE_INITIAL_DELAY_MS
+      ) {
         continue
       }
       if (hasAssistantMessageAfterPendingThreshold(messages, sessionId, pendingState)) {
@@ -3045,6 +3185,7 @@ function ConversationViewer({
     messages,
     pendingAssistantBySession,
     reconcileSessionMessagesAfterTerminalResponse,
+    sessions,
   ])
 
   // Real-time subscription for chat messages (subscription-only; no polling fallback).
@@ -4511,7 +4652,7 @@ function ConversationViewer({
             {isAuthUnavailable ? (
               <ConversationEmptyState
                 title="Console unavailable"
-                description="GraphQL access is unauthorized in this environment. Check API URL/key and restart dev."
+                description="GraphQL access is unauthorized in this environment. Check your sign-in session and Amplify target, then restart dev."
                 icon={<AlertCircle className="h-12 w-12 opacity-50" />}
               />
             ) : !selectedSessionId ? (

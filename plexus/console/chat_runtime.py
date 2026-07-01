@@ -6,9 +6,12 @@ import logging
 import os
 import re
 import socket
+import subprocess
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from openai import OpenAI
@@ -29,6 +32,8 @@ HANDLED_HUMAN_INTERACTIONS = {"CHAT"}
 DEFAULT_SESSION_TITLE_MODEL = "gpt-5.4-mini"
 SESSION_TITLE_MAX_WORDS = 8
 _PROCEDURE_SERVICE_CACHE: Dict[int, ProcedureService] = {}
+_CONSOLE_MCP_SERVER: Any = None
+_CONSOLE_MCP_SERVER_LOCK: Optional[asyncio.Lock] = None
 
 
 def _positive_int_env(name: str, default: int) -> int:
@@ -45,8 +50,9 @@ def _positive_int_env(name: str, default: int) -> int:
     return default
 
 
-CONSOLE_HISTORY_LIMIT = _positive_int_env("PLEXUS_CONSOLE_SESSION_HISTORY_LIMIT", 8)
-CONSOLE_HISTORY_MAX_CHARS = _positive_int_env("PLEXUS_CONSOLE_SESSION_HISTORY_MAX_CHARS", 220)
+CONSOLE_HISTORY_LIMIT = _positive_int_env("PLEXUS_CONSOLE_SESSION_HISTORY_LIMIT", 6)
+CONSOLE_HISTORY_MAX_CHARS = _positive_int_env("PLEXUS_CONSOLE_SESSION_HISTORY_MAX_CHARS", 160)
+CONSOLE_HISTORY_TOKEN_BUDGET = _positive_int_env("PLEXUS_CONSOLE_SESSION_HISTORY_TOKEN_BUDGET", 2200)
 
 
 @dataclass(frozen=True)
@@ -68,6 +74,7 @@ class ConsoleMessage:
     privacy_owner_user_id: Optional[str] = None
     privacy_span_id: Optional[str] = None
     client_send_started_at: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 def utc_now() -> str:
@@ -548,6 +555,86 @@ def _model_ids_match(selected: Any, resolved: Any) -> Optional[bool]:
     return selected_normalized == resolved_normalized
 
 
+@lru_cache(maxsize=1)
+def _current_code_sha() -> Optional[str]:
+    env_sha = str(
+        os.getenv("AWS_COMMIT_ID")
+        or os.getenv("AMPLIFY_COMMIT_ID")
+        or os.getenv("CODE_SHA")
+        or ""
+    ).strip()
+    if env_sha:
+        return env_sha
+    try:
+        repo_root = Path(__file__).resolve().parents[2]
+        result = subprocess.run(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=2,
+        )
+    except Exception:
+        return None
+    sha = (result.stdout or "").strip()
+    return sha or None
+
+
+def _env_truthy(name: str) -> bool:
+    return str(os.getenv(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _should_log_cloudwatch_for_message(message: ConsoleMessage) -> bool:
+    if message.response_target.startswith("local:"):
+        return _env_truthy("PLEXUS_CONSOLE_LOCAL_CLOUDWATCH")
+    return not _env_truthy("PLEXUS_CONSOLE_DISABLE_CLOUDWATCH")
+
+
+def _server_latency_metadata(summary: Dict[str, Any], *, owner: str) -> Dict[str, Any]:
+    keys = (
+        "client_to_claim_ms",
+        "pre_model_ms",
+        "model_first_chunk_ms",
+        "model_stream_ms",
+        "post_model_persist_ms",
+        "client_total_ms",
+        "first_token_ms",
+        "claim_to_first_token_ms",
+        "history_ms",
+        "startup_ms",
+        "run_ms",
+        "total_ms",
+    )
+    payload = {key: summary.get(key) for key in keys if summary.get(key) is not None}
+    payload.update({
+        "status": summary.get("status"),
+        "response_owner": owner,
+        "response_target": summary.get("response_target"),
+        "code_sha": _current_code_sha(),
+        "assistant_message_id": summary.get("assistant_message_id"),
+        "resolved_model": summary.get("resolved_model"),
+        "selected_model": summary.get("selected_model"),
+        "recorded_at": summary.get("t_completed"),
+    })
+    return payload
+
+
+def _merge_server_latency_metadata(
+    existing_metadata: Optional[Dict[str, Any]],
+    summary: Dict[str, Any],
+    *,
+    owner: str,
+) -> Dict[str, Any]:
+    metadata = dict(existing_metadata or {})
+    instrumentation = metadata.get("instrumentation")
+    if not isinstance(instrumentation, dict):
+        instrumentation = {}
+    instrumentation["server_latency"] = _server_latency_metadata(summary, owner=owner)
+    metadata["instrumentation"] = instrumentation
+    return metadata
+
+
 def _build_latency_summary(trace: Dict[str, Any], *, status: str) -> Dict[str, Any]:
     resolved_model = trace.get("resolved_model")
     selected_model = trace.get("selected_model")
@@ -591,12 +678,27 @@ def _build_latency_summary(trace: Dict[str, Any], *, status: str) -> Dict[str, A
         "history_ms": _duration_ms(trace.get("t_claimed"), trace.get("t_history_loaded")),
         "startup_ms": _duration_ms(trace.get("t_history_loaded"), trace.get("t_run_started")),
         "first_token_ms": _duration_ms(trace.get("t_run_started"), trace.get("t_first_assistant_chunk")),
+        "pre_model_ms": _duration_ms(trace.get("t_run_started"), trace.get("t_backend_execution_started")),
+        "model_first_chunk_ms": _duration_ms(
+            trace.get("t_backend_execution_started"),
+            trace.get("t_first_assistant_chunk"),
+        ),
+        "model_stream_ms": _duration_ms(trace.get("t_first_assistant_chunk"), trace.get("t_last_assistant_chunk")),
+        "post_model_persist_ms": _duration_ms(trace.get("t_last_assistant_chunk"), trace.get("t_run_completed")),
         "claim_to_first_token_ms": _duration_ms(trace.get("t_claimed"), trace.get("t_first_assistant_chunk")),
         "client_to_first_token_ms": _duration_ms(trace.get("t_client_send_started"), trace.get("t_first_assistant_chunk")),
         "first_chunk_lookup_ms": trace.get("first_chunk_lookup_ms"),
         "run_ms": _duration_ms(trace.get("t_run_started"), trace.get("t_run_completed")),
         "total_ms": _duration_ms(trace.get("t_received"), trace.get("t_completed")),
         "client_total_ms": _duration_ms(trace.get("t_client_send_started"), trace.get("t_completed")),
+        "t_client_init_started": trace.get("t_client_init_started"),
+        "t_client_init_completed": trace.get("t_client_init_completed"),
+        "t_service_acquire_started": trace.get("t_service_acquire_started"),
+        "t_service_acquire_completed": trace.get("t_service_acquire_completed"),
+        "t_procedure_bootstrap_started": trace.get("t_procedure_bootstrap_started"),
+        "t_procedure_bootstrap_completed": trace.get("t_procedure_bootstrap_completed"),
+        "t_backend_execution_started": trace.get("t_backend_execution_started"),
+        "t_last_assistant_chunk": trace.get("t_last_assistant_chunk"),
     }
     error = trace.get("error")
     if isinstance(error, str) and error:
@@ -613,6 +715,36 @@ def _get_procedure_service(client: PlexusDashboardClient) -> ProcedureService:
     return cached
 
 
+def warm_console_runtime(client: PlexusDashboardClient) -> None:
+    # Warm immutable runtime scaffolding once per warm worker path.
+    _get_procedure_service(client)
+
+
+async def _get_or_create_console_mcp_server(runtime_context: Dict[str, Any]) -> Any:
+    """Reuse a single embedded MCP server per warm container to avoid repeated tool registration costs."""
+    global _CONSOLE_MCP_SERVER, _CONSOLE_MCP_SERVER_LOCK
+
+    if _CONSOLE_MCP_SERVER is not None:
+        if hasattr(_CONSOLE_MCP_SERVER, "experiment_context"):
+            _CONSOLE_MCP_SERVER.experiment_context = runtime_context
+        return _CONSOLE_MCP_SERVER
+
+    if _CONSOLE_MCP_SERVER_LOCK is None:
+        _CONSOLE_MCP_SERVER_LOCK = asyncio.Lock()
+
+    async with _CONSOLE_MCP_SERVER_LOCK:
+        if _CONSOLE_MCP_SERVER is None:
+            from plexus.cli.procedure.mcp_transport import create_procedure_mcp_server
+
+            _CONSOLE_MCP_SERVER = await create_procedure_mcp_server(
+                experiment_context=runtime_context,
+            )
+        elif hasattr(_CONSOLE_MCP_SERVER, "experiment_context"):
+            _CONSOLE_MCP_SERVER.experiment_context = runtime_context
+
+    return _CONSOLE_MCP_SERVER
+
+
 def parse_chat_message(raw: Dict[str, Any]) -> Optional[ConsoleMessage]:
     message_id = str(raw.get("id") or "").strip()
     account_id = str(raw.get("accountId") or "").strip()
@@ -621,6 +753,7 @@ def parse_chat_message(raw: Dict[str, Any]) -> Optional[ConsoleMessage]:
     if not message_id or not account_id or not session_id:
         return None
 
+    metadata = _parse_metadata_object(raw.get("metadata"))
     return ConsoleMessage(
         id=message_id,
         account_id=account_id,
@@ -633,12 +766,13 @@ def parse_chat_message(raw: Dict[str, Any]) -> Optional[ConsoleMessage]:
         response_target=normalize_response_target(raw.get("responseTarget")),
         response_status=str(raw.get("responseStatus") or "").strip().upper(),
         created_at=str(raw.get("createdAt") or "").strip(),
-        selected_model=_extract_selected_model(raw.get("metadata")),
-        tool_access_mode=_extract_tool_access_mode(raw.get("metadata")),
-        private=_extract_private(raw.get("metadata")),
-        privacy_owner_user_id=_extract_privacy_owner_user_id(raw.get("metadata")),
-        privacy_span_id=_extract_privacy_span_id(raw.get("metadata")),
-        client_send_started_at=_extract_client_send_started_at(raw.get("metadata")),
+        selected_model=_extract_selected_model(metadata),
+        tool_access_mode=_extract_tool_access_mode(metadata),
+        private=_extract_private(metadata),
+        privacy_owner_user_id=_extract_privacy_owner_user_id(metadata),
+        privacy_span_id=_extract_privacy_span_id(metadata),
+        client_send_started_at=_extract_client_send_started_at(metadata),
+        metadata=metadata,
     )
 
 
@@ -745,6 +879,8 @@ def mark_message_completed(
     message_id: str,
     *,
     created_at: Optional[str],
+    completed_at: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
     mutation = """
     mutation CompleteConsoleChatMessage($input: UpdateChatMessageInput!) {
@@ -754,17 +890,18 @@ def mark_message_completed(
       }
     }
     """
+    input_payload = {
+        "id": message_id,
+        "createdAt": created_at,
+        "responseStatus": COMPLETED,
+        "responseCompletedAt": completed_at or utc_now(),
+        "responseError": None,
+    }
+    if metadata is not None:
+        input_payload["metadata"] = json.dumps(metadata)
     client.execute(
         mutation,
-        {
-            "input": {
-                "id": message_id,
-                "createdAt": created_at,
-                "responseStatus": COMPLETED,
-                "responseCompletedAt": utc_now(),
-                "responseError": None,
-            }
-        },
+        {"input": input_payload},
     )
 
 
@@ -774,6 +911,8 @@ def mark_message_failed(
     error: Exception,
     *,
     created_at: Optional[str],
+    completed_at: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
     mutation = """
     mutation FailConsoleChatMessage($input: UpdateChatMessageInput!) {
@@ -783,17 +922,18 @@ def mark_message_failed(
       }
     }
     """
+    input_payload = {
+        "id": message_id,
+        "createdAt": created_at,
+        "responseStatus": FAILED,
+        "responseCompletedAt": completed_at or utc_now(),
+        "responseError": str(error),
+    }
+    if metadata is not None:
+        input_payload["metadata"] = json.dumps(metadata)
     client.execute(
         mutation,
-        {
-            "input": {
-                "id": message_id,
-                "createdAt": created_at,
-                "responseStatus": FAILED,
-                "responseCompletedAt": utc_now(),
-                "responseError": str(error),
-            }
-        },
+        {"input": input_payload},
     )
 
 
@@ -826,6 +966,53 @@ def _clip_history_content(content: str) -> str:
     if CONSOLE_HISTORY_MAX_CHARS > 0 and len(text) > CONSOLE_HISTORY_MAX_CHARS:
         return f"{text[:CONSOLE_HISTORY_MAX_CHARS]}..."
     return text
+
+
+@lru_cache(maxsize=1)
+def _get_tiktoken_encoder():
+    try:
+        import tiktoken
+    except Exception:
+        return None
+    try:
+        return tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        return None
+
+
+def _estimate_text_tokens(text: str) -> int:
+    normalized = str(text or "").strip()
+    if not normalized:
+        return 0
+    encoder = _get_tiktoken_encoder()
+    if encoder is not None:
+        try:
+            return len(encoder.encode(normalized))
+        except Exception:
+            pass
+    # Fallback token approximation when tokenizer is unavailable.
+    return max(1, len(normalized) // 4)
+
+
+def _retain_history_with_token_budget(
+    entries: List[Dict[str, str]],
+    *,
+    token_budget: int,
+) -> List[Dict[str, str]]:
+    if token_budget <= 0 or not entries:
+        return entries
+    retained_newest_first: List[Dict[str, str]] = []
+    tokens_used = 0
+    for entry in reversed(entries):
+        entry_tokens = _estimate_text_tokens(entry.get("content", ""))
+        if retained_newest_first and (tokens_used + entry_tokens) > token_budget:
+            continue
+        retained_newest_first.append(entry)
+        tokens_used += entry_tokens
+    if not retained_newest_first:
+        retained_newest_first.append(entries[-1])
+    retained_newest_first.reverse()
+    return retained_newest_first
 
 
 def fetch_session_history(
@@ -901,7 +1088,11 @@ def fetch_session_history(
         if not content:
             continue
         normalized.append({"role": role, "content": content})
-    return normalized[-limit:]
+    limited = normalized[-limit:]
+    return _retain_history_with_token_budget(
+        limited,
+        token_budget=CONSOLE_HISTORY_TOKEN_BUDGET,
+    )
 
 
 def fetch_first_assistant_chunk_details(
@@ -979,6 +1170,21 @@ def fetch_first_assistant_chunk_details(
             if isinstance(timings, dict)
             else ""
         )
+        backend_execution_started_at = (
+            str(timings.get("backend_execution_started_at") or "").strip()
+            if isinstance(timings, dict)
+            else ""
+        )
+        last_chunk_received_at = (
+            str(timings.get("last_chunk_received_at") or "").strip()
+            if isinstance(timings, dict)
+            else ""
+        )
+        last_chunk_persisted_at = (
+            str(timings.get("last_chunk_persisted_at") or "").strip()
+            if isinstance(timings, dict)
+            else ""
+        )
         chunk_count = (
             _as_int(timings.get("chunk_count"))
             if isinstance(timings, dict)
@@ -1026,7 +1232,10 @@ def fetch_first_assistant_chunk_details(
                     "assistant_total_tokens": total_tokens,
                     "assistant_chunk_count": chunk_count,
                     "assistant_persisted_update_count": persisted_update_count,
+                    "assistant_backend_execution_started_at": backend_execution_started_at or None,
                     "assistant_first_chunk_persisted_at": first_chunk_persisted_at or None,
+                    "assistant_last_chunk_received_at": last_chunk_received_at or None,
+                    "assistant_last_chunk_persisted_at": last_chunk_persisted_at or None,
                 }
         if not created_at:
             continue
@@ -1077,16 +1286,17 @@ async def run_console_chat_response_async(
     # Create CloudWatch logger for console chat
     account_key = str(os.getenv("PLEXUS_ACCOUNT_KEY") or "").strip() or message.account_id
     cw_logger = None
-    try:
-        cw_logger = PlexusCloudWatchLogger(
-            account_key=account_key,
-            component_name="console-chat",
-            invocation_id=message.id,
-            log_category="console",
-        )
-        cw_logger.open()
-    except Exception as exc:
-        logger.debug("Could not create CloudWatch logger for console chat: %s", exc)
+    if _should_log_cloudwatch_for_message(message):
+        try:
+            cw_logger = PlexusCloudWatchLogger(
+                account_key=account_key,
+                component_name="console-chat",
+                invocation_id=message.id,
+                log_category="console",
+            )
+            cw_logger.open()
+        except Exception as exc:
+            logger.debug("Could not create CloudWatch logger for console chat: %s", exc)
 
     if latency_trace is not None:
         latency_trace["t_history_load_started"] = utc_now()
@@ -1123,7 +1333,12 @@ async def run_console_chat_response_async(
             "history": history,
         })
 
+    if latency_trace is not None:
+        latency_trace["t_service_acquire_started"] = utc_now()
     service = _get_procedure_service(client)
+    if latency_trace is not None:
+        latency_trace["t_service_acquire_completed"] = utc_now()
+        latency_trace["t_procedure_bootstrap_started"] = utc_now()
     run_started = utc_now()
     if latency_trace is not None:
         latency_trace["t_run_started"] = run_started
@@ -1147,6 +1362,9 @@ async def run_console_chat_response_async(
         context["console_privacy_span_id"] = message.privacy_span_id
     if message.selected_model:
         context["agent_models"] = {"assistant": message.selected_model}
+    mcp_server = await _get_or_create_console_mcp_server(context)
+    if latency_trace is not None:
+        latency_trace["t_procedure_bootstrap_completed"] = utc_now()
 
     # Log procedure invocation context
     if cw_logger:
@@ -1165,6 +1383,7 @@ async def run_console_chat_response_async(
             console_session_history=history,
             console_tool_access_mode=tool_access_mode,
             enable_mcp=True,
+            mcp_server=mcp_server,
             context=context,
         )
         if latency_trace is not None:
@@ -1195,8 +1414,17 @@ async def run_console_chat_response_async(
                     "assistant_chunk_count",
                     "assistant_persisted_update_count",
                     "assistant_first_chunk_persisted_at",
+                    "assistant_last_chunk_received_at",
+                    "assistant_last_chunk_persisted_at",
                 ):
                     latency_trace[key] = first_chunk_details.get(key)
+                latency_trace["t_backend_execution_started"] = first_chunk_details.get(
+                    "assistant_backend_execution_started_at"
+                )
+                latency_trace["t_last_assistant_chunk"] = (
+                    first_chunk_details.get("assistant_last_chunk_received_at")
+                    or first_chunk_details.get("assistant_last_chunk_persisted_at")
+                )
 
         # Log successful completion
         if cw_logger:
@@ -1251,6 +1479,8 @@ def process_console_message(
         latency_trace["poll_query_ms"] = poll_context.get("poll_query_ms")
         latency_trace["poll_batch_size"] = poll_context.get("poll_batch_size")
         latency_trace["poll_oldest_pending_ms"] = poll_context.get("poll_oldest_pending_ms")
+        latency_trace["t_client_init_started"] = poll_context.get("t_client_init_started")
+        latency_trace["t_client_init_completed"] = poll_context.get("t_client_init_completed")
     if not claim_message(
         client,
         message,
@@ -1270,17 +1500,36 @@ def process_console_message(
             maybe_auto_title_session(client, message=latest_message)
         except Exception:
             logger.exception("Auto-title generation failed for session %s", latest_message.session_id)
-        mark_message_completed(client, message.id, created_at=created_at)
-        latency_trace["t_completed"] = utc_now()
-        logger.info("%s", json.dumps(_build_latency_summary(latency_trace, status="COMPLETED"), sort_keys=True))
+        completed_at = utc_now()
+        latency_trace["t_completed"] = completed_at
+        summary = _build_latency_summary(latency_trace, status="COMPLETED")
+        completed_metadata = _merge_server_latency_metadata(latest_message.metadata, summary, owner=owner)
+        mark_message_completed(
+            client,
+            message.id,
+            created_at=created_at,
+            completed_at=completed_at,
+            metadata=completed_metadata,
+        )
+        logger.info("%s", json.dumps(summary, sort_keys=True))
         return True
     except Exception as exc:
         logger.exception("Console chat response failed for message %s", message.id)
         created_at = latest_message.created_at or message.created_at or None
-        mark_message_failed(client, message.id, exc, created_at=created_at)
-        latency_trace["t_completed"] = utc_now()
+        completed_at = utc_now()
+        latency_trace["t_completed"] = completed_at
         latency_trace["error"] = str(exc)
-        logger.info("%s", json.dumps(_build_latency_summary(latency_trace, status="FAILED"), sort_keys=True))
+        summary = _build_latency_summary(latency_trace, status="FAILED")
+        failed_metadata = _merge_server_latency_metadata(latest_message.metadata, summary, owner=owner)
+        mark_message_failed(
+            client,
+            message.id,
+            exc,
+            created_at=created_at,
+            completed_at=completed_at,
+            metadata=failed_metadata,
+        )
+        logger.info("%s", json.dumps(summary, sort_keys=True))
         raise
 
 

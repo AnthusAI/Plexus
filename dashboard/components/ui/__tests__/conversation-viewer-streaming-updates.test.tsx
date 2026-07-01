@@ -394,6 +394,89 @@ describe("ConversationViewer streaming updates", () => {
     })
   })
 
+  it("hydrates selected session messages when session update is newer than loaded visible messages", async () => {
+    mockChatSessionList.mockResolvedValueOnce({
+      data: [
+        {
+          id: "sess-1",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          category: "Console Chat",
+          createdAt: "2026-03-27T00:00:00.000Z",
+          updatedAt: "2026-03-27T00:00:05.000Z",
+        },
+      ],
+      nextToken: null,
+    })
+    mockChatMessageList.mockResolvedValueOnce({
+      data: [
+        {
+          id: "msg-user-stale",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "USER",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT",
+          content: "Reply with pong",
+          createdAt: "2026-03-27T00:00:02.000Z",
+        },
+      ],
+      nextToken: null,
+    })
+    mockChatMessageListBySession.mockResolvedValueOnce({
+      data: [
+        {
+          id: "msg-user-stale",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "USER",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT",
+          content: "Reply with pong",
+          createdAt: "2026-03-27T00:00:02.000Z",
+        },
+        {
+          id: "msg-assistant-hydrated",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "pong",
+          createdAt: "2026-03-27T00:00:04.000Z",
+          sequenceNumber: 3,
+          metadata: JSON.stringify({
+            streaming: {
+              state: "complete",
+            },
+          }),
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    expect(await screen.findByText("pong")).toBeInTheDocument()
+    expect(mockChatMessageListBySession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "sess-1",
+        sortDirection: "ASC",
+      }),
+      expect.objectContaining({
+        selectionSet: expect.arrayContaining(["id", "sessionId", "content"]),
+      }),
+    )
+  })
+
   it("updates assistant message in place from onUpdate subscription payloads", async () => {
     const { container } = render(
       <ConversationViewer
@@ -1340,6 +1423,118 @@ describe("ConversationViewer streaming updates", () => {
       expect(mockChatMessageListBySession).toHaveBeenCalledTimes(1)
       expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
       expect(screen.getByText("Recovered after timeout reconcile")).toBeInTheDocument()
+    })
+  })
+
+  it("schedules pending assistant reconciliation at about 500ms instead of the old 30s reconcile delay", async () => {
+    const timeoutSpy = jest.spyOn(global, "setTimeout")
+    const createdAt = new Date().toISOString()
+    mockChatMessageCreate.mockResolvedValueOnce({
+      data: {
+        id: "msg-user-fast-timeout",
+        createdAt,
+      },
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByText("Hel")
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Test fast reconcile scheduling" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageCreate).toHaveBeenCalled()
+      expect(screen.getByText("Thinking")).toBeInTheDocument()
+    })
+
+    const timeoutDelays = timeoutSpy.mock.calls
+      .map((call) => call[1])
+      .filter((delay): delay is number => typeof delay === "number")
+
+    expect(timeoutDelays.some((delay) => delay > 0 && delay <= 500)).toBe(true)
+    expect(timeoutDelays).not.toContain(30_000)
+    timeoutSpy.mockRestore()
+  })
+
+  it("hydrates pending assistant rows immediately when the selected session updatedAt advances", async () => {
+    const requestedAt = new Date().toISOString()
+    mockChatMessageCreate.mockResolvedValueOnce({
+      data: {
+        id: "msg-user-session-advanced",
+        createdAt: requestedAt,
+      },
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByText("Hel")
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Test session update reconcile path" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageCreate).toHaveBeenCalled()
+      expect(screen.getByText("Thinking")).toBeInTheDocument()
+    })
+
+    const listCallsBeforeSessionUpdate = mockChatMessageListBySession.mock.calls.length
+    mockChatMessageListBySession.mockResolvedValueOnce({
+      data: [
+        {
+          id: "msg-assistant-session-advanced",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "Recovered after session update",
+          createdAt: new Date(Date.parse(requestedAt) + 2_000).toISOString(),
+          sequenceNumber: 3,
+          metadata: JSON.stringify({
+            streaming: {
+              state: "complete",
+            },
+          }),
+        },
+      ],
+      nextToken: null,
+    })
+
+    await act(async () => {
+      subscriptions.sessionUpdate?.next({
+        data: {
+          onUpdateChatSession: {
+            id: "sess-1",
+            accountId: "acct-1",
+            procedureId: "proc-1",
+            category: "Console Chat",
+            createdAt: "2026-03-27T00:00:00.000Z",
+            updatedAt: new Date(Date.parse(requestedAt) + 2_000).toISOString(),
+          },
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(mockChatMessageListBySession.mock.calls.length).toBeGreaterThan(listCallsBeforeSessionUpdate)
+      expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
+      expect(screen.getByText("Recovered after session update")).toBeInTheDocument()
     })
   })
 

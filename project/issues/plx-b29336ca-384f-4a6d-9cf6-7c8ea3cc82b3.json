@@ -1,0 +1,61 @@
+{
+  "id": "plx-b29336ca-384f-4a6d-9cf6-7c8ea3cc82b3",
+  "title": "Align active dashboard runtime to main Plexus chat fixes",
+  "description": "Apply the dashboard frontend auth fallback fix into main Plexus, run web/chat from main Plexus instead of Plexus-2, and verify latency instrumentation fields are visible in active chat responses.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "e69fd14f-acb4-48af-93c4-d04884437963",
+      "author": "ryan",
+      "text": "Starting implementation in /Users/ryan/Projects/Plexus. Will patch frontend auth fallback files, stop Plexus-2 dev process, start dashboard + chat worker from main Plexus, and verify active runtime/latency outputs.",
+      "created_at": "2026-07-01T20:17:54.804246Z"
+    },
+    {
+      "id": "9244c135-86fa-4518-8390-d4c79596f693",
+      "author": "ryan",
+      "text": "Resuming validation setup: local dashboard is running main Plexus but points at stale sandbox outputs. Repointing local runtime to current sandbox resources and verifying login plus chat latency fields in Chrome.",
+      "created_at": "2026-07-01T21:07:14.586536Z"
+    },
+    {
+      "id": "98952e83-c09d-4fee-9c33-a0bd94ffaac3",
+      "author": "ryan",
+      "text": "Local sandbox validation complete: dashboard outputs now target the current sandbox, localhost:3000 logs in with the sandbox test user, old URL/key auth error is absent, local response target is wired to the worker, and warm console chat responses are visible with latency fields including pre-model and model-first-chunk timings.",
+      "created_at": "2026-07-01T21:19:17.381563Z"
+    },
+    {
+      "id": "679fa737-f6f8-4751-9830-c243a4640dda",
+      "author": "ryan",
+      "text": "Continuing browser-visible validation. API rows exist for assistant replies, but the selected console session is not rendering persisted assistant rows after reload; investigating session-index hydration and rendering before changing code.",
+      "created_at": "2026-07-01T21:28:34.593704Z"
+    },
+    {
+      "id": "6f12ee1f-71a2-4459-b204-f107194b4003",
+      "author": "ryan",
+      "text": "Validation update: fixed selected-session message hydration so persisted assistant replies render after a stale procedure-index load. Browser validation on localhost showed the prior assistant replies after reload, then a new short chat turn rendered the assistant response and cleared Thinking. Focused dashboard conversation tests pass, and console runtime latency tests pass with explicit coverage for the new timing fields.",
+      "created_at": "2026-07-01T21:37:14.099135Z"
+    },
+    {
+      "id": "a6bea199-83eb-4de9-97ac-beb420314083",
+      "author": "ryan",
+      "text": "Implementing next latency pass: reduce pending assistant fallback from the old 30s delay, add local worker startup identity/warmup logging, persist server latency metadata on completed trigger messages, and keep model choice unchanged until measurements show model latency is the bottleneck.",
+      "created_at": "2026-07-01T21:51:29.377665Z"
+    },
+    {
+      "id": "9b393e20-9c5e-4aa7-a4ec-690b2f08aecb",
+      "author": "ryan",
+      "text": "Implemented sandbox latency pass and validated locally. Changes: pending assistant recovery now starts at 500ms with fast retries; selected-session hydration is reused when session updates advance; local worker logs owner/pid/cwd/API/SHA and warms runtime before polling; user-row metadata now persists server latency fields. Focused tests pass. Sandbox validation with local worker shows 30s reveal stall removed, but warm visible latency remains about 6.5-8.0s because model first chunk is about 3.1-3.6s and post-persist/claim adds the rest.",
+      "created_at": "2026-07-01T22:10:38.359516Z"
+    }
+  ],
+  "created_at": "2026-07-01T20:17:50.590444Z",
+  "updated_at": "2026-07-01T22:10:38.359516Z",
+  "closed_at": null,
+  "custom": {}
+}

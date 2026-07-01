@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 import time
 from pathlib import Path
 from typing import Optional
@@ -12,6 +13,7 @@ from plexus.console.chat_runtime import (
     build_response_owner,
     normalize_response_target,
     process_pending_local_messages,
+    warm_console_runtime,
 )
 from plexus.dashboard.api.client import PlexusDashboardClient
 
@@ -49,6 +51,27 @@ def _resolve_client() -> PlexusDashboardClient:
     if not api_url or not api_key:
         raise RuntimeError("PLEXUS_API_URL and PLEXUS_API_KEY are required")
     return PlexusDashboardClient(api_url=api_url, api_key=api_key)
+
+
+def _resolve_api_url_for_log() -> str:
+    return str(
+        os.getenv("PLEXUS_API_URL") or os.getenv("NEXT_PUBLIC_PLEXUS_API_URL") or ""
+    ).strip()
+
+
+def _current_git_sha() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            cwd=_repo_root(),
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=2,
+        )
+    except Exception:
+        return "unknown"
+    return (result.stdout or "").strip() or "unknown"
 
 
 def _default_local_response_target() -> str:
@@ -127,11 +150,16 @@ def main(
     idle_poll_interval_seconds = _resolve_poll_interval_seconds(poll_interval_seconds)
     error_backoff_seconds = _resolve_error_backoff_seconds()
     client = _resolve_client()
+    warm_console_runtime(client)
 
     logger.info(
-        "Local Console chat worker started (target=%s owner=%s)",
+        "Local Console chat worker started (target=%s owner=%s pid=%s cwd=%s api_url=%s code_sha=%s)",
         resolved_target,
         owner,
+        os.getpid(),
+        os.getcwd(),
+        _resolve_api_url_for_log(),
+        _current_git_sha(),
     )
     while True:
         try:
