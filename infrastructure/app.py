@@ -5,6 +5,7 @@ from stacks.ecr_repositories_stack import EcrRepositoriesStack
 from stacks.app_deployment_pipeline_stack import AppDeploymentPipelineStack
 from stacks.console_worker_image_pipeline_stack import ConsoleWorkerImagePipelineStack
 from stacks.lambda_score_processor_stack import LambdaScoreProcessorStack
+from stacks.prod_to_staging_data_mirror_stack import ProdToStagingDataMirrorStack
 from stacks.score_processor_image_pipeline_stack import ScoreProcessorImagePipelineStack
 from stacks.shared.constants import LAMBDA_SCORE_PROCESSOR_REPOSITORY_BASE
 from pipelines.production_pipeline import ProductionPipelineStack
@@ -95,6 +96,13 @@ ScoreProcessorImagePipelineStack(
     description="Manual pipeline for building the production Lambda score processor image"
 )
 
+ProdToStagingDataMirrorStack(
+    app,
+    "plexus-prod-to-staging-data-mirror",
+    env=env,
+    description="Manual destructive mirror of Plexus production data into staging"
+)
+
 LambdaScoreProcessorStack(
     app,
     "plexus-lambda-score-processor-production",
@@ -103,8 +111,8 @@ LambdaScoreProcessorStack(
     response_queue_url=f"https://sqs.{region}.amazonaws.com/{account}/call-criteria-production-response-queue",
     standard_request_queue_arn=f"arn:aws:sqs:{region}:{account}:call-criteria-production-standard-request-queue",
     standard_request_queue_url=f"https://sqs.{region}.amazonaws.com/{account}/call-criteria-production-standard-request-queue",
-    reserved_concurrency=optional_int_env("PLEXUS_SCORE_PROCESSOR_RESERVED_CONCURRENCY"),
-    max_event_source_concurrency=int(os.environ.get("PLEXUS_SCORE_PROCESSOR_MAX_EVENT_SOURCE_CONCURRENCY", "5")),
+    reserved_concurrency=optional_int_env("PLEXUS_SCORE_PROCESSOR_RESERVED_CONCURRENCY", 500),
+    max_event_source_concurrency=int(os.environ.get("PLEXUS_SCORE_PROCESSOR_MAX_EVENT_SOURCE_CONCURRENCY", "500")),
     env=env,
     description="Production Lambda score processor consuming the Call Criteria production queue"
 )

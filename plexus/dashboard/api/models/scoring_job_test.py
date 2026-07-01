@@ -2,6 +2,7 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock
 from .scoring_job import ScoringJob
+from ..client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 @pytest.fixture
 def mock_client():
@@ -71,6 +72,7 @@ def test_update_scoring_job(sample_scoring_job):
     
     assert updated.status == 'RUNNING'
     assert updated.startedAt == now
+    assert sample_scoring_job._client.execute.call_args.kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 def test_get_by_id(mock_client):
     now = datetime.now(timezone.utc)

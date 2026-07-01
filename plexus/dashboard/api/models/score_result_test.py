@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import Mock
 from typing import TYPE_CHECKING
 from .score_result import ScoreResult
+from ..client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 from datetime import datetime, timezone
 import json
 
@@ -53,6 +54,7 @@ def test_create_score_result(mock_client):
     assert result.value == 0.85
     assert result.confidence == 0.92
     assert result.metadata == {'source': 'test'}
+    assert mock_client.execute.call_args.kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 def test_from_dict_handles_optional_fields(mock_client):
     """Test that from_dict properly handles missing optional fields"""
@@ -96,6 +98,7 @@ def test_update_score_result(sample_score_result):
     # Verify unchanged fields remain the same
     assert updated.value == sample_score_result.value
     assert updated.itemId == sample_score_result.itemId
+    assert sample_score_result._client.execute.call_args.kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 def test_batch_create_score_results(mock_client):
     """Test creating multiple score results in a batch"""

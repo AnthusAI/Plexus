@@ -62,10 +62,10 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
             "prompt_used": {"type": "string", "required": True},
             "iterations": {"type": "number", "required": True},
         },
-                "agents": {
+        "agents": {
             "assistant": {
                 "model": "gpt-5.4-mini",
-                "reasoning_effort": "medium",
+                "reasoning_effort": "low",
                 "verbosity": "low",
                 "max_tokens": 1024,
                 "stream": True,

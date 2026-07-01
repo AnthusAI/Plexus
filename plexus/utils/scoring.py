@@ -601,7 +601,7 @@ async def create_score_result(
     except Exception as e:
         logging.error(f"Error creating score result: {e}")
         logging.error(traceback.format_exc())
-        return None
+        raise RuntimeError(f"Error creating score result: {e}") from e
 
 
 async def get_existing_score_result(report_id: str, scorecard_id: str, score_id: str, type: str, account_id: str) -> Optional[dict]:

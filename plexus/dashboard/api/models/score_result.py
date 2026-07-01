@@ -374,7 +374,11 @@ class ScoreResult(BaseModel):
         }
         """ % cls.fields()
         
-        result = client.execute(mutation, {'input': input_data})
+        result = client.execute(
+            mutation,
+            {'input': input_data},
+            retry_policy="long_running_write",
+        )
         return cls.from_dict(result['createScoreResult'], client)
 
     def update(self, **kwargs) -> 'ScoreResult':
@@ -418,7 +422,11 @@ class ScoreResult(BaseModel):
             }
         }
         
-        result = self._client.execute(mutation, variables)
+        result = self._client.execute(
+            mutation,
+            variables,
+            retry_policy="long_running_write",
+        )
         return self.from_dict(result['updateScoreResult'], self._client)
 
     @classmethod

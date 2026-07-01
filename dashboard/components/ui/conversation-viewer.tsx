@@ -1014,6 +1014,49 @@ const getStreamingState = (metadata: unknown): string | null => {
   return typeof state === 'string' ? state.toLowerCase() : null
 }
 
+const getStreamingTimings = (metadata: unknown): Record<string, unknown> | null => {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null
+  }
+  const streaming = (metadata as Record<string, unknown>).streaming
+  if (!streaming || typeof streaming !== 'object' || Array.isArray(streaming)) {
+    return null
+  }
+  const timings = (streaming as Record<string, unknown>).timings
+  if (!timings || typeof timings !== 'object' || Array.isArray(timings)) {
+    return null
+  }
+  return timings as Record<string, unknown>
+}
+
+const isoDurationMs = (start?: string | null, end?: string | null): number | null => {
+  const startMs = toEpochMs(start || null)
+  const endMs = toEpochMs(end || null)
+  if (startMs === null || endMs === null) {
+    return null
+  }
+  return Math.max(0, endMs - startMs)
+}
+
+const isConsoleTimingProbeEnabled = (): boolean => {
+  if (process.env.NEXT_PUBLIC_CONSOLE_TIMING_PROBE === '1') {
+    return true
+  }
+  if (typeof window === 'undefined') {
+    return false
+  }
+  try {
+    const value = window.localStorage.getItem('plexus.console.timingProbe')
+    if (!value) {
+      return false
+    }
+    const normalized = value.trim().toLowerCase()
+    return normalized === '1' || normalized === 'true' || normalized === 'on'
+  } catch {
+    return false
+  }
+}
+
 const shouldIgnoreRegressiveAssistantUpdate = (previous: ChatMessage, incoming: ChatMessage): boolean => {
   if (!isAssistantChatMessage(previous) || !isAssistantChatMessage(incoming)) {
     return false
@@ -2010,6 +2053,7 @@ function ConversationViewer({
   const pendingAssistantReconciledAtRef = React.useRef<Record<string, string>>({})
   const pendingAssistantReconcileTimeoutRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const pendingAssistantReconcileScheduledAtRef = React.useRef<Record<string, string>>({})
+  const firstChunkTimingLoggedByPendingKeyRef = React.useRef<Record<string, true>>({})
 
   const markAuthUnavailable = React.useCallback((error: unknown, source: string): boolean => {
     if (!isUnauthorizedError(error)) {
@@ -2196,6 +2240,12 @@ function ConversationViewer({
     delete pendingAssistantReconciledAtRef.current[sessionId]
     pendingAssistantReconcileInFlightRef.current.delete(sessionId)
     clearPendingAssistantReconcileTimeout(sessionId)
+    const pendingKeyPrefix = `${sessionId}:`
+    for (const key of Object.keys(firstChunkTimingLoggedByPendingKeyRef.current)) {
+      if (key.startsWith(pendingKeyPrefix)) {
+        delete firstChunkTimingLoggedByPendingKeyRef.current[key]
+      }
+    }
     const baselineAssistantCreatedAt = getLatestAssistantCreatedAtForSession(messages, sessionId)
     setPendingAssistantBySession((prev) => ({
       ...prev,
@@ -2762,6 +2812,37 @@ function ConversationViewer({
     if (parsedSessionId && isAssistantChatMessage(parsed)) {
       const pendingState = pendingAssistantBySessionRef.current[parsedSessionId]
       if (pendingState && isAssistantMessageAfterPendingThreshold(parsed, pendingState)) {
+        const pendingKey = `${parsedSessionId}:${pendingState.requestedAt}`
+        if (!firstChunkTimingLoggedByPendingKeyRef.current[pendingKey]) {
+          firstChunkTimingLoggedByPendingKeyRef.current[pendingKey] = true
+          const timings = getStreamingTimings(parsed.metadata)
+          const firstChunkReceivedAt = typeof timings?.first_chunk_received_at === 'string'
+            ? timings.first_chunk_received_at
+            : null
+          const firstChunkPersistedAt = typeof timings?.first_chunk_persisted_at === 'string'
+            ? timings.first_chunk_persisted_at
+            : null
+          const observedAt = new Date().toISOString()
+          const clientSendStartedAt = pendingState.requestedAt
+          if (isConsoleTimingProbeEnabled()) {
+            console.info('[ConsoleChat] first assistant chunk observed', {
+              sessionId: parsedSessionId,
+              assistantMessageId: parsed.id,
+              triggerMessageId: pendingState.triggerMessageId || null,
+              clientSendStartedAt,
+              responseStartedAt: parsed.responseStartedAt || null,
+              firstChunkReceivedAt,
+              firstChunkPersistedAt,
+              observedAt,
+              durationsMs: {
+                clientToResponseStart: isoDurationMs(clientSendStartedAt, parsed.responseStartedAt || null),
+                responseStartToFirstChunkReceived: isoDurationMs(parsed.responseStartedAt || null, firstChunkReceivedAt),
+                firstChunkPersistedToObserved: isoDurationMs(firstChunkPersistedAt, observedAt),
+                clientToFirstChunkObserved: isoDurationMs(clientSendStartedAt, observedAt),
+              },
+            })
+          }
+        }
         clearPendingAssistant(parsedSessionId)
       }
     }
