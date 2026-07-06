@@ -232,11 +232,12 @@ class TestFindByCacheKey:
         
         assert 'listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt' in query
         assert 'sortDirection: DESC' in query
-        assert 'limit: 1' in query
+        assert 'limit: $limit' in query
         assert variables == {
             "itemId": "item-123",
             "type": "prediction", 
-            "scoreId": "score-789"
+            "scoreId": "score-789",
+            "limit": 10
         }
     
     def test_find_by_cache_key_not_found(self, mock_client, mock_empty_gsi_response):
@@ -344,7 +345,37 @@ class TestFindByCacheKey:
         assert 'type: $type' in query
         assert 'scoreId: $scoreId' in query
         assert 'sortDirection: DESC' in query
-        assert 'limit: 1' in query
+        assert 'limit: $limit' in query
+
+    def test_find_by_cache_key_skips_stale_dependency_result(self, mock_client, sample_score_result_data):
+        stale_result = sample_score_result_data.copy()
+        stale_result["id"] = "stale-result"
+        stale_result["metadata"] = json.dumps({
+            "dependency_consistency": {"is_stale": True}
+        })
+
+        current_result = sample_score_result_data.copy()
+        current_result["id"] = "current-result"
+        current_result["metadata"] = json.dumps({
+            "dependency_consistency": {"is_stale": False}
+        })
+
+        mock_client.execute.return_value = {
+            'listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt': {
+                'items': [stale_result, current_result]
+            }
+        }
+
+        result = ScoreResult.find_by_cache_key(
+            client=mock_client,
+            item_id="item-123",
+            type="prediction",
+            score_id="score-789",
+            include_stale=False,
+        )
+
+        assert result is not None
+        assert result.id == "current-result"
     
     def test_find_by_cache_key_fields_inclusion(self, mock_client, mock_gsi_response):
         """Test that all ScoreResult fields are included in the query"""
