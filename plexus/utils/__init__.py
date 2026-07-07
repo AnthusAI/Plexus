@@ -14,6 +14,7 @@ from .scoring import (
     resolve_score_id,
     get_existing_score_result,
     create_score_result,
+    enqueue_downstream_recompute_jobs,
     get_plexus_client,
     sanitize_metadata_for_graphql,
     check_if_score_is_disabled,
@@ -46,6 +47,7 @@ __all__ = [
     'resolve_score_id',
     'get_existing_score_result',
     'create_score_result',
+    'enqueue_downstream_recompute_jobs',
     'get_plexus_client',
     'sanitize_metadata_for_graphql',
     'check_if_score_is_disabled',
@@ -58,4 +60,4 @@ __all__ = [
     'download_score_result_trace_file',
     'check_s3_bucket_access',
     'capture_request_logs',
-] 
+]

@@ -474,7 +474,9 @@ class ScoreResult(BaseModel):
         item_id: str,
         type: str,
         score_id: str,
-        account_id: Optional[str] = None
+        account_id: Optional[str] = None,
+        include_stale: bool = True,
+        limit: int = 10,
     ) -> Optional['ScoreResult']:
         """
         Find the most recent ScoreResult using cache key components.
@@ -489,6 +491,8 @@ class ScoreResult(BaseModel):
             type: Type of score result (should be "prediction" or "evaluation")
             score_id: Score ID (should be resolved DynamoDB ID)
             account_id: Optional account ID for additional context/validation
+            include_stale: Include dependency-stale ScoreResults in cache hits
+            limit: Number of recent ScoreResults to inspect when stale results are skipped
             
         Returns:
             Most recent ScoreResult matching the cache key, or None if not found
@@ -511,13 +515,14 @@ class ScoreResult(BaseModel):
             query GetMostRecentScoreResult(
                 $itemId: String!,
                 $type: String!,
-                $scoreId: String!
+                $scoreId: String!,
+                $limit: Int
             ) {
                 listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt(
                     itemId: $itemId,
                     typeScoreIdUpdatedAt: { beginsWith: { type: $type, scoreId: $scoreId } },
                     sortDirection: DESC,
-                    limit: 1
+                    limit: $limit
                 ) {
                     items {
                         %s
@@ -529,7 +534,8 @@ class ScoreResult(BaseModel):
             cache_variables = {
                 "itemId": item_id,
                 "type": type,
-                "scoreId": score_id
+                "scoreId": score_id,
+                "limit": limit,
             }
             
             # Execute the query
@@ -539,9 +545,21 @@ class ScoreResult(BaseModel):
             items = response.get('listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt', {}).get('items', [])
             
             if items:
-                # Return the most recent result (first item due to DESC sort, limit 1)
-                score_result_data = items[0]
-                return cls.from_dict(score_result_data, client)
+                if include_stale:
+                    # Return the most recent result (first item due to DESC sort).
+                    return cls.from_dict(items[0], client)
+
+                from plexus.utils.dependency_snapshots import metadata_marks_stale
+
+                for score_result_data in items:
+                    if metadata_marks_stale(
+                        score_result_data.get("metadata"),
+                        score_result_data.get("trace"),
+                    ):
+                        continue
+                    return cls.from_dict(score_result_data, client)
+
+                return None
             else:
                 # No cached result found
                 return None

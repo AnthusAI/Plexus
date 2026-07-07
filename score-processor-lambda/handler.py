@@ -51,6 +51,7 @@ from plexus.utils.scoring import (
     get_metadata_from_item,
     get_external_id_from_item,
     create_score_result,
+    enqueue_downstream_recompute_jobs,
     score_single_target_with_dependencies,
 )
 from plexus.dashboard.api.models.item import Item
@@ -282,6 +283,9 @@ class LambdaJobProcessor:
                     item=item,
                     target_score_id=dynamo_score_id,
                     target_score_name=target_score_name,
+                    client=self.client,
+                    item_id=item_id,
+                    account_id=self.account_id,
                 )
 
                 if scoring_outcome.dependency_unmet:
@@ -315,6 +319,16 @@ class LambdaJobProcessor:
                               result_metadata.get('explanation', ''))
                 start_time_seconds = getattr(result, 'start_time_seconds', None)
                 end_time_seconds = getattr(result, 'end_time_seconds', None)
+                target_score_props = {}
+                try:
+                    target_score_props = scorecard_instance.score_registry.get_properties(target_score_name) or {}
+                except Exception:
+                    target_score_props = {}
+                target_score_version_id = None
+                for version_key in ("scoreVersionId", "version", "championVersionId", "version_id"):
+                    if target_score_props.get(version_key):
+                        target_score_version_id = str(target_score_props.get(version_key))
+                        break
 
                 # Check for ERROR result
                 if value and value.upper() == "ERROR":
@@ -339,6 +353,7 @@ class LambdaJobProcessor:
 
                 # Extract cost
                 cost = result_metadata.get('cost')
+                dependency_consistency = getattr(scoring_outcome, "dependency_consistency", None)
 
                 # Get logs
                 current_logs = get_logs()
@@ -360,6 +375,13 @@ class LambdaJobProcessor:
                     cost=cost,
                     start_time_seconds=start_time_seconds,
                     end_time_seconds=end_time_seconds,
+                    score_version_id=target_score_version_id,
+                    metadata_extra={
+                        "score_config_fingerprint": result_metadata.get("score_config_fingerprint"),
+                        "dependency_consistency": dependency_consistency,
+                    } if dependency_consistency else {
+                        "score_config_fingerprint": result_metadata.get("score_config_fingerprint"),
+                    },
                     client=self.client
                 )
 
@@ -367,6 +389,22 @@ class LambdaJobProcessor:
                     raise ValueError("Failed to create ScoreResult in DynamoDB")
 
                 logging.info(f"✅ Created ScoreResult: {score_result_id}")
+
+                if not (dependency_consistency and dependency_consistency.get("is_stale")):
+                    await enqueue_downstream_recompute_jobs(
+                        client=self.client,
+                        account_id=self.account_id,
+                        item_id=item_id,
+                        scorecard_id=dynamo_scorecard_id,
+                        dependency_score_id=dynamo_score_id,
+                        dependency_score_name=target_score_name,
+                        source_score_result_id=score_result_id,
+                    )
+                else:
+                    logging.info(
+                        "Skipping downstream recompute enqueue for stale ScoreResult %s",
+                        score_result_id,
+                    )
 
                 # Send response message
                 response_message = {"score_result_id": score_result_id}

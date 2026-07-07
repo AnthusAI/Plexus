@@ -7,11 +7,13 @@ from rich.text import Text
 from rich.json import JSON
 import json
 import uuid
-from datetime import datetime, timezone
+import asyncio
+from datetime import datetime, timezone, timedelta
 from plexus.dashboard.api.models.score_result import ScoreResult
 from plexus.cli.shared.client_utils import create_client
 from plexus.cli.report.utils import resolve_account_id_for_command
 from plexus.cli.shared.console import console
+from plexus.utils.dependency_snapshots import check_score_result_dependency_snapshot_current
 
 def format_datetime(dt: Optional[datetime]) -> str:
     """Format datetime with proper handling of None values"""
@@ -89,6 +91,185 @@ def resolve_scorecard_identifier(client, identifier):
         pass
     
     return None
+
+
+def resolve_score_identifier(client, scorecard_id: str, identifier: str) -> Optional[str]:
+    """Resolve a score identifier to its dashboard ID within a scorecard."""
+
+    try:
+        query = """
+        query GetScore($id: ID!) {
+            getScore(id: $id) {
+                id
+                scorecardId
+            }
+        }
+        """
+        result = client.execute(query, {"id": identifier})
+        score = result.get("getScore")
+        if score and score.get("scorecardId") == scorecard_id:
+            return score.get("id")
+    except Exception:
+        pass
+
+    query = """
+    query ListScores($filter: ModelScoreFilterInput, $limit: Int) {
+        listScores(filter: $filter, limit: $limit) {
+            items {
+                id
+                name
+                key
+                externalId
+                scorecardId
+            }
+        }
+    }
+    """
+    for field in ("key", "name", "externalId", "id"):
+        try:
+            response = client.execute(
+                query,
+                {
+                    "filter": {
+                        "scorecardId": {"eq": scorecard_id},
+                        field: {"eq": identifier},
+                    },
+                    "limit": 1,
+                },
+            )
+            items = response.get("listScores", {}).get("items", []) or []
+            if items:
+                return items[0].get("id")
+        except Exception:
+            continue
+    return None
+
+
+def _json_object(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _fetch_recent_score_results_for_dependency_audit(
+    *,
+    client,
+    account_id: str,
+    scorecard_id: str,
+    score_id: str,
+    days: int,
+    limit: int,
+) -> List[Dict[str, Any]]:
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(days=days)
+    query = """
+    query ListScoreResultsByScorecardAndUpdatedAt(
+        $scorecardId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $accountId: String!,
+        $scoreId: String!,
+        $limit: Int,
+        $nextToken: String
+    ) {
+        listScoreResultByScorecardIdAndUpdatedAt(
+            scorecardId: $scorecardId,
+            updatedAt: { between: [$startTime, $endTime] },
+            filter: {
+                accountId: { eq: $accountId },
+                scoreId: { eq: $scoreId },
+                type: { eq: "prediction" }
+            },
+            sortDirection: DESC,
+            limit: $limit,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                value
+                explanation
+                itemId
+                accountId
+                scorecardId
+                scoreId
+                scoreVersionId
+                metadata
+                trace
+                type
+                status
+                createdAt
+                updatedAt
+            }
+            nextToken
+        }
+    }
+    """
+    collected: List[Dict[str, Any]] = []
+    next_token = None
+    while len(collected) < limit:
+        response = client.execute(
+            query,
+            {
+                "scorecardId": scorecard_id,
+                "startTime": start_time.isoformat(),
+                "endTime": end_time.isoformat(),
+                "accountId": account_id,
+                "scoreId": score_id,
+                "limit": min(500, limit - len(collected)),
+                "nextToken": next_token,
+            },
+        )
+        payload = response.get("listScoreResultByScorecardIdAndUpdatedAt", {}) or {}
+        collected.extend(payload.get("items", []) or [])
+        next_token = payload.get("nextToken")
+        if not next_token:
+            break
+    return collected[:limit]
+
+
+async def _audit_dependency_snapshots(client, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    audited = []
+    for row in rows:
+        score_result = ScoreResult.from_dict(row, client)
+        check = await check_score_result_dependency_snapshot_current(
+            score_result=score_result,
+            client=client,
+            item_id=score_result.itemId,
+            account_id=score_result.accountId,
+        )
+        status = "match"
+        if not check.get("has_dependency_snapshot"):
+            status = "no_snapshot"
+        elif check.get("is_stale"):
+            status = "stale"
+
+        metadata = _json_object(row.get("metadata"))
+        trace = _json_object(row.get("trace"))
+        snapshot = trace.get("dependency_snapshot_v1") or metadata.get("dependency_snapshot_v1") or {}
+        audited.append({
+            "status": status,
+            "reason": check.get("reason"),
+            "score_result_id": row.get("id"),
+            "item_id": row.get("itemId"),
+            "score_id": row.get("scoreId"),
+            "score_version_id": row.get("scoreVersionId"),
+            "value": row.get("value"),
+            "updated_at": row.get("updatedAt"),
+            "snapshot_hash": check.get("snapshot_hash") or snapshot.get("hash"),
+            "current_snapshot_hash": check.get("current_snapshot_hash"),
+            "dependency_score_result_ids": [
+                dependency.get("score_result_id")
+                for dependency in snapshot.get("dependencies", [])
+                if isinstance(dependency, dict)
+            ],
+        })
+    return audited
 
 def format_score_result(result_data: Dict[str, Any]) -> Panel:
     """
@@ -431,6 +612,91 @@ def last(account: Optional[str], scorecard: Optional[str]):
         title=f"[bold]Most Recent Score Result: {result.get('id')}[/bold]",
         border_style="cyan"
     ))
+
+
+@score_results.command(name="audit-dependencies")
+@click.option('--account', help='Account key or ID (optional, uses default from environment if not provided)')
+@click.option('--scorecard', required=True, help='Scorecard identifier (ID, name, key, or external ID)')
+@click.option('--score', required=True, help='Computed/dependent score identifier (ID, name, key, or external ID)')
+@click.option('--days', type=int, default=7, show_default=True, help='Updated-at window to inspect')
+@click.option('--limit', type=int, default=100, show_default=True, help='Maximum score results to audit')
+@click.option('--output', type=click.Choice(["table", "json"]), default="table", show_default=True)
+def audit_dependencies(
+    account: Optional[str],
+    scorecard: str,
+    score: str,
+    days: int,
+    limit: int,
+    output: str,
+):
+    """Audit dependency snapshots for recent computed ScoreResults."""
+
+    client = create_client()
+    account_id = resolve_account_id_for_command(client, account)
+    scorecard_id = resolve_scorecard_identifier(client, scorecard)
+    if not scorecard_id:
+        raise click.ClickException(f"No scorecard found with identifier: {scorecard}")
+
+    score_id = resolve_score_identifier(client, scorecard_id, score)
+    if not score_id:
+        raise click.ClickException(f"No score found with identifier '{score}' in scorecard {scorecard_id}")
+
+    rows = _fetch_recent_score_results_for_dependency_audit(
+        client=client,
+        account_id=account_id,
+        scorecard_id=scorecard_id,
+        score_id=score_id,
+        days=days,
+        limit=limit,
+    )
+    audited = asyncio.run(_audit_dependency_snapshots(client, rows))
+
+    summary = {
+        "scorecard_id": scorecard_id,
+        "score_id": score_id,
+        "days": days,
+        "limit": limit,
+        "total": len(audited),
+        "match": sum(1 for row in audited if row["status"] == "match"),
+        "stale": sum(1 for row in audited if row["status"] == "stale"),
+        "no_snapshot": sum(1 for row in audited if row["status"] == "no_snapshot"),
+        "rows": audited,
+    }
+
+    if output == "json":
+        click.echo(json.dumps(summary, indent=2, default=str))
+        return
+
+    table = rich.table.Table(title="Dependency Snapshot Audit")
+    table.add_column("Status")
+    table.add_column("ScoreResult")
+    table.add_column("Item")
+    table.add_column("Value")
+    table.add_column("Updated")
+    table.add_column("Reason")
+    table.add_column("Snapshot Hash")
+    table.add_column("Current Hash")
+    for row in audited:
+        style = "green" if row["status"] == "match" else "yellow" if row["status"] == "no_snapshot" else "red"
+        table.add_row(
+            row["status"],
+            row.get("score_result_id") or "",
+            row.get("item_id") or "",
+            str(row.get("value") or ""),
+            row.get("updated_at") or "",
+            row.get("reason") or "",
+            (row.get("snapshot_hash") or "")[:12],
+            (row.get("current_snapshot_hash") or "")[:12],
+            style=style,
+        )
+    console.print(table)
+    console.print(
+        f"[bold]Total:[/bold] {summary['total']}  "
+        f"[green]match:[/green] {summary['match']}  "
+        f"[red]stale:[/red] {summary['stale']}  "
+        f"[yellow]no_snapshot:[/yellow] {summary['no_snapshot']}"
+    )
+
 
 @score_results.command()
 @click.option('--id', required=True, help='Score result ID to get info about')
@@ -818,7 +1084,7 @@ def result():
     """Manage score result records in the dashboard (alias for 'score-results')"""
     pass
 
-@click.group() 
+@click.group()
 def results():
     """Manage score result records in the dashboard (alias for 'score-results')"""
     pass
@@ -829,4 +1095,5 @@ for group in [score_result, result, results]:
     group.add_command(last)
     group.add_command(info)
     group.add_command(delete)
-    group.add_command(create_error) 
+    group.add_command(create_error)
+    group.add_command(audit_dependencies)
