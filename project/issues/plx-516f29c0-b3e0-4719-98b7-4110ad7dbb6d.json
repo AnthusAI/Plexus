@@ -16,10 +16,16 @@
       "author": "ryan",
       "text": "Validated console score-editing reliability bundle locally. Focused Python suite passed: MCP/tactus runtime, procedure prompt/executor compatibility, replay harness, TaskDispatcher, console runtime, and console worker tests. Dashboard Jest auth/conversation tests passed. Preparing scoped commit with reliability, durable evaluation dispatch, replay diagnostics, TaskDispatcher guard, and frontend auth cleanup.",
       "created_at": "2026-07-08T21:06:54.621172Z"
+    },
+    {
+      "id": "0aec6c5b-8fed-4e35-be04-7102d9bc9b49",
+      "author": "ryan",
+      "text": "Committed scoped reliability bundle as d6a2d25ab (Fix console score editing reliability). Local validation passed before commit: dashboard Jest targeted suites passed, and focused Python suite passed with 317 tests and 5 warnings. Branch still needs sync with current develop before PR/merge.",
+      "created_at": "2026-07-08T21:07:17.888117Z"
     }
   ],
   "created_at": "2026-07-08T21:01:21.573215Z",
-  "updated_at": "2026-07-08T21:06:54.621172Z",
+  "updated_at": "2026-07-08T21:07:17.888117Z",
   "closed_at": null,
   "custom": {}
 }
