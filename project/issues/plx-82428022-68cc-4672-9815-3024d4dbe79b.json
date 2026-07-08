@@ -1,0 +1,37 @@
+{
+  "id": "plx-82428022-68cc-4672-9815-3024d4dbe79b",
+  "title": "Remove dashboard API-key frontend fallback for chat auth",
+  "description": "Frontend-only fix: stop using API-key override paths for normal dashboard web GraphQL auth, rely on Amplify outputs auth mode, and update chat unauthorized copy accordingly.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3519f6c1-f359-41e4-bef6-7473282c902d",
+      "author": "ryan",
+      "text": "Starting implementation on a clean branch from latest origin/develop. Scope is dashboard frontend auth/runtime only; seed and worker API-key paths remain unchanged.",
+      "created_at": "2026-07-01T19:33:21.098745Z"
+    },
+    {
+      "id": "a1fe8242-f917-4096-aa96-250d2ecca903",
+      "author": "ryan",
+      "text": "Implemented frontend-scoped fix on clean branch/worktree  from . Changes: extracted Amplify output resolution into , removed non-local API-key override path from client layout, updated  to stop requiring/exporting API key envs, removed API-key promotion in , and updated console unauthorized banner wording to auth/session + Amplify target guidance. Added tests in  for local mode, non-local legacy env ignore behavior, and missing outputs. Verified tests:  PASS and  PASS. Attempted  smoke with legacy key envs: startup no longer requires ; run failed earlier in env hydration due missing python dependency () in fresh worktree virtualenv, not due API-key checks.",
+      "created_at": "2026-07-01T19:46:39.304616Z"
+    },
+    {
+      "id": "6ccf3edb-cd37-4563-80ad-3f9065172daa",
+      "author": "ryan",
+      "text": "Implemented frontend-scoped fix on clean branch/worktree codex/remove-api-key-frontend-fallback from origin/develop. Changes: extracted Amplify output resolution into dashboard/app/amplify-config.ts, removed non-local API-key override path from client layout, updated dev:web to stop requiring/exporting API key envs, removed API-key promotion in load-dev-env.sh, and updated console unauthorized banner wording to auth/session + Amplify target guidance. Added tests in dashboard/app/__tests__/amplify-config.test.ts for local mode, non-local legacy env ignore behavior, and missing outputs. Verified tests: jest app/__tests__/amplify-config.test.ts PASS and jest components/ui/__tests__/conversation-viewer-session-routing.test.tsx PASS. Attempted npm run dev:web smoke with legacy key envs: startup no longer requires PLEXUS_API_KEY; run failed earlier in env hydration due missing python dependency (yaml) in fresh worktree virtualenv, not due API-key checks.",
+      "created_at": "2026-07-01T19:50:05.009669Z"
+    }
+  ],
+  "created_at": "2026-07-01T19:33:18.348279Z",
+  "updated_at": "2026-07-01T19:50:05.009669Z",
+  "closed_at": null,
+  "custom": {}
+}

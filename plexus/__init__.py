@@ -15,6 +15,10 @@ import warnings
 # We also close the FanoutCache that DSPy created at import time so its
 # file descriptors are released.
 if os.environ.get("DSPY_DISABLE_DISK_CACHE", "").lower() in ("1", "true", "yes"):
+    # DSPy initializes a default disk cache at import time. In Lambda this can
+    # point to an unwritable home path and emit warnings before we disable disk
+    # cache. Force a writable location first to keep startup clean.
+    os.environ.setdefault("DSPY_CACHEDIR", "/tmp/.dspy_cache")
     import dspy
     # Close the FanoutCache that was auto-created at import time
     _old_disk = getattr(getattr(dspy, "cache", None), "disk_cache", None)

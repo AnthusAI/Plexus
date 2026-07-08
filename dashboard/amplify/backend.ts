@@ -257,7 +257,7 @@ function normalizeForResourceName(value: string): string {
 }
 
 function requireTaskDispatcherEnv(name: string): string {
-    const placeholder = 'WILL_BE_SET_AFTER_DEPLOYMENT';
+    const placeholders = new Set(['WILL_BE_SET_AFTER_DEPLOYMENT', 'bootstrap-nonsecret']);
     const value = (process.env[name] || '').trim();
 
     // Allow dummy values for sandbox environments
@@ -265,7 +265,7 @@ function requireTaskDispatcherEnv(name: string): string {
                       process.env.AWS_BRANCH === undefined ||
                       process.env.AWS_BRANCH === 'sandbox';
 
-    if (!value || value === placeholder) {
+    if (!value || placeholders.has(value)) {
         if (isSandbox) {
             console.warn(`⚠️  TaskDispatcher ${name} not set. Using dummy value for sandbox.`);
             return 'dummy-sandbox-value';

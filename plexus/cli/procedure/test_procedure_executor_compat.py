@@ -762,6 +762,61 @@ async def test_execute_tactus_injects_console_session_history_into_runtime_conte
 
 
 @pytest.mark.asyncio
+async def test_execute_tactus_injects_declared_input_context_as_lua_table(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeWithSourceCapture)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-input-injection",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "input:\n"
+            "  console_user_message:\n"
+            "    type: string\n"
+            "  console_session_history:\n"
+            "    type: object\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={
+            "console_user_message": "latest prompt",
+            "console_session_history": [
+                {"role": "USER", "content": "Pick a random number."},
+                {"role": "ASSISTANT", "content": "How about 7?"},
+            ],
+        },
+    )
+
+    assert result["success"] is True
+    parsed_source = yaml.safe_load(_RuntimeWithSourceCapture.last_source)
+    procedure_source = parsed_source["procedure"]
+    assert "-- Injected runtime context as native Lua tables" in procedure_source
+    assert 'input = { ["console_user_message"] = "latest prompt"' in procedure_source
+    assert '"console_session_history"' in procedure_source
+    assert "Json.decode" in procedure_source
+
+
+@pytest.mark.asyncio
 async def test_execute_tactus_applies_agent_model_overrides_from_context(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 

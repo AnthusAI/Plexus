@@ -150,3 +150,21 @@ def test_module_rejects_placeholder_dispatch_config(monkeypatch):
         assert "CELERY_RESULT_BACKEND_TEMPLATE" in str(exc)
     else:
         raise AssertionError("placeholder dispatch config should fail module import")
+
+
+def test_module_rejects_bootstrap_dispatch_config(monkeypatch):
+    monkeypatch.setenv("CELERY_AWS_ACCESS_KEY_ID", "test-key")
+    monkeypatch.setenv("CELERY_AWS_SECRET_ACCESS_KEY", "test-secret")
+    monkeypatch.setenv("CELERY_AWS_REGION_NAME", "us-west-2")
+    monkeypatch.setenv("CELERY_QUEUE_NAME", "bootstrap-nonsecret")
+    monkeypatch.setenv(
+        "CELERY_RESULT_BACKEND_TEMPLATE",
+        "db+postgresql://{aws_access_key}:{aws_secret_key}@localhost/test",
+    )
+
+    try:
+        _load_module()
+    except ValueError as exc:
+        assert "CELERY_QUEUE_NAME" in str(exc)
+    else:
+        raise AssertionError("bootstrap dispatch config should fail module import")

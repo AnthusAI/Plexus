@@ -1,0 +1,31 @@
+{
+  "id": "plx-bca6f2a4-c37f-4726-8447-3d07d60f3a47",
+  "title": "Reduce console chat startup latency and improve timing observability",
+  "description": "",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "bab332f0-293d-4e12-9ea9-38e96db79ccb",
+      "author": "ryan",
+      "text": "Implementing two-phase console latency reduction: disable DSPy disk cache for responder, reduce history defaults with token budget guard, add latency decomposition fields, and cache warm-path client/runtime init with focused tests.",
+      "created_at": "2026-06-30T17:47:47.298841Z"
+    },
+    {
+      "id": "91fe0de9-e62d-4341-9776-3a4a1b19c922",
+      "author": "ryan",
+      "text": "Implemented latency mitigation/observability patch: DSPy disk cache env disable in Console responder stack; runtime history defaults 6/160 plus token-budget retention (2200 default, newest-first); latency payload now includes pre_model_ms, model_first_chunk_ms, model_stream_ms, post_model_persist_ms and startup-phase timestamps; responder now caches GraphQL client across warm invocations and warms procedure service cache once. Tests passed: pytest -q plexus/console/test_chat_runtime.py dashboard/amplify/functions/consoleRunWorker/app_test.py and pytest -q dashboard/amplify/functions/consoleRunWorker",
+      "created_at": "2026-06-30T17:50:52.086535Z"
+    }
+  ],
+  "created_at": "2026-06-30T17:47:42.232111Z",
+  "updated_at": "2026-06-30T17:50:52.086535Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "38fd4574-3827-47b5-87c0-ceb2b26958cf",
+  "issue_id": "plx-bca6f2a4-c37f-4726-8447-3d07d60f3a47",
+  "event_type": "issue_created",
+  "occurred_at": "2026-06-30T17:47:42.233Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+    "priority": 1,
+    "status": "open",
+    "title": "Reduce console chat startup latency and improve timing observability"
+  }
+}

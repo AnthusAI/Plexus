@@ -27,6 +27,7 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     assert parsed["agents"]["assistant"]["tools"] == ["execute_tactus"]
     assert isinstance(parsed.get("code"), str)
     assert "State.set(\"stage\", \"preparing\")" in parsed["code"]
+    assert "MessageHistory.tail_tokens(" not in parsed["code"]
     assert "Previous user message before latest (if any):" in parsed["code"]
     assert "Use prior turns for continuity and respond concisely with concrete help." in parsed["code"]
 
@@ -124,9 +125,32 @@ def test_builtin_console_procedure_prompt_teaches_report_dispatch_contract():
     assert "memory_analysis = false" in system_prompt
     assert "pass a resolved scorecard UUID" in system_prompt
     assert "use the returned `scorecard.id`" in system_prompt
-    assert "task_id = h[\"dispatch_result\"]" in system_prompt
+    assert "task_id = h[\"task_id\"]" in system_prompt
+    assert "report_id = h[\"report_id\"]" in system_prompt
     assert "Do not use `plexus.feedback.alignment` to run a report" in system_prompt
     assert "Do not use `plexus.procedure.optimize` to run a report" in system_prompt
+
+
+def test_builtin_console_procedure_prompt_teaches_evaluation_dispatch_contract():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+
+    assert "EVALUATION REQUESTS (HARD RULES)" in system_prompt
+    assert "`plexus.evaluation.find_recent` is optional status discovery only" in system_prompt
+    assert "Report durable ids first" in system_prompt
+    assert "max_feedback_items = 20" in system_prompt
+    assert 'sampling_mode = "newest"' in system_prompt
+    assert "omit `days`" in system_prompt
+    assert "task_id = h[\"task_id\"]" in system_prompt
+    assert "evaluation_id = h[\"evaluation_id\"]" in system_prompt
+    feedback_example = system_prompt[
+        system_prompt.index("-- Run a feedback evaluation")
+        : system_prompt.index("-- Run an accuracy evaluation")
+    ]
+    assert "max_feedback_items = 20" in feedback_example
+    assert 'sampling_mode = "newest"' in feedback_example
+    assert "days" not in feedback_example
 
 
 def test_builtin_console_procedure_prompt_teaches_prediction_contract():

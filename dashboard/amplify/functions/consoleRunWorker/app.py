@@ -12,7 +12,14 @@ from plexus.console.chat_runtime import (
     build_response_owner,
     normalize_response_target,
     process_console_message,
+    utc_now,
 )
+
+try:
+    from plexus.console.chat_runtime import warm_console_runtime
+except ImportError:  # pragma: no cover - compatibility for older installed package
+    def warm_console_runtime(_client: Any) -> None:
+        return None
 from plexus.dashboard.api.client import ClientContext, PlexusDashboardClient
 
 logger = logging.getLogger()
@@ -55,6 +62,7 @@ def _deserialize_dynamo_item(raw: Dict[str, Any]) -> Dict[str, Any]:
     return {key: deserializer.deserialize(value) for key, value in raw.items()}
 
 
+@lru_cache(maxsize=1)
 def _resolve_client() -> PlexusDashboardClient:
     api_url = str(os.getenv("PLEXUS_API_URL") or "").strip()
     if not api_url:
@@ -81,7 +89,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         os.environ["PLEXUS_LAMBDA_REQUEST_ID"] = request_id
     owner = build_response_owner(expected_target, request_id=request_id)
     _load_provider_credentials()
+    client_init_started = utc_now()
     client = _resolve_client()
+    warm_console_runtime(client)
+    client_init_completed = utc_now()
+    worker_init_trace = {
+        "t_client_init_started": client_init_started,
+        "t_client_init_completed": client_init_completed,
+    }
 
     failures = []
     processed = 0
@@ -106,6 +121,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 message,
                 expected_target=expected_target,
                 owner=owner,
+                poll_context=worker_init_trace,
             ):
                 processed += 1
             else:

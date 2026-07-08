@@ -1486,6 +1486,154 @@ def _metadata_object(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _score_version_cache_entry_key(scorecard_id: Any, score_id: Any) -> str | None:
+    if not scorecard_id or not score_id:
+        return None
+    return f"{scorecard_id}:{score_id}"
+
+
+def _normalize_score_version_cache(raw_cache: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(raw_cache, dict):
+        return {}
+    normalized: dict[str, dict[str, Any]] = {}
+    for raw_key, raw_value in raw_cache.items():
+        if not isinstance(raw_value, dict):
+            continue
+        scorecard_id = raw_value.get("scorecard_id") or raw_value.get("scorecardId")
+        score_id = raw_value.get("score_id") or raw_value.get("scoreId")
+        version_id = raw_value.get("version_id") or raw_value.get("versionId")
+        if not scorecard_id or not score_id or not version_id:
+            continue
+        key = _score_version_cache_entry_key(scorecard_id, score_id) or str(raw_key)
+        normalized[key] = {
+            "scorecard_id": str(scorecard_id),
+            "score_id": str(score_id),
+            "version_id": str(version_id),
+            "parent_version_id": (
+                str(raw_value.get("parent_version_id") or raw_value.get("parentVersionId"))
+                if raw_value.get("parent_version_id") or raw_value.get("parentVersionId")
+                else None
+            ),
+            "source": str(raw_value.get("source") or "session"),
+            "updated_at": str(raw_value.get("updated_at") or raw_value.get("updatedAt") or ""),
+        }
+    return normalized
+
+
+def _runtime_context_score_version_cache(
+    runtime_context: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(runtime_context, dict):
+        return {}
+    return _normalize_score_version_cache(
+        runtime_context.get("score_version_cache")
+        or runtime_context.get("latest_score_versions")
+    )
+
+
+def _load_console_score_version_cache(
+    runtime_context: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    context_cache = _runtime_context_score_version_cache(runtime_context)
+    if context_cache:
+        return context_cache
+    if not isinstance(runtime_context, dict):
+        return {}
+    session_id = str(runtime_context.get("chat_session_id") or "").strip()
+    if not session_id:
+        return {}
+    try:
+        from plexus.cli.shared.client_utils import create_client
+
+        client = create_client()
+        result = client.execute(
+            """
+            query GetConsoleScoreVersionCacheSession($id: ID!) {
+              getChatSession(id: $id) {
+                id
+                metadata
+              }
+            }
+            """,
+            {"id": session_id},
+        )
+        session = (result or {}).get("getChatSession") or (
+            (result or {}).get("data") or {}
+        ).get("getChatSession")
+        metadata = _metadata_object((session or {}).get("metadata"))
+        console_metadata = _metadata_object(metadata.get("console"))
+        return _normalize_score_version_cache(
+            console_metadata.get("score_version_cache")
+        )
+    except Exception as exc:
+        logger.warning(
+            "Could not load console score version cache for session %s: %s",
+            session_id,
+            exc,
+        )
+        return {}
+
+
+def _save_console_score_version_cache(
+    runtime_context: dict[str, Any] | None,
+    cache: dict[str, dict[str, Any]],
+) -> None:
+    if isinstance(runtime_context, dict):
+        runtime_context["score_version_cache"] = cache
+    session_id = (
+        str(runtime_context.get("chat_session_id") or "").strip()
+        if isinstance(runtime_context, dict)
+        else ""
+    )
+    if not session_id:
+        return
+    try:
+        from plexus.cli.shared.client_utils import create_client
+
+        client = create_client()
+        result = client.execute(
+            """
+            query GetConsoleScoreVersionCacheSession($id: ID!) {
+              getChatSession(id: $id) {
+                id
+                metadata
+              }
+            }
+            """,
+            {"id": session_id},
+        )
+        session = (result or {}).get("getChatSession") or (
+            (result or {}).get("data") or {}
+        ).get("getChatSession")
+        metadata = _metadata_object((session or {}).get("metadata"))
+        console_metadata = _metadata_object(metadata.get("console"))
+        console_metadata["score_version_cache"] = cache
+        metadata["console"] = console_metadata
+        client.execute(
+            """
+            mutation UpdateConsoleScoreVersionCacheSession($input: UpdateChatSessionInput!) {
+              updateChatSession(input: $input) {
+                id
+                updatedAt
+              }
+            }
+            """,
+            {
+                "input": {
+                    "id": session_id,
+                    "metadata": json.dumps(metadata),
+                    "updatedAt": _iso(time.time()),
+                }
+            },
+        )
+    except Exception as exc:
+        logger.warning(
+            "Could not save console score version cache for session %s: %s",
+            session_id,
+            exc,
+        )
+
+
 def _build_archived_metadata(
     existing_metadata: Any,
     *,
@@ -3880,7 +4028,6 @@ def _default_evaluation_find_recent(args: dict[str, Any]) -> dict[str, Any]:
     from datetime import datetime, timedelta, timezone
 
     from plexus.dashboard.api.client import PlexusDashboardClient
-    from plexus.Evaluation import Evaluation
 
     score_version_id = args.get("score_version_id")
     evaluation_type = args.get("evaluation_type")
@@ -3951,7 +4098,31 @@ def _default_evaluation_find_recent(args: dict[str, Any]) -> dict[str, Any]:
     query FindRecentEvalByVersion($scoreVersionId: String!, $limit: Int) {
       listEvaluationByScoreVersionIdAndCreatedAt(
         scoreVersionId: $scoreVersionId sortDirection: DESC limit: $limit
-      ) { items { id type status scoreVersionId totalItems createdAt } }
+      ) {
+        items {
+          id
+          type
+          status
+          scoreVersionId
+          scorecardId
+          scoreId
+          totalItems
+          processedItems
+          createdAt
+          updatedAt
+          startedAt
+          taskId
+          parameters
+          metrics
+          accuracy
+          confusionMatrix
+          predictedClassDistribution
+          datasetClassDistribution
+          cost
+          errorMessage
+          errorDetails
+        }
+      }
     }
     """
     result = client.execute(
@@ -4005,14 +4176,10 @@ def _default_evaluation_find_recent(args: dict[str, Any]) -> dict[str, Any]:
             continue
 
         eval_id = item["id"]
-        try:
-            eval_info = Evaluation.get_evaluation_info(eval_id)
-        except Exception:
-            continue
 
-        parameters = eval_info.get("parameters") or {}
+        parameters = item.get("parameters") or {}
         if not isinstance(parameters, dict):
-            parameters = {}
+            parameters = _metadata_object(parameters)
 
         if normalized_eval_type == "accuracy" and dataset_id is not None:
             eval_dataset_id = parameters.get("dataset_id")
@@ -4061,7 +4228,7 @@ def _default_evaluation_find_recent(args: dict[str, Any]) -> dict[str, Any]:
                 if eval_sampling_mode != normalized_sampling_mode:
                     continue
             if latest_feedback_dt is not None:
-                created_text = eval_info.get("created_at") or item.get("createdAt")
+                created_text = item.get("createdAt")
                 try:
                     created_dt = datetime.fromisoformat(
                         str(created_text).replace("Z", "+00:00")
@@ -4083,73 +4250,51 @@ def _default_evaluation_find_recent(args: dict[str, Any]) -> dict[str, Any]:
             "_from_cache": True,
             "evaluation_id": eval_id,
             "id": eval_id,
-            "type": eval_info.get("type"),
-            "status": eval_info.get("status"),
-            "scorecard": eval_info.get("scorecard_name")
-            or eval_info.get("scorecard_id"),
-            "score": eval_info.get("score_name") or eval_info.get("score_id"),
-            "score_version_id": eval_info.get("score_version_id"),
-            "total_items": eval_info.get("total_items"),
-            "processed_items": eval_info.get("processed_items"),
-            "metrics": eval_info.get("metrics"),
-            "accuracy": eval_info.get("accuracy"),
-            "confusionMatrix": eval_info.get("confusion_matrix"),
-            "predictedClassDistribution": eval_info.get(
-                "predicted_class_distribution"
-            ),
-            "datasetClassDistribution": eval_info.get(
-                "dataset_class_distribution"
-            ),
-            "baselineEvaluationId": eval_info.get("baseline_evaluation_id"),
-            "currentBaselineEvaluationId": eval_info.get(
-                "current_baseline_evaluation_id"
-            ),
-            "cost": eval_info.get("cost"),
-            "cost_details": eval_info.get("cost_details"),
-            "started_at": eval_info.get("started_at"),
-            "created_at": eval_info.get("created_at"),
-            "updated_at": eval_info.get("updated_at"),
-            "root_cause": eval_info.get("root_cause"),
-            "misclassification_analysis": eval_info.get(
-                "misclassification_analysis"
-            ),
+            "type": item.get("type"),
+            "status": item.get("status"),
+            "scorecard": item.get("scorecardId"),
+            "score": item.get("scoreId"),
+            "score_version_id": item.get("scoreVersionId"),
+            "total_items": item.get("totalItems"),
+            "processed_items": item.get("processedItems"),
+            "parameters": parameters,
+            "metrics": item.get("metrics"),
+            "accuracy": item.get("accuracy"),
+            "confusionMatrix": item.get("confusionMatrix"),
+            "predictedClassDistribution": item.get("predictedClassDistribution"),
+            "datasetClassDistribution": item.get("datasetClassDistribution"),
+            "baselineEvaluationId": parameters.get("baseline"),
+            "currentBaselineEvaluationId": parameters.get("current_baseline"),
+            "cost": item.get("cost"),
+            "task_id": item.get("taskId"),
+            "started_at": item.get("startedAt"),
+            "created_at": item.get("createdAt"),
+            "updated_at": item.get("updatedAt"),
+            "root_cause": parameters.get("root_cause"),
+            "misclassification_analysis": parameters.get("misclassification_analysis"),
+            "error_message": item.get("errorMessage"),
+            "error_details": item.get("errorDetails"),
         }
 
     return {"found": False}
 
 
-def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> dict[str, Any]:
-    """Dispatch evaluation.run directly through the Plexus CLI in async mode.
-
-    Uses --emit-id-file to capture the evaluation_id from the subprocess so the
-    handle store can poll the evaluation status via the dashboard API once the
-    process exits.
-    """
-
-    import shutil
-    import subprocess
-    import tempfile
-
+def _evaluation_command_tokens(
+    args: dict[str, Any],
+    *,
+    include_emit_id_file: str | None = None,
+) -> tuple[str, list[str]]:
     scorecard_name = args.get("scorecard_name") or args.get("scorecard")
     if not scorecard_name:
         raise ValueError("plexus.evaluation.run requires scorecard_name")
 
     evaluation_type = str(args.get("evaluation_type") or "accuracy").strip().lower()
-    plexus_bin = shutil.which("plexus") or "plexus"
-
-    # Temp file for evaluation_id capture (read after process starts)
-    id_tmpfile = tempfile.NamedTemporaryFile(
-        prefix="plexus_eval_id_", suffix=".txt", delete=False
-    )
-    id_tmpfile.close()
-    id_file_path = id_tmpfile.name
 
     if evaluation_type == "feedback":
         score_name = args.get("score_name") or args.get("score")
         if not score_name:
             raise ValueError("plexus.evaluation.run feedback requires score_name")
         cmd = [
-            plexus_bin,
             "evaluate",
             "feedback",
             "--scorecard",
@@ -4160,8 +4305,6 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
             str(int(args.get("max_feedback_items") or 200)),
             "--sampling-mode",
             str(args.get("sampling_mode") or "newest"),
-            "--emit-id-file",
-            id_file_path,
         ]
         _append_optional_cli_arg(cmd, "--days", args.get("days"))
         _append_optional_cli_arg(cmd, "--version", args.get("version"))
@@ -4175,7 +4318,6 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
             cmd.append("--score-rubric-consistency-check")
     elif evaluation_type == "accuracy":
         cmd = [
-            plexus_bin,
             "evaluate",
             "accuracy",
             "--scorecard",
@@ -4183,8 +4325,6 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
             "--number-of-samples",
             str(int(args.get("n_samples") or 10)),
             "--json-only",
-            "--emit-id-file",
-            id_file_path,
         ]
         _append_optional_cli_arg(
             cmd, "--score", args.get("score_name") or args.get("score")
@@ -4212,6 +4352,114 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
     _append_optional_cli_arg(cmd, "--current-baseline", args.get("current_baseline"))
     _append_optional_cli_arg(cmd, "--notes", args.get("notes"))
     _append_optional_cli_arg(cmd, "--procedure-id", args.get("procedure_id"))
+    _append_optional_cli_arg(cmd, "--task-id", args.get("task_id"))
+    if include_emit_id_file:
+        cmd.extend(["--emit-id-file", include_emit_id_file])
+    return evaluation_type, cmd
+
+
+def _shell_command(tokens: list[str]) -> str:
+    return " ".join(shlex.quote(str(token)) for token in tokens)
+
+
+def _default_evaluation_runner_remote(args: dict[str, Any]) -> dict[str, Any]:
+    """Create a durable dashboard Task for async evaluation dispatch."""
+
+    from plexus.cli.shared.client_utils import create_client as create_dashboard_client
+    from plexus.dashboard.api.models.task import Task
+
+    client = create_dashboard_client()
+    if not client:
+        raise ValueError("Could not create dashboard client")
+    account_id = _resolve_runtime_account_id(client, args, "plexus.evaluation.run")
+    scorecard_name = args.get("scorecard_name") or args.get("scorecard")
+    score_name = args.get("score_name") or args.get("score")
+    evaluation_type, command_tokens = _evaluation_command_tokens(args)
+    task_type = (
+        "Feedback Accuracy Evaluation"
+        if evaluation_type == "feedback"
+        else "Accuracy Evaluation"
+    )
+    target = (
+        "evaluation/feedback"
+        if evaluation_type == "feedback"
+        else "evaluation/accuracy"
+    )
+    metadata = {
+        "type": task_type,
+        "task_type": task_type,
+        "scorecard": scorecard_name,
+        "evaluation_type": evaluation_type,
+        "trigger": "mcp_remote",
+        "parameters": {
+            key: _jsonable(value)
+            for key, value in args.items()
+            if key not in {"account_id", "async", "budget"}
+        },
+    }
+    if score_name:
+        metadata["score"] = score_name
+    if args.get("version"):
+        metadata["score_version_id"] = str(args["version"])
+    if args.get("procedure_id"):
+        metadata["procedure_id"] = str(args["procedure_id"])
+    if args.get("budget"):
+        metadata["child_budget"] = _jsonable(args.get("budget"))
+
+    task = Task.create(
+        client=client,
+        accountId=account_id,
+        type=task_type,
+        target=target,
+        command=_shell_command(command_tokens),
+        description=(
+            f"{task_type} for {scorecard_name}"
+            + (f" > {score_name}" if score_name else "")
+        ),
+        metadata=json.dumps(metadata, default=str),
+        dispatchStatus="PENDING",
+        status="PENDING",
+    )
+    return {
+        "status": "queued",
+        "dispatch_status": "PENDING",
+        "task_id": task.id,
+        "evaluation_id": None,
+        "evaluation_record_created": False,
+        "score_version_id": args.get("version"),
+        "command": command_tokens,
+        "command_string": _shell_command(command_tokens),
+        "evaluation_type": evaluation_type,
+        "scorecard": scorecard_name,
+        "score": score_name,
+        "child_budget": _jsonable(args.get("budget")),
+        "message": "Evaluation task created and queued for durable dispatch.",
+        "dashboard_url": "https://lab.callcriteria.com/lab/evaluations",
+    }
+
+
+def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> dict[str, Any]:
+    """Dispatch evaluation.run in async mode."""
+
+    if _resolve_report_dispatch_mode() == "celery":
+        return _default_evaluation_runner_remote(args)
+
+    import shutil
+    import subprocess
+    import tempfile
+
+    # Temp file for evaluation_id capture (read after process starts)
+    id_tmpfile = tempfile.NamedTemporaryFile(
+        prefix="plexus_eval_id_", suffix=".txt", delete=False
+    )
+    id_tmpfile.close()
+    id_file_path = id_tmpfile.name
+    evaluation_type, command_tokens = _evaluation_command_tokens(
+        args,
+        include_emit_id_file=id_file_path,
+    )
+    plexus_bin = shutil.which("plexus") or "plexus"
+    cmd = [plexus_bin, *command_tokens]
 
     child_budget = args.get("budget")
     env = apply_actor_context_to_env(os.environ.copy())
@@ -4269,7 +4517,7 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
         "stderr_log": stderr_log_path,
         "command": cmd,
         "evaluation_type": evaluation_type,
-        "scorecard": scorecard_name,
+        "scorecard": args.get("scorecard_name") or args.get("scorecard"),
         "score": args.get("score_name") or args.get("score"),
         "child_budget": _jsonable(child_budget),
         "message": "Evaluation dispatched in background.",
@@ -5030,6 +5278,7 @@ def _normalize_mcp_tool_args(
 def _public_handle(record: dict[str, Any]) -> dict[str, Any]:
     public = {
         "id": record["id"],
+        "handle_id": record["id"],
         "kind": record["kind"],
         "status": record["status"],
         "status_url": record.get("status_url"),
@@ -5039,7 +5288,18 @@ def _public_handle(record: dict[str, Any]) -> dict[str, Any]:
     if record.get("child_budget") is not None:
         public["child_budget"] = record.get("child_budget")
     if record.get("dispatch_result") is not None:
-        public["dispatch_result"] = record.get("dispatch_result")
+        dispatch_result = record.get("dispatch_result") or {}
+        public["dispatch_result"] = dispatch_result
+        for key in (
+            "task_id",
+            "evaluation_id",
+            "report_id",
+            "score_version_id",
+            "dispatch_status",
+            "evaluation_record_created",
+        ):
+            if key in dispatch_result:
+                public[key] = dispatch_result.get(key)
     return public
 
 
@@ -5103,7 +5363,8 @@ def _normalize_handle_status(status: Any) -> str:
         "cancelled": "cancelled",
         "canceled": "cancelled",
         "running": "running",
-        "pending": "running",
+        "pending": "queued",
+        "queued": "queued",
         "dispatched": "running",
     }
     return status_map.get(normalized, normalized or "running")
@@ -6574,7 +6835,7 @@ def _score_edit_llm_schema() -> dict[str, Any]:
         "additionalProperties": False,
         "properties": {
             "code": {"type": "string"},
-            "guidelines": {"type": "string"},
+            "guidelines": {"type": ["string", "null"]},
             "note": {"type": "string"},
             "summary": {"type": "string"},
         },
@@ -6699,6 +6960,7 @@ def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
             "You are editing a Plexus score version.\n"
             "Apply the user instruction to the score YAML.\n"
             "Return ONLY JSON with keys: code, guidelines, note, summary.\n"
+            "Set guidelines to null when guidelines are unchanged.\n"
             "Keep YAML valid and preserve behavior unless the instruction requires change.\n"
             + (
                 "Guidelines edits are allowed only when explicitly requested.\n"
@@ -7662,6 +7924,12 @@ class PlexusRuntimeModule:
         procedure_archive: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         stream_handler: _MCPStreamEmitter | None = None,
         runtime_context: dict[str, Any] | None = None,
+        score_version_cache_loader: Callable[
+            [dict[str, Any] | None], dict[str, dict[str, Any]]
+        ] | None = None,
+        score_version_cache_saver: Callable[
+            [dict[str, Any] | None, dict[str, dict[str, Any]]], None
+        ] | None = None,
         catch_runtime_errors: bool = False,
     ) -> None:
         self._mcp = mcp
@@ -7673,6 +7941,11 @@ class PlexusRuntimeModule:
             runtime_context if isinstance(runtime_context, dict) else None
         )
         self._runtime_context = dict(runtime_context or {})
+        self._score_version_cache_saver = (
+            score_version_cache_saver
+            if score_version_cache_saver is not None
+            else _save_console_score_version_cache
+        )
         self._tool_access_mode = _normalize_tool_access_mode(
             self._runtime_context.get("tool_access_mode")
         )
@@ -7842,7 +8115,19 @@ class PlexusRuntimeModule:
         self._procedure_branch = _default_procedure_branch
         self._stream_handler = stream_handler
         self._api_calls: list[str] = []
+        cache_loader = (
+            score_version_cache_loader
+            if score_version_cache_loader is not None
+            else _load_console_score_version_cache
+        )
         self._latest_score_versions: dict[tuple[str, str], dict[str, Any]] = {}
+        for cached in cache_loader(self._runtime_context).values():
+            key = self._score_version_cache_key(
+                cached.get("scorecard_id"),
+                cached.get("score_id"),
+            )
+            if key is not None:
+                self._latest_score_versions[key] = dict(cached)
         self.handle_protocol_required: tuple[str, str] | None = None
         methods_by_namespace: dict[str, set[str]] = {}
         for namespace_name, method_name in MCP_TOOL_MAP.keys():
@@ -7912,7 +8197,14 @@ class PlexusRuntimeModule:
             "version_id": str(version_id),
             "parent_version_id": str(parent_version_id) if parent_version_id else None,
             "source": source,
+            "updated_at": _iso(time.time()),
         }
+        cache_payload = {
+            _score_version_cache_entry_key(*cache_key): dict(cache_record)
+            for cache_key, cache_record in self._latest_score_versions.items()
+            if _score_version_cache_entry_key(*cache_key)
+        }
+        self._score_version_cache_saver(self._runtime_context, cache_payload)
 
     def _cached_latest_score_version(
         self, scorecard_id: Any, score_id: Any
@@ -9820,8 +10112,13 @@ Runtime ground rules:
   invalidation) request `Human.approve` automatically; pass
   `no_confirm = true` only when the user explicitly approved.
 - Long-running calls (`plexus.evaluation.run`, `plexus.report.run`,
-  `plexus.procedure.run`) must use `async = true`. They dispatch immediately
-  and return a handle — no `budget` table needed.
+  `plexus.procedure.run`) must use `async = true`. They return a handle.
+  `handle.id` is the local handle id, not a Task id, Evaluation id, or Report id.
+  For evaluations, report `task_id`, `dispatch_status`, `score_version_id`, and
+  `evaluation_id` exactly as returned. If `evaluation_id` is null/nil or
+  `evaluation_record_created` is false, say the Evaluation record is not created
+  yet; do not invent an evaluation id and do not copy `handle.id` into
+  `evaluation_id`.
 
 Helper aliases injected before your snippet runs:
 - High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,
@@ -9944,7 +10241,13 @@ local handle = plexus.report.run{
   async = true,
   budget = { usd = 1.0, wallclock_seconds = 600, depth = 1, tool_calls = 5 },
 }
-return { handle_id = handle.id, status = handle.status }
+return {
+  handle_id = handle.handle_id or handle.id,
+  task_id = handle.task_id,
+  report_id = handle.report_id,
+  status = handle.status,
+  dispatch_status = handle.dispatch_status,
+}
 ```
 
 Then poll, await, or cancel from a later `execute_tactus` call:

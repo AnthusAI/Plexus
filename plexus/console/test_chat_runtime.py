@@ -474,6 +474,30 @@ def test_local_targets_skip_cloudwatch_logging_by_default(monkeypatch):
     assert chat_runtime._should_log_cloudwatch_for_message(message) is True
 
 
+def test_build_latency_summary_decomposes_first_token_latency():
+    summary = chat_runtime._build_latency_summary(
+        {
+            "message_id": "msg-1",
+            "session_id": "sess-1",
+            "t_run_started": "2026-04-27T00:00:00.000Z",
+            "t_backend_execution_started": "2026-04-27T00:00:00.400Z",
+            "t_first_assistant_chunk": "2026-04-27T00:00:01.000Z",
+            "t_last_assistant_chunk": "2026-04-27T00:00:02.000Z",
+            "t_run_completed": "2026-04-27T00:00:02.100Z",
+            "t_received": "2026-04-27T00:00:00.000Z",
+            "t_completed": "2026-04-27T00:00:02.100Z",
+        },
+        status="COMPLETED",
+    )
+
+    assert summary["first_token_ms"] == 1000
+    assert summary["pre_model_ms"] == 400
+    assert summary["model_first_chunk_ms"] == 600
+    assert summary["model_stream_ms"] == 1000
+    assert summary["post_model_persist_ms"] == 100
+    assert abs(summary["first_token_ms"] - (summary["pre_model_ms"] + summary["model_first_chunk_ms"])) <= 1
+
+
 def test_process_console_message_marks_failed_when_harness_raises(monkeypatch):
     client = FakeClient()
 
@@ -1135,6 +1159,58 @@ def test_fetch_session_history_limits_to_recent_messages_and_clips_content(monke
     assert history == [
         {"role": "USER", "content": "older mess..."},
         {"role": "USER", "content": "new messag..."},
+    ]
+
+
+def test_fetch_session_history_applies_token_budget_newest_first(monkeypatch):
+    monkeypatch.setattr(chat_runtime, "CONSOLE_HISTORY_MAX_CHARS", 500)
+    monkeypatch.setattr(chat_runtime, "CONSOLE_HISTORY_TOKEN_BUDGET", 6)
+    monkeypatch.setattr(chat_runtime, "_estimate_text_tokens", lambda text: len(text.split()))
+    client = FakeHistoryClient([
+        {
+            "items": [
+                {
+                    "id": "msg-4",
+                    "role": "USER",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "latest one",
+                    "createdAt": "2026-04-27T00:00:04.000Z",
+                },
+                {
+                    "id": "msg-3",
+                    "role": "ASSISTANT",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT_ASSISTANT",
+                    "content": "third message here",
+                    "createdAt": "2026-04-27T00:00:03.000Z",
+                },
+                {
+                    "id": "msg-2",
+                    "role": "USER",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "second message here",
+                    "createdAt": "2026-04-27T00:00:02.000Z",
+                },
+                {
+                    "id": "msg-1",
+                    "role": "USER",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "first message",
+                    "createdAt": "2026-04-27T00:00:01.000Z",
+                },
+            ],
+            "nextToken": None,
+        },
+    ])
+
+    history = chat_runtime.fetch_session_history(client, "sess-1", limit=4)
+
+    assert history == [
+        {"role": "ASSISTANT", "content": "third message here"},
+        {"role": "USER", "content": "latest one"},
     ]
 
 

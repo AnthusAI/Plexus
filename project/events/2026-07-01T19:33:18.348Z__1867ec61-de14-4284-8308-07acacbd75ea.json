@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1867ec61-de14-4284-8308-07acacbd75ea",
+  "issue_id": "plx-82428022-68cc-4672-9815-3024d4dbe79b",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-01T19:33:18.348Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Frontend-only fix: stop using API-key override paths for normal dashboard web GraphQL auth, rely on Amplify outputs auth mode, and update chat unauthorized copy accordingly.",
+    "issue_type": "bug",
+    "labels": [],
+    "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+    "priority": 1,
+    "status": "open",
+    "title": "Remove dashboard API-key frontend fallback for chat auth"
+  }
+}

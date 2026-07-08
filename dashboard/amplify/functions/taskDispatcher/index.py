@@ -18,12 +18,12 @@ logging.basicConfig(
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-PLACEHOLDER_VALUE = "WILL_BE_SET_AFTER_DEPLOYMENT"
+PLACEHOLDER_VALUES = {"WILL_BE_SET_AFTER_DEPLOYMENT", "bootstrap-nonsecret"}
 
 
 def _required_env(name):
     value = os.environ.get(name, "").strip()
-    if not value or value == PLACEHOLDER_VALUE:
+    if not value or value in PLACEHOLDER_VALUES:
         raise ValueError(
             f"Missing required TaskDispatcher environment variable: {name}"
         )

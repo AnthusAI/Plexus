@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -45,7 +46,7 @@ class _MemoryHandleStore(execute.TactusHandleStore):
         record = {
             "id": handle_id,
             "kind": kind,
-            "status": "running",
+            "status": dispatch_result.get("status") or "running",
             "status_url": dispatch_result.get("dashboard_url"),
             "created_at": "2026-04-29T00:00:00Z",
             "updated_at": "2026-04-29T00:00:00Z",
@@ -57,10 +58,14 @@ class _MemoryHandleStore(execute.TactusHandleStore):
         }
         self.records[handle_id] = record
         self.created.append(record)
+        status = dispatch_result.get("status") or "running"
+        if status == "dispatched":
+            status = "running"
         public = {
             "id": handle_id,
+            "handle_id": handle_id,
             "kind": kind,
-            "status": "running",
+            "status": status,
             "status_url": dispatch_result.get("dashboard_url"),
             "created_at": record["created_at"],
             "parent_trace_id": parent_trace_id,
@@ -68,6 +73,16 @@ class _MemoryHandleStore(execute.TactusHandleStore):
         }
         if child_budget is not None:
             public["child_budget"] = child_budget
+        for key in (
+            "task_id",
+            "evaluation_id",
+            "report_id",
+            "score_version_id",
+            "dispatch_status",
+            "evaluation_record_created",
+        ):
+            if key in dispatch_result:
+                public[key] = dispatch_result.get(key)
         return public
 
     def get(self, handle_id: str) -> dict:
@@ -3218,6 +3233,7 @@ def test_evaluation_run_async_creates_handle_and_records_budget() -> None:
 
     assert handle == {
         "id": "handle-1",
+        "handle_id": "handle-1",
         "kind": "evaluation",
         "status": "running",
         "status_url": "https://example.test/evaluations/eval-1",
@@ -3229,6 +3245,7 @@ def test_evaluation_run_async_creates_handle_and_records_budget() -> None:
             "dashboard_url": "https://example.test/evaluations/eval-1",
         },
         "child_budget": budget,
+        "evaluation_id": "eval-1",
     }
     assert seen_args == {
         "scorecard_name": "Compliance",
@@ -3242,6 +3259,44 @@ def test_evaluation_run_async_creates_handle_and_records_budget() -> None:
     assert module.api_calls == ["plexus.evaluation.run"]
     assert handles.created[0]["dispatch_result"]["evaluation_id"] == "eval-1"
     assert handles.created[0]["child_budget"] == budget
+
+
+def test_evaluation_run_async_returns_queued_handle_for_pending_task() -> None:
+    handles = _MemoryHandleStore()
+
+    def fake_runner(_args: dict) -> dict:
+        return {
+            "status": "queued",
+            "task_id": "task-1",
+            "dispatch_status": "PENDING",
+            "score_version_id": "sv-1",
+            "evaluation_id": None,
+            "evaluation_record_created": False,
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        budget=execute.BudgetGate(),
+        handle_store=handles,
+        evaluation_runner=fake_runner,
+    )
+
+    handle = module.evaluation.run(
+        {
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+            "async": True,
+            "budget": _child_budget(),
+        }
+    )
+
+    assert handle["status"] == "queued"
+    assert handle["task_id"] == "task-1"
+    assert handle["dispatch_status"] == "PENDING"
+    assert handle["score_version_id"] == "sv-1"
+    assert handle["evaluation_id"] is None
+    assert handle["evaluation_record_created"] is False
 
 
 def test_evaluation_run_async_requires_explicit_child_budget() -> None:
@@ -3451,6 +3506,95 @@ def test_score_edit_chains_followup_from_session_latest(tmp_path, monkeypatch) -
     assert seen_args[1]["base_version_source"] == "session_latest"
     assert completed["result"]["version_id"] == "sv-2"
     assert completed["result"]["base_version_source"] == "session_latest"
+
+
+def test_score_edit_chains_followup_from_persisted_session_cache_across_modules(
+    tmp_path, monkeypatch
+) -> None:
+    persisted_cache: dict[str, dict[str, Any]] = {}
+    result_files = [
+        tmp_path / "score-edit-result-1.json",
+        tmp_path / "score-edit-result-2.json",
+    ]
+    result_files[0].write_text(
+        json.dumps({"success": True, "version_id": "sv-1", "parent_version_id": "champion-1"}),
+        encoding="utf-8",
+    )
+    result_files[1].write_text(
+        json.dumps({"success": True, "version_id": "sv-2", "parent_version_id": "sv-1"}),
+        encoding="utf-8",
+    )
+    seen_args: list[dict] = []
+
+    def fake_loader(_context: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+        return dict(persisted_cache)
+
+    def fake_saver(
+        _context: dict[str, Any] | None,
+        cache: dict[str, dict[str, Any]],
+    ) -> None:
+        persisted_cache.clear()
+        persisted_cache.update(cache)
+
+    def fake_runner(args: dict) -> dict:
+        seen_args.append(dict(args))
+        return {"status": "dispatched", "result_file": str(result_files[len(seen_args) - 1])}
+
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: {"id": "scorecard-1"},
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_score_for_score_edit",
+        lambda _client, _scorecard_id, _identifier: {"id": "score-1"},
+    )
+
+    first_module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        handle_store=_MemoryHandleStore(),
+        score_edit_runner=fake_runner,
+        runtime_context={"chat_session_id": "session-1"},
+        score_version_cache_loader=fake_loader,
+        score_version_cache_saver=fake_saver,
+    )
+    first_module.score.edit(
+        {
+            "scorecard_identifier": "Compliance",
+            "score_identifier": "Tone",
+            "instruction": "first edit",
+            "async": True,
+            "budget": _child_budget(),
+        }
+    )
+
+    second_module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-2",
+        handle_store=_MemoryHandleStore(),
+        score_edit_runner=fake_runner,
+        runtime_context={"chat_session_id": "session-1"},
+        score_version_cache_loader=fake_loader,
+        score_version_cache_saver=fake_saver,
+    )
+    completed = second_module.score.edit(
+        {
+            "scorecard_identifier": "Compliance",
+            "score_identifier": "Tone",
+            "instruction": "follow-up edit",
+            "async": True,
+            "budget": _child_budget(),
+        }
+    )
+
+    assert seen_args[0]["base_version_source"] == "champion"
+    assert seen_args[1]["version_id"] == "sv-1"
+    assert seen_args[1]["base_version_source"] == "session_latest"
+    assert completed["result"]["version_id"] == "sv-2"
+    assert persisted_cache["scorecard-1:score-1"]["version_id"] == "sv-2"
 
 
 def test_score_edit_cache_is_keyed_by_score(tmp_path, monkeypatch) -> None:
@@ -3981,6 +4125,20 @@ def test_run_score_edit_job_runs_post_submit_smoke_test_for_code_changes(
     assert payload["diffs"]["code"]["has_changes"] is True
 
 
+def test_score_edit_structured_output_schema_allows_null_guidelines() -> None:
+    schema = execute._score_edit_llm_schema()
+
+    assert schema["properties"]["guidelines"]["type"] == ["string", "null"]
+    execute._validate_score_edit_payload(
+        {
+            "code": "name: updated\n",
+            "guidelines": None,
+            "note": "updated",
+            "summary": "summary",
+        }
+    )
+
+
 def test_run_score_edit_job_ignores_llm_guidelines_edits_by_default(
     tmp_path, monkeypatch
 ) -> None:
@@ -4476,6 +4634,62 @@ def test_evaluation_run_uses_cached_latest_score_version_after_edit(monkeypatch)
 
     assert update_seen[0]["base_version_source"] == "champion"
     assert evaluation_seen["version"] == "sv-candidate"
+    assert evaluation_seen["base_version_source"] == "session_latest"
+
+
+def test_evaluation_run_uses_persisted_session_latest_without_prior_same_module_edit(
+    monkeypatch,
+) -> None:
+    evaluation_seen: dict = {}
+
+    def fake_loader(_context: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+        return {
+            "scorecard-1:score-1": {
+                "scorecard_id": "scorecard-1",
+                "score_id": "score-1",
+                "version_id": "sv-persisted",
+                "parent_version_id": "champion-1",
+                "source": "score.edit",
+            }
+        }
+
+    def fake_evaluation_runner(args: dict) -> dict:
+        evaluation_seen.update(args)
+        return {"status": "dispatched", "evaluation_id": "eval-1"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        trace_id="trace-1",
+        evaluation_runner=fake_evaluation_runner,
+        handle_store=_MemoryHandleStore(),
+        runtime_context={"chat_session_id": "session-1"},
+        score_version_cache_loader=fake_loader,
+    )
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", object)
+    monkeypatch.setattr(
+        execute,
+        "_resolve_scorecard_for_score_edit",
+        lambda _client, _identifier: {"id": "scorecard-1"},
+    )
+    monkeypatch.setattr(
+        execute,
+        "_resolve_score_for_score_edit",
+        lambda _client, _scorecard_id, _identifier: {"id": "score-1"},
+    )
+
+    module.evaluation.run(
+        {
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+            "evaluation_type": "feedback",
+            "max_feedback_items": 20,
+            "sampling_mode": "newest",
+            "async": True,
+            "budget": _child_budget(),
+        }
+    )
+
+    assert evaluation_seen["version"] == "sv-persisted"
     assert evaluation_seen["base_version_source"] == "session_latest"
 
 
@@ -5051,6 +5265,7 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/plexus")
     monkeypatch.setattr("subprocess.Popen", fake_popen)
     monkeypatch.setattr("time.sleep", lambda _: None)
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "local")
 
     with execute.set_runtime_actor_context(
         {
@@ -5119,6 +5334,7 @@ def test_default_evaluation_runner_passes_frozen_feedback_window(monkeypatch) ->
     monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/plexus")
     monkeypatch.setattr("subprocess.Popen", fake_popen)
     monkeypatch.setattr("time.sleep", lambda _: None)
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "local")
 
     execute._default_evaluation_runner(
         {
@@ -5138,6 +5354,134 @@ def test_default_evaluation_runner_passes_frozen_feedback_window(monkeypatch) ->
     assert captured["cmd"][captured["cmd"].index("--feedback-start-at") + 1] == "2026-02-01T00:00:00Z"
     assert "--feedback-end-at" in captured["cmd"]
     assert captured["cmd"][captured["cmd"].index("--feedback-end-at") + 1] == "2026-05-01T00:00:00Z"
+
+
+def test_default_evaluation_runner_creates_feedback_task_by_default(monkeypatch) -> None:
+    created: dict = {}
+    client = object()
+
+    def fake_create(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace(id="task-1")
+
+    monkeypatch.delenv("PLEXUS_DISPATCH_MODE", raising=False)
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: client)
+    monkeypatch.setattr("plexus.dashboard.api.models.task.Task.create", fake_create)
+    monkeypatch.setattr(
+        "subprocess.Popen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("local subprocess should not run by default")
+        ),
+    )
+
+    result = execute._default_evaluation_runner(
+        {
+            "account_id": "acct-1",
+            "evaluation_type": "feedback",
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+            "max_feedback_items": 25,
+            "sampling_mode": "newest",
+            "version": "sv-1",
+            "procedure_id": "proc-1",
+            "budget": _child_budget(),
+        },
+        None,
+    )
+
+    assert result["task_id"] == "task-1"
+    assert result["status"] == "queued"
+    assert result["dispatch_status"] == "PENDING"
+    assert result["evaluation_id"] is None
+    assert result["evaluation_record_created"] is False
+    assert result["score_version_id"] == "sv-1"
+    assert created["client"] is client
+    assert created["accountId"] == "acct-1"
+    assert created["type"] == "Feedback Accuracy Evaluation"
+    assert created["target"] == "evaluation/feedback"
+    assert created["dispatchStatus"] == "PENDING"
+    assert created["status"] == "PENDING"
+    assert created["command"] == (
+        "evaluate feedback --scorecard Compliance --score Tone --max-items 25 "
+        "--sampling-mode newest --version sv-1 --procedure-id proc-1"
+    )
+
+
+def test_default_evaluation_runner_creates_accuracy_task_by_default(monkeypatch) -> None:
+    created: dict = {}
+
+    def fake_create(**kwargs):
+        created.update(kwargs)
+        return SimpleNamespace(id="task-accuracy")
+
+    monkeypatch.delenv("PLEXUS_DISPATCH_MODE", raising=False)
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr("plexus.dashboard.api.models.task.Task.create", fake_create)
+
+    result = execute._default_evaluation_runner(
+        {
+            "account_id": "acct-1",
+            "evaluation_type": "accuracy",
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+            "n_samples": 15,
+            "version": "sv-accuracy",
+            "dataset_id": "dataset-1",
+            "budget": _child_budget(),
+        },
+        None,
+    )
+
+    assert result["task_id"] == "task-accuracy"
+    assert result["dispatch_status"] == "PENDING"
+    assert result["score_version_id"] == "sv-accuracy"
+    assert created["type"] == "Accuracy Evaluation"
+    assert created["target"] == "evaluation/accuracy"
+    assert created["command"] == (
+        "evaluate accuracy --scorecard Compliance --number-of-samples 15 --json-only "
+        "--score Tone --version sv-accuracy --dataset-id dataset-1"
+    )
+
+
+def test_default_evaluation_runner_does_not_claim_success_when_task_create_fails(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("PLEXUS_DISPATCH_MODE", raising=False)
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr(
+        "plexus.dashboard.api.models.task.Task.create",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("task write failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="task write failed"):
+        execute._default_evaluation_runner(
+            {
+                "account_id": "acct-1",
+                "evaluation_type": "feedback",
+                "scorecard_name": "Compliance",
+                "score_name": "Tone",
+                "max_feedback_items": 20,
+                "budget": _child_budget(),
+            },
+            None,
+        )
+
+
+def test_execute_tactus_description_warns_handle_id_is_not_evaluation_id() -> None:
+    description = execute.EXECUTE_TACTUS_DESCRIPTION
+
+    assert "`handle.id` is the local handle id" in description
+    assert "do not invent an evaluation id" in description
+    assert "evaluation_record_created" in description
+
+
+def test_console_prompt_warns_handle_id_is_not_evaluation_id() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    prompt = (repo_root / "plexus/procedures/console/chat_agent.tac").read_text()
+
+    assert "handle.id is only a local handle id" in prompt
+    assert "Never report handle.id as an evaluation_id" in prompt
+    assert "evaluation_record_created is false" in prompt
 
 
 def test_handle_peek_refreshes_evaluation_status() -> None:
@@ -6539,6 +6883,73 @@ def test_evaluation_info_is_listed_in_plexus_api_list() -> None:
     assert "compare" in catalog["plexus.evaluation"]
     assert "find_recent" in catalog["plexus.evaluation"]
     assert "archive" in catalog["plexus.evaluation"]
+
+
+def test_evaluation_find_recent_uses_graphql_without_evaluation_model_import(
+    monkeypatch,
+) -> None:
+    import builtins
+
+    original_import = builtins.__import__
+
+    def guarded_import(name, *args, **kwargs):
+        if name == "plexus.Evaluation":
+            raise AssertionError("evaluation.find_recent must not import plexus.Evaluation")
+        return original_import(name, *args, **kwargs)
+
+    class FakeClient:
+        def execute(self, _query, _variables):
+            return {
+                "listEvaluationByScoreVersionIdAndCreatedAt": {
+                    "items": [
+                        {
+                            "id": "eval-1",
+                            "type": "feedback",
+                            "status": "COMPLETED",
+                            "scoreVersionId": "sv-1",
+                            "scorecardId": "scorecard-1",
+                            "scoreId": "score-1",
+                            "totalItems": 20,
+                            "processedItems": 20,
+                            "createdAt": "2026-06-05T00:00:00Z",
+                            "updatedAt": "2026-06-05T00:01:00Z",
+                            "startedAt": "2026-06-05T00:00:10Z",
+                            "taskId": "task-1",
+                            "parameters": {
+                                "max_feedback_items": 20,
+                                "sampling_mode": "newest",
+                            },
+                            "metrics": {"alignment": 0.7},
+                            "accuracy": 0.8,
+                            "confusionMatrix": {"matrix": []},
+                            "predictedClassDistribution": {"Yes": 10},
+                            "datasetClassDistribution": {"Yes": 12},
+                            "cost": 0.12,
+                            "errorMessage": None,
+                            "errorDetails": None,
+                        }
+                    ]
+                }
+            }
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    monkeypatch.setattr("plexus.dashboard.api.client.PlexusDashboardClient", FakeClient)
+
+    result = execute._default_evaluation_find_recent(
+        {
+            "score_version_id": "sv-1",
+            "evaluation_type": "feedback",
+            "max_age_hours": 10000,
+            "max_feedback_items": 20,
+            "sampling_mode": "newest",
+        }
+    )
+
+    assert result["_from_cache"] is True
+    assert result["evaluation_id"] == "eval-1"
+    assert result["task_id"] == "task-1"
+    assert result["score_version_id"] == "sv-1"
+    assert result["metrics"] == {"alignment": 0.7}
 
 
 def test_evaluation_info_uses_injected_function_and_skips_mcp_loopback() -> None:

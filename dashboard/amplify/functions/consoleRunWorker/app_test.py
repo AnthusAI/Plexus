@@ -45,6 +45,7 @@ def test_handler_processes_cloud_targeted_insert(monkeypatch):
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
     monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
     monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
+    monkeypatch.setattr(app, "warm_console_runtime", lambda _client: None)
     monkeypatch.setattr(
         app,
         "process_console_message",
@@ -58,6 +59,8 @@ def test_handler_processes_cloud_targeted_insert(monkeypatch):
     assert result["batchItemFailures"] == []
     assert calls[0][0]["id"] == "msg-1"
     assert calls[0][1]["expected_target"] == "cloud"
+    assert isinstance(calls[0][1]["poll_context"].get("t_client_init_started"), str)
+    assert isinstance(calls[0][1]["poll_context"].get("t_client_init_completed"), str)
 
 
 def test_handler_skips_local_target_when_cloud_worker_does_not_claim(monkeypatch):
@@ -66,6 +69,7 @@ def test_handler_skips_local_target_when_cloud_worker_does_not_claim(monkeypatch
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
     monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
     monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
+    monkeypatch.setattr(app, "warm_console_runtime", lambda _client: None)
     monkeypatch.setattr(app, "process_console_message", lambda *_args, **_kwargs: False)
 
     result = app.handler(
@@ -84,6 +88,7 @@ def test_handler_ignores_non_insert_records(monkeypatch):
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
     monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
     monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
+    monkeypatch.setattr(app, "warm_console_runtime", lambda _client: None)
 
     result = app.handler(
         {"Records": [_stream_record(event_name="MODIFY")]},
@@ -100,6 +105,7 @@ def test_handler_reports_partial_batch_failure_when_processing_raises(monkeypatc
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
     monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
     monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
+    monkeypatch.setattr(app, "warm_console_runtime", lambda _client: None)
 
     def fail_processing(*_args, **_kwargs):
         raise RuntimeError("boom")
@@ -119,6 +125,7 @@ def test_handler_skips_insert_without_new_image(monkeypatch):
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
     monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
     monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
+    monkeypatch.setattr(app, "warm_console_runtime", lambda _client: None)
 
     result = app.handler(
         {
@@ -144,6 +151,7 @@ def test_handler_duplicate_stream_delivery_counts_only_one_processed(monkeypatch
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
     monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
     monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
+    monkeypatch.setattr(app, "warm_console_runtime", lambda _client: None)
     monkeypatch.setattr(app, "process_console_message", lambda *_args, **_kwargs: next(outcomes))
 
     result = app.handler(
@@ -159,6 +167,7 @@ def test_handler_duplicate_stream_delivery_counts_only_one_processed(monkeypatch
 def test_resolve_client_uses_iam_auth_without_api_key(monkeypatch):
     app = _load_app_module()
     created = []
+    app._resolve_client.cache_clear()
 
     class FakeClient:
         def __init__(self, *, api_url, context):
@@ -177,6 +186,7 @@ def test_resolve_client_uses_iam_auth_without_api_key(monkeypatch):
 
 def test_resolve_client_requires_iam_auth_mode(monkeypatch):
     app = _load_app_module()
+    app._resolve_client.cache_clear()
 
     monkeypatch.setenv("PLEXUS_API_URL", "https://example.appsync-api.us-west-2.amazonaws.com/graphql")
     monkeypatch.delenv("PLEXUS_GRAPHQL_AUTH_MODE", raising=False)
@@ -187,6 +197,26 @@ def test_resolve_client_requires_iam_auth_mode(monkeypatch):
         assert "PLEXUS_GRAPHQL_AUTH_MODE must be iam" in str(exc)
     else:
         raise AssertionError("expected RuntimeError")
+
+
+def test_resolve_client_reuses_cached_instance(monkeypatch):
+    app = _load_app_module()
+    app._resolve_client.cache_clear()
+    created = []
+
+    class FakeClient:
+        def __init__(self, *, api_url, context):
+            created.append((api_url, context.account_key))
+
+    monkeypatch.setenv("PLEXUS_API_URL", "https://example.appsync-api.us-west-2.amazonaws.com/graphql")
+    monkeypatch.setenv("PLEXUS_GRAPHQL_AUTH_MODE", "iam")
+    monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "call-criteria")
+    monkeypatch.setattr(app, "PlexusDashboardClient", FakeClient)
+
+    app._resolve_client()
+    app._resolve_client()
+
+    assert created == [("https://example.appsync-api.us-west-2.amazonaws.com/graphql", "call-criteria")]
 
 
 def test_load_provider_credentials_sets_openai_and_optional_anthropic(monkeypatch):

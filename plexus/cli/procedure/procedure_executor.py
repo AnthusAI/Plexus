@@ -1153,8 +1153,7 @@ async def _execute_tactus(
                 return _lua_string(value)
             try:
                 payload = json.dumps(value)
-                payload = payload.replace("]]", "] ]")
-                return f"Json.decode([[{payload}]])"
+                return f"Json.decode({_lua_string(payload)})"
             except Exception:
                 return _lua_string(str(value))
 
@@ -1433,9 +1432,10 @@ async def _execute_tactus(
                         context = legacy_input
 
                 # CRITICAL FIX: For YAML format with class: Tactus, the Tactus runtime does NOT
-                # automatically inject context dict values into the params table in Lua.
-                # We need to manually inject params by prepending Lua code that builds the params table.
-                # This ensures params.scorecard, params.score, etc. are available in the Lua code.
+                # automatically inject context dict values into the params/input tables in Lua.
+                # We need to manually inject them by prepending Lua code that builds native tables.
+                # This ensures params.scorecard, input.console_session_history, etc. are available
+                # without going through Python-backed POBJECT proxies.
                 if parsed_source.get('class') == 'Tactus' and context:
                     lua_source = parsed_source.get('code') or parsed_source.get('procedure')
                     if isinstance(lua_source, str):
@@ -1457,16 +1457,42 @@ async def _execute_tactus(
                             elif isinstance(param_def, dict) and param_def.get('default') is not None:
                                 params_dict[param_name] = param_def['default']
 
+                        input_dict = {}
+                        input_schema = parsed_source.get('input', {})
+                        if isinstance(input_schema, dict):
+                            for input_name, input_def in input_schema.items():
+                                if input_name in context:
+                                    raw_value = context[input_name]
+                                    if (isinstance(raw_value, (int, float))
+                                            and isinstance(input_def, dict)
+                                            and input_def.get('type') == 'string'):
+                                        raw_value = str(raw_value)
+                                    input_dict[input_name] = raw_value
+                                elif isinstance(input_def, dict) and input_def.get('default') is not None:
+                                    input_dict[input_name] = input_def['default']
+
+                        injection_lines = []
+                        injected_keys: List[str] = []
                         if params_dict:
-                            # Inject params initialization at the start of Lua code
-                            params_lua = _lua_table_literal(params_dict)
-                            injected_lua = f"-- Injected params from runtime context\nparams = {params_lua}\n\n{lua_source}"
+                            injection_lines.append(f"params = {_lua_table_literal(params_dict)}")
+                            injected_keys.extend(params_dict.keys())
+                        if input_dict:
+                            injection_lines.append(f"input = {_lua_table_literal(input_dict)}")
+                            injected_keys.extend(input_dict.keys())
+
+                        if injection_lines:
+                            injected_lua = (
+                                "-- Injected runtime context as native Lua tables\n"
+                                + "\n".join(injection_lines)
+                                + "\n\n"
+                                + lua_source
+                            )
                             if 'code' in parsed_source:
                                 parsed_source['code'] = injected_lua
                             else:
                                 parsed_source['procedure'] = injected_lua
                             procedure_source = yaml.safe_dump(parsed_source, sort_keys=False)
-                            logger.info(f"Injected params into Lua code: {list(params_dict.keys())}")
+                            logger.info("Injected runtime context into Lua code: %s", injected_keys)
 
                 lua_source = parsed_source.get('procedure')
                 if (

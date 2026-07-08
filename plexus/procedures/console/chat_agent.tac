@@ -4,6 +4,34 @@ local fallback_prompt = "Hello. How can I help you today?"
 local latest_user_prompt = fallback_prompt
 local injected_user_prompt = nil
 
+local function safe_sequence_length(value)
+  if type(value) ~= "table" then
+    return 0
+  end
+  local ok, length = pcall(function()
+    return #value
+  end)
+  if ok and type(length) == "number" then
+    return length
+  end
+  return 0
+end
+
+local function copy_history(value)
+  local copied = {}
+  local length = safe_sequence_length(value)
+  for i = 1, length do
+    local msg = value[i]
+    if type(msg) == "table" then
+      table.insert(copied, {
+        role = msg.role,
+        content = msg.content,
+      })
+    end
+  end
+  return copied
+end
+
 if type(input) == "table" then
   local candidate = input.console_user_message or input.user_message or input.prompt
   if type(candidate) == "string" and candidate ~= "" then
@@ -12,13 +40,12 @@ if type(input) == "table" then
   end
 end
 
--- History comes from caller via console_session_history, then filtered by MessageHistory
+-- History comes from caller via console_session_history. Keep it as a plain
+-- Lua table because MessageHistory.tail_tokens can return a Python proxy in
+-- the console Lambda runtime.
 local history = {}
 if type(input) == "table" then
-  local provided_history = input.console_session_history
-  if type(provided_history) == "table" and #provided_history > 0 then
-    history = provided_history
-  end
+  history = copy_history(input.console_session_history)
 end
 
 local tool_access_mode = "execution"
@@ -31,9 +58,9 @@ end
 
 -- Extract latest and previous user prompts for reference
 local previous_user_prompt = nil
-if #history > 0 then
+if safe_sequence_length(history) > 0 then
   local found_latest = false
-  for i = #history, 1, -1 do
+  for i = safe_sequence_length(history), 1, -1 do
     local msg = history[i]
     local role = string.upper(tostring((msg and msg.role) or ""))
     local content = (msg and msg.content) or nil
@@ -51,16 +78,10 @@ if #history > 0 then
   end
 end
 
--- Apply token-budgeted history management using MessageHistory primitives
--- Target: 100K tokens for history (models have 128K+ windows; leave room for system prompt + response)
-local MAX_HISTORY_TOKENS = 100000
-MessageHistory.replace(history)
-local filtered_history = MessageHistory.tail_tokens(MAX_HISTORY_TOKENS)
-
 -- Format filtered history for prompt context (preserving role structure)
 local history_context = ""
-for i = 1, #filtered_history do
-  local msg = filtered_history[i]
+for i = 1, safe_sequence_length(history) do
+  local msg = history[i]
   local role = string.upper(tostring((msg and msg.role) or "UNKNOWN"))
   local content = tostring((msg and msg.content) or "")
   if content ~= "" then
@@ -321,6 +342,11 @@ local assistant_prompt = "You are the Plexus Console assistant in an ongoing eng
                          "Current tool access mode: " .. tool_access_mode .. "\n" ..
                          "In planning mode, inspect existing data and procedure runs, run safe analysis, and propose exact next actions. " ..
                          "Planning blocks significant mutations: score version changes, champion promotion, and starting/continuing/branching/optimizing procedures.\n\n" ..
+                         "Async evaluation reporting rules:\n" ..
+                         "- Report durable IDs exactly as returned by tools: task_id first, then evaluation_id only if the tool returned a non-null evaluation_id or a verified Evaluation row.\n" ..
+                         "- handle.id is only a local handle id. Never report handle.id as an evaluation_id, task_id, or report_id.\n" ..
+                         "- If status is queued, dispatch_status is PENDING, evaluation_id is nil/null/missing, or evaluation_record_created is false, say the evaluation task was queued but the Evaluation record is not created yet.\n" ..
+                         "- Do not describe a queued PENDING evaluation as running until dispatchStatus is DISPATCHING/DISPATCHED or an Evaluation row exists.\n\n" ..
                          "Latest user message:\n" .. latest_user_prompt .. "\n\n" ..
                          "Previous user message before latest (if any):\n" .. (previous_user_prompt or "") .. "\n\n" ..
                          "Recent conversation context (oldest to newest):\n" .. history_context .. "\n\n" ..
