@@ -9,7 +9,11 @@ import types
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
-from plexus.Evaluation import FeedbackEvaluation, _sanitize_rca_generated_prose
+from plexus.Evaluation import (
+    FeedbackEvaluation,
+    _evaluation_rca_text,
+    _sanitize_rca_generated_prose,
+)
 from plexus.feedback_item_explanations import FeedbackItemExplanationTimeoutError
 
 
@@ -68,6 +72,56 @@ class TestFeedbackEvaluation:
             "The score accepted medication discussion as dosage confirmation. It also ignored "
             "that the current rubric does not require a separate customer acknowledgement."
         )
+
+    def test_evaluation_rca_text_defaults_to_openai(self, monkeypatch):
+        import plexus.rca_analysis as rca_mod
+
+        monkeypatch.delenv("PLEXUS_RCA_LLM_PROVIDER", raising=False)
+        monkeypatch.setattr(
+            "plexus.Evaluation._bedrock_converse_for_rca",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("Bedrock must not be called by default")
+            ),
+        )
+        monkeypatch.setattr(
+            rca_mod,
+            "_invoke_rca_openai_text",
+            lambda **kwargs: f"openai:{kwargs['call_site']}",
+        )
+
+        result = _evaluation_rca_text(
+            "system",
+            [{"role": "user", "content": "prompt"}],
+            max_tokens=50,
+            call_site="unit_default",
+        )
+
+        assert result == "openai:unit_default"
+
+    def test_evaluation_rca_text_uses_bedrock_only_when_selected(self, monkeypatch):
+        import plexus.rca_analysis as rca_mod
+
+        monkeypatch.setenv("PLEXUS_RCA_LLM_PROVIDER", "bedrock")
+        monkeypatch.setattr(
+            rca_mod,
+            "_invoke_rca_openai_text",
+            lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("OpenAI must not be called for explicit Bedrock provider")
+            ),
+        )
+        monkeypatch.setattr(
+            "plexus.Evaluation._bedrock_converse_for_rca",
+            lambda *_args, **_kwargs: "bedrock-result",
+        )
+
+        result = _evaluation_rca_text(
+            "system",
+            [{"role": "user", "content": "prompt"}],
+            max_tokens=50,
+            call_site="unit_bedrock",
+        )
+
+        assert result == "bedrock-result"
     
     def test_initialization(self, mock_api_client):
         """Test FeedbackEvaluation initialization."""
@@ -535,8 +589,8 @@ class TestFeedbackEvaluation:
         assert "item_classifications_all" not in root_cause["misclassification_analysis"]
 
     @pytest.mark.asyncio
-    async def test_run_evaluation_fails_when_rca_attachment_upload_fails(self, mock_api_client, mock_feedback_items):
-        """Feedback evaluation must fail if full RCA attachment upload fails."""
+    async def test_run_evaluation_completes_when_rca_attachment_upload_fails(self, mock_api_client, mock_feedback_items):
+        """Feedback evaluation should persist metrics when RCA attachment upload fails."""
         evaluation = FeedbackEvaluation(
             scorecard_name="Test Scorecard",
             scorecard=None,
@@ -577,11 +631,16 @@ class TestFeedbackEvaluation:
                             "plexus.Evaluation.upload_evaluation_artifact_file",
                             side_effect=RuntimeError("attachment upload failed"),
                         ):
-                            with pytest.raises(RuntimeError, match="attachment upload failed"):
-                                await evaluation.run()
+                            result = await evaluation.run()
 
-        failed_call = any(call.kwargs.get('status') == 'FAILED' for call in mock_eval_record.update.call_args_list)
-        assert failed_call
+        assert result["status"] == "success"
+        final_call = mock_eval_record.update.call_args_list[-1]
+        assert final_call.kwargs.get("status") == "COMPLETED"
+        assert final_call.kwargs.get("errorMessage") == "RCA unavailable: attachment upload failed"
+        params = json.loads(final_call.kwargs["parameters"])
+        assert params["root_cause_required"] is True
+        assert params["has_usable_root_cause"] is False
+        assert any("attachment upload failed" in warning for warning in params["rca_warnings"])
     
     @pytest.mark.asyncio
     async def test_run_evaluation_without_score_id(self, mock_api_client):
@@ -979,6 +1038,7 @@ class TestFeedbackEvaluation:
     @pytest.mark.asyncio
     async def test_root_cause_analysis_passes_max_exemplars_to_biblicus(self, mock_api_client, monkeypatch):
         """RCA should pass exemplar limits through to the current Biblicus constructor."""
+        monkeypatch.delenv("PLEXUS_RCA_LLM_PROVIDER", raising=False)
         evaluation = FeedbackEvaluation(
             scorecard_name="Test Scorecard",
             scorecard=None,
@@ -1043,9 +1103,16 @@ class TestFeedbackEvaluation:
             lambda model_id: (lambda texts: [[0.0] * 384 for _ in texts]),
             raising=False,
         )
-        monkeypatch.setattr(rm_mod, "bedrock_labeler", lambda: None, raising=False)
-        monkeypatch.setattr(rm_mod, "bedrock_causal", lambda: None, raising=False)
-        monkeypatch.setattr(rm_mod, "bedrock_synthesizer", lambda: None, raising=False)
+        monkeypatch.setattr(
+            rm_mod,
+            "resolve_llm_helpers",
+            lambda **kwargs: (
+                captured.setdefault("llm_provider_kwargs", kwargs) and None,
+                None,
+                None,
+            ),
+            raising=False,
+        )
         monkeypatch.setattr(
             rm_mod,
             "TimestampedText",
@@ -1088,11 +1155,12 @@ class TestFeedbackEvaluation:
         )
 
         assert captured["max_exemplars"] == 20
+        assert captured["llm_provider_kwargs"]["provider"] == "openai"
         assert result["topics"] == []
 
     @pytest.mark.asyncio
-    async def test_run_fails_when_incorrect_items_and_rca_missing(self, mock_api_client, mock_feedback_items):
-        """Feedback-backed runs with incorrect items must fail if RCA payload is missing."""
+    async def test_run_completes_when_incorrect_items_and_rca_missing(self, mock_api_client, mock_feedback_items):
+        """Feedback-backed runs should persist metrics even if RCA payload is missing."""
         evaluation = FeedbackEvaluation(
             scorecard_name="Test Scorecard",
             scorecard=None,
@@ -1124,11 +1192,16 @@ class TestFeedbackEvaluation:
             with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
                 with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items):
                     with patch.object(evaluation, '_run_root_cause_analysis', new_callable=AsyncMock, return_value={}):
-                        with pytest.raises(RuntimeError, match="no usable RCA payload"):
-                            await evaluation.run()
+                        result = await evaluation.run()
 
-        failed_call = any(call.kwargs.get('status') == 'FAILED' for call in mock_eval_record.update.call_args_list)
-        assert failed_call
+        assert result["status"] == "success"
+        final_call = mock_eval_record.update.call_args_list[-1]
+        assert final_call.kwargs.get("status") == "COMPLETED"
+        params = json.loads(final_call.kwargs["parameters"])
+        assert params["root_cause_required"] is True
+        assert params["has_usable_root_cause"] is False
+        assert "root_cause" not in params
+        assert any("no usable RCA payload" in warning for warning in params["rca_warnings"])
 
     @pytest.mark.asyncio
     async def test_run_succeeds_without_rca_when_no_incorrect_items(self, mock_api_client):

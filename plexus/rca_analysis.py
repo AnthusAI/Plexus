@@ -18,7 +18,7 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-RCA_OPENAI_MODEL = "gpt-5-mini"
+RCA_OPENAI_MODEL = "gpt-5.6-luna"
 RCA_OPENAI_REASONING_EFFORT = "low"
 RCA_MIN_OUTPUT_TOKENS = 1000
 RCA_LLM_TIMEOUT_SECONDS = 60

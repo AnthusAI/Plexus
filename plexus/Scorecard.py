@@ -294,6 +294,10 @@ class Scorecard:
         # Cache for score instances to avoid recreating them for each prediction
         # Key: score name, Value: score instance
         self._score_instance_cache = {}
+        # Cost providers report cumulative totals for cached score instances.
+        # Track the last seen snapshot per score so scorecard/evaluation totals add
+        # only the cost incurred by the current score invocation.
+        self._score_cost_snapshots = {}
 
         # For API-first loading
         if api_data is not None:
@@ -897,8 +901,21 @@ class Scorecard:
                     else:
                         raise
 
-                # Get the total cost for this score
-                score_total_cost = score_instance.get_accumulated_costs()
+                # Get the incremental cost for this score invocation.
+                score_total_cost = self._get_score_cost_delta(score, score_instance)
+
+                def attach_incremental_cost(result_item):
+                    if isinstance(result_item, Score.Result):
+                        if result_item.metadata is None:
+                            result_item.metadata = {}
+                        if isinstance(result_item.metadata, dict):
+                            result_item.metadata["cost"] = self._json_safe_cost(score_total_cost)
+
+                if isinstance(score_result, list):
+                    for single_result in score_result:
+                        attach_incremental_cost(single_result)
+                else:
+                    attach_incremental_cost(score_result)
 
                 # Update scorecard's cost accumulators
                 self.prompt_tokens += score_total_cost.get("prompt_tokens", 0)
@@ -1540,6 +1557,134 @@ class Scorecard:
             "cost_per_text": cost_per_text,
             "components": self.cost_components,
         }
+
+    @staticmethod
+    def _decimal_value(value):
+        try:
+            return Decimal(str(value or 0))
+        except Exception:
+            return Decimal("0")
+
+    @staticmethod
+    def _component_key(component):
+        if not isinstance(component, dict):
+            return None
+        metadata = component.get("metadata")
+        try:
+            metadata_key = json.dumps(metadata or {}, sort_keys=True, default=str)
+        except Exception:
+            metadata_key = str(metadata)
+        return (
+            component.get("type"),
+            component.get("provider"),
+            component.get("model"),
+            component.get("service"),
+            component.get("engine"),
+            component.get("operation"),
+            component.get("label"),
+            metadata_key,
+        )
+
+    @classmethod
+    def _aggregate_components_by_key(cls, components):
+        grouped = {}
+        for component in components or []:
+            if not isinstance(component, dict):
+                continue
+            key = cls._component_key(component)
+            if key is None:
+                continue
+            if key not in grouped:
+                grouped[key] = dict(component)
+            else:
+                row = grouped[key]
+                for field in (
+                    "prompt_tokens",
+                    "completion_tokens",
+                    "cached_tokens",
+                    "llm_calls",
+                    "duration_ms",
+                    "usd",
+                ):
+                    if field in component:
+                        row[field] = cls._decimal_value(row.get(field)) + cls._decimal_value(component.get(field))
+        return grouped
+
+    @classmethod
+    def _subtract_cost_snapshots(cls, current, previous):
+        if not isinstance(current, dict):
+            return {"total_cost": 0}
+        if not isinstance(previous, dict):
+            previous = {}
+
+        integer_fields = ("prompt_tokens", "completion_tokens", "cached_tokens", "llm_calls")
+        money_fields = ("input_cost", "output_cost", "total_cost", "scorecard_total_cost", "cost_per_text")
+
+        delta = dict(current)
+        for field in integer_fields:
+            delta[field] = max(
+                0,
+                int(current.get(field, 0) or 0) - int(previous.get(field, 0) or 0),
+            )
+        for field in money_fields:
+            if field in current or field in previous:
+                value = cls._decimal_value(current.get(field)) - cls._decimal_value(previous.get(field))
+                delta[field] = value if value > 0 else Decimal("0")
+
+        current_components = current.get("components")
+        previous_components = previous.get("components")
+        if isinstance(current_components, list):
+            if isinstance(previous_components, list) and len(current_components) >= len(previous_components):
+                if current_components[: len(previous_components)] == previous_components:
+                    delta["components"] = current_components[len(previous_components):]
+                    return delta
+
+            current_grouped = cls._aggregate_components_by_key(current_components)
+            previous_grouped = cls._aggregate_components_by_key(previous_components or [])
+            component_deltas = []
+            for key, component in current_grouped.items():
+                previous_component = previous_grouped.get(key, {})
+                row = dict(component)
+                has_delta = False
+                for field in (
+                    "prompt_tokens",
+                    "completion_tokens",
+                    "cached_tokens",
+                    "llm_calls",
+                    "duration_ms",
+                ):
+                    if field in component or field in previous_component:
+                        value = int(cls._decimal_value(component.get(field)) - cls._decimal_value(previous_component.get(field)))
+                        row[field] = max(0, value)
+                        has_delta = has_delta or row[field] > 0
+                if "usd" in component or "usd" in previous_component:
+                    usd_delta = cls._decimal_value(component.get("usd")) - cls._decimal_value(previous_component.get("usd"))
+                    row["usd"] = float(usd_delta if usd_delta > 0 else Decimal("0"))
+                    has_delta = has_delta or row["usd"] > 0
+                if has_delta:
+                    component_deltas.append(row)
+            delta["components"] = component_deltas
+
+        return delta
+
+    @classmethod
+    def _json_safe_cost(cls, value):
+        if isinstance(value, Decimal):
+            return float(value)
+        if isinstance(value, dict):
+            return {key: cls._json_safe_cost(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [cls._json_safe_cost(item) for item in value]
+        return value
+
+    def _get_score_cost_delta(self, score_name, score_instance):
+        current_costs = score_instance.get_accumulated_costs()
+        if not isinstance(current_costs, dict):
+            return {"total_cost": 0}
+        previous_costs = self._score_cost_snapshots.get(score_name)
+        delta = self._subtract_cost_snapshots(current_costs, previous_costs)
+        self._score_cost_snapshots[score_name] = current_costs
+        return delta
 
     def get_model_name(self, name=None, id=None, key=None):
         """Return the model name used for a specific score or the scorecard."""
