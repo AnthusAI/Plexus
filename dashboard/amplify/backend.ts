@@ -32,6 +32,7 @@ for (const table of Object.values(amplifyDynamoDbTables)) {
 }
 
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
+const requestAttachmentUploadFunction = backend.data.resources.functions.requestAttachmentUpload;
 
 // Add AppSync permissions to the getResourceByShareToken function
 if (getResourceByShareTokenFunction) {
@@ -41,6 +42,19 @@ if (getResourceByShareTokenFunction) {
             resources: ['*']
         })
     );
+}
+
+if (requestAttachmentUploadFunction) {
+    requestAttachmentUploadFunction.addEnvironment(
+        'SCORE_RESULT_ATTACHMENTS_BUCKET_NAME',
+        backend.scoreResultAttachments.resources.bucket.bucketName
+    );
+    requestAttachmentUploadFunction.addEnvironment(
+        'REPORT_BLOCK_DETAILS_BUCKET_NAME',
+        backend.reportBlockDetails.resources.bucket.bucketName
+    );
+    backend.scoreResultAttachments.resources.bucket.grantReadWrite(requestAttachmentUploadFunction);
+    backend.reportBlockDetails.resources.bucket.grantReadWrite(requestAttachmentUploadFunction);
 }
 
 // Detect sandbox environment

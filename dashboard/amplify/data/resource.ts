@@ -54,6 +54,10 @@ const getResourceByShareTokenHandler = defineFunction({
     entry: './resolvers/getResourceByShareToken.ts'
 });
 
+const requestAttachmentUploadHandler = defineFunction({
+    entry: './resolvers/requestAttachmentUpload.ts',
+});
+
 const schema = a.schema({
     Account: a
         .model({
@@ -541,6 +545,15 @@ const schema = a.schema({
         }),
         data: a.json()
     }),
+
+    AttachmentUploadTarget: a.customType({
+        key: a.string(),
+        uploadUrl: a.string(),
+        method: a.string(),
+        headers: a.json(),
+        contentType: a.string(),
+        expiresAt: a.datetime(),
+    }),
     
     getResourceByShareToken: a
         .query()
@@ -552,6 +565,21 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .handler(a.handler.function(getResourceByShareTokenHandler)),
+
+    requestAttachmentUpload: a
+        .mutation()
+        .arguments({
+            scope: a.string().required(),
+            ownerId: a.string().required(),
+            fileName: a.string().required(),
+            contentType: a.string(),
+        })
+        .returns(a.ref("AttachmentUploadTarget"))
+        .authorization((allow) => [
+            allow.publicApiKey(),
+            allow.authenticated(),
+        ])
+        .handler(a.handler.function(requestAttachmentUploadHandler)),
 
     ReportConfiguration: a
         .model({
