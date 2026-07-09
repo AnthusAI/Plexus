@@ -25,6 +25,11 @@ const SCOPE_CONFIG: Record<string, ScopeConfig> = {
   },
 };
 
+const FALLBACK_BUCKETS: Record<string, string> = {
+  SCORE_RESULT_ATTACHMENTS_BUCKET_NAME: 'scoreresultattachments-production',
+  REPORT_BLOCK_DETAILS_BUCKET_NAME: 'reportblockdetails-production',
+};
+
 function sanitizePathSegment(input: string, fieldName: string): string {
   const trimmed = (input || '').trim();
   if (!trimmed) {
@@ -58,7 +63,7 @@ export const handler: Schema['requestAttachmentUpload']['functionHandler'] = asy
     throw new Error(`Unsupported attachment scope: ${event.arguments.scope}`);
   }
 
-  const bucketName = (process.env[scopeConfig.bucketEnv] || '').trim();
+  const bucketName = (process.env[scopeConfig.bucketEnv] || FALLBACK_BUCKETS[scopeConfig.bucketEnv] || '').trim();
   if (!bucketName) {
     throw new Error(`Missing bucket configuration for scope: ${scope}`);
   }
@@ -75,7 +80,7 @@ export const handler: Schema['requestAttachmentUpload']['functionHandler'] = asy
     ContentType: contentType,
   });
 
-  const uploadUrl = await getSignedUrl(s3Client, putObjectCommand, {
+  const uploadUrl = await getSignedUrl(s3Client as any, putObjectCommand, {
     expiresIn: ttlSeconds,
   });
 

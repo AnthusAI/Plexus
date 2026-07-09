@@ -45,14 +45,6 @@ if (getResourceByShareTokenFunction) {
 }
 
 if (requestAttachmentUploadFunction) {
-    requestAttachmentUploadFunction.addEnvironment(
-        'SCORE_RESULT_ATTACHMENTS_BUCKET_NAME',
-        backend.scoreResultAttachments.resources.bucket.bucketName
-    );
-    requestAttachmentUploadFunction.addEnvironment(
-        'REPORT_BLOCK_DETAILS_BUCKET_NAME',
-        backend.reportBlockDetails.resources.bucket.bucketName
-    );
     backend.scoreResultAttachments.resources.bucket.grantReadWrite(requestAttachmentUploadFunction);
     backend.reportBlockDetails.resources.bucket.grantReadWrite(requestAttachmentUploadFunction);
 }
