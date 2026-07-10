@@ -1959,19 +1959,15 @@ class Evaluation:
                 if status == "COMPLETED":
                     cost_details = self.build_cost_details_from_expenses(expenses)
                     existing_parameters = self._get_existing_parameters_for_update()
-                    if existing_parameters:
-                        metadata = existing_parameters.get("metadata")
-                        if not isinstance(metadata, dict):
-                            metadata = {}
-                        metadata["cost_details"] = cost_details
-                        existing_parameters["metadata"] = metadata
-                        update_input["parameters"] = json.dumps(existing_parameters)
-                        self.parameters = existing_parameters
-                    else:
-                        self.logging.debug(
-                            "Skipping cost_details parameter write for evaluation %s because local parameters are unavailable",
-                            getattr(self, "experiment_id", None),
-                        )
+                    if not isinstance(existing_parameters, dict):
+                        existing_parameters = {}
+                    metadata = existing_parameters.get("metadata")
+                    if not isinstance(metadata, dict):
+                        metadata = {}
+                    metadata["cost_details"] = cost_details
+                    existing_parameters["metadata"] = metadata
+                    update_input["parameters"] = json.dumps(existing_parameters)
+                    self.parameters = existing_parameters
         except Exception as e:
             logging.debug(f"Could not get accumulated costs: {e}")
         
@@ -2861,6 +2857,11 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'status': 'COMPLETED',  # Add status
                 'type': 'evaluation',  # Add type field required by byTypeStatusUpdated GSI
             }
+            score_result_cost = None
+            if isinstance(getattr(score_result, "metadata", None), dict):
+                score_result_cost = score_result.metadata.get("cost")
+            if isinstance(score_result_cost, dict):
+                data["cost"] = json.dumps(score_result_cost, default=str)
             timestamps = extract_score_result_timestamps(
                 {
                     "start_time_seconds": getattr(score_result, "start_time_seconds", None),
@@ -2923,6 +2924,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     confidence
                     explanation
                     metadata
+                    cost
                     trace
                     code
                     type
