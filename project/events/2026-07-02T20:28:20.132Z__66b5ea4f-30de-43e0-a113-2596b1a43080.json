@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "66b5ea4f-30de-43e0-a113-2596b1a43080",
+  "issue_id": "plx-72c7e2b5-5ed1-46cf-b107-74ff25d3eb13",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-02T20:28:20.132Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Context: A containerized worker process that imports/runs Plexus code attempted to initialize its own CloudWatch application logging and create/use the default Plexus log group. That may be expected for first-party Plexus services, but it is surprising for embedded or batch-worker usage where the host runtime already owns stdout/stderr logging and log-group infrastructure.\n\nGoal: determine why Plexus logging initializes CloudWatch shipping in this worker context, whether an environment/configuration guard is missing, and what default behavior should be for non-hosted or embedded Plexus runtimes.\n\nAcceptance criteria:\n- Identify the Plexus logging initialization path that triggers CloudWatch log-group creation.\n- Document the configuration contract for enabling/disabling Plexus-managed CloudWatch shipping in worker or embedded runtimes.\n- Recommend whether Plexus should default to stdout-only logging unless explicit CloudWatch logging configuration is present.\n- Add tests or documentation in a follow-up implementation task before changing behavior.\n\nConfidentiality note: keep all follow-up notes free of client names, account identifiers, ARNs, IP addresses, and runtime-specific incident details.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-80653be7-0865-4ec7-b29f-9016798f66a2",
+    "priority": 2,
+    "status": "open",
+    "title": "Audit implicit Plexus CloudWatch log-group creation in worker runtimes"
+  }
+}
