@@ -246,8 +246,8 @@ async def _audit_dependency_snapshots(client, rows: List[Dict[str, Any]]) -> Lis
         status = "match"
         if not check.get("has_dependency_snapshot"):
             status = "no_snapshot"
-        elif check.get("is_stale"):
-            status = "stale"
+        elif not check.get("matches", True):
+            status = "mismatch"
 
         metadata = _json_object(row.get("metadata"))
         trace = _json_object(row.get("trace"))
@@ -658,7 +658,7 @@ def audit_dependencies(
         "limit": limit,
         "total": len(audited),
         "match": sum(1 for row in audited if row["status"] == "match"),
-        "stale": sum(1 for row in audited if row["status"] == "stale"),
+        "mismatch": sum(1 for row in audited if row["status"] == "mismatch"),
         "no_snapshot": sum(1 for row in audited if row["status"] == "no_snapshot"),
         "rows": audited,
     }
@@ -693,7 +693,7 @@ def audit_dependencies(
     console.print(
         f"[bold]Total:[/bold] {summary['total']}  "
         f"[green]match:[/green] {summary['match']}  "
-        f"[red]stale:[/red] {summary['stale']}  "
+        f"[red]mismatch:[/red] {summary['mismatch']}  "
         f"[yellow]no_snapshot:[/yellow] {summary['no_snapshot']}"
     )
 

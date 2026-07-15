@@ -88,11 +88,15 @@ class TestLambdaJobProcessor:
         assert score_single.call_args.kwargs["client"] is processor.client
         assert score_single.call_args.kwargs["item_id"] == "item-1"
         assert score_single.call_args.kwargs["account_id"] == "account-1"
+        assert score_single.call_args.kwargs["scorecard_id"] == "scorecard-dynamo-1"
+        assert score_single.call_args.kwargs["scoring_job_id"] == "job-1"
+        assert score_single.call_args.kwargs["external_id"] == "external-1"
         enqueue_downstream.assert_awaited_once()
+        processor.sqs_client.send_message.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_process_job_does_not_enqueue_downstream_for_stale_computed_result(self):
-        """Stale computed outputs should not fan out as authoritative dependencies."""
+    async def test_process_job_enqueues_downstream_for_successful_target_result(self):
+        """Successful target outputs are authoritative and trigger downstream recomputes."""
         import handler
 
         processor = handler.LambdaJobProcessor.__new__(handler.LambdaJobProcessor)
@@ -106,7 +110,7 @@ class TestLambdaJobProcessor:
         item = SimpleNamespace(id="item-1", text="transcript", attachedFiles=None)
         scoring_result = SimpleNamespace(
             value="No",
-            explanation="Composite result from stale dependency snapshot",
+            explanation="Composite result from persisted dependencies",
             metadata={},
             start_time_seconds=None,
             end_time_seconds=None,
@@ -114,7 +118,6 @@ class TestLambdaJobProcessor:
         scoring_outcome = SimpleNamespace(
             dependency_unmet=False,
             result=scoring_result,
-            dependency_consistency={"is_stale": True, "reason": "dependency_snapshot_changed_after_write"},
         )
 
         with patch.object(handler.ScoringJob, "get_by_id", return_value=scoring_job), \
@@ -135,7 +138,46 @@ class TestLambdaJobProcessor:
                 receipt_handle=None,
             )
 
+        enqueue_downstream.assert_awaited_once()
+        processor.sqs_client.send_message.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_process_job_does_not_write_or_export_when_dependency_scoring_fails(self):
+        """A dependency failure from JIT scoring must not create or export a composite result."""
+        import handler
+
+        processor = handler.LambdaJobProcessor.__new__(handler.LambdaJobProcessor)
+        processor.client = MagicMock()
+        processor.sqs_client = MagicMock()
+        processor.request_queue_url = "request-queue"
+        processor.response_queue_url = "response-queue"
+        processor.account_id = "account-1"
+
+        scoring_job = SimpleNamespace(update=MagicMock())
+        item = SimpleNamespace(id="item-1", text="transcript", attachedFiles=None)
+
+        with patch.object(handler.ScoringJob, "get_by_id", return_value=scoring_job), \
+             patch.object(handler.Item, "get_by_id", return_value=item), \
+             patch.object(handler, "resolve_scorecard_id", new_callable=AsyncMock, return_value="scorecard-dynamo-1"), \
+             patch.object(handler, "resolve_score_id", new_callable=AsyncMock, return_value={"id": "score-dynamo-1", "name": "Target Score"}), \
+             patch.object(handler, "get_metadata_from_item", new_callable=AsyncMock, return_value={}), \
+             patch.object(handler, "get_external_id_from_item", new_callable=AsyncMock, return_value="external-1"), \
+             patch.object(handler, "create_scorecard_instance_for_single_score", new_callable=AsyncMock, return_value=MagicMock()), \
+             patch.object(handler, "score_single_target_with_dependencies", new_callable=AsyncMock, side_effect=ValueError("JIT dependency returned ERROR")), \
+             patch.object(handler, "create_score_result", new_callable=AsyncMock) as create_score_result, \
+             patch.object(handler, "enqueue_downstream_recompute_jobs", new_callable=AsyncMock) as enqueue_downstream:
+            with pytest.raises(ValueError, match="JIT dependency returned ERROR"):
+                await processor.process_job(
+                    "job-1",
+                    "item-1",
+                    "scorecard-external-1",
+                    "score-external-1",
+                    receipt_handle=None,
+                )
+
+        create_score_result.assert_not_awaited()
         enqueue_downstream.assert_not_awaited()
+        processor.sqs_client.send_message.assert_not_called()
 
 
 class TestLambdaHandler:

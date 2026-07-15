@@ -8,7 +8,6 @@ from plexus.utils.dependency_snapshots import (
     DEPENDENCY_SOURCE_IN_MEMORY,
     check_score_result_dependency_snapshot_current,
     DependencySnapshot,
-    metadata_marks_stale,
     snapshot_from_in_memory_results,
 )
 
@@ -84,12 +83,6 @@ def test_snapshot_from_in_memory_results_unwraps_scorecard_result_entries():
     assert snapshot.missing_dependencies == []
 
 
-def test_metadata_marks_stale_from_metadata_or_trace():
-    assert metadata_marks_stale({"dependency_consistency": {"is_stale": True}})
-    assert metadata_marks_stale({}, {"dependency_consistency": {"is_stale": True}})
-    assert not metadata_marks_stale({"dependency_consistency": {"is_stale": False}})
-
-
 @pytest.mark.asyncio
 async def test_check_score_result_dependency_snapshot_current_detects_changed_dependency():
     stored_snapshot = DependencySnapshot(dependencies=[{
@@ -121,8 +114,8 @@ async def test_check_score_result_dependency_snapshot_current_detects_changed_de
             client=SimpleNamespace(),
             item_id="item-id",
             account_id="account-id",
-        )
+    )
 
     assert check["has_dependency_snapshot"] is True
-    assert check["is_stale"] is True
+    assert check["matches"] is False
     assert check["reason"] == "dependency_snapshot_changed_after_write"

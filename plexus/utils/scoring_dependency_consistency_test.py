@@ -48,7 +48,7 @@ async def test_score_single_target_uses_complete_persisted_dependencies():
 
     with patch(
         "plexus.dashboard.api.models.score_result.ScoreResult.find_by_cache_key",
-        side_effect=[persisted_child, persisted_child],
+        return_value=persisted_child,
     ):
         outcome = await score_single_target_with_dependencies(
             scorecard,
@@ -64,8 +64,8 @@ async def test_score_single_target_uses_complete_persisted_dependencies():
         )
 
     assert outcome.used_persisted_dependencies is True
-    assert outcome.dependency_consistency["is_stale"] is False
     assert outcome.result.metadata["trace"]["dependency_snapshot_v1"]["complete"] is True
+    assert set(outcome.result.metadata.keys()) == {"trace"}
 
 
 @pytest.mark.asyncio
@@ -125,34 +125,58 @@ async def test_score_single_target_respects_persisted_dependency_conditions():
 
     scorecard.get_score_result.assert_not_called()
     assert outcome.dependency_unmet is True
-    assert outcome.dependency_consistency["reason"] == "dependency_conditions_not_met"
+    assert outcome.dependency_snapshot.complete is True
 
 
 @pytest.mark.asyncio
-async def test_score_single_target_marks_in_memory_dependency_fallback_stale():
+async def test_score_single_target_persists_missing_dependency_before_composite():
     child_config = {"name": "Child", "id": "child-id", "key": "child"}
     target_config = {"name": "Composite", "id": "target-id", "key": "composite", "depends_on": ["Child"]}
     child_result = Score.Result(
         value="No",
-        explanation="Same-run child failed",
+        explanation="JIT child failed",
         parameters=Score.Parameters(name="Child", id="child-id"),
     )
-    target_result = Score.Result(
+    persisted_child = SimpleNamespace(
+        id="child-result-1",
         value="No",
-        explanation="Failed: Child",
-        parameters=Score.Parameters(name="Composite", id="target-id"),
+        explanation="Persisted JIT child failed",
+        metadata={},
+        scoreVersionId="child-version-1",
+        createdAt="2026-07-06T10:00:00Z",
+        updatedAt="2026-07-06T10:00:01Z",
     )
+
+    async def get_score_result(**kwargs):
+        assert kwargs["score"] == "Composite"
+        assert len(kwargs["results"]) == 1
+        assert kwargs["results"][0].metadata["dependency_source"] == "persisted_score_result"
+        assert kwargs["results"][0].metadata["score_result_id"] == "child-result-1"
+        return Score.Result(
+            value="No",
+            explanation="Failed: Child",
+            parameters=Score.Parameters(name="Composite", id="target-id"),
+        )
+
     scorecard = SimpleNamespace(
         name="Scorecard",
         scores=[child_config, target_config],
         score_registry=Registry([child_config, target_config]),
-        score_entire_text=AsyncMock(return_value={"child-id": child_result, "target-id": target_result}),
+        score_entire_text=AsyncMock(return_value={"child-id": child_result}),
+        get_score_result=AsyncMock(side_effect=get_score_result),
     )
 
     with patch(
         "plexus.dashboard.api.models.score_result.ScoreResult.find_by_cache_key",
-        return_value=None,
-    ):
+        side_effect=[None, None, None, persisted_child],
+    ), patch(
+        "plexus.utils.scoring.create_score_result",
+        new_callable=AsyncMock,
+        return_value="child-result-1",
+    ) as create_score_result, patch(
+        "plexus.utils.scoring.enqueue_downstream_recompute_jobs",
+        new_callable=AsyncMock,
+    ) as enqueue_downstream:
         outcome = await score_single_target_with_dependencies(
             scorecard,
             text="text",
@@ -164,12 +188,63 @@ async def test_score_single_target_marks_in_memory_dependency_fallback_stale():
             client=MagicMock(),
             item_id="item-1",
             account_id="account-1",
+            scorecard_id="scorecard-1",
+            scoring_job_id="job-1",
+            external_id="external-1",
         )
 
-    assert outcome.used_persisted_dependencies is False
-    assert outcome.dependency_consistency["is_stale"] is True
-    assert outcome.dependency_consistency["reason"] == "used_in_memory_dependencies_without_complete_persisted_snapshot"
-    assert outcome.result.metadata["trace"]["dependency_snapshot_v1"]["dependencies"][0]["source"] == "in_memory_dependency"
+    assert outcome.used_persisted_dependencies is True
+    assert outcome.result.value == "No"
+    scorecard.score_entire_text.assert_awaited_once()
+    assert scorecard.score_entire_text.call_args.kwargs["subset_of_score_names"] == ["Child"]
+    create_score_result.assert_awaited_once()
+    assert create_score_result.call_args.kwargs["score_id"] == "child-id"
+    assert create_score_result.call_args.kwargs["metadata_extra"]["created_via"] == "jit_dependency_score_result"
+    assert create_score_result.call_args.kwargs["metadata_extra"]["requested_score_id"] == "target-id"
+    enqueue_downstream.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_score_single_target_fails_when_jit_dependency_returns_error():
+    child_config = {"name": "Child", "id": "child-id", "key": "child"}
+    target_config = {"name": "Composite", "id": "target-id", "key": "composite", "depends_on": ["Child"]}
+    child_result = Score.Result(
+        value="ERROR",
+        explanation="Dependency failed",
+        parameters=Score.Parameters(name="Child", id="child-id"),
+    )
+    scorecard = SimpleNamespace(
+        name="Scorecard",
+        scores=[child_config, target_config],
+        score_registry=Registry([child_config, target_config]),
+        score_entire_text=AsyncMock(return_value={"child-id": child_result}),
+    )
+
+    with patch(
+        "plexus.dashboard.api.models.score_result.ScoreResult.find_by_cache_key",
+        return_value=None,
+    ), patch(
+        "plexus.utils.scoring.create_score_result",
+        new_callable=AsyncMock,
+    ) as create_score_result:
+        with pytest.raises(ValueError, match="returned ERROR"):
+            await score_single_target_with_dependencies(
+                scorecard,
+                text="text",
+                metadata={},
+                modality="API",
+                item=SimpleNamespace(id="item-1"),
+                target_score_id="target-id",
+                target_score_name="Composite",
+                client=MagicMock(),
+                item_id="item-1",
+                account_id="account-1",
+                scorecard_id="scorecard-1",
+                scoring_job_id="job-1",
+                external_id="external-1",
+            )
+
+    create_score_result.assert_not_awaited()
 
 
 @pytest.mark.asyncio

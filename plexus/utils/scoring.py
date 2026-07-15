@@ -7,14 +7,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, TYPE_CHECKING
 from plexus.utils.dependency_snapshots import (
-    build_dependency_consistency_metadata,
-    check_score_result_dependency_snapshot_current,
     fetch_persisted_dependency_snapshot,
     get_dependency_names,
     get_target_dependencies,
-    json_object,
     merge_snapshot_into_trace,
-    snapshot_from_in_memory_results,
+    score_version_id,
     unwrap_result_entry,
 )
 from plexus.utils.score_result_timestamps import extract_score_result_timestamps
@@ -72,7 +69,6 @@ class SingleScoreExecutionOutcome:
     score_results: Dict[str, Any]
     dependency_snapshot: Optional[Any] = None
     current_dependency_snapshot: Optional[Any] = None
-    dependency_consistency: Optional[Dict[str, Any]] = None
     used_persisted_dependencies: bool = False
 
 async def get_plexus_client():
@@ -356,6 +352,208 @@ def _dependency_conditions_met_from_results(
         return True
 
 
+def _result_metadata(result: Any) -> Dict[str, Any]:
+    metadata = getattr(result, "metadata", None)
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _trace_from_result_metadata(metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    trace = metadata.get("trace")
+    if isinstance(trace, dict):
+        return trace
+
+    nested_metadata = metadata.get("metadata")
+    if isinstance(nested_metadata, dict) and isinstance(nested_metadata.get("trace"), dict):
+        return nested_metadata["trace"]
+
+    return None
+
+
+def _score_registry_properties(scorecard_instance: Any, score_name: str) -> Dict[str, Any]:
+    registry = getattr(scorecard_instance, "score_registry", None)
+    if registry is None:
+        return {}
+    try:
+        return dict(registry.get_properties(score_name) or {})
+    except Exception:
+        logging.debug("Could not read score registry properties for %s", score_name, exc_info=True)
+        return {}
+
+
+async def _persist_jit_dependency_result(
+    *,
+    scorecard_instance: Any,
+    result: Any,
+    dependency_config: Dict[str, Any],
+    client: Any,
+    item_id: str,
+    account_id: str,
+    scorecard_id: str,
+    scoring_job_id: str,
+    external_id: str,
+    requested_score_id: str,
+    requested_score_name: str,
+) -> str:
+    value = str(result.value) if getattr(result, "value", None) is not None else None
+    explanation = getattr(result, "explanation", None) or _result_metadata(result).get("explanation", "")
+    if value and value.upper() == "ERROR":
+        raise ValueError(
+            f"JIT dependency '{dependency_config.get('name')}' returned ERROR: {explanation[:255] if explanation else 'No explanation'}"
+        )
+
+    metadata = _result_metadata(result)
+    score_name = dependency_config.get("name")
+    registry_props = _score_registry_properties(scorecard_instance, score_name) if score_name else {}
+    score_result_id = await create_score_result(
+        item_id=item_id,
+        scorecard_id=scorecard_id,
+        score_id=str(dependency_config.get("id")),
+        account_id=account_id,
+        scoring_job_id=scoring_job_id,
+        external_id=external_id,
+        value=value,
+        explanation=explanation,
+        trace_data=_trace_from_result_metadata(metadata),
+        log_content=None,
+        cost=metadata.get("cost"),
+        start_time_seconds=getattr(result, "start_time_seconds", None),
+        end_time_seconds=getattr(result, "end_time_seconds", None),
+        score_version_id=score_version_id(registry_props or dependency_config),
+        metadata_extra={
+            "score_config_fingerprint": metadata.get("score_config_fingerprint"),
+            "created_via": "jit_dependency_score_result",
+            "parent_scoring_job_id": scoring_job_id,
+            "requested_score_id": requested_score_id,
+            "requested_score_name": requested_score_name,
+        },
+        client=client,
+    )
+    if not score_result_id:
+        raise RuntimeError(f"Failed to persist JIT dependency ScoreResult for {dependency_config.get('name')}")
+
+    await enqueue_downstream_recompute_jobs(
+        client=client,
+        account_id=account_id,
+        item_id=item_id,
+        scorecard_id=scorecard_id,
+        dependency_score_id=str(dependency_config.get("id")),
+        dependency_score_name=str(dependency_config.get("name")),
+        source_score_result_id=score_result_id,
+    )
+    return score_result_id
+
+
+async def ensure_persisted_dependencies(
+    *,
+    scorecard_instance: Any,
+    text: str,
+    metadata: dict,
+    modality: str,
+    item: Any,
+    client: Any,
+    item_id: str,
+    account_id: str,
+    scorecard_id: str,
+    scoring_job_id: str,
+    external_id: str,
+    dependency_configs: list,
+    requested_score_id: str,
+    requested_score_name: str,
+    active_score_ids: set,
+):
+    """Compute and persist missing dependencies before a computed score runs."""
+
+    dependency_by_id = {
+        str(config.get("id")): config
+        for config in dependency_configs
+        if config.get("id")
+    }
+
+    snapshot, results = await fetch_persisted_dependency_snapshot(
+        client=client,
+        item_id=item_id,
+        account_id=account_id,
+        dependency_configs=dependency_configs,
+    )
+    if snapshot.complete:
+        return snapshot, results
+
+    for missing in snapshot.missing_dependencies:
+        dependency_id = str(missing.get("score_id") or "")
+        dependency_config = dependency_by_id.get(dependency_id)
+        if not dependency_id or dependency_config is None:
+            raise RuntimeError(f"Cannot compute missing dependency without a score ID: {missing}")
+        if dependency_id in active_score_ids:
+            raise RuntimeError(
+                f"Dependency cycle detected while computing {dependency_config.get('name')}"
+            )
+
+        single_snapshot, _ = await fetch_persisted_dependency_snapshot(
+            client=client,
+            item_id=item_id,
+            account_id=account_id,
+            dependency_configs=[dependency_config],
+        )
+        if single_snapshot.complete:
+            continue
+
+        dependency_name = dependency_config.get("name")
+        logging.info(
+            "Computing missing dependency '%s' (%s) just-in-time for requested score '%s'",
+            dependency_name,
+            dependency_id,
+            requested_score_name,
+        )
+        dependency_outcome = await score_single_target_with_dependencies(
+            scorecard_instance,
+            text=text,
+            metadata=metadata,
+            modality=modality,
+            item=item,
+            target_score_id=dependency_id,
+            target_score_name=dependency_name,
+            client=client,
+            item_id=item_id,
+            account_id=account_id,
+            scorecard_id=scorecard_id,
+            scoring_job_id=scoring_job_id,
+            external_id=external_id,
+            requested_score_id=requested_score_id,
+            requested_score_name=requested_score_name,
+            _active_score_ids=active_score_ids | {dependency_id},
+        )
+        if dependency_outcome.dependency_unmet or dependency_outcome.result is None:
+            raise RuntimeError(
+                f"Dependency '{dependency_name}' could not be computed for requested score '{requested_score_name}'"
+            )
+
+        await _persist_jit_dependency_result(
+            scorecard_instance=scorecard_instance,
+            result=dependency_outcome.result,
+            dependency_config=dependency_config,
+            client=client,
+            item_id=item_id,
+            account_id=account_id,
+            scorecard_id=scorecard_id,
+            scoring_job_id=scoring_job_id,
+            external_id=external_id,
+            requested_score_id=requested_score_id,
+            requested_score_name=requested_score_name,
+        )
+
+    snapshot, results = await fetch_persisted_dependency_snapshot(
+        client=client,
+        item_id=item_id,
+        account_id=account_id,
+        dependency_configs=dependency_configs,
+    )
+    if not snapshot.complete:
+        raise RuntimeError(
+            f"Missing dependencies remained after JIT persistence for '{requested_score_name}': {snapshot.missing_dependencies}"
+        )
+    return snapshot, results
+
+
 async def score_single_target_with_dependencies(
     scorecard_instance,
     *,
@@ -368,12 +566,23 @@ async def score_single_target_with_dependencies(
     client: Any = None,
     item_id: Optional[str] = None,
     account_id: Optional[str] = None,
+    scorecard_id: Optional[str] = None,
+    scoring_job_id: Optional[str] = None,
+    external_id: Optional[str] = None,
+    requested_score_id: Optional[str] = None,
+    requested_score_name: Optional[str] = None,
+    _active_score_ids: Optional[set] = None,
 ) -> SingleScoreExecutionOutcome:
     """
     Execute a single target score while preserving Scorecard dependency backfill behavior.
 
     Returns a structured outcome so callers can distinguish dependency-unmet from hard failures.
     """
+
+    requested_score_id = requested_score_id or target_score_id
+    requested_score_name = requested_score_name or target_score_name
+    active_score_ids = set(_active_score_ids or set())
+    active_score_ids.add(str(target_score_id))
 
     dependency_configs = get_target_dependencies(scorecard_instance, target_score_name)
 
@@ -396,22 +605,66 @@ async def score_single_target_with_dependencies(
                     "Persisted dependencies did not meet conditions for computed score '%s'",
                     target_score_name,
                 )
-                consistency = build_dependency_consistency_metadata(
-                    snapshot=persisted_snapshot,
-                    current_snapshot=persisted_snapshot,
-                    mode="persisted_dependency_snapshot",
-                )
-                consistency.update({"reason": "dependency_conditions_not_met"})
                 return SingleScoreExecutionOutcome(
                     result=None,
                     dependency_unmet=True,
                     score_results={target_score_id: "SKIPPED"},
                     dependency_snapshot=persisted_snapshot,
                     current_dependency_snapshot=persisted_snapshot,
-                    dependency_consistency=consistency,
                     used_persisted_dependencies=True,
                 )
 
+        else:
+            if not all([account_id, scorecard_id, scoring_job_id, external_id]):
+                raise RuntimeError(
+                    f"Cannot compute missing dependencies for '{target_score_name}' "
+                    "without ScoreResult persistence context"
+                )
+
+            logging.info(
+                "Persisted dependencies incomplete for computed score '%s'; computing and persisting missing dependencies. Missing: %s",
+                target_score_name,
+                persisted_snapshot.missing_dependencies,
+            )
+            persisted_snapshot, persisted_results = await ensure_persisted_dependencies(
+                scorecard_instance=scorecard_instance,
+                text=text,
+                metadata=metadata,
+                modality=modality,
+                item=item,
+                client=client,
+                item_id=item_id,
+                account_id=account_id,
+                scorecard_id=scorecard_id,
+                scoring_job_id=scoring_job_id,
+                external_id=external_id,
+                dependency_configs=dependency_configs,
+                requested_score_id=requested_score_id,
+                requested_score_name=requested_score_name,
+                active_score_ids=active_score_ids,
+            )
+
+            if not _dependency_conditions_met_from_results(
+                scorecard_instance=scorecard_instance,
+                target_score_id=target_score_id,
+                target_score_name=target_score_name,
+                dependency_configs=dependency_configs,
+                dependency_results=persisted_results,
+            ):
+                logging.info(
+                    "Persisted dependencies did not meet conditions for computed score '%s'",
+                    target_score_name,
+                )
+                return SingleScoreExecutionOutcome(
+                    result=None,
+                    dependency_unmet=True,
+                    score_results={target_score_id: "SKIPPED"},
+                    dependency_snapshot=persisted_snapshot,
+                    current_dependency_snapshot=persisted_snapshot,
+                    used_persisted_dependencies=True,
+                )
+
+        if persisted_snapshot.complete:
             logging.info(
                 "Using %s persisted dependency ScoreResult(s) for computed score '%s'",
                 len(persisted_results),
@@ -428,24 +681,11 @@ async def score_single_target_with_dependencies(
             )
             result = _unwrap_score_result_entry(direct_result)
 
-            current_snapshot, _ = await fetch_persisted_dependency_snapshot(
-                client=client,
-                item_id=item_id,
-                account_id=account_id,
-                dependency_configs=dependency_configs,
-            )
-            consistency = build_dependency_consistency_metadata(
-                snapshot=persisted_snapshot,
-                current_snapshot=current_snapshot,
-                mode="persisted_dependency_snapshot",
-            )
             if result is not None and result != "SKIPPED":
                 result.metadata = dict(getattr(result, "metadata", None) or {})
-                result.metadata["dependency_consistency"] = consistency
                 result.metadata["trace"] = merge_snapshot_into_trace(
                     result.metadata.get("trace"),
                     snapshot=persisted_snapshot,
-                    consistency=consistency,
                 )
 
             return SingleScoreExecutionOutcome(
@@ -453,16 +693,9 @@ async def score_single_target_with_dependencies(
                 dependency_unmet=result == "SKIPPED",
                 score_results={target_score_id: result},
                 dependency_snapshot=persisted_snapshot,
-                current_dependency_snapshot=current_snapshot,
-                dependency_consistency=consistency,
+                current_dependency_snapshot=persisted_snapshot,
                 used_persisted_dependencies=True,
             )
-
-        logging.info(
-            "Persisted dependencies incomplete for computed score '%s'; falling back to same-run dependency execution. Missing: %s",
-            target_score_name,
-            persisted_snapshot.missing_dependencies,
-        )
 
     try:
         score_results = await scorecard_instance.score_entire_text(
@@ -512,38 +745,10 @@ async def score_single_target_with_dependencies(
     ):
         dependency_unmet = True
 
-    dependency_snapshot = None
-    dependency_consistency = None
-    if dependency_configs:
-        dependency_snapshot = snapshot_from_in_memory_results(
-            scorecard_instance=scorecard_instance,
-            target_score_name=target_score_name,
-            score_results=score_results,
-        )
-        dependency_consistency = build_dependency_consistency_metadata(
-            snapshot=dependency_snapshot,
-            current_snapshot=None,
-            mode="in_memory_dependency_snapshot",
-        )
-        dependency_consistency.update({
-            "is_stale": True,
-            "reason": "used_in_memory_dependencies_without_complete_persisted_snapshot",
-        })
-        if result is not None:
-            result.metadata = dict(getattr(result, "metadata", None) or {})
-            result.metadata["dependency_consistency"] = dependency_consistency
-            result.metadata["trace"] = merge_snapshot_into_trace(
-                result.metadata.get("trace"),
-                snapshot=dependency_snapshot,
-                consistency=dependency_consistency,
-            )
-
     return SingleScoreExecutionOutcome(
         result=result,
         dependency_unmet=dependency_unmet,
         score_results=score_results,
-        dependency_snapshot=dependency_snapshot,
-        dependency_consistency=dependency_consistency,
         used_persisted_dependencies=False,
     )
 
@@ -979,39 +1184,9 @@ async def get_existing_score_result(report_id: str, scorecard_id: str, score_id:
             type=type,
             score_id=dynamo_score_id,
             account_id=account_id,
-            include_stale=False,
         )
         
         if cached_score_result:
-            dependency_consistency = await check_score_result_dependency_snapshot_current(
-                score_result=cached_score_result,
-                client=client,
-                item_id=item.id,
-                account_id=account_id,
-            )
-            if dependency_consistency.get("is_stale"):
-                logging.warning(
-                    "Cached ScoreResult %s is stale because dependency snapshot changed; bypassing cache",
-                    cached_score_result.id,
-                )
-                try:
-                    updated_metadata = json_object(cached_score_result.metadata)
-                    updated_metadata["dependency_consistency"] = dependency_consistency
-                    updated_trace = json_object(cached_score_result.trace)
-                    updated_trace["dependency_consistency"] = dependency_consistency
-                    await asyncio.to_thread(
-                        cached_score_result.update,
-                        metadata=updated_metadata,
-                        trace=updated_trace,
-                    )
-                except Exception:
-                    logging.warning(
-                        "Failed to mark cached ScoreResult %s stale; continuing with recompute",
-                        cached_score_result.id,
-                        exc_info=True,
-                    )
-                return None
-
             logging.info(f"✅ CACHE HIT: Found cached result {cached_score_result.id} with value: {cached_score_result.value}")
             logging.info(json.dumps({
                 "message_type": "cache_hit_found",

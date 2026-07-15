@@ -347,22 +347,19 @@ class TestFindByCacheKey:
         assert 'sortDirection: DESC' in query
         assert 'limit: $limit' in query
 
-    def test_find_by_cache_key_skips_stale_dependency_result(self, mock_client, sample_score_result_data):
-        stale_result = sample_score_result_data.copy()
-        stale_result["id"] = "stale-result"
-        stale_result["metadata"] = json.dumps({
-            "dependency_consistency": {"is_stale": True}
+    def test_find_by_cache_key_returns_latest_result_without_metadata_filtering(self, mock_client, sample_score_result_data):
+        latest_result = sample_score_result_data.copy()
+        latest_result["id"] = "latest-result"
+        latest_result["metadata"] = json.dumps({
+            "legacy_diagnostic": {"ignored_by_cache_lookup": True}
         })
 
         current_result = sample_score_result_data.copy()
         current_result["id"] = "current-result"
-        current_result["metadata"] = json.dumps({
-            "dependency_consistency": {"is_stale": False}
-        })
 
         mock_client.execute.return_value = {
             'listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt': {
-                'items': [stale_result, current_result]
+                'items': [latest_result, current_result]
             }
         }
 
@@ -371,11 +368,10 @@ class TestFindByCacheKey:
             item_id="item-123",
             type="prediction",
             score_id="score-789",
-            include_stale=False,
         )
 
         assert result is not None
-        assert result.id == "current-result"
+        assert result.id == "latest-result"
     
     def test_find_by_cache_key_fields_inclusion(self, mock_client, mock_gsi_response):
         """Test that all ScoreResult fields are included in the query"""
