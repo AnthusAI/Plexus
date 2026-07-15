@@ -1,0 +1,18 @@
+{
+  "id": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+  "title": "Publish reusable score processor deployment artifacts",
+  "description": "Purpose: make the score processor deployable by external infrastructure owners without embedding downstream account, pipeline, or environment details in Plexus. Definition of Done: Plexus exposes a public-safe artifact and construct contract, supports immutable image publishing, and documents the build/runtime inputs needed by downstream deployment pipelines.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-15T16:30:05.711426Z",
+  "updated_at": "2026-07-15T16:30:05.711426Z",
+  "closed_at": null,
+  "custom": {}
+}

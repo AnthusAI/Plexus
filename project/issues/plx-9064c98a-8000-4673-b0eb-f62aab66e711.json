@@ -1,0 +1,18 @@
+{
+  "id": "plx-9064c98a-8000-4673-b0eb-f62aab66e711",
+  "title": "Replace broad score processor IAM assumptions",
+  "description": "Audit reusable score processor infrastructure code and replace broad managed-policy assumptions with least-privilege grants supplied by the deployment owner.",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-15T16:30:15.239572Z",
+  "updated_at": "2026-07-15T16:30:15.239572Z",
+  "closed_at": null,
+  "custom": {}
+}
