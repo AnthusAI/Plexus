@@ -1,6 +1,6 @@
 # Async Score Processing Construct
 
-`plexus_constructs.AsyncScoreProcessing` defines the reusable infrastructure pattern for async score processing.
+`plexus.infrastructure.constructs.AsyncScoreProcessing` defines the reusable infrastructure pattern for async score processing.
 
 It is intentionally deployment-owner agnostic. It does not choose account IDs, deployment pipelines, source branches, secret names, or downstream environment names.
 
@@ -24,8 +24,10 @@ Deployment owners can pass existing request/response queues instead of letting t
 ```python
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_secretsmanager as secretsmanager
-from plexus_constructs import AsyncScoreProcessing
-from plexus_constructs.async_score_processing import AsyncScoreProcessingProps
+from plexus.infrastructure.constructs import AsyncScoreProcessing
+from plexus.infrastructure.constructs.async_score_processing import (
+    AsyncScoreProcessingProps,
+)
 
 repository = ecr.Repository.from_repository_name(
     self,
@@ -96,4 +98,3 @@ The construct exposes:
 - `function`
 - `role`
 - `dead_letter_queue_alarms`
-

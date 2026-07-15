@@ -11,8 +11,10 @@ from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_secretsmanager as secretsmanager
 
-from plexus_constructs import AsyncScoreProcessing
-from plexus_constructs.async_score_processing import AsyncScoreProcessingProps
+from plexus.infrastructure.constructs import AsyncScoreProcessing
+from plexus.infrastructure.constructs.async_score_processing import (
+    AsyncScoreProcessingProps,
+)
 
 
 def _build_template():
