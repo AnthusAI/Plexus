@@ -286,6 +286,9 @@ class LambdaJobProcessor:
                     client=self.client,
                     item_id=item_id,
                     account_id=self.account_id,
+                    scorecard_id=dynamo_scorecard_id,
+                    scoring_job_id=scoring_job_id,
+                    external_id=external_id,
                 )
 
                 if scoring_outcome.dependency_unmet:
@@ -353,8 +356,6 @@ class LambdaJobProcessor:
 
                 # Extract cost
                 cost = result_metadata.get('cost')
-                dependency_consistency = getattr(scoring_outcome, "dependency_consistency", None)
-
                 # Get logs
                 current_logs = get_logs()
                 logging.info(f"📋 Captured {len(current_logs) if current_logs else 0} bytes of logs")
@@ -378,9 +379,6 @@ class LambdaJobProcessor:
                     score_version_id=target_score_version_id,
                     metadata_extra={
                         "score_config_fingerprint": result_metadata.get("score_config_fingerprint"),
-                        "dependency_consistency": dependency_consistency,
-                    } if dependency_consistency else {
-                        "score_config_fingerprint": result_metadata.get("score_config_fingerprint"),
                     },
                     client=self.client
                 )
@@ -390,21 +388,15 @@ class LambdaJobProcessor:
 
                 logging.info(f"✅ Created ScoreResult: {score_result_id}")
 
-                if not (dependency_consistency and dependency_consistency.get("is_stale")):
-                    await enqueue_downstream_recompute_jobs(
-                        client=self.client,
-                        account_id=self.account_id,
-                        item_id=item_id,
-                        scorecard_id=dynamo_scorecard_id,
-                        dependency_score_id=dynamo_score_id,
-                        dependency_score_name=target_score_name,
-                        source_score_result_id=score_result_id,
-                    )
-                else:
-                    logging.info(
-                        "Skipping downstream recompute enqueue for stale ScoreResult %s",
-                        score_result_id,
-                    )
+                await enqueue_downstream_recompute_jobs(
+                    client=self.client,
+                    account_id=self.account_id,
+                    item_id=item_id,
+                    scorecard_id=dynamo_scorecard_id,
+                    dependency_score_id=dynamo_score_id,
+                    dependency_score_name=target_score_name,
+                    source_score_result_id=score_result_id,
+                )
 
                 # Send response message
                 response_message = {"score_result_id": score_result_id}

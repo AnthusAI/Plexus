@@ -1,10 +1,11 @@
 import unittest
 import asyncio
-from unittest.mock import Mock, MagicMock, AsyncMock
+from unittest.mock import Mock, MagicMock, AsyncMock, patch
 from plexus.Scorecard import Scorecard
 import pytest
 import logging
 from decimal import Decimal
+from plexus.scores.Score import Score
 
 def create_mock_score_instance():
     """Helper function to create a properly mocked score instance"""
@@ -30,6 +31,96 @@ def create_mock_score_instance():
     mock_score_instance.get_accumulated_costs = mock_get_accumulated_costs
     
     return mock_score_instance
+
+
+@pytest.mark.asyncio
+async def test_get_score_result_accumulates_only_incremental_cost_for_cached_score_instances():
+    """Regression: cached score instances report cumulative costs; scorecard totals need deltas."""
+
+    created_instances = []
+
+    class CumulativeCostScore:
+        @classmethod
+        async def create(cls, **_kwargs):
+            instance = cls()
+            created_instances.append(instance)
+            return instance
+
+        def __init__(self):
+            self.calls = 0
+
+        async def predict(self, *, context, model_input):
+            self.calls += 1
+            return Score.Result(
+                parameters=Score.Parameters(name="CumulativeCostScore", id="score-1"),
+                value="Pass",
+                metadata={"text": model_input.text},
+            )
+
+        def get_accumulated_costs(self):
+            return {
+                "prompt_tokens": self.calls * 100,
+                "completion_tokens": self.calls * 50,
+                "cached_tokens": 0,
+                "llm_calls": self.calls,
+                "input_cost": Decimal("0.10") * self.calls,
+                "output_cost": Decimal("0.05") * self.calls,
+                "total_cost": Decimal("0.15") * self.calls,
+                "components": [
+                    {
+                        "type": "api_call",
+                        "provider": "openai",
+                        "model": "gpt-5.4-nano",
+                        "prompt_tokens": self.calls * 100,
+                        "completion_tokens": self.calls * 50,
+                        "cached_tokens": 0,
+                        "llm_calls": self.calls,
+                        "usd": float(Decimal("0.15") * self.calls),
+                        "metadata": {"node_name": "classifier"},
+                    }
+                ],
+            }
+
+    class Registry:
+        @staticmethod
+        def get(_score_name):
+            return CumulativeCostScore
+
+        @staticmethod
+        def get_properties(score_name):
+            return {"name": score_name, "id": "score-1"}
+
+    scorecard = Scorecard(scorecard="TestScorecard")
+    scorecard.properties = {"name": "TestScorecard", "id": "scorecard-1"}
+    scorecard.score_registry = Registry()
+
+    with patch.object(scorecard.cloudwatch_logger, "log_metric"):
+        await scorecard.get_score_result(
+            scorecard="TestScorecard",
+            score="CumulativeCostScore",
+            text="First item",
+            metadata={},
+            modality="test",
+            results=[],
+        )
+        await scorecard.get_score_result(
+            scorecard="TestScorecard",
+            score="CumulativeCostScore",
+            text="Second item",
+            metadata={},
+            modality="test",
+            results=[],
+        )
+
+    assert len(created_instances) == 1
+    assert scorecard.prompt_tokens == 200
+    assert scorecard.completion_tokens == 100
+    assert scorecard.llm_calls == 2
+    assert scorecard.input_cost == Decimal("0.20")
+    assert scorecard.output_cost == Decimal("0.10")
+    assert scorecard.total_cost == Decimal("0.30")
+    assert len(scorecard.cost_components) == 2
+    assert sum(Decimal(str(component["usd"])) for component in scorecard.cost_components) == Decimal("0.30")
 
 # Remove unittest.TestCase since we're using pure pytest style
 class TestScorecard:

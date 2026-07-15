@@ -125,6 +125,10 @@ class FeedbackVolumeTimeline(FeedbackAlignmentTimeline):
             ]
 
             if not scores_to_analyze:
+                summary = self._summarize_points(points)
+                summary["fetched_feedback_items"] = 0
+                summary["ignored_invalid_feedback_items"] = 0
+                summary["analyzed_feedback_items"] = 0
                 return {
                     "report_type": "feedback_volume_timeline",
                     "block_title": self.DEFAULT_NAME,
@@ -138,12 +142,16 @@ class FeedbackVolumeTimeline(FeedbackAlignmentTimeline):
                     "bucket_policy": bucket_policy,
                     "buckets": self._serialize_buckets(buckets),
                     "points": points,
-                    "summary": self._summarize_points(points),
+                    "summary": summary,
                     "date_range": {
                         "start": range_start_utc.isoformat(),
                         "end": date_range_end_utc.isoformat(),
                     },
                     "message": "No scores found for the requested scope.",
+                    "fetched_feedback_items": 0,
+                    "ignored_invalid_feedback_items": 0,
+                    "analyzed_feedback_items": 0,
+                    "total_feedback_items_retrieved": 0,
                 }, self._get_log_string()
 
             resolved_score_id = scores_to_analyze[0]["score_id"] if scope == "single_score" else None
@@ -156,14 +164,26 @@ class FeedbackVolumeTimeline(FeedbackAlignmentTimeline):
             )
 
             total_feedback_items_retrieved = 0
+            fetched_feedback_items = 0
+            ignored_invalid_feedback_items = 0
             for score_info in scores_to_analyze:
+                self._last_feedback_fetch_stats = None
                 feedback_items = await self._fetch_feedback_items_for_score(
                     scorecard_id=scorecard.id,
                     score_id=score_info["score_id"],
                     start_date=range_start_utc,
                     end_date=range_end_query_utc,
                 )
-                total_feedback_items_retrieved += len(feedback_items)
+                fetch_stats = getattr(self, "_last_feedback_fetch_stats", None)
+                if not isinstance(fetch_stats, dict):
+                    fetch_stats = {
+                        "fetched_total": len(feedback_items),
+                        "ignored_invalid": 0,
+                        "analyzed_total": len(feedback_items),
+                    }
+                fetched_feedback_items += fetch_stats["fetched_total"]
+                ignored_invalid_feedback_items += fetch_stats["ignored_invalid"]
+                total_feedback_items_retrieved += fetch_stats["analyzed_total"]
 
                 for feedback_item in feedback_items:
                     edited_at = (
@@ -182,6 +202,11 @@ class FeedbackVolumeTimeline(FeedbackAlignmentTimeline):
 
                     self._accumulate_feedback_item(points[bucket_index], feedback_item)
 
+            summary = self._summarize_points(points)
+            summary["fetched_feedback_items"] = fetched_feedback_items
+            summary["ignored_invalid_feedback_items"] = ignored_invalid_feedback_items
+            summary["analyzed_feedback_items"] = total_feedback_items_retrieved
+
             output: Dict[str, Any] = {
                 "report_type": "feedback_volume_timeline",
                 "block_title": self.DEFAULT_NAME,
@@ -195,11 +220,14 @@ class FeedbackVolumeTimeline(FeedbackAlignmentTimeline):
                 "bucket_policy": bucket_policy,
                 "buckets": self._serialize_buckets(buckets),
                 "points": points,
-                "summary": self._summarize_points(points),
+                "summary": summary,
                 "date_range": {
                     "start": range_start_utc.isoformat(),
                     "end": date_range_end_utc.isoformat(),
                 },
+                "fetched_feedback_items": fetched_feedback_items,
+                "ignored_invalid_feedback_items": ignored_invalid_feedback_items,
+                "analyzed_feedback_items": total_feedback_items_retrieved,
                 "total_feedback_items_retrieved": total_feedback_items_retrieved,
                 "message": (
                     f"Processed {len(scores_to_analyze)} score(s) across "
@@ -227,17 +255,9 @@ class FeedbackVolumeTimeline(FeedbackAlignmentTimeline):
     def _accumulate_feedback_item(self, point: Dict[str, Any], feedback_item: FeedbackItem) -> None:
         point["feedback_items_total"] += 1
 
-        raw_invalid = getattr(feedback_item, "isInvalid", False)
-        if isinstance(raw_invalid, bool):
-            is_invalid = raw_invalid
-        elif isinstance(raw_invalid, (int, str)):
-            is_invalid = self._parse_bool(raw_invalid, default=False)
-        else:
-            is_invalid = False
-
         initial_value = getattr(feedback_item, "initialAnswerValue", None)
         final_value = getattr(feedback_item, "finalAnswerValue", None)
-        if is_invalid or initial_value is None or final_value is None:
+        if initial_value is None or final_value is None:
             point["feedback_items_invalid_or_unclassified"] += 1
             return
 

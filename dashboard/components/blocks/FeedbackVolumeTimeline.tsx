@@ -45,7 +45,13 @@ interface FeedbackVolumeTimelineData {
     feedback_items_unchanged: number;
     feedback_items_changed: number;
     feedback_items_invalid_or_unclassified: number;
+    fetched_feedback_items?: number;
+    ignored_invalid_feedback_items?: number;
+    analyzed_feedback_items?: number;
   };
+  fetched_feedback_items?: number;
+  ignored_invalid_feedback_items?: number;
+  analyzed_feedback_items?: number;
   message?: string;
   warning?: string;
   error?: string;
@@ -63,7 +69,7 @@ const chartConfig = {
     color: "var(--false)",
   },
   invalid: {
-    label: "Invalid / Unclassified",
+    label: "Unclassified",
     color: "var(--progress-background)",
   },
 };
@@ -86,7 +92,7 @@ const TimelineTooltip: React.FC<any> = ({ active, payload }) => {
       <div>Valid feedback items: {point.feedback_items_valid}</div>
       <div>Unchanged: {point.feedback_items_unchanged}</div>
       <div>Changed: {point.feedback_items_changed}</div>
-      <div>Invalid / unclassified: {point.feedback_items_invalid_or_unclassified}</div>
+      <div>Unclassified: {point.feedback_items_invalid_or_unclassified}</div>
     </div>
   );
 };
@@ -200,12 +206,21 @@ const FeedbackVolumeTimeline: React.FC<ReportBlockProps> = (props) => {
             <div className="text-xl font-semibold">{summary?.feedback_items_changed ?? 0}</div>
           </div>
           <div className="rounded-md bg-card p-3">
-            <div className="text-xs text-muted-foreground">Invalid / Unclassified</div>
+            <div className="text-xs text-muted-foreground">Unclassified</div>
             <div className="text-xl font-semibold">
               {summary?.feedback_items_invalid_or_unclassified ?? 0}
             </div>
           </div>
         </div>
+
+        {typeof output.ignored_invalid_feedback_items === "number" && (
+          <div className="text-xs text-muted-foreground">
+            Ignored invalid feedback items: {output.ignored_invalid_feedback_items}
+            {typeof output.fetched_feedback_items === "number" && (
+              <span> of {output.fetched_feedback_items} fetched</span>
+            )}
+          </div>
+        )}
 
         <div className="text-sm text-muted-foreground">
           {output.scorecard_name ? `Scorecard: ${output.scorecard_name}` : null}
@@ -241,7 +256,7 @@ const FeedbackVolumeTimeline: React.FC<ReportBlockProps> = (props) => {
                     <th className="px-2 py-1 font-medium">Valid</th>
                     <th className="px-2 py-1 font-medium">Unchanged</th>
                     <th className="px-2 py-1 font-medium">Changed</th>
-                    <th className="px-2 py-1 font-medium">Invalid / Unclassified</th>
+                    <th className="px-2 py-1 font-medium">Unclassified</th>
                   </tr>
                 </thead>
                 <tbody>

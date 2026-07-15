@@ -475,7 +475,6 @@ class ScoreResult(BaseModel):
         type: str,
         score_id: str,
         account_id: Optional[str] = None,
-        include_stale: bool = True,
         limit: int = 10,
     ) -> Optional['ScoreResult']:
         """
@@ -491,8 +490,7 @@ class ScoreResult(BaseModel):
             type: Type of score result (should be "prediction" or "evaluation")
             score_id: Score ID (should be resolved DynamoDB ID)
             account_id: Optional account ID for additional context/validation
-            include_stale: Include dependency-stale ScoreResults in cache hits
-            limit: Number of recent ScoreResults to inspect when stale results are skipped
+            limit: Number of recent ScoreResults to request from the cache index
             
         Returns:
             Most recent ScoreResult matching the cache key, or None if not found
@@ -545,21 +543,8 @@ class ScoreResult(BaseModel):
             items = response.get('listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt', {}).get('items', [])
             
             if items:
-                if include_stale:
-                    # Return the most recent result (first item due to DESC sort).
-                    return cls.from_dict(items[0], client)
-
-                from plexus.utils.dependency_snapshots import metadata_marks_stale
-
-                for score_result_data in items:
-                    if metadata_marks_stale(
-                        score_result_data.get("metadata"),
-                        score_result_data.get("trace"),
-                    ):
-                        continue
-                    return cls.from_dict(score_result_data, client)
-
-                return None
+                # Return the most recent result (first item due to DESC sort).
+                return cls.from_dict(items[0], client)
             else:
                 # No cached result found
                 return None

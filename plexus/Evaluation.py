@@ -102,6 +102,111 @@ def _bedrock_runtime_client_for_rca():
     )
 
 
+def _rca_llm_provider() -> str:
+    provider = os.getenv("PLEXUS_RCA_LLM_PROVIDER", "openai").strip().lower()
+    if provider not in {"openai", "bedrock", "auto"}:
+        logging.warning(
+            "Invalid PLEXUS_RCA_LLM_PROVIDER=%r; using openai",
+            provider,
+        )
+        return "openai"
+    return provider
+
+
+def _rca_llm_model_id() -> Optional[str]:
+    return (
+        os.getenv("PLEXUS_RCA_LLM_MODEL")
+        or os.getenv("PLEXUS_RCA_OPENAI_MODEL")
+        or os.getenv("PLEXUS_RCA_BEDROCK_MODEL_ID")
+        or None
+    )
+
+
+def _rca_bedrock_region() -> str:
+    return os.getenv("PLEXUS_RCA_BEDROCK_REGION") or os.getenv("AWS_REGION") or "us-east-1"
+
+
+def _rca_reinforcement_memory_llm_helpers():
+    provider = _rca_llm_provider()
+    try:
+        from biblicus.analysis.reinforcement_memory import resolve_llm_helpers
+    except ImportError as exc:
+        if provider == "bedrock":
+            from biblicus.analysis.reinforcement_memory import (
+                bedrock_causal,
+                bedrock_labeler,
+                bedrock_synthesizer,
+            )
+
+            model_id = _rca_llm_model_id() or CLAUDE_HAIKU_45_MODEL_ID
+            return (
+                bedrock_labeler(model_id=model_id, region=_rca_bedrock_region()),
+                bedrock_causal(model_id=model_id, region=_rca_bedrock_region()),
+                bedrock_synthesizer(model_id=model_id, region=_rca_bedrock_region()),
+            )
+        raise RuntimeError(
+            "Biblicus does not provide resolve_llm_helpers; install or run with a "
+            "Biblicus version that includes OpenAI reinforcement-memory RCA helpers."
+        ) from exc
+
+    return resolve_llm_helpers(
+        provider=provider,
+        model_id=_rca_llm_model_id(),
+        region=_rca_bedrock_region(),
+        timeout_seconds=_rca_llm_timeout_seconds(),
+        max_retries=1,
+    )
+
+
+def _bedrock_converse_for_rca(system: str, messages: list, max_tokens: int = 1000) -> str:
+    """Run a Bedrock Claude conversation and return assistant text."""
+    import json as _json
+
+    brt = _bedrock_runtime_client_for_rca()
+    body = _json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": messages,
+    })
+    resp = brt.invoke_model(
+        modelId=_rca_llm_model_id() or CLAUDE_HAIKU_45_MODEL_ID,
+        body=body,
+        contentType="application/json",
+        accept="application/json",
+    )
+    return _json.loads(resp["body"].read())["content"][0]["text"].strip()
+
+
+def _evaluation_rca_text(
+    system: str,
+    messages: list,
+    max_tokens: int = 1000,
+    *,
+    call_site: str = "evaluation_rca_text",
+) -> str:
+    """Generate RCA text with the configured provider; OpenAI is the default."""
+    if _rca_llm_provider() == "bedrock":
+        try:
+            return _bedrock_converse_for_rca(system, messages, max_tokens=max_tokens)
+        except Exception as exc:
+            logging.debug("Bedrock RCA text call failed: %s", exc)
+            return ""
+
+    try:
+        from plexus.rca_analysis import _invoke_rca_openai_text
+
+        return _invoke_rca_openai_text(
+            system=system,
+            messages=messages,
+            max_output_tokens=max_tokens,
+            call_site=call_site,
+        )
+    except Exception as exc:
+        logging.debug("OpenAI RCA text call failed: %s", exc)
+        return ""
+
+
 def _sanitize_rca_generated_prose(text: str, *, max_sentences: int = 3, max_chars: int = 900) -> str:
     """Keep RCA generated prose concise and remove headings supplied by the UI."""
     if not text:
@@ -1854,19 +1959,15 @@ class Evaluation:
                 if status == "COMPLETED":
                     cost_details = self.build_cost_details_from_expenses(expenses)
                     existing_parameters = self._get_existing_parameters_for_update()
-                    if existing_parameters:
-                        metadata = existing_parameters.get("metadata")
-                        if not isinstance(metadata, dict):
-                            metadata = {}
-                        metadata["cost_details"] = cost_details
-                        existing_parameters["metadata"] = metadata
-                        update_input["parameters"] = json.dumps(existing_parameters)
-                        self.parameters = existing_parameters
-                    else:
-                        self.logging.debug(
-                            "Skipping cost_details parameter write for evaluation %s because local parameters are unavailable",
-                            getattr(self, "experiment_id", None),
-                        )
+                    if not isinstance(existing_parameters, dict):
+                        existing_parameters = {}
+                    metadata = existing_parameters.get("metadata")
+                    if not isinstance(metadata, dict):
+                        metadata = {}
+                    metadata["cost_details"] = cost_details
+                    existing_parameters["metadata"] = metadata
+                    update_input["parameters"] = json.dumps(existing_parameters)
+                    self.parameters = existing_parameters
         except Exception as e:
             logging.debug(f"Could not get accumulated costs: {e}")
         
@@ -2756,6 +2857,11 @@ Total cost:       ${expenses['total_cost']:.6f}
                 'status': 'COMPLETED',  # Add status
                 'type': 'evaluation',  # Add type field required by byTypeStatusUpdated GSI
             }
+            score_result_cost = None
+            if isinstance(getattr(score_result, "metadata", None), dict):
+                score_result_cost = score_result.metadata.get("cost")
+            if isinstance(score_result_cost, dict):
+                data["cost"] = json.dumps(score_result_cost, default=str)
             timestamps = extract_score_result_timestamps(
                 {
                     "start_time_seconds": getattr(score_result, "start_time_seconds", None),
@@ -2818,6 +2924,7 @@ Total cost:       ${expenses['total_cost']:.6f}
                     confidence
                     explanation
                     metadata
+                    cost
                     trace
                     code
                     type
@@ -3684,22 +3791,40 @@ class FeedbackEvaluation(Evaluation):
                 for item in incorrect_items
             }
             root_cause_payload = {}
+            root_cause_error_message = None
             if incorrect_items_total > 0:
-                root_cause_payload = await self._run_root_cause_analysis(
-                    selected_feedback_items,
-                    score_result_map=score_result_map,
-                    original_explanations={},
-                    max_category_summary_items=self.max_category_summary_items,
-                    tracker=tracker,
-                )
+                try:
+                    root_cause_payload = await self._run_root_cause_analysis(
+                        selected_feedback_items,
+                        score_result_map=score_result_map,
+                        original_explanations={},
+                        max_category_summary_items=self.max_category_summary_items,
+                        tracker=tracker,
+                    )
+                except FeedbackItemExplanationTimeoutError:
+                    raise
+                except Exception as exc:
+                    root_cause_error_message = str(exc)
+                    self.logger.warning(
+                        "Root-cause analysis failed after metrics were computed; "
+                        "continuing evaluation completion without RCA: %s",
+                        root_cause_error_message,
+                    )
 
-            persisted_root_cause = await asyncio.to_thread(
-                self._persist_root_cause_for_parameters,
-                root_cause_payload,
-            )
+            try:
+                persisted_root_cause = await asyncio.to_thread(
+                    self._persist_root_cause_for_parameters,
+                    root_cause_payload,
+                )
+            except Exception as exc:
+                root_cause_error_message = str(exc)
+                persisted_root_cause = {}
+                self.logger.warning(
+                    "Root-cause analysis artifact persistence failed after metrics were computed; "
+                    "continuing evaluation completion without RCA: %s",
+                    root_cause_error_message,
+                )
             contract = self.root_cause_contract_outcome(incorrect_items_total, persisted_root_cause)
-            if contract["error_message"]:
-                raise RuntimeError(f"{contract['error_message']} (no usable RCA payload)")
 
             metrics_payload = [
                 {"name": "Alignment", "value": metrics_summary["ac1"]},
@@ -3728,16 +3853,26 @@ class FeedbackEvaluation(Evaluation):
                 root_cause_required=contract["root_cause_required"],
                 has_usable_root_cause=contract["has_usable_root_cause"],
             )
+            if contract["error_message"] or root_cause_error_message:
+                rca_warnings = list(parameters_payload.get("rca_warnings") or [])
+                if contract["error_message"]:
+                    rca_warnings.append(contract["error_message"])
+                if root_cause_error_message:
+                    rca_warnings.append(f"RCA unavailable: {root_cause_error_message}")
+                parameters_payload["rca_warnings"] = rca_warnings
 
             if evaluation_record:
-                evaluation_record.update(
-                    status="COMPLETED",
-                    accuracy=metrics_summary["accuracy"],
-                    metrics=json.dumps(metrics_payload),
-                    parameters=json.dumps(parameters_payload),
-                    totalItems=analysis.get("total_items") or len(selected_feedback_items),
-                    processedItems=analysis.get("total_items") or len(selected_feedback_items),
-                )
+                update_kwargs = {
+                    "status": "COMPLETED",
+                    "accuracy": metrics_summary["accuracy"],
+                    "metrics": json.dumps(metrics_payload),
+                    "parameters": json.dumps(parameters_payload),
+                    "totalItems": analysis.get("total_items") or len(selected_feedback_items),
+                    "processedItems": analysis.get("total_items") or len(selected_feedback_items),
+                }
+                if root_cause_error_message:
+                    update_kwargs["errorMessage"] = f"RCA unavailable: {root_cause_error_message}"
+                evaluation_record.update(**update_kwargs)
 
             return {
                 "status": "success",
@@ -4104,9 +4239,7 @@ class FeedbackEvaluation(Evaluation):
             try:
                 from biblicus.analysis.reinforcement_memory import (
                     ReinforcementMemory, LocalVectorStore,
-                    sentence_transformer_embedder,
-                    bedrock_labeler, bedrock_causal, bedrock_synthesizer,
-                    TimestampedText,
+                    sentence_transformer_embedder, TimestampedText,
                 )
             except ModuleNotFoundError as exc:
                 self.logger.warning(
@@ -4273,7 +4406,7 @@ class FeedbackEvaluation(Evaluation):
                     item_context_cache = {iid: payload for iid, payload in fetched_context}
 
             # Process all candidate items in parallel — the per-item RCA work
-            # (2 Bedrock LLM calls each) is the main bottleneck when done sequentially.
+            # is the main bottleneck when done sequentially.
             rca_sem = asyncio.Semaphore(3)
 
             async def _process_single_candidate(fi):
@@ -4655,14 +4788,15 @@ class FeedbackEvaluation(Evaluation):
             )
 
             def _run_analysis():
+                label_fn, infer_cause_fn, synthesize_cause_fn = _rca_reinforcement_memory_llm_helpers()
                 with tempfile.TemporaryDirectory() as tmpdir:
                     rm = ReinforcementMemory(
                         data_dir=tmpdir,
                         vector_store=LocalVectorStore(store_dir=tmpdir),
                         embed=embed_fn,
-                        label=bedrock_labeler(),
-                        infer_cause=bedrock_causal(),
-                        synthesize_cause=bedrock_synthesizer(),
+                        label=label_fn,
+                        infer_cause=infer_cause_fn,
+                        synthesize_cause=synthesize_cause_fn,
                         min_topic_size=3,
                         max_exemplars=max_report_exemplars,
                     )
@@ -4718,30 +4852,6 @@ class FeedbackEvaluation(Evaluation):
                     score_yaml_code=score_yaml_code,
                 )
 
-            _HAIKU_MODEL = CLAUDE_HAIKU_45_MODEL_ID
-
-            def _bedrock_converse(system: str, messages: list, max_tokens: int = 1000) -> str:
-                """Run a Bedrock Claude conversation and return the assistant response."""
-                import json as _json
-                try:
-                    brt = _bedrock_runtime_client_for_rca()
-                    body = _json.dumps({
-                        "anthropic_version": "bedrock-2023-05-31",
-                        "max_tokens": max_tokens,
-                        "system": system,
-                        "messages": messages,
-                    })
-                    resp = brt.invoke_model(
-                        modelId=_HAIKU_MODEL,
-                        body=body,
-                        contentType="application/json",
-                        accept="application/json",
-                    )
-                    return _json.loads(resp["body"].read())["content"][0]["text"].strip()
-                except Exception as exc:
-                    self.logger.debug("Bedrock converse call failed: %s", exc)
-                    return ""
-
             def _multi_turn_synthesis(
                 exemplar_dicts: list,
                 score_fix_exemplars: list,
@@ -4789,7 +4899,12 @@ class FeedbackEvaluation(Evaluation):
 
                 messages = [{"role": "user", "content": turn1_prompt}]
                 detailed_explanation = _sanitize_rca_generated_prose(
-                    _bedrock_converse(system, messages, max_tokens=360),
+                    _evaluation_rca_text(
+                        system,
+                        messages,
+                        max_tokens=360,
+                        call_site="evaluation_rca_topic_explanation",
+                    ),
                     max_sentences=3,
                     max_chars=700,
                 )
@@ -4818,7 +4933,12 @@ class FeedbackEvaluation(Evaluation):
                         )
                         messages.append({"role": "user", "content": turn2_prompt})
                         improvement_suggestion = _sanitize_rca_generated_prose(
-                            _bedrock_converse(system, messages, max_tokens=260),
+                            _evaluation_rca_text(
+                                system,
+                                messages,
+                                max_tokens=260,
+                                call_site="evaluation_rca_topic_improvement",
+                            ),
                             max_sentences=2,
                             max_chars=520,
                         )
@@ -4846,7 +4966,12 @@ class FeedbackEvaluation(Evaluation):
                     prompt += "\n".join(f"- {t}" for t in existing_titles) + "\n\n"
                 prompt += "Generate a concise, descriptive 3-8 word title for this error category:"
                 messages = [{"role": "user", "content": prompt}]
-                return _bedrock_converse(system, messages, max_tokens=30)
+                return _evaluation_rca_text(
+                    system,
+                    messages,
+                    max_tokens=30,
+                    call_site="evaluation_rca_topic_title",
+                )
 
             def _top_level_synthesis(topics: list, score_guidelines: str = "",
                                      score_yaml_code: str = "") -> tuple:
@@ -4891,7 +5016,12 @@ class FeedbackEvaluation(Evaluation):
                 )
                 messages = [{"role": "user", "content": prompt1}]
                 overall_explanation = _sanitize_rca_generated_prose(
-                    _bedrock_converse(system, messages, max_tokens=220),
+                    _evaluation_rca_text(
+                        system,
+                        messages,
+                        max_tokens=220,
+                        call_site="evaluation_rca_overall_explanation",
+                    ),
                     max_sentences=3,
                     max_chars=650,
                 )
@@ -4917,7 +5047,12 @@ class FeedbackEvaluation(Evaluation):
                         "operator-readable."
                     )})
                     overall_suggestion = _sanitize_rca_generated_prose(
-                        _bedrock_converse(system, messages, max_tokens=220),
+                        _evaluation_rca_text(
+                            system,
+                            messages,
+                            max_tokens=220,
+                            call_site="evaluation_rca_overall_improvement",
+                        ),
                         max_sentences=2,
                         max_chars=520,
                     )
@@ -5483,24 +5618,6 @@ class FeedbackEvaluation(Evaluation):
             ex["rca_failures"] = item_failure_diagnostics
             rca_item_failures.extend(item_failure_diagnostics)
 
-        def _bedrock_converse(system: str, prompt: str, max_tokens: int = 500) -> str:
-            import json as _json
-
-            brt = _bedrock_runtime_client_for_rca()
-            body = _json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": max_tokens,
-                "system": system,
-                "messages": [{"role": "user", "content": prompt}],
-            })
-            resp = brt.invoke_model(
-                modelId=CLAUDE_HAIKU_45_MODEL_ID,
-                body=body,
-                contentType="application/json",
-                accept="application/json",
-            )
-            return _json.loads(resp["body"].read())["content"][0]["text"].strip()
-
         exemplar_text = "\n".join([
             (
                 f"- Predicted '{ex.get('initial_answer_value')}' vs correct "
@@ -5533,7 +5650,13 @@ class FeedbackEvaluation(Evaluation):
         ])
 
         detailed_explanation = _sanitize_rca_generated_prose(
-            await asyncio.to_thread(_bedrock_converse, system, explanation_prompt, 260),
+            await asyncio.to_thread(
+                _evaluation_rca_text,
+                system,
+                [{"role": "user", "content": explanation_prompt}],
+                260,
+                call_site="evaluation_rca_small_set_explanation",
+            ),
             max_sentences=2,
             max_chars=520,
         )
@@ -5546,7 +5669,13 @@ class FeedbackEvaluation(Evaluation):
                 f"{score_fix_text}"
             )
             improvement_suggestion = _sanitize_rca_generated_prose(
-                await asyncio.to_thread(_bedrock_converse, system, improvement_prompt, 260),
+                await asyncio.to_thread(
+                    _evaluation_rca_text,
+                    system,
+                    [{"role": "user", "content": improvement_prompt}],
+                    260,
+                    call_site="evaluation_rca_small_set_improvement",
+                ),
                 max_sentences=2,
                 max_chars=520,
             )

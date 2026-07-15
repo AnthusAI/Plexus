@@ -1,7 +1,9 @@
 import pytest
+import json
 from datetime import datetime, timezone
 
 from plexus.Evaluation import Evaluation
+from plexus.scores.Score import Score
 
 
 def test_build_cost_details_from_expenses_single_model():
@@ -145,3 +147,103 @@ def test_update_variables_preserves_notes_and_baselines_when_adding_cost_details
     assert metadata.get("baseline") == "eval-baseline"
     assert metadata.get("current_baseline") == "eval-current"
     assert isinstance(metadata.get("cost_details"), dict)
+
+
+def test_update_variables_writes_cost_details_without_existing_parameters():
+    class _Scorecard:
+        @staticmethod
+        def get_accumulated_costs():
+            return {
+                "total_cost": 0.24,
+                "llm_calls": 1,
+                "prompt_tokens": 60,
+                "completion_tokens": 12,
+                "cached_tokens": 0,
+                "components": [
+                    {
+                        "type": "api_call",
+                        "provider": "openai",
+                        "model": "gpt-5-mini",
+                        "prompt_tokens": 60,
+                        "completion_tokens": 12,
+                        "cached_tokens": 0,
+                        "usd": 0.24,
+                    }
+                ],
+            }
+
+    evaluation = object.__new__(Evaluation)
+    evaluation.started_at = datetime.now(timezone.utc)
+    evaluation.processed_items = 3
+    evaluation.number_of_texts_to_sample = 3
+    evaluation.experiment_id = "eval-no-params"
+    evaluation.scorecard = _Scorecard()
+    evaluation.parameters = None
+    evaluation.score_id = None
+    evaluation.score_version_id = None
+    evaluation.logging = __import__("logging").getLogger("test")
+
+    variables = evaluation._get_update_variables(
+        metrics={"alignment": 0.51, "accuracy": 0.75, "precision": 0.8, "recall": 0.7},
+        status="COMPLETED",
+    )
+
+    update_input = variables["input"]
+    assert update_input["cost"] == pytest.approx(0.24)
+    parsed = json.loads(update_input["parameters"])
+    assert parsed["metadata"]["cost_details"]["total_usd"] == pytest.approx(0.24)
+
+
+@pytest.mark.asyncio
+async def test_create_score_result_persists_attached_cost():
+    class _DashboardClient:
+        def __init__(self):
+            self.variables = None
+
+        def execute(self, _mutation, variables):
+            self.variables = variables
+            return {
+                "createScoreResult": {
+                    "id": "score-result-1",
+                    "confidence": None,
+                    "explanation": "ok",
+                    "value": "Yes",
+                }
+            }
+
+    dashboard_client = _DashboardClient()
+    evaluation = object.__new__(Evaluation)
+    evaluation.experiment_id = "eval-1"
+    evaluation.account_id = "account-1"
+    evaluation.scorecard_id = "scorecard-1"
+    evaluation.dashboard_client = dashboard_client
+    evaluation.logging = __import__("logging").getLogger("test")
+
+    score_result = Score.Result(
+        value="Yes",
+        explanation="ok",
+        parameters=Score.Parameters(name="Dosage", id="score-1"),
+        metadata={
+            "explanation": "ok",
+            "cost": {
+                "total_cost": 0.031,
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+            },
+        },
+    )
+
+    await evaluation._create_score_result(
+        score_result=score_result,
+        content_id="item-1",
+        result={"item_id": "item-1", "form_id": "form-1"},
+        feedback_item_id="feedback-1",
+    )
+
+    input_data = dashboard_client.variables["input"]
+    assert "cost" in input_data
+    assert json.loads(input_data["cost"]) == {
+        "total_cost": 0.031,
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+    }

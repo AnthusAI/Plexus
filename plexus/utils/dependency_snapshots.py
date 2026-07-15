@@ -1,8 +1,8 @@
 """Dependency snapshot helpers for computed score consistency.
 
-These helpers keep dependency consistency concerns outside Score.predict. They are
-used by production orchestration/persistence paths to record exactly which child
-results a computed score used and to detect stale computed outputs later.
+These helpers keep dependency consistency concerns outside Score.predict. They
+record exactly which child results a computed score used so audits can compare
+that snapshot with current persisted dependency results.
 """
 
 from __future__ import annotations
@@ -13,7 +13,10 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+if TYPE_CHECKING:
+    from plexus.scores.Score import Score
 
 SNAPSHOT_SCHEMA_VERSION = "dependency_snapshot_v1"
 DEPENDENCY_SOURCE_PERSISTED = "persisted_score_result"
@@ -268,7 +271,6 @@ async def fetch_persisted_dependency_snapshot(
             type=result_type,
             score_id=str(dependency_id),
             account_id=account_id,
-            include_stale=False,
         )
         if not score_result:
             missing.append({
@@ -295,68 +297,16 @@ async def fetch_persisted_dependency_snapshot(
     return DependencySnapshot(dependencies=dependencies, missing_dependencies=missing), results
 
 
-def build_dependency_consistency_metadata(
-    *,
-    snapshot: Optional[DependencySnapshot],
-    current_snapshot: Optional[DependencySnapshot] = None,
-    mode: str,
-) -> Dict[str, Any]:
-    if snapshot is None:
-        return {
-            "mode": mode,
-            "has_dependency_snapshot": False,
-            "is_stale": False,
-        }
-
-    is_stale = False
-    reason = None
-    if not snapshot.complete:
-        is_stale = True
-        reason = "missing_dependencies"
-    elif current_snapshot is not None and snapshot.hash != current_snapshot.hash:
-        is_stale = True
-        reason = "dependency_snapshot_changed_before_write"
-
-    return {
-        "mode": mode,
-        "has_dependency_snapshot": True,
-        "snapshot_hash": snapshot.hash,
-        "current_snapshot_hash": current_snapshot.hash if current_snapshot else None,
-        "complete": snapshot.complete,
-        "is_stale": is_stale,
-        "reason": reason,
-        "schema_version": snapshot.schema_version,
-    }
-
-
 def merge_snapshot_into_trace(
     trace: Optional[Dict[str, Any]],
     *,
     snapshot: Optional[DependencySnapshot],
-    consistency: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    if snapshot is None and consistency is None:
+    if snapshot is None:
         return trace
     trace_data = dict(trace or {})
-    if snapshot is not None:
-        trace_data[SNAPSHOT_SCHEMA_VERSION] = snapshot.as_dict()
-    if consistency is not None:
-        trace_data["dependency_consistency"] = consistency
+    trace_data[SNAPSHOT_SCHEMA_VERSION] = snapshot.as_dict()
     return trace_data
-
-
-def metadata_marks_stale(metadata: Any, trace: Any = None) -> bool:
-    metadata = json_object(metadata)
-    consistency = metadata.get("dependency_consistency")
-    if isinstance(consistency, dict) and consistency.get("is_stale"):
-        return True
-
-    trace = json_object(trace)
-    if isinstance(trace, dict):
-        trace_consistency = trace.get("dependency_consistency")
-        if isinstance(trace_consistency, dict) and trace_consistency.get("is_stale"):
-            return True
-    return False
 
 
 def extract_dependency_snapshot(value: Any) -> Optional[Dict[str, Any]]:
@@ -400,7 +350,7 @@ async def check_score_result_dependency_snapshot_current(
     if not stored_snapshot:
         return {
             "has_dependency_snapshot": False,
-            "is_stale": False,
+            "matches": True,
             "reason": "no_dependency_snapshot",
         }
 
@@ -416,7 +366,7 @@ async def check_score_result_dependency_snapshot_current(
     if not dependency_configs:
         return {
             "has_dependency_snapshot": True,
-            "is_stale": True,
+            "matches": False,
             "reason": "dependency_snapshot_has_no_dependencies",
             "snapshot_hash": stored_hash,
             "current_snapshot_hash": None,
@@ -428,7 +378,7 @@ async def check_score_result_dependency_snapshot_current(
         account_id=account_id,
         dependency_configs=dependency_configs,
     )
-    is_stale = not current_snapshot.complete or current_snapshot.hash != stored_hash
+    matches = current_snapshot.complete and current_snapshot.hash == stored_hash
     reason = None
     if not current_snapshot.complete:
         reason = "current_dependency_missing"
@@ -437,7 +387,7 @@ async def check_score_result_dependency_snapshot_current(
 
     return {
         "has_dependency_snapshot": True,
-        "is_stale": is_stale,
+        "matches": matches,
         "reason": reason,
         "snapshot_hash": stored_hash,
         "current_snapshot_hash": current_snapshot.hash,

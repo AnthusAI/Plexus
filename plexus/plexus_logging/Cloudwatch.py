@@ -12,7 +12,7 @@ class CloudWatchLogger:
         self.cloudwatch_client = None
 
         # Get AWS region
-        aws_region = os.getenv('AWS_REGION') or os.getenv('AWS_REGION_NAME') or os.getenv('AWS_DEFAULT_REGION')
+        aws_region = os.getenv('AWS_REGION_NAME') or os.getenv('AWS_REGION') or os.getenv('AWS_DEFAULT_REGION')
 
         if not aws_region:
             logging.warning("AWS region not set, CloudWatch metrics disabled")

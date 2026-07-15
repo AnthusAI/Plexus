@@ -238,6 +238,24 @@ class TestConfigLoader:
         # Only api_url should be set, working_directory change failed
         assert os.environ.get('PLEXUS_API_URL') == 'https://test.com'
         assert env_vars_set == 1
+
+    def test_set_environment_variables_preserves_aws_profile_credentials(self):
+        """Test config AWS keys do not override an explicit AWS profile."""
+        config = {
+            'aws': {
+                'access_key_id': 'config-access-key',
+                'secret_access_key': 'config-secret-key',
+                'region_name': 'us-east-1',
+            }
+        }
+        os.environ['AWS_PROFILE'] = 'call-criteria'
+
+        env_vars_set = self.loader._set_environment_variables(config)
+
+        assert env_vars_set == 1
+        assert 'AWS_ACCESS_KEY_ID' not in os.environ
+        assert 'AWS_SECRET_ACCESS_KEY' not in os.environ
+        assert os.environ['AWS_REGION_NAME'] == 'us-east-1'
     
     @patch.object(ConfigLoader, '_load_yaml_file')
     def test_load_config_single_file(self, mock_load_yaml):

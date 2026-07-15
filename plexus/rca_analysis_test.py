@@ -732,6 +732,7 @@ def test_invoke_rca_openai_text_captures_context(tmp_path, monkeypatch):
 
     assert result == "ok"
     assert client_kwargs == [{"timeout": 60.0, "max_retries": 1}]
+    assert calls[0]["model"] == "gpt-5.6-luna"
     assert calls[0]["reasoning"] == {"effort": "low"}
     assert calls[0]["max_output_tokens"] == 1000
     json_files = list(tmp_path.glob("*.json"))

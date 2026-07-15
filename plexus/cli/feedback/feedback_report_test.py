@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from datetime import datetime, timezone
 
 from plexus.cli.feedback.feedback_report import report
+from plexus.cli.feedback.report_runner import build_feedback_alignment_timeline_report_blocks
 from plexus.reports.service import encode_programmatic_run_payload
 
 
@@ -15,6 +16,44 @@ def test_acceptance_rate_help_describes_durable_task_background_mode():
     assert "--background" in result.output
     assert "Queue as a durable task for dispatcher" in result.output
     assert "background thread" not in result.output
+
+
+def test_build_feedback_alignment_timeline_report_blocks_splits_score_series():
+    output = {
+        "mode": "all_scores",
+        "scorecard_name": "Example Scorecard",
+        "show_bucket_details": True,
+        "bucket_policy": {"bucket_type": "calendar_month"},
+        "sample_policy": {"rolling_min_items": 100},
+        "overall": {"score_id": "overall", "score_name": "Overall", "points": [{"bucket_index": 0}]},
+        "scores": [
+            {"score_id": "score-1", "score_name": "First Score", "points": [{"bucket_index": 0}]},
+            {"score_id": "score-2", "score_name": "Second Score", "points": [{"bucket_index": 0}]},
+        ],
+    }
+
+    blocks = build_feedback_alignment_timeline_report_blocks(
+        output_data=output,
+        block_config={"scorecard": "sc-1", "show_bucket_details": True},
+        log_output="generated",
+    )
+
+    assert [block["block_name"] for block in blocks] == [
+        "Overall Alignment Timeline",
+        "First Score Alignment Timeline",
+        "Second Score Alignment Timeline",
+    ]
+    assert [block["output"]["overall"]["score_id"] for block in blocks] == [
+        "overall",
+        "score-1",
+        "score-2",
+    ]
+    assert all(block["config"]["show_bucket_details"] is False for block in blocks)
+    assert all(block["output"]["show_bucket_details"] is False for block in blocks)
+    assert all(block["output"]["scores"] == [] for block in blocks)
+    assert all("message" not in block["output"] for block in blocks)
+    assert blocks[0]["output"]["show_methodology"] is True
+    assert [block["output"]["show_methodology"] for block in blocks[1:]] == [False, False]
 
 
 @patch("plexus.cli.feedback.feedback_report.run_programmatic_block_and_persist")
@@ -151,10 +190,10 @@ def test_acceptance_rate_timeline_uses_default_parallel_fetch_options(mock_run_f
     assert kwargs["extra_config"]["fetch_max_inflight_process"] == 8
 
 
-@patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")
-def test_feedback_alignment_timeline_show_bucket_details_flag_pass_through(mock_run_feedback_report_block):
+@patch("plexus.cli.feedback.feedback_report.run_feedback_alignment_timeline_report")
+def test_feedback_alignment_timeline_show_bucket_details_flag_pass_through(mock_run_feedback_alignment_timeline_report):
     runner = CliRunner()
-    mock_run_feedback_report_block.return_value = {"status": "success", "output": {"points": []}}
+    mock_run_feedback_alignment_timeline_report.return_value = {"status": "success", "output": {"points": []}}
 
     result = runner.invoke(
         report,
@@ -169,8 +208,83 @@ def test_feedback_alignment_timeline_show_bucket_details_flag_pass_through(mock_
     )
 
     assert result.exit_code == 0
-    _, kwargs = mock_run_feedback_report_block.call_args
+    _, kwargs = mock_run_feedback_alignment_timeline_report.call_args
     assert kwargs["extra_config"]["show_bucket_details"] is True
+    assert kwargs["extra_config"]["rolling_min_items"] == 100
+    assert kwargs["split_score_timelines"] is True
+
+
+@patch("plexus.cli.feedback.feedback_report.run_feedback_alignment_timeline_report")
+def test_feedback_alignment_timeline_rolling_min_items_pass_through(mock_run_feedback_alignment_timeline_report):
+    runner = CliRunner()
+    mock_run_feedback_alignment_timeline_report.return_value = {"status": "success", "output": {"points": []}}
+
+    result = runner.invoke(
+        report,
+        [
+            "timeline",
+            "--scorecard",
+            "1438",
+            "--days",
+            "30",
+            "--rolling-min-items",
+            "25",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, kwargs = mock_run_feedback_alignment_timeline_report.call_args
+    assert kwargs["extra_config"]["rolling_min_items"] == 25
+
+
+@patch("plexus.cli.feedback.feedback_report.run_feedback_alignment_timeline_report")
+def test_feedback_alignment_timeline_score_filter_flags_pass_through(mock_run_feedback_alignment_timeline_report):
+    runner = CliRunner()
+    mock_run_feedback_alignment_timeline_report.return_value = {"status": "success", "output": {"points": []}}
+
+    result = runner.invoke(
+        report,
+        [
+            "timeline",
+            "--scorecard",
+            "1438",
+            "--days",
+            "30",
+            "--include-score",
+            "Score 1",
+            "--include-score",
+            "Score 2",
+            "--exclude-score",
+            "Score 3",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, kwargs = mock_run_feedback_alignment_timeline_report.call_args
+    assert kwargs["extra_config"]["include_scores"] == ["Score 1", "Score 2"]
+    assert kwargs["extra_config"]["exclude_scores"] == ["Score 3"]
+
+
+@patch("plexus.cli.feedback.feedback_report.run_feedback_alignment_timeline_report")
+def test_feedback_alignment_timeline_single_block_flag_pass_through(mock_run_feedback_alignment_timeline_report):
+    runner = CliRunner()
+    mock_run_feedback_alignment_timeline_report.return_value = {"status": "success", "output": {"points": []}}
+
+    result = runner.invoke(
+        report,
+        [
+            "timeline",
+            "--scorecard",
+            "1438",
+            "--days",
+            "30",
+            "--single-block",
+        ],
+    )
+
+    assert result.exit_code == 0
+    _, kwargs = mock_run_feedback_alignment_timeline_report.call_args
+    assert kwargs["split_score_timelines"] is False
 
 
 @patch("plexus.cli.feedback.feedback_report.run_feedback_report_block")

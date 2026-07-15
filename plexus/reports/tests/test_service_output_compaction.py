@@ -110,6 +110,33 @@ def test_persist_output_artifact_handles_dict_payload(monkeypatch):
     assert isinstance(content_arg, bytes)
 
 
+def test_persist_output_artifact_raises_when_s3_unavailable(monkeypatch):
+    monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", False)
+
+    with pytest.raises(RuntimeError, match="S3 utilities are unavailable"):
+        service._persist_output_artifact_and_compact(
+            report_block_id="rb-inline",
+            output_payload={"status": "ok", "summary": "inline payload"},
+            existing_details_files_list=[],
+            log_prefix="[test]",
+        )
+
+
+def test_persist_output_artifact_propagates_upload_failure(monkeypatch):
+    monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", True)
+    upload_mock = Mock(side_effect=PermissionError("denied"))
+    monkeypatch.setattr(service, "upload_report_block_file", upload_mock)
+
+    with pytest.raises(PermissionError, match="denied"):
+        service._persist_output_artifact_and_compact(
+            report_block_id="rb-inline",
+            output_payload={"status": "ok", "summary": "inline payload"},
+            existing_details_files_list=[],
+            log_prefix="[test]",
+        )
+    upload_mock.assert_called_once()
+
+
 def test_fetch_first_block_result_surfaces_failed_compacted_payload(monkeypatch):
     monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", True)
     client = Mock()
@@ -186,13 +213,13 @@ def test_check_db_cache_uses_report_parameters_cache_key(monkeypatch):
     assert cached == {"status": "ok", "topics": [1, 2]}
 
 
-def test_persist_output_artifact_raises_when_s3_unavailable(monkeypatch):
+def test_persist_output_artifact_raises_when_s3_unavailable_and_payload_present(monkeypatch):
     monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", False)
 
     with pytest.raises(RuntimeError, match="S3 utilities are unavailable"):
         service._persist_output_artifact_and_compact(
             report_block_id="rb-2",
-            output_payload=json.dumps({"status": "ok"}),
+            output_payload=json.dumps({"status": "ok", "summary": "payload present"}),
             existing_details_files_list=[],
             log_prefix="[test]",
         )
@@ -222,7 +249,34 @@ def test_persist_log_artifact_if_present_raises_when_s3_unavailable(monkeypatch)
     with pytest.raises(RuntimeError, match="S3 utilities are unavailable"):
         service._persist_log_artifact_if_present(
             report_block_id="rb-4",
-            log_output="x",
+            log_output="small log",
+            existing_details_files_list=[],
+            log_prefix="[test]",
+        )
+
+
+def test_persist_log_artifact_if_present_propagates_upload_failure(monkeypatch):
+    monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", True)
+    upload_mock = Mock(side_effect=PermissionError("denied"))
+    monkeypatch.setattr(service, "upload_report_block_file", upload_mock)
+
+    with pytest.raises(PermissionError, match="denied"):
+        service._persist_log_artifact_if_present(
+            report_block_id="rb-4",
+            log_output="small log",
+            existing_details_files_list=[],
+            log_prefix="[test]",
+        )
+    upload_mock.assert_called_once()
+
+
+def test_persist_log_artifact_if_present_raises_when_s3_unavailable_and_log_present(monkeypatch):
+    monkeypatch.setattr(service, "S3_UTILS_AVAILABLE", False)
+
+    with pytest.raises(RuntimeError, match="S3 utilities are unavailable"):
+        service._persist_log_artifact_if_present(
+            report_block_id="rb-4",
+            log_output="this log is present",
             existing_details_files_list=[],
             log_prefix="[test]",
         )

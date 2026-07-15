@@ -449,6 +449,45 @@ class TestFetchFeedbackItemsForScore:
         assert len(result) == 2
         assert mock_api_client.execute.call_count == 1
 
+    @pytest.mark.asyncio
+    async def test_fetch_feedback_items_with_stats_excludes_invalid(self, mock_api_client):
+        start_date = datetime.now(timezone.utc) - timedelta(days=7)
+        end_date = datetime.now(timezone.utc)
+
+        mock_response = {
+            'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt': {
+                'items': [
+                    {'id': 'feedback-item-1', 'isInvalid': False, 'editedAt': datetime.now(timezone.utc).isoformat()},
+                    {'id': 'feedback-item-2', 'isInvalid': True, 'editedAt': datetime.now(timezone.utc).isoformat()},
+                    {'id': 'feedback-item-3', 'isInvalid': None, 'editedAt': datetime.now(timezone.utc).isoformat()},
+                ],
+                'nextToken': None,
+            }
+        }
+        mock_api_client.execute = MagicMock(return_value=mock_response)
+
+        def _build_item(payload, client=None):
+            item = MagicMock()
+            item.id = payload["id"]
+            item.isInvalid = payload.get("isInvalid")
+            return item
+
+        with patch('plexus.dashboard.api.models.feedback_item.FeedbackItem.from_dict', side_effect=_build_item):
+            items, stats = await feedback_utils.fetch_feedback_items_for_score_with_stats(
+                mock_api_client,
+                "test-account-id",
+                "scorecard-1",
+                "score-1",
+                start_date,
+                end_date,
+                exclude_invalid=True,
+            )
+
+        assert [item.id for item in items] == ["feedback-item-1", "feedback-item-3"]
+        assert stats["fetched_total"] == 3
+        assert stats["ignored_invalid"] == 1
+        assert stats["analyzed_total"] == 2
+
 
 class TestIdentifyScorecardsWithFeedback:
     """Tests for identify_scorecards_with_feedback function."""

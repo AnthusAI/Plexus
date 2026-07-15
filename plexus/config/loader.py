@@ -221,11 +221,18 @@ class ConfigLoader:
         the precedence order: env vars > YAML config > defaults.
         """
         env_vars_set = 0
+        aws_profile_requested = bool(os.environ.get("AWS_PROFILE") or os.environ.get("AWS_DEFAULT_PROFILE"))
         
         for yaml_key, env_var in self.ENV_VAR_MAPPING.items():
             value = self._get_nested_value(config, yaml_key)
             
             if value is not None:
+                if aws_profile_requested and env_var in {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"}:
+                    logger.debug(
+                        "Skipped %s from config because AWS_PROFILE/AWS_DEFAULT_PROFILE is set",
+                        env_var,
+                    )
+                    continue
                 # Handle special case for working directory
                 if env_var == '_PLEXUS_WORKING_DIRECTORY':
                     if self._change_working_directory(str(value)):

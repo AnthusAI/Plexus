@@ -207,36 +207,49 @@ max_feedback_items: 50`,
     type: "FeedbackAlignmentTimeline",
     category: "Trends",
     badge: "Trend",
-    summary: "Plots alignment metrics across complete historical buckets so teams can see whether agreement is improving or drifting.",
+    summary: "Plots stored feedback alignment across time buckets with rolling minimum samples so teams can see whether agreement is improving or drifting.",
     answers: ["Is alignment improving over time?", "Did a release or rubric change move AC1?", "Which completed periods had no feedback?"],
     useWhen: ["Reviewing week-over-week score health.", "Checking post-release drift.", "Separating recent trend from long-window averages."],
     avoidWhen: ["You only need the latest aggregate; use FeedbackAlignment.", "You need feedback volume only; use FeedbackVolumeTimeline."],
     cli: `plexus feedback report timeline \\
   --scorecard "Customer Service QA" \\
-  --score "Medication Review: Dosage" \\
+  --include-score "Resolution Accuracy" \\
+  --exclude-score "Experimental Variant" \\
   --bucket-type calendar_week \\
   --bucket-count 6 \\
-  --show-bucket-details`,
+  --rolling-min-items 100`,
     config: `class: FeedbackAlignmentTimeline
 scorecard: "Customer Service QA"
-score: "Medication Review: Dosage"
+include_scores:
+  - "Resolution Accuracy"
+exclude_scores:
+  - "Experimental Variant"
 bucket_type: calendar_week
 bucket_count: 6
-show_bucket_details: true`,
-    interpretation: ["Only complete buckets are shown, so partial current periods do not distort the trend.", "Falling AC1 with stable feedback volume usually means policy or score behavior drift."],
+rolling_min_items: 100
+show_bucket_details: false`,
+    interpretation: ["Each chart measures how often stored production score answers agreed with the final human correction recorded in feedback.", "The bucket date is feedback edit time, not call time and not score-version release time.", "Feedback items marked invalid are excluded before analysis, and the report includes fetched/analyzed/ignored-invalid counts.", "Each point first uses feedback edited inside the bucket; if the bucket has fewer than rolling_min_items records, older feedback is added until the point reaches the minimum or no earlier feedback exists.", "Lookback records only stabilize sparse buckets; each point still ends at that bucket's end date.", "This report does not replay historical champion versions or backtest current prompts.", "The CLI persists scorecard-level runs as top-level timeline blocks by default: one overall timeline followed by one timeline per included score."],
     sampleOutput: {
       mode: "single_score",
       block_title: "Feedback Alignment Timeline",
       block_description: "Alignment metrics over complete historical buckets",
       bucket_policy: { bucket_type: "calendar_week", bucket_count: 4, timezone: "UTC", week_start: "monday", complete_only: true },
+      sample_policy: {
+        metric: "Gwet AC1 over stored feedback answer pairs",
+        rolling_min_items: 100,
+        lookback: "unbounded",
+        bucket_timestamp: "FeedbackItem.editedAt",
+        prediction_value: "FeedbackItem.initialAnswerValue",
+        reference_value: "FeedbackItem.finalAnswerValue",
+      },
       overall: {
-        score_id: "score-dosage",
-        score_name: "Medication Review: Dosage",
+        score_id: "score-resolution-accuracy",
+        score_name: "Resolution Accuracy",
         points: [
-          { bucket_index: 0, label: "Mar 2", start: "2026-03-02T00:00:00Z", end: "2026-03-09T00:00:00Z", ac1: 0.62, accuracy: 75, item_count: 20, agreements: 15, mismatches: 5 },
-          { bucket_index: 1, label: "Mar 9", start: "2026-03-09T00:00:00Z", end: "2026-03-16T00:00:00Z", ac1: 0.71, accuracy: 82, item_count: 22, agreements: 18, mismatches: 4 },
-          { bucket_index: 2, label: "Mar 16", start: "2026-03-16T00:00:00Z", end: "2026-03-23T00:00:00Z", ac1: 0.79, accuracy: 87, item_count: 23, agreements: 20, mismatches: 3 },
-          { bucket_index: 3, label: "Mar 23", start: "2026-03-23T00:00:00Z", end: "2026-03-30T00:00:00Z", ac1: 0.84, accuracy: 89, item_count: 26, agreements: 23, mismatches: 3 },
+          { bucket_index: 0, label: "Mar 2", start: "2026-03-02T00:00:00Z", end: "2026-03-09T00:00:00Z", ac1: 0.62, accuracy: 75, item_count: 100, bucket_item_count: 20, sample_item_count: 100, lookback_item_count: 80, sample_start: "2026-01-15T00:00:00Z", sample_end: "2026-03-08T18:00:00Z", sample_extended: true, agreements: 75, mismatches: 25 },
+          { bucket_index: 1, label: "Mar 9", start: "2026-03-09T00:00:00Z", end: "2026-03-16T00:00:00Z", ac1: 0.71, accuracy: 82, item_count: 100, bucket_item_count: 22, sample_item_count: 100, lookback_item_count: 78, sample_start: "2026-01-22T00:00:00Z", sample_end: "2026-03-15T18:00:00Z", sample_extended: true, agreements: 82, mismatches: 18 },
+          { bucket_index: 2, label: "Mar 16", start: "2026-03-16T00:00:00Z", end: "2026-03-23T00:00:00Z", ac1: 0.79, accuracy: 87, item_count: 100, bucket_item_count: 23, sample_item_count: 100, lookback_item_count: 77, sample_start: "2026-01-29T00:00:00Z", sample_end: "2026-03-22T18:00:00Z", sample_extended: true, agreements: 87, mismatches: 13 },
+          { bucket_index: 3, label: "Mar 23", start: "2026-03-23T00:00:00Z", end: "2026-03-30T00:00:00Z", ac1: 0.84, accuracy: 89, item_count: 100, bucket_item_count: 26, sample_item_count: 100, lookback_item_count: 74, sample_start: "2026-02-05T00:00:00Z", sample_end: "2026-03-29T18:00:00Z", sample_extended: true, agreements: 89, mismatches: 11 },
         ],
       },
       scores: [],

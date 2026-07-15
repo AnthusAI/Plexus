@@ -316,6 +316,9 @@ class FeedbackAlignment(BaseReportBlock):
                     "score_name": None,
                     "overall_ac1": None, "total_items": 0, "total_mismatches": 0, "accuracy": None,
                     "scores": [],
+                    "fetched_feedback_items": 0,
+                    "ignored_invalid_feedback_items": 0,
+                    "analyzed_feedback_items": 0,
                     "total_feedback_items_retrieved": 0,
                     "date_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
                     "message": msg,
@@ -330,6 +333,8 @@ class FeedbackAlignment(BaseReportBlock):
 
             # --- 4. Fetch and Analyze Feedback for Each Score ---
             all_feedback_items_retrieved_count = 0
+            fetched_feedback_items_count = 0
+            ignored_invalid_feedback_items_count = 0
             all_date_filtered_feedback_items = []  # For overall calculation
             per_score_analysis_results = []
             # For optional memory analysis: collect edit comment texts per score
@@ -343,13 +348,28 @@ class FeedbackAlignment(BaseReportBlock):
             for score_index, score_info in enumerate(scores_to_process):
                 self._log(f"--- Processing Score: '{score_info['plexus_score_name']}' (ID: {score_info['plexus_score_id']}, CC ID: {score_info['cc_question_id']}) ---")
                 
-                items_for_this_score = await self._fetch_feedback_items_for_score(
+                fetch_result = await self._fetch_feedback_items_for_score(
                     plexus_scorecard_id=plexus_scorecard_obj.id,
                     plexus_score_id=score_info['plexus_score_id'],
                     start_date=start_date,
                     end_date=end_date
                 )
-                all_feedback_items_retrieved_count += len(items_for_this_score)
+                if (
+                    isinstance(fetch_result, tuple)
+                    and len(fetch_result) == 2
+                    and isinstance(fetch_result[1], dict)
+                ):
+                    items_for_this_score, fetch_stats = fetch_result
+                else:
+                    items_for_this_score = fetch_result or []
+                    fetch_stats = {
+                        "fetched_total": len(items_for_this_score),
+                        "ignored_invalid": 0,
+                        "analyzed_total": len(items_for_this_score),
+                    }
+                fetched_feedback_items_count += fetch_stats["fetched_total"]
+                ignored_invalid_feedback_items_count += fetch_stats["ignored_invalid"]
+                all_feedback_items_retrieved_count += fetch_stats["analyzed_total"]
                 self._log(f"Retrieved {len(items_for_this_score)} FeedbackItems for this score within date range: {start_date.date()} - {end_date.date()}")
                 
                 all_date_filtered_feedback_items.extend(items_for_this_score)
@@ -543,6 +563,9 @@ class FeedbackAlignment(BaseReportBlock):
                     "scorecard_name": str(plexus_scorecard_obj.name),
                     "date_range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
                     "processed_scores": len(scores_to_process),
+                    "fetched_feedback_items": fetched_feedback_items_count,
+                    "ignored_invalid_feedback_items": ignored_invalid_feedback_items_count,
+                    "analyzed_feedback_items": all_feedback_items_retrieved_count,
                     "total_feedback_items_retrieved": all_feedback_items_retrieved_count,
                     "overall_ac1": overall_analysis.get("ac1"),
                     "accuracy": overall_analysis.get("accuracy"),
@@ -557,6 +580,9 @@ class FeedbackAlignment(BaseReportBlock):
                 "total_agreements": overall_analysis.get("agreements"),  # Renamed from agreements
                 "accuracy": overall_analysis.get("accuracy"),  # Renamed from accuracy
                 "scores": per_score_analysis_results,
+                "fetched_feedback_items": fetched_feedback_items_count,
+                "ignored_invalid_feedback_items": ignored_invalid_feedback_items_count,
+                "analyzed_feedback_items": all_feedback_items_retrieved_count,
                 "total_feedback_items_retrieved": all_feedback_items_retrieved_count,
                 "date_range": {
                     "start": start_date.isoformat(),
@@ -1378,9 +1404,13 @@ class FeedbackAlignment(BaseReportBlock):
 
         return formatted_output, detailed_log
 
-    async def _fetch_feedback_items_for_score(self, plexus_scorecard_id: str, plexus_score_id: str, 
-                                       start_date: Optional[datetime] = None, 
-                                       end_date: Optional[datetime] = None) -> List[FeedbackItem]:
+    async def _fetch_feedback_items_for_score(
+        self,
+        plexus_scorecard_id: str,
+        plexus_score_id: str,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> Tuple[List[FeedbackItem], Dict[str, int]]:
         """
         Fetches FeedbackItem records for a specific Plexus Score on a Plexus Scorecard.
         Now with direct GraphQL query for date-filtered items.
@@ -1424,17 +1454,18 @@ class FeedbackAlignment(BaseReportBlock):
             return []
 
         # Use the utility function
-        items = await feedback_utils.fetch_feedback_items_for_score(
+        items, stats = await feedback_utils.fetch_feedback_items_for_score_with_stats(
             self.api_client,
             account_id,
             plexus_scorecard_id,
             plexus_score_id,
             start_date,
-            end_date
+            end_date,
+            exclude_invalid=True,
         )
         
         self._log(f"Total items fetched for score {plexus_score_id}: {len(items)}")
-        return items
+        return items, stats
     
     def _analyze_feedback_data_gwet(self, feedback_items: List[FeedbackItem], score_id_info: str) -> Dict[str, Any]:
         """

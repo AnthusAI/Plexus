@@ -1453,6 +1453,137 @@ def run_programmatic_report_and_persist(
     return report.id, first_error_message
 
 
+def persist_precomputed_report_blocks(
+    *,
+    report_name: str,
+    block_definitions: List[Dict[str, Any]],
+    account_id: str,
+    client: PlexusDashboardClient,
+    report_parameters: Optional[Dict[str, Any]] = None,
+    display_title: Optional[str] = None,
+    display_subtitle: Optional[str] = None,
+    display_description: Optional[str] = None,
+) -> str:
+    """
+    Persist an ordered report whose block outputs have already been computed.
+
+    This is useful when one expensive block run produces multiple visual series
+    that should appear as separate top-level report blocks.
+    """
+    if not report_name or not str(report_name).strip():
+        raise ValueError("'report_name' is required.")
+    if not block_definitions:
+        raise ValueError("'block_definitions' must contain at least one block.")
+
+    normalized_blocks: List[Dict[str, Any]] = []
+    for idx, raw in enumerate(block_definitions):
+        if not isinstance(raw, dict):
+            raise ValueError(f"Invalid block definition at index {idx}: expected object.")
+        class_name = str(raw.get("class_name") or "").strip()
+        if not class_name:
+            raise ValueError(f"Invalid block definition at index {idx}: 'class_name' is required.")
+        block_name = str(raw.get("block_name") or _humanize_block_class(class_name)).strip()
+        config = raw.get("config")
+        if config is None:
+            config = {}
+        if not isinstance(config, dict):
+            raise ValueError(f"Invalid block definition at index {idx}: 'config' must be an object.")
+        normalized_blocks.append(
+            {
+                "class_name": class_name,
+                "block_name": block_name,
+                "config": config,
+                "position": idx,
+                "output": raw.get("output"),
+                "log": raw.get("log"),
+            }
+        )
+
+    config_id = _get_programmatic_config_id(account_id, client)
+    task = Task.create(
+        client=client,
+        type="ProgrammaticReport",
+        target=str(report_name).strip(),
+        command="persist_precomputed_report_blocks",
+        accountId=account_id,
+        status="COMPLETED",
+        dispatchStatus="COMPLETED",
+        completedAt=datetime.now(timezone.utc).isoformat(),
+    )
+
+    parameters = dict(report_parameters or {})
+    if display_title:
+        parameters["_display_title"] = display_title
+    if display_subtitle:
+        parameters["_display_subtitle"] = display_subtitle
+    if display_description:
+        parameters["_display_description"] = display_description
+
+    report = Report.create(
+        client=client,
+        accountId=account_id,
+        taskId=task.id,
+        name=str(report_name).strip(),
+        reportConfigurationId=config_id,
+        parameters=parameters,
+    )
+    resolved_title = (display_title or str(report_name).strip() or "Programmatic Report").strip()
+    markdown_header = _build_programmatic_markdown_header(
+        title=resolved_title,
+        subtitle=display_subtitle,
+        description=display_description,
+    )
+    report.update(output=f"{markdown_header}\n\n{_build_programmatic_report_markdown(normalized_blocks)}")
+
+    for block in normalized_blocks:
+        report_block = ReportBlock.create(
+            client=client,
+            reportId=report.id,
+            position=int(block["position"]),
+            type=block["class_name"],
+            name=block["block_name"],
+            output="{}",
+            log="Processing...",
+        )
+
+        output_payload = block.get("output")
+        if output_payload is None:
+            output_payload = {}
+
+        log_output = block.get("log")
+        final_log_message, attached_files, _ = _persist_log_artifact_if_present(
+            report_block_id=report_block.id,
+            log_output=log_output,
+            existing_details_files_list=[],
+            log_prefix="[precomputed-report]",
+        )
+        compact_output_json, attached_files, _ = _persist_output_artifact_and_compact(
+            report_block_id=report_block.id,
+            output_payload=output_payload,
+            existing_details_files_list=attached_files,
+            log_prefix="[precomputed-report]",
+        )
+
+        mutation = """
+        mutation UpdateReportBlock($input: UpdateReportBlockInput!) {
+            updateReportBlock(input: $input) { id output log attachedFiles }
+        }
+        """
+        client.execute(
+            mutation,
+            {
+                "input": {
+                    "id": report_block.id,
+                    "output": compact_output_json,
+                    "log": final_log_message,
+                    "attachedFiles": attached_files,
+                }
+            },
+        )
+
+    return report.id
+
+
 def _fetch_first_block_result(
     report_id: str,
     client: PlexusDashboardClient,

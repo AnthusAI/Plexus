@@ -15,6 +15,7 @@ import yaml
 
 from plexus.cli.feedback.report_runner import (
     build_window_config,
+    run_feedback_alignment_timeline_report,
     run_feedback_report_block,
 )
 from plexus.cli.report.utils import resolve_account_id_for_command
@@ -565,8 +566,11 @@ def contradictions(
 @report.command(name="timeline")
 @click.option("--scorecard", required=True, help="Scorecard identifier (id, external id, or key).")
 @click.option("--score", required=False, help="Optional score identifier (id or external id).")
+@click.option("--include-score", "include_scores", multiple=True, help="Score identifier to include. Repeatable.")
+@click.option("--exclude-score", "exclude_scores", multiple=True, help="Score identifier to exclude. Repeatable.")
 @click.option("--bucket-type", default="trailing_7d", show_default=True)
 @click.option("--bucket-count", type=int, default=12, show_default=True)
+@click.option("--rolling-min-items", type=int, default=100, show_default=True, help="Minimum feedback items per rolling timeline point.")
 @click.option("--timezone", "timezone_name", default="UTC", show_default=True)
 @click.option("--week-start", type=click.Choice(["monday", "sunday"]), default="monday", show_default=True)
 @click.option(
@@ -582,14 +586,23 @@ def contradictions(
 @click.option("--ttl-hours", type=float, default=24.0, show_default=True, help="Cache TTL in hours.")
 @click.option("--fresh", is_flag=True, help="Ignore cached results and rerun.")
 @click.option("--background", is_flag=True, help="Queue as a durable task for dispatcher execution and return immediately.")
+@click.option(
+    "--split-score-timelines/--single-block",
+    default=True,
+    show_default=True,
+    help="Persist scorecard-level timeline reports as top-level overall and per-score timeline blocks.",
+)
 @click.option("--account", "account_identifier", default=None, help="Optional account key or id.")
 @click.option("--format", "output_format", type=click.Choice(["json", "yaml"]), default="json", show_default=True)
 @click.option("--include-log", is_flag=True, help="Include report block log output.")
 def timeline(
     scorecard: str,
     score: Optional[str],
+    include_scores: tuple[str, ...],
+    exclude_scores: tuple[str, ...],
     bucket_type: str,
     bucket_count: int,
+    rolling_min_items: int,
     timezone_name: str,
     week_start: str,
     show_bucket_details: bool,
@@ -600,13 +613,13 @@ def timeline(
     ttl_hours: float,
     fresh: bool,
     background: bool,
+    split_score_timelines: bool,
     account_identifier: Optional[str],
     output_format: str,
     include_log: bool,
 ) -> None:
-    """Run the FeedbackAlignmentTimeline report block directly."""
-    result = run_feedback_report_block(
-        block_class="FeedbackAlignmentTimeline",
+    """Run the FeedbackAlignmentTimeline report."""
+    result = run_feedback_alignment_timeline_report(
         scorecard=scorecard,
         score=score,
         days=_coerce_optional_int(days, "days"),
@@ -620,10 +633,14 @@ def timeline(
         extra_config={
             "bucket_type": bucket_type,
             "bucket_count": bucket_count,
+            "rolling_min_items": rolling_min_items,
             "timezone": timezone_name,
             "week_start": week_start,
             "show_bucket_details": show_bucket_details,
+            "include_scores": list(include_scores),
+            "exclude_scores": list(exclude_scores),
         },
+        split_score_timelines=split_score_timelines,
     )
     _print_result(title="FeedbackAlignmentTimeline", result=result, output_format=output_format, include_log=include_log)
 
