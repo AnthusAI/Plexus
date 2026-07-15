@@ -418,6 +418,18 @@ describe("ConversationViewer session-routing states", () => {
       />
     )
 
+    expect(screen.getByTestId("console-score-workflow-summary")).toBeInTheDocument()
+    expect(screen.getByText("Score workflow")).toBeInTheDocument()
+    expect(screen.getByText("Score version changed")).toBeInTheDocument()
+    expect(screen.getByText("No validation run found in this chat yet.")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Open workflow parent score version" })).toHaveAttribute(
+      "href",
+      "/lab/scorecards/sc-1/scores/s-1/versions/version-1"
+    )
+    expect(screen.getByRole("link", { name: "Open workflow candidate score version" })).toHaveAttribute(
+      "href",
+      "/lab/scorecards/sc-1/scores/s-1/versions/version-2"
+    )
     expect(screen.getByTestId("console-score-change-diff")).toBeInTheDocument()
     fireEvent.click(screen.getByTestId("console-score-change-diff-trigger"))
 

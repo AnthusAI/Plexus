@@ -1,0 +1,25 @@
+{
+  "id": "plx-656ef752-3367-4abf-9132-a8031757dcc3",
+  "title": "Improve console score workflow UI",
+  "description": "",
+  "type": "task",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "7315e76a-26c0-4553-8c1b-909dff80a11b",
+      "author": "ryan",
+      "text": "Implemented a first-pass Console score workflow summary for chat messages and tool outputs. It surfaces score version changes, queued/completed evaluation state, durable task/evaluation/report/procedure links when available, and a clear missing-validation next step. Focused dashboard Jest suites passed locally: conversation-viewer session routing and streaming updates.",
+      "created_at": "2026-07-15T16:34:20.751398Z"
+    }
+  ],
+  "created_at": "2026-07-15T16:30:11.791417Z",
+  "updated_at": "2026-07-15T16:34:20.751398Z",
+  "closed_at": null,
+  "custom": {}
+}

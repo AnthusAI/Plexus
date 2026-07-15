@@ -1921,6 +1921,66 @@ describe("ConversationViewer streaming updates", () => {
       expect(screen.getByTestId("evaluation-tool-output")).toBeInTheDocument()
       expect(screen.getByTestId("evaluation-tool-output").textContent).toContain("eval-1")
     })
+    expect(screen.getByTestId("console-score-workflow-summary")).toBeInTheDocument()
+    expect(screen.getByText("Evaluation available")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Open workflow evaluation" })).toHaveAttribute(
+      "href",
+      "/lab/evaluations/eval-1"
+    )
+    expect(screen.getByText(/Review the result/)).toBeInTheDocument()
+  })
+
+  it("renders queued evaluation task workflow without calling it running", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-exec-tactus-eval-queued",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "TOOL_CALL",
+          humanInteraction: "INTERNAL",
+          toolName: "execute_tactus",
+          toolParameters: JSON.stringify({ tactus: "return plexus.evaluation.run({ async = true })" }),
+          toolResponse: JSON.stringify({
+            ok: true,
+            api_calls: ["plexus.evaluation.run"],
+            value: {
+              status: "queued",
+              task_id: "task-queued-1",
+              dispatch_status: "PENDING",
+              evaluation_id: null,
+              evaluation_record_created: false,
+              score_version_id: "version-2",
+              evaluation_type: "feedback",
+            },
+          }),
+          content: "execute_tactus(...)",
+          createdAt: "2026-03-27T00:00:03.500Z",
+          sequenceNumber: 35,
+        },
+      ],
+      nextToken: null,
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId("console-score-workflow-summary")).toBeInTheDocument()
+    })
+    expect(screen.getByText("Evaluation queued")).toBeInTheDocument()
+    expect(screen.getByText("Task queued; evaluation record not created yet.")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Open workflow evaluation task" })).toHaveAttribute(
+      "href",
+      "/lab/tasks/task-queued-1"
+    )
+    expect(screen.queryByText("Running")).not.toBeInTheDocument()
   })
 
   it("renders execute_tactus evaluation output when value includes evaluationId without api_calls", async () => {
