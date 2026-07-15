@@ -13,7 +13,10 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+if TYPE_CHECKING:
+    from plexus.scores.Score import Score
 
 SNAPSHOT_SCHEMA_VERSION = "dependency_snapshot_v1"
 DEPENDENCY_SOURCE_PERSISTED = "persisted_score_result"
