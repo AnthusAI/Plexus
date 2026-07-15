@@ -3801,6 +3801,8 @@ class FeedbackEvaluation(Evaluation):
                         max_category_summary_items=self.max_category_summary_items,
                         tracker=tracker,
                     )
+                except FeedbackItemExplanationTimeoutError:
+                    raise
                 except Exception as exc:
                     root_cause_error_message = str(exc)
                     self.logger.warning(
