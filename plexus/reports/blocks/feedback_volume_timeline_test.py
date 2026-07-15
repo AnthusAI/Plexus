@@ -95,6 +95,9 @@ async def test_generate_single_score_mode_classifies_bucket_counts(mock_api_clie
     assert output["points"][1]["feedback_items_invalid_or_unclassified"] == 1
     assert output["summary"]["feedback_items_total"] == 3
     assert output["summary"]["feedback_items_valid"] == 2
+    assert output["ignored_invalid_feedback_items"] == 0
+    assert output["analyzed_feedback_items"] == 3
+    assert output["fetched_feedback_items"] == 3
 
 
 @pytest.mark.asyncio
@@ -132,6 +135,7 @@ async def test_generate_exact_window_ignores_bucket_count_and_sets_show_details(
     assert output["bucket_policy"]["bucket_count"] == 3
     assert output["date_range"]["start"].startswith("2026-04-01T00:00:00")
     assert output["date_range"]["end"].startswith("2026-04-19T23:59:59")
+    assert output["ignored_invalid_feedback_items"] == 0
 
 
 @pytest.mark.asyncio
@@ -164,7 +168,7 @@ async def test_generate_scorecard_scope_aggregates_scores(mock_api_client):
             _make_feedback_item(
                 item_id="fi-2",
                 initial="yes",
-                final="no",
+                final=None,
                 edited_at=datetime(2026, 4, 5, 8, 0, tzinfo=timezone.utc),
                 is_invalid=True,
             ),
@@ -207,6 +211,7 @@ async def test_generate_scorecard_scope_aggregates_scores(mock_api_client):
     assert populated_bucket_point["feedback_items_changed"] == 1
     assert populated_bucket_point["feedback_items_invalid_or_unclassified"] == 1
     assert output["summary"]["feedback_items_total"] == 3
+    assert output["summary"]["ignored_invalid_feedback_items"] == 0
 
 
 @pytest.mark.asyncio

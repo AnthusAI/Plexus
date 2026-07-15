@@ -164,6 +164,9 @@ class VectorTopicMemory(BaseReportBlock):
             "index_name": None,
             "indexed_doc_count": 0,
             "indexed_doc_ids_sample": [],
+            "fetched_feedback_items": 0,
+            "ignored_invalid_feedback_items": 0,
+            "analyzed_feedback_items": 0,
         }
 
         try:
@@ -191,7 +194,19 @@ class VectorTopicMemory(BaseReportBlock):
             datasets = []
 
             if scorecard_param:
-                datasets = await self._resolve_feedback_datasets(scorecard_param, days_param)
+                datasets_result = await self._resolve_feedback_datasets(scorecard_param, days_param)
+                if isinstance(datasets_result, tuple) and len(datasets_result) == 2:
+                    datasets, feedback_fetch_stats = datasets_result
+                else:
+                    datasets = datasets_result or []
+                    feedback_fetch_stats = getattr(
+                        self,
+                        "_last_feedback_fetch_stats",
+                        {"fetched_total": 0, "ignored_invalid": 0, "analyzed_total": 0},
+                    )
+                output_data["fetched_feedback_items"] = feedback_fetch_stats["fetched_total"]
+                output_data["ignored_invalid_feedback_items"] = feedback_fetch_stats["ignored_invalid"]
+                output_data["analyzed_feedback_items"] = feedback_fetch_stats["analyzed_total"]
             elif source or dataset:
                 # Use DataSource/DataSet
                 resolver = DatasetResolver(self.api_client)
@@ -970,23 +985,33 @@ class VectorTopicMemory(BaseReportBlock):
 
         if not scores_to_process:
             self._log("No scores to process.", level="WARNING")
+            self._last_feedback_fetch_stats = {
+                "fetched_total": 0,
+                "ignored_invalid": 0,
+                "analyzed_total": 0,
+            }
             return []
 
         datasets = []
+        fetch_stats_total = {"fetched_total": 0, "ignored_invalid": 0, "analyzed_total": 0}
         
         for score_info in scores_to_process:
             texts = []
             doc_ids = []
             timestamps = []
             
-            items = await feedback_utils.fetch_feedback_items_for_score(
+            items, fetch_stats = await feedback_utils.fetch_feedback_items_for_score_with_stats(
                 self.api_client,
                 account_id,
                 plexus_scorecard.id,
                 score_info["plexus_score_id"],
                 start_date,
                 end_date,
+                exclude_invalid=True,
             )
+            fetch_stats_total["fetched_total"] += fetch_stats["fetched_total"]
+            fetch_stats_total["ignored_invalid"] += fetch_stats["ignored_invalid"]
+            fetch_stats_total["analyzed_total"] += fetch_stats["analyzed_total"]
             
             if content_source == "edit_comment":
                 for fi in items:
@@ -1066,4 +1091,5 @@ class VectorTopicMemory(BaseReportBlock):
                 })
                 self._log(f"Resolved {len(texts)} items for score {score_info['plexus_score_name']}.")
 
+        self._last_feedback_fetch_stats = fetch_stats_total
         return datasets

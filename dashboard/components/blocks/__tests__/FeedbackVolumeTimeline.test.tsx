@@ -57,7 +57,13 @@ describe("FeedbackVolumeTimeline", () => {
         feedback_items_unchanged: 7,
         feedback_items_changed: 2,
         feedback_items_invalid_or_unclassified: 1,
+        fetched_feedback_items: 12,
+        ignored_invalid_feedback_items: 2,
+        analyzed_feedback_items: 10,
       },
+      fetched_feedback_items: 12,
+      ignored_invalid_feedback_items: 2,
+      analyzed_feedback_items: 10,
       show_bucket_details: false,
     },
     log: undefined,
@@ -73,6 +79,7 @@ describe("FeedbackVolumeTimeline", () => {
     expect(screen.getByText("Feedback Volume Timeline")).toBeInTheDocument();
     expect(screen.getByText("Total Feedback Items")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
+    expect(screen.getByText(/Ignored invalid feedback items: 2/)).toBeInTheDocument();
     expect(screen.getByTestId("chart-container")).toBeInTheDocument();
     expect(screen.queryByText("Bucket Metrics")).not.toBeInTheDocument();
   });
@@ -89,7 +96,7 @@ describe("FeedbackVolumeTimeline", () => {
     );
 
     expect(screen.getByText("Bucket Metrics")).toBeInTheDocument();
-    expect(screen.getAllByText("Invalid / Unclassified")).toHaveLength(2);
+    expect(screen.getAllByText("Unclassified")).toHaveLength(2);
   });
 
   it("shows processing placeholder instead of zero metrics while pending", () => {

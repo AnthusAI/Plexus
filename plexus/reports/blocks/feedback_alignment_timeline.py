@@ -12,6 +12,7 @@ from plexus.dashboard.api.models.feedback_item import FeedbackItem
 from . import feedback_utils
 from .base import BaseReportBlock
 from .feedback_scope_resolver import (
+    ResolvedScoreRef,
     list_scores_for_scorecard,
     resolve_score_for_scorecard,
     resolve_scorecard,
@@ -41,6 +42,8 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
     DEFAULT_NAME = "Feedback Alignment Timeline"
     DEFAULT_DESCRIPTION = "Alignment metrics over time"
     DEFAULT_DAYS = 30
+    DEFAULT_ROLLING_MIN_ITEMS = 100
+    ROLLING_LOOKBACK_START_UTC = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
     TRAILING_BUCKET_DAYS: Dict[str, int] = {
         "trailing_1d": 1,
@@ -62,6 +65,11 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
             score_identifier = self._get_param("score_id") or self._get_param("score")
             if score_identifier is not None:
                 score_identifier = str(score_identifier).strip() or None
+            include_score_identifiers = self._parse_score_filter_values(self._get_param("include_scores"))
+            exclude_score_identifiers = self._parse_score_filter_values(self._get_param("exclude_scores"))
+            has_score_filter = bool(include_score_identifiers or exclude_score_identifiers)
+            if score_identifier and has_score_filter:
+                raise ValueError("'score'/'score_id' cannot be combined with 'include_scores' or 'exclude_scores'.")
 
             bucket_type = str(self._get_param("bucket_type") or "trailing_7d").strip().lower()
             requested_bucket_count = self._get_param("bucket_count")
@@ -69,6 +77,7 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
             timezone_name = str(self._get_param("timezone") or "UTC").strip()
             week_start = str(self._get_param("week_start") or "monday").strip().lower()
             show_bucket_details = self._parse_bool(self._get_param("show_bucket_details"), default=False)
+            rolling_min_items = int(self._get_param("rolling_min_items") or self.DEFAULT_ROLLING_MIN_ITEMS)
 
             if bucket_type not in self.TRAILING_BUCKET_DAYS and bucket_type not in self.CALENDAR_BUCKET_TYPES:
                 supported = sorted(list(self.TRAILING_BUCKET_DAYS.keys()) + list(self.CALENDAR_BUCKET_TYPES))
@@ -77,6 +86,8 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                 )
             if week_start not in self.WEEK_START_INDEX:
                 raise ValueError("'week_start' must be either 'monday' or 'sunday'.")
+            if rolling_min_items <= 0:
+                raise ValueError("'rolling_min_items' must be a positive integer.")
 
             try:
                 tzinfo = ZoneInfo(timezone_name)
@@ -132,10 +143,18 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
 
             effective_bucket_count = len(buckets)
             scorecard = await self._resolve_scorecard(str(scorecard_identifier))
-            scores_to_analyze = await self._resolve_scores_for_mode(
-                scorecard_id=scorecard.id,
-                score_identifier=score_identifier,
-            )
+            score_filter: Optional[Dict[str, Any]] = None
+            if has_score_filter:
+                scores_to_analyze, score_filter = await self._resolve_scores_with_filters(
+                    scorecard_id=scorecard.id,
+                    include_score_identifiers=include_score_identifiers,
+                    exclude_score_identifiers=exclude_score_identifiers,
+                )
+            else:
+                scores_to_analyze = await self._resolve_scores_for_mode(
+                    scorecard_id=scorecard.id,
+                    score_identifier=score_identifier,
+                )
 
             bucket_policy = {
                 "bucket_type": bucket_type,
@@ -147,9 +166,13 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                 "complete_only": complete_only,
                 "window_mode": window_mode,
             }
+            sample_policy = self._build_sample_policy(
+                rolling_min_items=rolling_min_items,
+                bucket_type=bucket_type,
+            )
 
             if not scores_to_analyze:
-                return {
+                output = {
                     "mode": "single_score" if score_identifier else "all_scores",
                     "block_title": self.DEFAULT_NAME,
                     "block_description": self.DEFAULT_DESCRIPTION,
@@ -157,6 +180,7 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                     "scorecard_name": scorecard.name,
                     "show_bucket_details": show_bucket_details,
                     "bucket_policy": bucket_policy,
+                    "sample_policy": sample_policy,
                     "buckets": self._serialize_buckets(buckets),
                     "overall": {"score_id": "overall", "score_name": "Overall", "points": []},
                     "scores": [],
@@ -165,7 +189,14 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                         "start": range_start_utc.isoformat(),
                         "end": date_range_end_utc.isoformat(),
                     },
-                }, self._get_log_string()
+                    "fetched_feedback_items": 0,
+                    "ignored_invalid_feedback_items": 0,
+                    "analyzed_feedback_items": 0,
+                    "total_feedback_items_retrieved": 0,
+                }
+                if score_filter is not None:
+                    output["score_filter"] = score_filter
+                return output, self._get_log_string()
 
             self._log(
                 f"Running FeedbackAlignmentTimeline for scorecard '{scorecard.name}' "
@@ -173,41 +204,41 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                 f"bucket_count={effective_bucket_count}, window_mode={window_mode}"
             )
 
-            overall_bucket_items: List[List[FeedbackItem]] = [[] for _ in buckets]
             score_series: List[Dict[str, Any]] = []
             total_feedback_items_retrieved = 0
+            fetched_feedback_items = 0
+            ignored_invalid_feedback_items = 0
+            overall_metric_items: List[FeedbackItem] = []
 
             for score_info in scores_to_analyze:
                 score_id = score_info["score_id"]
                 score_name = score_info["score_name"]
+                self._last_feedback_fetch_stats = None
                 feedback_items = await self._fetch_feedback_items_for_score(
                     scorecard_id=scorecard.id,
                     score_id=score_id,
-                    start_date=range_start_utc,
+                    start_date=self.ROLLING_LOOKBACK_START_UTC,
                     end_date=range_end_query_utc,
                 )
-                total_feedback_items_retrieved += len(feedback_items)
+                fetch_stats = getattr(self, "_last_feedback_fetch_stats", None)
+                if not isinstance(fetch_stats, dict):
+                    fetch_stats = {
+                        "fetched_total": len(feedback_items),
+                        "ignored_invalid": 0,
+                        "analyzed_total": len(feedback_items),
+                    }
+                fetched_feedback_items += fetch_stats["fetched_total"]
+                ignored_invalid_feedback_items += fetch_stats["ignored_invalid"]
+                total_feedback_items_retrieved += fetch_stats["analyzed_total"]
+                metric_items = self._prepare_metric_items(feedback_items)
+                overall_metric_items.extend(metric_items)
 
-                per_bucket_items: List[List[FeedbackItem]] = [[] for _ in buckets]
-                for feedback_item in feedback_items:
-                    edited_at = feedback_item.editedAt
-                    if not edited_at:
-                        continue
-                    if edited_at.tzinfo is None:
-                        edited_at = edited_at.replace(tzinfo=timezone.utc)
-                    edited_local = edited_at.astimezone(tzinfo)
-
-                    bucket_index = self._find_bucket_index(edited_local, buckets)
-                    if bucket_index is None:
-                        continue
-
-                    per_bucket_items[bucket_index].append(feedback_item)
-                    overall_bucket_items[bucket_index].append(feedback_item)
-
-                points = [
-                    self._build_point(bucket, index, self._calculate_alignment_metrics(items))
-                    for index, (bucket, items) in enumerate(zip(buckets, per_bucket_items))
-                ]
+                points = self._build_rolling_points(
+                    buckets=buckets,
+                    metric_items=metric_items,
+                    tzinfo=tzinfo,
+                    rolling_min_items=rolling_min_items,
+                )
                 score_series.append(
                     {
                         "score_id": score_id,
@@ -216,10 +247,12 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                     }
                 )
 
-            overall_points = [
-                self._build_point(bucket, index, self._calculate_alignment_metrics(items))
-                for index, (bucket, items) in enumerate(zip(buckets, overall_bucket_items))
-            ]
+            overall_points = self._build_rolling_points(
+                buckets=buckets,
+                metric_items=self._prepare_metric_items(overall_metric_items),
+                tzinfo=tzinfo,
+                rolling_min_items=rolling_min_items,
+            )
 
             mode = "single_score" if score_identifier else "all_scores"
             output: Dict[str, Any] = {
@@ -230,6 +263,7 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                 "scorecard_name": scorecard.name,
                 "show_bucket_details": show_bucket_details,
                 "bucket_policy": bucket_policy,
+                "sample_policy": sample_policy,
                 "buckets": self._serialize_buckets(buckets),
                 "overall": {
                     "score_id": "overall",
@@ -241,12 +275,17 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                     "start": range_start_utc.isoformat(),
                     "end": date_range_end_utc.isoformat(),
                 },
+                "fetched_feedback_items": fetched_feedback_items,
+                "ignored_invalid_feedback_items": ignored_invalid_feedback_items,
+                "analyzed_feedback_items": total_feedback_items_retrieved,
                 "total_feedback_items_retrieved": total_feedback_items_retrieved,
                 "message": (
                     f"Processed {len(score_series)} score(s) across "
                     f"{len(buckets)} bucket(s) in {window_mode} mode."
                 ),
             }
+            if score_filter is not None:
+                output["score_filter"] = score_filter
 
             # In single-score mode, "overall" and selected score represent the same series.
             if mode == "single_score" and score_series:
@@ -285,6 +324,20 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
         if value_str in {"0", "false", "no", "n", "off"}:
             return False
         return default
+
+    def _parse_score_filter_values(self, value: Any) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            stripped = value.strip()
+            return [stripped] if stripped else []
+        if isinstance(value, (list, tuple, set)):
+            values: List[str] = []
+            for item in value:
+                values.extend(self._parse_score_filter_values(item))
+            return values
+        stripped = str(value).strip()
+        return [stripped] if stripped else []
 
     def _has_explicit_window(self) -> bool:
         return any(
@@ -359,6 +412,101 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
         scores = await list_scores_for_scorecard(self.api_client, scorecard_id)
         return [{"score_id": score.id, "score_name": score.name} for score in scores]
 
+    async def _resolve_scores_with_filters(
+        self,
+        *,
+        scorecard_id: str,
+        include_score_identifiers: List[str],
+        exclude_score_identifiers: List[str],
+    ) -> Tuple[List[Dict[str, str]], Dict[str, Any]]:
+        score_refs = await list_scores_for_scorecard(self.api_client, scorecard_id)
+        if include_score_identifiers:
+            included_refs = self._resolve_score_filter_identifiers(
+                score_refs,
+                include_score_identifiers,
+                scorecard_id=scorecard_id,
+                filter_name="include_scores",
+            )
+        else:
+            included_refs = list(score_refs)
+
+        excluded_refs = self._resolve_score_filter_identifiers(
+            score_refs,
+            exclude_score_identifiers,
+            scorecard_id=scorecard_id,
+            filter_name="exclude_scores",
+        )
+        excluded_ids = {score.id for score in excluded_refs}
+        final_refs = [score for score in included_refs if score.id not in excluded_ids]
+
+        return (
+            [{"score_id": score.id, "score_name": score.name} for score in final_refs],
+            {
+                "requested_include_scores": include_score_identifiers,
+                "requested_exclude_scores": exclude_score_identifiers,
+                "resolved_included_scores": self._serialize_score_refs(final_refs),
+                "resolved_excluded_scores": self._serialize_score_refs(excluded_refs),
+            },
+        )
+
+    def _resolve_score_filter_identifiers(
+        self,
+        score_refs: List[ResolvedScoreRef],
+        identifiers: List[str],
+        *,
+        scorecard_id: str,
+        filter_name: str,
+    ) -> List[ResolvedScoreRef]:
+        resolved: List[ResolvedScoreRef] = []
+        seen_ids = set()
+        for identifier in identifiers:
+            score_ref = self._find_score_ref(score_refs, identifier)
+            if score_ref is None:
+                raise ValueError(
+                    f"{filter_name} identifier '{identifier}' did not match any score on scorecard '{scorecard_id}'."
+                )
+            if score_ref.id in seen_ids:
+                continue
+            resolved.append(score_ref)
+            seen_ids.add(score_ref.id)
+        return resolved
+
+    def _find_score_ref(self, score_refs: List[ResolvedScoreRef], identifier: str) -> Optional[ResolvedScoreRef]:
+        normalized = str(identifier).strip()
+        if not normalized:
+            return None
+
+        for score_ref in score_refs:
+            if normalized in {
+                score_ref.id,
+                score_ref.name,
+                score_ref.key or "",
+                score_ref.external_id or "",
+            }:
+                return score_ref
+
+        folded = normalized.casefold()
+        matches = [
+            score_ref
+            for score_ref in score_refs
+            if folded
+            in {
+                score_ref.id.casefold(),
+                score_ref.name.casefold(),
+                (score_ref.key or "").casefold(),
+                (score_ref.external_id or "").casefold(),
+            }
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            names = ", ".join(f"{score.name} ({score.id})" for score in matches)
+            raise ValueError(f"Score filter identifier '{identifier}' matched multiple scores: {names}.")
+        return None
+
+    def _serialize_score_refs(self, score_refs: List[ResolvedScoreRef]) -> List[Dict[str, str]]:
+        return [{"score_id": score.id, "score_name": score.name} for score in score_refs]
+
     async def _fetch_feedback_items_for_score(
         self,
         scorecard_id: str,
@@ -367,14 +515,17 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
         end_date: datetime,
     ) -> List[FeedbackItem]:
         account_id = self._resolve_account_id()
-        return await feedback_utils.fetch_feedback_items_for_score(
+        items, stats = await feedback_utils.fetch_feedback_items_for_score_with_stats(
             api_client=self.api_client,
             account_id=account_id,
             scorecard_id=scorecard_id,
             score_id=score_id,
             start_date=start_date,
             end_date=end_date,
+            exclude_invalid=True,
         )
+        self._last_feedback_fetch_stats = stats
+        return items
 
     def _resolve_account_id(self) -> str:
         account_id = self.params.get("account_id")
@@ -586,6 +737,95 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
                 return index
         return None
 
+    def _build_sample_policy(self, *, rolling_min_items: int, bucket_type: str) -> Dict[str, Any]:
+        return {
+            "metric": "Gwet AC1 over stored feedback answer pairs",
+            "bucket_type": bucket_type,
+            "rolling_min_items": rolling_min_items,
+            "lookback": "unbounded",
+            "bucket_timestamp": "FeedbackItem.editedAt",
+            "prediction_value": "FeedbackItem.initialAnswerValue",
+            "reference_value": "FeedbackItem.finalAnswerValue",
+            "explanation": (
+                "Each chart measures how often stored production score answers agreed with "
+                "the final human correction recorded in feedback. Buckets are based on "
+                "feedback edit time, not call time or score-version release time. Each point "
+                "first uses feedback edited inside the bucket. If the bucket has fewer than "
+                f"{rolling_min_items} feedback records, older feedback is added until the sample "
+                f"reaches {rolling_min_items} records or no earlier feedback exists. Lookback "
+                "records only stabilize sparse buckets; each point still ends at that bucket's "
+                "end date. Feedback items marked invalid are excluded before analysis. "
+                "This is not a replay or backtest of historical champion versions."
+            ),
+        }
+
+    def _prepare_metric_items(self, items: List[FeedbackItem]) -> List[FeedbackItem]:
+        metric_items = [
+            item
+            for item in items
+            if item.editedAt is not None
+            and item.initialAnswerValue is not None
+            and item.finalAnswerValue is not None
+        ]
+        return sorted(metric_items, key=self._edited_at_utc)
+
+    def _edited_at_utc(self, item: FeedbackItem) -> datetime:
+        edited_at = item.editedAt
+        if edited_at is None:
+            return datetime.min.replace(tzinfo=timezone.utc)
+        if edited_at.tzinfo is None:
+            edited_at = edited_at.replace(tzinfo=timezone.utc)
+        return edited_at.astimezone(timezone.utc)
+
+    def _edited_at_local(self, item: FeedbackItem, tzinfo: ZoneInfo) -> datetime:
+        return self._edited_at_utc(item).astimezone(tzinfo)
+
+    def _build_rolling_points(
+        self,
+        *,
+        buckets: List[_TimeBucket],
+        metric_items: List[FeedbackItem],
+        tzinfo: ZoneInfo,
+        rolling_min_items: int,
+    ) -> List[Dict[str, Any]]:
+        points: List[Dict[str, Any]] = []
+        sorted_items = self._prepare_metric_items(metric_items)
+
+        for index, bucket in enumerate(buckets):
+            bucket_items = [
+                item
+                for item in sorted_items
+                if bucket.start_local <= self._edited_at_local(item, tzinfo) < bucket.end_local
+            ]
+            bucket_item_count = len(bucket_items)
+            if bucket_item_count >= rolling_min_items:
+                sample_items = bucket_items
+            else:
+                eligible_items = [
+                    item
+                    for item in sorted_items
+                    if self._edited_at_local(item, tzinfo) < bucket.end_local
+                ]
+                sample_items = eligible_items[-rolling_min_items:]
+
+            lookback_item_count = max(0, len(sample_items) - bucket_item_count)
+            sample_dates = [self._edited_at_utc(item) for item in sample_items]
+            sample_start = min(sample_dates).isoformat() if sample_dates else None
+            sample_end = max(sample_dates).isoformat() if sample_dates else None
+            metrics = self._calculate_alignment_metrics(sample_items)
+            sample_metadata = {
+                "bucket_item_count": bucket_item_count,
+                "sample_item_count": metrics["item_count"],
+                "lookback_item_count": lookback_item_count,
+                "sample_start": sample_start,
+                "sample_end": sample_end,
+                "sample_extended": lookback_item_count > 0,
+                "sample_underfilled": metrics["item_count"] < rolling_min_items,
+            }
+            points.append(self._build_point(bucket, index, metrics, sample_metadata=sample_metadata))
+
+        return points
+
     def _calculate_alignment_metrics(self, items: List[FeedbackItem]) -> Dict[str, Any]:
         paired_initial: List[str] = []
         paired_final: List[str] = []
@@ -626,8 +866,15 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
             "mismatches": mismatches,
         }
 
-    def _build_point(self, bucket: _TimeBucket, index: int, metrics: Dict[str, Any]) -> Dict[str, Any]:
-        return {
+    def _build_point(
+        self,
+        bucket: _TimeBucket,
+        index: int,
+        metrics: Dict[str, Any],
+        *,
+        sample_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        point = {
             "bucket_index": index,
             "label": bucket.label,
             "start": bucket.start_local.astimezone(timezone.utc).isoformat(),
@@ -638,6 +885,9 @@ class FeedbackAlignmentTimeline(BaseReportBlock):
             "agreements": metrics["agreements"],
             "mismatches": metrics["mismatches"],
         }
+        if sample_metadata:
+            point.update(sample_metadata)
+        return point
 
     def _serialize_buckets(self, buckets: List[_TimeBucket]) -> List[Dict[str, Any]]:
         return [

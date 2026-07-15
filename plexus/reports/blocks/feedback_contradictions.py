@@ -156,43 +156,43 @@ class FeedbackContradictions(BaseReportBlock):
             start_date,
             end_date,
             max_feedback_items if max_feedback_items > 0 else None,
+            exclude_invalid=False,
         )
+        fetch_stats = {"fetched_total": len(all_items), "ignored_invalid": 0, "analyzed_total": 0}
 
-        # Group all records by itemId first, then apply invalid + deduplication together.
-        # If ANY record for an itemId is marked invalid, the whole item is excluded.
-        # Among non-invalid records, keep only the most recent per itemId.
+        # Exclude invalid feedback records first, then dedupe by itemId.
         groups: dict[str, list[Any]] = {}
         no_item_id: list[Any] = []
-        for item in all_items:
+        invalid_items = [item for item in all_items if getattr(item, "isInvalid", False)]
+        valid_input_items = [item for item in all_items if not getattr(item, "isInvalid", False)]
+        for item in valid_input_items:
             item_id = getattr(item, "itemId", None)
             if not item_id:
                 no_item_id.append(item)
             else:
                 groups.setdefault(item_id, []).append(item)
 
-        invalid_count = 0
+        invalid_count = len(invalid_items)
         duplicate_count = 0
         valid_items = []
         for item_id, group in groups.items():
-            if any(getattr(i, "isInvalid", False) for i in group):
-                invalid_count += len(group)
-                continue
             best = max(group, key=lambda i: getattr(i, "editedAt", None) or "")
             duplicate_count += len(group) - 1
             valid_items.append(best)
-        # Items with no itemId: apply only the isInvalid filter, no deduplication possible.
-        for item in no_item_id:
-            if getattr(item, "isInvalid", False):
-                invalid_count += 1
-            else:
-                valid_items.append(item)
+        # Items with no itemId cannot be deduplicated.
+        valid_items.extend(no_item_id)
+
+        fetch_stats["ignored_invalid"] = invalid_count
+        fetch_stats["analyzed_total"] = len(valid_items)
 
         self._log(
-            f"Fetched {len(all_items)} feedback items; {len(valid_items)} eligible "
-            f"({invalid_count} excluded as already-invalid, {duplicate_count} duplicate item IDs removed)."
+            f"Fetched {fetch_stats['fetched_total']} feedback items; {len(valid_items)} eligible "
+            f"({fetch_stats['ignored_invalid']} excluded as already-invalid, {duplicate_count} duplicate item IDs removed)."
         )
         diagnostics: Dict[str, Any] = {
-            "feedback_items_fetched": len(all_items),
+            "feedback_items_fetched": fetch_stats["fetched_total"],
+            "feedback_items_ignored_invalid": fetch_stats["ignored_invalid"],
+            "feedback_items_analyzed": fetch_stats["analyzed_total"],
             "eligible_items": len(valid_items),
             "cache_hits": 0,
             "generated": 0,

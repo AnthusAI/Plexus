@@ -12,7 +12,7 @@ the feedback evaluation CLI commands.
 """
 
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import logging
 import asyncio
 from datetime import datetime, timezone
@@ -197,6 +197,7 @@ async def fetch_feedback_items_for_score(
     start_date: datetime,
     end_date: datetime,
     max_items: Optional[int] = None,
+    exclude_invalid: bool = True,
 ) -> List[FeedbackItem]:
     """
     Fetches FeedbackItem records for a specific score on a scorecard within a date range.
@@ -215,13 +216,40 @@ async def fetch_feedback_items_for_score(
     Returns:
         List of FeedbackItem objects
     """
+    items, _ = await fetch_feedback_items_for_score_with_stats(
+        api_client=api_client,
+        account_id=account_id,
+        scorecard_id=scorecard_id,
+        score_id=score_id,
+        start_date=start_date,
+        end_date=end_date,
+        max_items=max_items,
+        exclude_invalid=exclude_invalid,
+    )
+    return items
+
+
+async def fetch_feedback_items_for_score_with_stats(
+    api_client,
+    account_id: str,
+    scorecard_id: str,
+    score_id: str,
+    start_date: datetime,
+    end_date: datetime,
+    max_items: Optional[int] = None,
+    exclude_invalid: bool = True,
+) -> Tuple[List[FeedbackItem], Dict[str, int]]:
+    """
+    Fetch feedback items plus fetch/analyzed/ignored-invalid counters.
+    """
     logger.debug(f"Fetching feedback items for scorecard {scorecard_id}, score {score_id}")
     logger.debug(f"Date range: {start_date.isoformat()} to {end_date.isoformat()}")
-    
-    all_items_for_score = []
-    
+
+    all_items_for_score: List[FeedbackItem] = []
+    fetched_total = 0
+    ignored_invalid = 0
+
     try:
-        # Use the optimized GSI query
         query = """
         query ListFeedbackItemsByGSI(
             $accountId: String!,
@@ -276,8 +304,7 @@ async def fetch_feedback_items_for_score(
             }
         }
         """
-        
-        # Prepare variables for the query
+
         variables = {
             "accountId": account_id,
             "composite_sk_condition": {
@@ -298,26 +325,34 @@ async def fetch_feedback_items_for_score(
             "nextToken": None,
             "sortDirection": "DESC"
         }
-        
+
         next_token = None
-        
+
         while True:
             if next_token:
                 variables["nextToken"] = next_token
-            
+
             try:
                 response = await asyncio.to_thread(api_client.execute, query, variables)
-                
+
                 if response and 'errors' in response:
                     logger.warning(f"GraphQL errors with GSI query: {response.get('errors')}")
                     break
-                
+
                 if response and 'listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt' in response:
                     result = response['listFeedbackItemByAccountIdAndScorecardIdAndScoreIdAndEditedAt']
                     item_dicts = result.get('items', [])
-                    
-                    # Convert to FeedbackItem objects
                     items = [FeedbackItem.from_dict(item_dict, client=api_client) for item_dict in item_dicts]
+                    fetched_total += len(items)
+                    if exclude_invalid:
+                        valid_items: List[FeedbackItem] = []
+                        for item in items:
+                            if getattr(item, "isInvalid", False) is True:
+                                ignored_invalid += 1
+                                continue
+                            valid_items.append(item)
+                        items = valid_items
+
                     all_items_for_score.extend(items)
 
                     if max_items is not None and max_items > 0 and len(all_items_for_score) >= max_items:
@@ -327,27 +362,40 @@ async def fetch_feedback_items_for_score(
                             max_items,
                         )
                         break
-                    
-                    logger.debug(f"Fetched {len(items)} items using GSI query (total: {len(all_items_for_score)})")
-                    
-                    # Get next token for pagination
+
+                    logger.debug(f"Fetched {len(items)} analyzed items using GSI query (total: {len(all_items_for_score)})")
+
                     next_token = result.get('nextToken')
                     if not next_token:
                         break
                 else:
                     logger.warning("Unexpected response format from GSI query")
                     break
-                    
+
             except Exception as e:
                 logger.warning(f"Error during GSI query execution: {e}")
                 all_items_for_score = []
+                fetched_total = 0
+                ignored_invalid = 0
                 break
-        
+
     except Exception as e:
         logger.error(f"Error during feedback item fetch for score {score_id}: {str(e)}")
-    
-    logger.debug(f"Total items fetched for score {score_id}: {len(all_items_for_score)}")
-    return all_items_for_score
+
+    analyzed_total = len(all_items_for_score)
+    stats = {
+        "fetched_total": fetched_total,
+        "ignored_invalid": ignored_invalid,
+        "analyzed_total": analyzed_total,
+    }
+    logger.debug(
+        "Feedback fetch totals for score %s: fetched=%s, ignored_invalid=%s, analyzed=%s",
+        score_id,
+        fetched_total,
+        ignored_invalid,
+        analyzed_total,
+    )
+    return all_items_for_score, stats
 
 
 async def fetch_score_results_for_score(

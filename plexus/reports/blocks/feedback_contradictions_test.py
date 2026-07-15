@@ -153,6 +153,10 @@ async def test_feedback_contradictions_mode_returns_contradiction_payload(monkey
         'plexus.reports.blocks.feedback_contradictions.feedback_utils.fetch_feedback_items_for_score',
         _fetch_items,
     )
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.hydrate_feedback_item_explanations',
+        AsyncMock(return_value={'fi-1': {'summary': 'cached'}}),
+    )
     monkeypatch.setattr(block, '_fetch_score_results_by_item_ids', AsyncMock(return_value={}))
     monkeypatch.setattr(
         block,
@@ -279,7 +283,16 @@ async def test_feedback_contradictions_accepts_explicit_timestamp_window(monkeyp
 
     captured = {}
 
-    async def _fetch_items(_client, _account_id, _scorecard_id, _score_id, start_date, end_date, _limit):
+    async def _fetch_items(
+        _client,
+        _account_id,
+        _scorecard_id,
+        _score_id,
+        start_date,
+        end_date,
+        _limit,
+        **_kwargs,
+    ):
         captured['start'] = start_date
         captured['end'] = end_date
         return []
@@ -287,6 +300,10 @@ async def test_feedback_contradictions_accepts_explicit_timestamp_window(monkeyp
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_contradictions.feedback_utils.fetch_feedback_items_for_score',
         _fetch_items,
+    )
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.hydrate_feedback_item_explanations',
+        AsyncMock(return_value={}),
     )
 
     parsed, _log = await block.generate()
@@ -329,6 +346,10 @@ async def test_feedback_contradictions_mode_aligned_includes_dataset_payload(mon
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_contradictions.feedback_utils.fetch_feedback_items_for_score',
         _fetch_items,
+    )
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.hydrate_feedback_item_explanations',
+        AsyncMock(return_value={'fi-1': {'summary': 'cached'}}),
     )
     monkeypatch.setattr(block, '_fetch_score_results_by_item_ids', AsyncMock(return_value={}))
 
@@ -432,6 +453,10 @@ async def test_feedback_contradictions_applies_max_feedback_items_cap(monkeypatc
         'plexus.reports.blocks.feedback_contradictions.feedback_utils.fetch_feedback_items_for_score',
         _fetch_items,
     )
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.hydrate_feedback_item_explanations',
+        AsyncMock(return_value={'fi-1': {'summary': 'cached'}}),
+    )
     captured_item_ids = []
 
     async def _fetch_score_results(item_ids, _score_id):
@@ -502,6 +527,10 @@ async def test_feedback_contradictions_rubric_memory_is_explicit_opt_in(monkeypa
     monkeypatch.setattr(
         'plexus.reports.blocks.feedback_contradictions.feedback_utils.fetch_feedback_items_for_score',
         _fetch_items,
+    )
+    monkeypatch.setattr(
+        'plexus.reports.blocks.feedback_contradictions.hydrate_feedback_item_explanations',
+        AsyncMock(return_value={'fi-1': {'summary': 'cached'}}),
     )
     monkeypatch.setattr(block, '_fetch_score_results_by_item_ids', AsyncMock(return_value={}))
     monkeypatch.setattr(
