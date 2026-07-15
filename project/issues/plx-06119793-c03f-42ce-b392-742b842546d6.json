@@ -3,7 +3,7 @@
   "title": "Document score processor external build and runtime contract",
   "description": "Document the public-safe Docker build inputs, runtime environment variables, queue contracts, and permission assumptions required to deploy the score processor outside the Plexus infrastructure pipeline.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -16,11 +16,17 @@
       "author": "derek.norrbom",
       "text": "Added README documentation for the standalone score processor artifact publisher, including resources created, metadata parameters, configuration variables, validation commands, and deployment command. Documentation intentionally avoids downstream deployment-specific names and account details.",
       "created_at": "2026-07-15T16:40:47.637467Z"
+    },
+    {
+      "id": "4d9153d4-337d-49d2-a8dd-9e25998681c1",
+      "author": "derek.norrbom",
+      "text": "Added public-safe construct contract documentation at infrastructure/docs/async-score-processing-construct.md, covering resources created, required inputs, secret mapping, IAM responsibility boundary, and exposed properties.",
+      "created_at": "2026-07-15T18:25:23.348202Z"
     }
   ],
   "created_at": "2026-07-15T16:30:15.223994Z",
-  "updated_at": "2026-07-15T16:40:47.637467Z",
-  "closed_at": null,
+  "updated_at": "2026-07-15T18:25:23.358495Z",
+  "closed_at": "2026-07-15T18:25:23.358495Z",
   "custom": {
     "project_label": "plx",
     "source": "shared"

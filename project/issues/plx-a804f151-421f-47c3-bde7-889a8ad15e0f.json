@@ -3,16 +3,32 @@
   "title": "Define generic score processor construct contract",
   "description": "Define a reusable infrastructure construct or construct interface for score processing that accepts externally owned queues, image references, configuration sources, concurrency settings, and optional alarms without embedding downstream deployment details.",
   "type": "task",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
   "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "df019cfe-1aae-4da3-b404-dd2b99a496c5",
+      "author": "derek.norrbom",
+      "text": "Starting reusable construct implementation. The construct will be public-safe and parameterized: deployment owners provide naming prefix, environment name, ECR repository plus immutable tag/digest, runtime config secret mapping, concurrency settings, and optional extra IAM statements. It will not include downstream account IDs, queue names, pipeline names, or environment-specific deployment logic.",
+      "created_at": "2026-07-15T18:23:02.254439Z"
+    },
+    {
+      "id": "36c6ca01-39ba-4987-85e0-a0926ec6747c",
+      "author": "derek.norrbom",
+      "text": "Implemented the public-safe AsyncScoreProcessing construct under infrastructure/plexus_constructs. It accepts deployment-owned naming, environment, ECR repository plus immutable tag/digest, runtime config secret mapping, optional existing queues, concurrency settings, Bedrock resources, and additional scoped IAM statements. Validation passed: python -m pytest infrastructure/tests/unit/test_async_score_processing_construct.py -q; python -m pytest tests/unit -q from infrastructure/score_processor_artifacts.",
+      "created_at": "2026-07-15T18:25:23.304629Z"
+    }
+  ],
   "created_at": "2026-07-15T16:30:15.189415Z",
-  "updated_at": "2026-07-15T16:30:15.189415Z",
-  "closed_at": null,
-  "custom": {}
+  "updated_at": "2026-07-15T18:25:23.316144Z",
+  "closed_at": "2026-07-15T18:25:23.316144Z",
+  "custom": {
+    "project_label": "plx",
+    "source": "shared"
+  }
 }
