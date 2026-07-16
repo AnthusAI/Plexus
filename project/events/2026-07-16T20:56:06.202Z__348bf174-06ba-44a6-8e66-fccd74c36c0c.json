@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "348bf174-06ba-44a6-8e66-fccd74c36c0c",
+  "issue_id": "plx-7a8b2c38-2c10-4890-942a-8b04bc8fc65a",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-16T20:56:06.202Z",
+  "actor_id": "ryan",
+  "payload": {
+    "assignee": null,
+    "description": "Track Plexus-internal hardening of feedback evaluation preflight and integrity diagnostics. This epic contains no client-specific information.",
+    "issue_type": "epic",
+    "labels": [],
+    "parent": null,
+    "priority": 1,
+    "status": "open",
+    "title": "Feedback evaluation integrity hardening"
+  }
+}

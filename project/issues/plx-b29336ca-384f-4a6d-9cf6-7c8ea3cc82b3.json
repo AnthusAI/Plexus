@@ -5,7 +5,7 @@
   "type": "bug",
   "status": "in_progress",
   "priority": 1,
-  "assignee": null,
+  "assignee": "ryan",
   "creator": null,
   "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
   "labels": [],
@@ -52,10 +52,28 @@
       "author": "ryan",
       "text": "Implemented sandbox latency pass and validated locally. Changes: pending assistant recovery now starts at 500ms with fast retries; selected-session hydration is reused when session updates advance; local worker logs owner/pid/cwd/API/SHA and warms runtime before polling; user-row metadata now persists server latency fields. Focused tests pass. Sandbox validation with local worker shows 30s reveal stall removed, but warm visible latency remains about 6.5-8.0s because model first chunk is about 3.1-3.6s and post-persist/claim adds the rest.",
       "created_at": "2026-07-01T22:10:38.359516Z"
+    },
+    {
+      "id": "8d604c1b-54f3-4681-8716-a090d0a7fe45",
+      "author": "ryan",
+      "text": "Starting direct-console reply completion fix. The dashboard will scope live message subscriptions to the selected chat session, preserve direct reply procedure identity, and use terminal trigger completion for one authoritative session hydration. Focused behavior tests will cover direct streaming completion, session switching, terminal hydration, and event ordering.",
+      "created_at": "2026-07-16T18:51:39.150339Z"
+    },
+    {
+      "id": "6d2029f3-3738-4657-a396-3e59c872a073",
+      "author": "ryan",
+      "text": "Implementation complete. ChatMessage subscriptions now scope to the active session so direct assistant replies retain their distinct procedure identity while their stream and terminal updates reach the visible conversation. Removed timer-driven assistant reconciliation; terminal trigger completion performs one authoritative session-index hydration. Focused dashboard tests and TypeScript typecheck pass. Local dashboard reload is clean; end-to-end validation is ready with a fresh local chat message.",
+      "created_at": "2026-07-16T18:56:22.022053Z"
+    },
+    {
+      "id": "96129bd4-fee7-40b6-bf9d-2766ff3e0cf5",
+      "author": "ryan",
+      "text": "Follow-up diagnosis: a sandbox turn was claimed and completed by the local worker, with a durable assistant row, while the browser remained at one message and Thinking. Stored session updates also did not reach the browser. The filtered AppSync model-subscription path is silently dropping events in this sandbox. Updated Console to use unfiltered model subscriptions and enforce procedure/session boundaries client-side; focused tests and typecheck pass. A fresh browser turn is required to validate the repaired live subscription path.",
+      "created_at": "2026-07-16T19:03:49.554613Z"
     }
   ],
   "created_at": "2026-07-01T20:17:50.590444Z",
-  "updated_at": "2026-07-01T22:10:38.359516Z",
+  "updated_at": "2026-07-16T19:03:49.554613Z",
   "closed_at": null,
   "custom": {}
 }

@@ -1,0 +1,18 @@
+{
+  "id": "plx-7a8b2c38-2c10-4890-942a-8b04bc8fc65a",
+  "title": "Feedback evaluation integrity hardening",
+  "description": "Track Plexus-internal hardening of feedback evaluation preflight and integrity diagnostics. This epic contains no client-specific information.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-16T20:56:06.201654Z",
+  "updated_at": "2026-07-16T20:56:06.201654Z",
+  "closed_at": null,
+  "custom": {}
+}
