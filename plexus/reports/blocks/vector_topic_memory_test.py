@@ -459,6 +459,8 @@ async def test_vector_topic_memory_uses_qdrant_provider_in_local_mode(vector_top
     mock_vector_store.health_check.return_value = False
 
     with patch(
+        "plexus.analysis.embedding_cache.EmbeddingCache",
+    ), patch(
         "plexus.analysis.embedding_cache.EmbeddingService",
         return_value=mock_embedding_service,
     ), patch(
