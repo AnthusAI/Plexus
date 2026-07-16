@@ -232,11 +232,6 @@ const CONSOLE_CHAT_MODEL_OPTIONS = [
 const DEFAULT_CONSOLE_CHAT_MODEL = 'gpt-5.4-mini'
 const CONVERSATION_BOTTOM_EPSILON_PX = 2
 const SCROLL_DELTA_EPSILON_PX = 0.1
-const PENDING_ASSISTANT_SESSION_RECONCILE_INITIAL_DELAY_MS = 500
-const PENDING_ASSISTANT_SESSION_RECONCILE_FAST_RETRY_MS = 1_000
-const PENDING_ASSISTANT_SESSION_RECONCILE_SLOW_RETRY_MS = 5_000
-const PENDING_ASSISTANT_SESSION_RECONCILE_FAST_WINDOW_MS = 10_000
-const PENDING_ASSISTANT_SESSION_RECONCILE_GIVE_UP_MS = 120_000
 const CHAT_SESSION_SELECTION_SET = [
   "id",
   "accountId",
@@ -264,7 +259,14 @@ const CHAT_MESSAGE_SELECTION_SET = [
   'parentMessageId',
   'accountId',
   'procedureId',
+  'responseTarget',
+  'responseStatus',
+  'responseOwner',
+  'responseStartedAt',
+  'responseCompletedAt',
+  'responseError',
   'createdAt',
+  'updatedAt',
   'sequenceNumber',
   'sessionId',
 ] as const
@@ -291,6 +293,7 @@ export interface ChatMessage {
   responseCompletedAt?: string
   responseError?: string
   createdAt: string
+  updatedAt?: string
   sequenceNumber?: number
   sessionId?: string
 }
@@ -334,6 +337,13 @@ type PendingAssistantState = {
   requestedAt: string
   baselineAssistantCreatedAt?: string | null
   triggerMessageId?: string
+}
+
+type BrowserVisibilityState = {
+  pending: PendingAssistantState
+  trigger?: ChatMessage
+  assistant?: ChatMessage
+  recorded?: boolean
 }
 
 type ConsoleToolViewModel = {
@@ -861,9 +871,103 @@ const parseRawChatMessage = (msg: any): ChatMessage | null => {
     responseCompletedAt: msg.responseCompletedAt,
     responseError: msg.responseError,
     createdAt: msg.createdAt,
+    updatedAt: msg.updatedAt,
     sequenceNumber: msg.sequenceNumber,
     sessionId: msg.sessionId
   }
+}
+
+const listSessionChatMessages = async (
+  sessionId: string,
+  options?: {
+    sortDirection?: 'ASC' | 'DESC'
+    limit?: number
+  },
+): Promise<any[]> => {
+  const sortDirection = options?.sortDirection ?? 'ASC'
+  const limit = options?.limit ?? 200
+  const client = getClient()
+  const listBySession = (client.models.ChatMessage as any)?.listChatMessageBySessionIdAndCreatedAt
+  const rows: any[] = []
+  let nextToken: string | null = null
+
+  const query = `
+    query ListConversationSessionMessages(
+      $sessionId: String!
+      $limit: Int
+      $nextToken: String
+      $sortDirection: ModelSortDirection
+    ) {
+      listChatMessageBySessionIdAndCreatedAt(
+        sessionId: $sessionId
+        sortDirection: $sortDirection
+        limit: $limit
+        nextToken: $nextToken
+      ) {
+        items {
+          id
+          content
+          role
+          messageType
+          humanInteraction
+          toolName
+          toolParameters
+          toolResponse
+          metadata
+          parentMessageId
+          accountId
+          procedureId
+          responseTarget
+          responseStatus
+          responseOwner
+          responseStartedAt
+          responseCompletedAt
+          responseError
+          createdAt
+          updatedAt
+          sequenceNumber
+          sessionId
+        }
+        nextToken
+      }
+    }
+  `
+
+  do {
+    let pageRows: any[] = []
+    let pageNextToken: string | null = null
+
+    if (typeof listBySession === 'function') {
+      const response: { data?: any[], nextToken?: string | null } = await listBySession({
+        sessionId,
+        sortDirection,
+        limit,
+        nextToken,
+      }, {
+        selectionSet: CHAT_MESSAGE_SELECTION_SET,
+      })
+      pageRows = Array.isArray(response?.data) ? response.data : []
+      pageNextToken = response?.nextToken || null
+    } else {
+      const response = await (client.graphql({
+        query,
+        variables: {
+          sessionId,
+          sortDirection,
+          limit,
+          nextToken,
+        },
+      }) as Promise<any>)
+      const payload = response?.data?.listChatMessageBySessionIdAndCreatedAt
+      pageRows = Array.isArray(payload?.items) ? payload.items : []
+      pageNextToken = payload?.nextToken || null
+    }
+
+    rows.push(...pageRows)
+    nextToken = pageNextToken
+  } while (nextToken)
+
+  return rows
 }
 
 const hasCompleteRealtimeChatMessage = (msg: any): boolean => {
@@ -979,6 +1083,7 @@ const areMessagesEquivalent = (left: ChatMessage, right: ChatMessage): boolean =
     && left.responseCompletedAt === right.responseCompletedAt
     && left.responseError === right.responseError
     && left.createdAt === right.createdAt
+    && left.updatedAt === right.updatedAt
     && left.sequenceNumber === right.sequenceNumber
     && left.sessionId === right.sessionId
   )
@@ -2051,9 +2156,8 @@ function ConversationViewer({
   const selectedSessionHydratedForUpdateRef = React.useRef<Record<string, string>>({})
   const pendingAssistantReconcileInFlightRef = React.useRef<Set<string>>(new Set())
   const pendingAssistantReconciledAtRef = React.useRef<Record<string, string>>({})
-  const pendingAssistantReconcileTimeoutRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({})
-  const pendingAssistantReconcileScheduledAtRef = React.useRef<Record<string, string>>({})
   const firstChunkTimingLoggedByPendingKeyRef = React.useRef<Record<string, true>>({})
+  const browserVisibilityBySessionRef = React.useRef<Record<string, BrowserVisibilityState>>({})
 
   const markAuthUnavailable = React.useCallback((error: unknown, source: string): boolean => {
     if (!isUnauthorizedError(error)) {
@@ -2171,25 +2275,6 @@ function ConversationViewer({
     pendingAssistantBySessionRef.current = pendingAssistantBySession
   }, [pendingAssistantBySession])
 
-  const clearPendingAssistantReconcileTimeout = React.useCallback((sessionId: string) => {
-    const handle = pendingAssistantReconcileTimeoutRef.current[sessionId]
-    if (handle) {
-      clearTimeout(handle)
-      delete pendingAssistantReconcileTimeoutRef.current[sessionId]
-    }
-    delete pendingAssistantReconcileScheduledAtRef.current[sessionId]
-  }, [])
-
-  useEffect(() => (
-    () => {
-      for (const handle of Object.values(pendingAssistantReconcileTimeoutRef.current)) {
-        clearTimeout(handle)
-      }
-      pendingAssistantReconcileTimeoutRef.current = {}
-      pendingAssistantReconcileScheduledAtRef.current = {}
-    }
-  ), [])
-
   useEffect(() => {
     if (propMessages) {
       return
@@ -2223,6 +2308,13 @@ function ConversationViewer({
   // Use either experimentId or procedureId (they're synonymous in this context)
   const effectiveId = experimentId || procedureId
   const dispatchProcedureId = forceProcedureIdForDispatch?.trim() || null
+  const conversationSessionIds = React.useMemo(() => (
+    new Set(
+      sessions
+        .filter((session) => session.procedureId === effectiveId)
+        .map((session) => session.id),
+    )
+  ), [effectiveId, sessions])
   
   // Notify parent of session count changes
   useEffect(() => {
@@ -2239,7 +2331,6 @@ function ConversationViewer({
     setAutoFollowEnabled(true)
     delete pendingAssistantReconciledAtRef.current[sessionId]
     pendingAssistantReconcileInFlightRef.current.delete(sessionId)
-    clearPendingAssistantReconcileTimeout(sessionId)
     const pendingKeyPrefix = `${sessionId}:`
     for (const key of Object.keys(firstChunkTimingLoggedByPendingKeyRef.current)) {
       if (key.startsWith(pendingKeyPrefix)) {
@@ -2247,18 +2338,68 @@ function ConversationViewer({
       }
     }
     const baselineAssistantCreatedAt = getLatestAssistantCreatedAtForSession(messages, sessionId)
+    const pending: PendingAssistantState = {
+      requestedAt,
+      baselineAssistantCreatedAt,
+      triggerMessageId,
+    }
+    browserVisibilityBySessionRef.current[sessionId] = { pending }
     setPendingAssistantBySession((prev) => ({
       ...prev,
-      [sessionId]: {
-        requestedAt,
-        baselineAssistantCreatedAt,
-        triggerMessageId,
-      },
+      [sessionId]: pending,
     }))
-  }, [clearPendingAssistantReconcileTimeout, messages])
+  }, [messages])
+
+  const persistBrowserVisibleLatency = React.useCallback((
+    sessionId: string,
+    visibility: BrowserVisibilityState,
+  ) => {
+    const trigger = visibility.trigger
+    const assistant = visibility.assistant
+    if (!trigger || !assistant || visibility.recorded || trigger.responseStatus !== 'COMPLETED') {
+      return
+    }
+    visibility.recorded = true
+
+    window.requestAnimationFrame(() => {
+      const observedAt = new Date().toISOString()
+      const metadata = coerceObjectRecord(trigger.metadata) || {}
+      const instrumentation = coerceObjectRecord(metadata.instrumentation) || {}
+      const requestedAtMs = toEpochMs(visibility.pending.requestedAt)
+      const observedAtMs = toEpochMs(observedAt)
+      const nextMetadata = {
+        ...metadata,
+        instrumentation: {
+          ...instrumentation,
+          client_visibility: {
+            assistant_message_id: assistant.id,
+            observed_at: observedAt,
+            client_to_assistant_visible_ms: (
+              requestedAtMs !== null && observedAtMs !== null
+                ? Math.max(0, observedAtMs - requestedAtMs)
+                : null
+            ),
+            source: 'conversation_viewer',
+          },
+        },
+      }
+
+      void (getClient().models.ChatMessage.update as any)({
+        id: trigger.id,
+        metadata: JSON.stringify(nextMetadata),
+      }).catch((error: unknown) => {
+        visibility.recorded = false
+        console.warn('Failed to persist browser-visible console latency', {
+          sessionId,
+          triggerMessageId: trigger.id,
+          assistantMessageId: assistant.id,
+          error,
+        })
+      })
+    })
+  }, [])
 
   const clearPendingAssistant = React.useCallback((sessionId: string) => {
-    clearPendingAssistantReconcileTimeout(sessionId)
     delete pendingAssistantReconciledAtRef.current[sessionId]
     pendingAssistantReconcileInFlightRef.current.delete(sessionId)
     setPendingAssistantBySession((prev) => {
@@ -2269,7 +2410,7 @@ function ConversationViewer({
       delete next[sessionId]
       return next
     })
-  }, [clearPendingAssistantReconcileTimeout])
+  }, [])
 
   useEffect(() => {
     if (isAuthUnavailable) {
@@ -2296,47 +2437,6 @@ function ConversationViewer({
       clearPendingAssistant(sessionId)
     }
   }, [clearPendingAssistant, messages, pendingAssistantBySession])
-
-  useEffect(() => {
-    if (isAuthUnavailable) {
-      for (const sessionId of Object.keys(pendingAssistantReconcileTimeoutRef.current)) {
-        clearPendingAssistantReconcileTimeout(sessionId)
-      }
-      return
-    }
-
-    const activeSessionIds = new Set<string>()
-    for (const [sessionId, pendingState] of Object.entries(pendingAssistantBySession)) {
-      activeSessionIds.add(sessionId)
-      if (pendingAssistantReconcileScheduledAtRef.current[sessionId] === pendingState.requestedAt) {
-        continue
-      }
-
-      clearPendingAssistantReconcileTimeout(sessionId)
-      const requestedAtMs = toEpochMs(pendingState.requestedAt)
-      const elapsedMs = requestedAtMs === null ? Number.POSITIVE_INFINITY : Math.max(0, Date.now() - requestedAtMs)
-      const delayMs = Math.max(0, PENDING_ASSISTANT_SESSION_RECONCILE_INITIAL_DELAY_MS - elapsedMs)
-      pendingAssistantReconcileScheduledAtRef.current[sessionId] = pendingState.requestedAt
-      pendingAssistantReconcileTimeoutRef.current[sessionId] = setTimeout(() => {
-        delete pendingAssistantReconcileTimeoutRef.current[sessionId]
-        delete pendingAssistantReconcileScheduledAtRef.current[sessionId]
-        setPendingAssistantBySession((prev) => {
-          const current = prev[sessionId]
-          if (!current || current.requestedAt !== pendingState.requestedAt) {
-            return prev
-          }
-          // Force a state tick so the reconciliation effect runs even when no subscription event arrives.
-          return { ...prev }
-        })
-      }, delayMs)
-    }
-
-    for (const sessionId of Object.keys(pendingAssistantReconcileTimeoutRef.current)) {
-      if (!activeSessionIds.has(sessionId)) {
-        clearPendingAssistantReconcileTimeout(sessionId)
-      }
-    }
-  }, [clearPendingAssistantReconcileTimeout, isAuthUnavailable, pendingAssistantBySession])
 
   const handleSessionSelect = (sessionId: string) => {
     setInternalSelectedSessionId(sessionId)
@@ -2594,6 +2694,23 @@ function ConversationViewer({
           nextToken = response.nextToken || null
         } while (nextToken)
 
+        if (selectedId) {
+          try {
+            const selectedSessionRows = await listSessionChatMessages(selectedId, {
+              sortDirection: 'ASC',
+              limit: 200,
+            })
+            if (selectedSessionRows.length > 0) {
+              allMessages = [...allMessages, ...selectedSessionRows]
+            }
+          } catch (error) {
+            console.warn('Unable to hydrate selected session messages during initial load:', {
+              sessionId: selectedId,
+              error,
+            })
+          }
+        }
+
         if (allMessages.length > 0) {
           const sortedMessages = normalizeAndSortVisibleMessages(allMessages)
           setInternalMessages(sortedMessages)
@@ -2626,10 +2743,6 @@ function ConversationViewer({
   // Real-time subscription for chat sessions (subscription-only; no polling fallback)
   useEffect(() => {
     if (!effectiveId || isAuthUnavailable) return
-
-    const subscriptionFilter = {
-      procedureId: { eq: effectiveId },
-    }
 
     const upsertSessionFromPayload = (rawSession: any, source: 'create' | 'update') => {
       const parsed = parseRawChatSession(rawSession)
@@ -2708,7 +2821,6 @@ function ConversationViewer({
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
       createSubscription = (getClient().models.ChatSession.onCreate as any)({
-        filter: subscriptionFilter,
         selectionSet: CHAT_SESSION_SELECTION_SET,
       }).subscribe({
         next: (payload: any) => {
@@ -2737,7 +2849,6 @@ function ConversationViewer({
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
       updateSubscription = (getClient().models.ChatSession.onUpdate as any)({
-        filter: subscriptionFilter,
         selectionSet: CHAT_SESSION_SELECTION_SET,
       }).subscribe({
         next: (payload: any) => {
@@ -2766,7 +2877,6 @@ function ConversationViewer({
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
       deleteSubscription = (getClient().models.ChatSession.onDelete as any)({
-        filter: subscriptionFilter,
         selectionSet: ['id'],
       }).subscribe({
         next: (payload: any) => {
@@ -2804,11 +2914,35 @@ function ConversationViewer({
       return
     }
 
-    if (!parsed.procedureId || parsed.procedureId !== effectiveId) {
+    const belongsToConversation = (
+      (parsed.procedureId && parsed.procedureId === effectiveId)
+      || (parsed.sessionId ? conversationSessionIds.has(parsed.sessionId) : false)
+    )
+
+    if (!belongsToConversation) {
       return
     }
 
     const parsedSessionId = parsed.sessionId
+    const browserVisibility = parsedSessionId
+      ? browserVisibilityBySessionRef.current[parsedSessionId]
+      : undefined
+    if (browserVisibility && parsedSessionId) {
+      if (
+        parsed.id === browserVisibility.pending.triggerMessageId
+        && parsed.responseStatus === 'COMPLETED'
+      ) {
+        browserVisibility.trigger = parsed
+      }
+      if (
+        isAssistantChatMessage(parsed)
+        && getStreamingState(parsed.metadata) === 'complete'
+      ) {
+        browserVisibility.assistant = parsed
+      }
+      persistBrowserVisibleLatency(parsedSessionId, browserVisibility)
+    }
+
     if (parsedSessionId && isAssistantChatMessage(parsed)) {
       const pendingState = pendingAssistantBySessionRef.current[parsedSessionId]
       if (pendingState && isAssistantMessageAfterPendingThreshold(parsed, pendingState)) {
@@ -2887,7 +3021,7 @@ function ConversationViewer({
       )
       return keepsOrder ? next : sortChatMessages(next)
     })
-  }, [clearPendingAssistant, effectiveId])
+  }, [clearPendingAssistant, conversationSessionIds, effectiveId, persistBrowserVisibleLatency])
 
   useEffect(() => {
     if (propMessages || isAuthUnavailable || isLoading || !selectedSessionId) {
@@ -2922,11 +3056,6 @@ function ConversationViewer({
       return
     }
 
-    const listBySession = (getClient().models.ChatMessage as any).listChatMessageBySessionIdAndCreatedAt
-    if (typeof listBySession !== 'function') {
-      return
-    }
-
     const inFlight = selectedSessionHydrationInFlightRef.current
     if (inFlight.has(hydrationKey)) {
       return
@@ -2938,28 +3067,18 @@ function ConversationViewer({
 
     const hydrateSelectedSession = async () => {
       try {
-        let nextToken: string | null = null
-        do {
-          const response: { data?: any[], nextToken?: string | null } = await listBySession({
-            sessionId: selectedSessionId,
-            sortDirection: 'ASC',
-            limit: 200,
-            nextToken,
-          }, {
-            selectionSet: CHAT_MESSAGE_SELECTION_SET,
-          })
+        const rows = await listSessionChatMessages(selectedSessionId, {
+          sortDirection: 'ASC',
+          limit: 200,
+        })
 
-          if (isDisposed) {
-            return
-          }
+        if (isDisposed) {
+          return
+        }
 
-          const rows = Array.isArray(response?.data) ? response.data : []
-          for (const row of rows) {
-            applyRealtimeMessageMutation(row)
-          }
-
-          nextToken = response?.nextToken || null
-        } while (nextToken)
+        for (const row of rows) {
+          applyRealtimeMessageMutation(row)
+        }
       } catch (error) {
         if (markAuthUnavailable(error, 'selected_session_message_hydration')) {
           return
@@ -2996,89 +3115,11 @@ function ConversationViewer({
     pendingState: PendingAssistantState,
     triggerResponseStatus: ChatMessage['responseStatus'] | undefined,
   ) => {
-    const requestedAtMs = toEpochMs(pendingState.requestedAt)
-    const elapsedMs = requestedAtMs === null ? Number.POSITIVE_INFINITY : Math.max(0, Date.now() - requestedAtMs)
-    const hasTerminalTriggerStatus = isTerminalResponseStatus(triggerResponseStatus)
-    const shouldGiveUp = (
-      triggerResponseStatus === 'FAILED'
-      || (hasTerminalTriggerStatus && elapsedMs >= PENDING_ASSISTANT_SESSION_RECONCILE_GIVE_UP_MS)
-    )
-    const scheduleRetry = () => {
-      const retryDelayMs = elapsedMs < PENDING_ASSISTANT_SESSION_RECONCILE_FAST_WINDOW_MS
-        ? PENDING_ASSISTANT_SESSION_RECONCILE_FAST_RETRY_MS
-        : PENDING_ASSISTANT_SESSION_RECONCILE_SLOW_RETRY_MS
-      delete pendingAssistantReconciledAtRef.current[sessionId]
-      clearPendingAssistantReconcileTimeout(sessionId)
-      pendingAssistantReconcileTimeoutRef.current[sessionId] = setTimeout(() => {
-        delete pendingAssistantReconcileTimeoutRef.current[sessionId]
-        delete pendingAssistantReconcileScheduledAtRef.current[sessionId]
-        setPendingAssistantBySession((prev) => {
-          const current = prev[sessionId]
-          if (!current || current.requestedAt !== pendingState.requestedAt) {
-            return prev
-          }
-          return { ...prev }
-        })
-      }, retryDelayMs)
-    }
-
     try {
-      const listBySession = (getClient().models.ChatMessage as any).listChatMessageBySessionIdAndCreatedAt
-      const listByProcedure = (getClient().models.ChatMessage as any).listChatMessageByProcedureIdAndCreatedAt
-
-      let hydratedRows: any[] = []
-      let sessionListError: unknown = null
-      let procedureListError: unknown = null
-      let loadedFrom: 'session' | 'procedure' | null = null
-
-      if (typeof listBySession === 'function') {
-        try {
-          const response: { data?: any[] } = await listBySession({
-            sessionId,
-            sortDirection: 'DESC',
-            limit: 50,
-          }, {
-            selectionSet: CHAT_MESSAGE_SELECTION_SET,
-          })
-          hydratedRows = Array.isArray(response?.data) ? response.data : []
-          loadedFrom = 'session'
-        } catch (error) {
-          sessionListError = error
-        }
-      }
-
-      if (!loadedFrom && typeof listByProcedure === 'function' && effectiveId) {
-        try {
-          const response: { data?: any[] } = await listByProcedure({
-            procedureId: effectiveId,
-            sortDirection: 'DESC',
-            limit: 200,
-          }, {
-            selectionSet: CHAT_MESSAGE_SELECTION_SET,
-          })
-          hydratedRows = Array.isArray(response?.data)
-            ? response.data.filter((row) => row?.sessionId === sessionId)
-            : []
-          loadedFrom = 'procedure'
-        } catch (error) {
-          procedureListError = error
-        }
-      }
-
-      if (!loadedFrom) {
-        // If the runtime client lacks session/procedure listing APIs, avoid indefinite "Thinking".
-        clearPendingAssistant(sessionId)
-        console.warn('Chat message session reconciliation unavailable', {
-          hasListBySession: typeof listBySession === 'function',
-          hasListByProcedure: typeof listByProcedure === 'function',
-          hasEffectiveId: Boolean(effectiveId),
-          sessionId,
-          triggerMessageId: pendingState.triggerMessageId,
-          sessionListError,
-          procedureListError,
-        })
-        return
-      }
+      const hydratedRows = await listSessionChatMessages(sessionId, {
+        sortDirection: 'DESC',
+        limit: 50,
+      })
 
       for (const row of hydratedRows) {
         applyRealtimeMessageMutation(row)
@@ -3090,43 +3131,37 @@ function ConversationViewer({
         return
       }
 
-      if (!shouldGiveUp) {
-        // Assistant persistence/subscription can lag terminal state updates.
-        // Keep pending state and retry hydration instead of dropping the response.
-        scheduleRetry()
+      if (triggerResponseStatus !== 'FAILED') {
+        // Completion is the authoritative convergence point. Do not poll when it
+        // cannot yet observe an assistant row; the session subscription remains live.
+        console.warn('Terminal chat response completed without an assistant row', {
+          sessionId,
+          triggerMessageId: pendingState.triggerMessageId,
+        })
         return
       }
 
-      // Give-up window reached (or explicit failure) without assistant row; clear stale pending state.
+      // A failed trigger has no reply to wait for.
       clearPendingAssistant(sessionId)
-      console.warn('Clearing pending assistant after terminal response without assistant message', {
+      console.warn('Clearing pending assistant after failed terminal response', {
         sessionId,
         triggerMessageId: pendingState.triggerMessageId,
         triggerResponseStatus,
-        elapsedMs,
       })
     } catch (error) {
       if (markAuthUnavailable(error, 'pending_assistant_session_reconcile')) {
         return
       }
-      if (!shouldGiveUp) {
-        scheduleRetry()
-        return
-      }
-      clearPendingAssistant(sessionId)
       console.warn('Failed pending assistant session reconciliation', {
         sessionId,
         triggerMessageId: pendingState.triggerMessageId,
         triggerResponseStatus,
-        elapsedMs,
         error,
       })
     }
   }, [
     applyRealtimeMessageMutation,
     clearPendingAssistant,
-    clearPendingAssistantReconcileTimeout,
-    effectiveId,
     markAuthUnavailable,
   ])
 
@@ -3135,29 +3170,13 @@ function ConversationViewer({
       return
     }
 
-    const nowMs = Date.now()
     for (const [sessionId, pendingState] of Object.entries(pendingAssistantBySession)) {
       const triggerMessageId = pendingState.triggerMessageId
       const triggerMessage = triggerMessageId
         ? messages.find((message) => message.id === triggerMessageId)
         : undefined
       const triggerResponseStatus = triggerMessage?.responseStatus
-      const hasTerminalTriggerStatus = Boolean(triggerMessage && isTerminalResponseStatus(triggerResponseStatus))
-      const requestedAtMs = toEpochMs(pendingState.requestedAt)
-      const elapsedMs = requestedAtMs === null ? Number.POSITIVE_INFINITY : nowMs - requestedAtMs
-      const session = sessions.find((candidate) => candidate.id === sessionId)
-      const sessionUpdatedMs = toEpochMs(session?.updatedAt || null)
-      const sessionAdvancedSinceRequest = (
-        requestedAtMs !== null
-        && sessionUpdatedMs !== null
-        && sessionUpdatedMs > requestedAtMs + 500
-      )
-
-      if (
-        !hasTerminalTriggerStatus
-        && !sessionAdvancedSinceRequest
-        && elapsedMs < PENDING_ASSISTANT_SESSION_RECONCILE_INITIAL_DELAY_MS
-      ) {
+      if (!triggerMessage || !isTerminalResponseStatus(triggerResponseStatus)) {
         continue
       }
       if (hasAssistantMessageAfterPendingThreshold(messages, sessionId, pendingState)) {
@@ -3185,16 +3204,14 @@ function ConversationViewer({
     messages,
     pendingAssistantBySession,
     reconcileSessionMessagesAfterTerminalResponse,
-    sessions,
   ])
 
-  // Real-time subscription for chat messages (subscription-only; no polling fallback).
+  // AppSync subscription filters can silently drop sandbox events. Subscribe
+  // broadly, then enforce the selected session boundary before mutating state.
   useEffect(() => {
-    if (!effectiveId || isAuthUnavailable) return
+    if (!selectedSessionId || isAuthUnavailable) return
 
-    const subscriptionFilter = {
-      procedureId: { eq: effectiveId },
-    }
+    const subscribedSessionId = selectedSessionId
     let isDisposed = false
 
     const hydrateRealtimeMessageById = async (messageId: string, source: 'create' | 'update') => {
@@ -3219,6 +3236,9 @@ function ConversationViewer({
           console.warn(`Unable to hydrate chat message ${source} payload by id`, { messageId: normalizedMessageId })
           return
         }
+        if (hydrated.sessionId !== subscribedSessionId) {
+          return
+        }
         applyRealtimeMessageMutation(hydrated)
       } catch (error) {
         if (markAuthUnavailable(error, `message_${source}_hydrate_get`)) {
@@ -3233,6 +3253,49 @@ function ConversationViewer({
       }
     }
 
+    const hydrateSelectedSessionFromRealtimeCue = async (source: 'create' | 'update') => {
+      const hydrationKey = `realtime-cue:${subscribedSessionId}`
+      const inFlight = selectedSessionHydrationInFlightRef.current
+      if (inFlight.has(hydrationKey)) {
+        return
+      }
+
+      inFlight.add(hydrationKey)
+      try {
+        const rows = await listSessionChatMessages(subscribedSessionId, {
+          sortDirection: 'ASC',
+          limit: 200,
+        })
+        if (isDisposed) {
+          return
+        }
+
+        for (const row of rows) {
+          applyRealtimeMessageMutation(row)
+        }
+
+        const pendingState = pendingAssistantBySessionRef.current[subscribedSessionId]
+        const hydratedMessages = normalizeAndSortVisibleMessages(rows)
+        if (
+          pendingState
+          && hasAssistantMessageAfterPendingThreshold(hydratedMessages, subscribedSessionId, pendingState)
+        ) {
+          clearPendingAssistant(subscribedSessionId)
+        }
+      } catch (error) {
+        if (markAuthUnavailable(error, `message_${source}_hydrate_session`)) {
+          return
+        }
+        console.warn('Failed hydrating selected session from realtime message cue', {
+          sessionId: subscribedSessionId,
+          source,
+          error,
+        })
+      } finally {
+        inFlight.delete(hydrationKey)
+      }
+    }
+
     let createSubscription: { unsubscribe: () => void } | null = null
     let updateSubscription: { unsubscribe: () => void } | null = null
     let deleteSubscription: { unsubscribe: () => void } | null = null
@@ -3240,13 +3303,17 @@ function ConversationViewer({
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
       createSubscription = (getClient().models.ChatMessage.onCreate as any)({
-        filter: subscriptionFilter,
         selectionSet: CHAT_MESSAGE_SELECTION_SET,
       }).subscribe({
         next: (payload: any) => {
+          if (isDisposed) {
+            return
+          }
           const incoming = extractSubscriptionRecord(payload, ['onCreateChatMessage'])
           if (!incoming) {
-            console.warn('Ignoring malformed chat message create payload', payload)
+            // Some sandbox AppSync subscriptions signal a change with no row payload.
+            // The selected session index is authoritative and this remains event-driven.
+            void hydrateSelectedSessionFromRealtimeCue('create')
             return
           }
           if (!hasCompleteRealtimeChatMessage(incoming)) {
@@ -3256,6 +3323,9 @@ function ConversationViewer({
               return
             }
             void hydrateRealtimeMessageById(messageId, 'create')
+            return
+          }
+          if (incoming.sessionId !== subscribedSessionId) {
             return
           }
           applyRealtimeMessageMutation(incoming)
@@ -3279,13 +3349,15 @@ function ConversationViewer({
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
       updateSubscription = (getClient().models.ChatMessage.onUpdate as any)({
-        filter: subscriptionFilter,
         selectionSet: CHAT_MESSAGE_SELECTION_SET,
       }).subscribe({
         next: (payload: any) => {
+          if (isDisposed) {
+            return
+          }
           const incoming = extractSubscriptionRecord(payload, ['onUpdateChatMessage'])
           if (!incoming) {
-            console.warn('Ignoring malformed chat message update payload', payload)
+            void hydrateSelectedSessionFromRealtimeCue('update')
             return
           }
           if (!hasCompleteRealtimeChatMessage(incoming)) {
@@ -3295,6 +3367,9 @@ function ConversationViewer({
               return
             }
             void hydrateRealtimeMessageById(messageId, 'update')
+            return
+          }
+          if (incoming.sessionId !== subscribedSessionId) {
             return
           }
           applyRealtimeMessageMutation(incoming)
@@ -3318,17 +3393,19 @@ function ConversationViewer({
     try {
       // @ts-ignore - Amplify Gen2 typing issue with subscriptions
       deleteSubscription = (getClient().models.ChatMessage.onDelete as any)({
-        filter: subscriptionFilter,
-        selectionSet: ['id', 'procedureId'],
+        selectionSet: ['id', 'sessionId'],
       }).subscribe({
         next: (payload: any) => {
+          if (isDisposed) {
+            return
+          }
           const incoming = extractSubscriptionRecord(payload, ['onDeleteChatMessage'])
           const deletedMessageId = typeof incoming?.id === 'string' ? incoming.id : null
           if (!deletedMessageId) {
             console.warn('Ignoring malformed chat message delete payload', payload)
             return
           }
-          if (!incoming?.procedureId || incoming.procedureId !== effectiveId) {
+          if (incoming?.sessionId && incoming.sessionId !== subscribedSessionId) {
             return
           }
           setInternalMessages((prevMessages) => (
@@ -3359,7 +3436,13 @@ function ConversationViewer({
       updateSubscription?.unsubscribe()
       deleteSubscription?.unsubscribe()
     }
-  }, [applyRealtimeMessageMutation, effectiveId, isAuthUnavailable, markAuthUnavailable])
+  }, [
+    applyRealtimeMessageMutation,
+    clearPendingAssistant,
+    isAuthUnavailable,
+    markAuthUnavailable,
+    selectedSessionId,
+  ])
   
   // Sort sessions by last update date in reverse chronological order (most recent first)
   const sortedSessions = [...sessions].sort((a, b) => {
@@ -3463,17 +3546,6 @@ function ConversationViewer({
       },
     ]
   }, [conversationRows, selectedSessionId, showThinkingPlaceholder])
-  const hasStreamingAssistantTail = React.useMemo(() => {
-    const lastMessage = sortedMessages[sortedMessages.length - 1]
-    if (!lastMessage || !isAssistantChatMessage(lastMessage)) {
-      return false
-    }
-    const streamingState = (lastMessage.metadata as { streaming?: { state?: string } } | undefined)?.streaming?.state
-    if (!streamingState) {
-      return false
-    }
-    return streamingState !== 'complete'
-  }, [sortedMessages])
   const latestConversationRenderSignature = React.useMemo(() => {
     const lastMessage = sortedMessages[sortedMessages.length - 1]
     if (!lastMessage) {
@@ -3484,11 +3556,14 @@ function ConversationViewer({
       sortedMessages.length,
       lastMessage.id,
       lastMessage.createdAt,
+      lastMessage.updatedAt || '',
       lastMessage.content.length,
       lastMessage.responseStatus || '',
+      getStreamingState(lastMessage.metadata) || '',
       showThinkingPlaceholder ? 'thinking' : 'idle',
     ].join(':')
   }, [selectedSessionId, showThinkingPlaceholder, sortedMessages])
+
   const shouldForceFollow = autoFollowEnabled
   const pendingMessageForPrompt = React.useMemo(
     () => [...sortedMessages].reverse().find(message => unresolvedPendingMessageIds.has(message.id)) || null,
@@ -4341,11 +4416,21 @@ function ConversationViewer({
           messagePersisted = true
 
           const persistedCreatedAt = created?.data?.createdAt || nowIso
-          setInternalMessages(prev => prev.map(message => (
-            message.id === optimisticMessageId
-              ? { ...optimisticMessage, ...attribution, id: createdMessageId, createdAt: persistedCreatedAt }
-              : message
-          )))
+          setInternalMessages(prev => {
+            const existingPersisted = prev.find((message) => message.id === createdMessageId)
+            const mergedPersisted: ChatMessage = {
+              ...optimisticMessage,
+              ...(existingPersisted || {}),
+              ...attribution,
+              id: createdMessageId,
+              createdAt: persistedCreatedAt,
+              createdByUserId: attribution.createdByUserId || existingPersisted?.createdByUserId,
+            }
+            const withoutOptimisticOrPersisted = prev.filter((message) => (
+              message.id !== optimisticMessageId && message.id !== createdMessageId
+            ))
+            return sortChatMessages([...withoutOptimisticOrPersisted, mergedPersisted])
+          })
 
           if (!enableProcedureSteering) {
             markPendingAssistant(
