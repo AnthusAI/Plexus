@@ -301,6 +301,8 @@ export interface ChatMessage {
 export interface ChatSession {
   id: string
   accountId?: string
+  scorecardId?: string
+  scoreId?: string
   procedureId?: string
   name?: string
   category?: string
@@ -374,6 +376,8 @@ export interface ConversationViewerProps {
   defaultSidebarWidth?: number
   forceProcedureIdForDispatch?: string
   defaultAccountIdForNewSession?: string
+  selectedScorecardId?: string | null
+  selectedScoreId?: string | null
   enableProcedureSteering?: boolean
 }
 
@@ -812,6 +816,8 @@ const parseRawChatSession = (session: any): ChatSession | null => {
   return {
     id: session.id,
     accountId: session.accountId,
+    scorecardId: session.scorecardId,
+    scoreId: session.scoreId,
     procedureId: session.procedureId,
     name: session.name,
     category: session.category,
@@ -2106,6 +2112,8 @@ function ConversationViewer({
   defaultSidebarWidth = 320,
   forceProcedureIdForDispatch,
   defaultAccountIdForNewSession,
+  selectedScorecardId,
+  selectedScoreId,
   enableProcedureSteering = false,
 }: ConversationViewerProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(defaultSidebarCollapsed)
@@ -4100,6 +4108,8 @@ function ConversationViewer({
     }
     const created = await (client.models.ChatSession.create as any)({
       accountId: fallbackSessionAccountId,
+      ...(selectedScorecardId ? { scorecardId: selectedScorecardId } : {}),
+      ...(selectedScoreId ? { scoreId: selectedScoreId } : {}),
       procedureId: fallbackSessionProcedureId,
       category: STANDARD_SESSION_CATEGORY,
       metadata: serializeSessionMetadata(sessionMetadata),
@@ -4117,6 +4127,8 @@ function ConversationViewer({
     const createdSession: ChatSession = {
       id: sessionId,
       accountId: fallbackSessionAccountId,
+      scorecardId: created?.data?.scorecardId || selectedScorecardId || undefined,
+      scoreId: created?.data?.scoreId || selectedScoreId || undefined,
       procedureId: fallbackSessionProcedureId,
       category: created?.data?.category || STANDARD_SESSION_CATEGORY,
       name: created?.data?.name,
@@ -4148,7 +4160,7 @@ function ConversationViewer({
     }
 
     return createdSession
-  }, [consoleToolAccessMode, currentUserId, fallbackSessionAccountId, fallbackSessionProcedureId, isConsolePrivate, onSessionSelect])
+  }, [consoleToolAccessMode, currentUserId, fallbackSessionAccountId, fallbackSessionProcedureId, isConsolePrivate, onSessionSelect, selectedScoreId, selectedScorecardId])
 
   const handleCreateSession = React.useCallback(async () => {
     if (isAuthUnavailable) {
