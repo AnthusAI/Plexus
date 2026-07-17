@@ -62,8 +62,19 @@ echo ""
 
 cd "$DASHBOARD_DIR"
 
+# A sandbox must never inherit branch/runtime wiring from a production or
+# staging deployment shell.  Let Amplify resolve its own sandbox data API.
+unset AWS_BRANCH AMPLIFY_ENV PLEXUS_API_URL
+
 export AMPLIFY_ENABLE_SANDBOX_CONSOLE_WORKER=true
 export AWS_REGION="$REGION"
+if [[ -z "$CONFIG_SECRET_NAME" ]]; then
+  CONFIG_SECRET_NAME="plexus/staging/config"
+fi
+if [[ "$CONFIG_SECRET_NAME" == "plexus/production/config" ]]; then
+  echo "Refusing to start a sandbox Console worker with a production secret." >&2
+  exit 1
+fi
 if [[ -n "$CONFIG_SECRET_NAME" ]]; then
   export PLEXUS_CONFIG_SECRET_NAME="$CONFIG_SECRET_NAME"
 fi

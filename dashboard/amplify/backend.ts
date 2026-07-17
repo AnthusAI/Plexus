@@ -193,7 +193,7 @@ if (shouldDeployConsoleWorker) {
     const consoleWorkerEnvironmentName = normalizeForResourceName(resolveEnvironmentName());
     const consoleWorkerConfigSecretName = (
         process.env.PLEXUS_CONFIG_SECRET_NAME ||
-        `plexus/${consoleWorkerEnvironmentName}/config`
+        (isSandbox ? 'plexus/staging/config' : `plexus/${consoleWorkerEnvironmentName}/config`)
     ).trim();
 
     if (!resolvedDataApiUrl) {
@@ -202,6 +202,9 @@ if (shouldDeployConsoleWorker) {
                 ? 'Unable to resolve sandbox GraphQL URL for ConsoleRunWorkerStack deployment'
                 : 'PLEXUS_API_URL must be set for ConsoleRunWorkerStack deployment'
         );
+    }
+    if (isSandbox && consoleWorkerConfigSecretName === 'plexus/production/config') {
+        throw new Error('Sandbox ConsoleRunWorker must not use plexus/production/config');
     }
 
     consoleRunWorkerStack = new ConsoleChatResponderStack(
