@@ -5592,6 +5592,33 @@ def test_report_run_async_creates_handle_and_records_budget() -> None:
     assert handles.created[0]["child_budget"] == budget
 
 
+def test_handle_status_can_resume_report_by_durable_task_id(monkeypatch) -> None:
+    """A later console turn can poll a report without Lambda-local handle state."""
+
+    class FakeTask:
+        id = "task-1"
+        status = "COMPLETED"
+        statusMessage = "Report complete"
+        errorMessage = None
+        output = None
+        updatedAt = "2026-07-17T00:00:00Z"
+        completedAt = "2026-07-17T00:00:00Z"
+
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+    monkeypatch.setattr(
+        "plexus.dashboard.api.models.task.Task.get_by_id",
+        lambda task_id, _client: FakeTask() if task_id == "task-1" else None,
+    )
+
+    module = execute.PlexusRuntimeModule(FastMCP("test"))
+    status = module.handle.status({"task_id": "task-1"})
+
+    assert status["id"] == "task-1"
+    assert status["durable_id"] == "task-1"
+    assert status["kind"] == "report"
+    assert status["status"] == "completed"
+
+
 def test_report_run_async_receives_runtime_account_context() -> None:
     seen_args: dict = {}
 
