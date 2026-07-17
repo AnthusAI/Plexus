@@ -54,6 +54,18 @@ def test_builtin_console_procedure_prompt_teaches_docs_primitives():
     assert "plexus.score.search" in system_prompt
 
 
+def test_builtin_console_prompt_completes_read_only_feedback_alignment_without_reports():
+    """Read-only alignment triage must finish without creating a report artifact."""
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+
+    assert "READ-ONLY FEEDBACK ALIGNMENT" in system_prompt
+    assert "plexus.feedback.alignment_batch" in system_prompt
+    assert "do not dispatch `plexus.report.run`" in system_prompt.lower()
+    assert "Do not stop after a partial result" in system_prompt
+
+
 def test_builtin_console_procedure_prompt_is_cs_domain_focused():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)

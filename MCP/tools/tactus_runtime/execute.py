@@ -8924,12 +8924,22 @@ class PlexusRuntimeModule:
             )
         parsed = _args(args)
         handle_id = parsed.get("id")
-        if not handle_id:
-            raise ValueError(f"plexus.handle.{method} requires id")
+        task_id = parsed.get("task_id") or parsed.get("taskId")
+        if not handle_id and not task_id:
+            raise ValueError(f"plexus.handle.{method} requires id or task_id")
 
         self._budget.check_before("handle", method)
         self._record_api_call("handle", method)
         try:
+            # Lambda-local handle files cannot be recovered by a later chat
+            # turn running on another worker.  Report dispatch already returns
+            # a durable dashboard task id, so make that id directly pollable.
+            if task_id:
+                if method not in {"peek", "status", "await"}:
+                    raise ValueError(
+                        f"plexus.handle.{method} requires an ephemeral handle id"
+                    )
+                return self._refresh_task_handle(str(task_id))
             if method in {"peek", "status"}:
                 return self._refresh_handle(str(handle_id))
             if method == "cancel":
@@ -8953,6 +8963,48 @@ class PlexusRuntimeModule:
             raise ValueError(f"Unsupported Plexus runtime API: plexus.handle.{method}")
         finally:
             self._budget.record_after("handle", method)
+
+    @staticmethod
+    def _refresh_task_handle(task_id: str) -> dict[str, Any]:
+        """Return a stable handle-shaped status for a persisted dashboard task."""
+        try:
+            from plexus.cli.shared.client_utils import create_client
+            from plexus.dashboard.api.models.task import Task
+
+            task = Task.get_by_id(task_id, create_client())
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "id": task_id,
+                "durable_id": task_id,
+                "kind": "report",
+                "status": "running_unknown",
+                "last_status_error": str(exc),
+            }
+
+        if not task:
+            return {
+                "id": task_id,
+                "durable_id": task_id,
+                "kind": "report",
+                "status": "not_found",
+            }
+
+        raw_status = str(getattr(task, "status", "") or "").strip().lower()
+        status = _normalize_handle_status(raw_status)
+        return {
+            "id": task_id,
+            "durable_id": task_id,
+            "kind": "report",
+            "status": status,
+            "task": {
+                "id": task_id,
+                "status": getattr(task, "status", None),
+                "status_message": getattr(task, "statusMessage", None),
+                "error": getattr(task, "errorMessage", None),
+                "updated_at": getattr(task, "updatedAt", None),
+                "completed_at": getattr(task, "completedAt", None),
+            },
+        }
 
     def _cancel_handle(self, handle_id: str) -> dict[str, Any]:
         record = self._handle_store.get(handle_id)
