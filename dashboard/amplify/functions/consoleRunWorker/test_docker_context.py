@@ -23,3 +23,12 @@ def test_console_worker_dockerfile_verifies_mcp_tool_modules():
     assert "test -f /workspace/MCP/tools/tactus_runtime/execute.py" in dockerfile
     assert "test -f /workspace/MCP/tools/tactus_runtime/_item_helpers.py" in dockerfile
     assert "test -f /workspace/MCP/server.py" in dockerfile
+
+
+def test_console_worker_installs_scoring_runtime_dependencies():
+    repo_root = Path(__file__).resolve().parents[4]
+    dockerfile = repo_root.joinpath(
+        "dashboard/amplify/functions/consoleRunWorker/Dockerfile"
+    ).read_text()
+
+    assert 'pip install --no-cache-dir -e "/workspace[scoring]"' in dockerfile
