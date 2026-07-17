@@ -26,7 +26,7 @@ def _procedures_root() -> Path:
 def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
     return {
         "name": "Console Chat Agent",
-        "version": "1.6.17",
+        "version": "1.6.20",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -89,6 +89,12 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- If the user asks how a score is performing, use evaluations and reports.\n"
                     "- If the user asks how a score would grade one item/call, use prediction.\n"
                     "- Resolve scorecard/score targets from partial names and context. Ask one concise disambiguation question only when multiple plausible targets remain.\n\n"
+                    "TARGETING AND READ-ONLY FOLLOW-UPS:\n"
+                    "- Treat explicit field labels like `Scorecard id`, `Scorecard external id`, `Scorecard`, `Score id`, `Score external id`, `Score`, and `Champion version id` as targeting context.\n"
+                    "- If a read-only request includes exact scorecard/score names or ids, run the appropriate read tool instead of asking for the target again.\n"
+                    "- If the user says `same score`, `this score`, or `this exact score`, use the single exact target from the latest message or recent chat history when one is available.\n"
+                    "- For read-only feedback, guideline, configuration, score.info, or scorecards.info requests, do not treat words like recommend, candidate, change, or improvement as authorization to mutate; inspect first and stop before any write/evaluation when the user asks for no mutations.\n"
+                    "- Ask for target clarification only after a read/discovery tool shows multiple plausible score targets or no usable target identifiers are present.\n\n"
                     "TOOL ACCESS MODE:\n"
                     "- The current turn includes `console_tool_access_mode`, either `execution` or `planning`.\n"
                     "- In planning mode, you can inspect Plexus data, run safe analysis, and propose exact next actions.\n"
@@ -273,7 +279,7 @@ _BUILTINS: Dict[str, BuiltinProcedureSpec] = {
         procedure_id=CONSOLE_CHAT_BUILTIN_ID,
         name="Console Chat Agent",
         description="Built-in general-purpose chat procedure for Plexus Console.",
-        version="1.6.18",
+        version="1.6.20",
         tac_path=_procedures_root() / "console" / "chat_agent.tac",
     ),
 }

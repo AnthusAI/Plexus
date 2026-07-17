@@ -387,6 +387,18 @@ local function extract_score_target_key(value)
     return string.lower(scorecard_id) .. "|" .. string.lower(score_id)
   end
 
+  scorecard_id = (
+    string.match(lowered, "scorecard%s+id%s*:%s*([0-9a-f%-]+)")
+    or string.match(lowered, "scorecard_id%s*[:=]%s*([0-9a-f%-]+)")
+  )
+  score_id = (
+    string.match(lowered, "score%s+id%s*:%s*([0-9a-f%-]+)")
+    or string.match(lowered, "score_id%s*[:=]%s*([0-9a-f%-]+)")
+  )
+  if scorecard_id ~= nil and score_id ~= nil and looks_like_uuid(scorecard_id) and looks_like_uuid(score_id) then
+    return string.lower(scorecard_id) .. "|" .. string.lower(score_id)
+  end
+
   local uuids = {}
   for token in string.gmatch(value, "[0-9a-fA-F%-]+") do
     if looks_like_uuid(token) then
@@ -403,6 +415,30 @@ end
 
 local function has_explicit_score_target(value)
   return extract_score_target_key(value) ~= nil
+end
+
+local function contains_standalone_phrase(value, phrase)
+  if type(value) ~= "string" or type(phrase) ~= "string" or phrase == "" then
+    return false
+  end
+
+  local start_at = 1
+  while true do
+    local first, last = string.find(value, phrase, start_at, true)
+    if first == nil then
+      return false
+    end
+
+    local before = first > 1 and string.sub(value, first - 1, first - 1) or ""
+    local after = string.sub(value, last + 1, last + 1)
+    local before_is_word = before ~= "" and string.match(before, "[%w_]") ~= nil
+    local after_is_word = after ~= "" and string.match(after, "[%w_]") ~= nil
+    if not before_is_word and not after_is_word then
+      return true
+    end
+
+    start_at = last + 1
+  end
 end
 
 local function collect_active_score_targets()
@@ -430,12 +466,10 @@ end
 if deterministic_response == nil then
   local lower_latest = string.lower(latest_user_prompt or "")
   local has_deictic_score_ref = (
-    string.find(lower_latest, "this score", 1, true)
-    or string.find(lower_latest, "that score", 1, true)
-    or string.find(lower_latest, "this scorecard", 1, true)
-    or string.find(lower_latest, "that scorecard", 1, true)
-    or string.find(lower_latest, "same score", 1, true)
-  ) ~= nil
+    contains_standalone_phrase(lower_latest, "this score")
+    or contains_standalone_phrase(lower_latest, "that score")
+    or contains_standalone_phrase(lower_latest, "same score")
+  )
   local explicit_target_key = extract_score_target_key(latest_user_prompt)
   local active_targets = collect_active_score_targets()
   local active_target_count = #active_targets

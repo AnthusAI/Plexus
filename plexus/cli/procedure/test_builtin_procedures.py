@@ -207,6 +207,35 @@ def test_builtin_console_procedure_disambiguates_deictic_score_references():
     assert "more than one possible score target" in code
     assert "this score" in code
     assert "same score" in code
+    assert "scorecard%s+id%s*:%s*([0-9a-f%-]+)" in code
+    assert "score%s+id%s*:%s*([0-9a-f%-]+)" in code
+
+
+def test_builtin_console_procedure_allows_scorecard_wide_deictic_analysis():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    code = parsed["code"]
+    guard = code.split("local has_deictic_score_ref =", 1)[1].split(
+        "local explicit_target_key", 1
+    )[0]
+
+    assert '"this scorecard"' not in guard
+    assert '"that scorecard"' not in guard
+    assert "contains_standalone_phrase" in code
+    assert 'contains_standalone_phrase(lower_latest, "this score")' in guard
+    assert 'string.match(after, "[%w_]")' in code
+
+
+def test_builtin_console_procedure_prompt_treats_read_only_exact_ids_as_targeted():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+
+    assert "TARGETING AND READ-ONLY FOLLOW-UPS" in system_prompt
+    assert "`Scorecard id`" in system_prompt
+    assert "`Score id`" in system_prompt
+    assert "run the appropriate read tool instead of asking for the target again" in system_prompt
+    assert "do not treat words like recommend, candidate, change, or improvement as authorization to mutate" in system_prompt
 
 
 def test_builtin_console_procedure_consumes_score_disambiguation_followups():
@@ -253,7 +282,7 @@ def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
     # Bumped when the Console assistant tool contract changes.
-    assert parsed["version"] == "1.6.17"
+    assert parsed["version"] == "1.6.20"
 
 
 def test_is_builtin_procedure_id():

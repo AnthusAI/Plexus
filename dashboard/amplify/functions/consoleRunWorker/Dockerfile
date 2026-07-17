@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git && \
 
 # Install Plexus, Lambda runtime interface client, and required dependencies.
 RUN python -m pip install --upgrade pip && \
-    python -m pip install --no-cache-dir -e /workspace && \
+    python -m pip install --no-cache-dir -e "/workspace[scoring]" && \
     python -m pip install --no-cache-dir "python-statemachine>=2.5.0" awslambdaric
 
 COPY dashboard/amplify/functions/consoleRunWorker/app.py /var/task/app.py
