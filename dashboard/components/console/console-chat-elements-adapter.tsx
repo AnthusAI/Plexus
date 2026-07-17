@@ -5,6 +5,8 @@ import ConversationViewer from "@/components/ui/conversation-viewer"
 interface ConsoleChatElementsAdapterProps {
   procedureId: string
   accountId?: string
+  selectedScorecardId?: string | null
+  selectedScoreId?: string | null
   selectedSessionId?: string
   onSessionSelect?: (sessionId: string) => void
 }
@@ -18,6 +20,8 @@ interface ConsoleChatElementsAdapterProps {
 export default function ConsoleChatElementsAdapter({
   procedureId,
   accountId,
+  selectedScorecardId,
+  selectedScoreId,
   selectedSessionId,
   onSessionSelect,
 }: ConsoleChatElementsAdapterProps) {
@@ -25,6 +29,8 @@ export default function ConsoleChatElementsAdapter({
     <ConversationViewer
       procedureId={procedureId}
       defaultAccountIdForNewSession={accountId}
+      selectedScorecardId={selectedScorecardId}
+      selectedScoreId={selectedScoreId}
       selectedSessionId={selectedSessionId}
       onSessionSelect={onSessionSelect}
       forceProcedureIdForDispatch={procedureId}
