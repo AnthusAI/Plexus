@@ -61,6 +61,7 @@ def test_load_local_env_reads_repo_and_dashboard_env_files(monkeypatch):
 def test_main_rejects_cloud_response_target(monkeypatch):
     worker = _load_local_worker_module()
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
+    monkeypatch.setattr(worker, "_load_local_env", lambda: None)
 
     try:
         worker.main()
@@ -106,6 +107,7 @@ def test_main_processes_pending_messages_with_local_owner(monkeypatch):
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "local:ryan")
     monkeypatch.setenv("CONSOLE_LOCAL_WORKER_IDLE_POLL_SECONDS", "0")
+    monkeypatch.setattr(worker, "_load_local_env", lambda: None)
     monkeypatch.setattr(worker, "_resolve_client", SimpleNamespace)
     monkeypatch.setattr(worker, "warm_console_runtime", lambda _client: None)
     monkeypatch.setattr(
@@ -135,6 +137,7 @@ def test_main_drain_mode_only_sleeps_when_no_work(monkeypatch):
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "local:ryan")
     monkeypatch.setenv("CONSOLE_LOCAL_WORKER_IDLE_POLL_SECONDS", "0")
+    monkeypatch.setattr(worker, "_load_local_env", lambda: None)
     monkeypatch.setattr(worker, "_resolve_client", SimpleNamespace)
     monkeypatch.setattr(worker, "warm_console_runtime", lambda _client: None)
     monkeypatch.setattr(

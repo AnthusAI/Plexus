@@ -16,8 +16,9 @@ class _FakeLogsClient:
     class exceptions:
         ResourceAlreadyExistsException = _FakeResourceAlreadyExists
 
-    def __init__(self, fail_policy=False):
+    def __init__(self, fail_policy=False, access_denied_policy=False):
         self.fail_policy = fail_policy
+        self.access_denied_policy = access_denied_policy
         self.created_groups = []
         self.policy_groups = []
 
@@ -25,6 +26,11 @@ class _FakeLogsClient:
         self.created_groups.append(logGroupName)
 
     def put_data_protection_policy(self, logGroupIdentifier, policyDocument):
+        if self.access_denied_policy:
+            raise RuntimeError(
+                "An error occurred (AccessDeniedException) when calling the "
+                "PutDataProtectionPolicy operation: not authorized"
+            )
         if self.fail_policy:
             raise RuntimeError("policy failed")
         self.policy_groups.append(logGroupIdentifier)
@@ -139,6 +145,30 @@ def test_setup_logging_fails_closed_when_policy_fails(monkeypatch):
     CustomLogging.setup_logging("plexus/api/test")
 
     assert CustomLogging.cloudwatch_handler is None
+
+
+def test_setup_logging_warns_concisely_when_policy_permission_missing(monkeypatch):
+    warnings = []
+    errors = []
+    plexus_logger = logging.getLogger("plexus")
+
+    monkeypatch.setenv("AWS_REGION", "us-west-2")
+    monkeypatch.setattr(
+        CustomLogging,
+        "_cloudwatch_logs_client",
+        lambda _region: _FakeLogsClient(access_denied_policy=True),
+    )
+    monkeypatch.setattr(CustomLogging.watchtower, "CloudWatchLogHandler", _FakeWatchtowerHandler)
+    monkeypatch.setattr(plexus_logger, "warning", lambda message, *args, **_kwargs: warnings.append(message % args))
+    monkeypatch.setattr(plexus_logger, "error", lambda message, *args, **_kwargs: errors.append(message % args if args else message))
+
+    CustomLogging.setup_logging("plexus/api/test")
+
+    assert CustomLogging.cloudwatch_handler is None
+    assert warnings == [
+        "CloudWatch logging disabled for plexus/api/test: missing logs:PutDataProtectionPolicy permission"
+    ]
+    assert errors == []
 
 
 def test_setup_logging_skips_cloudwatch_without_region(monkeypatch):

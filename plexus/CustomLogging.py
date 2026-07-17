@@ -62,6 +62,26 @@ def _prepare_cloudwatch_log_group(logs_client, log_group_name):
     )
 
 
+def _is_cloudwatch_policy_access_denied(exc):
+    """
+    Return True for expected IAM denials when applying CloudWatch data protection.
+
+    Lambda roles in some environments can create/write log streams but cannot
+    call PutDataProtectionPolicy on legacy log groups. We still fail closed for
+    CloudWatch shipping, but this is an environment permission issue rather than
+    an application error and should not obscure the real worker symptom.
+    """
+    text = str(exc)
+    return (
+        "PutDataProtectionPolicy" in text
+        and (
+            "AccessDeniedException" in text
+            or "AccessDenied" in text
+            or "not authorized" in text
+        )
+    )
+
+
 def _cloudwatch_logging_enabled():
     """
     Return True when CloudWatch log shipping is enabled.
@@ -150,7 +170,13 @@ def setup_logging(log_group_name=DEFAULT_LOG_GROUP_NAME, attach_root=False):
 
             current_log_group_name = log_group_name
         except Exception as e:
-            plexus_logger.error(f"Error creating CloudWatch handler: {str(e)}")
+            if _is_cloudwatch_policy_access_denied(e):
+                plexus_logger.warning(
+                    "CloudWatch logging disabled for %s: missing logs:PutDataProtectionPolicy permission",
+                    log_group_name,
+                )
+            else:
+                plexus_logger.error(f"Error creating CloudWatch handler: {str(e)}")
             cloudwatch_handler = None
             root_cloudwatch_handler = None
             current_log_group_name = None

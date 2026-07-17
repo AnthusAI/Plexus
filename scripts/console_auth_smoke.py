@@ -177,6 +177,11 @@ def parse_args() -> argparse.Namespace:
         help="Prompt content for the user chat message.",
     )
     parser.add_argument(
+        "--response-target",
+        default=os.getenv("CONSOLE_RESPONSE_TARGET", "cloud"),
+        help="Response target for the queued user message (default: cloud).",
+    )
+    parser.add_argument(
         "--timeout-seconds",
         type=int,
         default=180,
@@ -203,6 +208,11 @@ def parse_args() -> argparse.Namespace:
         "--require-dispatch-mode",
         default=None,
         help="Optional expected task metadata.dispatch_mode value (for example: console_async_worker).",
+    )
+    parser.add_argument(
+        "--skip-start-console-run",
+        action="store_true",
+        help="Skip startConsoleRun and rely on the ChatMessage stream worker to process the pending message.",
     )
     return parser.parse_args()
 
@@ -359,6 +369,8 @@ def run_smoke(args: argparse.Namespace) -> Dict[str, Any]:
                     "role": "USER",
                     "messageType": "MESSAGE",
                     "humanInteraction": "CHAT",
+                    "responseStatus": "PENDING",
+                    "responseTarget": args.response_target,
                     "content": args.prompt,
                 }
             },
@@ -367,22 +379,26 @@ def run_smoke(args: argparse.Namespace) -> Dict[str, Any]:
         user_message_id = user_message["id"]
 
         dispatch_started_at = utc_now_iso()
-        run_resp = graphql(
-            url=args.graphql_url,
-            id_token=auth.id_token,
-            query=START_CONSOLE_RUN,
-            variables={
-                "sessionId": session_id,
-                "procedureId": args.procedure_id,
-                "triggerMessageId": user_message_id,
-                "clientInstrumentation": json.dumps(
-                    {"source": "scripts/console_auth_smoke.py", "dispatch_started_at": dispatch_started_at}
-                ),
-            },
-        )
-        run = run_resp["startConsoleRun"]
-        task_id = run["taskId"]
-        run_id = run["runId"]
+        run: Dict[str, Any] = {}
+        task_id: Optional[str] = None
+        run_id: Optional[str] = None
+        if not args.skip_start_console_run:
+            run_resp = graphql(
+                url=args.graphql_url,
+                id_token=auth.id_token,
+                query=START_CONSOLE_RUN,
+                variables={
+                    "sessionId": session_id,
+                    "procedureId": args.procedure_id,
+                    "triggerMessageId": user_message_id,
+                    "clientInstrumentation": json.dumps(
+                        {"source": "scripts/console_auth_smoke.py", "dispatch_started_at": dispatch_started_at}
+                    ),
+                },
+            )
+            run = run_resp["startConsoleRun"]
+            task_id = run["taskId"]
+            run_id = run["runId"]
 
         started = time.monotonic()
         first_assistant_delay: Optional[float] = None
@@ -392,13 +408,14 @@ def run_smoke(args: argparse.Namespace) -> Dict[str, Any]:
         growth_samples: List[Dict[str, Any]] = []
 
         while time.monotonic() - started < args.timeout_seconds:
-            task_data = graphql(
-                url=args.graphql_url,
-                id_token=auth.id_token,
-                query=GET_TASK,
-                variables={"id": task_id},
-            )
-            latest_task = task_data.get("getTask")
+            if task_id:
+                task_data = graphql(
+                    url=args.graphql_url,
+                    id_token=auth.id_token,
+                    query=GET_TASK,
+                    variables={"id": task_id},
+                )
+                latest_task = task_data.get("getTask")
 
             messages_data = graphql(
                 url=args.graphql_url,
