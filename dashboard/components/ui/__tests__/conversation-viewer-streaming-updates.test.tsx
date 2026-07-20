@@ -52,6 +52,7 @@ jest.mock("react-virtuoso", () => {
 
 const mockChatSessionList = jest.fn()
 const mockChatSessionGet = jest.fn()
+const mockChatSessionCreate = jest.fn()
 const mockChatMessageList = jest.fn()
 const mockChatMessageListBySession = jest.fn()
 const mockChatMessageGet = jest.fn()
@@ -72,6 +73,7 @@ const mockClient = {
     ChatSession: {
       listChatSessionByProcedureIdAndCreatedAt: mockChatSessionList,
       get: mockChatSessionGet,
+      create: mockChatSessionCreate,
       onCreate: mockChatSessionOnCreate,
       onUpdate: mockChatSessionOnUpdate,
       onDelete: mockChatSessionOnDelete,
@@ -281,6 +283,7 @@ describe("ConversationViewer streaming updates", () => {
     mockChatMessageCreate.mockReset()
     mockChatMessageUpdate.mockReset()
     mockChatSessionGet.mockReset()
+    mockChatSessionCreate.mockReset()
     mockChatSessionOnCreate.mockReset()
     mockChatSessionOnUpdate.mockReset()
     mockChatSessionOnDelete.mockReset()
@@ -305,6 +308,15 @@ describe("ConversationViewer streaming updates", () => {
       nextToken: null,
     })
     mockChatSessionGet.mockResolvedValue({ data: null })
+    mockChatSessionCreate.mockResolvedValue({
+      data: {
+        id: "sess-created",
+        accountId: "acct-1",
+        procedureId: "proc-1",
+        createdAt: "2026-03-27T00:00:02.000Z",
+        updatedAt: "2026-03-27T00:00:02.000Z",
+      },
+    })
 
     mockChatMessageList.mockResolvedValue({
       data: [
@@ -1123,6 +1135,31 @@ describe("ConversationViewer streaming updates", () => {
     await waitFor(() => {
       expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
       expect(screen.getByText("Streaming reply")).toBeInTheDocument()
+    })
+  })
+
+  it("persists the selected scorecard and score when creating a console session", async () => {
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultAccountIdForNewSession="acct-1"
+        selectedScorecardId="scorecard-1"
+        selectedScoreId="score-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    const newSessionButton = await screen.findByTitle("New session")
+    fireEvent.click(newSessionButton)
+
+    await waitFor(() => {
+      expect(mockChatSessionCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorecardId: "scorecard-1",
+          scoreId: "score-1",
+        }),
+        expect.anything(),
+      )
     })
   })
 

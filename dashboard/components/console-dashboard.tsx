@@ -323,6 +323,8 @@ export default function ConsoleDashboard({ routeSessionId }: ConsoleDashboardPro
           <ConsoleChatElementsAdapter
             procedureId={selectedProcedureId}
             accountId={selectedAccountId ?? undefined}
+            selectedScorecardId={selectedScorecard}
+            selectedScoreId={selectedScore}
             selectedSessionId={selectedSessionId}
             onSessionSelect={handleSelectSession}
           />
