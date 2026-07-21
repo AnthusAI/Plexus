@@ -1,28 +1,14 @@
+from __future__ import annotations
+
 import os
 from pydantic import ConfigDict, BaseModel
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
-from langchain_core.language_models import BaseLanguageModel
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
-from langchain_aws import ChatBedrock, ChatBedrockConverse
-
-from langchain_openai import AzureChatOpenAI
-from langchain_openai import ChatOpenAI
-from langchain_community.callbacks import OpenAICallbackHandler
-
-# Optional import for ChatOllama
-try:
-    from langchain_ollama import ChatOllama
-    OLLAMA_AVAILABLE = True
-except ImportError:
-    ChatOllama = None
-    OLLAMA_AVAILABLE = False
 
 from plexus.CustomLogging import logging
 from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
-
-from langchain_community.chat_models import ChatVertexAI
 
 import threading
 
@@ -138,7 +124,13 @@ class LangChainUser:
         self.openai_callback = None
         self.model = self._initialize_model()
 
-    def _initialize_model(self, custom_params: Optional[dict] = None) -> BaseLanguageModel:
+    @staticmethod
+    def _create_openai_callback():
+        from langchain_community.callbacks import OpenAICallbackHandler
+
+        return OpenAICallbackHandler()
+
+    def _initialize_model(self, custom_params: Optional[dict] = None) -> Any:
         """
         Initialize and return the appropriate language model based on the configured provider.
 
@@ -153,7 +145,7 @@ class LangChainUser:
         max_tokens = params.max_tokens
 
         if params.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
-            self.openai_callback = OpenAICallbackHandler()
+            self.openai_callback = self._create_openai_callback()
             callbacks = [self.openai_callback, self.token_counter]
             
             # Models starting with or containing "gpt-5" do not support temperature/top_p
@@ -163,6 +155,8 @@ class LangChainUser:
             supports_reasoning = model_lc.startswith("gpt-5") or model_lc.startswith("o")
 
             if params.model_provider == "AzureChatOpenAI":
+                from langchain_openai import AzureChatOpenAI
+
                 azure_kwargs = {
                     "azure_endpoint": os.getenv("AZURE_API_BASE"),
                     "api_version": os.getenv("AZURE_API_VERSION"),
@@ -181,6 +175,8 @@ class LangChainUser:
                     logging.error(f"AzureChatOpenAI init unexpected error: {type(e).__name__}: {e}")
                     raise
             else:  # ChatOpenAI
+                from langchain_openai import ChatOpenAI
+
                 chat_kwargs = {
                     "model": params.model_name,
                     "api_key": os.getenv("OPENAI_API_KEY"),
@@ -227,6 +223,8 @@ class LangChainUser:
                     logging.error(f"ChatOpenAI init unexpected error: {type(e).__name__}: {e}")
                     raise
         elif params.model_provider == "BedrockChat":
+            from langchain_aws import ChatBedrock, ChatBedrockConverse
+
             model_name = params.model_name or CLAUDE_HAIKU_45_MODEL_ID
             
             if "gpt-oss" in model_name.lower():
@@ -264,6 +262,8 @@ class LangChainUser:
             
             callbacks = [self.token_counter]
         elif params.model_provider == "ChatVertexAI":
+            from langchain_community.chat_models import ChatVertexAI
+
             base_model = ChatVertexAI(
                 model=params.model_name or "gemini-1.5-flash-001",
                 temperature=params.temperature,
@@ -271,11 +271,13 @@ class LangChainUser:
             )
             callbacks = [self.token_counter]
         elif params.model_provider == "ChatOllama":
-            if not OLLAMA_AVAILABLE:
+            try:
+                from langchain_ollama import ChatOllama
+            except ImportError as exc:
                 raise ImportError(
                     "ChatOllama provider requires the 'langchain_ollama' package. "
                     "Install it with: pip install langchain-ollama"
-                )
+                ) from exc
             
             model_name = params.model_name or "gpt-oss:20b"
             
@@ -322,6 +324,8 @@ class LangChainUser:
         Asynchronously initialize the language model.
         """
         if self.parameters.model_provider == "ChatOpenAI":
+            from langchain_openai import ChatOpenAI
+
             is_gpt5 = (self.parameters.model_name or "").lower().find("gpt-5") != -1
             kwargs = {
                 "model": self.parameters.model_name,
@@ -338,6 +342,8 @@ class LangChainUser:
             await model.agenerate([])  # Initialize the async client
             return model
         elif self.parameters.model_provider == "AzureChatOpenAI":
+            from langchain_openai import AzureChatOpenAI
+
             is_gpt5 = (self.parameters.model_name or "").lower().find("gpt-5") != -1
             kwargs = {
                 "deployment_name": self.parameters.model_name,

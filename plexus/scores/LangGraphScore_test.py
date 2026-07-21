@@ -139,7 +139,7 @@ async def test_timestamp_enrichment_uses_recorded_deepgram_attachment_key():
         "plexus.utils.score_result_s3_utils.download_score_result_trace_file",
         side_effect=download_only_recorded_key,
     ) as download, patch(
-        "plexus.scores.LangGraphScore.TactusRuntime",
+        "tactus.core.runtime.TactusRuntime",
         return_value=runtime,
     ):
         enriched = await score._enrich_explanation_with_timestamps(
@@ -163,7 +163,7 @@ async def test_timestamp_enrichment_does_not_derive_legacy_deepgram_key_without_
         "plexus.utils.score_result_s3_utils.download_score_result_trace_file",
         side_effect=AssertionError("legacy DeepGram key should not be requested"),
     ) as download, patch(
-        "plexus.scores.LangGraphScore.TactusRuntime",
+        "tactus.core.runtime.TactusRuntime",
     ) as runtime:
         enriched = await score._enrich_explanation_with_timestamps(
             explanation,

@@ -8,21 +8,21 @@ Uses the Tactus runtime with in-process execution (no Docker containers)
 for high-volume Plexus scenarios with trusted code.
 """
 
+from __future__ import annotations
+
 import asyncio
 import inspect
 import json
 import logging
 import os
-from typing import Optional, Union, List, Any, Dict
+from typing import Optional, Union, List, Any, Dict, TYPE_CHECKING
 from pydantic import ConfigDict, model_validator
 
 from plexus.scores.Score import Score
 from plexus.utils.score_result_timestamps import extract_score_result_timestamps
 
-# Import Tactus components
-from tactus.core.runtime import TactusRuntime
-from tactus.adapters.memory import MemoryStorage
-from tactus.adapters.cost_collector_log import CostCollectorLogHandler
+if TYPE_CHECKING:
+    from tactus.core.runtime import TactusRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +122,9 @@ class TactusScore(Score):
 
     def _create_runtime(self) -> TactusRuntime:
         """Create a runtime instance for pool use."""
+        from tactus.adapters.memory import MemoryStorage
+        from tactus.core.runtime import TactusRuntime
+
         storage = MemoryStorage()
         runtime_kwargs = {
             "procedure_id": self.parameters.name or "tactus_score",
@@ -393,6 +396,8 @@ Procedure {
             The prediction result with value and explanation
         """
         runtime = await self._acquire_runtime()
+        from tactus.adapters.cost_collector_log import CostCollectorLogHandler
+
         runtime.log_handler = CostCollectorLogHandler()
 
         try:
