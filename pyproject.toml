@@ -104,9 +104,11 @@ scoring = [
     "boto3",
     "langchain", "langchain-core", "langchain-community",
     "langgraph", "langchain-aws", "langchain-openai",
-    "langchain-ollama", "langchain-google-vertexai",
-    "langchain-anthropic", "langgraph-checkpoint-postgres",
+    "langchain-ollama", "langchain-anthropic", "langgraph-checkpoint-postgres",
     "psycopg", "tactus", "nltk", "graphviz",
+]
+google-vertexai = [
+    "langchain-google-vertexai",
 ]
 infra = [
     "celery", "fastapi", "uvicorn", "pycurl", "sqlalchemy", "pyairtable",
