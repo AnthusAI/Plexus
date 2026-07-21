@@ -3,7 +3,7 @@
   "title": "Minimize score runtime dependency imports",
   "description": "Reduce cold-start and image-size pressure for reusable scoring runtimes by making score loading import only the dependencies required for the selected score type.\n\nScope:\n- Audit scorecard and score module imports that eagerly load optional score types.\n- Move heavy score-type dependencies behind lazy imports where behavior permits.\n- Split package extras so basic scoring runtimes do not require training, IDE, workflow, or optional provider stacks.\n- Coordinate any Tactus dependency-boundary follow-up separately if Plexus still pulls unnecessary Tactus dependencies.\n\nValidation should include a focused score runtime import smoke test and existing score processor tests.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -85,7 +85,7 @@
     }
   ],
   "created_at": "2026-07-21T19:17:06.434825Z",
-  "updated_at": "2026-07-21T20:45:05.351821Z",
-  "closed_at": null,
+  "updated_at": "2026-07-21T20:47:40.874955Z",
+  "closed_at": "2026-07-21T20:47:40.874955Z",
   "custom": {}
 }
