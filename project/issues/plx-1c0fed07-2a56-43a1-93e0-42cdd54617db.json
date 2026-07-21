@@ -1,0 +1,31 @@
+{
+  "id": "plx-1c0fed07-2a56-43a1-93e0-42cdd54617db",
+  "title": "Minimize score runtime dependency imports",
+  "description": "Reduce cold-start and image-size pressure for reusable scoring runtimes by making score loading import only the dependencies required for the selected score type.\n\nScope:\n- Audit scorecard and score module imports that eagerly load optional score types.\n- Move heavy score-type dependencies behind lazy imports where behavior permits.\n- Split package extras so basic scoring runtimes do not require training, IDE, workflow, or optional provider stacks.\n- Coordinate any Tactus dependency-boundary follow-up separately if Plexus still pulls unnecessary Tactus dependencies.\n\nValidation should include a focused score runtime import smoke test and existing score processor tests.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8eac9f8b-1423-40ec-b635-f17fe4cdfc6b",
+      "author": "derek.norrbom",
+      "text": "Initial audit: scorecard loading eagerly imports LangGraphScore, and LangGraphScore imports Tactus runtime at module import. The downstream runtime image also currently installs broad app dependencies. First step is to shrink the downstream serverless image dependency manifest for testing, then isolate Plexus lazy-import/package-extra changes.",
+      "created_at": "2026-07-21T19:17:10.954492Z"
+    },
+    {
+      "id": "023aa0f1-a67e-4ec2-9d47-78a0cae3aade",
+      "author": "derek.norrbom",
+      "text": "Clarification: downstream scoring uses both LangGraphScore and TactusScore in production, so the scoring runtime cannot avoid either path. The cleanup target is to remove optional training/evaluation/reporting/import side effects while preserving both score implementations.",
+      "created_at": "2026-07-21T19:29:19.787991Z"
+    }
+  ],
+  "created_at": "2026-07-21T19:17:06.434825Z",
+  "updated_at": "2026-07-21T19:29:19.787991Z",
+  "closed_at": null,
+  "custom": {}
+}

@@ -17,7 +17,6 @@ from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
 from plexus.scores.Score import Score
 from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
-from plexus.scores.LangGraphScore import BatchProcessingPause, LangGraphScore
 
 SCORE_RESULT_TRACE_SCHEMA_VERSION = "score_result_dependency_v1"
 DEFAULT_TRACE_SCORE_IDENTIFIERS = {
@@ -27,6 +26,21 @@ DEFAULT_TRACE_SCORE_IDENTIFIERS = {
     "48813",
     "910707",
 }
+
+
+def _is_lang_graph_score_instance(value: Any) -> bool:
+    if value.__class__.__name__ != "LangGraphScore":
+        return False
+    from plexus.scores.LangGraphScore import LangGraphScore
+
+    return isinstance(value, LangGraphScore)
+
+
+def _is_batch_processing_pause(value: BaseException) -> bool:
+    return (
+        value.__class__.__name__ == "BatchProcessingPause"
+        and value.__class__.__module__ == "plexus.scores.LangGraphScore"
+    )
 
 
 def _normalize_trace_identifier(value: Any) -> str:
@@ -727,7 +741,7 @@ class Scorecard:
                 ]
 
             # Add required metadata for LangGraphScore
-            if isinstance(score_instance, LangGraphScore):
+            if _is_lang_graph_score_instance(score_instance):
                 account_key = os.getenv("PLEXUS_ACCOUNT_KEY")
                 if not account_key:
                     raise ValueError("PLEXUS_ACCOUNT_KEY not found in environment")
@@ -1025,11 +1039,13 @@ class Scorecard:
                 else:
                     return [score_result]
 
-            except BatchProcessingPause:
-                # Re-raise BatchProcessingPause to be handled by API
-                logging.info(
-                    f"BatchProcessingPause caught in get_score_result for {score}"
-                )
+            except Exception as e:
+                if _is_batch_processing_pause(e):
+                    # Re-raise BatchProcessingPause to be handled by API
+                    logging.info(
+                        f"BatchProcessingPause caught in get_score_result for {score}"
+                    )
+                    raise
                 raise
             finally:
                 if hasattr(score_instance, "cleanup"):
@@ -1478,18 +1494,20 @@ class Scorecard:
                 logging.info(f"Score {score_name} was skipped: {e.reason}")
                 return
 
-            except BatchProcessingPause as e:
-                logging.info(
-                    f"Score {score_name} paused for batch processing (thread_id: {e.thread_id})"
-                )
-                # Store the paused state in results
-                results_by_score_id[score_id] = Score.Result(
-                    value="PAUSED",
-                    error=str(e),
-                    parameters=Score.Parameters(name=score_name, scorecard=self.name),
-                    metadata={"thread_id": e.thread_id, "batch_job_id": e.batch_job_id},
-                )
-                # Re-raise to be handled by higher-level code
+            except Exception as e:
+                if _is_batch_processing_pause(e):
+                    logging.info(
+                        f"Score {score_name} paused for batch processing (thread_id: {e.thread_id})"
+                    )
+                    # Store the paused state in results
+                    results_by_score_id[score_id] = Score.Result(
+                        value="PAUSED",
+                        error=str(e),
+                        parameters=Score.Parameters(name=score_name, scorecard=self.name),
+                        metadata={"thread_id": e.thread_id, "batch_job_id": e.batch_job_id},
+                    )
+                    # Re-raise to be handled by higher-level code
+                    raise
                 raise
 
         remaining_scores = set(dependency_graph.keys())
@@ -1523,14 +1541,16 @@ class Scorecard:
                     return_exceptions=True,
                 )
                 for score_id, outcome in zip(ready_batch, batch_outcomes):
-                    if isinstance(outcome, BatchProcessingPause):
+                    if isinstance(outcome, Exception) and _is_batch_processing_pause(outcome):
                         raise outcome
                     if isinstance(outcome, Exception):
                         raise outcome
                     remaining_scores.discard(score_id)
 
-            except BatchProcessingPause as e:
-                # Don't remove from remaining scores, just re-raise to be handled by caller
+            except Exception as e:
+                if _is_batch_processing_pause(e):
+                    # Don't remove from remaining scores, just re-raise to be handled by caller
+                    raise
                 raise
 
         logging.info(f"All scores processed. Total scores: {len(results_by_score_id)}")
