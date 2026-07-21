@@ -22,10 +22,16 @@
       "author": "derek.norrbom",
       "text": "Clarification: downstream scoring uses both LangGraphScore and TactusScore in production, so the scoring runtime cannot avoid either path. The cleanup target is to remove optional training/evaluation/reporting/import side effects while preserving both score implementations.",
       "created_at": "2026-07-21T19:29:19.787991Z"
+    },
+    {
+      "id": "35b4fddb-2703-420f-8fe0-933bd50d78c1",
+      "author": "derek.norrbom",
+      "text": "Provider split: removed langchain-google-vertexai from the default scoring extra. Vertex AI support should be installed explicitly with a provider-specific extra so downstream scoring runtimes do not pull Google BigQuery/storage/pyarrow dependencies unless they actually need that provider.",
+      "created_at": "2026-07-21T19:37:36.873964Z"
     }
   ],
   "created_at": "2026-07-21T19:17:06.434825Z",
-  "updated_at": "2026-07-21T19:29:19.787991Z",
+  "updated_at": "2026-07-21T19:37:36.873964Z",
   "closed_at": null,
   "custom": {}
 }
