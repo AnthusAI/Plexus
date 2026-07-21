@@ -28,10 +28,28 @@
       "author": "derek.norrbom",
       "text": "Provider split: removed langchain-google-vertexai from the default scoring extra. Vertex AI support should be installed explicitly with a provider-specific extra so downstream scoring runtimes do not pull Google BigQuery/storage/pyarrow dependencies unless they actually need that provider.",
       "created_at": "2026-07-21T19:37:36.873964Z"
+    },
+    {
+      "id": "83d686a4-c768-4dc0-a0b7-4c603f7c1392",
+      "author": "derek.norrbom",
+      "text": "Investigating optional CloudWatch logging for lightweight scoring consumers. Root cause: importing plexus.CustomLogging currently imports watchtower and boto3 eagerly, so consumers without logging extras fail before logging is configured. I will make those dependencies lazy/optional, add regression coverage for the no-extra case, then run focused tests.",
+      "created_at": "2026-07-21T19:47:59.105032Z"
+    },
+    {
+      "id": "c6bda33e-aa51-4160-aefd-36a4b7429327",
+      "author": "derek.norrbom",
+      "text": "Scope decision: Plexus must not own downstream CloudWatch log groups or metrics. Remove CloudWatch handler creation/provisioning from the shared logging module rather than retaining a compatibility path. Plexus will provide redacted standard-library/Rich logging only; applications own AWS handlers, log groups, IAM, retention, and metrics.",
+      "created_at": "2026-07-21T19:51:17.469774Z"
+    },
+    {
+      "id": "6d5f1170-07ff-4366-906d-2c1661d9c563",
+      "author": "derek.norrbom",
+      "text": "Implemented the runtime ownership boundary. Removed CloudWatch log-group/stream provisioning and metric emission from CustomLogging, Scorecard, scoring utilities, console chat, procedure execution, workers, and evaluation CLI setup. Removed watchtower from package extras and deleted the dedicated CloudWatch runtime modules/tests. Validation (Python 3.11): python -m pytest plexus/CustomLogging_test.py plexus/Scorecard_test.py plexus/console/test_chat_runtime.py -q (48 passed); python -m pytest plexus/cli/procedure -q (passed); import smoke test succeeds with watchtower and boto3 unavailable. The remaining CloudWatch references are CDK alarm constructs, not package runtime behavior.",
+      "created_at": "2026-07-21T20:01:28.069176Z"
     }
   ],
   "created_at": "2026-07-21T19:17:06.434825Z",
-  "updated_at": "2026-07-21T19:37:36.873964Z",
+  "updated_at": "2026-07-21T20:01:28.069176Z",
   "closed_at": null,
   "custom": {}
 }
