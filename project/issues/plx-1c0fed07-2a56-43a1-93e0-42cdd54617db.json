@@ -3,7 +3,7 @@
   "title": "Minimize score runtime dependency imports",
   "description": "Reduce cold-start and image-size pressure for reusable scoring runtimes by making score loading import only the dependencies required for the selected score type.\n\nScope:\n- Audit scorecard and score module imports that eagerly load optional score types.\n- Move heavy score-type dependencies behind lazy imports where behavior permits.\n- Split package extras so basic scoring runtimes do not require training, IDE, workflow, or optional provider stacks.\n- Coordinate any Tactus dependency-boundary follow-up separately if Plexus still pulls unnecessary Tactus dependencies.\n\nValidation should include a focused score runtime import smoke test and existing score processor tests.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -64,10 +64,16 @@
       "author": "derek.norrbom",
       "text": "Fixed the Azure provider boundary: LangChainUser now imports azure.identity only inside get_azure_credential, so LangGraphScore loads for non-Azure scoring runtimes without azure-identity. Added a subprocess import regression and made API scorecard construction raise when requested score configs fail registration, avoiding misleading successful empty instances. Validation: python -m pytest plexus/LangChainUser_test.py plexus/Scorecard_test.py -q (14 passed). The broader LangGraphScore suite produced 85 passes/24 skips and two pre-existing async-fixture errors.",
       "created_at": "2026-07-21T20:15:51.496070Z"
+    },
+    {
+      "id": "cb07247c-a905-4afb-b856-07195973a260",
+      "author": "derek.norrbom",
+      "text": "Fix pushed at Plexus commit 66623c5 (branch head 5108c6b). Downstream AQA lock now resolves branch head 5108c6b0aee3a1a44a05a9b70113fa5c1eda4776 without azure-identity or watchtower.",
+      "created_at": "2026-07-21T20:16:59.487009Z"
     }
   ],
   "created_at": "2026-07-21T19:17:06.434825Z",
-  "updated_at": "2026-07-21T20:15:51.496070Z",
-  "closed_at": null,
+  "updated_at": "2026-07-21T20:16:59.509988Z",
+  "closed_at": "2026-07-21T20:16:59.509988Z",
   "custom": {}
 }
