@@ -3,7 +3,7 @@
   "title": "Minimize score runtime dependency imports",
   "description": "Reduce cold-start and image-size pressure for reusable scoring runtimes by making score loading import only the dependencies required for the selected score type.\n\nScope:\n- Audit scorecard and score module imports that eagerly load optional score types.\n- Move heavy score-type dependencies behind lazy imports where behavior permits.\n- Split package extras so basic scoring runtimes do not require training, IDE, workflow, or optional provider stacks.\n- Coordinate any Tactus dependency-boundary follow-up separately if Plexus still pulls unnecessary Tactus dependencies.\n\nValidation should include a focused score runtime import smoke test and existing score processor tests.",
   "type": "task",
-  "status": "closed",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -52,10 +52,22 @@
       "author": "derek.norrbom",
       "text": "Completed and pushed. Plexus no longer provisions CloudWatch log groups/streams or emits CloudWatch metrics from its runtime package. Logging remains redacted and scoped to the plexus logger; downstream applications own destinations, IAM, log groups, retention, and metrics. Focused Python 3.11 validation passed.",
       "created_at": "2026-07-21T20:03:50.093924Z"
+    },
+    {
+      "id": "4b1658e0-7ba2-4552-83f4-e5a0c0e561e8",
+      "author": "derek.norrbom",
+      "text": "Regression found in the reduced scoring dependency set: LangGraphScore imports LangChainUser, which imports azure.identity eagerly even for non-Azure providers. This prevents requested scores from registering when azure-identity is absent. Reopening to make Azure credentials provider-scoped/lazy and add import regression coverage.",
+      "created_at": "2026-07-21T20:13:41.458964Z"
+    },
+    {
+      "id": "773b4cfb-06e3-4ef6-a7d7-dabf9ebebea9",
+      "author": "derek.norrbom",
+      "text": "Fixed the Azure provider boundary: LangChainUser now imports azure.identity only inside get_azure_credential, so LangGraphScore loads for non-Azure scoring runtimes without azure-identity. Added a subprocess import regression and made API scorecard construction raise when requested score configs fail registration, avoiding misleading successful empty instances. Validation: python -m pytest plexus/LangChainUser_test.py plexus/Scorecard_test.py -q (14 passed). The broader LangGraphScore suite produced 85 passes/24 skips and two pre-existing async-fixture errors.",
+      "created_at": "2026-07-21T20:15:51.496070Z"
     }
   ],
   "created_at": "2026-07-21T19:17:06.434825Z",
-  "updated_at": "2026-07-21T20:03:50.123165Z",
-  "closed_at": "2026-07-21T20:03:50.123165Z",
+  "updated_at": "2026-07-21T20:15:51.496070Z",
+  "closed_at": null,
   "custom": {}
 }
