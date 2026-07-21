@@ -25,7 +25,6 @@ from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
 from langchain_community.chat_models import ChatVertexAI
 
 import threading
-from azure.identity import ChainedTokenCredential, AzureCliCredential, DefaultAzureCredential
 
 class LangChainUser:
 
@@ -378,6 +377,18 @@ class LangChainUser:
 
     def get_azure_credential(self):
         """Get Azure credential for authentication."""
+        try:
+            from azure.identity import (
+                AzureCliCredential,
+                ChainedTokenCredential,
+                DefaultAzureCredential,
+            )
+        except ImportError as exc:
+            raise ImportError(
+                "Azure credential authentication requires the optional "
+                "'azure-identity' package"
+            ) from exc
+
         if not hasattr(self, '_credential'):
             self._credential = ChainedTokenCredential(
                 AzureCliCredential(process_timeout=10),

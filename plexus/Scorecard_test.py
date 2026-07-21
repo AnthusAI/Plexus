@@ -33,6 +33,43 @@ def create_mock_score_instance():
     return mock_score_instance
 
 
+def test_create_instance_from_api_data_fails_when_score_class_cannot_register():
+    api_data = {
+        "id": "scorecard-1",
+        "name": "Test Scorecard",
+        "sections": {
+            "items": [
+                {
+                    "scores": {
+                        "items": [
+                            {
+                                "id": "score-1",
+                                "name": "Requested Score",
+                                "key": "requested_score",
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+    }
+    score_configs = [
+        {
+            "id": "score-1",
+            "name": "Requested Score",
+            "key": "requested_score",
+            "class": "UnavailableScoreClass",
+        }
+    ]
+
+    with pytest.raises(RuntimeError, match="Requested Score.*UnavailableScoreClass"):
+        Scorecard.create_instance_from_api_data(
+            "scorecard-1",
+            api_data,
+            score_configs,
+        )
+
+
 @pytest.mark.asyncio
 async def test_get_score_result_accumulates_only_incremental_cost_for_cached_score_instances():
     """Regression: cached score instances report cumulative costs; scorecard totals need deltas."""

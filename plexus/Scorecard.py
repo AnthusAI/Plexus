@@ -1934,6 +1934,31 @@ class Scorecard:
             scorecard=scorecard_id, api_data=api_data, scores_config=scores_config
         )
 
+        unregistered_scores = []
+        for config in scores_config:
+            if not isinstance(config, dict):
+                continue
+            identifiers = (
+                config.get("id"),
+                config.get("key"),
+                config.get("name"),
+            )
+            if not any(
+                identifier
+                and scorecard_instance.score_registry.get_properties(identifier)
+                for identifier in identifiers
+            ):
+                unregistered_scores.append(
+                    f"{config.get('name') or config.get('key') or config.get('id')} "
+                    f"({config.get('class') or 'missing class'})"
+                )
+
+        if unregistered_scores:
+            raise RuntimeError(
+                "Failed to register requested score configurations: "
+                + ", ".join(unregistered_scores)
+            )
+
         # Verify IDs after instance creation
         if hasattr(scorecard_instance, "scores"):
             id_verification = [
