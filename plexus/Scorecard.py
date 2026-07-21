@@ -16,7 +16,6 @@ from datetime import datetime
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
 from plexus.scores.Score import Score
-from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
 
 SCORE_RESULT_TRACE_SCHEMA_VERSION = "score_result_dependency_v1"
 DEFAULT_TRACE_SCORE_IDENTIFIERS = {
@@ -300,7 +299,6 @@ class Scorecard:
         # Track how many texts have been processed by this scorecard instance
         self.number_of_texts_processed = 0
 
-        self.cloudwatch_logger = CloudWatchLogger()
         # Optional preference to load only from local YAML files (no API)
         # Can be set by callers (e.g., CLI/MCP) after construction as well
         self.yaml_only = False
@@ -948,76 +946,6 @@ class Scorecard:
                 if isinstance(score_total_cost.get("components"), list):
                     self.cost_components.extend(score_total_cost.get("components"))
 
-                # Log CloudWatch metrics for this individual score
-                total_tokens = score_total_cost.get(
-                    "prompt_tokens", 0
-                ) + score_total_cost.get("completion_tokens", 0)
-                dimensions = {
-                    "ScoreCardID": str(self.properties.get("id", "unknown")),
-                    "ScoreCardName": str(self.properties.get("name", "unknown")),
-                    "Score": str(score_configuration.get("name", "unknown")),
-                    "ScoreID": str(score_configuration.get("id", "unknown")),
-                    "Modality": modality or "Development",
-                    "Environment": os.getenv("environment") or "Unknown",
-                }
-
-                self.cloudwatch_logger.log_metric(
-                    "Cost", score_total_cost.get("total_cost", 0), dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "PromptTokens", score_total_cost.get("prompt_tokens", 0), dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CompletionTokens",
-                    score_total_cost.get("completion_tokens", 0),
-                    dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "TotalTokens", total_tokens, dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CachedTokens", score_total_cost.get("cached_tokens", 0), dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "ExternalAIRequests",
-                    score_total_cost.get("llm_calls", 0),
-                    dimensions,
-                )
-
-                scorecard_dimensions = {
-                    "ScoreCardName": str(self.properties.get("name", "unknown")),
-                    "Environment": os.getenv("environment") or "Unknown",
-                }
-
-                self.cloudwatch_logger.log_metric(
-                    "CostByScorecard",
-                    score_total_cost.get("total_cost", 0),
-                    scorecard_dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "PromptTokensByScorecard",
-                    score_total_cost.get("prompt_tokens", 0),
-                    scorecard_dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CompletionTokensByScorecard",
-                    score_total_cost.get("completion_tokens", 0),
-                    scorecard_dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "TotalTokensByScorecard", total_tokens, scorecard_dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CachedTokensByScorecard",
-                    score_total_cost.get("cached_tokens", 0),
-                    scorecard_dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "ExternalAIRequestsByScorecard",
-                    score_total_cost.get("llm_calls", 0),
-                    scorecard_dimensions,
-                )
-
                 # Persist the final text that was sent to the model (after input source/processors)
                 # so downstream consumers (e.g., evaluation dashboard views) can show what was scored.
                 if isinstance(score_result, list):
@@ -1459,32 +1387,6 @@ class Scorecard:
                         composite_input_results=previous_result_summaries,
                         final_result=result,
                     )
-
-                # Cost/token metrics are already recorded in get_score_result().
-                # Avoid re-instantiating the score here because it can trigger expensive setup
-                # (e.g., LangGraph workflow compilation) for every item.
-                dimensions = {
-                    "ScoreCardID": str(self.properties.get("id", "unknown")),
-                    "ScoreCardName": str(self.properties.get("name", "unknown")),
-                    "Score": str(score_config.get("name", score_name)),
-                    "ScoreID": str(score_config.get("id", "")),
-                    "Modality": modality or "Development",
-                    "Environment": os.getenv("environment") or "Unknown",
-                }
-                self.cloudwatch_logger.log_metric("ItemTokens", item_tokens, dimensions)
-
-                scorecard_dimensions = {
-                    "ScoreCardName": str(self.properties.get("name", "unknown")),
-                    "Environment": os.getenv("environment") or "Unknown",
-                }
-                self.cloudwatch_logger.log_metric(
-                    "ItemTokensByScorecard", item_tokens, scorecard_dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CostPerText",
-                    self.get_accumulated_costs().get("cost_per_text", 0),
-                    scorecard_dimensions,
-                )
 
                 results_by_score_id[score_id] = result
                 results.append({"id": score_id, "name": score_name, "result": result})

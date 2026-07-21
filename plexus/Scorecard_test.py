@@ -94,23 +94,22 @@ async def test_get_score_result_accumulates_only_incremental_cost_for_cached_sco
     scorecard.properties = {"name": "TestScorecard", "id": "scorecard-1"}
     scorecard.score_registry = Registry()
 
-    with patch.object(scorecard.cloudwatch_logger, "log_metric"):
-        await scorecard.get_score_result(
-            scorecard="TestScorecard",
-            score="CumulativeCostScore",
-            text="First item",
-            metadata={},
-            modality="test",
-            results=[],
-        )
-        await scorecard.get_score_result(
-            scorecard="TestScorecard",
-            score="CumulativeCostScore",
-            text="Second item",
-            metadata={},
-            modality="test",
-            results=[],
-        )
+    await scorecard.get_score_result(
+        scorecard="TestScorecard",
+        score="CumulativeCostScore",
+        text="First item",
+        metadata={},
+        modality="test",
+        results=[],
+    )
+    await scorecard.get_score_result(
+        scorecard="TestScorecard",
+        score="CumulativeCostScore",
+        text="Second item",
+        metadata={},
+        modality="test",
+        results=[],
+    )
 
     assert len(created_instances) == 1
     assert scorecard.prompt_tokens == 200

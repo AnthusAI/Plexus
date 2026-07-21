@@ -45,10 +45,9 @@ from plexus.feedback_item_explanations import (
 
 from plexus.scores.LangGraphScore import LangGraphScore
 import inspect
-from plexus.CustomLogging import logging, setup_logging, set_log_group
+from plexus.CustomLogging import logging, setup_logging
 
 # Set up logging for evaluations
-set_log_group('plexus/evaluation')
 setup_logging()
 
 
