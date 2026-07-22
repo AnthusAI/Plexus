@@ -13,6 +13,12 @@ def test_trace_sink_stream_update_defaults_are_responsive():
     assert PlexusTraceSink.STREAM_UPDATE_MIN_CHARS_DELTA > 0
 
 
+def test_trace_sink_persists_nested_report_task_id_in_tool_metadata():
+    sink = PlexusTraceSink(AsyncMock())
+    patch = sink._tool_metadata_patch({"value": {"task_id": "task-1", "report_id": "report-1"}})
+    assert patch["console_report_task"] == {"task_id": "task-1", "report_id": "report-1"}
+
+
 @pytest.mark.asyncio
 async def test_trace_sink_records_tool_call_with_structured_payloads():
     recorder = AsyncMock()
@@ -272,6 +278,27 @@ async def test_trace_sink_drops_placeholder_assistant_completion_message():
     assert message_id is None
     recorder.record_message.assert_not_awaited()
     assert sink.assistant_message_texts == []
+
+
+@pytest.mark.asyncio
+async def test_trace_sink_drops_blank_internal_message_events():
+    recorder = AsyncMock()
+    recorder.start_session.return_value = "sess-1"
+
+    sink = PlexusTraceSink(recorder)
+    await sink.start_session()
+
+    message_id = await sink.record(
+        {
+            "event_type": "agent_message",
+            "role": "system",
+            "content": "",
+            "human_interaction": "INTERNAL",
+        }
+    )
+
+    assert message_id is None
+    recorder.record_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio

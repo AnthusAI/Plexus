@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b2f3e8ea-0a5e-445a-b973-ab18f56ee8b0",
+  "issue_id": "plx-44d457ce-d44a-4369-888b-97ead3d555bb",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-15T16:30:15.207Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Update the score processor image build path so every image can be referenced by immutable tag or digest and downstream deployment pipelines can promote a precise image version.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+    "priority": 1,
+    "status": "open",
+    "title": "Publish immutable score processor image metadata"
+  }
+}

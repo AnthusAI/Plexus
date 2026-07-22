@@ -332,7 +332,7 @@ describe("ConversationViewer session-routing states", () => {
       />
     )
 
-    fireEvent.click(screen.getByRole("button", { name: "Create New Session" }))
+    fireEvent.click(screen.getByRole("button", { name: "New session" }))
 
     await waitFor(() => {
       const createArg = createMock.mock.calls[0]?.[0] || {}
@@ -345,6 +345,121 @@ describe("ConversationViewer session-routing states", () => {
         expect.anything()
       )
       expect(onSessionSelect).toHaveBeenCalledWith("session-new")
+    })
+  })
+
+  it("routes an immediate first prompt to the newly created session", async () => {
+    let resolveSessionCreate: (value: any) => void = () => undefined
+    const createSessionMock = jest.fn(() => new Promise((resolve) => {
+      resolveSessionCreate = resolve
+    }))
+    const updateSessionMock = jest.fn().mockResolvedValue({ data: { id: "session-new" } })
+    const createMessageMock = jest.fn().mockResolvedValue({
+      data: { id: "message-new", createdAt: "2026-03-27T00:02:00.000Z" },
+    })
+
+    mockedGetClient.mockReturnValue({
+      models: {
+        ChatSession: {
+          create: createSessionMock,
+          update: updateSessionMock,
+        },
+        ChatMessage: {
+          create: createMessageMock,
+        },
+      },
+    } as any)
+
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={messages}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "New session" }))
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Send this to the new session" },
+    })
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Submit" })).not.toBeDisabled()
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => expect(createSessionMock).toHaveBeenCalled())
+    resolveSessionCreate({
+      data: {
+        id: "session-new",
+        accountId: "acct-1",
+        procedureId: "builtin:console/chat",
+        category: "Console Chat",
+        createdAt: "2026-03-27T00:01:00.000Z",
+        updatedAt: "2026-03-27T00:01:00.000Z",
+      },
+    })
+
+    await waitFor(() => {
+      expect(createMessageMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: "session-new",
+          content: "Send this to the new session",
+        })
+      )
+    })
+    expect(updateSessionMock).not.toHaveBeenCalled()
+  })
+
+  it("reuses resolved user attribution instead of blocking message persistence", async () => {
+    const updateSessionMock = jest.fn().mockResolvedValue({ data: { id: "session-1" } })
+    const createMessageMock = jest.fn().mockResolvedValue({
+      data: { id: "message-new", createdAt: "2026-03-27T00:02:00.000Z" },
+    })
+    const dispatchMock = jest.fn().mockResolvedValue({ data: { accepted: true } })
+
+    mockedGetClient.mockReturnValue({
+      models: {
+        ChatSession: {
+          update: updateSessionMock,
+        },
+        ChatMessage: {
+          create: createMessageMock,
+        },
+      },
+      mutations: {
+        dispatchConsoleChat: dispatchMock,
+      },
+    } as any)
+
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={messages}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(mockedGetCurrentUserAttribution).toHaveBeenCalled()
+    })
+    mockedGetCurrentUserAttribution.mockImplementation(
+      () => new Promise(() => undefined)
+    )
+
+    fireEvent.change(screen.getByPlaceholderText("Type a message"), {
+      target: { value: "Send without another profile lookup" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(createMessageMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          createdByUserId: "user-1",
+          content: "Send without another profile lookup",
+        })
+      )
     })
   })
 
@@ -374,6 +489,28 @@ describe("ConversationViewer session-routing states", () => {
     expect(screen.getByText("No session selected")).toBeInTheDocument()
     expect(screen.queryByText("hello")).not.toBeInTheDocument()
     expect(screen.queryByText("assistant reply")).not.toBeInTheDocument()
+  })
+
+  it("shows an actionable in-conversation notice when a user trigger fails", () => {
+    render(
+      <ConversationViewer
+        sessions={sessions}
+        messages={[
+          {
+            ...messages[0],
+            responseStatus: "FAILED",
+            responseError: "internal worker detail that must not be shown",
+          },
+        ]}
+        selectedSessionId="session-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    expect(screen.getByTestId("console-response-failed")).toHaveTextContent(
+      "The response could not be completed. Try sending it again or choose another model."
+    )
+    expect(screen.queryByText("internal worker detail that must not be shown")).not.toBeInTheDocument()
   })
 
   it("renders console score-change links and Monaco diff panel from assistant metadata", () => {
@@ -475,6 +612,29 @@ describe("ConversationViewer session-routing states", () => {
     )
 
     expect(screen.getAllByText("2026-03-27T00:15:00.000Z")).toHaveLength(2)
+  })
+
+  it("does not present an unloaded message count as an empty session", () => {
+    render(
+      <ConversationViewer
+        sessions={[{
+          id: "session-message-count-unknown",
+          accountId: "acct-1",
+          procedureId: "builtin:console/chat",
+          name: "Historical Session",
+          category: "Console Chat",
+          createdAt: "2026-03-27T00:00:00.000Z",
+          updatedAt: "2026-03-27T00:15:00.000Z",
+        } as ChatSession]}
+        messages={[]}
+        selectedSessionId="session-message-count-unknown"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    const sidebarTitle = screen.getAllByText("Historical Session").find((element) => element.closest("button"))
+    expect(sidebarTitle).toBeDefined()
+    expect(within(sidebarTitle?.closest("button") as HTMLElement).getByText("Messages not loaded")).toBeInTheDocument()
   })
 
   it("falls back to session createdAt when updatedAt is missing", () => {

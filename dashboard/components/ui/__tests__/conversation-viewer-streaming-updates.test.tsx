@@ -53,6 +53,7 @@ jest.mock("react-virtuoso", () => {
 const mockChatSessionList = jest.fn()
 const mockChatSessionGet = jest.fn()
 const mockChatSessionCreate = jest.fn()
+const mockChatSessionUpdate = jest.fn()
 const mockChatMessageList = jest.fn()
 const mockChatMessageListBySession = jest.fn()
 const mockChatMessageGet = jest.fn()
@@ -66,14 +67,19 @@ const mockChatMessageOnUpdate = jest.fn()
 const mockChatMessageOnDelete = jest.fn()
 const mockUserGet = jest.fn()
 const mockGraphql = jest.fn()
+const mockDispatchConsoleChat = jest.fn()
 
 const mockClient = {
   graphql: mockGraphql,
+  mutations: {
+    dispatchConsoleChat: mockDispatchConsoleChat,
+  },
   models: {
     ChatSession: {
       listChatSessionByProcedureIdAndCreatedAt: mockChatSessionList,
       get: mockChatSessionGet,
       create: mockChatSessionCreate,
+      update: mockChatSessionUpdate,
       onCreate: mockChatSessionOnCreate,
       onUpdate: mockChatSessionOnUpdate,
       onDelete: mockChatSessionOnDelete,
@@ -284,6 +290,7 @@ describe("ConversationViewer streaming updates", () => {
     mockChatMessageUpdate.mockReset()
     mockChatSessionGet.mockReset()
     mockChatSessionCreate.mockReset()
+    mockChatSessionUpdate.mockReset()
     mockChatSessionOnCreate.mockReset()
     mockChatSessionOnUpdate.mockReset()
     mockChatSessionOnDelete.mockReset()
@@ -292,6 +299,8 @@ describe("ConversationViewer streaming updates", () => {
     mockChatMessageOnDelete.mockReset()
     mockUserGet.mockReset()
     mockGraphql.mockReset()
+    mockDispatchConsoleChat.mockReset()
+    mockDispatchConsoleChat.mockResolvedValue({ data: { accepted: true } })
     delete process.env.NEXT_PUBLIC_CONSOLE_RESPONSE_TARGET
 
     mockChatSessionList.mockResolvedValue({
@@ -317,6 +326,7 @@ describe("ConversationViewer streaming updates", () => {
         updatedAt: "2026-03-27T00:00:02.000Z",
       },
     })
+    mockChatSessionUpdate.mockResolvedValue({ data: { id: "sess-1" } })
 
     mockChatMessageList.mockResolvedValue({
       data: [
@@ -1098,12 +1108,16 @@ describe("ConversationViewer streaming updates", () => {
       expect(mockChatMessageCreate).toHaveBeenCalled()
       expect(screen.getByText("Thinking")).toBeInTheDocument()
     })
+    expect(screen.getByPlaceholderText("Type a message")).toBeDisabled()
 
     const messageCreateCall = mockChatMessageCreate.mock.calls[0] || []
     expect(messageCreateCall[1]).toBeUndefined()
     const createdMessage = messageCreateCall[0]
     expect(createdMessage.responseTarget).toBe("cloud")
     expect(createdMessage.responseStatus).toBe("PENDING")
+    await waitFor(() => {
+      expect(mockDispatchConsoleChat).toHaveBeenCalledWith({ messageId: "msg-user-2" })
+    })
     const metadata = JSON.parse(createdMessage.metadata)
     expect(metadata.attribution).toEqual({
       actorType: "user",
@@ -1136,6 +1150,44 @@ describe("ConversationViewer streaming updates", () => {
       expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
       expect(screen.getByText("Streaming reply")).toBeInTheDocument()
     })
+    expect(screen.getByPlaceholderText("Type a message")).not.toBeDisabled()
+  })
+
+  it("marks a persisted trigger failed and replaces thinking when direct dispatch rejects", async () => {
+    mockDispatchConsoleChat.mockRejectedValueOnce(new Error("responder invocation denied"))
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    const input = await screen.findByPlaceholderText("Type a message")
+    fireEvent.change(input, {
+      target: { value: "Test failed direct dispatch" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatMessageUpdate).toHaveBeenCalledWith(expect.objectContaining({
+        id: "msg-user-2",
+        responseStatus: "FAILED",
+        responseCompletedAt: expect.any(String),
+        responseError: expect.stringContaining("responder invocation denied"),
+      }))
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText("Thinking")).not.toBeInTheDocument()
+      expect(screen.getByTestId("console-response-failed")).toHaveTextContent(
+        "The response could not be completed. Try sending it again or choose another model."
+      )
+      expect(screen.getAllByText("Test failed direct dispatch").length).toBeGreaterThan(0)
+    })
+
+    expect(screen.queryByText("responder invocation denied")).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText("Type a message")).not.toBeDisabled()
   })
 
   it("persists the selected scorecard and score when creating a console session", async () => {
@@ -1160,6 +1212,33 @@ describe("ConversationViewer streaming updates", () => {
         }),
         expect.anything(),
       )
+    })
+  })
+
+  it("persists selected scope on an existing console session before sending", async () => {
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        selectedScorecardId="scorecard-1"
+        selectedScoreId="score-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    const input = await screen.findByPlaceholderText("Type a message")
+    fireEvent.change(input, { target: { value: "make the rule clearer" } })
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }))
+
+    await waitFor(() => {
+      expect(mockChatSessionUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "sess-1",
+          scorecardId: "scorecard-1",
+          scoreId: "score-1",
+        }),
+        expect.anything(),
+      )
+      expect(mockChatMessageCreate).toHaveBeenCalled()
     })
   })
 
@@ -1954,6 +2033,40 @@ describe("ConversationViewer streaming updates", () => {
         expect.objectContaining({ index: "LAST", align: "end", behavior: "auto" })
       )
     })
+  })
+
+  it("bounds initial cross-session message loading even when another page exists", async () => {
+    mockChatMessageList.mockResolvedValue({
+      data: [
+        {
+          id: "msg-initial-page",
+          accountId: "acct-1",
+          procedureId: "proc-1",
+          sessionId: "sess-1",
+          role: "ASSISTANT",
+          messageType: "MESSAGE",
+          humanInteraction: "CHAT_ASSISTANT",
+          content: "first page only",
+          createdAt: "2026-03-27T00:00:01.000Z",
+          sequenceNumber: 1,
+        },
+      ],
+      nextToken: "another-page-exists",
+    })
+
+    render(
+      <ConversationViewer
+        experimentId="proc-1"
+        defaultSidebarCollapsed={false}
+      />
+    )
+
+    await screen.findByText("first page only")
+    expect(mockChatMessageList).toHaveBeenCalledTimes(1)
+    expect(mockChatMessageList).toHaveBeenCalledWith(
+      expect.objectContaining({ procedureId: "proc-1", limit: 200 }),
+      expect.anything(),
+    )
   })
 
   it("renders execute_tactus evaluation envelopes using EvaluationToolOutput", async () => {

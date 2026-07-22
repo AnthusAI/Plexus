@@ -123,6 +123,14 @@ def test_get_task_by_id():
     assert 'query GetTask($id: ID!)' in query
     assert 'getTask(id: $id)' in query
 
+
+def test_get_task_by_id_returns_none_for_explicit_graphql_null():
+    mock_client = MagicMock()
+    mock_client.execute.return_value = {'getTask': None}
+
+    assert Task.get_by_id('missing-task-id', mock_client) is None
+
+
 def test_get_stages():
     mock_client = MagicMock()
     mock_task = Task(

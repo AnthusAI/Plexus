@@ -57,6 +57,10 @@ const getResourceByShareTokenHandler = defineFunction({
     }
 });
 
+export const dispatchConsoleChatHandler = defineFunction({
+    entry: './resolvers/dispatchConsoleChat.ts',
+});
+
 const schema = a.schema({
     Account: a
         .model({
@@ -555,6 +559,17 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .handler(a.handler.function(getResourceByShareTokenHandler)),
+
+    ConsoleChatDispatchResult: a.customType({
+        accepted: a.boolean().required(),
+    }),
+
+    dispatchConsoleChat: a
+        .mutation()
+        .arguments({ messageId: a.id().required() })
+        .returns(a.ref('ConsoleChatDispatchResult'))
+        .authorization((allow) => [allow.authenticated()])
+        .handler(a.handler.function(dispatchConsoleChatHandler)),
 
     ReportConfiguration: a
         .model({
