@@ -8,6 +8,12 @@ from plexus import CustomLogging
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def _enable_cloudwatch_logging_for_each_test(monkeypatch):
+    """Keep these tests independent of Lambda-specific process state."""
+    monkeypatch.delenv("PLEXUS_DISABLE_CLOUDWATCH_LOGS", raising=False)
+
+
 class _FakeResourceAlreadyExists(Exception):
     pass
 
