@@ -230,10 +230,6 @@ if (shouldDeployConsoleWorker) {
             resources: ['*'],
         }),
     );
-    dispatchConsoleChatFunction.addEnvironment(
-        'CONSOLE_RESPONDER_PARAMETER_NAME',
-        consoleResponderParameterName,
-    );
     dispatchConsoleChatFunction.addToRolePolicy(
         new PolicyStatement({
             effect: Effect.ALLOW,
