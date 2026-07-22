@@ -296,6 +296,11 @@ class TestEmbeddedMCPServer:
             {"procedure_id": "proc-1", "account_id": "acct-console"}
         )
         server.register_plexus_tools([])
+        execute_tactus_tool = server.transport.tools["execute_tactus"]
+        assert "exact account-wide duplicate-name count" in execute_tactus_tool.description
+        assert "return_metadata = true" in execute_tactus_tool.description
+        assert "next_token = token" in execute_tactus_tool.description
+        assert "complete = false" in execute_tactus_tool.description
         await server.transport.initialize({"name": "Test"})
 
         result = await server.transport.call_tool(

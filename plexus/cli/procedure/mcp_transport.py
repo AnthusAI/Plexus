@@ -831,6 +831,27 @@ class EmbeddedMCPServer:
                     `plexus` is a global providing access to all Plexus functionality.
                     Examples:
                       return plexus.scorecards.list({})
+                      -- For an exact account-wide duplicate-name count, do not pass the
+                      -- name as identifier. Aggregate every metadata page in Lua:
+                      local target, token, pages, matches = "Example Scorecard", nil, 0, {}
+                      repeat
+                        local ok, page = pcall(function()
+                          return plexus.scorecards.list({ return_metadata = true, next_token = token })
+                        end)
+                        if not ok then
+                          ok, page = pcall(function()
+                            return plexus.scorecards.list({ return_metadata = true, next_token = token })
+                          end)
+                        end
+                        if not ok then return { complete = false, pages = pages, error = tostring(page) } end
+                        pages = pages + 1
+                        for _, scorecard in ipairs(page.items or {}) do
+                          if scorecard.name == target then matches[#matches + 1] = scorecard.id end
+                        end
+                        token = page.nextToken
+                      until not token
+                      return { complete = true, pages = pages, count = #matches, ids = matches }
+                      -- Use the same metadata/next_token pattern for any exhaustive collection.
                       return plexus.score.info({ id = "score-id" })
                       return plexus.evaluation.find_recent({ score_id = "id", count = 5 })
                       return plexus.item.last({ count = 1 })

@@ -45,6 +45,8 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     system_prompt = parsed["agents"]["assistant"]["system_prompt"]
     assert "structured scorecard/score scope supplied with the turn is authoritative" in system_prompt
     assert "Do not conclude that a score is strict or lenient" in system_prompt
+    assert "exhaustive collection questions" in system_prompt
+    assert "pagination metadata" in system_prompt
     assert len(system_prompt) < 1_200
     assert "prompt_contract" not in parsed
     assert isinstance(parsed.get("code"), str)
@@ -77,6 +79,15 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     # receives; keep the portfolio routing guard in that prompt too.
     assert "Deictic scope: when scorecard or score scope is selected" in parsed["code"]
     assert "use the selected ID directly" in parsed["code"]
+    assert "not yet retrieved, not unavailable" in parsed["code"]
+    assert "use the selected scorecard and score names as tool arguments" in parsed["code"]
+    assert "EXHAUSTIVE COLLECTION QUERIES" in parsed["code"]
+    assert "do not use deterministic phrase routing" in parsed["code"]
+    assert "rather than identifier resolution or fuzzy search" in parsed["code"]
+    assert "follow every continuation page" in parsed["code"]
+    assert "Call a result exact only after that completion condition" in parsed["code"]
+    assert "retry that same page once" in parsed["code"]
+    assert "report incomplete coverage and no exact count" in parsed["code"]
     assert "must not call evaluation.find_recent with only count" in parsed["code"]
     assert "Never use evaluation.find_recent for " in parsed["code"]
     assert "portfolio triage." in parsed["code"]
@@ -374,7 +385,7 @@ def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
     # Bumped when the Console assistant tool contract changes.
-    assert parsed["version"] == "1.6.26"
+    assert parsed["version"] == "1.6.27"
 
 
 def test_is_builtin_procedure_id():

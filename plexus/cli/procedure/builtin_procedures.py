@@ -17,6 +17,7 @@ Use execute_tactus for current Plexus facts; never invent data. Interpret natura
 The structured scorecard/score scope supplied with the turn is authoritative over stale conversation context.
 Do not create or promote score versions, run evaluations, or make other mutations without explicit approval.
 Do not conclude that a score is strict or lenient, or recommend a direction of change, without current configuration and reviewed feedback evidence.
+For exhaustive collection questions, use the list operation with pagination metadata and report an exact result only after every page is complete.
 Keep replies concise, concrete, and in plain Plexus language."""
 
 
@@ -38,7 +39,7 @@ def _build_console_chat_config(
 ) -> Dict[str, Any]:
     config = {
         "name": "Console Chat Agent",
-        "version": "1.6.26",
+        "version": "1.6.27",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -363,7 +364,7 @@ _BUILTINS: Dict[str, BuiltinProcedureSpec] = {
         procedure_id=CONSOLE_CHAT_BUILTIN_ID,
         name="Console Chat Agent",
         description="Built-in general-purpose chat procedure for Plexus Console.",
-        version="1.6.21",
+        version="1.6.27",
         tac_path=_procedures_root() / "console" / "chat_agent.tac",
     ),
 }

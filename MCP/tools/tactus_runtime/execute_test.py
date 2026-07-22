@@ -438,6 +438,75 @@ def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> 
     ]
 
 
+def test_default_scorecards_list_returns_metadata_for_account_wide_pages(monkeypatch) -> None:
+    """Metadata pagination remains available without identifier resolution."""
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    queries: list[str] = []
+
+    class FakeClient:
+        def execute(self, query: str) -> dict[str, Any]:
+            queries.append(query)
+            if 'nextToken: "page-2"' in query:
+                return {
+                    "listScorecards": {
+                        "items": [{"id": "card-2", "name": "Duplicate"}],
+                        "nextToken": None,
+                    }
+                }
+            return {
+                "listScorecards": {
+                    "items": [{"id": "card-1", "name": "Duplicate"}],
+                    "nextToken": "page-2",
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", FakeClient)
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("enumeration must not resolve an identifier")),
+    )
+
+    first_page = execute._default_scorecards_list({"return_metadata": True})
+    second_page = execute._default_scorecards_list(
+        {"return_metadata": True, "next_token": first_page["nextToken"]}
+    )
+
+    assert first_page == {
+        "items": [{"id": "card-1", "name": "Duplicate"}],
+        "nextToken": "page-2",
+    }
+    assert second_page == {
+        "items": [{"id": "card-2", "name": "Duplicate"}],
+        "nextToken": None,
+    }
+    assert len(queries) == 2
+    assert 'nextToken: "page-2"' in queries[1]
+
+
+def test_default_scorecards_list_uses_identifier_resolution_for_single_record_lookup(monkeypatch) -> None:
+    """Targeted single-record lookup retains its canonical resolver behavior."""
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    class FakeClient:
+        def execute(self, query: str) -> dict[str, Any]:
+            assert "getScorecard(id: \"card-1\")" in query
+            return {"getScorecard": {"id": "card-1", "name": "Duplicate"}}
+
+    monkeypatch.setattr(client_utils, "create_client", FakeClient)
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: "card-1" if identifier == "Duplicate" else None,
+    )
+
+    assert execute._default_scorecards_list({"identifier": "Duplicate"}) == [
+        {"id": "card-1", "name": "Duplicate"}
+    ]
+
+
 def test_default_score_update_applies_actor_attribution(monkeypatch) -> None:
     from plexus.cli.shared import client_utils, direct_identifier_resolution
     from plexus.linting import schemas
