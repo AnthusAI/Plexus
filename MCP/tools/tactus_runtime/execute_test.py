@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import subprocess
@@ -364,6 +365,8 @@ def test_default_score_info_accepts_version_alias(monkeypatch) -> None:
     assert result["isChampionVersion"] is False
     assert result["isSpecificVersion"] is True
     assert result["versionDetails"]["id"] == "sv-candidate"
+    assert result["previousVersionId"] == "sv-champion"
+    assert result["previousVersionSource"] == "parent"
     assert result["code"] == "name: Candidate\n"
 
 
@@ -915,7 +918,7 @@ def test_default_score_update_serializes_attribution_metadata(monkeypatch) -> No
                     "getScoreVersion": {
                         "id": "version-2",
                         "configuration": "name: old\n",
-                        "guidelines": "# new\n",
+                        "guidelines": captured_inputs[0]["guidelines"],
                     }
                 }
             if "CreateScoreVersion" in query:
@@ -976,7 +979,21 @@ def test_default_score_update_serializes_attribution_metadata(monkeypatch) -> No
     assert parsed["attribution"]["source"] == "execute_tactus"
     assert result["guidelines_validation"]["is_valid"] is True
     assert result["changed_fields"] == ["guidelines"]
+    assert result["configuration_preserved"] is True
+    assert result["configuration_source"] == "parent_version"
+    assert captured_inputs[0]["configuration"] == "name: old\n"
     assert result["diffs"]["guidelines"]["has_changes"] is True
+    assert result["post_submit_test"] == {
+        "status": "skipped",
+        "reason": "guidelines_only_no_behavior_change",
+    }
+    assert result["post_submit_verification"] == {
+        "status": "passed",
+        "kind": "guidelines_only_persistence",
+        "guidelines_valid": True,
+        "guidelines_persisted": True,
+        "configuration_unchanged": True,
+    }
     assert result["version_url"] == "/lab/scorecards/scorecard-1/scores/score-1/versions/version-2"
     assert result["parent_version_url"] == "/lab/scorecards/scorecard-1/scores/score-1/versions/version-1"
 
@@ -3750,6 +3767,116 @@ def test_console_origin_score_update_guidelines_requires_guidelines_intent(monke
     assert called is False
 
 
+def test_console_origin_score_edit_is_blocked_for_guidelines_only_request() -> None:
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-guidelines-only-edit-guard"),
+        runtime_context={
+            "chat_session_id": "chat-1",
+            "console_user_message": (
+                "Make the guidelines wording clearer; keep behavior exactly the same."
+            ),
+        },
+    )
+
+    with pytest.raises(execute.ConsoleScoreEditBlockedForGuidelinesOnly):
+        module.score.edit(
+            {
+                "scorecard_identifier": "card",
+                "score_identifier": "score",
+                "instruction": "Change the score code",
+                "async": True,
+            }
+        )
+
+
+def test_console_origin_score_edit_is_blocked_for_written_rule_request() -> None:
+    """Human phrasing must retain the no-code-edit safety boundary.
+
+    This mirrors the browser acceptance prompt: it does not use the implementation
+    words "guidelines" or "wording", but it clearly requests a written-rule-only
+    revision and explicitly preserves scoring behavior.
+    """
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-written-rule-edit-guard"),
+        runtime_context={
+            "chat_session_id": "chat-1",
+            "console_user_message": (
+                "make the written rule clearer that skipped missing deps need no "
+                "manual review. behavior stays the same. save a candidate, not live."
+            ),
+        },
+    )
+
+    with pytest.raises(execute.ConsoleScoreEditBlockedForGuidelinesOnly):
+        module.score.edit(
+            {
+                "scorecard_identifier": "card",
+                "score_identifier": "score",
+                "instruction": "Change the score code",
+                "async": True,
+            }
+        )
+
+
+def test_console_origin_score_edit_is_blocked_for_vague_wording_preservation_request() -> None:
+    """The browser acceptance phrasing must not fall through to code editing."""
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-vague-wording-edit-guard"),
+        runtime_context={
+            "chat_session_id": "chat-1",
+            "console_user_message": (
+                "the wording is kind of confusing. can u make it clearer? "
+                "dont change how it scores tho. just a candidate please"
+            ),
+        },
+    )
+
+    with pytest.raises(execute.ConsoleScoreEditBlockedForGuidelinesOnly):
+        module.score.edit(
+            {
+                "scorecard_identifier": "card",
+                "score_identifier": "score",
+                "instruction": "Revise the score code for clarity",
+                "async": True,
+            }
+        )
+
+
+def test_console_origin_score_edit_rejects_candidate_only_non_instruction() -> None:
+    """A fresh session must not infer a code change from a bare affirmative."""
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-candidate-only-edit-guard"),
+        runtime_context={
+            "chat_session_id": "chat-1",
+            "console_user_message": "yes, do it for this one. candidate only please",
+        },
+    )
+
+    with pytest.raises(execute.ConsoleScoreEditRequiresConcreteInstruction):
+        module.score.edit(
+            {
+                "scorecard_identifier": "card",
+                "score_identifier": "score",
+                "instruction": "make this score candidate-only; do not change the champion",
+                "async": True,
+            }
+        )
+
+
+def test_score_edit_structured_output_schema_requires_every_declared_property() -> None:
+    """Strict Responses schemas must require every declared property."""
+    schema = execute._score_edit_llm_schema()
+
+    assert set(schema["required"]) == set(schema["properties"])
+    assert schema["properties"]["guidelines"]["type"] == ["string", "null"]
+
+
+def test_score_edit_smoke_test_requires_an_explicit_mechanical_pass() -> None:
+    assert execute._score_edit_smoke_test_passed({"success": True, "passed": True})
+    assert not execute._score_edit_smoke_test_passed({"success": True, "passed": False})
+    assert not execute._score_edit_smoke_test_passed({"success": False, "passed": True})
+
+
 def test_console_origin_score_update_metadata_only_is_allowed() -> None:
     seen_args: dict = {}
 
@@ -3950,6 +4077,7 @@ def test_run_score_edit_job_runs_post_submit_smoke_test_for_code_changes(
         "_default_score_test",
         lambda args: {
             "success": True,
+            "passed": True,
             "version": args.get("version"),
             "samples": args.get("samples"),
         },
@@ -4044,7 +4172,7 @@ def test_run_score_edit_job_ignores_llm_guidelines_edits_by_default(
     monkeypatch.setattr(
         execute,
         "_default_score_test",
-        lambda _args: {"success": True},
+        lambda _args: {"success": True, "passed": True},
     )
 
     result_path = tmp_path / "result.json"
@@ -4298,7 +4426,7 @@ def test_run_score_edit_job_retries_with_fallback_model_after_parse_failure(
             }
         ),
     )
-    monkeypatch.setattr(execute, "_default_score_test", lambda _args: {"success": True})
+    monkeypatch.setattr(execute, "_default_score_test", lambda _args: {"success": True, "passed": True})
 
     result_path = tmp_path / "result.json"
     execute._run_score_edit_job(
@@ -4393,8 +4521,13 @@ def test_run_score_edit_job_retries_after_post_save_smoke_failure(
     def _smoke(args: dict[str, Any]) -> dict[str, Any]:
         version = str(args.get("version") or "")
         if version == "sv-1":
-            return {"success": False, "reason": "simulated failure"}
-        return {"success": True, "version": version}
+            return {
+                "success": True,
+                "passed": False,
+                "failure_code": "selection_shortfall",
+                "reason": "simulated missing samples",
+            }
+        return {"success": True, "passed": True, "version": version}
 
     monkeypatch.setattr(execute, "_default_score_test", _smoke)
 
@@ -6861,7 +6994,7 @@ def test_default_feedback_finder_chains_through_resolvers_and_service(
     assert kwargs["scorecard_id"] == "sc:Compliance"
     assert kwargs["score_id"] == "sn:sc:Compliance:Tone"
     assert kwargs["account_id"] == "acct-default"
-    assert kwargs["days"] == 7
+    assert kwargs["days"] == 30
     assert kwargs["limit"] == 4
     assert kwargs["offset"] == 8
     assert kwargs["initial_value"] == "Yes"
@@ -7114,3 +7247,271 @@ async def test_execute_tactus_runs_evaluation_info_through_direct_function() -> 
     record = store.records[0]
     assert record["api_calls"] == ["plexus.evaluation.info"]
     assert record["ok"] is True
+
+
+def test_feedback_alignment_batch_accepts_scorecard_id(monkeypatch) -> None:
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [],
+                        "nextToken": None,
+                    }
+                }
+            return {
+                "getScorecard": {
+                    "id": "scorecard-1",
+                    "name": "Example Scorecard",
+                    "sections": {"items": []},
+                }
+            }
+
+    resolved_identifiers = []
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: resolved_identifiers.append(identifier) or "scorecard-1",
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+
+    result = execute._default_feedback_alignment_batch({"scorecard_id": "scorecard-1"})
+
+    assert resolved_identifiers == ["scorecard-1"]
+    assert result["scorecard_id"] == "scorecard-1"
+    assert result["scores"] == []
+
+
+def test_feedback_alignment_batch_accepts_bounded_scorecard_list(monkeypatch) -> None:
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [],
+                        "nextToken": None,
+                    }
+                }
+            return {
+                "getScorecard": {
+                    "id": "scorecard-1",
+                    "name": "Example Scorecard",
+                    "sections": {"items": []},
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: f"id-{identifier}",
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+
+    result = execute._default_feedback_alignment_batch(
+        {"scorecards": ["One", "Two", "Three"], "days": 30}
+    )
+
+    assert result["days"] == 30
+    assert result["scorecards_requested"] == 3
+    assert result["scorecards_analyzed"] == 3
+    assert [row["scorecard_name"] for row in result["scorecards"]] == [
+        "One",
+        "Two",
+        "Three",
+    ]
+
+
+def test_feedback_alignment_batch_selects_bounded_portfolio_in_one_call(monkeypatch) -> None:
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    inventory_args = []
+    created_clients = []
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [],
+                        "nextToken": None,
+                    }
+                }
+            raise AssertionError("bounded portfolio analysis must reuse inventory score data")
+
+    monkeypatch.setattr(
+        client_utils,
+        "create_client",
+        lambda: created_clients.append(FakeClient()) or created_clients[-1],
+    )
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("bounded portfolio analysis must not re-resolve inventory IDs")
+        ),
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+    monkeypatch.setattr(
+        execute,
+        "_default_scorecards_list",
+        lambda args: inventory_args.append(args) or [
+            {"id": "id-One", "name": "One", "sections": {"items": []}},
+            {"id": "id-Two", "name": "Two", "sections": {"items": []}},
+        ],
+    )
+
+    result = execute._default_feedback_alignment_batch(
+        {"scorecard_limit": 2, "days": 30}
+    )
+
+    assert inventory_args == [{"limit": 2, "_include_scores": True}]
+    assert len(created_clients) == 1
+    assert result["selection_rule"] == "first 2 scorecards returned"
+    assert result["scorecards_requested"] == 2
+    assert [row["scorecard_name"] for row in result["scorecards"]] == ["One", "Two"]
+
+
+def test_feedback_alignment_batch_prefetches_portfolio_window_once(monkeypatch) -> None:
+    from plexus.cli.feedback.feedback_service import FeedbackService
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    executed_queries = []
+
+    class FakeClient:
+        def execute(self, query, variables=None):
+            executed_queries.append((query, variables or {}))
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [
+                            {
+                                "id": "feedback-1",
+                                "scorecardId": "id-One",
+                                "scoreId": "score-one",
+                                "initialAnswerValue": "No",
+                                "finalAnswerValue": "Yes",
+                                "isInvalid": False,
+                            }
+                        ],
+                        "nextToken": None,
+                    }
+                }
+
+            scorecard_name = "One" if "id-One" in query else "Two"
+            score_id = "score-one" if scorecard_name == "One" else "score-two"
+            return {
+                "getScorecard": {
+                    "id": f"id-{scorecard_name}",
+                    "name": scorecard_name,
+                    "sections": {
+                        "items": [
+                            {
+                                "scores": {
+                                    "items": [{"id": score_id, "name": f"Score {scorecard_name}"}]
+                                }
+                            }
+                        ]
+                    },
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: f"id-{identifier}",
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+    monkeypatch.setattr(
+        FeedbackService,
+        "summarize_feedback",
+        staticmethod(lambda **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected per-score query"))),
+    )
+
+    result = execute._default_feedback_alignment_batch(
+        {"scorecards": ["One", "Two"], "days": 30}
+    )
+
+    feedback_window_queries = [
+        query for query, _variables in executed_queries
+        if "ListFeedbackItemsByEditedTime" in query
+    ]
+    assert len(feedback_window_queries) == 1
+    assert result["scorecards"][0]["scores"][0]["total_items"] == 1
+    assert result["scorecards"][0]["scores"][0]["accuracy"] == 0
+    assert result["scorecards"][1]["scores"][0]["total_items"] == 0
+
+
+def test_feedback_alignment_batch_bounds_concurrent_score_reads(monkeypatch) -> None:
+    from plexus.cli.feedback.feedback_service import FeedbackService
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    score_count = 7
+
+    class FakeClient:
+        def execute(self, _query):
+            return {
+                "getScorecard": {
+                    "id": "scorecard-1",
+                    "name": "Example Scorecard",
+                    "sections": {
+                        "items": [
+                            {
+                                "scores": {
+                                    "items": [
+                                        {"id": f"score-{index}", "name": f"Score {index}"}
+                                        for index in range(score_count)
+                                    ]
+                                }
+                            }
+                        ]
+                    },
+                }
+            }
+
+    active_reads = 0
+    max_active_reads = 0
+
+    async def fake_summarize_feedback(**kwargs):
+        nonlocal active_reads, max_active_reads
+        active_reads += 1
+        max_active_reads = max(max_active_reads, active_reads)
+        await asyncio.sleep(0.01)
+        active_reads -= 1
+        return {"analysis": {"accuracy": 100}, "score_name": kwargs["score_name"]}
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, _identifier: "scorecard-1",
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+    monkeypatch.setattr(
+        FeedbackService,
+        "summarize_feedback",
+        staticmethod(fake_summarize_feedback),
+    )
+    monkeypatch.setattr(
+        FeedbackService,
+        "format_summary_result_as_dict",
+        staticmethod(lambda summary: summary),
+    )
+
+    result = execute._default_feedback_alignment_batch({"scorecard": "Example"})
+
+    assert result["scores_analyzed"] == score_count
+    assert max_active_reads == execute.FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY
+
+
+def test_feedback_alignment_batch_rejects_unbounded_scorecard_list() -> None:
+    with pytest.raises(ValueError, match="at most 5 scorecards"):
+        execute._default_feedback_alignment_batch(
+            {"scorecards": ["One", "Two", "Three", "Four", "Five", "Six"]}
+        )

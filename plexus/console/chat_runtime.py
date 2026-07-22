@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
+from importlib import import_module
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -36,6 +37,18 @@ _CONSOLE_MCP_SERVER: Any = None
 _CONSOLE_MCP_SERVER_LOCK: Optional[asyncio.Lock] = None
 
 
+def console_async_tasks_available() -> bool:
+    """Whether this Console worker can dispatch work to a durable async consumer.
+
+    A missing flag preserves the production behavior. Sandboxes without the
+    TaskDispatcher/Celery stack set it to false so the agent can offer a
+    synchronous alternative instead of creating a task that can never run.
+    """
+    return str(os.getenv("PLEXUS_CONSOLE_ASYNC_TASKS_AVAILABLE") or "true").strip().lower() not in {
+        "0", "false", "no", "off"
+    }
+
+
 def _positive_int_env(name: str, default: int) -> int:
     raw = os.getenv(name)
     if raw is None:
@@ -51,7 +64,10 @@ def _positive_int_env(name: str, default: int) -> int:
 
 
 CONSOLE_HISTORY_LIMIT = _positive_int_env("PLEXUS_CONSOLE_SESSION_HISTORY_LIMIT", 6)
-CONSOLE_HISTORY_MAX_CHARS = _positive_int_env("PLEXUS_CONSOLE_SESSION_HISTORY_MAX_CHARS", 160)
+# Preserve one concise evidence response (including quoted snippets) for an
+# immediate human follow-up.  The aggregate token budget below still bounds
+# total prompt growth across the session.
+CONSOLE_HISTORY_MAX_CHARS = _positive_int_env("PLEXUS_CONSOLE_SESSION_HISTORY_MAX_CHARS", 800)
 CONSOLE_HISTORY_TOKEN_BUDGET = _positive_int_env("PLEXUS_CONSOLE_SESSION_HISTORY_TOKEN_BUDGET", 2200)
 
 
@@ -75,6 +91,7 @@ class ConsoleMessage:
     privacy_span_id: Optional[str] = None
     client_send_started_at: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    session_scope: Optional[Dict[str, Any]] = None
 
 
 def utc_now() -> str:
@@ -179,10 +196,12 @@ def _is_private_metadata(raw_metadata: Any) -> bool:
 def resolve_console_tool_access_mode(
     client: PlexusDashboardClient,
     message: ConsoleMessage,
+    *,
+    session_scope: Optional[Dict[str, Any]] = None,
 ) -> str:
     if message.tool_access_mode:
         return message.tool_access_mode
-    session = fetch_chat_session(client, message.session_id)
+    session = session_scope if session_scope is not None else fetch_chat_session(client, message.session_id)
     if session:
         mode = _extract_tool_access_mode(session.get("metadata"))
         if mode:
@@ -220,6 +239,7 @@ def _generate_session_title_with_llm(
     *,
     conversation_messages: List[Dict[str, str]],
     selected_model: Optional[str],
+    scope_context: Optional[str] = None,
 ) -> Optional[str]:
     prompt_lines = [
         "Generate a concise chat session title.",
@@ -228,6 +248,8 @@ def _generate_session_title_with_llm(
         "If scorecard and score names are available, include those names in the title.",
         "Prefer human-readable scorecard/score names over IDs.",
     ]
+    if scope_context and scope_context.strip():
+        prompt_lines.append(scope_context.strip())
     for index, message in enumerate(conversation_messages, start=1):
         role = str(message.get("role") or "USER").strip().upper()
         content = str(message.get("content") or "").strip()
@@ -258,12 +280,116 @@ def fetch_chat_session(client: PlexusDashboardClient, session_id: str) -> Option
         id
         name
         metadata
+        scorecardId
+        scoreId
+        scorecard {
+          id
+          name
+        }
+        score {
+          id
+          name
+        }
       }
     }
     """
     result = client.execute(query, {"id": session_id})
     payload = _graphql_field(result, "getChatSession")
     return payload if isinstance(payload, dict) else None
+
+
+def _metadata_object(value: Any) -> Dict[str, Any]:
+    """Return a message metadata object without trusting its storage format."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _score_edit_audit_from_metadata(value: Any) -> Optional[Dict[str, Any]]:
+    """Extract the durable, normalized score-edit audit stored on an assistant turn."""
+    metadata = _metadata_object(value)
+    audit = metadata.get("score_change_audit")
+    if not isinstance(audit, dict) or str(audit.get("kind") or "").lower() != "score_edit":
+        return None
+    version_id = str(audit.get("version_id") or "").strip()
+    if not version_id:
+        return None
+    return {
+        "version_id": version_id,
+        "parent_version_id": str(audit.get("parent_version_id") or "").strip(),
+        "promoted": bool(audit.get("promoted")),
+        "push_outcome": str(audit.get("push_outcome") or "").strip(),
+        "smoke_status": str(
+            (audit.get("post_submit_test") or {}).get("status")
+            if isinstance(audit.get("post_submit_test"), dict)
+            else ""
+        ).strip(),
+    }
+
+
+def fetch_latest_score_edit_audit(
+    client: PlexusDashboardClient, session_id: str, *, max_items: int = 200
+) -> Optional[Dict[str, Any]]:
+    """Find the most recent persisted Console score-edit audit for this session.
+
+    This deliberately reads message metadata rather than chat prose: later model
+    responses can be wrong, while the audit is written by the score-edit path.
+    """
+    query = """
+    query ListConsoleScoreEditAudits($sessionId: String!, $limit: Int, $nextToken: String) {
+      listChatMessageBySessionIdAndCreatedAt(
+        sessionId: $sessionId
+        sortDirection: DESC
+        limit: $limit
+        nextToken: $nextToken
+      ) {
+        items { id role metadata createdAt }
+        nextToken
+      }
+    }
+    """
+    seen = 0
+    next_token: Optional[str] = None
+    while seen < max_items:
+        page_limit = min(100, max_items - seen)
+        result = client.execute(query, {"sessionId": session_id, "limit": page_limit, "nextToken": next_token})
+        page = _graphql_field(result, "listChatMessageBySessionIdAndCreatedAt")
+        if not isinstance(page, dict):
+            return None
+        items = page.get("items")
+        if not isinstance(items, list):
+            return None
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            seen += 1
+            if str(item.get("role") or "").upper() != "ASSISTANT":
+                continue
+            audit = _score_edit_audit_from_metadata(item.get("metadata"))
+            if audit is not None:
+                return audit
+        next_token = page.get("nextToken")
+        if not next_token:
+            return None
+    return None
+
+
+def fetch_latest_report_task(client: PlexusDashboardClient, session_id: str) -> Optional[Dict[str, str]]:
+    """Read the durable report task captured on the most recent tool message."""
+    query = """query LatestConsoleReportTask($sessionId: String!) { listChatMessageBySessionIdAndCreatedAt(sessionId: $sessionId, sortDirection: DESC, limit: 100) { items { metadata } } }"""
+    page = _graphql_field(client.execute(query, {"sessionId": session_id}), "listChatMessageBySessionIdAndCreatedAt")
+    for item in (page or {}).get("items", []):
+        metadata = _metadata_object(item.get("metadata") if isinstance(item, dict) else None)
+        task = metadata.get("console_report_task")
+        if isinstance(task, dict) and str(task.get("task_id") or "").strip():
+            return {"task_id": str(task["task_id"]).strip(), "report_id": str(task.get("report_id") or "").strip()}
+    return None
 
 
 def fetch_recent_user_chat_turns(
@@ -489,9 +615,18 @@ def maybe_auto_title_session(
                 conversation_messages.append({"role": "ASSISTANT", "content": assistant_content})
         conversation_messages.append({"role": "USER", "content": user_messages[1]})
 
+    scorecard_name = str((session.get("scorecard") or {}).get("name") or "").strip()
+    score_name = str((session.get("score") or {}).get("name") or "").strip()
+    scope_parts = []
+    if scorecard_name:
+        scope_parts.append(f"Selected scorecard: {scorecard_name}")
+    if score_name:
+        scope_parts.append(f"selected score: {score_name}")
+
     title = _generate_session_title_with_llm(
         conversation_messages=conversation_messages,
         selected_model=message.selected_model,
+        scope_context="; ".join(scope_parts) if scope_parts else None,
     )
     if not title:
         return
@@ -594,6 +729,7 @@ def _should_log_cloudwatch_for_message(message: ConsoleMessage) -> bool:
 def _server_latency_metadata(summary: Dict[str, Any], *, owner: str) -> Dict[str, Any]:
     keys = (
         "client_to_claim_ms",
+        "direct_message_fetch_ms",
         "pre_model_ms",
         "model_first_chunk_ms",
         "model_stream_ms",
@@ -656,6 +792,7 @@ def _build_latency_summary(trace: Dict[str, Any], *, status: str) -> Dict[str, A
         "poll_query_ms": trace.get("poll_query_ms"),
         "poll_batch_size": trace.get("poll_batch_size"),
         "poll_oldest_pending_ms": trace.get("poll_oldest_pending_ms"),
+        "direct_message_fetch_ms": trace.get("direct_message_fetch_ms"),
         "client_send_started_at": trace.get("t_client_send_started"),
         "t_received": trace.get("t_received"),
         "t_worker_started": trace.get("t_worker_started"),
@@ -716,8 +853,13 @@ def _get_procedure_service(client: PlexusDashboardClient) -> ProcedureService:
 
 
 def warm_console_runtime(client: PlexusDashboardClient) -> None:
-    # Warm immutable runtime scaffolding once per warm worker path.
+    # Warm only the reusable Console scaffolding before the worker accepts an
+    # interactive request.  The embedded MCP server registers the Console
+    # tools; importing the broader score-processing runtime here duplicates
+    # that work and can prevent Lambda provisioned concurrency from becoming
+    # ready within its initialization budget.
     _get_procedure_service(client)
+    asyncio.run(_get_or_create_console_mcp_server({}))
 
 
 async def _get_or_create_console_mcp_server(runtime_context: Dict[str, Any]) -> Any:
@@ -773,6 +915,7 @@ def parse_chat_message(raw: Dict[str, Any]) -> Optional[ConsoleMessage]:
         privacy_span_id=_extract_privacy_span_id(metadata),
         client_send_started_at=_extract_client_send_started_at(metadata),
         metadata=metadata,
+        session_scope=raw.get("session") if isinstance(raw.get("session"), dict) else None,
     )
 
 
@@ -1342,7 +1485,15 @@ async def run_console_chat_response_async(
     run_started = utc_now()
     if latency_trace is not None:
         latency_trace["t_run_started"] = run_started
-    tool_access_mode = resolve_console_tool_access_mode(client, message)
+    session_scope = message.session_scope
+    if session_scope is None:
+        session_scope = fetch_chat_session(client, message.session_id) or {}
+    tool_access_mode = resolve_console_tool_access_mode(
+        client,
+        message,
+        session_scope=session_scope,
+    )
+    async_tasks_available = console_async_tasks_available()
     if latency_trace is not None:
         latency_trace["tool_access_mode"] = tool_access_mode
     context: Dict[str, Any] = {
@@ -1352,11 +1503,51 @@ async def run_console_chat_response_async(
         "console_response_owner": owner,
         "tool_access_mode": tool_access_mode,
         "console_tool_access_mode": tool_access_mode,
+        "console_async_tasks_available": async_tasks_available,
+        "console_selected_model": message.selected_model or "",
         "console_private": message.private,
         # Console stream dispatch does not create a Task record, so task-metadata
         # lookup adds avoidable latency in chat tracing without adding signal.
         "disable_console_dispatch_metadata_lookup": True,
     }
+    # A first-turn session cannot yet contain a prior score edit or report run.
+    # Avoid two guaranteed-empty GraphQL lookups on the latency-critical path;
+    # follow-up turns still load the durable state needed for terse replies such
+    # as "promote it" or "show me the report".
+    has_prior_conversation = len(history) > 1
+    latest_score_edit_audit = (
+        fetch_latest_score_edit_audit(client, message.session_id)
+        if has_prior_conversation
+        else None
+    )
+    latest_report_task = (
+        fetch_latest_report_task(client, message.session_id)
+        if has_prior_conversation and async_tasks_available
+        else None
+    )
+    scorecard_id = str(session_scope.get("scorecardId") or "").strip()
+    score_id = str(session_scope.get("scoreId") or "").strip()
+    scorecard_name = str((session_scope.get("scorecard") or {}).get("name") or "").strip()
+    score_name = str((session_scope.get("score") or {}).get("name") or "").strip()
+    if scorecard_id:
+        context["scorecard_id"] = scorecard_id
+        # The Tactus score-editor bridge uses the legacy identifiers below.
+        # Keep the explicit ID keys for other Console consumers.
+        context["scorecard"] = scorecard_id
+    if scorecard_name:
+        context["scorecard_name"] = scorecard_name
+    if score_id:
+        context["score_id"] = score_id
+        context["score"] = score_id
+    if score_name:
+        context["score_name"] = score_name
+    if latest_score_edit_audit:
+        context["console_latest_score_edit_version_id"] = latest_score_edit_audit["version_id"]
+        context["console_latest_score_edit_parent_version_id"] = latest_score_edit_audit["parent_version_id"]
+        context["console_latest_score_edit_promoted"] = latest_score_edit_audit["promoted"]
+        context["console_latest_score_edit_smoke_status"] = latest_score_edit_audit["smoke_status"]
+    if latest_report_task:
+        context["console_latest_report_task_id"] = latest_report_task["task_id"]
     if message.private:
         context["console_privacy_owner_user_id"] = message.privacy_owner_user_id
         context["console_privacy_span_id"] = message.privacy_span_id
@@ -1382,6 +1573,17 @@ async def run_console_chat_response_async(
             console_user_message=message.content,
             console_session_history=history,
             console_tool_access_mode=tool_access_mode,
+            console_async_tasks_available=async_tasks_available,
+            console_selected_model=message.selected_model or "",
+            console_scorecard_id=scorecard_id,
+            console_score_id=score_id,
+            console_scorecard_name=scorecard_name,
+            console_score_name=score_name,
+            console_latest_score_edit_version_id=(latest_score_edit_audit or {}).get("version_id", ""),
+            console_latest_score_edit_parent_version_id=(latest_score_edit_audit or {}).get("parent_version_id", ""),
+            console_latest_score_edit_promoted=bool((latest_score_edit_audit or {}).get("promoted")),
+            console_latest_score_edit_smoke_status=(latest_score_edit_audit or {}).get("smoke_status", ""),
+            console_latest_report_task_id=(latest_report_task or {}).get("task_id", ""),
             enable_mcp=True,
             mcp_server=mcp_server,
             context=context,
@@ -1479,6 +1681,7 @@ def process_console_message(
         latency_trace["poll_query_ms"] = poll_context.get("poll_query_ms")
         latency_trace["poll_batch_size"] = poll_context.get("poll_batch_size")
         latency_trace["poll_oldest_pending_ms"] = poll_context.get("poll_oldest_pending_ms")
+        latency_trace["direct_message_fetch_ms"] = poll_context.get("direct_message_fetch_ms")
         latency_trace["t_client_init_started"] = poll_context.get("t_client_init_started")
         latency_trace["t_client_init_completed"] = poll_context.get("t_client_init_completed")
     if not claim_message(
@@ -1493,13 +1696,10 @@ def process_console_message(
 
     latest_message = message
     try:
-        latest_message = fetch_message(client, message.id) or message
+        is_direct_dispatch = isinstance(poll_context, dict) and "direct_message_fetch_ms" in poll_context
+        latest_message = message if is_direct_dispatch else (fetch_message(client, message.id) or message)
         created_at = latest_message.created_at or message.created_at or None
         run_console_chat_response(client, latest_message, owner=owner, latency_trace=latency_trace)
-        try:
-            maybe_auto_title_session(client, message=latest_message)
-        except Exception:
-            logger.exception("Auto-title generation failed for session %s", latest_message.session_id)
         completed_at = utc_now()
         latency_trace["t_completed"] = completed_at
         summary = _build_latency_summary(latency_trace, status="COMPLETED")
@@ -1512,6 +1712,10 @@ def process_console_message(
             metadata=completed_metadata,
         )
         logger.info("%s", json.dumps(summary, sort_keys=True))
+        try:
+            maybe_auto_title_session(client, message=latest_message)
+        except Exception:
+            logger.exception("Auto-title generation failed for session %s", latest_message.session_id)
         return True
     except Exception as exc:
         logger.exception("Console chat response failed for message %s", message.id)

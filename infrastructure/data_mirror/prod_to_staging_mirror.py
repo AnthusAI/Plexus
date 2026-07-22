@@ -25,13 +25,17 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-1"
+# The original staging refresh runs in one region.  Developer sandboxes are
+# routinely created elsewhere, so source and target clients must be separate.
+SOURCE_REGION = os.environ.get("SOURCE_REGION", REGION)
+TARGET_REGION = os.environ.get("TARGET_REGION", REGION)
 ACCOUNT_ID = os.environ.get("EXPECTED_ACCOUNT_ID", "656853518159")
 APP_ID = os.environ.get("AMPLIFY_APP_ID", "d1vx7jva4xxlue")
 SOURCE_SUFFIX = os.environ.get("SOURCE_TABLE_SUFFIX", "xp6b4qnyovcjxh5p4yz57ygwku-NONE")
 TARGET_SUFFIX = os.environ.get("TARGET_TABLE_SUFFIX", "5urd722zufd3tj43kvbrlsrkjm-NONE")
 SOURCE_BRANCH_TOKEN = os.environ.get("SOURCE_BRANCH_TOKEN", "-ma-")
 TARGET_BRANCH_TOKEN = os.environ.get("TARGET_BRANCH_TOKEN", "-st-")
-CONFIRM_VALUE = "mirror-main-to-staging"
+CONFIRM_VALUE = os.environ.get("CONFIRM_DESTRUCTIVE_VALUE", "mirror-main-to-staging")
 
 TABLE_WORKERS = int(os.environ.get("TABLE_WORKERS", "4"))
 SEGMENT_WORKERS = int(os.environ.get("SEGMENT_WORKERS", "16"))
@@ -60,6 +64,18 @@ S3_BUCKET_PAIRS = {
         "amplify-d1vx7jva4xxlue-st-rubricmemorybucket827768-bs8rfrbij69y",
     ),
 }
+if raw_bucket_pairs := os.environ.get("S3_BUCKET_PAIRS_JSON"):
+    parsed_bucket_pairs = json.loads(raw_bucket_pairs)
+    if not isinstance(parsed_bucket_pairs, dict):
+        raise RuntimeError("S3_BUCKET_PAIRS_JSON must be a JSON object")
+    S3_BUCKET_PAIRS = {
+        category: (pair[0], pair[1])
+        for category, pair in parsed_bucket_pairs.items()
+        if isinstance(category, str) and isinstance(pair, list) and len(pair) == 2
+        and all(isinstance(bucket, str) for bucket in pair)
+    }
+    if not S3_BUCKET_PAIRS:
+        raise RuntimeError("S3_BUCKET_PAIRS_JSON did not contain any valid bucket pairs")
 
 SEGMENTS_BY_MODEL = {
     "ScoreResult": 64,
@@ -81,13 +97,18 @@ SEGMENTS_BY_MODEL = {
 READ_CONFIG = Config(retries={"max_attempts": 10, "mode": "adaptive"}, max_pool_connections=128)
 WRITE_CONFIG = Config(retries={"max_attempts": 20, "mode": "adaptive"}, max_pool_connections=128)
 
-session = boto3.Session(region_name=REGION)
-sts = session.client("sts", config=READ_CONFIG)
-ddb_client = session.client("dynamodb", config=WRITE_CONFIG)
-ddb = session.resource("dynamodb", config=WRITE_CONFIG)
-s3 = session.client("s3", config=WRITE_CONFIG)
-lambda_client = session.client("lambda", config=WRITE_CONFIG)
-cognito = session.client("cognito-idp", config=WRITE_CONFIG)
+source_session = boto3.Session(region_name=SOURCE_REGION)
+target_session = boto3.Session(region_name=TARGET_REGION)
+sts = source_session.client("sts", config=READ_CONFIG)
+source_ddb_client = source_session.client("dynamodb", config=WRITE_CONFIG)
+target_ddb_client = target_session.client("dynamodb", config=WRITE_CONFIG)
+source_ddb = source_session.resource("dynamodb", config=WRITE_CONFIG)
+target_ddb = target_session.resource("dynamodb", config=WRITE_CONFIG)
+source_s3 = source_session.client("s3", config=WRITE_CONFIG)
+target_s3 = target_session.client("s3", config=WRITE_CONFIG)
+target_lambda_client = target_session.client("lambda", config=WRITE_CONFIG)
+source_cognito = source_session.client("cognito-idp", config=WRITE_CONFIG)
+target_cognito = target_session.client("cognito-idp", config=WRITE_CONFIG)
 serializer = TypeSerializer()
 deserializer = TypeDeserializer()
 
@@ -141,9 +162,9 @@ def table_model_name(table_name: str, suffix: str) -> str | None:
     return None
 
 
-def list_tables_by_model(suffix: str) -> dict[str, str]:
+def list_tables_by_model(client: Any, suffix: str) -> dict[str, str]:
     result: dict[str, str] = {}
-    paginator = ddb_client.get_paginator("list_tables")
+    paginator = client.get_paginator("list_tables")
     for page in paginator.paginate():
         for name in page.get("TableNames", []):
             model = table_model_name(name, suffix)
@@ -152,8 +173,8 @@ def list_tables_by_model(suffix: str) -> dict[str, str]:
     return result
 
 
-def describe_table(name: str) -> dict[str, Any]:
-    return ddb_client.describe_table(TableName=name)["Table"]
+def describe_table(client: Any, name: str) -> dict[str, Any]:
+    return client.describe_table(TableName=name)["Table"]
 
 
 def key_attributes(table_description: dict[str, Any]) -> tuple[str, ...]:
@@ -161,8 +182,8 @@ def key_attributes(table_description: dict[str, Any]) -> tuple[str, ...]:
 
 
 def discover_table_pairs() -> list[TablePair]:
-    source_tables = list_tables_by_model(SOURCE_SUFFIX)
-    target_tables = list_tables_by_model(TARGET_SUFFIX)
+    source_tables = list_tables_by_model(source_ddb_client, SOURCE_SUFFIX)
+    target_tables = list_tables_by_model(target_ddb_client, TARGET_SUFFIX)
     missing_targets = sorted(set(source_tables) - set(target_tables))
     extra_targets = sorted(set(target_tables) - set(source_tables))
     if missing_targets:
@@ -172,8 +193,8 @@ def discover_table_pairs() -> list[TablePair]:
 
     pairs: list[TablePair] = []
     for model in sorted(source_tables):
-        source_desc = describe_table(source_tables[model])
-        target_desc = describe_table(target_tables[model])
+        source_desc = describe_table(source_ddb_client, source_tables[model])
+        target_desc = describe_table(target_ddb_client, target_tables[model])
         source_keys = key_attributes(source_desc)
         target_keys = key_attributes(target_desc)
         if source_keys != target_keys:
@@ -194,7 +215,7 @@ def discover_table_pairs() -> list[TablePair]:
 
 
 def table_stream_arn(table_name: str) -> str | None:
-    table = describe_table(table_name)
+    table = describe_table(target_ddb_client, table_name)
     return table.get("LatestStreamArn")
 
 
@@ -204,7 +225,7 @@ def discover_staging_event_source_mappings(table_pairs: Iterable[TablePair]) -> 
         arn = table_stream_arn(pair.target)
         if not arn:
             continue
-        paginator = lambda_client.get_paginator("list_event_source_mappings")
+        paginator = target_lambda_client.get_paginator("list_event_source_mappings")
         for page in paginator.paginate(EventSourceArn=arn):
             for mapping in page.get("EventSourceMappings", []):
                 mappings.append(
@@ -219,7 +240,7 @@ def discover_staging_event_source_mappings(table_pairs: Iterable[TablePair]) -> 
 
 
 def update_event_source_mapping(uuid: str, enabled: bool) -> None:
-    lambda_client.update_event_source_mapping(UUID=uuid, Enabled=enabled)
+    target_lambda_client.update_event_source_mapping(UUID=uuid, Enabled=enabled)
 
 
 def set_stream_consumers(mappings: list[dict[str, Any]], enabled: bool) -> None:
@@ -242,7 +263,7 @@ def wait_for_event_source_state(mappings: list[dict[str, Any]], desired: str, ti
     remaining = {mapping["uuid"] for mapping in mappings}
     while remaining and time.time() < deadline:
         for uuid in list(remaining):
-            current = lambda_client.get_event_source_mapping(UUID=uuid).get("State")
+            current = target_lambda_client.get_event_source_mapping(UUID=uuid).get("State")
             if current == desired:
                 remaining.remove(uuid)
         if remaining:
@@ -259,7 +280,7 @@ def scan_kwargs(total_segments: int, segment: int) -> dict[str, Any]:
 
 
 def delete_table_segment(pair: TablePair, total_segments: int, segment: int) -> int:
-    table = ddb.Table(pair.target)
+    table = target_ddb.Table(pair.target)
     deleted = 0
     last_key = None
     projection = ", ".join(f"#k{i}" for i, _ in enumerate(pair.key_attributes))
@@ -296,8 +317,8 @@ def empty_table(pair: TablePair) -> int:
 
 
 def copy_table_segment(pair: TablePair, total_segments: int, segment: int, limit: int | None = None) -> int:
-    source = ddb.Table(pair.source)
-    target = ddb.Table(pair.target)
+    source = source_ddb.Table(pair.source)
+    target = target_ddb.Table(pair.target)
     copied = 0
     last_key = None
     with target.batch_writer(overwrite_by_pkeys=list(pair.key_attributes)) as writer:
@@ -359,8 +380,8 @@ def copy_all_tables(pairs: list[TablePair]) -> None:
             future.result()
 
 
-def list_s3_keys(bucket: str) -> Iterable[dict[str, Any]]:
-    paginator = s3.get_paginator("list_objects_v2")
+def list_s3_keys(client: Any, bucket: str) -> Iterable[dict[str, Any]]:
+    paginator = client.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=bucket):
         for item in page.get("Contents", []):
             yield item
@@ -370,15 +391,15 @@ def empty_bucket(bucket: str) -> int:
     log("empty bucket start", bucket=bucket)
     deleted = 0
     batch: list[dict[str, str]] = []
-    for obj in list_s3_keys(bucket):
+    for obj in list_s3_keys(target_s3, bucket):
         batch.append({"Key": obj["Key"]})
         if len(batch) == 1000:
-            s3.delete_objects(Bucket=bucket, Delete={"Objects": batch, "Quiet": True})
+            target_s3.delete_objects(Bucket=bucket, Delete={"Objects": batch, "Quiet": True})
             deleted += len(batch)
             log("empty bucket progress", bucket=bucket, deleted=deleted)
             batch = []
     if batch:
-        s3.delete_objects(Bucket=bucket, Delete={"Objects": batch, "Quiet": True})
+        target_s3.delete_objects(Bucket=bucket, Delete={"Objects": batch, "Quiet": True})
         deleted += len(batch)
     log("empty bucket complete", bucket=bucket, deleted=deleted)
     return deleted
@@ -386,7 +407,7 @@ def empty_bucket(bucket: str) -> int:
 
 def head_size(bucket: str, key: str) -> int | None:
     try:
-        return int(s3.head_object(Bucket=bucket, Key=key)["ContentLength"])
+        return int(target_s3.head_object(Bucket=bucket, Key=key)["ContentLength"])
     except ClientError as error:
         code = error.response.get("Error", {}).get("Code")
         if code in {"404", "NoSuchKey", "NotFound"}:
@@ -399,10 +420,11 @@ def copy_one_object(source_bucket: str, target_bucket: str, key: str, size: int)
         target_size = head_size(target_bucket, key)
         if target_size == size:
             return "skipped"
-    s3.copy(
+    target_s3.copy(
         {"Bucket": source_bucket, "Key": key},
         target_bucket,
         key,
+        SourceClient=source_s3,
         Config=TransferConfig(max_concurrency=4, multipart_threshold=64 * 1024 * 1024),
     )
     return "copied"
@@ -425,7 +447,7 @@ def copy_bucket_pair(category: str, source_bucket: str, target_bucket: str) -> d
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=S3_WORKERS) as executor:
         futures = []
-        for obj in list_s3_keys(source_bucket):
+        for obj in list_s3_keys(source_s3, source_bucket):
             futures.append(executor.submit(worker, obj))
             if len(futures) >= S3_WORKERS * 4:
                 for future in concurrent.futures.as_completed(futures):
@@ -472,12 +494,13 @@ def discover_user_pool(branch_token: str, explicit_env: str) -> str | None:
         return explicit
     desired_branch = "main" if branch_token == SOURCE_BRANCH_TOKEN else "staging"
     candidates = []
-    paginator = cognito.get_paginator("list_user_pools")
+    cognito_client = source_cognito if branch_token == SOURCE_BRANCH_TOKEN else target_cognito
+    paginator = cognito_client.get_paginator("list_user_pools")
     for page in paginator.paginate(MaxResults=60):
         for pool in page.get("UserPools", []):
             name = pool.get("Name", "")
             pool_id = pool["Id"]
-            details = cognito.describe_user_pool(UserPoolId=pool_id)["UserPool"]
+            details = cognito_client.describe_user_pool(UserPoolId=pool_id)["UserPool"]
             tags = details.get("UserPoolTags", {})
             if tags.get("amplify:app-id") == APP_ID and tags.get("amplify:branch-name") == desired_branch:
                 candidates.append(pool_id)
@@ -504,7 +527,7 @@ def mirror_cognito_users(source_pool_id: str | None, target_pool_id: str | None)
     copied = 0
     updated = 0
     skipped_create = 0
-    paginator = cognito.get_paginator("list_users")
+    paginator = source_cognito.get_paginator("list_users")
     for page in paginator.paginate(UserPoolId=source_pool_id):
         for user in page.get("Users", []):
             username = user["Username"]
@@ -513,9 +536,9 @@ def mirror_cognito_users(source_pool_id: str | None, target_pool_id: str | None)
                 if attr.get("Name") not in {"sub", "identities", "email_verified", "phone_number_verified"}
             ]
             try:
-                cognito.admin_get_user(UserPoolId=target_pool_id, Username=username)
+                target_cognito.admin_get_user(UserPoolId=target_pool_id, Username=username)
                 if attributes:
-                    cognito.admin_update_user_attributes(
+                    target_cognito.admin_update_user_attributes(
                         UserPoolId=target_pool_id,
                         Username=username,
                         UserAttributes=attributes,
@@ -527,7 +550,7 @@ def mirror_cognito_users(source_pool_id: str | None, target_pool_id: str | None)
                 if not temp_password:
                     skipped_create += 1
                     continue
-                cognito.admin_create_user(
+                target_cognito.admin_create_user(
                     UserPoolId=target_pool_id,
                     Username=username,
                     UserAttributes=attributes,
@@ -555,8 +578,8 @@ def preflight() -> MappingState:
             key_attributes=pair.key_attributes,
         )
     for category, (source, target) in S3_BUCKET_PAIRS.items():
-        s3.head_bucket(Bucket=source)
-        s3.head_bucket(Bucket=target)
+        source_s3.head_bucket(Bucket=source)
+        target_s3.head_bucket(Bucket=target)
         log("bucket pair", category=category, source=source, target=target)
     for mapping in mappings:
         log("staging event source mapping", **mapping)
@@ -581,6 +604,8 @@ def canary(state: MappingState) -> None:
 
 def full_mirror(state: MappingState) -> None:
     require_confirmation("Full mirror")
+    if SOURCE_SUFFIX == TARGET_SUFFIX:
+        raise RuntimeError("Refusing full mirror when source and target table suffixes are identical")
     set_stream_consumers(state.event_source_mappings, False)
     wait_for_event_source_state(state.event_source_mappings, "Disabled")
     try:
@@ -614,8 +639,8 @@ def direct_pair_from_model() -> TablePair:
         raise RuntimeError("MODEL is required for table-scoped modes")
     source_name = f"{model}-{SOURCE_SUFFIX}"
     target_name = f"{model}-{TARGET_SUFFIX}"
-    source_desc = describe_table(source_name)
-    target_desc = describe_table(target_name)
+    source_desc = describe_table(source_ddb_client, source_name)
+    target_desc = describe_table(target_ddb_client, target_name)
     source_keys = key_attributes(source_desc)
     target_keys = key_attributes(target_desc)
     if source_keys != target_keys:
@@ -735,7 +760,7 @@ def copy_bucket_prefix(category: str, source_bucket: str, target_bucket: str, pr
             log("copy object failed", category=category, key=key, error=str(exc))
             return {"listed": 1, "copied": 0, "skipped": 0, "failed": 1, "bytes": size}
 
-    paginator = s3.get_paginator("list_objects_v2")
+    paginator = source_s3.get_paginator("list_objects_v2")
     with concurrent.futures.ThreadPoolExecutor(max_workers=S3_WORKERS) as executor:
         futures = []
         for page in paginator.paginate(Bucket=source_bucket, Prefix=prefix):
@@ -757,7 +782,7 @@ def copy_bucket_prefix(category: str, source_bucket: str, target_bucket: str, pr
 
 def main() -> int:
     mode = os.environ.get("MIRROR_MODE", "preflight").strip().lower()
-    log("mirror start", mode=mode, region=REGION, app_id=APP_ID)
+    log("mirror start", mode=mode, source_region=SOURCE_REGION, target_region=TARGET_REGION, app_id=APP_ID)
     try:
         if mode == "delete-table":
             run_delete_table_direct()

@@ -43,6 +43,7 @@ export async function recentCopy(
   let attemptedCount = 0;
   const createdIds: string[] = [];
   let nextToken: string | null | undefined = null;
+  const seenNextTokens = new Set<string>();
 
   do {
     try {
@@ -89,6 +90,15 @@ export async function recentCopy(
       }
 
       nextToken = result.nextToken;
+      // Protect long-running seeds from an API that returns a stale cursor.
+      // This can otherwise spin forever when a filtered query yields no rows.
+      if (nextToken && seenNextTokens.has(nextToken)) {
+        logger.warn(name, 'Stopping because pagination returned a repeated continuation token');
+        break;
+      }
+      if (nextToken) {
+        seenNextTokens.add(nextToken);
+      }
       if (nextToken && attemptedCount >= maxItems) {
         logger.info(name, `Stopped at configured cap of ${maxItems} items`);
         break;

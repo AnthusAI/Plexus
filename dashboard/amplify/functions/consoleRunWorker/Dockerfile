@@ -7,6 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /var/task
 
+# Required for git-based dependencies (for example openai-cost-calculator).
+# Keep this before the source copy so normal worker code edits reuse the layer.
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy repository so the worker can import Plexus source directly.
 COPY . /workspace
 
@@ -14,16 +19,17 @@ COPY . /workspace
 # Fail the image build if those modules are missing from the context.
 RUN test -f /workspace/MCP/tools/tactus_runtime/execute.py && \
     test -f /workspace/MCP/tools/tactus_runtime/_item_helpers.py && \
-    test -f /workspace/MCP/server.py
-
-# Required for git-based dependencies (for example openai-cost-calculator).
-RUN apt-get update && apt-get install -y --no-install-recommends git && \
-    rm -rf /var/lib/apt/lists/*
+    test -f /workspace/MCP/server.py && \
+    test -f /workspace/plexus/procedures/console/chat_agent.tac
 
 # Install Plexus, Lambda runtime interface client, and required dependencies.
-RUN python -m pip install --upgrade pip && \
-    python -m pip install --no-cache-dir -e "/workspace[scoring]" && \
-    python -m pip install --no-cache-dir "python-statemachine>=2.5.0" awslambdaric
+# `plexus.score.test` imports the Celery-backed score-task module even when it
+# runs synchronously, so the Console's post-submit verification needs Celery
+# in addition to the lightweight scoring extra.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --progress-bar off --upgrade pip && \
+    python -m pip install --progress-bar off -e "/workspace[scoring]" && \
+    python -m pip install --progress-bar off "python-statemachine>=2.5.0" "celery>=5.4.0" awslambdaric
 
 COPY dashboard/amplify/functions/consoleRunWorker/app.py /var/task/app.py
 

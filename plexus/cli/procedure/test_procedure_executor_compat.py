@@ -5,7 +5,24 @@ import pytest
 import yaml
 
 from plexus.cli.procedure.mcp_transport import create_procedure_mcp_server
-from plexus.cli.procedure.procedure_executor import _PlexusTraceLogBridge, _execute_tactus
+from plexus.cli.procedure.procedure_executor import (
+    _PlexusTraceLogBridge,
+    _execute_tactus,
+    _score_edit_audit_markdown,
+)
+
+
+def test_score_change_audit_calls_out_guidelines_only_candidate() -> None:
+    markdown = _score_edit_audit_markdown(
+        {
+            "success": True,
+            "version_id": "candidate-1",
+            "changed_fields": ["guidelines"],
+        }
+    )
+
+    assert markdown.startswith("**Guidelines update saved**")
+    assert "- Changed fields: `guidelines`" in markdown
 
 
 class _FakeRuntime:
@@ -791,6 +808,7 @@ async def test_execute_tactus_applies_agent_model_overrides_from_context(monkeyp
             "agents:\n"
             "  assistant:\n"
             "    model: gpt-5.4-mini\n"
+            "    max_tokens: 4096\n"
             "    system_prompt: |\n"
             "      test system prompt\n"
             "    initial_message: Ready.\n"
@@ -801,15 +819,16 @@ async def test_execute_tactus_applies_agent_model_overrides_from_context(monkeyp
         ),
         client=SimpleNamespace(),
         mcp_server=None,
-        context={"agent_models": {"assistant": "gpt-4.1-mini"}},
+        context={"agent_models": {"assistant": "gpt-5-mini"}},
     )
 
     assert result["success"] is True
     assert _RuntimeWithSourceCapture.last_context["agent_models_applied"] == {
-        "assistant": "gpt-4.1-mini"
+        "assistant": "gpt-5-mini"
     }
     parsed_source = yaml.safe_load(_RuntimeWithSourceCapture.last_source)
-    assert parsed_source["agents"]["assistant"]["model"] == "gpt-4.1-mini"
+    assert parsed_source["agents"]["assistant"]["model"] == "gpt-5-mini"
+    assert parsed_source["agents"]["assistant"]["max_tokens"] == 16000
 
 
 @pytest.mark.asyncio

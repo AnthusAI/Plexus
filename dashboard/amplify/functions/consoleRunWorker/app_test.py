@@ -38,26 +38,101 @@ def _stream_record(*, target="cloud", status="PENDING", event_name="INSERT"):
     }
 
 
-def test_handler_processes_cloud_targeted_insert(monkeypatch):
+def test_runtime_imports_are_deferred_until_a_direct_message_needs_processing(monkeypatch):
+    app = _load_app_module()
+    runtime_loads = []
+
+    assert app._console_runtime.cache_info().currsize == 0
+
+    def runtime():
+        runtime_loads.append(True)
+        return {
+            "production_response_target": "cloud",
+            "build_response_owner": lambda target, **_kwargs: {"target": target},
+            "normalize_response_target": lambda target: target,
+            "process_console_message": lambda *_args, **_kwargs: True,
+        }
+
+    monkeypatch.setattr(app, "_console_runtime", runtime)
+    monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
+    monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
+    monkeypatch.setattr(app, "fetch_console_message", lambda *_args: {"id": "msg-direct"})
+    monkeypatch.setattr(app, "process_console_message", lambda *_args, **_kwargs: True)
+
+    assert app.handler({}, SimpleNamespace(aws_request_id="req-empty"))["processed"] == 0
+    assert runtime_loads == []
+
+    assert app.handler({"directMessageId": "msg-direct"}, SimpleNamespace(aws_request_id="req-1"))["processed"] == 1
+    assert runtime_loads == [True]
+
+
+def test_lambda_runtime_disables_redundant_custom_cloudwatch_shipping(monkeypatch):
+    app = _load_app_module()
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "console-responder")
+    monkeypatch.delenv("PLEXUS_DISABLE_CLOUDWATCH_LOGS", raising=False)
+
+    app._prepare_console_runtime_environment()
+
+    assert app.os.environ["PLEXUS_DISABLE_CLOUDWATCH_LOGS"] == "true"
+
+
+def test_warm_interactive_runtime_prepares_reusable_console_state(monkeypatch):
+    app = _load_app_module()
+    app._warm_interactive_runtime.cache_clear()
+    client = object()
+    calls = []
+
+    monkeypatch.setattr(app, "_load_provider_credentials", lambda: calls.append("credentials"))
+    monkeypatch.setattr(app, "_resolve_client", lambda: client)
+    monkeypatch.setattr(
+        app,
+        "_console_runtime",
+        lambda: {"warm_console_runtime": lambda value: calls.append(("warm", value))},
+    )
+
+    app._warm_interactive_runtime()
+    app._warm_interactive_runtime()
+
+    assert calls == ["credentials", ("warm", client)]
+
+
+def test_handler_ignores_legacy_stream_payload(monkeypatch):
+    app = _load_app_module()
+    calls = []
+
+    result = app.handler({"Records": [_stream_record()]}, SimpleNamespace(aws_request_id="req-1"))
+    assert result["processed"] == 0
+    assert result["skipped"] == 0
+    assert result["batchItemFailures"] == []
+    assert calls == []
+
+
+def test_handler_processes_direct_message_without_waiting_for_a_stream_record(monkeypatch):
     app = _load_app_module()
     calls = []
 
     monkeypatch.setenv("CONSOLE_RESPONSE_TARGET", "cloud")
+    monkeypatch.delenv("PLEXUS_LAMBDA_REQUEST_ID", raising=False)
     monkeypatch.setattr(app, "_load_provider_credentials", lambda: None)
     monkeypatch.setattr(app, "_resolve_client", SimpleNamespace)
+    monkeypatch.setattr(
+        app,
+        "fetch_console_message",
+        lambda _client, message_id: {**_stream_record()["dynamodb"]["NewImage"], "id": message_id},
+    )
     monkeypatch.setattr(
         app,
         "process_console_message",
         lambda _client, message, **kwargs: calls.append((message, kwargs)) or True,
     )
 
-    result = app.handler({"Records": [_stream_record()]}, SimpleNamespace(aws_request_id="req-1"))
+    result = app.handler({"directMessageId": "msg-direct"}, SimpleNamespace(aws_request_id="req-direct"))
 
-    assert result["processed"] == 1
-    assert result["skipped"] == 0
-    assert result["batchItemFailures"] == []
-    assert calls[0][0]["id"] == "msg-1"
+    assert result == {"processed": 1, "skipped": 0, "batchItemFailures": []}
+    assert calls[0][0]["id"] == "msg-direct"
     assert calls[0][1]["expected_target"] == "cloud"
+    assert isinstance(calls[0][1]["poll_context"]["direct_message_fetch_ms"], int)
+    assert "PLEXUS_LAMBDA_REQUEST_ID" not in app.os.environ
 
 
 def test_handler_skips_local_target_when_cloud_worker_does_not_claim(monkeypatch):
@@ -74,7 +149,7 @@ def test_handler_skips_local_target_when_cloud_worker_does_not_claim(monkeypatch
     )
 
     assert result["processed"] == 0
-    assert result["skipped"] == 1
+    assert result["skipped"] == 0
     assert result["batchItemFailures"] == []
 
 
@@ -91,7 +166,7 @@ def test_handler_ignores_non_insert_records(monkeypatch):
     )
 
     assert result["processed"] == 0
-    assert result["skipped"] == 1
+    assert result["skipped"] == 0
 
 
 def test_handler_reports_partial_batch_failure_when_processing_raises(monkeypatch):
@@ -110,7 +185,7 @@ def test_handler_reports_partial_batch_failure_when_processing_raises(monkeypatc
 
     assert result["processed"] == 0
     assert result["skipped"] == 0
-    assert result["batchItemFailures"] == [{"itemIdentifier": "seq-1"}]
+    assert result["batchItemFailures"] == []
 
 
 def test_handler_skips_insert_without_new_image(monkeypatch):
@@ -134,7 +209,7 @@ def test_handler_skips_insert_without_new_image(monkeypatch):
     )
 
     assert result["processed"] == 0
-    assert result["skipped"] == 1
+    assert result["skipped"] == 0
 
 
 def test_handler_duplicate_stream_delivery_counts_only_one_processed(monkeypatch):
@@ -151,8 +226,8 @@ def test_handler_duplicate_stream_delivery_counts_only_one_processed(monkeypatch
         SimpleNamespace(aws_request_id="req-1"),
     )
 
-    assert result["processed"] == 1
-    assert result["skipped"] == 1
+    assert result["processed"] == 0
+    assert result["skipped"] == 0
     assert result["batchItemFailures"] == []
 
 

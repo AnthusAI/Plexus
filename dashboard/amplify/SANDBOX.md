@@ -33,7 +33,11 @@ Amplify sandboxes in this project are configured for **development and testing**
 4. **Lower cost** - Fewer resources = lower AWS costs per developer
 
 **Trade-off:**
-- Task dispatching and console chat won't work in sandboxes
+- With the optional ConsoleRunWorker enabled, interactive Console chat and its
+  synchronous read-only/score-version workflows can run in a sandbox.
+- Asynchronous work that creates a `Task` record—reports, evaluations, and
+  other Celery-dispatched jobs—will remain pending because TaskDispatcher and
+  the isolated Celery consumer are not deployed.
 - This is acceptable since sandboxes are primarily for:
   - Testing GraphQL queries/mutations
   - Testing the seed script
@@ -61,19 +65,26 @@ You can pass normal sandbox args after `--`, for example:
 ./scripts/start-sandbox-with-console-worker.sh -- --identifier full-app
 ```
 
-If your provider secret is not `plexus/development/config`, pass it explicitly:
+If your sandbox-region provider secret is not `plexus/staging/config`, pass it explicitly:
 
 ```bash
 ./scripts/start-sandbox-with-console-worker.sh \
-  --config-secret-name plexus/production/config \
+  --config-secret-name plexus/development/config \
   --region us-west-2
 ```
+
+The launcher rejects `plexus/production/config` so a sandbox worker cannot
+silently use production model credentials.
 
 ### 2. Infrastructure Requirements
 
 - **Docker available locally**: CDK image asset build requires Docker
 - **Secrets Manager**: `plexus/<environment>/config` secret must exist with provider keys
-- **No TaskDispatcher in sandbox**: TaskDispatcher remains disabled in sandbox mode
+- **No TaskDispatcher in sandbox**: TaskDispatcher remains disabled in sandbox mode.
+  Do not dispatch reports/evaluations for completion testing in this setup;
+  they will create durable `PENDING` tasks but no worker can consume them.
+  Full async acceptance testing requires a separate, isolated Celery queue,
+  result backend, dispatcher, and consumer.
 
 ## Sandbox Detection Logic
 

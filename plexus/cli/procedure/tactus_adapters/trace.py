@@ -270,16 +270,37 @@ class PlexusTraceSink:
 
     def _tool_metadata_patch(self, tool_result: Any) -> Optional[Dict[str, Any]]:
         tool_cost_summary, tool_billing_mode = self._tool_cost_summary(tool_result)
-        if not isinstance(tool_cost_summary, dict):
-            return None
-        return {
-            "cost": {
+        patch: Dict[str, Any] = {}
+        if isinstance(tool_cost_summary, dict):
+            patch["cost"] = {
                 "kind": "tool_execution",
                 "billing_mode": tool_billing_mode,
                 "live": False,
                 "summary": self._finalize_summary(tool_cost_summary),
             }
-        }
+        normalized = tool_result
+        if isinstance(tool_result, str):
+            try:
+                normalized = json.loads(tool_result)
+            except Exception:
+                normalized = None
+        if isinstance(normalized, dict):
+            report_result = normalized
+            for key in ("value", "result", "data"):
+                nested = report_result.get(key)
+                if isinstance(nested, dict) and (
+                    nested.get("task_id") or nested.get("taskId")
+                ):
+                    report_result = nested
+                    break
+            task_id = str(report_result.get("task_id") or report_result.get("taskId") or "").strip()
+            report_id = str(report_result.get("report_id") or report_result.get("reportId") or "").strip()
+            if task_id:
+                patch["console_report_task"] = {
+                    "task_id": task_id,
+                    "report_id": report_id or None,
+                }
+        return patch or None
 
     def _tool_failure_message(self, tool_name: Any, tool_result: Any) -> Optional[str]:
         normalized_result = tool_result
@@ -1044,6 +1065,10 @@ class PlexusTraceSink:
                 content = f"Tool response: {tool_name}"
         content_text = str(content or "")
         normalized_content = content_text.strip()
+
+        if message_type == "MESSAGE" and not normalized_content:
+            logger.debug("Dropping blank trace message event: %s", event_type or event_kind)
+            return None
 
         if message_type == "MESSAGE" and normalized_content.lower() == "assistant turn completed.":
             logger.debug("Dropping placeholder completion trace message: %s", normalized_content)

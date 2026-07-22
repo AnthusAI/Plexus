@@ -2,14 +2,21 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 import yaml
+from lupa import LuaRuntime
 
 from plexus.cli.procedure.builtin_procedures import (
     CONSOLE_CHAT_BUILTIN_ID,
+    get_console_chat_policy_contract,
     get_builtin_procedure_yaml,
     is_builtin_procedure_id,
 )
 from plexus.cli.procedure.service import ProcedureService
 from plexus.cli.procedure.tactus_adapters.storage import PlexusStorageAdapter
+
+
+def _console_policy_source(parsed):
+    """The detailed contract is retained for source-level specification."""
+    return get_console_chat_policy_contract()
 
 
 def test_builtin_console_procedure_yaml_contains_tactus_source():
@@ -19,22 +26,99 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     parsed = yaml.safe_load(yaml_text)
     assert parsed["class"] == "Tactus"
     assert "console_session_history" in parsed.get("input", {})
+    assert "console_scorecard_id" in parsed["input"]
+    assert "console_score_id" in parsed["input"]
+    assert "console_scorecard_name" in parsed["input"]
+    assert "console_score_name" in parsed["input"]
+    assert "console_latest_score_edit_version_id" in parsed["input"]
+    assert "console_latest_score_edit_promoted" in parsed["input"]
+    assert "console_async_tasks_available" in parsed["input"]
+    assert "console_selected_model" in parsed["input"]
     assert parsed["agents"]["assistant"]["model"] == "gpt-5.4-mini"
     assert parsed["agents"]["assistant"]["reasoning_effort"] == "low"
     assert parsed["agents"]["assistant"]["verbosity"] == "low"
-    assert parsed["agents"]["assistant"]["max_tokens"] == 1024
+    # The Console must have room to return a full guidelines document in a
+    # guidelines-only score.update tool call after score.info.
+    assert parsed["agents"]["assistant"]["max_tokens"] == 4096
     assert parsed["agents"]["assistant"]["stream"] is True
     assert parsed["agents"]["assistant"]["tools"] == ["execute_tactus"]
+    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    assert "structured scorecard/score scope supplied with the turn is authoritative" in system_prompt
+    assert "Do not conclude that a score is strict or lenient" in system_prompt
+    assert len(system_prompt) < 1_200
+    assert "prompt_contract" not in parsed
     assert isinstance(parsed.get("code"), str)
+    # The Console procedure is embedded Lua.  Compile it without executing so
+    # a malformed routing branch cannot reach the sandbox as an endless
+    # "Thinking" state.
+    LuaRuntime().execute("return function()\n" + parsed["code"] + "\nend")
     assert "State.set(\"stage\", \"preparing\")" in parsed["code"]
-    assert "Previous user message before latest (if any):" in parsed["code"]
-    assert "Use prior turns for continuity and respond concisely with concrete help." in parsed["code"]
+    assert "Interpret the user's natural language yourself" in parsed["code"]
+    assert "Structured execution context (authoritative)" in parsed["code"]
+    assert "each proposed policy change must be traceable" in parsed["code"]
+    assert "omit unrelated policy topics" in parsed["code"]
+    assert "there is nothing to promote" in parsed["code"]
+    assert "provides no transcript, item ID, or call reference" in parsed["code"]
+    assert "make zero tool calls for that turn" in parsed["code"]
+    assert "local scope_mode = \"portfolio_read_only\"" in parsed["code"]
+    assert "Scope policy: score mode means work within the selected score" in parsed["code"]
+    assert "selected structured scope overrides conversational carryover" in parsed["code"]
+    assert "do not use a score, scorecard, or example from prior conversation" in parsed["code"]
+    assert "A user's assertion that a score is too strict or too lenient is a hypothesis" in parsed["code"]
+    assert "Do not agree with it or recommend a direction of change" in parsed["code"]
+    assert "must obtain both a current `plexus.score.info` result and reviewed disagreement examples" in parsed["code"]
+    assert "If this turn did not retrieve reviewed feedback, do not call the score strict or lenient" in parsed["code"]
+    assert "Portfolio_read_only mode permits read-only cross-scorecard research" in parsed["code"]
+    assert (
+        "Portfolio research workflow: make one bounded call to "
+        "`plexus.feedback.alignment_batch({ scorecard_limit = 5, days = 30 })`"
+    ) in parsed["code"]
+    # The compact runtime prompt is what the deployed assistant actually
+    # receives; keep the portfolio routing guard in that prompt too.
+    assert "must not call evaluation.find_recent with only count" in parsed["code"]
+    assert "Never use evaluation.find_recent for " in parsed["code"]
+    assert "portfolio triage." in parsed["code"]
+    assert "do not inventory scorecards separately" in parsed["code"]
+    assert "selection rule, and coverage" in parsed["code"]
+    assert "do not ask the user to choose a subset" in parsed["code"]
+    assert "scorecard_limit = 5" in parsed["code"]
+    assert parsed["code"].count("scorecard_limit = 5") == 2
+    assert "call it a sample unless every in-scope scorecard was analyzed" in parsed["code"]
+    assert "clear but unqualified account-wide research request" in parsed["code"]
+    assert "plexus.feedback.alignment_batch({ scorecards =" in parsed["code"]
+    assert "do not make one sequential batch call per scorecard" in parsed["code"]
+    assert "Never call plexus.scorecard.alignment_batch" in parsed["code"]
+    assert "execute the full bounded review in this turn" in parsed["code"]
+    assert "do not re-run a scorecard-wide alignment batch" in parsed["code"]
+    assert "scorecard triage offered examples for a named score" in parsed["code"]
+    assert "multiple named scores" in parsed["code"]
+    assert "do not silently choose only the first" in parsed["code"]
+    assert "initial_value is the model's original value and final_value is the reviewer's value" in parsed["code"]
+    assert "causal diagnostic for a selected score" in parsed["code"]
+    assert "`versionDetails.parentVersionId` is the direct immediate predecessor" in parsed["code"]
+    assert "take `versionDetails.parentVersionId`" in parsed["code"]
+    assert "Do not rank a score from configuration shape, prompt rigidity, or generic intuition" in parsed["code"]
+    assert "state the exact available count rather than implying the requested count exists" in parsed["code"]
+    assert "check both reviewed flip directions" in parsed["code"]
+    assert "Do this before any tool call" in parsed["code"]
+    assert "do not call report tools, report catalogs, or docs lookup" in parsed["code"]
+    assert "do not create a candidate/version or call score-editing tools" in parsed["code"]
+    assert "GUIDELINES-ONLY ROUTING" not in parsed["code"]
+    assert "DIRECT SELECTED-SCORE FEEDBACK-EXAMPLE ROUTING" not in parsed["code"]
+
+
+def test_builtin_console_portfolio_read_does_not_force_a_second_agent_invocation():
+    yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
+    parsed = yaml.safe_load(yaml_text)
+
+    assert parsed["code"].count("assistant({ message") == 1
+    assert "Continue the authorized portfolio read now." not in parsed["code"]
 
 
 def test_builtin_console_procedure_prompt_teaches_docs_primitives():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     # The Console assistant must know how to discover and load topics
     # from the agent documentation knowledge base.
@@ -58,7 +142,7 @@ def test_builtin_console_prompt_completes_read_only_feedback_alignment_without_r
     """Read-only alignment triage must finish without creating a report artifact."""
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     assert "READ-ONLY FEEDBACK ALIGNMENT" in system_prompt
     assert "plexus.feedback.alignment_batch" in system_prompt
@@ -69,7 +153,7 @@ def test_builtin_console_prompt_completes_read_only_feedback_alignment_without_r
 def test_builtin_console_procedure_prompt_is_cs_domain_focused():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     assert "AUDIENCE AND LANGUAGE" in system_prompt
     assert "non-technical customer success representatives" in system_prompt
@@ -80,7 +164,7 @@ def test_builtin_console_procedure_prompt_is_cs_domain_focused():
 def test_builtin_console_procedure_prompt_contains_nontechnical_intent_routing():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     assert "INTENT ROUTING FOR NON-TECHNICAL REQUESTS" in system_prompt
     assert "clarify wording" in system_prompt
@@ -88,12 +172,20 @@ def test_builtin_console_procedure_prompt_contains_nontechnical_intent_routing()
     assert "Do not reroute score behavior requests into guidelines edits" in system_prompt
     assert "how a score is performing" in system_prompt
     assert "grade one item/call" in system_prompt
+    assert "Do not re-inventory the full scorecard" in system_prompt
+    assert "do not quote or enumerate excluded records" in system_prompt
+    assert 'initial_value = "Yes", final_value = "No"' in system_prompt
+    assert "inspect the target score's current configuration and guidelines" in system_prompt
+    assert "Never call `plexus.score.info` with placeholders such as `all scores`" in system_prompt
+    assert "VERSION COMPARISON INTEGRITY" in system_prompt
+    assert "Never infer a diff from a single version" in system_prompt
+    assert "immediately preceding focused next step" in system_prompt
 
 
 def test_builtin_console_procedure_prompt_teaches_skill_discovery():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     assert "OPERATIONAL SKILLS" in system_prompt
     assert "plexus.skills.list" in system_prompt
@@ -111,7 +203,7 @@ def test_builtin_console_procedure_prompt_teaches_skill_discovery():
 def test_builtin_console_procedure_prompt_teaches_guidelines_validation_runtime_helper():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     assert "GUIDELINES WORKFLOWS" in system_prompt
     assert "plexus.guidelines.validate" in system_prompt
@@ -124,7 +216,7 @@ def test_builtin_console_procedure_prompt_teaches_guidelines_validation_runtime_
 def test_builtin_console_procedure_prompt_teaches_report_dispatch_contract():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     assert "REPORT REQUESTS (HARD RULES)" in system_prompt
     assert "plexus.report.run" in system_prompt
@@ -144,7 +236,7 @@ def test_builtin_console_procedure_prompt_teaches_report_dispatch_contract():
 def test_builtin_console_procedure_prompt_teaches_prediction_contract():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     assert "PREDICTION REQUESTS (HARD RULES)" in system_prompt
     assert "use `plexus.score.predict`" in system_prompt
@@ -157,7 +249,7 @@ def test_builtin_console_procedure_prompt_teaches_prediction_contract():
 def test_builtin_console_procedure_prompt_enforces_score_edit_completion_contract():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     assert "IMPORTANT for score.edit" in system_prompt
     assert "behavior-change requests" in system_prompt
@@ -181,7 +273,7 @@ def test_builtin_console_procedure_prompt_enforces_score_edit_completion_contrac
 def test_builtin_console_procedure_prompt_blocks_direct_score_code_update():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     assert "Do not call plexus.score.update with code, yaml_content, or full YAML" in system_prompt
     assert "use score.edit instead" in system_prompt
@@ -193,7 +285,7 @@ def test_builtin_console_procedure_prompt_blocks_direct_score_code_update():
 def test_builtin_console_procedure_prompt_teaches_runtime_post_submit_smoke_test():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     assert "post-submit smoke test (`plexus.score.test`)" in system_prompt
     assert "Report that automatic smoke-test outcome" in system_prompt
@@ -204,10 +296,8 @@ def test_builtin_console_procedure_guards_against_uuid_only_replies():
     parsed = yaml.safe_load(yaml_text)
     code = parsed["code"]
 
-    assert 'for _, key in ipairs({ "response", "content", "message", "text", "output" }) do' in code
-    assert "result\" }) do" not in code
-    assert "looks_like_uuid" in code
-    assert "assistant returned only a version identifier" in code
+    assert "Structured execution context (authoritative)" in code
+    assert "Interpret the user's natural language yourself" in code
 
 
 def test_builtin_console_procedure_disambiguates_deictic_score_references():
@@ -215,33 +305,21 @@ def test_builtin_console_procedure_disambiguates_deictic_score_references():
     parsed = yaml.safe_load(yaml_text)
     code = parsed["code"]
 
-    assert "I need the exact target first" in code
-    assert "more than one possible score target" in code
-    assert "this score" in code
-    assert "same score" in code
-    assert "scorecard%s+id%s*:%s*([0-9a-f%-]+)" in code
-    assert "score%s+id%s*:%s*([0-9a-f%-]+)" in code
+    assert "Selected scorecard" in code
+    assert "do not expect deterministic phrase routing" in code
 
 
 def test_builtin_console_procedure_allows_scorecard_wide_deictic_analysis():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
     code = parsed["code"]
-    guard = code.split("local has_deictic_score_ref =", 1)[1].split(
-        "local explicit_target_key", 1
-    )[0]
-
-    assert '"this scorecard"' not in guard
-    assert '"that scorecard"' not in guard
-    assert "contains_standalone_phrase" in code
-    assert 'contains_standalone_phrase(lower_latest, "this score")' in guard
-    assert 'string.match(after, "[%w_]")' in code
+    assert "Interpret the user's natural language yourself" in code
 
 
 def test_builtin_console_procedure_prompt_treats_read_only_exact_ids_as_targeted():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     assert "TARGETING AND READ-ONLY FOLLOW-UPS" in system_prompt
     assert "`Scorecard id`" in system_prompt
@@ -254,13 +332,9 @@ def test_builtin_console_procedure_consumes_score_disambiguation_followups():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
     code = parsed["code"]
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
-    assert "find_pending_score_disambiguation" in code
-    assert "resolve_pending_score_choice" in code
-    assert "Continue the pending user request" in code
-    assert "Use score_identifier exactly" in code
-    assert "without confidence" in code
+    assert "Recent conversation" in code
     assert "plexus.score.resolve" in system_prompt
     assert "score_resolve" in system_prompt
 
@@ -268,7 +342,7 @@ def test_builtin_console_procedure_consumes_score_disambiguation_followups():
 def test_builtin_console_procedure_prompt_teaches_planning_mode_contract():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
-    system_prompt = parsed["agents"]["assistant"]["system_prompt"]
+    system_prompt = _console_policy_source(parsed)
 
     assert "TOOL ACCESS MODE" in system_prompt
     assert "console_tool_access_mode" in parsed["input"]
@@ -294,7 +368,7 @@ def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
     # Bumped when the Console assistant tool contract changes.
-    assert parsed["version"] == "1.6.20"
+    assert parsed["version"] == "1.6.21"
 
 
 def test_is_builtin_procedure_id():
@@ -367,6 +441,8 @@ async def test_run_procedure_builtin_passes_console_context_overrides():
                 {"role": "ASSISTANT", "content": "How about 7?"},
                 {"role": "USER", "content": "Multiply that by three."},
             ],
+            console_scorecard_id="scorecard-1",
+            console_score_id="score-1",
         )
 
     assert result == expected_result
@@ -377,6 +453,8 @@ async def test_run_procedure_builtin_passes_console_context_overrides():
         {"role": "ASSISTANT", "content": "How about 7?"},
         {"role": "USER", "content": "Multiply that by three."},
     ]
+    assert execute_kwargs["context"]["console_scorecard_id"] == "scorecard-1"
+    assert execute_kwargs["context"]["console_score_id"] == "score-1"
 
 
 @pytest.mark.asyncio

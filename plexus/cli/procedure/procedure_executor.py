@@ -329,9 +329,14 @@ def _score_edit_audit_markdown(event: Dict[str, Any]) -> str:
         else "unknown"
     )
     success = bool(event.get("success"))
+    changed_field_set = {str(field) for field in changed_fields or [] if field}
 
     if success and version_id:
-        title = "**Score edit saved**"
+        title = (
+            "**Guidelines update saved**"
+            if changed_field_set == {"guidelines"}
+            else "**Score edit saved**"
+        )
     elif version_id:
         title = "**Score edit needs review**"
     else:
@@ -1219,14 +1224,31 @@ async def _execute_tactus(
                 if not isinstance(agent_config, dict):
                     continue
                 current_model = str(agent_config.get("model") or "").strip()
-                if current_model == requested_model:
-                    applied[agent_name] = requested_model
-                    continue
                 next_agent_config = dict(agent_config)
-                next_agent_config["model"] = requested_model
-                updated_agents[agent_name] = next_agent_config
+                agent_changed = False
+                if current_model != requested_model:
+                    next_agent_config["model"] = requested_model
+                    agent_changed = True
+
+                # DSPy's OpenAI reasoning-model adapter rejects these compact
+                # GPT-5 variants unless max_tokens is at least 16k. The
+                # Console model picker is a supported user control, so a
+                # selected runnable model must also receive a runnable token
+                # configuration instead of failing after the user waits for a
+                # response.
+                if requested_model.strip().lower() in {"gpt-5-mini", "gpt-5-nano"}:
+                    try:
+                        configured_max_tokens = int(next_agent_config.get("max_tokens") or 0)
+                    except (TypeError, ValueError):
+                        configured_max_tokens = 0
+                    if configured_max_tokens < 16000:
+                        next_agent_config["max_tokens"] = 16000
+                        agent_changed = True
+
+                if agent_changed:
+                    updated_agents[agent_name] = next_agent_config
                 applied[agent_name] = requested_model
-                changed = True
+                changed = changed or agent_changed
 
             if not changed:
                 return source_text, applied
