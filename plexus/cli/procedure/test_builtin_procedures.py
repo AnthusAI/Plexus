@@ -75,9 +75,15 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     ) in parsed["code"]
     # The compact runtime prompt is what the deployed assistant actually
     # receives; keep the portfolio routing guard in that prompt too.
+    assert "Deictic scope: when scorecard or score scope is selected" in parsed["code"]
+    assert "use the selected ID directly" in parsed["code"]
     assert "must not call evaluation.find_recent with only count" in parsed["code"]
     assert "Never use evaluation.find_recent for " in parsed["code"]
     assert "portfolio triage." in parsed["code"]
+    assert "LIFECYCLE CREATION" in parsed["code"]
+    assert "Do not call the session read-only" in parsed["code"]
+    assert "plexus.scorecards.create" in parsed["code"]
+    assert "plexus.score.update" in parsed["code"]
     assert "do not inventory scorecards separately" in parsed["code"]
     assert "selection rule, and coverage" in parsed["code"]
     assert "do not ask the user to choose a subset" in parsed["code"]
@@ -368,7 +374,7 @@ def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
     # Bumped when the Console assistant tool contract changes.
-    assert parsed["version"] == "1.6.21"
+    assert parsed["version"] == "1.6.26"
 
 
 def test_is_builtin_procedure_id():
