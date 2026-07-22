@@ -61,6 +61,28 @@ def test_console_worker_asset_hash_forces_nested_stack_refresh():
     assert "lambda.DockerImageCode.fromEcr(workerImage.repository" in resource
 
 
+def test_console_responder_parameter_isolated_by_environment():
+    repo_root = Path(__file__).resolve().parents[4]
+    resource = repo_root.joinpath(
+        "dashboard/amplify/functions/consoleRunWorker/resource.ts"
+    ).read_text()
+    backend = repo_root.joinpath("dashboard/amplify/backend.ts").read_text()
+    dispatcher = repo_root.joinpath(
+        "dashboard/amplify/data/resolvers/dispatchConsoleChat.ts"
+    ).read_text()
+
+    assert "parameterName: props.responderParameterName" in resource
+    assert (
+        "const consoleResponderParameterName = "
+        "`/plexus/${consoleWorkerEnvironmentName}/console-chat/responder`;" in backend
+    )
+    assert "responderParameterName: consoleResponderParameterName," in backend
+    assert 'CONSOLE_RESPONDER_PARAMETER_NAME' in backend
+    assert 'consoleResponderParameterName,' in backend
+    assert "process.env.CONSOLE_RESPONDER_PARAMETER_NAME" in dispatcher
+    assert "'/plexus/console-chat/responder'" not in dispatcher
+
+
 def test_sandbox_hotpatch_overlays_the_complete_worker_source():
     repo_root = Path(__file__).resolve().parents[4]
     dockerfile = repo_root.joinpath(
