@@ -15,6 +15,7 @@ Usage example:
 from __future__ import annotations
 
 import argparse
+import boto3
 import csv
 import json
 import os
@@ -223,6 +224,38 @@ def _create_user_message(
     return created
 
 
+def _dispatch_responder_message(
+    *,
+    message_id: str,
+    responder_function: str,
+    aws_region: Optional[str],
+) -> None:
+    """Start the same direct-message worker path used by a cloud Console turn."""
+    lambda_client = boto3.client("lambda", region_name=aws_region or None)
+    lambda_client.invoke(
+        FunctionName=responder_function,
+        InvocationType="Event",
+        Payload=json.dumps({"directMessageId": message_id}).encode("utf-8"),
+    )
+
+
+def _dispatch_console_message(
+    *,
+    message_id: str,
+    dispatcher_function: str,
+    aws_region: Optional[str],
+) -> None:
+    """Invoke the same dispatcher Lambda that the Console mutation uses."""
+    lambda_client = boto3.client("lambda", region_name=aws_region or None)
+    result = lambda_client.invoke(
+        FunctionName=dispatcher_function,
+        InvocationType="RequestResponse",
+        Payload=json.dumps({"arguments": {"messageId": message_id}}).encode("utf-8"),
+    )
+    if result.get("FunctionError"):
+        raise RuntimeError(f"Console dispatcher failed for message {message_id}")
+
+
 def _get_message(client: PlexusDashboardClient, message_id: str) -> Dict[str, Any]:
     query = """
     query GetBenchmarkMessage($id: ID!) {
@@ -269,7 +302,15 @@ def run_benchmark(
     timeout_seconds: float,
     poll_interval_seconds: float,
     procedure_id: str,
+    responder_function: Optional[str] = None,
+    dispatcher_function: Optional[str] = None,
+    aws_region: Optional[str] = None,
 ) -> List[BenchmarkRow]:
+    if response_target == "cloud" and not (responder_function or dispatcher_function):
+        raise RuntimeError(
+            "--responder-function or --dispatcher-function is required for cloud benchmarks so each persisted message is dispatched"
+        )
+
     rows: List[BenchmarkRow] = []
     for index in range(1, samples + 1):
         prompt = f"Latency benchmark sample {index}: reply with 'ok {index}'."
@@ -284,6 +325,19 @@ def run_benchmark(
         )
         message_id = str(created.get("id"))
         created_at = str(created.get("createdAt") or "")
+        if response_target == "cloud":
+            if dispatcher_function:
+                _dispatch_console_message(
+                    message_id=message_id,
+                    dispatcher_function=dispatcher_function,
+                    aws_region=aws_region,
+                )
+            else:
+                _dispatch_responder_message(
+                    message_id=message_id,
+                    responder_function=str(responder_function),
+                    aws_region=aws_region,
+                )
         deadline = time.time() + timeout_seconds
         status = "PENDING"
         response_started_at: Optional[str] = None
@@ -374,6 +428,21 @@ def main() -> None:
     parser.add_argument("--timeout-seconds", type=float, default=180.0, help="Per-message timeout")
     parser.add_argument("--poll-interval-seconds", type=float, default=0.5, help="Poll interval while waiting")
     parser.add_argument("--procedure-id", default=CONSOLE_CHAT_BUILTIN_ID, help="Procedure ID for created user messages")
+    parser.add_argument(
+        "--responder-function",
+        default=os.getenv("CONSOLE_RESPONDER_FUNCTION", ""),
+        help="Cloud responder Lambda alias/name; required when --response-target cloud",
+    )
+    parser.add_argument(
+        "--dispatcher-function",
+        default=os.getenv("CONSOLE_DISPATCHER_FUNCTION", ""),
+        help="Console dispatcher Lambda name; uses the same dispatch path as the UI",
+    )
+    parser.add_argument(
+        "--aws-region",
+        default=os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION", ""),
+        help="AWS region for the cloud responder invocation",
+    )
     parser.add_argument("--out", default="", help="Output path prefix for JSON/CSV artifacts")
     args = parser.parse_args()
 
@@ -388,6 +457,9 @@ def main() -> None:
         timeout_seconds=args.timeout_seconds,
         poll_interval_seconds=args.poll_interval_seconds,
         procedure_id=args.procedure_id,
+        responder_function=args.responder_function or None,
+        dispatcher_function=args.dispatcher_function or None,
+        aws_region=args.aws_region or None,
     )
     _print_report(rows)
     _write_artifacts(rows, args.out or None)

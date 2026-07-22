@@ -38,6 +38,7 @@ SCORE_EDIT_AUDIT_EVENT_KEY = "score_edit_audit"
 SCORE_EDIT_AUDIT_COMPACT_KEY = "score_edit_audit_compact"
 SCORE_AUDIT_DIFF_TEXT_MAX_CHARS = 20_000
 SCORE_AUDIT_UNIFIED_DIFF_MAX_CHARS = 20_000
+FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY = 4
 
 
 PLEXUS_DOCS_DIR = os.path.normpath(
@@ -739,6 +740,28 @@ class ConsoleGuidelinesUpdateRequiresGuidelinesIntent(PermissionError):
         )
 
 
+class ConsoleScoreEditBlockedForGuidelinesOnly(PermissionError):
+    """Raised when a guidelines-only Console request attempts a code-edit workflow."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Console chat cannot call plexus.score.edit for an explicitly guidelines-only, "
+            "behavior-preserving request. Load the full current guidelines and use "
+            "plexus.score.update with guidelines only."
+        )
+
+
+class ConsoleScoreEditRequiresConcreteInstruction(PermissionError):
+    """Raised when Console attempts a candidate-only score edit with no requested change."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Console chat cannot start plexus.score.edit from a candidate-only approval "
+            "without a concrete score change. Ask what behavior, code, or prompt should "
+            "change, or continue the specific proposal already present in this chat session."
+        )
+
+
 @dataclass(frozen=True)
 class RuntimeMethodSpec:
     handler: str
@@ -843,6 +866,7 @@ def _default_scorecards_list(args: dict[str, Any]) -> Any:
     identifier = args.get("identifier") or args.get("name") or args.get("key")
     next_token = args.get("next_token") or args.get("nextToken")
     return_metadata = bool(args.get("return_metadata", False))
+    include_scores = bool(args.get("_include_scores", False))
 
     raw_limit = args.get("limit")
     if raw_limit is None:
@@ -899,10 +923,13 @@ def _default_scorecards_list(args: dict[str, Any]) -> Any:
 
     filter_str = ", ".join(filter_parts)
     next_token_arg = f', nextToken: "{next_token}"' if next_token else ""
+    scorecard_fields = "id name key description externalId createdAt updatedAt"
+    if include_scores:
+        scorecard_fields += " sections { items { scores { items { id name } } } }"
     query = (
         "query ListScorecards { "
         f"listScorecards(filter: {{ {filter_str} }}, limit: {fetch_limit}{next_token_arg}) {{ "
-        "items { id name key description externalId createdAt updatedAt } "
+        f"items {{ {scorecard_fields} }} "
         "nextToken } }"
     )
     response = client.execute(query)
@@ -2008,15 +2035,108 @@ def _default_feedback_alignment(args: dict[str, Any]) -> dict[str, Any]:
     return FeedbackService.format_summary_result_as_dict(summary)
 
 
-def _default_feedback_alignment_batch(args: dict[str, Any]) -> dict[str, Any]:
+def _load_feedback_alignment_window(
+    client: Any,
+    *,
+    account_id: str,
+    days: int,
+) -> list[dict[str, Any]]:
+    """Load one account-scoped feedback window for bounded portfolio triage."""
+    from datetime import datetime, timedelta, timezone
+
+    query = """
+    query ListFeedbackItemsByEditedTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listFeedbackItemByAccountIdAndEditedAt(
+            accountId: $accountId,
+            editedAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                scorecardId
+                scoreId
+                initialAnswerValue
+                finalAnswerValue
+                isInvalid
+            }
+            nextToken
+        }
+    }
     """
-    Run plexus.feedback.alignment for all scores in a scorecard.
+    end_time = datetime.now(timezone.utc) + timedelta(minutes=5)
+    start_time = end_time - timedelta(days=days, minutes=5)
+    variables = {
+        "accountId": account_id,
+        "startTime": start_time.isoformat().replace("+00:00", "Z"),
+        "endTime": end_time.isoformat().replace("+00:00", "Z"),
+        "nextToken": None,
+    }
+    items: list[dict[str, Any]] = []
+
+    while True:
+        response = client.execute(query, variables)
+        if not isinstance(response, dict):
+            raise TypeError(
+                "plexus.feedback.alignment_batch received an invalid feedback-window response"
+            )
+        if response.get("errors"):
+            raise RuntimeError(
+                "plexus.feedback.alignment_batch feedback-window query failed: "
+                + json.dumps(response["errors"])
+            )
+        page = response.get("listFeedbackItemByAccountIdAndEditedAt")
+        if not isinstance(page, dict):
+            data = response.get("data")
+            page = (
+                data.get("listFeedbackItemByAccountIdAndEditedAt")
+                if isinstance(data, dict)
+                else None
+            )
+        if not isinstance(page, dict):
+            raise RuntimeError(
+                "plexus.feedback.alignment_batch feedback-window data was missing"
+            )
+        page_items = page.get("items") or []
+        if isinstance(page_items, list):
+            items.extend(
+                item
+                for item in page_items
+                if isinstance(item, dict) and not item.get("isInvalid")
+            )
+        next_token = page.get("nextToken")
+        if not next_token:
+            return items
+        variables["nextToken"] = next_token
+
+
+def _default_feedback_alignment_batch(
+    args: dict[str, Any],
+    *,
+    _prefetched_feedback_items: list[dict[str, Any]] | None = None,
+    _prefetched_account_id: str | None = None,
+    _prefetched_scorecard_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Run plexus.feedback.alignment for all scores in one or more scorecards.
 
     Returns alignment metrics for each score in a single call, avoiding
-    N separate API calls when analyzing scorecard-wide performance.
+    N separate API calls when analyzing scorecard-wide performance. A bounded
+    ``scorecards`` list is evaluated concurrently so portfolio triage does not
+    require one sequential model tool round trip per scorecard.
 
-    Required args:
+    Target args (one of):
         scorecard (str): Scorecard name, key, or ID.
+        scorecard_name (str): Scorecard name.
+        scorecard_id (str): Scorecard ID.
+        scorecards (list[str]): Up to five scorecard names, keys, or IDs.
+        scorecard_limit (int): Select the first 1-5 account scorecards for a
+            bounded portfolio sample without a separate inventory tool call.
 
     Optional args:
         days (int): Feedback lookback window in days. Default 7.
@@ -2047,13 +2167,148 @@ def _default_feedback_alignment_batch(args: dict[str, Any]) -> dict[str, Any]:
             ]
         }
     """
+    raw_scorecards = args.get("scorecards")
+    prefetched_scorecards_by_id: dict[str, dict[str, Any]] = {}
+    portfolio_selection_rule: str | None = None
+    has_explicit_scorecard = any(
+        args.get(key) for key in ("scorecard", "scorecard_name", "scorecard_id")
+    )
+    raw_scorecard_limit = args.get("scorecard_limit")
+    if (
+        raw_scorecards is None
+        and raw_scorecard_limit is not None
+        and not has_explicit_scorecard
+    ):
+        try:
+            scorecard_limit = int(raw_scorecard_limit)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "plexus.feedback.alignment_batch scorecard_limit must be an integer"
+            ) from exc
+        if not 1 <= scorecard_limit <= 5:
+            raise ValueError(
+                "plexus.feedback.alignment_batch scorecard_limit must be between 1 and 5"
+            )
+        inventory = _default_scorecards_list(
+            {"limit": scorecard_limit, "_include_scores": True}
+        )
+        prefetched_scorecards_by_id = {
+            str(card.get("id")): card
+            for card in inventory
+            if isinstance(card, dict) and card.get("id")
+        }
+        raw_scorecards = [
+            card.get("id") or card.get("name")
+            for card in inventory
+            if isinstance(card, dict) and (card.get("name") or card.get("id"))
+        ]
+        portfolio_selection_rule = f"first {scorecard_limit} scorecards returned"
+
+    if raw_scorecards is not None:
+        from concurrent.futures import ThreadPoolExecutor
+        from plexus.cli.shared.client_utils import create_client
+
+        if not isinstance(raw_scorecards, (list, tuple)):
+            raise ValueError(
+                "plexus.feedback.alignment_batch scorecards must be a list"
+            )
+        scorecard_identifiers = [
+            str(identifier).strip()
+            for identifier in raw_scorecards
+            if str(identifier).strip()
+        ]
+        if not scorecard_identifiers and portfolio_selection_rule is not None:
+            return {
+                "days": int(float(args.get("days", 7))),
+                "selection_rule": portfolio_selection_rule,
+                "scorecards_requested": 0,
+                "scorecards_analyzed": 0,
+                "scorecards": [],
+            }
+        if not scorecard_identifiers:
+            raise ValueError(
+                "plexus.feedback.alignment_batch scorecards must not be empty"
+            )
+        if len(scorecard_identifiers) > 5:
+            raise ValueError(
+                "plexus.feedback.alignment_batch accepts at most 5 scorecards"
+            )
+
+        single_args = dict(args)
+        for key in (
+            "scorecards",
+            "scorecard",
+            "scorecard_name",
+            "scorecard_id",
+            "scorecard_limit",
+        ):
+            single_args.pop(key, None)
+
+        portfolio_client = create_client()
+        if not portfolio_client:
+            raise RuntimeError(
+                "plexus.feedback.alignment_batch: could not create dashboard client"
+            )
+        portfolio_account_id = _resolve_runtime_account_id(
+            portfolio_client,
+            args,
+            "plexus.feedback.alignment_batch",
+        )
+        portfolio_feedback_items = _load_feedback_alignment_window(
+            portfolio_client,
+            account_id=portfolio_account_id,
+            days=int(float(args.get("days", 7))),
+        )
+
+        def analyze_scorecard(identifier: str) -> dict[str, Any]:
+            try:
+                return _default_feedback_alignment_batch(
+                    {**single_args, "scorecard": identifier},
+                    _prefetched_feedback_items=portfolio_feedback_items,
+                    _prefetched_account_id=portfolio_account_id,
+                    _prefetched_scorecard_data=prefetched_scorecards_by_id.get(identifier),
+                )
+            except Exception as exc:
+                return {
+                    "scorecard_name": identifier,
+                    "error": str(exc),
+                }
+
+        # scorecard_limit carries the selected scorecards (including their
+        # score lists) into this branch, so its per-scorecard work is entirely
+        # local after the single feedback-window read.  Avoid thread startup
+        # and scheduling overhead on that latency-critical path.  Explicit
+        # named scorecard lists still use bounded parallel reads below.
+        if portfolio_selection_rule is not None:
+            scorecard_results = [
+                analyze_scorecard(identifier) for identifier in scorecard_identifiers
+            ]
+        else:
+            with ThreadPoolExecutor(max_workers=len(scorecard_identifiers)) as executor:
+                scorecard_results = list(
+                    executor.map(analyze_scorecard, scorecard_identifiers)
+                )
+        result = {
+            "days": int(float(args.get("days", 7))),
+            "scorecards_requested": len(scorecard_identifiers),
+            "scorecards_analyzed": len(scorecard_results),
+            "scorecards": scorecard_results,
+        }
+        if portfolio_selection_rule is not None:
+            result["selection_rule"] = portfolio_selection_rule
+        return result
+
     from plexus.cli.feedback.feedback_service import FeedbackService
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.memoized_resolvers import (
         memoized_resolve_scorecard_identifier,
     )
 
-    scorecard_name = args.get("scorecard_name") or args.get("scorecard")
+    scorecard_name = (
+        args.get("scorecard_name")
+        or args.get("scorecard")
+        or args.get("scorecard_id")
+    )
     if not scorecard_name:
         raise ValueError("plexus.feedback.alignment_batch requires scorecard")
 
@@ -2062,32 +2317,51 @@ def _default_feedback_alignment_batch(args: dict[str, Any]) -> dict[str, Any]:
     include_scores = args.get("include_scores")
     exclude_scores = args.get("exclude_scores", [])
 
-    client = create_client()
-    if not client:
-        raise RuntimeError("plexus.feedback.alignment_batch: could not create dashboard client")
+    client = None
+    if _prefetched_scorecard_data is not None:
+        data = _prefetched_scorecard_data
+        scorecard_id = str(data.get("id") or "").strip()
+        if not scorecard_id:
+            raise ValueError(
+                "plexus.feedback.alignment_batch prefetched scorecard data has no id"
+            )
+        account_id = _prefetched_account_id
+        if not account_id:
+            raise ValueError(
+                "plexus.feedback.alignment_batch prefetched scorecard data has no account"
+            )
+        scorecard_name = data.get("name") or scorecard_name
+    else:
+        client = create_client()
+        if not client:
+            raise RuntimeError("plexus.feedback.alignment_batch: could not create dashboard client")
 
-    account_id = _resolve_runtime_account_id(client, args, "plexus.feedback.alignment_batch")
-    scorecard_id = memoized_resolve_scorecard_identifier(client, str(scorecard_name))
-    if not scorecard_id:
-        raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found")
-
-    # Get all scores via the same GraphQL query pattern used by scorecards.info
-    import json as _json
-    query = (
-        "query GetScorecard { "
-        f'getScorecard(id: "{scorecard_id}") {{ '
-        "id name sections { items { scores { items { id name } } } } "
-        "} }"
-    )
-    response = client.execute(query)
-    if "errors" in response:
-        raise RuntimeError(
-            "plexus.feedback.alignment_batch dashboard error: "
-            + _json.dumps(response["errors"])
+        account_id = _prefetched_account_id or _resolve_runtime_account_id(
+            client,
+            args,
+            "plexus.feedback.alignment_batch",
         )
-    data = response.get("getScorecard")
-    if not data:
-        raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found after query")
+        scorecard_id = memoized_resolve_scorecard_identifier(client, str(scorecard_name))
+        if not scorecard_id:
+            raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found")
+
+        # Get all scores via the same GraphQL query pattern used by scorecards.info
+        import json as _json
+        query = (
+            "query GetScorecard { "
+            f'getScorecard(id: "{scorecard_id}") {{ '
+            "id name sections { items { scores { items { id name } } } } "
+            "} }"
+        )
+        response = client.execute(query)
+        if "errors" in response:
+            raise RuntimeError(
+                "plexus.feedback.alignment_batch dashboard error: "
+                + _json.dumps(response["errors"])
+            )
+        data = response.get("getScorecard")
+        if not data:
+            raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found after query")
 
     # Flatten scores from all sections
     all_scores = []
@@ -2112,53 +2386,85 @@ def _default_feedback_alignment_batch(args: dict[str, Any]) -> dict[str, Any]:
     if exclude_scores:
         all_scores = [s for s in all_scores if s["name"] not in exclude_scores]
 
-    # Run alignment analysis for each score
-    results = []
-    for score in all_scores:
-        score_name = score["name"]
-        score_id = score["id"]
+    prefetched_by_score: dict[str, list[Any]] | None = None
+    if _prefetched_feedback_items is not None:
+        from types import SimpleNamespace
 
-        try:
-            summary = _run_async_from_sync(
-                FeedbackService.summarize_feedback(
-                    client=client,
-                    scorecard_name=str(scorecard_name),
-                    score_name=score_name,
-                    scorecard_id=scorecard_id,
-                    score_id=score_id,
-                    account_id=account_id,
-                    days=days,
+        prefetched_by_score = {}
+        for item in _prefetched_feedback_items:
+            if item.get("scorecardId") != scorecard_id:
+                continue
+            item_score_id = str(item.get("scoreId") or "").strip()
+            if not item_score_id:
+                continue
+            prefetched_by_score.setdefault(item_score_id, []).append(
+                SimpleNamespace(
+                    initialAnswerValue=item.get("initialAnswerValue"),
+                    finalAnswerValue=item.get("finalAnswerValue"),
                 )
             )
-            summary_dict = FeedbackService.format_summary_result_as_dict(summary)
 
-            # Extract just the fields we need
-            analysis = summary_dict.get("analysis", {})
-            accuracy = analysis.get("accuracy")
+    async def analyze_scores() -> list[dict[str, Any] | None]:
+        semaphore = asyncio.Semaphore(FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY)
 
-            # Apply accuracy threshold filter if provided
-            if accuracy_threshold is not None and accuracy is not None:
-                if accuracy >= accuracy_threshold:
-                    continue
+        async def analyze_score(score: dict[str, str]) -> dict[str, Any] | None:
+            score_name = score["name"]
+            score_id = score["id"]
 
-            results.append({
-                "score_id": score_id,
-                "score_name": score_name,
-                "accuracy": accuracy,
-                "ac1": analysis.get("ac1"),
-                "total_items": analysis.get("total_items"),
-                "confusion_matrix": analysis.get("confusion_matrix"),
-                "precision": analysis.get("precision"),
-                "recall": analysis.get("recall"),
-                "warning": analysis.get("warning"),
-            })
-        except Exception as e:
-            # Include errors in results so caller knows which scores failed
-            results.append({
-                "score_id": score_id,
-                "score_name": score_name,
-                "error": str(e),
-            })
+            try:
+                if prefetched_by_score is not None:
+                    analysis = FeedbackService._analyze_feedback_items(
+                        prefetched_by_score.get(score_id, [])
+                    )
+                else:
+                    async with semaphore:
+                        summary = await FeedbackService.summarize_feedback(
+                            client=client,
+                            scorecard_name=str(scorecard_name),
+                            score_name=score_name,
+                            scorecard_id=scorecard_id,
+                            score_id=score_id,
+                            account_id=account_id,
+                            days=days,
+                        )
+                    summary_dict = FeedbackService.format_summary_result_as_dict(summary)
+                    analysis = summary_dict.get("analysis", {})
+                accuracy = analysis.get("accuracy")
+
+                if (
+                    accuracy_threshold is not None
+                    and accuracy is not None
+                    and accuracy >= accuracy_threshold
+                ):
+                    return None
+
+                return {
+                    "score_id": score_id,
+                    "score_name": score_name,
+                    "accuracy": accuracy,
+                    "ac1": analysis.get("ac1"),
+                    "total_items": analysis.get("total_items"),
+                    "confusion_matrix": analysis.get("confusion_matrix"),
+                    "precision": analysis.get("precision"),
+                    "recall": analysis.get("recall"),
+                    "warning": analysis.get("warning"),
+                }
+            except Exception as exc:
+                # Include errors in results so callers can distinguish a
+                # failed read from a score with no feedback.
+                return {
+                    "score_id": score_id,
+                    "score_name": score_name,
+                    "error": str(exc),
+                }
+
+        return await asyncio.gather(*(analyze_score(score) for score in all_scores))
+
+    results = [
+        result
+        for result in _run_async_from_sync(analyze_scores())
+        if result is not None
+    ]
 
     return {
         "scorecard_id": scorecard_id,
@@ -2189,7 +2495,11 @@ def _default_feedback_finder(args: dict[str, Any]) -> dict[str, Any]:
     if not scorecard_name or not score_name:
         raise ValueError("plexus.feedback.find requires scorecard_name and score_name")
 
-    days = int(args["days"]) if args.get("days") is not None else 7
+    # A feedback lookup without an explicit window is typically initiated by a
+    # conversational request for recent disagreements.  Seven days silently
+    # hides too much evidence for that workflow; callers can still request a
+    # narrower window explicitly.
+    days = int(args["days"]) if args.get("days") is not None else 30
     limit = int(args["limit"]) if args.get("limit") is not None else None
     offset = int(args["offset"]) if args.get("offset") is not None else None
     prioritize_edit_comments = bool(args.get("prioritize_edit_comments", True))
@@ -2558,6 +2868,25 @@ def _default_score_info(args: dict[str, Any]) -> dict[str, Any]:
                 "metadata": version_data.get("metadata"),
                 "isChampion": target_version_id == score.get("championVersionId"),
             }
+            parent_version_id = str(version_data.get("parentVersionId") or "").strip()
+            if parent_version_id:
+                response["previousVersionId"] = parent_version_id
+                response["previousVersionSource"] = "parent"
+            else:
+                version_ids = [str(version.get("id") or "").strip() for version in all_versions]
+                try:
+                    version_index = version_ids.index(target_version_id)
+                except ValueError:
+                    version_index = -1
+                chronological_predecessor = (
+                    version_ids[version_index + 1]
+                    if version_index >= 0 and version_index + 1 < len(version_ids)
+                    else ""
+                )
+                response["previousVersionId"] = chronological_predecessor or None
+                response["previousVersionSource"] = (
+                    "chronological" if chronological_predecessor else None
+                )
             response["isSpecificVersion"] = bool(
                 version_id and version_id != score.get("championVersionId")
             )
@@ -6333,6 +6662,12 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
     new_version_id: str | None = None
     if code or guidelines_provided:
         should_preserve_guidelines = bool(code) and not guidelines_provided and guidelines is None
+        # The deployed CreateScoreVersion schema requires a configuration even
+        # when the user changes only the written guidelines.  Preserve the
+        # parent configuration for that storage constraint without treating it
+        # as a user-requested code change in the result/diff.
+        should_preserve_configuration = guidelines_provided and not code
+        configuration_to_save = code
         changed_fields: list[str] = []
         if code:
             changed_fields.append("code")
@@ -6419,6 +6754,19 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
         if parent_version_id:
             parent_snapshot = _load_score_version_snapshot(parent_version_id)
 
+        if should_preserve_configuration:
+            preserved_configuration = parent_snapshot.get("configuration")
+            if not preserved_configuration:
+                return {
+                    "success": False,
+                    "error": "Unable to preserve configuration for guidelines-only score update",
+                    "error_code": "score_update_configuration_preservation_failed",
+                    "parent_version_id": parent_version_id,
+                }
+            configuration_to_save = preserved_configuration
+            result["configuration_preserved"] = True
+            result["configuration_source"] = "parent_version"
+
         version_mutation = """
         mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
             createScoreVersion(input: $input) { id createdAt }
@@ -6429,8 +6777,8 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
             "note": version_note,
             "isFeatured": "false",
         }
-        if code:
-            input_obj["configuration"] = code
+        if configuration_to_save:
+            input_obj["configuration"] = configuration_to_save
         if guidelines is not None:
             input_obj["guidelines"] = guidelines
         if parent_version_id:
@@ -6499,6 +6847,42 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
             )
             if diffs:
                 result["diffs"] = diffs
+
+            if guidelines_provided and not code:
+                # A guidelines-only candidate intentionally has no behavior
+                # change to smoke-test.  Still prove the safety invariant
+                # after persistence: the full candidate document remains
+                # syntactically valid and the stored configuration is exactly
+                # the parent configuration that the adapter preserved.
+                from plexus.guidelines.validator import validate_guidelines_content
+
+                persisted_guidelines = candidate_snapshot.get("guidelines") or ""
+                persisted_configuration = candidate_snapshot.get("configuration") or ""
+                expected_configuration = parent_snapshot.get("configuration") or ""
+                persisted_validation = validate_guidelines_content(
+                    persisted_guidelines
+                ).to_dict()
+                configuration_unchanged = (
+                    bool(expected_configuration)
+                    and persisted_configuration == expected_configuration
+                )
+                guidelines_persisted = persisted_guidelines == str(guidelines or "")
+                verification_passed = (
+                    bool(persisted_validation.get("is_valid"))
+                    and configuration_unchanged
+                    and guidelines_persisted
+                )
+                result["post_submit_test"] = {
+                    "status": "skipped",
+                    "reason": "guidelines_only_no_behavior_change",
+                }
+                result["post_submit_verification"] = {
+                    "status": "passed" if verification_passed else "failed",
+                    "kind": "guidelines_only_persistence",
+                    "guidelines_valid": bool(persisted_validation.get("is_valid")),
+                    "guidelines_persisted": guidelines_persisted,
+                    "configuration_unchanged": configuration_unchanged,
+                }
         except Exception as diff_error:  # noqa: BLE001
             logger.warning(
                 "Could not generate score.update diff payload for %s/%s: %s",
@@ -6506,6 +6890,16 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
                 score_id,
                 diff_error,
             )
+            if guidelines_provided and not code:
+                result["post_submit_test"] = {
+                    "status": "skipped",
+                    "reason": "guidelines_only_no_behavior_change",
+                }
+                result["post_submit_verification"] = {
+                    "status": "failed",
+                    "kind": "guidelines_only_persistence",
+                    "error": str(diff_error),
+                }
 
     result["message"] = (
         f"Score updated: version {new_version_id}" if new_version_id
@@ -6574,11 +6968,14 @@ def _score_edit_llm_schema() -> dict[str, Any]:
         "additionalProperties": False,
         "properties": {
             "code": {"type": "string"},
-            "guidelines": {"type": "string"},
+            # Responses strict JSON Schema requires every declared property in
+            # `required`.  Null preserves the existing guidelines when a code
+            # edit does not intentionally revise them.
+            "guidelines": {"type": ["string", "null"]},
             "note": {"type": "string"},
             "summary": {"type": "string"},
         },
-        "required": ["code", "note", "summary"],
+        "required": ["code", "guidelines", "note", "summary"],
     }
 
 
@@ -6840,7 +7237,11 @@ def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
                         ) from exc
 
                     post_submit_test = {"status": "passed", "result": smoke_result}
-                    if isinstance(smoke_result, dict) and smoke_result.get("success") is False:
+                    # `success` means the smoke-test runner completed.  A
+                    # completed run with `passed: false` still found a broken
+                    # or untestable candidate and must not be reported as a
+                    # successful post-submit verification.
+                    if not _score_edit_smoke_test_passed(smoke_result):
                         raise _ScoreEditAttemptError(
                             "score_edit_post_submit_test_failed",
                             "post_submit_test",
@@ -7289,6 +7690,19 @@ def _default_score_test(args: dict[str, Any]) -> dict[str, Any]:
             days=days,
         )
     )
+
+
+def _score_edit_smoke_test_passed(result: Any) -> bool:
+    """Return whether a post-save mechanical score test actually passed.
+
+    The test runner uses ``success`` for successful execution and ``passed``
+    for the score-version result. Older callers returned only ``success``;
+    preserve that contract while treating an explicit ``passed: false`` as a
+    failed verification.
+    """
+    if not isinstance(result, dict) or result.get("success") is not True:
+        return False
+    return result.get("passed") is not False
 
 
 def _default_feedback_latest_update(args: dict[str, Any]) -> dict[str, Any]:
@@ -8207,10 +8621,67 @@ class PlexusRuntimeModule:
             "rubric",
             "policy wording",
             "wording",
+            "written rule",
+            "written rules",
             "criteria document",
             "guidance text",
         )
         return any(marker in text for marker in explicit_guidelines_markers)
+
+    def _console_request_is_guidelines_only(self) -> bool:
+        text = self._console_user_request_text()
+        if not self._console_request_allows_guidelines_update():
+            return False
+        behavior_preserving_markers = (
+            "keep behavior",
+            "behavior stays",
+            "no behavior change",
+            "keep the current behavior",
+            "keep current behavior",
+            # Human requests commonly describe the score's observable outcome
+            # rather than calling it "behavior".  These phrases still mean
+            # the instruction must never enter the code-edit workflow.
+            "don't change how it scores",
+            "do not change how it scores",
+            "dont change how it scores",
+            "don't change scoring",
+            "do not change scoring",
+            "dont change scoring",
+            "scoring stays the same",
+            "scoring should stay the same",
+        )
+        return any(marker in text for marker in behavior_preserving_markers)
+
+    @staticmethod
+    def _score_edit_instruction_is_candidate_only(instruction: Any) -> bool:
+        """Return true for dispatch text that describes version status but no edit.
+
+        The Console model sometimes expands a human's bare "yes" into an edit
+        instruction that only says to save a non-champion candidate.  That is an
+        approval boundary, not a requested behavior/code change, and dispatching
+        it makes the score editor invent one.
+        """
+        if not isinstance(instruction, str):
+            return False
+        normalized = instruction.lower().strip()
+        if not normalized:
+            return True
+        status_phrases = (
+            "candidate-only",
+            "candidate only",
+            "do not change the champion",
+            "don't change the champion",
+            "do not change champion",
+            "don't change champion",
+            "do not promote",
+            "keep it non-champion",
+        )
+        if not any(phrase in normalized for phrase in status_phrases):
+            return False
+        for phrase in status_phrases:
+            normalized = normalized.replace(phrase, " ")
+        normalized = re.sub(r"[^a-z]+", " ", normalized).strip()
+        return normalized in {"", "make this score", "make it", "do it", "save it"}
 
     def _enforce_console_score_update_policy(self, parsed: dict[str, Any]) -> None:
         if not self._is_console_runtime():
@@ -8372,6 +8843,13 @@ class PlexusRuntimeModule:
                     self._append_console_audit_event(score_edit_audit_event)
                 return result
             if method == "edit":
+                if self._is_console_runtime() and self._console_request_is_guidelines_only():
+                    raise ConsoleScoreEditBlockedForGuidelinesOnly()
+                if (
+                    self._is_console_runtime()
+                    and self._score_edit_instruction_is_candidate_only(parsed.get("instruction"))
+                ):
+                    raise ConsoleScoreEditRequiresConcreteInstruction()
                 if not bool(parsed.get("async")):
                     self.handle_protocol_required = ("score", "edit")
                     raise RequiresHandleProtocol("score", "edit")
@@ -8973,6 +9451,7 @@ class PlexusRuntimeModule:
 
             task = Task.get_by_id(task_id, create_client())
         except Exception as exc:  # noqa: BLE001
+            logger.exception("Failed to refresh durable report task status task_id=%s", task_id)
             return {
                 "id": task_id,
                 "durable_id": task_id,

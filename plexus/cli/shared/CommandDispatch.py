@@ -188,8 +188,8 @@ def _list_pending_tasks_for_account(
 
         metadata = _normalize_metadata(task.get("metadata"))
         if metadata.get("dispatch_mode") == "console_async_worker":
-            # Console chat responses are dispatched from ChatMessage stream handling.
-            # Skip them in the generic dispatcher to avoid duplicate execution.
+            # Console chat responses are dispatched by the dedicated
+            # dispatchConsoleChat mutation, not by the generic task dispatcher.
             continue
 
         pending.append(task)

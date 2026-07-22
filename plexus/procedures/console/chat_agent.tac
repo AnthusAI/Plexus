@@ -1,545 +1,117 @@
 State.set("stage", "preparing")
 
-local fallback_prompt = "Hello. How can I help you today?"
-local latest_user_prompt = fallback_prompt
-local injected_user_prompt = nil
+local input_table = type(input) == "table" and input or {}
+local latest_user_prompt = tostring(input_table.console_user_message or input_table.user_message or input_table.prompt or "Hello. How can I help you today?")
+local history = type(input_table.console_session_history) == "table" and input_table.console_session_history or {}
+local tool_access_mode = tostring(input_table.console_tool_access_mode or input_table.tool_access_mode or "execution")
 
-if type(input) == "table" then
-  local candidate = input.console_user_message or input.user_message or input.prompt
-  if type(candidate) == "string" and candidate ~= "" then
-    injected_user_prompt = candidate
-    latest_user_prompt = candidate
-  end
-end
+local scorecard_id = tostring(input_table.console_scorecard_id or "")
+local score_id = tostring(input_table.console_score_id or "")
+local scorecard_name = tostring(input_table.console_scorecard_name or scorecard_id)
+local score_name = tostring(input_table.console_score_name or score_id)
+local selected_model = tostring(input_table.console_selected_model or "")
+local latest_candidate = tostring(input_table.console_latest_score_edit_version_id or "")
+local candidate_parent = tostring(input_table.console_latest_score_edit_parent_version_id or "")
+local candidate_smoke_status = tostring(input_table.console_latest_score_edit_smoke_status or "")
+local async_value = input_table.console_async_tasks_available
+local async_tasks_available = not (async_value == false or tostring(async_value or "") == "false" or tostring(async_value or "") == "0")
 
--- History comes from caller via console_session_history, then filtered by MessageHistory
-local history = {}
-if type(input) == "table" then
-  local provided_history = input.console_session_history
-  if type(provided_history) == "table" and #provided_history > 0 then
-    history = provided_history
-  end
-end
-
-local tool_access_mode = "execution"
-if type(input) == "table" then
-  local provided_mode = input.console_tool_access_mode or input.tool_access_mode
-  if type(provided_mode) == "string" and provided_mode ~= "" then
-    tool_access_mode = provided_mode
-  end
-end
-
--- Extract latest and previous user prompts for reference
-local previous_user_prompt = nil
-if #history > 0 then
-  local found_latest = false
-  for i = #history, 1, -1 do
-    local msg = history[i]
-    local role = string.upper(tostring((msg and msg.role) or ""))
-    local content = (msg and msg.content) or nil
-    if role == "USER" and type(content) == "string" and content ~= "" then
-      if not found_latest then
-        found_latest = true
-        if not injected_user_prompt then
-          latest_user_prompt = content
-        end
-      else
-        previous_user_prompt = content
-        break
-      end
-    end
-  end
-end
-
--- Apply token-budgeted history management using MessageHistory primitives
--- Target: 100K tokens for history (models have 128K+ windows; leave room for system prompt + response)
-local MAX_HISTORY_TOKENS = 100000
-MessageHistory.replace(history)
-local filtered_history = MessageHistory.tail_tokens(MAX_HISTORY_TOKENS)
-
--- Format filtered history for prompt context (preserving role structure)
+-- Keep context bounded without classifying human language in Lua. Durable
+-- score/scope state is structured above; recent turns only support pronouns
+-- and immediate follow-ups. Do not also load full history into agent memory.
+local first_history_index = math.max(1, #history - 5)
 local history_context = ""
-for i = 1, #filtered_history do
-  local msg = filtered_history[i]
-  local role = string.upper(tostring((msg and msg.role) or "UNKNOWN"))
-  local content = tostring((msg and msg.content) or "")
+for i = first_history_index, #history do
+  local message = history[i]
+  local content = tostring((message and message.content) or "")
   if content ~= "" then
-    history_context = history_context .. role .. ": " .. content .. "\n"
+    if #content > 500 then content = string.sub(content, 1, 500) .. "…" end
+    history_context = history_context .. string.upper(tostring((message and message.role) or "UNKNOWN")) .. ": " .. content .. "\n"
   end
 end
 
-local function _trim(value)
-  if type(value) ~= "string" then
-    return ""
-  end
-  return (value:gsub("^%s+", ""):gsub("%s+$", ""))
-end
-
-local number_words = {
-  zero = 0,
-  one = 1,
-  two = 2,
-  three = 3,
-  four = 4,
-  five = 5,
-  six = 6,
-  seven = 7,
-  eight = 8,
-  nine = 9,
-  ten = 10,
-  eleven = 11,
-  twelve = 12,
-  thirteen = 13,
-  fourteen = 14,
-  fifteen = 15,
-  sixteen = 16,
-  seventeen = 17,
-  eighteen = 18,
-  nineteen = 19,
-  twenty = 20,
-}
-
-local function parse_number_token(raw_token)
-  if raw_token == nil then
-    return nil
-  end
-  local token = string.lower(_trim(tostring(raw_token)))
-  if token == "" then
-    return nil
-  end
-  local numeric = tonumber(token)
-  if numeric ~= nil then
-    return numeric
-  end
-  token = token:gsub("[^%a%-]", "")
-  return number_words[token]
-end
-
-local function format_number(value)
-  if type(value) ~= "number" then
-    return tostring(value)
-  end
-  if math.floor(value) == value then
-    return tostring(math.floor(value))
-  end
-  return tostring(value)
-end
-
-local function find_last_numeric_reference()
-  for i = #history, 1, -1 do
-    local msg = history[i]
-    local content = (msg and msg.content) or nil
-    if type(content) == "string" and content ~= "" then
-      local last_match = nil
-      for numeric_token in string.gmatch(content, "[-+]?%d+%.?%d*") do
-        local parsed = tonumber(numeric_token)
-        if parsed ~= nil then
-          last_match = parsed
-        end
-      end
-      if last_match ~= nil then
-        return last_match
-      end
-    end
-  end
-  return nil
-end
-
-local function normalized_choice_text(value)
-  local text = string.lower(_trim(tostring(value or "")))
-  text = text:gsub("^use%s+", "")
-  text = text:gsub("^choose%s+", "")
-  text = text:gsub("^select%s+", "")
-  text = text:gsub("^the%s+", "")
-  text = text:gsub("%s+score$", "")
-  text = text:gsub("[%.,;:!?]+$", "")
-  text = _trim(text)
-  return text
-end
-
-local function find_pending_score_disambiguation()
-  for i = #history, 1, -1 do
-    local msg = history[i]
-    local role = string.upper(tostring((msg and msg.role) or ""))
-    local content = (msg and msg.content) or nil
-    if role == "ASSISTANT"
-      and type(content) == "string"
-      and string.find(content, "matching scores", 1, true)
-      and string.find(content, "Which one", 1, true) then
-      local scorecard = string.match(content, "on%s+%*%*(.-)%*%*")
-      local candidates = {}
-      for candidate in string.gmatch(content, "%-%s+%*%*(.-)%*%*") do
-        table.insert(candidates, _trim(candidate))
-      end
-      if #candidates > 0 then
-        local pending_user_request = nil
-        for j = i - 1, 1, -1 do
-          local prior = history[j]
-          local prior_role = string.upper(tostring((prior and prior.role) or ""))
-          local prior_content = (prior and prior.content) or nil
-          if prior_role == "USER" and type(prior_content) == "string" and prior_content ~= "" then
-            pending_user_request = prior_content
-            break
-          end
-        end
-        return {
-          scorecard = scorecard,
-          candidates = candidates,
-          pending_user_request = pending_user_request,
-        }
-      end
-    end
-  end
-  return nil
-end
-
-local function resolve_pending_score_choice(pending, latest)
-  if pending == nil or type(pending.candidates) ~= "table" then
-    return nil, nil
-  end
-
-  local lower_latest = string.lower(latest or "")
-  local ordinal = nil
-  if string.find(lower_latest, "first", 1, true) or string.find(lower_latest, "1st", 1, true) then
-    ordinal = 1
-  elseif string.find(lower_latest, "second", 1, true) or string.find(lower_latest, "2nd", 1, true) then
-    ordinal = 2
-  elseif string.find(lower_latest, "third", 1, true) or string.find(lower_latest, "3rd", 1, true) then
-    ordinal = 3
-  end
-  if ordinal ~= nil and pending.candidates[ordinal] ~= nil then
-    return pending.candidates[ordinal], nil
-  end
-
-  local normalized_latest = normalized_choice_text(latest)
-  local exact_matches = {}
-  for _, candidate in ipairs(pending.candidates) do
-    if normalized_choice_text(candidate) == normalized_latest then
-      table.insert(exact_matches, candidate)
-    end
-  end
-  if #exact_matches == 1 then
-    return exact_matches[1], nil
-  elseif #exact_matches > 1 then
-    return nil, "I still need one exact score name from the list before I can apply the change."
-  end
-
-  if string.find(lower_latest, "without confidence", 1, true) then
-    local matches = {}
-    for _, candidate in ipairs(pending.candidates) do
-      if not string.find(string.lower(candidate), "confidence", 1, true) then
-        table.insert(matches, candidate)
-      end
-    end
-    if #matches == 1 then
-      return matches[1], nil
-    end
-  elseif string.find(lower_latest, "with confidence", 1, true) then
-    local matches = {}
-    for _, candidate in ipairs(pending.candidates) do
-      if string.find(string.lower(candidate), "confidence", 1, true) then
-        table.insert(matches, candidate)
-      end
-    end
-    if #matches == 1 then
-      return matches[1], nil
-    end
-  end
-
-  return nil, nil
-end
-
-local deterministic_response = nil
-do
-  local lower_latest = string.lower(latest_user_prompt or "")
-  local multiplier_token = (
-    string.match(lower_latest, "multiply%s+.-%s+by%s+([%w%.-]+)")
-    or string.match(lower_latest, "times%s+([%w%.-]+)")
-  )
-  local multiplier = parse_number_token(multiplier_token)
-  local explicit_left_token = string.match(lower_latest, "multiply%s+([%w%.-]+)%s+by%s+[%w%.-]+")
-  local explicit_left = parse_number_token(explicit_left_token)
-  local has_reference = (
-    string.find(lower_latest, " that ", 1, true)
-    or string.find(lower_latest, "that?", 1, true)
-    or string.find(lower_latest, "that.", 1, true)
-    or string.find(lower_latest, " it ", 1, true)
-    or string.find(lower_latest, "it?", 1, true)
-    or string.find(lower_latest, "it.", 1, true)
-  ) ~= nil
-
-  if multiplier ~= nil then
-    if explicit_left ~= nil then
-      local computed = explicit_left * multiplier
-      deterministic_response = (
-        format_number(explicit_left)
-        .. " multiplied by "
-        .. format_number(multiplier)
-        .. " is "
-        .. format_number(computed)
-        .. "."
-      )
-    elseif has_reference then
-      local base_number = find_last_numeric_reference()
-      if base_number ~= nil then
-        local computed = base_number * multiplier
-        deterministic_response = (
-          format_number(base_number)
-          .. " multiplied by "
-          .. format_number(multiplier)
-          .. " is "
-          .. format_number(computed)
-          .. "."
-        )
-      end
-    end
-  end
-end
-
-local disambiguation_context = ""
-do
-  local pending = find_pending_score_disambiguation()
-  local selected_score, selection_error = resolve_pending_score_choice(pending, latest_user_prompt)
-  if selection_error ~= nil then
-    deterministic_response = deterministic_response or selection_error
-  elseif selected_score ~= nil and pending ~= nil then
-    disambiguation_context =
-      "Resolved follow-up target selection:\n" ..
-      "- The latest user message is a response to your prior score disambiguation question.\n" ..
-      "- Continue the pending user request; do not ask the same disambiguation question again.\n" ..
-      "- Use scorecard_identifier exactly: " .. tostring(pending.scorecard or "") .. "\n" ..
-      "- Use score_identifier exactly: " .. tostring(selected_score) .. "\n" ..
-      "- Pending user request to complete:\n" .. tostring(pending.pending_user_request or "") .. "\n\n"
+local scope_mode = "portfolio_read_only"
+local scope = "No scorecard is selected."
+if scorecard_id ~= "" then
+  scope_mode = "scorecard"
+  scope = "Selected scorecard: " .. scorecard_name .. " (id: " .. scorecard_id .. ")."
+  if score_id ~= "" then
+    scope_mode = "score"
+    scope = scope .. " Selected score: " .. score_name .. " (id: " .. score_id .. ")."
   end
 end
 
 State.set("stage", "responding")
+local assistant_prompt = "You are the Plexus Console assistant. Interpret the user's natural language yourself; do not expect deterministic phrase routing.\n\n" ..
+  "Structured execution context (authoritative):\n" ..
+  "- Read scope mode: " .. scope_mode .. ".\n" ..
+  "- " .. scope .. "\n" ..
+  "- Tool access mode: " .. tool_access_mode .. "\n" ..
+  "- Selected model: " .. selected_model .. "\n" ..
+  "- Async tasks available: " .. tostring(async_tasks_available) .. "\n" ..
+  "- Latest candidate version: " .. latest_candidate .. "; parent champion: " .. candidate_parent .. "; smoke status: " .. candidate_smoke_status .. "\n\n" ..
+  "Scope policy: score mode means work within the selected score. Scorecard mode permits read-only ranking and research within that scorecard; ask before selecting a score for any mutation. Portfolio_read_only mode permits read-only cross-scorecard research only when the user clearly asks to compare, rank, find, investigate, or report across scorecards. Keep every such read within the active account; never infer a client or search outside that boundary. The selected structured scope overrides conversational carryover: when a score or scorecard is selected, do not use a score, scorecard, or example from prior conversation unless it matches that selected scope. For an ambiguous unscoped request that asks to fix, change, evaluate, or promote, ask for scope instead of searching broadly.\n\n" ..
+  "Scorecard triage evidence rule: when the user asks which rule or score is off, weak, problematic, or worth looking at first, treat that as a feedback-alignment prioritization request. In scorecard mode, first use `plexus.feedback.alignment_batch` for the selected scorecard and rank returned scores using their actual alignment metrics, disagreement volume, and sufficient-data status. Do not rank a score from configuration shape, prompt rigidity, or generic intuition. If the batch has insufficient feedback to support a ranking, say so plainly; offer a separately labeled configuration review rather than presenting configuration observations as evidence of poor alignment.\n\n" ..
+  "Portfolio research workflow: make one bounded call to `plexus.feedback.alignment_batch({ scorecard_limit = 5, days = 30 })`. The tool selects the first five account-scoped scorecards and returns their names and selection rule, so do not inventory scorecards separately. When the user names a subset, call `plexus.feedback.alignment_batch({ scorecards = { \"Name A\", \"Name B\" }, days = 30 })` once instead. Do not make one sequential alignment call per scorecard, and never invent a `plexus.scorecard.alignment_batch` namespace. Rank the returned score metrics across the bounded set. State the coverage, selection rule, and lookback window; call it a sample unless every in-scope scorecard was analyzed. Rank only scorecards/scores with sufficient feedback volume, and list insufficient-data scorecards separately as unranked. Do not use docs lookup as a fallback for this workflow. Do not mutate, create evaluations, or run reports for portfolio research unless separately approved.\n\n" ..
+  "For a clear but unqualified account-wide research request, do not ask the user to select all versus a subset before doing the permitted read-only work. After listing scorecards, choose a small deterministic sample (for example, the first five returned scorecards), run the bounded batches, and disclose the exact selection rule, coverage, and that it is a sample. Ask for a subset only when the request itself is ambiguous or asks to mutate.\n\n" ..
+  "If the immediately preceding assistant turn offered a read-only portfolio review and the user accepts it (including terse replies such as 'yes', 'do it', or 'go ahead'), execute the full bounded review in this turn and return the findings. Do not merely repeat the plan or say what you will do next.\n\n" ..
+  "If a prior portfolio result already named a worst scorecard and a specific worst score, and the user accepts the offered deep-dive, carry those exact names forward. Read that score's current configuration and a bounded set of its feedback examples; do not re-run a scorecard-wide alignment batch or another portfolio scan merely to identify the same target.\n\n" ..
+  "Likewise, if a scorecard triage offered examples for a named score and the user accepts that offer with a short reply such as 'yes', 'show that', or 'show me those', carry the exact named score into bounded `plexus.feedback.find` reads. Do not rerun scorecard-wide alignment merely to repeat the triage or rediscover the offered target.\n\n" ..
+  "When the immediately relevant prior result names multiple named scores and the user accepts or refers to them collectively (for example, 'those', 'both', or 'show them'), preserve every explicitly named target. Complete the bounded read-only request for each target when it is feasible; do not silently choose only the first. If the requested work would be materially too large, say which targets you can cover in this turn and ask the user which to prioritize instead.\n\n" ..
+  "Feedback direction integrity: in `plexus.feedback.find`, initial_value is the model's original value and final_value is the reviewer's value. When a preceding triage says the model predicted X while feedback/review says Y, preserve that exact direction as initial_value=X and final_value=Y. Do not reverse it, and do not label a direction as false-positive or false-negative unless the returned values support that label.\n\n" ..
+  "For a causal diagnostic for a selected score (for example, 'why is it missing these?' or 'why is it getting this wrong?'), read the current score configuration with `plexus.score.info` and bounded reviewed disagreement examples before attributing the behavior to a rule, threshold, or wording. Alignment metrics alone establish that there is disagreement, not why it occurs; if configuration or examples are unavailable, say that cause is not yet established.\n\n" ..
+  "A user's assertion that a score is too strict or too lenient is a hypothesis, not evidence. Do not agree with it or recommend a direction of change until you have read the selected score's current configuration and relevant reviewed feedback examples in this conversation. For a selected-score strictness/leniency diagnosis, you must obtain both a current `plexus.score.info` result and reviewed disagreement examples through `plexus.feedback.find` before reaching that conclusion; when the direction is unknown, check both reviewed flip directions or state that the evidence is insufficient. If authoring is unavailable, explain that boundary first, then offer a bounded read-only diagnosis; if the user declines or evidence is unavailable, say what cannot yet be concluded instead of guessing.\n\n" ..
+  "Version comparison integrity: never infer a diff from one version or conversational memory. In a champion `plexus.score.info` response, `versionDetails.parentVersionId` is the direct immediate predecessor. For a selected score request to compare with the previous version, read the champion info, take `versionDetails.parentVersionId`, then call `plexus.score.info` again with that version ID and read both concrete endpoints before describing changes. Do not stop after the champion configuration. Ask the user for a version identifier only when `versionDetails.parentVersionId` is empty.\n\n" ..
+  "Hard constraints: do not claim a diff without reading both comparison endpoints; do not create, evaluate, or promote anything without explicit approval; never promote a candidate with failed validation; if the user asks to ship or promote but no candidate exists, say plainly that there is nothing to promote and offer to draft or create a candidate first; and do not dispatch async work when async tasks are unavailable. Explain capability limits plainly.\n\n" ..
+  "Async-report fallback: when the user asks for a report and async tasks are unavailable, say plainly that this sandbox cannot run an asynchronous report. Do this before any tool call: do not call report tools, report catalogs, or docs lookup to diagnose the already-authoritative capability state. You may then offer or provide an immediate read-only alignment snapshot when it answers the underlying question, but label it as a snapshot rather than a report.\n\n" ..
+  "Unavailable-authoring fallback: when async tasks are unavailable, this sandbox also cannot safely create or validate score candidates. For a request to tighten, loosen, edit, change, draft for saving, evaluate, or promote a score, explain that limitation before any tool call; do not create a candidate/version or call score-editing tools. You may offer a read-only configuration review or a proposed change for later execution, but do not imply that any version was saved or tested.\n\n" ..
+  "Use execute_tactus for Plexus reads and actions. Ground conclusions in tool results and recent evidence. When the user requests examples, state the exact available count rather than implying the requested count exists; never call one record a couple. For a generic request for reviewed wrong examples, check both reviewed flip directions before saying none exist, then state the combined count; use a single direction only when the user explicitly specifies it. Highest-priority missing-input rule: if the user asks to grade, score, or assess a call but provides no transcript, item ID, or call reference, answer immediately by asking for one; make zero tool calls for that turn. For a proposed guideline or configuration change, each proposed policy change must be traceable to the evidence or current configuration you read in this conversation; omit unrelated policy topics instead of broadening the recommendation. Ask one concise question only when a necessary target or comparison endpoint is genuinely ambiguous.\n\n" ..
+  "Final evidence check before responding: If this turn did not retrieve reviewed feedback, do not call the score strict or lenient, do not say a proposed change is safest, and do not recommend a direction of change. Say that configuration alone does not establish alignment behavior and offer to retrieve the reviewed examples.\n\n" ..
+  "Latest user message:\n" .. latest_user_prompt .. "\n\nRecent conversation:\n" .. history_context .. "\nRespond now."
 
-local assistant_prompt = "You are the Plexus Console assistant in an ongoing engineering chat.\n" ..
-                         "Use prior turns for continuity and respond concisely with concrete help.\n" ..
-                         "Ask one short clarifying question only if context is insufficient.\n\n" ..
-                         "Current tool access mode: " .. tool_access_mode .. "\n" ..
-                         "In planning mode, inspect existing data and procedure runs, run safe analysis, and propose exact next actions. " ..
-                         "Planning blocks significant mutations: score version changes, champion promotion, and starting/continuing/branching/optimizing procedures.\n\n" ..
-                         "Latest user message:\n" .. latest_user_prompt .. "\n\n" ..
-                         "Previous user message before latest (if any):\n" .. (previous_user_prompt or "") .. "\n\n" ..
-                         "Recent conversation context (oldest to newest):\n" .. history_context .. "\n\n" ..
-                         disambiguation_context ..
-                         "Respond to the latest user message now."
+-- Keep the runtime payload short.  The detailed policy text above remains in
+-- source for compatibility while the model receives this focused contract.
+assistant_prompt = "You are Plexus Console. Respond concisely in plain language. " ..
+  "Use execute_tactus for current Plexus facts; never invent data.\n\n" ..
+  "Authoritative context:\n- scope mode: " .. scope_mode .. "\n- " .. scope ..
+  "\n- access mode: " .. tool_access_mode ..
+  "\n- async tasks available: " .. tostring(async_tasks_available) .. "\n\n" ..
+  "Safety: selected scope overrides stale chat targets; no write, evaluation, or promotion without explicit approval; " ..
+  "do not claim a score is strict/lenient or recommend a direction without current configuration and reviewed feedback evidence. " ..
+  "When evidence is missing, say so and offer the focused read. For scorecard triage, use alignment_batch; " ..
+  "for examples use feedback.find; for causal claims read score.info and examples.\n\n" ..
+  "Research routing: an unscoped vague request such as 'what has been weird lately' or 'what should I do first' " ..
+  "must not call evaluation.find_recent with only count; that tool requires a concrete score version and evaluation type " ..
+  "and is heavyweight. Ask for a scorecard or score when the request is ambiguous. If the user clearly asks for " ..
+  "account-wide research, call plexus.feedback.alignment_batch({ scorecard_limit = 5, days = 30 }) once and " ..
+  "disclose the returned sample, selection rule, and coverage. The tool selects the first five account-scoped scorecards, " ..
+  "so do not inventory scorecards separately and do not ask the user to choose a subset. " ..
+  "For a user-named subset, call plexus.feedback.alignment_batch({ scorecards = { \"Name A\", \"Name B\" }, days = 30 }) once. " ..
+  "Never call plexus.scorecard.alignment_batch; do not make one sequential batch call per scorecard. " ..
+  "Do not ask whether the user wants you to continue; that would be an incorrect refusal of " ..
+  "an already-authorized read-only request. Label the result as a sample. Never use evaluation.find_recent for " ..
+  "portfolio triage.\n\n" ..
+  "Latest user message:\n" .. latest_user_prompt .. "\n\nRecent conversation:\n" .. history_context
 
 local function extract_text(value)
-  if type(value) == "string" and value ~= "" then
-    return value
-  end
-  -- Handle both Lua tables AND Lupa-wrapped Python objects (type == "userdata")
+  if type(value) == "string" and value ~= "" then return value end
   if type(value) == "table" or type(value) == "userdata" then
-    for _, key in ipairs({"response", "content", "message", "text"}) do
-      local ok, attr = pcall(function() return value[key] end)
-      if ok and type(attr) == "string" and attr ~= "" then
-        return attr
-      end
-    end
-    -- Indexed first element
-    local ok_first, first = pcall(function() return value[1] end)
-    if ok_first and type(first) == "string" and first ~= "" then
-      return first
-    end
-    if ok_first and (type(first) == "table" or type(first) == "userdata") then
-      for _, key in ipairs({"text", "content"}) do
-        local ok2, attr2 = pcall(function() return first[key] end)
-        if ok2 and type(attr2) == "string" and attr2 ~= "" then
-          return attr2
-        end
-      end
+    for _, key in ipairs({"response", "content", "message", "text", "output"}) do
+      local ok, candidate = pcall(function() return value[key] end)
+      if ok and type(candidate) == "string" and candidate ~= "" then return candidate end
     end
   end
   return ""
 end
 
-local function looks_like_uuid(value)
-  if type(value) ~= "string" then
-    return false
-  end
-  local trimmed = _trim(value)
-  if trimmed == "" then
-    return false
-  end
-  return string.match(trimmed, "^[0-9a-fA-F]{8}%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") ~= nil
+local result = assistant({ message = assistant_prompt })
+local response = extract_text(result)
+if response == "" then
+  local ok, output = pcall(function() return assistant.output end)
+  if ok then response = extract_text(output) end
 end
 
-local function contains_score_link(value)
-  if type(value) ~= "string" then
-    return false
-  end
-  local lowered = string.lower(value)
-  return string.find(lowered, "/scorecards/", 1, true) ~= nil
-    and string.find(lowered, "/scores/", 1, true) ~= nil
-end
-
-local function extract_score_target_key(value)
-  if type(value) ~= "string" then
-    return nil
-  end
-
-  local lowered = string.lower(value)
-  local scorecard_id, score_id = string.match(lowered, "/scorecards/([0-9a-f%-]+)/scores/([0-9a-f%-]+)")
-  if scorecard_id ~= nil and score_id ~= nil and looks_like_uuid(scorecard_id) and looks_like_uuid(score_id) then
-    return string.lower(scorecard_id) .. "|" .. string.lower(score_id)
-  end
-
-  scorecard_id = (
-    string.match(lowered, "scorecard%s+id%s*:%s*([0-9a-f%-]+)")
-    or string.match(lowered, "scorecard_id%s*[:=]%s*([0-9a-f%-]+)")
-  )
-  score_id = (
-    string.match(lowered, "score%s+id%s*:%s*([0-9a-f%-]+)")
-    or string.match(lowered, "score_id%s*[:=]%s*([0-9a-f%-]+)")
-  )
-  if scorecard_id ~= nil and score_id ~= nil and looks_like_uuid(scorecard_id) and looks_like_uuid(score_id) then
-    return string.lower(scorecard_id) .. "|" .. string.lower(score_id)
-  end
-
-  local uuids = {}
-  for token in string.gmatch(value, "[0-9a-fA-F%-]+") do
-    if looks_like_uuid(token) then
-      table.insert(uuids, string.lower(_trim(token)))
-    end
-  end
-
-  if #uuids >= 2 then
-    return uuids[1] .. "|" .. uuids[2]
-  end
-
-  return nil
-end
-
-local function has_explicit_score_target(value)
-  return extract_score_target_key(value) ~= nil
-end
-
-local function contains_standalone_phrase(value, phrase)
-  if type(value) ~= "string" or type(phrase) ~= "string" or phrase == "" then
-    return false
-  end
-
-  local start_at = 1
-  while true do
-    local first, last = string.find(value, phrase, start_at, true)
-    if first == nil then
-      return false
-    end
-
-    local before = first > 1 and string.sub(value, first - 1, first - 1) or ""
-    local after = string.sub(value, last + 1, last + 1)
-    local before_is_word = before ~= "" and string.match(before, "[%w_]") ~= nil
-    local after_is_word = after ~= "" and string.match(after, "[%w_]") ~= nil
-    if not before_is_word and not after_is_word then
-      return true
-    end
-
-    start_at = last + 1
-  end
-end
-
-local function collect_active_score_targets()
-  local seen = {}
-  local ordered = {}
-
-  local function remember(value)
-    local key = extract_score_target_key(value)
-    if key ~= nil and seen[key] == nil then
-      seen[key] = true
-      table.insert(ordered, key)
-    end
-  end
-
-  remember(latest_user_prompt)
-  for i = #history, 1, -1 do
-    local msg = history[i]
-    local content = (msg and msg.content) or nil
-    remember(content)
-  end
-
-  return ordered
-end
-
-if deterministic_response == nil then
-  local lower_latest = string.lower(latest_user_prompt or "")
-  local has_deictic_score_ref = (
-    contains_standalone_phrase(lower_latest, "this score")
-    or contains_standalone_phrase(lower_latest, "that score")
-    or contains_standalone_phrase(lower_latest, "same score")
-  )
-  local explicit_target_key = extract_score_target_key(latest_user_prompt)
-  local active_targets = collect_active_score_targets()
-  local active_target_count = #active_targets
-
-  if has_deictic_score_ref and explicit_target_key == nil then
-    if active_target_count == 0 then
-      deterministic_response = "I can do that, but I need the exact target first. Please share the scorecard and score (name or link), and I’ll apply the change."
-    elseif active_target_count > 1 then
-      deterministic_response = "I can do that, but this chat has more than one possible score target. Please share the exact scorecard and score (name or link), and I’ll apply the change."
-    end
-  end
-end
-
-local assistant_result = nil
-if deterministic_response ~= nil and deterministic_response ~= "" then
-  assistant_result = { response = deterministic_response }
-else
-  assistant_result = assistant({ message = assistant_prompt })
-end
-
-local final_response = ""
-
-final_response = extract_text(assistant_result)
-
--- Fallback: read TactusResult.output (may be string or structured table/userdata)
-if final_response == "" then
-  local ok_res, res_output = pcall(function() return assistant_result.output end)
-  if ok_res and res_output ~= nil then
-    final_response = extract_text(res_output)
-  end
-end
-
--- Fallback: assistant.output set by Tactus after the call — filter out Python repr garbage
-if final_response == "" then
-  local ok_out, out_val = pcall(function() return assistant.output end)
-  if ok_out and type(out_val) == "string" and out_val ~= ""
-    and not string.find(out_val, "UsageStats", 1, true)
-    and not string.find(out_val, "output=None", 1, true) then
-    final_response = out_val
-  end
-end
-
-if final_response == "" then
-  for _, key in ipairs({ "response", "content", "message", "text", "output" }) do
-    local ok_attr, attr_value = pcall(function()
-      return assistant_result[key]
-    end)
-    if ok_attr then
-      local attr_text = extract_text(attr_value)
-      if attr_text ~= "" then
-        final_response = attr_text
-        break
-      end
-    end
-  end
-end
-
-if looks_like_uuid(final_response) then
-  final_response = "Completed, but the assistant returned only a version identifier (" .. final_response .. "). I will include a clear human-readable summary next time."
-end
-
-if final_response == "" then
-  final_response = "I can help with that. Could you clarify what you want me to do next?"
-end
+if response == "" then response = "I can help with that. Could you clarify what you want me to do next?" end
 
 State.set("stage", "complete")
-
-return {
-  success = final_response ~= "",
-  response = final_response,
-  prompt_used = latest_user_prompt,
-  iterations = Iterations.current()
-}
+return { success = response ~= "", response = response, prompt_used = latest_user_prompt, iterations = Iterations.current() }

@@ -9,6 +9,16 @@ import yaml
 
 CONSOLE_CHAT_BUILTIN_ID = "builtin:console/chat"
 
+# Per-turn scope and the current request are assembled in chat_agent.tac.
+# Keep the always-on prompt compact; duplicating the operational manual here
+# materially delays the first token in an interactive conversation.
+CONSOLE_CHAT_RUNTIME_SYSTEM_PROMPT = """You are Plexus Console, an interactive assistant for scorecard work.
+Use execute_tactus for current Plexus facts; never invent data. Interpret natural language yourself.
+The structured scorecard/score scope supplied with the turn is authoritative over stale conversation context.
+Do not create or promote score versions, run evaluations, or make other mutations without explicit approval.
+Do not conclude that a score is strict or lenient, or recommend a direction of change, without current configuration and reviewed feedback evidence.
+Keep replies concise, concrete, and in plain Plexus language."""
+
 
 @dataclass(frozen=True)
 class BuiltinProcedureSpec:
@@ -23,10 +33,12 @@ def _procedures_root() -> Path:
     return Path(__file__).resolve().parents[2] / "procedures"
 
 
-def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
-    return {
+def _build_console_chat_config(
+    tac_source: str, *, include_policy_contract: bool = False
+) -> Dict[str, Any]:
+    config = {
         "name": "Console Chat Agent",
-        "version": "1.6.20",
+        "version": "1.6.21",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -55,6 +67,37 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                 "default": "execution",
                 "description": "Console tool access mode for this turn: execution or planning.",
             },
+            "console_scorecard_id": {
+                "type": "string",
+                "required": False,
+                "default": "",
+                "description": "Authoritative scorecard scope selected for this Console session.",
+            },
+            "console_score_id": {
+                "type": "string",
+                "required": False,
+                "default": "",
+                "description": "Authoritative score scope selected for this Console session.",
+            },
+            "console_scorecard_name": {
+                "type": "string",
+                "required": False,
+                "default": "",
+                "description": "Display name for the scorecard selected for this Console session.",
+            },
+            "console_score_name": {
+                "type": "string",
+                "required": False,
+                "default": "",
+                "description": "Display name for the score selected for this Console session.",
+            },
+            "console_latest_score_edit_version_id": {"type": "string", "required": False, "default": ""},
+            "console_latest_score_edit_parent_version_id": {"type": "string", "required": False, "default": ""},
+            "console_latest_score_edit_promoted": {"type": "boolean", "required": False, "default": False},
+            "console_latest_score_edit_smoke_status": {"type": "string", "required": False, "default": ""},
+            "console_latest_report_task_id": {"type": "string", "required": False, "default": ""},
+            "console_async_tasks_available": {"type": "boolean", "required": False, "default": True},
+            "console_selected_model": {"type": "string", "required": False, "default": ""},
         },
         "outputs": {
             "success": {"type": "boolean", "required": True},
@@ -67,7 +110,12 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                 "model": "gpt-5.4-mini",
                 "reasoning_effort": "low",
                 "verbosity": "low",
-                "max_tokens": 1024,
+                # A complete guidelines-only candidate update must send the
+                # full revised Markdown document back in an execute_tactus
+                # call.  Existing real-world documents exceed 1K output
+                # tokens, so that cap truncates the JSON tool call after
+                # score.info and leaves the Console visibly stuck.
+                "max_tokens": 4096,
                 "stream": True,
                 "system_prompt": (
                     "You are the Plexus Console assistant in an interactive chat.\n\n"
@@ -93,8 +141,19 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
                     "- Treat explicit field labels like `Scorecard id`, `Scorecard external id`, `Scorecard`, `Score id`, `Score external id`, `Score`, and `Champion version id` as targeting context.\n"
                     "- If a read-only request includes exact scorecard/score names or ids, run the appropriate read tool instead of asking for the target again.\n"
                     "- If the user says `same score`, `this score`, or `this exact score`, use the single exact target from the latest message or recent chat history when one is available.\n"
+                    "- For a follow-up asking for examples, reviewer rationale, or evidence about a score you identified in the preceding response, reuse that exact scorecard/score target from recent assistant history and call the focused read tool directly. Do not re-inventory the full scorecard or claim data is unavailable unless that focused lookup itself returns no data.\n"
+                    "- When the immediately preceding focused next step names a single target and the user replies with an acceptance such as `yes`, `yeah`, `do it`, `pull it`, or `go ahead`, treat that as acceptance of the offered read-only step. Reuse that focused target only when no different score or scorecard is currently selected. The selected Console scope is authoritative and must override stale conversational targets. If the offered target is not uniquely resolvable, ask one concise clarification instead of silently reverting to a broad scope.\n"
+                    "- When the user asks for false-positive or false-negative examples, return only records with the requested decision disagreement. Never pad the requested list with agreements or non-flips, and do not quote or enumerate excluded records anywhere in the response; if fewer qualifying examples exist, state only the smaller qualifying count.\n"
+                    "- Fetch those examples with separate focused calls: `plexus.feedback.find({ scorecard_name = \"...\", score_name = \"...\", initial_value = \"Yes\", final_value = \"No\", ... })` for false positives and the inverse `initial_value = \"No\", final_value = \"Yes\"` for false negatives. Do not use an unfiltered feedback.find result to construct an FP/FN-only list.\n"
                     "- For read-only feedback, guideline, configuration, score.info, or scorecards.info requests, do not treat words like recommend, candidate, change, or improvement as authorization to mutate; inspect first and stop before any write/evaluation when the user asks for no mutations.\n"
+                    "- Before recommending any configuration, prompt, or guideline change from feedback examples, inspect the target score's current configuration and guidelines with `plexus.score.info`. Tie the recommendation to the returned rule text and reviewer evidence; do not infer a root cause or propose wording not supported by that inspection. If the evidence is insufficient, say so and recommend the next read-only inspection instead.\n"
+                    "- For a configuration recommendation following an earlier analysis, reuse the exact score target named in recent assistant history. Never call `plexus.score.info` with placeholders such as `all scores`; a missing exact score target is a read-only clarification blocker, not permission to generalize or invent a recommendation.\n"
+                    "- A user's claim that a score is too strict or too lenient is a hypothesis. Do not conclude that a score is strict or lenient, or recommend making it stricter or looser, until this turn has read both the current configuration and reviewed disagreement examples. If feedback has not been retrieved, say the evidence is insufficient and offer that focused read.\n"
                     "- Ask for target clarification only after a read/discovery tool shows multiple plausible score targets or no usable target identifiers are present.\n\n"
+                    "VERSION COMPARISON INTEGRITY:\n"
+                    "- Never infer a diff from a single version, a score summary, or conversational memory.\n"
+                    "- Before saying what changed, identify both comparison endpoints and read both exact versions.\n"
+                    "- If no baseline is established, say that plainly and ask which version, candidate, or time point to compare; do not substitute unrelated recent workspace activity.\n\n"
                     "TOOL ACCESS MODE:\n"
                     "- The current turn includes `console_tool_access_mode`, either `execution` or `planning`.\n"
                     "- In planning mode, you can inspect Plexus data, run safe analysis, and propose exact next actions.\n"
@@ -281,14 +340,30 @@ def _build_console_chat_config(tac_source: str) -> Dict[str, Any]:
         "stages": ["preparing", "responding", "complete"],
         "code": tac_source,
     }
+    # Preserve the detailed contract for source-level specification tests and
+    # review, but never serialize it into the runtime procedure artifact.
+    policy_contract = config["agents"]["assistant"]["system_prompt"]
+    config["agents"]["assistant"]["system_prompt"] = CONSOLE_CHAT_RUNTIME_SYSTEM_PROMPT
+    if include_policy_contract:
+        config["prompt_contract"] = policy_contract
+    return config
 
+
+def get_console_chat_policy_contract() -> str:
+    """Return the detailed Console contract for source-level specifications."""
+    tac_source = (_procedures_root() / "console" / "chat_agent.tac").read_text(
+        encoding="utf-8"
+    )
+    return _build_console_chat_config(tac_source, include_policy_contract=True)[
+        "prompt_contract"
+    ]
 
 _BUILTINS: Dict[str, BuiltinProcedureSpec] = {
     CONSOLE_CHAT_BUILTIN_ID: BuiltinProcedureSpec(
         procedure_id=CONSOLE_CHAT_BUILTIN_ID,
         name="Console Chat Agent",
         description="Built-in general-purpose chat procedure for Plexus Console.",
-        version="1.6.20",
+        version="1.6.21",
         tac_path=_procedures_root() / "console" / "chat_agent.tac",
     ),
 }

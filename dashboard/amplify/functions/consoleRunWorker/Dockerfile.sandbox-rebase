@@ -1,0 +1,26 @@
+# Sandbox-only runtime rebase.  It starts a fresh image manifest but retains
+# the installed Python environment from the last browser-verified worker.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE} AS known_good_runtime
+
+FROM public.ecr.aws/docker/library/python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/workspace:/workspace/MCP
+
+WORKDIR /var/task
+
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
+# The working sandbox image's dependency environment is the authority here;
+# copying it prevents an unconstrained fresh pip install from changing the
+# Tactus runtime behavior during rapid acceptance-test iteration.
+COPY --from=known_good_runtime /usr/local /usr/local
+COPY . /workspace
+COPY dashboard/amplify/functions/consoleRunWorker/app.py /var/task/app.py
+
+ENTRYPOINT [ "/usr/local/bin/python", "-m", "awslambdaric" ]
+CMD ["app.handler"]

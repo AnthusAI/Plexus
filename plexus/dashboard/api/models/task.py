@@ -594,7 +594,7 @@ class Task(BaseModel):
         return self
 
     @classmethod
-    def get_by_id(cls, id: str, client: '_BaseAPIClient') -> 'Task':
+    def get_by_id(cls, id: str, client: '_BaseAPIClient') -> Optional['Task']:
         query = """
         query GetTask($id: ID!) {
             getTask(id: $id) {
@@ -606,6 +606,12 @@ class Task(BaseModel):
         result = client.execute(query, {'id': id})
         if not result or 'getTask' not in result:
             raise Exception(f"Failed to get Task {id}")
+
+        # AppSync returns an explicit null when a durable task is absent.  A
+        # status poll must treat that as a normal not-found state rather than
+        # passing None into from_dict and surfacing an opaque TypeError.
+        if result.get('getTask') is None:
+            return None
 
         return cls.from_dict(result['getTask'], client)
 

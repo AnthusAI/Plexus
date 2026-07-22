@@ -885,6 +885,21 @@ class ProcedureService:
                         console_session_history = options.get('console_session_history')
                         if isinstance(console_session_history, list) and console_session_history:
                             context['console_session_history'] = console_session_history
+                        for scope_key in (
+                            'console_scorecard_id',
+                            'console_score_id',
+                            'console_scorecard_name',
+                            'console_score_name',
+                            'console_latest_score_edit_version_id',
+                            'console_latest_score_edit_parent_version_id',
+                            'console_latest_score_edit_smoke_status',
+                            'console_latest_report_task_id',
+                        ):
+                            scope_value = options.get(scope_key)
+                            if isinstance(scope_value, str) and scope_value.strip():
+                                context[scope_key] = scope_value.strip()
+                        if isinstance(options.get('console_latest_score_edit_promoted'), bool):
+                            context['console_latest_score_edit_promoted'] = options['console_latest_score_edit_promoted']
 
                         # Merge user-provided context (from CLI) into procedure context
                         user_context = options.pop('context', None)
