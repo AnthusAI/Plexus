@@ -5,11 +5,14 @@ import type { Schema } from '../resource';
 
 const lambda = new LambdaClient({});
 const ssm = new SSMClient({});
-const responderParameterName = '/plexus/console-chat/responder';
+const responderParameterName = process.env.CONSOLE_RESPONDER_PARAMETER_NAME?.trim();
 let responderFunctionName: string | undefined;
 
 const getResponderFunctionName = async (): Promise<string> => {
   if (responderFunctionName) return responderFunctionName;
+  if (!responderParameterName) {
+    throw new Error('Console responder parameter is not configured');
+  }
 
   const result = await ssm.send(new GetParameterCommand({ Name: responderParameterName }));
   const value = result.Parameter?.Value?.trim();

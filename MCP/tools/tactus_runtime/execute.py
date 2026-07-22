@@ -597,6 +597,8 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("scorecards_info", "scorecards", "info"),
     ("scorecards_search", "scorecards", "search"),
     ("scorecards_create", "scorecards", "create"),
+    ("scorecards_update", "scorecards", "update"),
+    ("scorecards_delete", "scorecards", "delete"),
     ("score_info", "score", "info"),
     ("score_create", "score", "create"),
     ("score_search", "score", "search"),
@@ -606,6 +608,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("score_pull", "score", "pull"),
     ("score_resolve", "score", "resolve"),
     ("score_update", "score", "update"),
+    ("score_delete", "score", "delete"),
     ("score_edit", "score", "edit"),
     ("score_test", "score", "test"),
     ("score_set_champion", "score", "set_champion"),
@@ -783,6 +786,8 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("scorecards", "info"): _method_spec("_call_scorecards", planning_allowed=True),
     ("scorecards", "search"): _method_spec("_call_scorecards", planning_allowed=True),
     ("scorecards", "create"): _method_spec("_call_scorecards", planning_allowed=False),
+    ("scorecards", "update"): _method_spec("_call_scorecards", planning_allowed=False),
+    ("scorecards", "delete"): _method_spec("_call_scorecards", planning_allowed=False),
     ("score", "info"): _method_spec("_call_score", planning_allowed=True),
     ("score", "create"): _method_spec("_call_score", planning_allowed=False),
     ("score", "search"): _method_spec("_call_score", planning_allowed=True),
@@ -792,6 +797,7 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("score", "pull"): _method_spec("_call_score", planning_allowed=True),
     ("score", "resolve"): _method_spec("_call_score", planning_allowed=True),
     ("score", "update"): _method_spec("_call_score", planning_allowed=False),
+    ("score", "delete"): _method_spec("_call_score", planning_allowed=False),
     ("score", "edit"): _method_spec("_call_score", planning_allowed=False),
     ("score", "test"): _method_spec("_call_score", planning_allowed=True),
     ("score", "set_champion"): _method_spec("_call_score", planning_allowed=False),
@@ -1305,6 +1311,135 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
         "plexus.scorecards.create failed after compatibility attempts: "
         + " | ".join(attempted_errors)
     )
+
+
+def _default_scorecards_update(args: dict[str, Any]) -> dict[str, Any]:
+    """Update scorecard metadata without changing its scores or versions."""
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.direct_identifier_resolution import (
+        direct_resolve_scorecard_identifier,
+    )
+
+    identifier = (
+        args.get("id")
+        or args.get("scorecard_id")
+        or args.get("identifier")
+        or args.get("scorecard_identifier")
+        or args.get("scorecard")
+    )
+    if not identifier:
+        raise ValueError("plexus.scorecards.update requires id or scorecard identifier")
+
+    fields = {
+        "name": "name",
+        "key": "key",
+        "description": "description",
+        "external_id": "externalId",
+        "externalId": "externalId",
+    }
+    updates = {
+        graph_field: args[arg_name]
+        for arg_name, graph_field in fields.items()
+        if args.get(arg_name) is not None
+    }
+    if not updates:
+        raise ValueError(
+            "plexus.scorecards.update requires at least one metadata field "
+            "(name, key, description, or external_id)"
+        )
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.scorecards.update: could not create dashboard client")
+    scorecard_id = direct_resolve_scorecard_identifier(client, str(identifier))
+    if not scorecard_id:
+        raise ValueError(f"Scorecard not found: {identifier!r}")
+
+    # UpdateScorecardInput deliberately contains only model fields; unlike a
+    # create input it does not accept the runtime attribution metadata.
+    input_obj = {"id": scorecard_id, **updates}
+    mutation = """
+    mutation UpdateScorecard($input: UpdateScorecardInput!) {
+      updateScorecard(input: $input) { id name key description externalId }
+    }
+    """
+    response = client.execute(mutation, {"input": input_obj})
+    updated = (response or {}).get("updateScorecard") or {}
+    if not updated.get("id"):
+        raise RuntimeError("plexus.scorecards.update returned no scorecard")
+    return {"success": True, "scorecard": updated, "changed_fields": sorted(updates)}
+
+
+def _default_scorecards_delete(args: dict[str, Any]) -> dict[str, Any]:
+    """Delete an explicitly confirmed scorecard and all of its contents."""
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.direct_identifier_resolution import (
+        direct_resolve_scorecard_identifier,
+    )
+
+    if args.get("confirmed") is not True:
+        raise ValueError(
+            "plexus.scorecards.delete is destructive and requires confirmed = true"
+        )
+    identifier = (
+        args.get("id")
+        or args.get("scorecard_id")
+        or args.get("identifier")
+        or args.get("scorecard_identifier")
+        or args.get("scorecard")
+    )
+    if not identifier:
+        raise ValueError("plexus.scorecards.delete requires id or scorecard identifier")
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.scorecards.delete: could not create dashboard client")
+    scorecard_id = direct_resolve_scorecard_identifier(client, str(identifier))
+    if not scorecard_id:
+        raise ValueError(f"Scorecard not found: {identifier!r}")
+
+    info = _default_scorecards_info({"id": scorecard_id})
+    sections = ((info.get("sections") or {}).get("items") or [])
+    deleted_scores = 0
+    deleted_sections = 0
+    for section in sections:
+        for score in ((section.get("scores") or {}).get("items") or []):
+            score_id = score.get("id")
+            if not score_id:
+                continue
+            _default_score_delete({"id": score_id, "confirmed": True})
+            deleted_scores += 1
+        section_id = section.get("id")
+        if section_id:
+            mutation = """
+            mutation DeleteScorecardSection($input: DeleteScorecardSectionInput!) {
+              deleteScorecardSection(input: $input) { id }
+            }
+            """
+            client.execute(
+                mutation,
+                {"input": {"id": section_id}},
+            )
+            deleted_sections += 1
+
+    mutation = """
+    mutation DeleteScorecard($input: DeleteScorecardInput!) {
+      deleteScorecard(input: $input) { id }
+    }
+    """
+    response = client.execute(
+        mutation,
+        {"input": {"id": scorecard_id}},
+    )
+    deleted = (response or {}).get("deleteScorecard") or {}
+    if not deleted.get("id"):
+        raise RuntimeError("plexus.scorecards.delete returned no scorecard")
+    return {
+        "success": True,
+        "id": deleted["id"],
+        "deleted_scores": deleted_scores,
+        "deleted_sections": deleted_sections,
+    }
 
 
 def _default_score_search(args: dict[str, Any]) -> dict[str, Any]:
@@ -7410,6 +7545,38 @@ def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
         json.dump(output, handle, indent=2, sort_keys=True, default=str)
 
 
+def _default_score_delete(args: dict[str, Any]) -> dict[str, Any]:
+    """Delete an explicitly confirmed score by its unambiguous ID."""
+    from plexus.cli.shared.client_utils import create_client
+
+    if args.get("confirmed") is not True:
+        raise ValueError(
+            "plexus.score.delete is destructive and requires confirmed = true"
+        )
+    score_id = str(args.get("id") or args.get("score_id") or "").strip()
+    if not score_id:
+        raise ValueError(
+            "plexus.score.delete requires the exact score id; resolve the score before deleting"
+        )
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.score.delete: could not create dashboard client")
+    mutation = """
+    mutation DeleteScore($input: DeleteScoreInput!) {
+      deleteScore(input: $input) { id }
+    }
+    """
+    response = client.execute(
+        mutation,
+        {"input": {"id": score_id}},
+    )
+    deleted = (response or {}).get("deleteScore") or {}
+    if not deleted.get("id"):
+        raise RuntimeError("plexus.score.delete returned no score")
+    return {"success": True, "id": deleted["id"]}
+
+
 def _default_score_edit_runner(args: dict[str, Any]) -> dict[str, Any]:
     import tempfile
 
@@ -8042,6 +8209,8 @@ class PlexusRuntimeModule:
         scorecards_infoer: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         scorecards_searcher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         scorecards_creator: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        scorecards_updater: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        scorecards_deleter: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_create: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_searcher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
@@ -8050,6 +8219,7 @@ class PlexusRuntimeModule:
         score_contradictions: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_pull: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_update: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_delete: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_edit_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_test: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_set_champion: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
@@ -8114,6 +8284,16 @@ class PlexusRuntimeModule:
             if scorecards_creator is not None
             else _default_scorecards_create
         )
+        self._scorecards_updater = (
+            scorecards_updater
+            if scorecards_updater is not None
+            else _default_scorecards_update
+        )
+        self._scorecards_deleter = (
+            scorecards_deleter
+            if scorecards_deleter is not None
+            else _default_scorecards_delete
+        )
         self._score_info = score_info if score_info is not None else _default_score_info
         self._score_create = (
             score_create if score_create is not None else _default_score_create
@@ -8130,6 +8310,7 @@ class PlexusRuntimeModule:
         )
         self._score_pull = score_pull if score_pull is not None else _default_score_pull
         self._score_update = score_update if score_update is not None else _default_score_update
+        self._score_delete = score_delete if score_delete is not None else _default_score_delete
         self._score_edit_runner = (
             score_edit_runner if score_edit_runner is not None else _default_score_edit_runner
         )
@@ -8737,6 +8918,7 @@ class PlexusRuntimeModule:
             "pull",
             "resolve",
             "update",
+            "delete",
             "edit",
             "test",
             "set_champion",
@@ -8842,6 +9024,12 @@ class PlexusRuntimeModule:
                     )
                     self._append_console_audit_event(score_edit_audit_event)
                 return result
+            if method == "delete":
+                if parsed.get("confirmed") is not True:
+                    raise ValueError(
+                        "plexus.score.delete is destructive and requires confirmed = true"
+                    )
+                return self._score_delete(parsed)
             if method == "edit":
                 if self._is_console_runtime() and self._console_request_is_guidelines_only():
                     raise ConsoleScoreEditBlockedForGuidelinesOnly()
@@ -8996,7 +9184,9 @@ class PlexusRuntimeModule:
             self._budget.record_after("procedure", method)
 
     def _call_scorecards(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "scorecards" or method not in {"list", "info", "search", "create"}:
+        if namespace != "scorecards" or method not in {
+            "list", "info", "search", "create", "update", "delete"
+        }:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -9008,6 +9198,14 @@ class PlexusRuntimeModule:
                 return self._scorecards_lister(parsed)
             if method == "create":
                 return self._scorecards_creator(parsed)
+            if method == "update":
+                return self._scorecards_updater(parsed)
+            if method == "delete":
+                if parsed.get("confirmed") is not True:
+                    raise ValueError(
+                        "plexus.scorecards.delete is destructive and requires confirmed = true"
+                    )
+                return self._scorecards_deleter(parsed)
             if method == "search":
                 return self._scorecards_searcher(parsed)
             return self._scorecards_infoer(parsed)

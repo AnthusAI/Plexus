@@ -14,6 +14,7 @@ interface ConsoleChatResponderStackProps extends NestedStackProps {
   plexusApiUrl?: string;
   environmentName?: string;
   asyncTasksAvailable?: boolean;
+  responderParameterName: string;
   configSecretName?: string;
   reportBlockDetailsBucket?: IBucket;
 }
@@ -91,7 +92,7 @@ export class ConsoleChatResponderStack extends NestedStack {
     // mutation handler.  The parameter is account-local and contains only
     // the alias ARN; each dispatch Lambda caches it after its first lookup.
     new ssm.StringParameter(this, "InteractiveResponderParameter", {
-      parameterName: "/plexus/console-chat/responder",
+      parameterName: props.responderParameterName,
       stringValue: this.responderAlias.functionArn,
     });
 

@@ -2374,6 +2374,123 @@ def test_planning_mode_blocks_score_create() -> None:
     assert called is False
 
 
+def test_score_delete_requires_confirmation_and_dispatches_when_confirmed() -> None:
+    calls: list[dict] = []
+
+    def fake_score_delete(args: dict) -> dict:
+        calls.append(args)
+        return {"success": True, "id": args["id"]}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-score-delete"),
+        score_delete=fake_score_delete,
+    )
+
+    with pytest.raises(ValueError, match="confirmed = true"):
+        module.score.delete({"id": "score-1"})
+
+    assert calls == []
+    assert module.score.delete({"id": "score-1", "confirmed": True}) == {
+        "success": True,
+        "id": "score-1",
+    }
+    assert calls == [{"id": "score-1", "confirmed": True}]
+
+
+def test_default_score_delete_keeps_runtime_confirmation_out_of_graphql_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict]] = []
+
+    class FakeClient:
+        context = None
+
+        def execute(self, query: str, variables: dict) -> dict:
+            calls.append((query, variables))
+            return {"deleteScore": {"id": "score-1"}}
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    assert execute._default_score_delete({"id": "score-1", "confirmed": True}) == {
+        "success": True,
+        "id": "score-1",
+    }
+    assert calls[0][1] == {"input": {"id": "score-1"}}
+
+
+def test_planning_mode_blocks_score_delete() -> None:
+    called = False
+
+    def fake_score_delete(_args: dict) -> dict:
+        nonlocal called
+        called = True
+        return {"success": True}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-planning-mode-blocks-score-delete"),
+        score_delete=fake_score_delete,
+        runtime_context={"tool_access_mode": "planning"},
+    )
+
+    with pytest.raises(execute.PlanningModeToolNotAllowed) as exc_info:
+        module.score.delete({"id": "score-1", "confirmed": True})
+
+    assert "plexus.score.delete" in str(exc_info.value)
+    assert called is False
+
+
+def test_scorecards_update_and_delete_use_explicit_lifecycle_handlers() -> None:
+    update_calls: list[dict] = []
+    delete_calls: list[dict] = []
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-scorecard-lifecycle"),
+        scorecards_updater=lambda args: update_calls.append(args) or {"success": True},
+        scorecards_deleter=lambda args: delete_calls.append(args) or {"success": True},
+    )
+
+    assert module.scorecards.update({"id": "card-1", "name": "Renamed"}) == {
+        "success": True
+    }
+    with pytest.raises(ValueError, match="confirmed = true"):
+        module.scorecards.delete({"id": "card-1"})
+    assert module.scorecards.delete({"id": "card-1", "confirmed": True}) == {
+        "success": True
+    }
+    assert update_calls == [{"id": "card-1", "name": "Renamed"}]
+    assert delete_calls == [{"id": "card-1", "confirmed": True}]
+
+
+def test_default_scorecards_update_keeps_attribution_metadata_out_of_graphql_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict]] = []
+
+    class FakeClient:
+        context = None
+
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "getScorecard" in query:
+                return {"getScorecard": {"id": "card-1"}}
+            calls.append((query, variables or {}))
+            return {"updateScorecard": {"id": "card-1", "name": "Renamed"}}
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.direct_identifier_resolution.direct_resolve_scorecard_identifier",
+        lambda _client, _identifier: "card-1",
+    )
+
+    result = execute._default_scorecards_update({"id": "card-1", "name": "Renamed"})
+
+    assert result["success"] is True
+    assert calls[0][1] == {"input": {"id": "card-1", "name": "Renamed"}}
+
+
 def test_planning_mode_blocks_scorecards_create() -> None:
     called = False
 

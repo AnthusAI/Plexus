@@ -38,7 +38,7 @@ def _build_console_chat_config(
 ) -> Dict[str, Any]:
     config = {
         "name": "Console Chat Agent",
-        "version": "1.6.21",
+        "version": "1.6.26",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
