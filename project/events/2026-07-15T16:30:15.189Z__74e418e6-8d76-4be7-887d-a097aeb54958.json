@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "74e418e6-8d76-4be7-887d-a097aeb54958",
+  "issue_id": "plx-a804f151-421f-47c3-bde7-889a8ad15e0f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-15T16:30:15.189Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Define a reusable infrastructure construct or construct interface for score processing that accepts externally owned queues, image references, configuration sources, concurrency settings, and optional alarms without embedding downstream deployment details.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+    "priority": 1,
+    "status": "open",
+    "title": "Define generic score processor construct contract"
+  }
+}

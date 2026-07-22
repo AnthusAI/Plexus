@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "5e59987f-6c04-48e4-8e2c-dd784a5a0f99",
+  "issue_id": "plx-06119793-c03f-42ce-b392-742b842546d6",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-15T16:30:15.224Z",
+  "actor_id": "derek.norrbom",
+  "payload": {
+    "assignee": null,
+    "description": "Document the public-safe Docker build inputs, runtime environment variables, queue contracts, and permission assumptions required to deploy the score processor outside the Plexus infrastructure pipeline.",
+    "issue_type": "task",
+    "labels": [],
+    "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+    "priority": 1,
+    "status": "open",
+    "title": "Document score processor external build and runtime contract"
+  }
+}
