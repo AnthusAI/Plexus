@@ -20,8 +20,8 @@ const getResponderFunctionName = async (): Promise<string> => {
 
 /**
  * Starts the Console responder immediately after the user message is durable.
- * The DynamoDB Stream remains enabled: both delivery paths race through the
- * responder's conditional PENDING -> RUNNING claim, so only one can execute.
+ * This is the sole cloud delivery mechanism. The responder's conditional
+ * PENDING -> RUNNING claim remains the exactly-once guard for invocations.
  */
 export const handler: Schema['dispatchConsoleChat']['functionHandler'] = async (event) => {
   const messageId = event.arguments.messageId.trim();

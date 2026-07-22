@@ -117,11 +117,11 @@ def _resolve_client() -> PlexusDashboardClient:
 
 
 def fetch_console_message(client: PlexusDashboardClient, message_id: str) -> Dict[str, Any] | None:
-    """Read a persisted Console message for the direct interactive path.
+    """Read a persisted Console message for the cloud interactive flow.
 
-    The stream worker still receives the same insert as a recovery path.  The
-    response-status conditional claim in process_console_message makes the two
-    delivery mechanisms race-safe.
+    Cloud messages are delivered only by dispatchConsoleChat. The response-
+    status conditional claim in process_console_message protects against a
+    duplicate invocation without defining a second delivery route.
     """
     query = """
     query GetDirectConsoleMessage($id: ID!) {
