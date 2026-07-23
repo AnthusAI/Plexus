@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -7,6 +8,7 @@ import yaml
 from plexus.cli.procedure.mcp_transport import create_procedure_mcp_server
 from plexus.cli.procedure.procedure_executor import (
     _PlexusTraceLogBridge,
+    _ensure_direct_run_cli_path,
     _execute_tactus,
     _score_edit_audit_markdown,
 )
@@ -23,6 +25,15 @@ def test_score_change_audit_calls_out_guidelines_only_candidate() -> None:
 
     assert markdown.startswith("**Guidelines update saved**")
     assert "- Changed fields: `guidelines`" in markdown
+
+
+def test_direct_run_makes_its_python_console_scripts_available(monkeypatch):
+    monkeypatch.setattr("plexus.cli.procedure.procedure_executor.sys.executable", "/tmp/venv/bin/python")
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    _ensure_direct_run_cli_path()
+
+    assert os.environ["PATH"].split(os.pathsep) == ["/tmp/venv/bin", "/usr/bin"]
 
 
 class _FakeRuntime:

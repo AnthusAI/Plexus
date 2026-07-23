@@ -10,8 +10,10 @@ import logging
 import json
 import inspect
 import asyncio
+import os
 import queue
 import re
+import sys
 import threading
 import uuid
 import yaml
@@ -31,6 +33,21 @@ CONSOLE_CHAT_BUILTIN_ID = "builtin:console/chat"
 
 class ProcedureExecutionCancelled(RuntimeError):
     """Raised when a procedure worker observes a dashboard cancellation request."""
+
+
+def _ensure_direct_run_cli_path() -> None:
+    """Make the current Python environment's console scripts available to a direct run.
+
+    Some existing procedure primitives invoke the ``plexus`` CLI as a child
+    process.  An in-process caller may use an absolute Python executable rather
+    than activating the virtual environment first, so preserve the runtime's
+    executable directory explicitly for those child processes.
+    """
+    executable_dir = os.path.dirname(os.path.abspath(sys.executable))
+    current_path = os.environ.get("PATH", "")
+    path_parts = current_path.split(os.pathsep) if current_path else []
+    if executable_dir not in path_parts:
+        os.environ["PATH"] = os.pathsep.join([executable_dir, *path_parts])
 
 
 def _is_dashboard_task_cancelled(client: Any, task_id: Optional[str]) -> bool:
@@ -1560,6 +1577,8 @@ async def _execute_tactus(
         # Unlike a dashboard procedure it owns no durable Procedure record, so
         # checkpoint/state must remain in memory and never touch S3.
         direct_run = bool(options.pop("direct_run", False))
+        if direct_run:
+            _ensure_direct_run_cli_path()
         storage = (
             InMemoryStorageAdapter(procedure_id)
             if direct_run
