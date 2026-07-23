@@ -6750,6 +6750,57 @@ def test_default_procedure_runner_launches_detached_local_subprocess(monkeypatch
     assert captured["cmd"][-4:] == ["proc-1", "--max-iterations", "2", "--dry-run"]
 
 
+def test_optimizer_uses_local_subprocess_even_when_generic_dispatch_is_celery(monkeypatch) -> None:
+    monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "account-1")
+    monkeypatch.setenv("PLEXUS_DISPATCH_MODE", "celery")
+    monkeypatch.setattr("plexus.cli.shared.client_utils.create_client", lambda: object())
+
+    captured: dict[str, Any] = {}
+
+    class FakeProcedureService:
+        def __init__(self, _client) -> None:
+            pass
+
+        def create_procedure(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                success=True,
+                procedure=SimpleNamespace(id="optimizer-proc-1"),
+                message="created",
+            )
+
+    class FakeProcess:
+        pid = 12345
+
+    monkeypatch.setattr("plexus.cli.procedure.service.ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        execute,
+        "_launch_local_procedure_subprocess",
+        lambda cmd, procedure_id: (FakeProcess(), f"/tmp/{procedure_id}.log"),
+    )
+
+    result = execute._default_procedure_optimize(
+        {
+            "scorecard": "Example scorecard",
+            "score": "Example score",
+            "max_iterations": 1,
+            "dry_run": True,
+        }
+    )
+
+    assert captured["dispatch_mode"] == "local"
+    assert result == {
+        "procedure_id": "optimizer-proc-1",
+        "status": "running",
+        "pid": 12345,
+        "log_path": "/tmp/optimizer-proc-1.log",
+        "message": "Optimizer procedure dispatched — running as independent subprocess.",
+        "scorecard": "Example scorecard",
+        "score": "Example score",
+        "dashboard_url": "https://lab.callcriteria.com/lab/procedures/optimizer-proc-1",
+    }
+
+
 def test_procedure_run_blocking_requires_handle_protocol() -> None:
     module = execute.PlexusRuntimeModule(FastMCP("test"))
 

@@ -5138,7 +5138,11 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
             "plexus.procedure.optimize: PLEXUS_ACCOUNT_KEY environment variable is required"
         )
 
-    dispatch_mode = _resolve_report_dispatch_mode()
+    # Optimizer runs invoked through execute_tactus are intentionally local.
+    # They are long-running, stateful authoring workflows and must not depend
+    # on the generic remote report/task dispatcher. Other report dispatch
+    # behavior remains governed by PLEXUS_DISPATCH_MODE.
+    dispatch_mode = "local"
     result = service.create_procedure(
         account_identifier=account,
         scorecard_identifier=str(scorecard_identifier),
