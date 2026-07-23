@@ -535,6 +535,58 @@ async def test_execute_tactus_direct_run_uses_ephemeral_storage_and_source_path(
 
 
 @pytest.mark.asyncio
+async def test_direct_run_does_not_hydrate_an_unrelated_console_session(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr("tactus.core.TactusRuntime", _FakeRuntime)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.InMemoryStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(
+            state_set=lambda *_a, **_k: None,
+            state_get=lambda *_a, **_k: {},
+        ),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+
+    class Recorder:
+        account_id = None
+
+        def get_latest_console_trigger_message(self):
+            raise AssertionError("direct run must not read a Console trigger")
+
+        def get_console_session_history(self):
+            raise AssertionError("direct run must not read Console history")
+
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: Recorder(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.cloudwatch_logger._create_procedure_cloudwatch_logger",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            AssertionError("direct run must not start CloudWatch transport")
+        ),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="direct-2",
+        procedure_source="name: Test\nclass: Tactus\ncode: |\n  return { success = true }\n",
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={},
+        direct_run=True,
+    )
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
 async def test_console_tactus_bridges_mcp_tools_into_toolset_registry(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 

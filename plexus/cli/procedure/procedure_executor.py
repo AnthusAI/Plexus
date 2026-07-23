@@ -1632,11 +1632,15 @@ async def _execute_tactus(
 
         _account_key = getattr(getattr(client, "context", None), "account_key", None) or "unknown"
         from .cloudwatch_logger import _create_procedure_cloudwatch_logger, _install_cloudwatch_llm_context_patch
-        cw_logger = _create_procedure_cloudwatch_logger(
-            account_key=_account_key,
-            procedure_id=procedure_id,
-            invocation_run_id=invocation_run_id,
-        )
+        # A direct run has no durable dashboard Procedure record and must not
+        # establish CloudWatch transport or metadata writes before its local
+        # procedure body can execute.
+        if not direct_run:
+            cw_logger = _create_procedure_cloudwatch_logger(
+                account_key=_account_key,
+                procedure_id=procedure_id,
+                invocation_run_id=invocation_run_id,
+            )
 
         log_bridge = _PlexusTraceLogBridge(
             trace_sink,
@@ -1885,8 +1889,14 @@ async def _execute_tactus(
                 )
                 # If the chat recorder supports console-trigger hydration, treat this as
                 # console-like context even when the caller did not pass console keys.
-                or callable(get_console_trigger_message)
-                or callable(get_console_session_history)
+                # Direct runs deliberately have no Console session to hydrate.
+                or (
+                    not direct_run
+                    and (
+                        callable(get_console_trigger_message)
+                        or callable(get_console_session_history)
+                    )
+                )
             )
 
             if is_console_context and not runtime_context.get("console_user_message"):
