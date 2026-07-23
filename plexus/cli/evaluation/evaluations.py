@@ -1401,6 +1401,7 @@ async def _run_shared_feedback_root_cause_orchestration(
     ]
     incorrect_items_analyzed_for_rca = len(feedback_items_for_rca)
 
+    rca_failure: Optional[str] = None
     if incorrect_items_total == 0 or incorrect_items_analyzed_for_rca == 0:
         if incorrect_items_total > 0 and incorrect_items_with_feedback_link == 0:
             warnings.append(
@@ -1471,8 +1472,12 @@ async def _run_shared_feedback_root_cause_orchestration(
                 tracker=tracker,
             )
         except Exception as _rca_exc:
-            logging.warning(f"Root-cause analysis failed (non-fatal): {_rca_exc}")
+            rca_failure = str(_rca_exc)
+            logging.warning(f"Root-cause analysis failed (non-fatal): {rca_failure}")
             root_cause = []
+
+    if rca_failure:
+        warnings.append(f"RCA generation failed: {rca_failure}")
 
     persisted_root_cause = await asyncio.to_thread(
         fe._persist_root_cause_for_parameters,
@@ -1507,6 +1512,7 @@ async def _run_shared_feedback_root_cause_orchestration(
         "root_cause_required": contract["root_cause_required"],
         "has_usable_root_cause": contract["has_usable_root_cause"],
         "error_message": contract["error_message"],
+        "rca_failure": rca_failure,
     }
 
 
