@@ -17,7 +17,14 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from openai import OpenAI
 
-from plexus.cli.procedure.builtin_procedures import CONSOLE_CHAT_BUILTIN_ID
+from plexus.cli.procedure.builtin_procedures import (
+    CONSOLE_CHAT_BUILTIN_ID,
+    CONSOLE_CHAT_DEFAULT_MODEL,
+    CONSOLE_CHAT_DEFAULT_PROVIDER,
+    CONSOLE_CHAT_MAX_TOKENS,
+    CONSOLE_CHAT_REASONING_EFFORT,
+    CONSOLE_CHAT_VERBOSITY,
+)
 from plexus.cli.procedure.service import ProcedureService
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.logging.cloudwatch_logger import PlexusCloudWatchLogger
@@ -730,10 +737,15 @@ def _server_latency_metadata(summary: Dict[str, Any], *, owner: str) -> Dict[str
     keys = (
         "client_to_claim_ms",
         "direct_message_fetch_ms",
-        "pre_model_ms",
-        "model_first_chunk_ms",
-        "model_stream_ms",
-        "post_model_persist_ms",
+        "runtime_to_provider_dispatch_ms",
+        "agent_preparation_ms",
+        "lm_initialization_ms",
+        "lm_initialized_during_request",
+        "provider_first_chunk_ms",
+        "provider_stream_ms",
+        "provider_request_count",
+        "assistant_stream_ms",
+        "post_stream_persist_ms",
         "client_total_ms",
         "first_token_ms",
         "claim_to_first_token_ms",
@@ -806,28 +818,70 @@ def _build_latency_summary(trace: Dict[str, Any], *, status: str) -> Dict[str, A
         "t_first_assistant_chunk": trace.get("t_first_assistant_chunk"),
         "t_first_chunk_lookup_completed": trace.get("t_first_chunk_lookup_completed"),
         "t_completed": trace.get("t_completed"),
-        "queue_to_worker_ms": _duration_ms(trace.get("t_received"), trace.get("t_worker_started")),
-        "queue_to_claim_ms": _duration_ms(trace.get("t_received"), trace.get("t_claimed")),
-        "client_to_claim_ms": _duration_ms(trace.get("t_client_send_started"), trace.get("t_claimed")),
+        "queue_to_worker_ms": _duration_ms(
+            trace.get("t_received"), trace.get("t_worker_started")
+        ),
+        "queue_to_claim_ms": _duration_ms(
+            trace.get("t_received"), trace.get("t_claimed")
+        ),
+        "client_to_claim_ms": _duration_ms(
+            trace.get("t_client_send_started"), trace.get("t_claimed")
+        ),
         "claim_ms": _duration_ms(trace.get("t_received"), trace.get("t_claimed")),
         "claim_roundtrip_ms": trace.get("claim_roundtrip_ms"),
-        "history_load_ms": _duration_ms(trace.get("t_history_load_started"), trace.get("t_history_loaded")),
-        "history_ms": _duration_ms(trace.get("t_claimed"), trace.get("t_history_loaded")),
-        "startup_ms": _duration_ms(trace.get("t_history_loaded"), trace.get("t_run_started")),
-        "first_token_ms": _duration_ms(trace.get("t_run_started"), trace.get("t_first_assistant_chunk")),
-        "pre_model_ms": _duration_ms(trace.get("t_run_started"), trace.get("t_backend_execution_started")),
-        "model_first_chunk_ms": _duration_ms(
-            trace.get("t_backend_execution_started"),
-            trace.get("t_first_assistant_chunk"),
+        "history_load_ms": _duration_ms(
+            trace.get("t_history_load_started"), trace.get("t_history_loaded")
         ),
-        "model_stream_ms": _duration_ms(trace.get("t_first_assistant_chunk"), trace.get("t_last_assistant_chunk")),
-        "post_model_persist_ms": _duration_ms(trace.get("t_last_assistant_chunk"), trace.get("t_run_completed")),
-        "claim_to_first_token_ms": _duration_ms(trace.get("t_claimed"), trace.get("t_first_assistant_chunk")),
-        "client_to_first_token_ms": _duration_ms(trace.get("t_client_send_started"), trace.get("t_first_assistant_chunk")),
+        "history_ms": _duration_ms(
+            trace.get("t_claimed"), trace.get("t_history_loaded")
+        ),
+        "startup_ms": _duration_ms(
+            trace.get("t_history_loaded"), trace.get("t_run_started")
+        ),
+        "first_token_ms": _duration_ms(
+            trace.get("t_run_started"), trace.get("t_first_assistant_chunk")
+        ),
+        "runtime_to_provider_dispatch_ms": _duration_ms(
+            trace.get("t_run_started"), trace.get("t_provider_request_started")
+        ),
+        "agent_preparation_ms": _duration_ms(
+            trace.get("t_agent_preparation_started"),
+            trace.get("t_agent_preparation_completed"),
+        ),
+        "lm_initialization_ms": _duration_ms(
+            trace.get("t_lm_initialization_started"),
+            trace.get("t_lm_initialization_completed"),
+        ),
+        "lm_initialized_during_request": bool(trace.get("t_lm_initialization_started")),
+        "provider_first_chunk_ms": _duration_ms(
+            trace.get("t_provider_request_started"),
+            trace.get("t_provider_first_chunk"),
+        ),
+        "provider_stream_ms": _duration_ms(
+            trace.get("t_provider_first_chunk"),
+            trace.get("t_provider_request_completed"),
+        ),
+        "provider_request_count": trace.get("provider_request_count"),
+        "assistant_stream_ms": _duration_ms(
+            trace.get("t_first_assistant_chunk"), trace.get("t_last_assistant_chunk")
+        ),
+        "post_stream_persist_ms": _duration_ms(
+            trace.get("t_last_assistant_chunk"), trace.get("t_run_completed")
+        ),
+        "claim_to_first_token_ms": _duration_ms(
+            trace.get("t_claimed"), trace.get("t_first_assistant_chunk")
+        ),
+        "client_to_first_token_ms": _duration_ms(
+            trace.get("t_client_send_started"), trace.get("t_first_assistant_chunk")
+        ),
         "first_chunk_lookup_ms": trace.get("first_chunk_lookup_ms"),
-        "run_ms": _duration_ms(trace.get("t_run_started"), trace.get("t_run_completed")),
+        "run_ms": _duration_ms(
+            trace.get("t_run_started"), trace.get("t_run_completed")
+        ),
         "total_ms": _duration_ms(trace.get("t_received"), trace.get("t_completed")),
-        "client_total_ms": _duration_ms(trace.get("t_client_send_started"), trace.get("t_completed")),
+        "client_total_ms": _duration_ms(
+            trace.get("t_client_send_started"), trace.get("t_completed")
+        ),
         "t_client_init_started": trace.get("t_client_init_started"),
         "t_client_init_completed": trace.get("t_client_init_completed"),
         "t_service_acquire_started": trace.get("t_service_acquire_started"),
@@ -835,6 +889,13 @@ def _build_latency_summary(trace: Dict[str, Any], *, status: str) -> Dict[str, A
         "t_procedure_bootstrap_started": trace.get("t_procedure_bootstrap_started"),
         "t_procedure_bootstrap_completed": trace.get("t_procedure_bootstrap_completed"),
         "t_backend_execution_started": trace.get("t_backend_execution_started"),
+        "t_agent_preparation_started": trace.get("t_agent_preparation_started"),
+        "t_agent_preparation_completed": trace.get("t_agent_preparation_completed"),
+        "t_lm_initialization_started": trace.get("t_lm_initialization_started"),
+        "t_lm_initialization_completed": trace.get("t_lm_initialization_completed"),
+        "t_provider_request_started": trace.get("t_provider_request_started"),
+        "t_provider_first_chunk": trace.get("t_provider_first_chunk"),
+        "t_provider_request_completed": trace.get("t_provider_request_completed"),
         "t_last_assistant_chunk": trace.get("t_last_assistant_chunk"),
     }
     error = trace.get("error")
@@ -860,6 +921,14 @@ def warm_console_runtime(client: PlexusDashboardClient) -> None:
     # ready within its initialization budget.
     _get_procedure_service(client)
     asyncio.run(_get_or_create_console_mcp_server({}))
+    tactus_dspy = import_module("tactus.dspy")
+    tactus_dspy.prewarm_agent_runtime(
+        CONSOLE_CHAT_DEFAULT_MODEL,
+        provider=CONSOLE_CHAT_DEFAULT_PROVIDER,
+        max_tokens=CONSOLE_CHAT_MAX_TOKENS,
+        reasoning_effort=CONSOLE_CHAT_REASONING_EFFORT,
+        verbosity=CONSOLE_CHAT_VERBOSITY,
+    )
 
 
 async def _get_or_create_console_mcp_server(runtime_context: Dict[str, Any]) -> Any:
@@ -1587,6 +1656,7 @@ async def run_console_chat_response_async(
             enable_mcp=True,
             mcp_server=mcp_server,
             context=context,
+            lifecycle_trace=latency_trace,
         )
         if latency_trace is not None:
             latency_trace["t_run_completed"] = utc_now()

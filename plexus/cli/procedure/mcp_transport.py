@@ -584,18 +584,20 @@ class EmbeddedMCPServer:
             # plexus.* runtime APIs.
             import sys
             import os
-            
+
             # Create a mock MCP object that captures tool registrations
             class ToolCapture:
                 def __init__(self, server):
                     self.server = server
                     self.registered_tools = []
-                
-                def tool(self):
+
+                def tool(self, *, description: Optional[str] = None):
                     def decorator(func):
                         # Extract tool info from the function
                         tool_name = func.__name__
-                        tool_description = func.__doc__ or f"Tool: {tool_name}"
+                        tool_description = (
+                            description or func.__doc__ or f"Tool: {tool_name}"
+                        )
 
                         # Build JSON schema from the registered function signature.
                         # This keeps MCP tool argument contracts available to Tactus.
@@ -821,6 +823,7 @@ class EmbeddedMCPServer:
                     _default_handle_store as _et_handles,
                     BudgetGate,
                     BudgetSpec,
+                    EXECUTE_TACTUS_DESCRIPTION,
                 )
 
                 _et_trace_store = _et_traces()
@@ -833,136 +836,9 @@ class EmbeddedMCPServer:
                     tool_calls=500,
                 ))
 
-                @tool_capture.tool()
+                @tool_capture.tool(description=EXECUTE_TACTUS_DESCRIPTION)
                 async def execute_tactus(tactus: str) -> dict:
-                    """Execute a Tactus (Lua) snippet against the Plexus runtime.
-                    `plexus` is a global providing access to all Plexus functionality.
-                    Examples:
-                      return plexus.scorecards.list({})
-                      -- For an exact account-wide duplicate-name count, do not pass the
-                      -- name as identifier. Treat opaque runtime values as exact data:
-                      -- keep dependent reads in this program and pass scorecard.id directly.
-                      local target, token, pages, summaries = "Example Scorecard", nil, 0, {}
-                      repeat
-                        local ok, page = pcall(function()
-                          return plexus.scorecards.list({ return_metadata = true, next_token = token })
-                        end)
-                        if ok and page == nil then ok = false end
-                        if not ok then
-                          ok, page = pcall(function()
-                            return plexus.scorecards.list({ return_metadata = true, next_token = token })
-                          end)
-                        end
-                        if ok and page == nil then ok = false end
-                        if not ok then return { complete = false, pages = pages, error = tostring(page) } end
-                        pages = pages + 1
-                        for _, scorecard in ipairs(page.items or {}) do
-                          if scorecard.name == target then
-                            local detail = plexus.scorecards.info({ identifier = scorecard.id })
-                            local score_count = 0
-                            local sections = detail.sections and detail.sections.items or {}
-                            for _, section in ipairs(sections) do
-                              local scores = section.scores and section.scores.items or {}
-                              score_count = score_count + #scores
-                            end
-                            summaries[#summaries + 1] = {
-                              name = detail.name,
-                              score_count = score_count,
-                            }
-                          end
-                        end
-                        token = page.nextToken
-                      until not token
-                      return { complete = true, pages = pages, count = #summaries, matches = summaries }
-                      -- Use the same metadata/next_token pattern for any exhaustive collection.
-                      -- Never silently reduce complete requested coverage to a sample.
-                      -- For complete portfolio research, collect every returned opaque ID,
-                      -- pass it directly to one bounded batch call, and return coverage.
-                      -- Never return the unaggregated alignment batch payload; consume all
-                      -- rows here and return compact totals, failures, and ranked evidence:
-                      local scorecard_ids, portfolio_pages = {}, 0
-                      token = nil
-                      repeat
-                        local ok, portfolio_page = pcall(function()
-                          return plexus.scorecards.list({ return_metadata = true, next_token = token })
-                        end)
-                        if ok and portfolio_page == nil then ok = false end
-                        if not ok then
-                          ok, portfolio_page = pcall(function()
-                            return plexus.scorecards.list({ return_metadata = true, next_token = token })
-                          end)
-                        end
-                        if ok and portfolio_page == nil then ok = false end
-                        if not ok then
-                          return { complete = false, pages = portfolio_pages, error = "collection page failed after retry" }
-                        end
-                        portfolio_pages = portfolio_pages + 1
-                        for _, scorecard in ipairs(portfolio_page.items or {}) do
-                          scorecard_ids[#scorecard_ids + 1] = scorecard.id
-                        end
-                        token = portfolio_page.nextToken
-                      until not token
-                      if #scorecard_ids == 0 then
-                        return { complete = true, pages = portfolio_pages, discovered = 0, coverage = {
-                          target_count = 0, completed_count = 0, failed_count = 0, complete = true,
-                        } }
-                      end
-                      local analysis = plexus.feedback.alignment_batch({ scorecards = scorecard_ids, days = 14 })
-                      local priorities, failures = {}, {}
-                      local scorecards_with_feedback, scores_analyzed, feedback_items = 0, 0, 0
-                      for _, scorecard_result in ipairs(analysis.scorecards or {}) do
-                        if scorecard_result.error then
-                          failures[#failures + 1] = {
-                            scorecard_name = scorecard_result.scorecard_name,
-                            error = string.sub(tostring(scorecard_result.error), 1, 240),
-                          }
-                        else
-                          local has_feedback = false
-                          for _, score_result in ipairs(scorecard_result.scores or {}) do
-                            scores_analyzed = scores_analyzed + 1
-                            local item_count = tonumber(score_result.total_items) or 0
-                            feedback_items = feedback_items + item_count
-                            if item_count > 0 then
-                              has_feedback = true
-                              priorities[#priorities + 1] = {
-                                scorecard_name = scorecard_result.scorecard_name,
-                                score_name = score_result.score_name,
-                                total_items = item_count,
-                                accuracy = score_result.accuracy,
-                                ac1 = score_result.ac1,
-                                warning = score_result.warning,
-                              }
-                            end
-                          end
-                          if has_feedback then scorecards_with_feedback = scorecards_with_feedback + 1 end
-                        end
-                      end
-                      table.sort(priorities, function(a, b)
-                        local a_accuracy = tonumber(a.accuracy) or 101
-                        local b_accuracy = tonumber(b.accuracy) or 101
-                        if a_accuracy == b_accuracy then return a.total_items > b.total_items end
-                        return a_accuracy < b_accuracy
-                      end)
-                      local highlights = {}
-                      for index = 1, math.min(#priorities, 10) do highlights[index] = priorities[index] end
-                      return {
-                        complete = analysis.coverage.complete,
-                        pages = portfolio_pages,
-                        discovered = #scorecard_ids,
-                        coverage = analysis.coverage,
-                        totals = {
-                          scorecards_with_feedback = scorecards_with_feedback,
-                          scores_analyzed = scores_analyzed,
-                          feedback_items = feedback_items,
-                        },
-                        ranked_from_count = #priorities,
-                        priorities = highlights,
-                        failures = failures,
-                      }
-                      return plexus.score.info({ id = "score-id" })
-                      return plexus.evaluation.find_recent({ score_id = "id", count = 5 })
-                      return plexus.item.last({ count = 1 })
-                    """
+                    """Execute a short Tactus snippet through the single Plexus MCP tool."""
                     return await _et_run(
                         tactus,
                         None,

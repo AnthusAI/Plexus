@@ -1,0 +1,31 @@
+{
+  "id": "plx-e4aec8b1-75fe-4a85-a057-6135fabe3899",
+  "title": "Integrate released Tactus lifecycle APIs and verify latency",
+  "description": "Upgrade the Tactus dependency, remove runtime method replacement, prewarm the Console model stack, correct latency metrics, keep tool context compact, and verify locally plus in the sandbox before production approval.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-0f79ddc4-5ad8-408b-a1cc-fbe32f7f20aa",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "1aa0f2e6-3597-4683-824c-791df48424de",
+      "author": "ryan.porter",
+      "text": "Verification also found one remaining DSPy ToolCall compatibility monkeypatch in the procedure executor. It must be removed and covered by the owned Tactus object-shape support before this integration task is complete.",
+      "created_at": "2026-07-23T20:11:07.489539Z"
+    },
+    {
+      "id": "61db88ee-754f-49b3-963f-e0ea41113002",
+      "author": "ryan.porter",
+      "text": "Integrated the local Tactus branch through supported APIs only: removed the remaining Tactus/DSPy method and ToolCall monkeypatches, prewarmed the configured Console model, disabled redundant per-turn steering reads through supported Agent configuration, and replaced misleading model timing with lifecycle phases. Corrected the built-in procedure registry/config version to 1.6.32. Focused Plexus verification passes: 346 tests. Sandbox browser benchmark: 7.596s fresh, 7.268s mean across ten warm turns, down from 15.155s; provider first chunk normally 1.65-2.1s and no request-time LM initialization. Awaiting the reviewed Tactus patch release before locking Plexus to the released artifact and running the full Python CI matrix.",
+      "created_at": "2026-07-23T20:34:01.873075Z"
+    }
+  ],
+  "created_at": "2026-07-23T18:45:38.775982Z",
+  "updated_at": "2026-07-23T20:34:01.873075Z",
+  "closed_at": null,
+  "custom": {}
+}
