@@ -554,18 +554,17 @@ async def test_direct_run_does_not_hydrate_an_unrelated_console_session(monkeypa
         lambda *_a, **_k: SimpleNamespace(),
     )
 
-    class Recorder:
-        account_id = None
-
-        def get_latest_console_trigger_message(self):
-            raise AssertionError("direct run must not read a Console trigger")
-
-        def get_console_session_history(self):
-            raise AssertionError("direct run must not read Console history")
-
     monkeypatch.setattr(
         "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
-        lambda *_a, **_k: Recorder(),
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            AssertionError("direct run must not construct a durable chat recorder")
+        ),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            AssertionError("direct run must not construct a durable trace sink")
+        ),
     )
     monkeypatch.setattr(
         "plexus.cli.procedure.cloudwatch_logger._create_procedure_cloudwatch_logger",

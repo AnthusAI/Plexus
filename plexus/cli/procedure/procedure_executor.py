@@ -1029,6 +1029,52 @@ class _PlexusTraceLogBridge:
         await asyncio.to_thread(self._worker.join, 1.0)
 
 
+class _DirectRunChatRecorder:
+    """Process-local recorder used when no dashboard procedure exists."""
+
+    account_id: Optional[str] = None
+
+    async def start_session(self, *args: Any, **kwargs: Any) -> str:
+        return "direct-run"
+
+    async def record_message(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+    async def record_assistant_message(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+    async def record_system_message(self, *args: Any, **kwargs: Any) -> str:
+        return ""
+
+    async def record_user_message(self, *args: Any, **kwargs: Any) -> str:
+        return ""
+
+    async def record_tool_call(self, *args: Any, **kwargs: Any) -> str:
+        return ""
+
+    async def record_tool_response(self, *args: Any, **kwargs: Any) -> str:
+        return ""
+
+    async def update_message(self, *args: Any, **kwargs: Any) -> bool:
+        return False
+
+    async def end_session(self, *args: Any, **kwargs: Any) -> bool:
+        return True
+
+
+class _DirectRunTraceSink:
+    """Avoid durable trace writes for an explicitly process-local execution."""
+
+    def __init__(self) -> None:
+        self.assistant_message_texts: list[str] = []
+
+    async def record(self, event: Any) -> None:
+        return None
+
+    async def flush(self) -> None:
+        return None
+
+
 async def execute_procedure(
     procedure_id: str,
     procedure_code: str,
@@ -1584,7 +1630,11 @@ async def _execute_tactus(
             if direct_run
             else PlexusStorageAdapter(client, procedure_id)
         )
-        chat_recorder = ProcedureChatRecorder(client, procedure_id)
+        chat_recorder = (
+            _DirectRunChatRecorder()
+            if direct_run
+            else ProcedureChatRecorder(client, procedure_id)
+        )
         child_budget = (
             context.get("_plexus_child_budget")
             if isinstance(context, dict)
@@ -1615,7 +1665,7 @@ async def _execute_tactus(
         hitl = options.pop("hitl_adapter", None)
         if hitl is None:
             hitl = PlexusHITLAdapter(client, procedure_id, chat_recorder, storage)
-        trace_sink = PlexusTraceSink(chat_recorder)
+        trace_sink = _DirectRunTraceSink() if direct_run else PlexusTraceSink(chat_recorder)
 
         def _on_incremental_cost_event(event: Any) -> None:
             # Persist each inference cost event as it arrives so dashboards can
@@ -1642,10 +1692,12 @@ async def _execute_tactus(
                 invocation_run_id=invocation_run_id,
             )
 
-        log_bridge = _PlexusTraceLogBridge(
-            trace_sink,
-            on_cost_event=_on_incremental_cost_event,
-            cw_logger=cw_logger,
+        log_bridge = (
+            None if direct_run else _PlexusTraceLogBridge(
+                trace_sink,
+                on_cost_event=_on_incremental_cost_event,
+                cw_logger=cw_logger,
+            )
         )
 
         # Create Tactus runtime with Plexus adapters.
