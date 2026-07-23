@@ -670,3 +670,48 @@ class PlexusStorageAdapter:
         metadata = self.load_procedure_metadata(procedure_id)
         metadata.state = {}
         self.save_procedure_metadata(procedure_id, metadata)
+
+
+class InMemoryStorageAdapter(PlexusStorageAdapter):
+    """Ephemeral Tactus storage for an explicitly direct procedure invocation.
+
+    A direct invocation is intentionally not a dashboard Procedure execution: it
+    has no Procedure record to update and must never require the attachment
+    bucket.  It still needs Tactus' normal checkpoint/state interface during
+    the lifetime of the process, so share the protocol implementation above
+    while replacing only the persistence boundary.
+    """
+
+    def __init__(self, procedure_id: str):
+        self.procedure_id = procedure_id
+        self._metadata_cache = ProcedureMetadata(procedure_id=procedure_id)
+        logger.info("InMemoryStorageAdapter initialized for direct procedure %s", procedure_id)
+
+    def load_procedure_metadata(self, procedure_id: str) -> ProcedureMetadata:
+        if procedure_id != self.procedure_id:
+            logger.warning(
+                "Requested procedure_id %s does not match direct procedure %s",
+                procedure_id,
+                self.procedure_id,
+            )
+        return self._metadata_cache
+
+    def save_procedure_metadata(self, procedure_id: str, metadata: ProcedureMetadata) -> None:
+        if procedure_id != self.procedure_id:
+            logger.warning(
+                "Saving metadata for %s into direct procedure %s",
+                procedure_id,
+                self.procedure_id,
+            )
+        self._metadata_cache = metadata
+
+    def update_procedure_status(
+        self,
+        procedure_id: str,
+        status: str,
+        waiting_on_message_id: Optional[str] = None,
+    ) -> None:
+        metadata = self.load_procedure_metadata(procedure_id)
+        metadata.status = status
+        metadata.waiting_on_message_id = waiting_on_message_id
+        self.save_procedure_metadata(procedure_id, metadata)

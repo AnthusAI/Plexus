@@ -1117,7 +1117,12 @@ async def _execute_tactus(
 
     try:
         from tactus.core import TactusRuntime
-        from .tactus_adapters import PlexusStorageAdapter, PlexusHITLAdapter, PlexusTraceSink
+        from .tactus_adapters import (
+            InMemoryStorageAdapter,
+            PlexusStorageAdapter,
+            PlexusHITLAdapter,
+            PlexusTraceSink,
+        )
         from .chat_recorder import ProcedureChatRecorder
         
         def _extract_legacy_input_from_params(source_config: Dict[str, Any]) -> Dict[str, Any]:
@@ -1551,8 +1556,15 @@ async def _execute_tactus(
             import os
             _api_key = os.getenv('OPENAI_API_KEY')
 
-        # Create Plexus adapters
-        storage = PlexusStorageAdapter(client, procedure_id)
+        # A caller may explicitly request a direct, process-local execution.
+        # Unlike a dashboard procedure it owns no durable Procedure record, so
+        # checkpoint/state must remain in memory and never touch S3.
+        direct_run = bool(options.pop("direct_run", False))
+        storage = (
+            InMemoryStorageAdapter(procedure_id)
+            if direct_run
+            else PlexusStorageAdapter(client, procedure_id)
+        )
         chat_recorder = ProcedureChatRecorder(client, procedure_id)
         child_budget = (
             context.get("_plexus_child_budget")
@@ -1618,6 +1630,7 @@ async def _execute_tactus(
         _runtime_param_names: list = [
             "procedure_id", "storage_backend", "hitl_handler", "chat_recorder",
             "trace_sink", "log_handler", "mcp_server", "openai_api_key", "run_id",
+            "source_file_path",
         ]
 
         runtime_kwargs: Dict[str, Any] = {
@@ -1630,6 +1643,7 @@ async def _execute_tactus(
             "mcp_server": mcp_server,
             "openai_api_key": _api_key,
             "run_id": invocation_run_id,
+            "source_file_path": options.pop("source_file_path", None),
         }
         supports_chat_recorder = True
         try:

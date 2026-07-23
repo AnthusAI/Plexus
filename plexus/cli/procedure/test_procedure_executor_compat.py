@@ -28,8 +28,10 @@ def test_score_change_audit_calls_out_guidelines_only_candidate() -> None:
 class _FakeRuntime:
     last_context = None
     last_instance = None
+    last_kwargs = None
 
     def __init__(self, **_kwargs):
+        _FakeRuntime.last_kwargs = _kwargs
         self.toolset_registry = {}
         self.tool_primitive = None
         self.log_handler = None
@@ -478,6 +480,47 @@ async def test_execute_tactus_initializes_embedded_mcp_transport(monkeypatch):
 
     assert result["success"] is True
     assert mcp_server.transport.connected is True
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_direct_run_uses_ephemeral_storage_and_source_path(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr("tactus.core.TactusRuntime", _FakeRuntime)
+
+    direct_storages = []
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.InMemoryStorageAdapter",
+        lambda procedure_id: direct_storages.append(procedure_id) or SimpleNamespace(
+            state_set=lambda *_a, **_k: None,
+            state_get=lambda *_a, **_k: {},
+        ),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="direct-1",
+        procedure_source="name: Test\nclass: Tactus\ncode: |\n  return { success = true }\n",
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={},
+        direct_run=True,
+        source_file_path="/tmp/direct_optimizer.tac",
+    )
+
+    assert result["success"] is True
+    assert direct_storages == ["direct-1"]
+    assert _FakeRuntime.last_kwargs["source_file_path"] == "/tmp/direct_optimizer.tac"
 
 
 @pytest.mark.asyncio

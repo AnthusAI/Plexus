@@ -2,7 +2,10 @@ import json
 
 from tactus.protocols.models import ProcedureMetadata
 
-from plexus.cli.procedure.tactus_adapters.storage import PlexusStorageAdapter
+from plexus.cli.procedure.tactus_adapters.storage import (
+    InMemoryStorageAdapter,
+    PlexusStorageAdapter,
+)
 from plexus.dashboard.api.client import LONG_RUNNING_WRITE_RETRY_POLICY_NAME
 
 
@@ -107,3 +110,16 @@ def test_update_procedure_status_uses_long_running_write_policy():
     storage.update_procedure_status("proc-123", "RUNNING", waiting_on_message_id="msg-1")
 
     assert fake_client.retry_policies[-1] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+
+
+def test_in_memory_storage_keeps_direct_run_state_without_dashboard_or_s3_calls():
+    storage = InMemoryStorageAdapter("direct-procedure")
+
+    storage.state_set("direct-procedure", "phase", "baseline")
+    storage.checkpoint_save("direct-procedure", "read_feedback", {"count": 3})
+    storage.update_procedure_status("direct-procedure", "COMPLETED")
+
+    metadata = storage.load_procedure_metadata("direct-procedure")
+    assert metadata.state == {"phase": "baseline"}
+    assert storage.checkpoint_get("direct-procedure", "read_feedback") == {"count": 3}
+    assert metadata.status == "COMPLETED"
