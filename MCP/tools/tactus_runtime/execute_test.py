@@ -438,6 +438,53 @@ def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> 
     ]
 
 
+def test_tactus_dataflow_preserves_opaque_id_between_collection_calls(monkeypatch) -> None:
+    """Dependent reads receive the exact opaque ID returned by discovery."""
+    opaque_id = "0a0a0a0a-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    info_args: list[dict[str, Any]] = []
+
+    def fake_list(args: dict[str, Any]) -> dict[str, Any]:
+        assert args == {"return_metadata": True}
+        return {
+            "items": [{"id": opaque_id, "name": "Example Scorecard"}],
+            "nextToken": None,
+        }
+
+    def fake_info(args: dict[str, Any]) -> dict[str, Any]:
+        info_args.append(args)
+        return {"name": "Example Scorecard", "sections": {"items": []}}
+
+    runtime_module = execute.PlexusRuntimeModule
+
+    def module_factory(*args, **kwargs):
+        return runtime_module(
+            *args,
+            **kwargs,
+            scorecards_lister=fake_list,
+            scorecards_infoer=fake_info,
+        )
+
+    monkeypatch.setattr(execute, "PlexusRuntimeModule", module_factory)
+    result = execute._run_tactus_sync(
+        """
+        local page = plexus.scorecards.list({ return_metadata = true })
+        local record = page.items[1]
+        local detail = plexus.scorecards.info({ identifier = record.id })
+        return { id = record.id, name = detail.name }
+        """,
+        FastMCP("test-opaque-value-dataflow"),
+        trace_id="trace-opaque-value-dataflow",
+        trace_store=_RecordingTraceStore(),
+    )
+
+    assert result["ok"] is True
+    assert result["value"] == {
+        "id": opaque_id,
+        "name": "Example Scorecard",
+    }
+    assert info_args == [{"identifier": opaque_id}]
+
+
 def test_default_scorecards_list_returns_metadata_for_account_wide_pages(monkeypatch) -> None:
     """Metadata pagination remains available without identifier resolution."""
     from plexus.cli.shared import client_utils, memoized_resolvers

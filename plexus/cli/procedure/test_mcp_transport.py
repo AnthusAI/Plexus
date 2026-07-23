@@ -301,6 +301,9 @@ class TestEmbeddedMCPServer:
         assert "return_metadata = true" in execute_tactus_tool.description
         assert "next_token = token" in execute_tactus_tool.description
         assert "complete = false" in execute_tactus_tool.description
+        assert "opaque runtime values" in execute_tactus_tool.description
+        assert "identifier = scorecard.id" in execute_tactus_tool.description
+        assert "score_count" in execute_tactus_tool.description
         await server.transport.initialize({"name": "Test"})
 
         result = await server.transport.call_tool(

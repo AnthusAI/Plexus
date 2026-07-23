@@ -832,8 +832,9 @@ class EmbeddedMCPServer:
                     Examples:
                       return plexus.scorecards.list({})
                       -- For an exact account-wide duplicate-name count, do not pass the
-                      -- name as identifier. Aggregate every metadata page in Lua:
-                      local target, token, pages, matches = "Example Scorecard", nil, 0, {}
+                      -- name as identifier. Treat opaque runtime values as exact data:
+                      -- keep dependent reads in this program and pass scorecard.id directly.
+                      local target, token, pages, summaries = "Example Scorecard", nil, 0, {}
                       repeat
                         local ok, page = pcall(function()
                           return plexus.scorecards.list({ return_metadata = true, next_token = token })
@@ -846,11 +847,23 @@ class EmbeddedMCPServer:
                         if not ok then return { complete = false, pages = pages, error = tostring(page) } end
                         pages = pages + 1
                         for _, scorecard in ipairs(page.items or {}) do
-                          if scorecard.name == target then matches[#matches + 1] = scorecard.id end
+                          if scorecard.name == target then
+                            local detail = plexus.scorecards.info({ identifier = scorecard.id })
+                            local score_count = 0
+                            local sections = detail.sections and detail.sections.items or {}
+                            for _, section in ipairs(sections) do
+                              local scores = section.scores and section.scores.items or {}
+                              score_count = score_count + #scores
+                            end
+                            summaries[#summaries + 1] = {
+                              name = detail.name,
+                              score_count = score_count,
+                            }
+                          end
                         end
                         token = page.nextToken
                       until not token
-                      return { complete = true, pages = pages, count = #matches, ids = matches }
+                      return { complete = true, pages = pages, count = #summaries, matches = summaries }
                       -- Use the same metadata/next_token pattern for any exhaustive collection.
                       return plexus.score.info({ id = "score-id" })
                       return plexus.evaluation.find_recent({ score_id = "id", count = 5 })

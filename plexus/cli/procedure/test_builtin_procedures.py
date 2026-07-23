@@ -47,6 +47,8 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     assert "Do not conclude that a score is strict or lenient" in system_prompt
     assert "exhaustive collection questions" in system_prompt
     assert "pagination metadata" in system_prompt
+    assert "opaque runtime values" in system_prompt
+    assert "never retype or reconstruct them" in system_prompt
     assert len(system_prompt) < 1_200
     assert "prompt_contract" not in parsed
     assert isinstance(parsed.get("code"), str)
@@ -88,6 +90,11 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     assert "Call a result exact only after that completion condition" in parsed["code"]
     assert "retry that same page once" in parsed["code"]
     assert "report incomplete coverage and no exact count" in parsed["code"]
+    assert "OPAQUE RUNTIME VALUE INTEGRITY" in parsed["code"]
+    assert "Never reconstruct, repair, abbreviate, or manually retype" in parsed["code"]
+    assert "pass `record.id` directly" in parsed["code"]
+    assert "rediscover the target inside the authorized execution program" in parsed["code"]
+    assert "A not-found response is a lookup failure" in parsed["code"]
     assert "must not call evaluation.find_recent with only count" in parsed["code"]
     assert "Never use evaluation.find_recent for " in parsed["code"]
     assert "portfolio triage." in parsed["code"]
@@ -385,7 +392,7 @@ def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
     # Bumped when the Console assistant tool contract changes.
-    assert parsed["version"] == "1.6.27"
+    assert parsed["version"] == "1.6.28"
 
 
 def test_is_builtin_procedure_id():
