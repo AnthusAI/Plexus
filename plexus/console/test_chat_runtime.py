@@ -749,7 +749,11 @@ def test_run_console_chat_response_passes_console_context_to_builtin(monkeypatch
             calls.append((procedure_id, kwargs, self.service_client))
             return {"success": True, "response": "42"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_procedure_service",
+        lambda service_client: FakeProcedureService(service_client),
+    )
 
     assert message is not None
     latency_trace = {}
@@ -809,7 +813,11 @@ def test_run_console_chat_response_passes_session_score_scope_to_builtin(monkeyp
             calls.append(kwargs)
             return {"success": True, "response": "ok"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_procedure_service",
+        lambda service_client: FakeProcedureService(service_client),
+    )
     monkeypatch.setattr(
         chat_runtime,
         "fetch_chat_session",
@@ -890,7 +898,11 @@ def test_run_console_chat_response_passes_durable_unpromoted_edit_state(monkeypa
             calls.append(kwargs)
             return {"success": True, "response": "ok"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_procedure_service",
+        lambda service_client: FakeProcedureService(service_client),
+    )
     monkeypatch.setattr(
         chat_runtime,
         "fetch_session_history",
@@ -1008,7 +1020,11 @@ def test_console_tool_mode_message_snapshot_overrides_session(monkeypatch):
             calls.append((procedure_id, kwargs, self.service_client))
             return {"success": True, "response": "ok"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_procedure_service",
+        lambda service_client: FakeProcedureService(service_client),
+    )
 
     assert message is not None
     chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
@@ -1034,7 +1050,11 @@ def test_console_tool_mode_uses_session_metadata_when_message_has_no_snapshot(mo
             calls.append((procedure_id, kwargs, self.service_client))
             return {"success": True, "response": "ok"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_procedure_service",
+        lambda service_client: FakeProcedureService(service_client),
+    )
 
     assert message is not None
     chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
@@ -1060,7 +1080,11 @@ def test_run_console_chat_response_passes_selected_model_override(monkeypatch):
             calls.append((procedure_id, kwargs, self.service_client))
             return {"success": True, "response": "ok"}
 
-    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_procedure_service",
+        lambda service_client: FakeProcedureService(service_client),
+    )
 
     assert message is not None
     result = chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
