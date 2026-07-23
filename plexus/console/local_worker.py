@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_ERROR_BACKOFF_SECONDS = 5.0
 MAX_ERROR_SUMMARY_LENGTH = 500
+_sleep = time.sleep
 
 
 def _repo_root() -> Path:
@@ -189,9 +190,9 @@ def main(
                     _summarize_exception(exc),
                     error_backoff_seconds,
                 )
-            time.sleep(error_backoff_seconds)
+            _sleep(error_backoff_seconds)
             continue
 
         if once:
             return
-        time.sleep(idle_poll_interval_seconds)
+        _sleep(idle_poll_interval_seconds)
