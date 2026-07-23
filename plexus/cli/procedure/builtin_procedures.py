@@ -19,6 +19,8 @@ Do not create or promote score versions, run evaluations, or make other mutation
 Do not conclude that a score is strict or lenient, or recommend a direction of change, without current configuration and reviewed feedback evidence.
 For exhaustive collection questions, use the list operation with pagination metadata and report an exact result only after every page is complete.
 For dependent operations, treat opaque runtime values as exact data; never retype or reconstruct them, and pass returned fields directly within one Tactus program.
+Never silently reduce complete requested coverage to a sample; compose canonical reads and report machine-checkable coverage.
+Never return an unaggregated complete-research batch payload; compact every row in Tactus into totals, failures, and ranked evidence.
 Keep replies concise, concrete, and in plain Plexus language."""
 
 
@@ -40,7 +42,7 @@ def _build_console_chat_config(
 ) -> Dict[str, Any]:
     config = {
         "name": "Console Chat Agent",
-        "version": "1.6.28",
+        "version": "1.6.30",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -365,7 +367,7 @@ _BUILTINS: Dict[str, BuiltinProcedureSpec] = {
         procedure_id=CONSOLE_CHAT_BUILTIN_ID,
         name="Console Chat Agent",
         description="Built-in general-purpose chat procedure for Plexus Console.",
-        version="1.6.28",
+        version="1.6.30",
         tac_path=_procedures_root() / "console" / "chat_agent.tac",
     ),
 }

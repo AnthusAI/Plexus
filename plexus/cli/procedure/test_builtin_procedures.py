@@ -49,6 +49,8 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     assert "pagination metadata" in system_prompt
     assert "opaque runtime values" in system_prompt
     assert "never retype or reconstruct them" in system_prompt
+    assert "Never silently reduce complete requested coverage to a sample" in system_prompt
+    assert "Never return an unaggregated complete-research batch payload" in system_prompt
     assert len(system_prompt) < 1_200
     assert "prompt_contract" not in parsed
     assert isinstance(parsed.get("code"), str)
@@ -73,10 +75,15 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     assert "must obtain both a current `plexus.score.info` result and reviewed disagreement examples" in parsed["code"]
     assert "If this turn did not retrieve reviewed feedback, do not call the score strict or lenient" in parsed["code"]
     assert "Portfolio_read_only mode permits read-only cross-scorecard research" in parsed["code"]
-    assert (
-        "Portfolio research workflow: make one bounded call to "
-        "`plexus.feedback.alignment_batch({ scorecard_limit = 5, days = 30 })`"
-    ) in parsed["code"]
+    assert "COMPLETE COVERAGE CONTRACT" in parsed["code"]
+    assert "Never silently reduce requested complete coverage to a sample" in parsed["code"]
+    assert "only when the user explicitly requests or approves a sample" in parsed["code"]
+    assert "pass every returned `record.id` directly" in parsed["code"]
+    assert "one `plexus.feedback.alignment_batch` call" in parsed["code"]
+    assert "requested, completed, failed, and complete" in parsed["code"]
+    assert "Never return the unaggregated batch payload" in parsed["code"]
+    assert "ranked-from count" in parsed["code"]
+    assert "If exhaustive enumeration returns zero targets" in parsed["code"]
     # The compact runtime prompt is what the deployed assistant actually
     # receives; keep the portfolio routing guard in that prompt too.
     assert "Deictic scope: when scorecard or score scope is selected" in parsed["code"]
@@ -102,17 +109,13 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     assert "Do not call the session read-only" in parsed["code"]
     assert "plexus.scorecards.create" in parsed["code"]
     assert "plexus.score.update" in parsed["code"]
-    assert "do not inventory scorecards separately" in parsed["code"]
-    assert "selection rule, and coverage" in parsed["code"]
     assert "do not ask the user to choose a subset" in parsed["code"]
-    assert "scorecard_limit = 5" in parsed["code"]
-    assert parsed["code"].count("scorecard_limit = 5") == 2
-    assert "call it a sample unless every in-scope scorecard was analyzed" in parsed["code"]
-    assert "clear but unqualified account-wide research request" in parsed["code"]
+    assert "For complete account-wide research, do not use `scorecard_limit`" in parsed["code"]
+    assert "A sample is a distinct, explicitly authorized scope" in parsed["code"]
     assert "plexus.feedback.alignment_batch({ scorecards =" in parsed["code"]
     assert "do not make one sequential batch call per scorecard" in parsed["code"]
     assert "Never call plexus.scorecard.alignment_batch" in parsed["code"]
-    assert "execute the full bounded review in this turn" in parsed["code"]
+    assert "execute the full requested review in this turn" in parsed["code"]
     assert "do not re-run a scorecard-wide alignment batch" in parsed["code"]
     assert "scorecard triage offered examples for a named score" in parsed["code"]
     assert "multiple named scores" in parsed["code"]
@@ -392,7 +395,7 @@ def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
     # Bumped when the Console assistant tool contract changes.
-    assert parsed["version"] == "1.6.28"
+    assert parsed["version"] == "1.6.30"
 
 
 def test_is_builtin_procedure_id():
