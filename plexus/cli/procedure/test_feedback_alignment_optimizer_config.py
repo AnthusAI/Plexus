@@ -915,6 +915,10 @@ def test_optimizer_yaml_terminates_dry_runs_before_candidate_follow_on_work():
     code = config["code"]
 
     assert "local dry_run_proposals = {}" in code
+    assert (
+        "if ok and submit_result and (submit_result.dry_run == true or submit_result.version_id) then"
+        in code
+    )
     assert "if submit_result.dry_run == true then" in code
     assert "table.insert(dry_run_proposals" in code
     assert "no score version, smoke test, or evaluation will run" in code

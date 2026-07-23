@@ -6694,7 +6694,10 @@ code: |
         local submit_call = Tool.last_call("submit_score_version")
         if submit_call then
           local ok, submit_result = pcall(function() return safe_decode(submit_call.result) end)
-          if ok and submit_result and submit_result.version_id then
+          -- A dry run intentionally has no durable version ID.  Treat its
+          -- explicit dry_run result as a valid terminal proposal, while still
+          -- requiring a real ID for a persisted candidate.
+          if ok and submit_result and (submit_result.dry_run == true or submit_result.version_id) then
             local candidate_id = submit_result.version_id
             local submitted_editor_content = call_plexus_tool("score_editor_get_content", {})
             local submitted_file_content = submitted_editor_content and submitted_editor_content.file_content or ""
