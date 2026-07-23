@@ -908,3 +908,21 @@ def test_optimizer_yaml_forwards_dry_run_to_every_score_editor_setup():
     assert len(setup_blocks) == 2
     for block in setup_blocks:
         assert "dry_run              = params.dry_run" in block.split("})", 1)[0]
+
+
+def test_optimizer_yaml_terminates_dry_runs_before_candidate_follow_on_work():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local dry_run_proposals = {}" in code
+    assert "if submit_result.dry_run == true then" in code
+    assert "table.insert(dry_run_proposals" in code
+    assert "no score version, smoke test, or evaluation will run" in code
+
+    phase_three = code.split("-- PHASE 3: Batch evaluate all submitted versions", 1)[1]
+    dry_run_guard, batch_evaluation = phase_three.split("if #submitted_versions == 0 then", 1)
+    assert "if params.dry_run == true then" in dry_run_guard
+    assert 'status = "dry_run"' in dry_run_guard
+    assert "proposals = dry_run_proposals" in dry_run_guard
+    assert "plexus_evaluation_run" not in dry_run_guard
+    assert "plexus_evaluation_run" in batch_evaluation

@@ -6403,6 +6403,7 @@ code: |
     -- PHASE 2: Implement each hypothesis (continuous conversation)
     -- ================================================================
     local submitted_versions = {}
+    local dry_run_proposals = {}
     local submitted_version_keys = {}
     local submitted_version_ids = {}
     local function record_submitted_version(entry)
@@ -6695,64 +6696,79 @@ code: |
           local ok, submit_result = pcall(function() return safe_decode(submit_call.result) end)
           if ok and submit_result and submit_result.version_id then
             local candidate_id = submit_result.version_id
-            Human.notify({message = string.format(
-              "    Hypothesis %d: version %s created (step %d) — smoke testing...",
-              h, candidate_id, react_step), level = "info"})
-
-            local smoke_passed = false
-            local smoke_detail = ""
             local submitted_editor_content = call_plexus_tool("score_editor_get_content", {})
             local submitted_file_content = submitted_editor_content and submitted_editor_content.file_content or ""
-            if protect_mechanical_prompt_lines and contains_legacy_xcc_placeholders(submitted_file_content) then
-              smoke_detail = build_legacy_placeholder_guard_failure(candidate_id, submitted_file_content)
-            else
-              local test_ok, test_result = pcall(call_plexus_tool, "plexus_score_test", {
-                scorecard_identifier = params.scorecard,
-                score_identifier     = score_id,
-                version              = candidate_id,
-                samples              = 3
+            if submit_result.dry_run == true then
+              local version_note = tostring(tool_call_arg(submit_call, "version_note", ""))
+              table.insert(dry_run_proposals, {
+                index = h,
+                hypothesis = hyp,
+                version_note = version_note,
+                yaml_content = submitted_file_content,
               })
-              if not test_ok then
-                smoke_detail = "Score test call error: " .. tostring(test_result)
-              elseif type(test_result) ~= "table" then
-                smoke_detail = "Score test returned non-table response: " .. tostring(test_result)
+              hyp_done_reason = version_note ~= "" and version_note or "dry-run proposal generated"
+              hypothesis_done = true
+              Human.notify({message = string.format(
+                "    Hypothesis %d: validated dry-run proposal captured; no score version, smoke test, or evaluation will run.",
+                h), level = "info"})
+            else
+              Human.notify({message = string.format(
+                "    Hypothesis %d: version %s created (step %d) — smoke testing...",
+                h, candidate_id, react_step), level = "info"})
+
+              local smoke_passed = false
+              local smoke_detail = ""
+              if protect_mechanical_prompt_lines and contains_legacy_xcc_placeholders(submitted_file_content) then
+                smoke_detail = build_legacy_placeholder_guard_failure(candidate_id, submitted_file_content)
               else
-                smoke_passed = test_result.passed == true
-                if not smoke_passed then
-                  local base = tostring(test_result.message or "Score test failed")
-                  local fc = tostring(test_result.failure_code or "unknown")
-                  smoke_detail = string.format("%s (failure_code=%s)", base, fc)
-                  if test_result.failures and #test_result.failures > 0 then
-                    smoke_detail = smoke_detail .. "\n\nFailure details:\n" .. tostring(safe_encode(test_result.failures) or "[]")
-                  elseif test_result.predictions and #test_result.predictions > 0 then
-                    smoke_detail = smoke_detail .. "\n\nPrediction details:\n" .. tostring(safe_encode(test_result.predictions) or "[]")
-                  end
-                  if fc == "unresolved_prompt_placeholders" then
-                    smoke_detail = "MECHANICAL PROMPT RENDERING FAILURE: rendered LLM messages contain unresolved template placeholders. "
-                      .. "Repair placeholder syntax or metadata interpolation before attempting rubric tuning.\n\n"
-                      .. smoke_detail
+                local test_ok, test_result = pcall(call_plexus_tool, "plexus_score_test", {
+                  scorecard_identifier = params.scorecard,
+                  score_identifier     = score_id,
+                  version              = candidate_id,
+                  samples              = 3
+                })
+                if not test_ok then
+                  smoke_detail = "Score test call error: " .. tostring(test_result)
+                elseif type(test_result) ~= "table" then
+                  smoke_detail = "Score test returned non-table response: " .. tostring(test_result)
+                else
+                  smoke_passed = test_result.passed == true
+                  if not smoke_passed then
+                    local base = tostring(test_result.message or "Score test failed")
+                    local fc = tostring(test_result.failure_code or "unknown")
+                    smoke_detail = string.format("%s (failure_code=%s)", base, fc)
+                    if test_result.failures and #test_result.failures > 0 then
+                      smoke_detail = smoke_detail .. "\n\nFailure details:\n" .. tostring(safe_encode(test_result.failures) or "[]")
+                    elseif test_result.predictions and #test_result.predictions > 0 then
+                      smoke_detail = smoke_detail .. "\n\nPrediction details:\n" .. tostring(safe_encode(test_result.predictions) or "[]")
+                    end
+                    if fc == "unresolved_prompt_placeholders" then
+                      smoke_detail = "MECHANICAL PROMPT RENDERING FAILURE: rendered LLM messages contain unresolved template placeholders. "
+                        .. "Repair placeholder syntax or metadata interpolation before attempting rubric tuning.\n\n"
+                        .. smoke_detail
+                    end
                   end
                 end
               end
-            end
 
-            if smoke_passed then
-              version_id = candidate_id
-              diag(string.format("Hyp %d score test passed, setting version_id=%s", h, tostring(candidate_id)))
-              local vn = tostring(tool_call_arg(submit_call, "version_note", ""))
-              if has_text(vn) then hyp_done_reason = vn end
-              hypothesis_done = true
-            else
-              Human.notify({message = string.format(
-                "    Hypothesis %d: score test FAILED — %s",
-                h, trunc(smoke_detail, 120)), level = "warning"})
-              diag(string.format("Hyp %d score test FAILED (version=%s): %s",
-                h, tostring(candidate_id), trunc(smoke_detail, 200)))
-              smoke_test_failure = string.format(
-                "Version %s was created but FAILED the mechanical score test.\n\nError detail:\n%s\n\n"
-                .. "The score_config.yaml has an execution error. Diagnose and fix it, "
-                .. "then call submit_score_version again.",
-                candidate_id, smoke_detail)
+              if smoke_passed then
+                version_id = candidate_id
+                diag(string.format("Hyp %d score test passed, setting version_id=%s", h, tostring(candidate_id)))
+                local vn = tostring(tool_call_arg(submit_call, "version_note", ""))
+                if has_text(vn) then hyp_done_reason = vn end
+                hypothesis_done = true
+              else
+                Human.notify({message = string.format(
+                  "    Hypothesis %d: score test FAILED — %s",
+                  h, trunc(smoke_detail, 120)), level = "warning"})
+                diag(string.format("Hyp %d score test FAILED (version=%s): %s",
+                  h, tostring(candidate_id), trunc(smoke_detail, 200)))
+                smoke_test_failure = string.format(
+                  "Version %s was created but FAILED the mechanical score test.\n\nError detail:\n%s\n\n"
+                  .. "The score_config.yaml has an execution error. Diagnose and fix it, "
+                  .. "then call submit_score_version again.",
+                  candidate_id, smoke_detail)
+              end
             end
 
           elseif ok and submit_result and submit_result.error then
@@ -6853,6 +6869,23 @@ code: |
     -- ================================================================
     -- PHASE 3: Batch evaluate all submitted versions
     -- ================================================================
+    if params.dry_run == true then
+      State.set("dry_run_proposals", dry_run_proposals)
+      Human.notify({message = string.format(
+        "Cycle %d — dry run complete: %d validated proposal(s); no score versions, smoke tests, or evaluations were created.",
+        cycle, #dry_run_proposals), level = "info"})
+      return {
+        success = true,
+        status = "dry_run",
+        message = string.format("Dry run completed with %d validated proposal(s); no score version was created.", #dry_run_proposals),
+        regression_baseline_id = regression_baseline_id,
+        recent_baseline_id = recent_baseline_id,
+        proposals = dry_run_proposals,
+        scorecard_id = scorecard_id,
+        score_id = score_id,
+      }
+    end
+
     if #submitted_versions == 0 then
       -- No hypotheses produced a version
       local skip_reason = any_cannot_improve and "cannot_improve" or "all_hypotheses_failed"
