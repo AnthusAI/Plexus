@@ -6183,11 +6183,10 @@ code: |
       rubric_memory_briefing = rubric_memory_briefing
     })
 
-    -- Log planning context for debugging
-    local context_log_path = string.format("optimizer_cycle%d_planning_context.txt", cycle)
-    pcall(function()
-      File.write(context_log_path, planning_inject .. "\n\nLane-specific cookbooks are injected per hypothesis slot.")
-    end)
+    -- The planning context is already represented in the procedure trace and
+    -- notifications. Lane-specific cookbooks are injected per hypothesis slot.
+    -- Do not write a local debug artifact here: procedure runtimes may
+    -- intentionally expose a read-only filesystem.
 
     -- Define the hypothesis generation slots for this cycle.
     -- num_candidates caps only the three normal rubric lanes; protected
@@ -6442,7 +6441,8 @@ code: |
         code_file_path       = score_pull.codeFilePath,
         parent_version_id    = last_accepted_version_id,
         iteration            = cycle,
-        hypothesis           = hyp.name .. ": " .. (hyp.description or "")
+        hypothesis           = hyp.name .. ": " .. (hyp.description or ""),
+        dry_run              = params.dry_run
       })
 
       -- Clear accumulated conversation and tool state to prevent corruption.
@@ -7017,7 +7017,8 @@ code: |
           code_file_path       = score_pull.codeFilePath,
           parent_version_id    = parent_version_id,
           iteration            = cycle,
-          hypothesis           = string.format("Cycle %d synthesis (%s)", cycle, strategy_label)
+          hypothesis           = string.format("Cycle %d synthesis (%s)", cycle, strategy_label),
+          dry_run              = params.dry_run
         })
 
         code_editor.clear_history()

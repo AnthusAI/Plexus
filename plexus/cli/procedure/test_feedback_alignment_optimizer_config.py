@@ -898,3 +898,13 @@ def test_optimizer_yaml_records_recurrence_for_failed_no_synthesis_cycles():
     assert "failed_fb_item_class" in code
     assert "record_cycle_item_recurrence(cycle, failed_fb_item_class" in code
     assert "Cycle %d - Repeat Misclassification Tracker: no repeat or transition-history items yet." in code
+
+
+def test_optimizer_yaml_forwards_dry_run_to_every_score_editor_setup():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    setup_blocks = code.split('call_plexus_tool("score_editor_setup", {')[1:]
+    assert len(setup_blocks) == 2
+    for block in setup_blocks:
+        assert "dry_run              = params.dry_run" in block.split("})", 1)[0]
