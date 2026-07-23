@@ -41,7 +41,7 @@ def test_continuous_worker_logs_compact_warning_and_backs_off(monkeypatch):
         raise _StopWorker()
 
     monkeypatch.setattr(local_worker, "process_pending_local_messages", fail_poll)
-    monkeypatch.setattr(local_worker.time, "sleep", stop_after_sleep)
+    monkeypatch.setattr(local_worker, "_sleep", stop_after_sleep)
 
     with pytest.raises(_StopWorker):
         local_worker.main(response_target="local:test")

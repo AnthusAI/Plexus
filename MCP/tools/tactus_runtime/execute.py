@@ -39,6 +39,7 @@ SCORE_EDIT_AUDIT_COMPACT_KEY = "score_edit_audit_compact"
 SCORE_AUDIT_DIFF_TEXT_MAX_CHARS = 20_000
 SCORE_AUDIT_UNIFIED_DIFF_MAX_CHARS = 20_000
 FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY = 4
+FEEDBACK_ALIGNMENT_SCORECARD_CONCURRENCY = 5
 
 
 PLEXUS_DOCS_DIR = os.path.normpath(
@@ -2261,15 +2262,17 @@ def _default_feedback_alignment_batch(
     Run plexus.feedback.alignment for all scores in one or more scorecards.
 
     Returns alignment metrics for each score in a single call, avoiding
-    N separate API calls when analyzing scorecard-wide performance. A bounded
-    ``scorecards`` list is evaluated concurrently so portfolio triage does not
-    require one sequential model tool round trip per scorecard.
+    N separate API calls when analyzing scorecard-wide performance. An explicit
+    ``scorecards`` list may contain the complete discovered target set; it is
+    evaluated with bounded concurrency and one shared feedback-window read.
 
     Target args (one of):
         scorecard (str): Scorecard name, key, or ID.
         scorecard_name (str): Scorecard name.
         scorecard_id (str): Scorecard ID.
-        scorecards (list[str]): Up to five scorecard names, keys, or IDs.
+        scorecards (list[str]): Scorecard names, keys, or IDs. Complete account
+            coverage should be discovered with paginated scorecards.list calls
+            and passed here as one explicit list.
         scorecard_limit (int): Select the first 1-5 account scorecards for a
             bounded portfolio sample without a separate inventory tool call.
 
@@ -2359,16 +2362,17 @@ def _default_feedback_alignment_batch(
                 "scorecards_requested": 0,
                 "scorecards_analyzed": 0,
                 "scorecards": [],
+                "coverage": {
+                    "target_count": 0,
+                    "completed_count": 0,
+                    "failed_count": 0,
+                    "complete": True,
+                },
             }
         if not scorecard_identifiers:
             raise ValueError(
                 "plexus.feedback.alignment_batch scorecards must not be empty"
             )
-        if len(scorecard_identifiers) > 5:
-            raise ValueError(
-                "plexus.feedback.alignment_batch accepts at most 5 scorecards"
-            )
-
         single_args = dict(args)
         for key in (
             "scorecards",
@@ -2419,15 +2423,31 @@ def _default_feedback_alignment_batch(
                 analyze_scorecard(identifier) for identifier in scorecard_identifiers
             ]
         else:
-            with ThreadPoolExecutor(max_workers=len(scorecard_identifiers)) as executor:
+            with ThreadPoolExecutor(
+                max_workers=min(
+                    FEEDBACK_ALIGNMENT_SCORECARD_CONCURRENCY,
+                    len(scorecard_identifiers),
+                )
+            ) as executor:
                 scorecard_results = list(
                     executor.map(analyze_scorecard, scorecard_identifiers)
                 )
+        failed_count = sum(
+            1 for scorecard_result in scorecard_results
+            if scorecard_result.get("error")
+        )
+        completed_count = len(scorecard_results) - failed_count
         result = {
             "days": int(float(args.get("days", 7))),
             "scorecards_requested": len(scorecard_identifiers),
             "scorecards_analyzed": len(scorecard_results),
             "scorecards": scorecard_results,
+            "coverage": {
+                "target_count": len(scorecard_identifiers),
+                "completed_count": completed_count,
+                "failed_count": failed_count,
+                "complete": completed_count == len(scorecard_identifiers),
+            },
         }
         if portfolio_selection_rule is not None:
             result["selection_rule"] = portfolio_selection_rule
@@ -2497,6 +2517,7 @@ def _default_feedback_alignment_batch(
         data = response.get("getScorecard")
         if not data:
             raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found after query")
+        scorecard_name = data.get("name") or scorecard_name
 
     # Flatten scores from all sections
     all_scores = []
@@ -10552,6 +10573,19 @@ Runtime ground rules:
   `plexus.procedure.run`) must use `async = true`. They dispatch immediately
   and return a handle — no `budget` table needed.
 
+Complete coverage contract:
+- Never silently reduce complete requested coverage to a sample.
+- Exhaustively paginate the canonical collection, keep returned IDs as opaque
+  values, and pass the complete target list to one bounded downstream call.
+- Return collection completion plus downstream coverage. If either is
+  incomplete, report an incomplete result rather than an exact answer.
+- Never return the unaggregated alignment batch payload for complete research.
+  Consume every result row in Lua and return compact totals, all failures, and
+  bounded ranked highlights with `ranked_from_count`; this is full-analysis
+  summarization, not sampling.
+- Use bounded sample arguments only when the user explicitly requests or
+  approves a sample.
+
 Helper aliases injected before your snippet runs:
 - High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,
   `item`, `last_item`, `feedback`, `feedback_alignment`, `acceptance_rate`,
@@ -10566,6 +10600,93 @@ Helper aliases injected before your snippet runs:
 - Fall back to `plexus.<namespace>.<method>{...}` for anything else.
 
 Examples:
+
+0) Complete account-wide feedback research with compact coverage evidence:
+```tactus
+local token, pages, scorecard_ids = nil, 0, {}
+repeat
+  local ok, page = pcall(function()
+    return plexus.scorecards.list({ return_metadata = true, next_token = token })
+  end)
+  if ok and page == nil then ok = false end
+  if not ok then
+    ok, page = pcall(function()
+      return plexus.scorecards.list({ return_metadata = true, next_token = token })
+    end)
+  end
+  if ok and page == nil then ok = false end
+  if not ok then
+    return { complete = false, pages = pages, error = tostring(page) }
+  end
+  pages = pages + 1
+  for _, record in ipairs(page.items or {}) do
+    scorecard_ids[#scorecard_ids + 1] = record.id
+  end
+  token = page.nextToken
+until not token
+if #scorecard_ids == 0 then
+  return { complete = true, pages = pages, discovered = 0, coverage = {
+    target_count = 0, completed_count = 0, failed_count = 0, complete = true,
+  } }
+end
+local analysis = plexus.feedback.alignment_batch({
+  scorecards = scorecard_ids,
+  days = 14,
+})
+local priorities, failures = {}, {}
+local scorecards_with_feedback, scores_analyzed, feedback_items = 0, 0, 0
+for _, scorecard_result in ipairs(analysis.scorecards or {}) do
+  if scorecard_result.error then
+    failures[#failures + 1] = {
+      scorecard_name = scorecard_result.scorecard_name,
+      error = string.sub(tostring(scorecard_result.error), 1, 240),
+    }
+  else
+    local has_feedback = false
+    for _, score_result in ipairs(scorecard_result.scores or {}) do
+      scores_analyzed = scores_analyzed + 1
+      local item_count = tonumber(score_result.total_items) or 0
+      feedback_items = feedback_items + item_count
+      if item_count > 0 then
+        has_feedback = true
+        priorities[#priorities + 1] = {
+          scorecard_name = scorecard_result.scorecard_name,
+          score_name = score_result.score_name,
+          total_items = item_count,
+          accuracy = score_result.accuracy,
+          ac1 = score_result.ac1,
+          warning = score_result.warning,
+        }
+      end
+    end
+    if has_feedback then scorecards_with_feedback = scorecards_with_feedback + 1 end
+  end
+end
+table.sort(priorities, function(a, b)
+  local a_accuracy = tonumber(a.accuracy) or 101
+  local b_accuracy = tonumber(b.accuracy) or 101
+  if a_accuracy == b_accuracy then return a.total_items > b.total_items end
+  return a_accuracy < b_accuracy
+end)
+local highlights = {}
+for index = 1, math.min(#priorities, 10) do
+  highlights[index] = priorities[index]
+end
+return {
+  complete = analysis.coverage.complete,
+  pages = pages,
+  discovered = #scorecard_ids,
+  coverage = analysis.coverage,
+  totals = {
+    scorecards_with_feedback = scorecards_with_feedback,
+    scores_analyzed = scores_analyzed,
+    feedback_items = feedback_items,
+  },
+  ranked_from_count = #priorities,
+  priorities = highlights,
+  failures = failures,
+}
+```
 
 1) Find a scorecard by name:
 ```tactus
