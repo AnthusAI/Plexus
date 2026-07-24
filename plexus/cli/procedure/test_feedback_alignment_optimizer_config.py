@@ -15,6 +15,13 @@ OPTIMIZER_DOCS_DIR = (
 OPTIMIZER_SKILL_PATH = (
     Path(__file__).resolve().parents[3] / "skills" / "score-optimizer" / "SKILL.md"
 )
+OPTIMIZER_COHORT_GUIDE_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "skills"
+    / "score-optimizer"
+    / "references"
+    / "feedback-cohorts.md"
+)
 
 
 def _load_optimizer_config():
@@ -87,6 +94,31 @@ def test_optimizer_skill_documents_three_phase_rubric_memory_sop():
     assert "Phase 1" in skill
     assert "Phase 2" in skill
     assert "Phase 3" in skill
+
+
+def test_optimizer_skill_preserves_complete_runs_and_one_cohort_selection_path():
+    skill = " ".join(OPTIMIZER_SKILL_PATH.read_text(encoding="utf-8").split())
+    cohort_guide = " ".join(
+        OPTIMIZER_COHORT_GUIDE_PATH.read_text(encoding="utf-8").split()
+    )
+
+    assert "run through terminal completion" in skill
+    assert "Do not stop, cancel, or kill an evaluation" in skill
+    assert "single canonical" in cohort_guide
+    assert "Do not recreate its selection logic in an ad hoc script" in cohort_guide
+    assert "exact feedback-item set equality" in cohort_guide
+
+
+def test_optimizer_requires_balanced_regression_cohort_without_unbalanced_fallback():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "balance = true" in code
+    assert "balance = false" not in code
+    assert "trying unbalanced" not in code.lower()
+    assert "Created unbalanced dataset" not in code
+    assert "no unbalanced fallback will be used" in code
+    assert "build_result.balance_complete" in code
 
 
 def test_optimizer_yaml_defines_dedicated_reporting_agents():
@@ -412,9 +444,12 @@ def test_optimizer_yaml_requires_requested_rows_for_cached_regression_dataset():
     assert "dataset_source_exhausted and dataset_rows >= min_acceptable" in code
     assert "dataset_requested_max_items >= min_dataset_rows" in code
     assert "dataset_check.row_count >= min_acceptable" not in code
+    assert "dataset_check.balance_applied == true" in code
+    assert "dataset_check.resolved_final_classes ~= nil" in code
+    assert "dataset_check.class_coverage ~= nil" in code
     assert "build_source_exhausted" in code
-    assert "unbal_source_exhausted" in code
     assert "qualifying_found" in code
+    assert "unbal_source_exhausted" not in code
 
 
 def test_optimizer_yaml_bounds_report_context_and_output_shapes():

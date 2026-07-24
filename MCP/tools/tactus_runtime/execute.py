@@ -4019,12 +4019,22 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
     stored_requested_max_items: Any = None
     stored_qualifying_found: Any = None
     stored_source_exhausted: Any = None
+    stored_balance_applied: Any = None
+    stored_balance_complete: Any = None
+    stored_lookback_extended: Any = None
+    stored_resolved_final_classes: Any = None
+    stored_class_coverage: Any = None
     for candidate in datasets:
         candidate_row_count: Any = None
         candidate_feedback_target_hash: str | None = None
         candidate_requested_max_items: Any = None
         candidate_qualifying_found: Any = None
         candidate_source_exhausted: Any = None
+        candidate_balance_applied: Any = None
+        candidate_balance_complete: Any = None
+        candidate_lookback_extended: Any = None
+        candidate_resolved_final_classes: Any = None
+        candidate_class_coverage: Any = None
         if candidate.get("dataSourceVersionId"):
             try:
                 dsv_result = client.execute(
@@ -4046,6 +4056,13 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
                         candidate_requested_max_items = stats.get("requested_max_items")
                         candidate_qualifying_found = stats.get("qualifying_found")
                         candidate_source_exhausted = stats.get("source_exhausted")
+                        candidate_balance_applied = stats.get("balance_applied")
+                        candidate_balance_complete = stats.get("balance_complete")
+                        candidate_lookback_extended = stats.get("lookback_extended")
+                        candidate_resolved_final_classes = stats.get(
+                            "resolved_final_classes"
+                        )
+                        candidate_class_coverage = stats.get("class_coverage")
                         candidate_feedback_target_hash = stats.get(
                             "feedback_target_hash"
                         )
@@ -4064,6 +4081,11 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
         stored_requested_max_items = candidate_requested_max_items
         stored_qualifying_found = candidate_qualifying_found
         stored_source_exhausted = candidate_source_exhausted
+        stored_balance_applied = candidate_balance_applied
+        stored_balance_complete = candidate_balance_complete
+        stored_lookback_extended = candidate_lookback_extended
+        stored_resolved_final_classes = candidate_resolved_final_classes
+        stored_class_coverage = candidate_class_coverage
         break
 
     if not dataset:
@@ -4089,6 +4111,11 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
         "requested_max_items": stored_requested_max_items,
         "qualifying_found": stored_qualifying_found,
         "source_exhausted": stored_source_exhausted,
+        "balance_applied": stored_balance_applied,
+        "balance_complete": stored_balance_complete,
+        "lookback_extended": stored_lookback_extended,
+        "resolved_final_classes": stored_resolved_final_classes,
+        "class_coverage": stored_class_coverage,
         "is_materialized": bool(readiness.get("is_materialized")),
         "dataset_file": readiness.get("dataset_file"),
         "materialization_error": readiness.get("materialization_error"),
