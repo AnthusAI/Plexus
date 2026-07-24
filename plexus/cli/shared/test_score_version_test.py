@@ -15,6 +15,35 @@ class _FakeScorecard:
         return {}, {"Agent Misrepresentation": "node-1"}
 
 
+class _BrokenExtractorScorecard(_FakeScorecard):
+    scores = [
+        {
+            "id": "score-1",
+            "name": "Agent Misrepresentation",
+            "class": "LangGraphScore",
+            "graph": [
+                {
+                    "name": "extractor",
+                    "class": "Extractor",
+                    "output": {
+                        "value": "extracted_evidence",
+                        "explanation": "explanation",
+                    },
+                },
+                {
+                    "name": "classifier",
+                    "class": "Classifier",
+                    "user_message": "Evidence: {{extracted_evidence}}",
+                    "output": {
+                        "value": "classification",
+                        "explanation": "explanation",
+                    },
+                },
+            ],
+        }
+    ]
+
+
 class _FakeScoreResult:
     value = "No"
     explanation = "Test explanation"
@@ -62,6 +91,65 @@ def test_score_version_test_explicit_items_override_samples(monkeypatch):
     assert result["requested_samples"] == 3
     assert result["selected_samples"] == 2
     assert result["selection_source"] == "explicit_items"
+
+
+def test_score_version_test_rejects_invalid_extractor_output_dataflow(monkeypatch):
+    monkeypatch.setattr(
+        svc,
+        "_resolve_scorecard_and_score",
+        lambda **_: (
+            "scorecard-1",
+            "score-1",
+            {"id": "score-1", "name": "Agent Misrepresentation", "championVersionId": "champ-1"},
+        ),
+    )
+    monkeypatch.setattr(
+        svc,
+        "resolve_item_identifier",
+        lambda _client, identifier, _account_id: identifier,
+    )
+    monkeypatch.setattr(
+        svc,
+        "load_scorecard_from_api",
+        lambda **_: _BrokenExtractorScorecard(),
+    )
+
+    result = asyncio.run(
+        svc.run_score_version_test(
+            client=_FakeClient(),
+            scorecard_identifier="sc",
+            score_identifier="score",
+            samples=1,
+            item_identifiers=["item-x"],
+            days=90,
+        )
+    )
+
+    assert result["passed"] is False
+    assert result["failure_code"] == "invalid_score_dataflow"
+    assert result["predictions"] == []
+    assert result["failures"] == [
+        {
+            "node": "extractor",
+            "node_class": "Extractor",
+            "output_target": "value",
+            "output_source": "extracted_evidence",
+            "message": (
+                "Extractor output source 'extracted_evidence' is invalid; "
+                "map a downstream state field to 'extracted_text'."
+            ),
+        },
+        {
+            "node": "extractor",
+            "node_class": "Extractor",
+            "output_target": "explanation",
+            "output_source": "explanation",
+            "message": (
+                "Extractor output source 'explanation' is invalid; "
+                "map a downstream state field to 'extracted_text'."
+            ),
+        },
+    ]
 
 
 def test_score_version_test_fails_on_selection_shortfall(monkeypatch):
