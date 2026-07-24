@@ -4938,9 +4938,14 @@ code: |
     )
     local dataset_size_adequate = dataset_rows >= min_dataset_rows
       or (dataset_source_exhausted and dataset_rows >= min_acceptable)
+    local dataset_balance_contract_adequate = dataset_check
+      and dataset_check.balance_applied == true
+      and dataset_check.resolved_final_classes ~= nil
+      and dataset_check.class_coverage ~= nil
     local dataset_adequate = dataset_check and dataset_check.has_dataset
       and dataset_check.is_materialized
       and dataset_size_adequate
+      and dataset_balance_contract_adequate
       and dataset_is_fresh
 
     local selected_dataset_id = nil
@@ -4958,7 +4963,12 @@ code: |
       ), level = "info"})
     else
       if dataset_check and dataset_check.has_dataset then
-        if not dataset_is_fresh and has_text(active_feedback_target_updated_at) then
+        if not dataset_balance_contract_adequate then
+          Human.notify({message = string.format(
+            "Existing dataset for version %s lacks verified terminal-class coverage; rebuilding it with the adaptive balanced cohort contract...",
+            tostring(version_id or "champion")
+          ), level = "info"})
+        elseif not dataset_is_fresh and has_text(active_feedback_target_updated_at) then
           Human.notify({message = string.format(
             "Existing dataset for version %s is stale (created_at=%s older than watermark=%s), creating new one...",
             tostring(version_id or "champion"),
@@ -4990,8 +5000,8 @@ code: |
         score_version_id = version_id
       })
       if not build_ok then
-        Human.notify({message = "Balanced dataset build failed (" .. tostring(build_result) .. "), trying unbalanced...", level = "info"})
-        build_result = nil
+        Human.notify({message = "Balanced regression dataset build failed (" .. tostring(build_result) .. "). Regression tracking disabled for this run; no unbalanced fallback will be used.", level = "warning"})
+        return nil
       end
 
       local build_qualifying_found = build_result and tonumber(build_result.qualifying_found or 0) or 0
@@ -5000,39 +5010,23 @@ code: |
         selected_dataset_id = build_result.dataset_id
         selected_feedback_target_hash = build_result.feedback_target_hash
         selected_row_count = build_result.rows_written
-        Human.notify({message = "Created balanced dataset: " .. selected_dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
+        Human.notify({message = string.format(
+          "Created adaptive regression dataset: %s (%d rows, historical lookback extended=%s, balanced coverage complete=%s)",
+          tostring(selected_dataset_id),
+          tonumber(build_result.rows_written or 0),
+          tostring(build_result.lookback_extended == true),
+          tostring(build_result.balance_complete == true)
+        ), level = "info"})
       else
         local rows_so_far = (build_result and build_result.rows_written) or 0
-        Human.notify({message = "Balanced dataset only has " .. rows_so_far .. " rows, trying unbalanced...", level = "info"})
-
-        local unbal_ok, unbal_result = pcall(call_plexus_tool, "plexus_dataset_build_from_feedback_window", {
-          scorecard = params.scorecard,
-          score = params.score,
-          max_items = min_dataset_rows,
-          days = params.days,
-          balance = false,
-          score_version_id = version_id
-        })
-        local final_build_result = unbal_ok and unbal_result or nil
-
-        local unbal_qualifying_found = final_build_result and tonumber(final_build_result.qualifying_found or 0) or 0
-        local unbal_source_exhausted = unbal_qualifying_found > 0 and unbal_qualifying_found < min_dataset_rows
-        if final_build_result and final_build_result.rows_written and (final_build_result.rows_written >= min_dataset_rows or (unbal_source_exhausted and final_build_result.rows_written >= min_acceptable)) then
-          selected_dataset_id = final_build_result.dataset_id
-          selected_feedback_target_hash = final_build_result.feedback_target_hash
-          selected_row_count = final_build_result.rows_written
-          Human.notify({message = "Created unbalanced dataset: " .. selected_dataset_id .. " (" .. final_build_result.rows_written .. " rows)", level = "info"})
-        else
-          local final_rows = (final_build_result and final_build_result.rows_written) or 0
-          Human.notify({message = string.format(
-            "Insufficient feedback data for regression dataset (version %s): only %d items available (need %d, minimum %d). Regression tracking disabled for this run.",
-            tostring(version_id or "champion"),
-            final_rows,
-            min_dataset_rows,
-            min_acceptable
-          ), level = "warning"})
-          return nil
-        end
+        Human.notify({message = string.format(
+          "Insufficient balanced feedback data for regression dataset (version %s): only %d items available (need %d, minimum %d). Regression tracking disabled for this run; no unbalanced fallback will be used.",
+          tostring(version_id or "champion"),
+          rows_so_far,
+          min_dataset_rows,
+          min_acceptable
+        ), level = "warning"})
+        return nil
       end
     end
 

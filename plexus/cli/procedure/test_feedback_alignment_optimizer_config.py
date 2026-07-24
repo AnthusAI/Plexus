@@ -76,6 +76,18 @@ def test_optimizer_skill_documents_three_phase_rubric_memory_sop():
     assert "Phase 3" in skill
 
 
+def test_optimizer_requires_balanced_regression_cohort_without_unbalanced_fallback():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "balance = true" in code
+    assert "balance = false" not in code
+    assert "trying unbalanced" not in code.lower()
+    assert "Created unbalanced dataset" not in code
+    assert "no unbalanced fallback will be used" in code
+    assert "build_result.balance_complete" in code
+
+
 def test_optimizer_yaml_defines_dedicated_reporting_agents():
     config = _load_optimizer_config()
     agents = config["agents"]
@@ -399,9 +411,12 @@ def test_optimizer_yaml_requires_requested_rows_for_cached_regression_dataset():
     assert "dataset_source_exhausted and dataset_rows >= min_acceptable" in code
     assert "dataset_requested_max_items >= min_dataset_rows" in code
     assert "dataset_check.row_count >= min_acceptable" not in code
+    assert "dataset_check.balance_applied == true" in code
+    assert "dataset_check.resolved_final_classes ~= nil" in code
+    assert "dataset_check.class_coverage ~= nil" in code
     assert "build_source_exhausted" in code
-    assert "unbal_source_exhausted" in code
     assert "qualifying_found" in code
+    assert "unbal_source_exhausted" not in code
 
 
 def test_optimizer_yaml_bounds_report_context_and_output_shapes():

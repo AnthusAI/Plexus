@@ -122,6 +122,9 @@ questions, and "cannot improve" conclusions.
 
 ## Operating Rules
 
+Read [references/feedback-cohorts.md](references/feedback-cohorts.md) before
+building or accepting optimizer evaluation cohorts.
+
 - Use the direct CLI for optimizer execution and debugging. Do not treat dashboard or dispatcher state alone as proof that a run is healthy.
 - Prefer `python -m plexus.cli` from the repo root over a possibly stale installed `plexus` binary.
 - Capture stdout/stderr with `tee` for real runs so you keep the traceback and early procedure/task IDs.
