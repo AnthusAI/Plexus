@@ -129,7 +129,7 @@ building or accepting optimizer evaluation cohorts.
 - Prefer `python -m plexus.cli` from the repo root over a possibly stale installed `plexus` binary.
 - Capture stdout/stderr with `tee` for real runs so you keep the traceback and early procedure/task IDs.
 - Baseline evaluations are the real start of meaningful optimizer work. Procedure creation alone is not.
-- Let dispatched evaluations and root-cause analyses finish. Do not spend attention stopping them merely because an early result already supports a decision; their completed output can still supply regression evidence and future diagnostics.
+- Let every legitimate evaluation run through terminal completion, including root-cause analysis and artifact finalization. Do not stop, cancel, or kill an evaluation merely because partial metrics already support a decision, a candidate is clearly winning or losing, or the remaining work seems unnecessary. Premature stopping saves too little human attention and leaves incomplete evidence and stale runtime state. Intervene only when the user explicitly requests cancellation or execution is clearly unauthorized or harmful.
 - Never invalidate feedback automatically.
 - Never invalidate feedback just because a contradictions report flagged an item.
 - Always discuss candidate invalidation groups with the user first.
