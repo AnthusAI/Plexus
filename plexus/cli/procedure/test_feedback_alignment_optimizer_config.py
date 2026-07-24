@@ -975,3 +975,15 @@ def test_optimizer_yaml_records_recurrence_for_failed_no_synthesis_cycles():
     assert "failed_fb_item_class" in code
     assert "record_cycle_item_recurrence(cycle, failed_fb_item_class" in code
     assert "Cycle %d - Repeat Misclassification Tracker: no repeat or transition-history items yet." in code
+
+
+def test_optimizer_yaml_freezes_fresh_regression_dataset_for_all_candidate_evaluations():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "dataset_id = ensure_regression_dataset_for_version(params.start_version)" in code
+    assert 'State.set("dataset_id", dataset_id)' in code
+    assert "ensure_regression_dataset_for_version(sv.version_id)" not in code
+    assert "ensure_regression_dataset_for_version(final_version_id)" not in code
+    assert "sv.dataset_id = dataset_id" in code
+    assert code.count("dataset_id = dataset_id,") >= 3

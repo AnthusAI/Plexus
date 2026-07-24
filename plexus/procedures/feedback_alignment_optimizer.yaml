@@ -6925,13 +6925,12 @@ code: |
       local batch = {}
       for _, sv in ipairs(submitted_versions) do
         if regression_available then
-          local candidate_dataset_id = ensure_regression_dataset_for_version(sv.version_id)
-          sv.dataset_id = candidate_dataset_id
+          sv.dataset_id = dataset_id
           table.insert(batch, {
             scorecard_name = params.scorecard,
             score_name = params.score,
             evaluation_type = "accuracy",
-            dataset_id = candidate_dataset_id,
+            dataset_id = dataset_id,
             n_samples = params.max_samples or 100,
             version = sv.version_id,
             baseline = regression_baseline_id,
@@ -7850,13 +7849,12 @@ code: |
         local eval_batch = {}
         for _, sv in ipairs(strategy_versions) do
           if regression_available then
-            local strategy_dataset_id = ensure_regression_dataset_for_version(sv.version_id)
-            sv.dataset_id = strategy_dataset_id
+            sv.dataset_id = dataset_id
             table.insert(eval_batch, {
               scorecard_name = params.scorecard,
               score_name = params.score,
               evaluation_type = "accuracy",
-              dataset_id = strategy_dataset_id,
+              dataset_id = dataset_id,
               n_samples = params.max_samples or 100,
               version = sv.version_id,
               baseline = regression_baseline_id,
@@ -8158,14 +8156,12 @@ code: |
           status_msg(string.format("Cycle %d/%d — evaluating synthesis result", cycle, max_cycles))
           Human.notify({message = "  Evaluating final version...", level = "info"})
           local b_batch = {}
-          local final_dataset_id = nil
           if regression_available then
-            final_dataset_id = ensure_regression_dataset_for_version(final_version_id)
             table.insert(b_batch, {
               scorecard_name = params.scorecard,
               score_name = params.score,
               evaluation_type = "accuracy",
-              dataset_id = final_dataset_id,
+              dataset_id = dataset_id,
               n_samples = params.max_samples or 100,
               version = final_version_id,
               baseline = regression_baseline_id,
