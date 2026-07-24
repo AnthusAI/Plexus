@@ -672,6 +672,41 @@ code: |
     return result
   end
 
+  local function extract_selected_feedback_item_ids(eval_result)
+    if type(eval_result) ~= "table" then return nil end
+    local parameters = eval_result.parameters
+    if type(parameters) == "string" then
+      local decoded = safe_decode(parameters)
+      if type(decoded) == "table" then parameters = decoded end
+    end
+    if type(parameters) ~= "table" then return nil end
+    local ids = parameters.selected_feedback_item_ids or parameters.feedback_item_ids
+    if type(ids) ~= "table" or #ids == 0 then return nil end
+    local normalized = {}
+    for _, item_id in ipairs(ids) do
+      if has_text(item_id) then table.insert(normalized, tostring(item_id)) end
+    end
+    return #normalized > 0 and normalized or nil
+  end
+
+  local function same_id_set(left, right)
+    if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
+    local counts = {}
+    for _, item_id in ipairs(left) do
+      local key = tostring(item_id)
+      counts[key] = (counts[key] or 0) + 1
+    end
+    for _, item_id in ipairs(right) do
+      local key = tostring(item_id)
+      if not counts[key] or counts[key] == 0 then return false end
+      counts[key] = counts[key] - 1
+    end
+    for _, count in pairs(counts) do
+      if count ~= 0 then return false end
+    end
+    return true
+  end
+
   local function prediction_mode_collapse_reason(metrics)
     if type(metrics) ~= "table" then return nil end
 
@@ -1247,6 +1282,35 @@ code: |
       local t = os.clock() + delay
       while os.clock() < t do end
     end
+  end
+
+  local function require_exact_feedback_cohort(eval_result, expected_ids)
+    if type(expected_ids) ~= "table" or #expected_ids == 0 then
+      return false, "expected recent feedback cohort is unavailable"
+    end
+    local eval_info = eval_result
+    local actual_ids = extract_selected_feedback_item_ids(eval_info)
+    if not actual_ids and type(eval_result) == "table" then
+      local eval_id = eval_result.id or eval_result.evaluation_id
+      if has_text(eval_id) then
+        eval_info = call_plexus_tool("plexus_evaluation_info", {
+          evaluation_id = eval_id,
+          output_format = "json"
+        })
+        actual_ids = extract_selected_feedback_item_ids(eval_info)
+      end
+    end
+    if not actual_ids then
+      return false, "candidate evaluation does not expose selected_feedback_item_ids"
+    end
+    if not same_id_set(actual_ids, expected_ids) then
+      return false, string.format(
+        "candidate feedback cohort differs from baseline (expected=%d actual=%d)",
+        #expected_ids,
+        #actual_ids
+      )
+    end
+    return true, nil
   end
 
   -- Build version history table for agent context
@@ -4649,6 +4713,7 @@ code: |
   local recent_baseline_metrics = nil
   local recent_baseline_cost_per_item = nil
   local recent_baseline_rca   = {}
+  local recent_baseline_feedback_item_ids = nil
   -- current score config — set by init or continuation, used in cycle loop
   local current_code_path    = nil
   local current_code         = nil
@@ -4890,6 +4955,7 @@ code: |
     recent_baseline_cost_per_item = State.get("recent_baseline_cost_per_item")
     regression_baseline_rca   = State.get("last_regression_rca") or {}
     recent_baseline_rca   = State.get("last_recent_rca") or {}
+    recent_baseline_feedback_item_ids = State.get("recent_baseline_feedback_item_ids")
     regression_available      = regression_baseline_metrics ~= nil
 
     -- Re-pull current config from last accepted version
@@ -5511,6 +5577,24 @@ code: |
     end
   end
 
+  -- Freeze the exact recent-feedback membership once, regardless of whether the
+  -- baseline was resumed, reused, or freshly evaluated. Every candidate must
+  -- replay these opaque IDs; matching only the window and count is insufficient.
+  do
+    local baseline_info = call_plexus_tool("plexus_evaluation_info", {
+      evaluation_id = recent_baseline_id,
+      output_format = "json"
+    })
+    recent_baseline_feedback_item_ids = extract_selected_feedback_item_ids(baseline_info)
+    if not recent_baseline_feedback_item_ids then
+      error("Recent baseline does not expose selected_feedback_item_ids; exact candidate comparison is unavailable")
+    end
+    Human.notify({message = string.format(
+      "Frozen recent feedback cohort: %d exact item IDs",
+      #recent_baseline_feedback_item_ids
+    ), level = "info"})
+  end
+
   -- Store both baselines in state
   State.set("regression_baseline_id",      regression_baseline_id)
   State.set("regression_baseline_metrics", regression_baseline_metrics)
@@ -5518,6 +5602,7 @@ code: |
   State.set("recent_baseline_id",      recent_baseline_id)
   State.set("recent_baseline_metrics", recent_baseline_metrics)
   State.set("recent_baseline_cost_per_item", recent_baseline_cost_per_item)
+  State.set("recent_baseline_feedback_item_ids", recent_baseline_feedback_item_ids)
   -- Immutable copies for dashboard display — never overwritten on acceptance
   -- (the non-initial keys are updated each accepted cycle for agent context)
   if State.get("recent_initial_baseline_metrics") == nil then
@@ -6945,6 +7030,7 @@ code: |
           days = params.days,
           max_feedback_items = params.max_samples or 100,
           sampling_mode = "newest",
+          feedback_item_ids = recent_baseline_feedback_item_ids,
           feedback_start_at = params.feedback_window_start_at,
           feedback_end_at = params.feedback_window_end_at,
           version = sv.version_id,
@@ -6983,6 +7069,13 @@ code: |
         end
         local fb_r = batch_results and batch_results[base_idx + evals_per]
         if fb_r and (fb_r.id or fb_r.evaluation_id) then
+          local cohort_ok, cohort_error = require_exact_feedback_cohort(
+            fb_r,
+            recent_baseline_feedback_item_ids
+          )
+          if not cohort_ok then
+            error("Invalid candidate comparison: " .. tostring(cohort_error))
+          end
           sv.fb_metrics = extract_metrics(fb_r)
           sv.fb_cost_per_item = extract_cost_per_item(fb_r)
           sv.fb_deltas = calculate_deltas(sv.fb_metrics, recent_baseline_metrics)
@@ -7870,6 +7963,7 @@ code: |
             days = params.days,
             max_feedback_items = params.max_samples or 100,
             sampling_mode = "newest",
+            feedback_item_ids = recent_baseline_feedback_item_ids,
             feedback_start_at = params.feedback_window_start_at,
             feedback_end_at = params.feedback_window_end_at,
             version = sv.version_id,
@@ -7906,6 +8000,13 @@ code: |
           end
           local fb_r = eval_results and eval_results[offset + evals_per]
           if fb_r and (fb_r.id or fb_r.evaluation_id) then
+            local cohort_ok, cohort_error = require_exact_feedback_cohort(
+              fb_r,
+              recent_baseline_feedback_item_ids
+            )
+            if not cohort_ok then
+              error("Invalid strategy comparison: " .. tostring(cohort_error))
+            end
             sv.fb_metrics = extract_metrics(fb_r)
             sv.fb_cost_per_item = extract_cost_per_item(fb_r)
             sv.fb_deltas = calculate_deltas(sv.fb_metrics, recent_baseline_metrics)
@@ -8176,6 +8277,7 @@ code: |
             days = params.days,
             max_feedback_items = params.max_samples or 100,
             sampling_mode = "newest",
+            feedback_item_ids = recent_baseline_feedback_item_ids,
             feedback_start_at = params.feedback_window_start_at,
             feedback_end_at = params.feedback_window_end_at,
             version = final_version_id,
@@ -8204,6 +8306,13 @@ code: |
           end
           local b_fb_r = b_results and b_results[b_evals_per]
           if b_fb_r and (b_fb_r.id or b_fb_r.evaluation_id) then
+            local cohort_ok, cohort_error = require_exact_feedback_cohort(
+              b_fb_r,
+              recent_baseline_feedback_item_ids
+            )
+            if not cohort_ok then
+              error("Invalid synthesis comparison: " .. tostring(cohort_error))
+            end
             b_fb_metrics = extract_metrics(b_fb_r)
             b_fb_cost_per_item = extract_cost_per_item(b_fb_r)
             b_fb_deltas = calculate_deltas(b_fb_metrics, recent_baseline_metrics)
