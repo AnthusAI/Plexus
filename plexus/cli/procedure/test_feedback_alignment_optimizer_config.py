@@ -47,6 +47,19 @@ end
     return lua, schedule
 
 
+def _build_optimizer_candidate_collapse_checker():
+    from lupa import LuaRuntime
+
+    config = _load_optimizer_config()
+    code = config["code"]
+    start = code.index("local function prediction_mode_collapse_reason(metrics)")
+    end = code.index("local function extract_cost_per_item(eval_result)")
+    block = code[start:end]
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    check = lua.execute(block + "\nreturn prediction_mode_collapse_reason")
+    return lua, check
+
+
 def _lua_list(lua_table):
     return [lua_table[i] for i in range(1, len(lua_table) + 1)]
 
@@ -515,6 +528,35 @@ def test_optimizer_yaml_uses_shared_score_version_test_tool():
     assert 'call_plexus_tool, "plexus_score_test"' in code
     assert 'version              = candidate_id' in code
     assert 'samples              = 3' in code
+
+
+def test_optimizer_disqualifies_single_class_predictions_on_multiclass_cohort():
+    lua, check = _build_optimizer_candidate_collapse_checker()
+    reason = check(
+        lua.table_from(
+            {
+                "confusion_matrix": lua.table_from(
+                    {
+                        1: lua.table_from({1: 0, 2: 10}),
+                        2: lua.table_from({1: 0, 2: 37}),
+                    }
+                ),
+                "confusion_labels": lua.table_from({1: "no", 2: "yes"}),
+            }
+        )
+    )
+
+    assert reason == "prediction_mode_collapse_actual_2_predicted_1"
+
+
+def test_optimizer_review_gate_uses_prediction_mode_collapse_as_disqualifier():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "prediction_mode_collapse_reason(b_fb_metrics)" in code
+    assert "prediction_mode_collapse_reason(b_acc_metrics)" in code
+    assert 'disqualification_reason = "recent_" .. collapse_reason' in code
+    assert 'disqualification_reason = "regression_" .. regression_collapse_reason' in code
 
 
 def test_optimizer_yaml_routes_unresolved_placeholders_to_mechanical_repair_lane():

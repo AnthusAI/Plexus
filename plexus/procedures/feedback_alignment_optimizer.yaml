@@ -672,6 +672,51 @@ code: |
     return result
   end
 
+  local function prediction_mode_collapse_reason(metrics)
+    if type(metrics) ~= "table" then return nil end
+
+    local actual_nonzero = 0
+    local predicted_nonzero = 0
+    local matrix = metrics.confusion_matrix
+    if type(matrix) == "table" and #matrix > 0 then
+      local column_totals = {}
+      for _, row in ipairs(matrix) do
+        if type(row) == "table" then
+          local row_total = 0
+          for column_index, value in ipairs(row) do
+            local count = tonumber(value) or 0
+            row_total = row_total + count
+            column_totals[column_index] = (column_totals[column_index] or 0) + count
+          end
+          if row_total > 0 then actual_nonzero = actual_nonzero + 1 end
+        end
+      end
+      for _, count in pairs(column_totals) do
+        if count > 0 then predicted_nonzero = predicted_nonzero + 1 end
+      end
+    else
+      for _, entry in ipairs(metrics.actual_distribution or {}) do
+        if type(entry) == "table" and (tonumber(entry.count) or 0) > 0 then
+          actual_nonzero = actual_nonzero + 1
+        end
+      end
+      for _, entry in ipairs(metrics.predicted_distribution or {}) do
+        if type(entry) == "table" and (tonumber(entry.count) or 0) > 0 then
+          predicted_nonzero = predicted_nonzero + 1
+        end
+      end
+    end
+
+    if actual_nonzero > 1 and predicted_nonzero == 1 then
+      return string.format(
+        "prediction_mode_collapse_actual_%d_predicted_%d",
+        actual_nonzero,
+        predicted_nonzero
+      )
+    end
+    return nil
+  end
+
   local function extract_cost_per_item(eval_result)
     if type(eval_result) ~= "table" then
       return nil
@@ -8195,9 +8240,17 @@ code: |
 
         local disqualified = false
         local disqualification_reason = nil
+        local collapse_reason = prediction_mode_collapse_reason(b_fb_metrics)
+        local regression_collapse_reason = prediction_mode_collapse_reason(b_acc_metrics)
         if not b_fb_metrics then
           disqualified = true
           disqualification_reason = "missing_recent_metrics"
+        elseif collapse_reason then
+          disqualified = true
+          disqualification_reason = "recent_" .. collapse_reason
+        elseif regression_available and regression_collapse_reason then
+          disqualified = true
+          disqualification_reason = "regression_" .. regression_collapse_reason
         elseif regression_available and b_acc_deltas.alignment < -0.02 then
           disqualified = true
           disqualification_reason = string.format("regression_regression_vs_baseline_%.3f", b_acc_deltas.alignment)
