@@ -143,6 +143,46 @@ def _extract_item_text(item_data: Dict[str, Any], metadata: Dict[str, Any]) -> s
     return best_text.strip()
 
 
+def _validate_score_configuration_dataflow(
+    score_configuration: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """Return mechanical node-output contract failures for a score config.
+
+    LangGraph output mappings use ``downstream_state_field: node_state_field``.
+    Extractor exposes ``extracted_text``; mapping from a made-up source field can
+    silently leave the downstream state empty while the graph still executes.
+    """
+    if not isinstance(score_configuration, dict):
+        return []
+    if score_configuration.get("class") != "LangGraphScore":
+        return []
+
+    failures: List[Dict[str, Any]] = []
+    for index, node in enumerate(score_configuration.get("graph") or []):
+        if not isinstance(node, dict) or node.get("class") != "Extractor":
+            continue
+        node_name = str(node.get("name") or f"graph[{index}]")
+        output = node.get("output")
+        if not isinstance(output, dict):
+            continue
+        for output_target, output_source in output.items():
+            if output_source == "extracted_text":
+                continue
+            failures.append(
+                {
+                    "node": node_name,
+                    "node_class": "Extractor",
+                    "output_target": str(output_target),
+                    "output_source": output_source,
+                    "message": (
+                        f"Extractor output source {output_source!r} is invalid; "
+                        "map a downstream state field to 'extracted_text'."
+                    ),
+                }
+            )
+    return failures
+
+
 def _resolve_scorecard_and_score(
     *,
     client,
@@ -610,6 +650,7 @@ async def run_score_version_test(
     resolved_score_name = str(score_data.get("name") or score_identifier)
     target_result_id: Optional[str] = None
     prediction_results: List[Dict[str, Any]] = []
+    dataflow_failures: List[Dict[str, Any]] = []
 
     if not selection_error:
         scorecard_instance = load_scorecard_from_api(
@@ -619,6 +660,7 @@ async def run_score_version_test(
             specific_version=target_version_id,
         )
         # Resolve canonical score name for subset execution and result matching.
+        selected_score_config: Optional[Dict[str, Any]] = None
         for score_config in getattr(scorecard_instance, "scores", []) or []:
             if (
                 str(score_config.get("id")) == str(score_id)
@@ -626,35 +668,43 @@ async def run_score_version_test(
                 or score_config.get("key") == score_identifier
                 or str(score_config.get("externalId")) == str(score_identifier)
             ):
+                selected_score_config = score_config
                 resolved_score_name = score_config.get("name") or resolved_score_name
                 break
-        try:
-            _, name_to_id = scorecard_instance.build_dependency_graph([resolved_score_name])
-            target_result_id = name_to_id.get(resolved_score_name)
-        except Exception:
-            target_result_id = None
-
-        prediction_results = list(
-            await asyncio.gather(
-                *[
-                    _predict_single_item(
-                        client=client,
-                        scorecard_instance=scorecard_instance,
-                        resolved_score_name=resolved_score_name,
-                        target_result_id=target_result_id,
-                        score_name_for_output=resolved_score_name,
-                        item_id=item_id,
-                    )
-                    for item_id in resolved_items
-                ]
-            )
+        dataflow_failures = _validate_score_configuration_dataflow(
+            selected_score_config or {}
         )
+        if not dataflow_failures:
+            try:
+                _, name_to_id = scorecard_instance.build_dependency_graph([resolved_score_name])
+                target_result_id = name_to_id.get(resolved_score_name)
+            except Exception:
+                target_result_id = None
+
+            prediction_results = list(
+                await asyncio.gather(
+                    *[
+                        _predict_single_item(
+                            client=client,
+                            scorecard_instance=scorecard_instance,
+                            resolved_score_name=resolved_score_name,
+                            target_result_id=target_result_id,
+                            score_name_for_output=resolved_score_name,
+                            item_id=item_id,
+                        )
+                        for item_id in resolved_items
+                    ]
+                )
+            )
 
     passed = False
     failure_code = None
     message = "Score version mechanical test passed."
     if selection_error:
         failure_code, message = selection_error
+    elif dataflow_failures:
+        failure_code = "invalid_score_dataflow"
+        message = "Score configuration contains an invalid node-output dataflow mapping."
     else:
         failed_predictions = [p for p in prediction_results if not p.get("passed")]
         if failed_predictions:
@@ -688,7 +738,7 @@ async def run_score_version_test(
         "selection_source": selection_source,
         "item_ids": resolved_items,
         "predictions": prediction_results,
-        "failures": [p for p in prediction_results if not p.get("passed")],
+        "failures": dataflow_failures or [p for p in prediction_results if not p.get("passed")],
     }
 
 

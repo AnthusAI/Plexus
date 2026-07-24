@@ -126,6 +126,7 @@ questions, and "cannot improve" conclusions.
 - Prefer `python -m plexus.cli` from the repo root over a possibly stale installed `plexus` binary.
 - Capture stdout/stderr with `tee` for real runs so you keep the traceback and early procedure/task IDs.
 - Baseline evaluations are the real start of meaningful optimizer work. Procedure creation alone is not.
+- Let dispatched evaluations and root-cause analyses finish. Do not spend attention stopping them merely because an early result already supports a decision; their completed output can still supply regression evidence and future diagnostics.
 - Never invalidate feedback automatically.
 - Never invalidate feedback just because a contradictions report flagged an item.
 - Always discuss candidate invalidation groups with the user first.
@@ -135,6 +136,20 @@ questions, and "cannot improve" conclusions.
 - Promoting an untested ScoreVersion to champion is a policy violation. Before any champion promotion, confirm the exact version has at least one associated feedback or accuracy evaluation. The `plexus_score_set_champion` tool enforces this by default; use `force=true` only when the user explicitly authorizes an emergency override.
 - Use MCP for inspection around the optimizer when helpful, but not as the primary execution path during debugging.
 - When you prepare a score for optimizer work with `python -m plexus.cli score push`, remember that CLI-published guidelines come from `scorecards/<scorecard>/guidelines/<score>.md`. A sidecar markdown file next to the YAML is not the canonical guidelines path for CLI push.
+
+## Candidate Integrity Before Promotion
+
+Treat an optimizer's `accepted` or winning candidate as provisional. Before recommending promotion:
+
+1. Confirm every compared evaluation completed and used the exact intended cohort. Compare item or feedback IDs (or a deterministic cohort hash), not only item counts.
+2. Inspect the confusion matrix and class-specific recall/precision. Do not approve from aggregate accuracy or AC1 alone.
+3. If the actual cohort contains multiple classes, disqualify any candidate that predicts only one class, even when an aggregate metric improves.
+4. Confirm regression evidence is independent. Identical recent and regression item IDs are matched evidence, not two independent validation cohorts.
+5. Inspect high-severity RCA findings such as `prediction_mode_collapse`; resolve them before promotion.
+6. Verify the candidate's multi-node dataflow mechanically before or alongside evaluation. For an `Extractor`, map its emitted `extracted_text` directly downstream; do not invent or rename the source field (for example, `extracted_evidence`) unless the node actually emits it.
+7. Keep diagnosis, candidate/version IDs, evaluation IDs, cohort identity, confusion matrices, material rubric/code changes, RCA findings, and promotion status in one optimization-session note.
+
+No candidate is promotion-ready until these checks pass and the user explicitly approves champion promotion.
 
 ## Direct CLI as Source of Truth
 
