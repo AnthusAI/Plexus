@@ -975,3 +975,42 @@ def test_optimizer_yaml_records_recurrence_for_failed_no_synthesis_cycles():
     assert "failed_fb_item_class" in code
     assert "record_cycle_item_recurrence(cycle, failed_fb_item_class" in code
     assert "Cycle %d - Repeat Misclassification Tracker: no repeat or transition-history items yet." in code
+
+
+def test_optimizer_yaml_freezes_fresh_regression_dataset_for_all_candidate_evaluations():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "dataset_id = ensure_regression_dataset_for_version(params.start_version)" in code
+    assert 'State.set("dataset_id", dataset_id)' in code
+    assert "ensure_regression_dataset_for_version(sv.version_id)" not in code
+    assert "ensure_regression_dataset_for_version(final_version_id)" not in code
+    assert "sv.dataset_id = dataset_id" in code
+    assert code.count("dataset_id = dataset_id,") >= 3
+
+
+def test_optimizer_yaml_replays_and_verifies_exact_recent_feedback_cohort():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "Frozen recent feedback cohort" in code
+    assert 'State.set("recent_baseline_feedback_item_ids"' in code
+    assert code.count("feedback_item_ids = recent_baseline_feedback_item_ids") == 3
+    assert "require_exact_feedback_cohort" in code
+    assert "candidate feedback cohort differs from baseline" in code
+    assert "Invalid candidate comparison" in code
+    assert "Invalid strategy comparison" in code
+    assert "Invalid synthesis comparison" in code
+
+
+def test_optimizer_yaml_is_valid_lua_after_exact_cohort_wiring():
+    from lupa import LuaRuntime
+
+    code = _load_optimizer_config()["code"]
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    syntax_check = lua.eval(
+        "function(source) local fn, err = load(source); return fn ~= nil, err end"
+    )
+    valid, error = syntax_check(code)
+
+    assert valid, error

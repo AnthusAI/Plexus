@@ -345,6 +345,72 @@ async def test_shared_feedback_rca_orchestration_returns_partial_coverage_for_mi
     assert any("missing feedback_item_id linkage" in warning for warning in outcome["warnings"])
 
 
+@pytest.mark.asyncio
+async def test_shared_feedback_rca_uses_exact_feedback_ids_without_reselecting_window():
+    client = MagicMock()
+    client.execute.return_value = {
+        "listScoreResultByEvaluationId": {
+            "items": [
+                {
+                    "id": "sr-kept",
+                    "value": "No",
+                    "metadata": json.dumps(
+                        {
+                            "correct": False,
+                            "human_label": "Yes",
+                            "feedback_item_id": "fi-kept",
+                        }
+                    ),
+                    "explanation": "kept",
+                },
+                {
+                    "id": "sr-outside",
+                    "value": "No",
+                    "metadata": json.dumps(
+                        {
+                            "correct": False,
+                            "human_label": "Yes",
+                            "feedback_item_id": "fi-outside",
+                        }
+                    ),
+                    "explanation": "outside",
+                },
+            ],
+            "nextToken": None,
+        }
+    }
+
+    with patch(
+        "plexus.Evaluation.FeedbackEvaluation._fetch_feedback_items",
+        new=AsyncMock(side_effect=AssertionError("exact cohort must not reselect the window")),
+    ), patch(
+        "plexus.cli.evaluation.evaluations._fetch_feedback_items_by_ids",
+        new=AsyncMock(return_value={}),
+    ):
+        outcome = await _run_shared_feedback_root_cause_orchestration(
+            client=client,
+            account_key="acct-key",
+            account_id="acct-id",
+            evaluation_id="eval-1",
+            scorecard_identifier="scorecard-1",
+            scorecard_id="scorecard-1",
+            score_id="score-1",
+            score_version_id="version-1",
+            max_items=2,
+            sampling_mode="newest",
+            sample_seed=None,
+            max_category_summary_items=20,
+            days=30,
+            feedback_item_ids=["fi-kept"],
+            tracker=None,
+            apply_feedback_window_selection=True,
+        )
+
+    assert outcome["incorrect_items_total"] == 1
+    assert outcome["selection_metadata"]["sampling_mode"] == "exact_ids"
+    assert outcome["selection_metadata"]["selected_feedback_item_ids"] == ["fi-kept"]
+
+
 def test_apply_feedback_rca_outcome_to_parameters_sets_coverage_and_warnings():
     existing = {"keep": "value"}
     outcome = {

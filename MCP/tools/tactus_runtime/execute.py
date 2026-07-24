@@ -4680,6 +4680,8 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
         _append_optional_cli_arg(cmd, "--sample-seed", args.get("sample_seed"))
         _append_optional_cli_arg(cmd, "--feedback-start-at", args.get("feedback_start_at"))
         _append_optional_cli_arg(cmd, "--feedback-end-at", args.get("feedback_end_at"))
+        for feedback_item_id in args.get("feedback_item_ids") or []:
+            cmd.extend(["--feedback-item-id", str(feedback_item_id)])
         _append_optional_cli_arg(
             cmd, "--max-category-summary-items", args.get("max_category_summary_items")
         )

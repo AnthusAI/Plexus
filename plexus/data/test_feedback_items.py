@@ -61,6 +61,61 @@ def test_parameter_validation():
         FeedbackItems(**invalid_limit)
 
 
+def test_exact_feedback_item_ids_are_unique_and_preserve_requested_order():
+    with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
+         patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
+        mock_create_client.return_value = Mock()
+        mock_resolve_account.return_value = 'test-account-id'
+        dataset = FeedbackItems(
+            scorecard='scorecard-1',
+            score='score-1',
+            feedback_item_ids=['opaque-B', 'opaque-A'],
+        )
+
+    item_a = Mock(id='opaque-A', scorecardId='scorecard-1', scoreId='score-1', isInvalid=False)
+    item_b = Mock(id='opaque-B', scorecardId='scorecard-1', scoreId='score-1', isInvalid=False)
+
+    async def fetch_specific(_ids):
+        return [item_a, item_b]
+
+    dataset._fetch_specific_feedback_items = fetch_specific
+    result = asyncio.run(
+        dataset._fetch_feedback_items_for_scores('scorecard-1', [('score-1', 'Score')])
+    )
+
+    assert [item.id for item in result['score-1']] == ['opaque-B', 'opaque-A']
+
+    with pytest.raises(ValidationError, match='must not contain duplicates'):
+        FeedbackItems.Parameters(
+            scorecard='scorecard-1',
+            score='score-1',
+            feedback_item_ids=['opaque-A', 'opaque-A'],
+        )
+
+
+def test_exact_feedback_item_ids_fail_closed_when_membership_cannot_be_materialized():
+    with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
+         patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
+        mock_create_client.return_value = Mock()
+        mock_resolve_account.return_value = 'test-account-id'
+        dataset = FeedbackItems(
+            scorecard='scorecard-1',
+            score='score-1',
+            feedback_item_ids=['opaque-A', 'opaque-missing'],
+        )
+
+    item_a = Mock(id='opaque-A', scorecardId='scorecard-1', scoreId='score-1', isInvalid=False)
+
+    async def fetch_specific(_ids):
+        return [item_a]
+
+    dataset._fetch_specific_feedback_items = fetch_specific
+    with pytest.raises(ValueError, match='missing=1'):
+        asyncio.run(
+            dataset._fetch_feedback_items_for_scores('scorecard-1', [('score-1', 'Score')])
+        )
+
+
 def test_initial_value_and_final_value_parameters():
     """Test the new initial_value and final_value parameters."""
     
