@@ -615,28 +615,91 @@ def validate_run_limits(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _assessment_packet_fingerprint(packet: Mapping[str, Any]) -> str | None:
+    """Recompute the canonical fingerprint of a returned assessment packet.
+
+    A target must carry the actual assessment packet, not an unverified string
+    that merely looks like a fingerprint.  This is deliberately the same
+    envelope that :meth:`OptimizationDecisionPacket.to_dict` fingerprints.
+    """
+    evidence = packet.get("evidence")
+    if not isinstance(evidence, Mapping):
+        return None
+    return evidence_fingerprint(
+        {
+            "account_id": packet.get("account_id"),
+            "scope": packet.get("scope") or {},
+            "window": packet.get("window") or {},
+            "policy_version": packet.get("policy_version"),
+            "champion_version": packet.get("champion_version"),
+            "feedback_watermark": packet.get("feedback_watermark"),
+            "evidence": dict(evidence),
+        }
+    )
+
+
+def _ready_target_provenance_failure(target: Mapping[str, Any]) -> str | None:
+    """Return one fail-closed reason when a launch target lacks provenance."""
+    scorecard_id = str(target.get("scorecard_id") or "")
+    score_id = str(target.get("score_id") or "")
+    if not scorecard_id or not score_id:
+        return "exact_target_identifiers_required"
+
+    assessment_value = target.get("assessment")
+    if not isinstance(assessment_value, Mapping):
+        return "assessment_packet_required"
+    assessment = dict(assessment_value)
+    scope = assessment.get("scope")
+    if not isinstance(scope, Mapping) or (
+        str(scope.get("scorecard_id") or "") != scorecard_id
+        or str(scope.get("score_id") or "") != score_id
+    ):
+        return "assessment_scope_mismatch"
+
+    claimed_fingerprint = target.get("assessment_fingerprint")
+    packet_fingerprint = assessment.get("evidence_fingerprint") or assessment.get("fingerprint")
+    recomputed_fingerprint = _assessment_packet_fingerprint(assessment)
+    if not isinstance(claimed_fingerprint, str) or not claimed_fingerprint:
+        return "assessment_fingerprint_required"
+    if (
+        not isinstance(packet_fingerprint, str)
+        or packet_fingerprint != recomputed_fingerprint
+        or claimed_fingerprint != packet_fingerprint
+    ):
+        return "assessment_fingerprint_mismatch"
+
+    coverage = assessment.get("coverage")
+    states = assessment.get("states")
+    readiness = (
+        states.get("optimization", states.get("readiness"))
+        if isinstance(states, Mapping)
+        else assessment.get("readiness_state")
+    )
+    if not isinstance(coverage, Mapping) or coverage.get("complete") is not True or readiness != "ready_to_optimize":
+        return "assessment_not_ready"
+
+    champion_version = assessment.get("champion_version")
+    feedback_watermark = assessment.get("feedback_watermark")
+    if not champion_version:
+        return "champion_version_required"
+    if not feedback_watermark:
+        return "feedback_watermark_required"
+    if (
+        target.get("champion_version") != champion_version
+        or target.get("feedback_watermark") != feedback_watermark
+    ):
+        return "assessment_freshness_mismatch"
+    return None
+
+
 def _validate_ready_targets(targets: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Return explicit provenance failures for public optimizer dispatch."""
     rejected: list[dict[str, Any]] = []
     for target_source in targets:
         target = dict(target_source)
-        if not target.get("scorecard_id") or not target.get("score_id"):
-            rejected.append({"target": target, "reason": "exact_target_identifiers_required"})
-            continue
-        assessment = target.get("assessment") if isinstance(target.get("assessment"), Mapping) else {}
-        complete = target.get("assessment_complete", assessment.get("complete"))
-        readiness = target.get("readiness_state", assessment.get("readiness_state"))
-        if complete is not True or readiness != "ready_to_optimize":
-            rejected.append({"target": target, "reason": "assessment_not_ready"})
-            continue
-        if not target.get("champion_version"):
-            rejected.append({"target": target, "reason": "champion_version_required"})
-            continue
-        if not target.get("feedback_watermark"):
-            rejected.append({"target": target, "reason": "feedback_watermark_required"})
-            continue
-        if not target.get("assessment_fingerprint"):
-            rejected.append({"target": target, "reason": "assessment_fingerprint_required"})
+        reason = _ready_target_provenance_failure(target)
+        if reason:
+            rejected.append({"target": target, "reason": reason})
     return rejected
 
 
@@ -695,11 +758,15 @@ def validate_approved_batch(targets: Sequence[Mapping[str, Any]], *, approved: b
         scorecard_id, score_id = str(target.get("scorecard_id") or ""), str(target.get("score_id") or "")
         key = (scorecard_id, score_id)
         printable = f"{scorecard_id}:{score_id}"
-        if not scorecard_id or not score_id:
-            rejected.append({"target": target, "reason": "exact_target_identifiers_required"})
+        provenance_failure = _ready_target_provenance_failure(target)
+        current_fingerprint = current_fingerprints.get(printable)
+        if provenance_failure:
+            rejected.append({"target": target, "reason": provenance_failure})
         elif key in seen:
             rejected.append({"target": target, "reason": "duplicate_target"})
-        elif printable in current_fingerprints and target.get("assessment_fingerprint") != current_fingerprints[printable]:
+        elif not isinstance(current_fingerprint, str) or not current_fingerprint:
+            rejected.append({"target": target, "reason": "current_assessment_fingerprint_required"})
+        elif target.get("assessment_fingerprint") != current_fingerprint:
             rejected.append({"target": target, "reason": "stale_assessment"})
         else:
             accepted.append(target)
@@ -721,17 +788,24 @@ def classify_post_run_review(evidence: Mapping[str, Any], *, context: Mapping[st
         return _packet_result("review", {"post_run_state": "failed_or_incomplete", "promotion_ready": False, "primary_next_action": "complete_or_repair_evaluation"}, data)
     if data.get("stakeholder_questions") or data.get("stakeholder_decision_required"):
         return _packet_result("review", {"post_run_state": "stakeholder_decision_required", "promotion_ready": False, "primary_next_action": "resolve_stakeholder_questions", "stakeholder_questions": list(data.get("stakeholder_questions") or [])}, data)
-    if data.get("prediction_collapse") or data.get("measurable_safe_improvement") is False:
+    if data.get("prediction_collapse") is True or data.get("measurable_safe_improvement") is False:
         return _packet_result("review", {"post_run_state": "no_safe_improvement", "promotion_ready": False, "primary_next_action": "retain_champion"}, data)
     required = (
+        "indexed_optimizer_review",
+        "candidate_version_id",
         "matched_recent_evaluation",
         "historical_regression_evidence",
         "class_specific_metrics",
+        "prediction_collapse",
         "rca_complete",
         "artifacts_complete",
         "measurable_safe_improvement",
     )
-    missing = [name for name in required if not data.get(name)]
+    missing = [
+        name
+        for name in required
+        if (data.get(name) is not False if name == "prediction_collapse" else not data.get(name))
+    ]
     if not missing:
         return _packet_result("review", {"post_run_state": "promotion_ready", "promotion_ready": True, "primary_next_action": "request_promotion_approval", "missing_evidence": []}, data)
     return _packet_result("review", {"post_run_state": "continue_optimization", "promotion_ready": False, "primary_next_action": "continue_optimization", "missing_evidence": missing, "blockers": missing}, data)

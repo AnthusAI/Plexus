@@ -16,7 +16,7 @@ import time
 import traceback
 import uuid
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Optional
+from typing import Annotated, Any, Callable, Mapping, Optional
 
 from fastmcp import Context, FastMCP
 from pydantic import Field
@@ -9564,9 +9564,35 @@ class PlexusRuntimeModule:
             return {"scores": [], "coverage": coverage}
 
         downstream_coverage = alignment.get("coverage") if isinstance(alignment, dict) else None
-        if isinstance(downstream_coverage, dict) and not downstream_coverage.get("complete", False):
+        expected_targets = len(card_ids)
+        if not isinstance(downstream_coverage, dict):
             coverage["complete"] = False
-            coverage["failures"].extend(downstream_coverage.get("failures") or [{"stage": "feedback_alignment", "error": "incomplete"}])
+            coverage["failures"].append({
+                "stage": "feedback_alignment",
+                "error": "missing analysis coverage evidence",
+            })
+        else:
+            reported_targets = downstream_coverage.get("target_count")
+            completed_targets = downstream_coverage.get("completed_count")
+            if downstream_coverage.get("complete") is not True:
+                coverage["complete"] = False
+                coverage["failures"].extend(
+                    downstream_coverage.get("failures")
+                    or [{"stage": "feedback_alignment", "error": "incomplete"}]
+                )
+            # Exact portfolio rankings require the analysis batch to attest to
+            # the same target set discovered by exhaustive pagination.  A
+            # truthy `complete` flag alone cannot prove that it analyzed every
+            # discovered scorecard.
+            if reported_targets != expected_targets or completed_targets != expected_targets:
+                coverage["complete"] = False
+                coverage["failures"].append({
+                    "stage": "feedback_alignment",
+                    "error": "analysis coverage does not match discovered scope",
+                    "discovered_target_count": expected_targets,
+                    "reported_target_count": reported_targets,
+                    "reported_completed_count": completed_targets,
+                })
         inventory_scores: dict[tuple[str, str], dict[str, Any]] = {}
         for card in cards:
             card_id = str(card.get("id") or "")
@@ -9596,6 +9622,19 @@ class PlexusRuntimeModule:
                         "scorecard_id": scorecard_id,
                         "scorecard_name": score.get("scorecard_name") or card_result.get("scorecard_name"),
                     })
+        analyzed_scorecards = {
+            str(card_result.get("scorecard_id") or card_result.get("scorecardId") or "")
+            for card_result in (alignment.get("scorecards") or [])
+            if isinstance(card_result, dict) and not card_result.get("error")
+        }
+        missing_scorecards = sorted(set(card_ids) - analyzed_scorecards)
+        if missing_scorecards:
+            coverage["complete"] = False
+            coverage["failures"].append({
+                "stage": "feedback_alignment",
+                "error": "analysis result omitted discovered scorecards",
+                "scorecard_ids": missing_scorecards,
+            })
         return {"scores": rows, "coverage": coverage, "window": window}
 
     def _current_optimization_freshness(
@@ -9636,13 +9675,98 @@ class PlexusRuntimeModule:
                 })
         return evidence_by_target, failures
 
+    @staticmethod
+    def _current_assessment_fingerprint(target: Mapping[str, Any]) -> str | None:
+        """Recompute the canonical fingerprint from the embedded assessment.
+
+        The dispatcher independently validates this packet.  Computing the
+        current-fingerprint map here as well ensures the transport never
+        substitutes a caller-controlled fingerprint for that evidence.
+        """
+        assessment = target.get("assessment")
+        if not isinstance(assessment, Mapping):
+            return None
+        evidence = assessment.get("evidence")
+        if not isinstance(evidence, Mapping):
+            return None
+        from plexus.optimization.decision import evidence_fingerprint
+
+        return evidence_fingerprint({
+            "account_id": assessment.get("account_id"),
+            "scope": assessment.get("scope") or {},
+            "window": assessment.get("window") or {},
+            "policy_version": assessment.get("policy_version"),
+            "champion_version": assessment.get("champion_version"),
+            "feedback_watermark": assessment.get("feedback_watermark"),
+            "evidence": dict(evidence),
+        })
+
     def _optimization_assessment_payload(self, args: dict[str, Any]) -> dict[str, Any]:
         scorecard_id = str(args.get("scorecard_id") or "")
         score_id = str(args.get("score_id") or "")
         if not scorecard_id or not score_id:
             raise ValueError("plexus.optimization.assess requires exact scorecard_id and score_id")
-        evidence = dict(args.get("rank_evidence") or args.get("evidence") or {})
+        # Assessment composes a frozen rank row with configuration facts.  If
+        # a caller already has that row/packet, reuse it exactly; otherwise an
+        # exact-ID request builds the canonical account-wide frozen rank input
+        # and selects this score's row.  It never treats empty evidence as
+        # complete.
+        supplied = args.get("rank_evidence") or args.get("evidence") or args.get("rank_packet")
+        if supplied is None:
+            supplied = self._rank_payload_from_runtime(args)
+        source = dict(supplied) if isinstance(supplied, dict) else {}
+        rank_rows: list[Any] = []
+        for key in ("scores", "ranked", "unranked"):
+            values = source.get(key)
+            if isinstance(values, list):
+                rank_rows.extend(values)
+        packet_evidence = source.get("evidence")
+        if isinstance(packet_evidence, dict):
+            for key in ("scores", "ranked", "unranked"):
+                values = packet_evidence.get(key)
+                if isinstance(values, list):
+                    rank_rows.extend(values)
+        selected = next(
+            (
+                dict(row)
+                for row in rank_rows
+                if isinstance(row, dict)
+                and str(row.get("scorecard_id") or row.get("scorecardId") or "") == scorecard_id
+                and str(row.get("score_id") or row.get("scoreId") or row.get("id") or "") == score_id
+            ),
+            None,
+        )
+        if selected is not None:
+            evidence = {
+                **source,
+                **selected,
+                "scope": {"scorecard_id": scorecard_id, "score_id": score_id},
+                "coverage": source.get("coverage") or {},
+                "window": source.get("window") or packet_evidence.get("window", {}) if isinstance(packet_evidence, dict) else source.get("window") or {},
+            }
+        else:
+            evidence = source
         failures: list[Any] = list((evidence.get("coverage") or {}).get("failures") or [])
+        evidence_scope = dict(evidence.get("scope") or {})
+        evidence_scorecard_id = evidence.get("scorecard_id") or evidence_scope.get("scorecard_id")
+        evidence_score_id = evidence.get("score_id") or evidence_scope.get("score_id")
+        if not evidence:
+            failures.append("frozen rank evidence is required")
+        elif selected is None and any(rank_rows):
+            failures.append("exact score is absent from frozen rank evidence")
+        elif (
+            (evidence_scorecard_id is not None and str(evidence_scorecard_id) != scorecard_id)
+            or (evidence_score_id is not None and str(evidence_score_id) != score_id)
+        ):
+            failures.append("rank evidence does not match exact score identifiers")
+        window = evidence.get("window") or args.get("window") or {}
+        if not isinstance(window, dict) or not window.get("start") or not window.get("end"):
+            failures.append("frozen feedback window is required")
+        if not any(
+            key in evidence
+            for key in ("valid_feedback_count", "total_items", "totalItems")
+        ):
+            failures.append("frozen feedback metrics are required")
         try:
             info = self._score_info({"scorecard_identifier": scorecard_id, "score_identifier": score_id})
         except Exception as exc:  # noqa: BLE001
@@ -9694,12 +9818,15 @@ class PlexusRuntimeModule:
             except Exception as exc:  # noqa: BLE001
                 failures.append(f"weekly metrics unavailable: {exc}")
         coverage = dict(evidence.get("coverage") or {})
-        complete = bool(coverage.get("complete", evidence.get("coverage_complete", True))) and not failures
+        # Do not default absent coverage to complete: a score may only be
+        # assessed from rank evidence that explicitly attests complete frozen
+        # coverage for this exact target.
+        complete = bool(coverage.get("complete", evidence.get("coverage_complete", False))) and not failures
         return {
             **evidence,
             "account_id": args.get("account_id"), "scorecard_id": scorecard_id, "score_id": score_id,
             "scope": {"scorecard_id": scorecard_id, "score_id": score_id},
-            "window": evidence.get("window") or args.get("window") or {},
+            "window": window,
             "coverage": {**coverage, "complete": complete, "failures": failures},
             "coverage_complete": complete, "coverage_failures": failures,
             "champion_version": info.get("championVersionId"),
@@ -9719,13 +9846,22 @@ class PlexusRuntimeModule:
             info = self._score_info({"scorecard_identifier": scorecard_id, "score_identifier": score_id})
         except Exception as exc:  # noqa: BLE001
             failures.append(str(exc))
-        base = {"scorecard": scorecard_id, "score": score_id, "scorecard_id": scorecard_id, "score_id": score_id, "version": info.get("championVersionId")}
+        score_version_id = str(info.get("championVersionId") or "")
+        if not score_version_id:
+            failures.append("missing champion version for semantic diagnosis")
+        base = {
+            "scorecard": scorecard_id,
+            "score": score_id,
+            "scorecard_id": scorecard_id,
+            "score_id": score_id,
+            "version": score_version_id,
+            "score_version_id": score_version_id,
+        }
         results: dict[str, Any] = {}
         for name, handler in (
             ("contradictions", self._score_contradictions),
             ("rubric_memory", self._rubric_memory_recent_entries),
             ("rubric_evidence", self._rubric_memory_evidence_pack),
-            ("sme_gate", self._rubric_memory_sme_question_gate),
         ):
             try:
                 value = handler(base)
@@ -9734,8 +9870,42 @@ class PlexusRuntimeModule:
                     failures.append(f"{name} pending")
             except Exception as exc:  # noqa: BLE001
                 failures.append(str(exc))
+        rubric_context = results.get("rubric_evidence") or results.get("rubric_memory") or {}
+        gate_args = {
+            **base,
+            "rubric_memory_context": rubric_context,
+            "candidate_agenda_markdown": args.get("candidate_agenda_markdown") or "",
+            # Keep the gate's input tied to the exact semantic evidence rather
+            # than asking it to rediscover or infer prior results.
+            "optimizer_context": args.get("optimizer_context") or str({
+                "contradictions": results.get("contradictions") or {},
+                "rubric_memory": results.get("rubric_memory") or {},
+                "rubric_evidence": results.get("rubric_evidence") or {},
+            }),
+        }
+        try:
+            value = self._rubric_memory_sme_question_gate(gate_args)
+            results["sme_gate"] = value
+            if isinstance(value, dict) and (value.get("pending") or value.get("handle_id")):
+                failures.append("sme_gate pending")
+        except Exception as exc:  # noqa: BLE001
+            failures.append(str(exc))
         contradictions = results.get("contradictions") or {}
         sme = results.get("sme_gate") or {}
+        stakeholder_questions: list[str] = []
+        if isinstance(sme, dict):
+            # The typed SME gate publishes final agenda items, not a generic
+            # `questions` field.  Surface only retained/transformed items that
+            # are explicitly classified as true open questions; answered or
+            # suppressed candidates must not block optimization.
+            for item in sme.get("final_items") or []:
+                if not isinstance(item, dict):
+                    continue
+                if str(item.get("answer_status") or "").lower() != "true_open_question":
+                    continue
+                question = str(item.get("final_text") or item.get("original_text") or "").strip()
+                if question:
+                    stakeholder_questions.append(question)
         return {
             "account_id": args.get("account_id"), "scorecard_id": scorecard_id, "score_id": score_id,
             "scope": {"scorecard_id": scorecard_id, "score_id": score_id},
@@ -9749,16 +9919,23 @@ class PlexusRuntimeModule:
                 else contradictions.get("status", "inconclusive") if isinstance(contradictions, dict) else "inconclusive"
             ),
             "feedback_rubric_consistent": isinstance(contradictions, dict) and contradictions.get("status") == "consistent",
-            "stakeholder_questions": (sme.get("questions") or []) if isinstance(sme, dict) else [],
+            "stakeholder_questions": stakeholder_questions,
             "complete": not failures, "coverage": {"complete": not failures, "failures": failures},
             "coverage_complete": not failures, "coverage_failures": failures,
             "evidence_ids": [value.get("id") for value in results.values() if isinstance(value, dict) and value.get("id")],
         }
 
     def _optimization_review_payload(self, args: dict[str, Any]) -> dict[str, Any]:
-        if args.get("evidence") or not args.get("procedure_id"):
-            return args
-        procedure_id = str(args["procedure_id"])
+        procedure_id = str(args.get("procedure_id") or "")
+        if not procedure_id:
+            # Public callers cannot turn unverified boolean fields into a
+            # promotion decision.  Only indexed optimizer evidence is a valid
+            # review input.
+            return {"evidence": {
+                "terminal": False,
+                "incomplete": True,
+                "error": "procedure_id is required for indexed optimizer review",
+            }}
         try:
             if self._review_evidence_loader is not None:
                 manifest = self._review_evidence_loader(procedure_id)
@@ -9816,6 +9993,40 @@ class PlexusRuntimeModule:
                 freshness_evidence, freshness_failures = (
                     self._current_optimization_freshness(args.get("targets"))
                 )
+                fresh_targets: list[dict[str, Any]] = []
+                current_fingerprints: dict[str, str] = {}
+                for source in args.get("targets") or []:
+                    if not isinstance(source, dict):
+                        continue
+                    scorecard_id = str(source.get("scorecard_id") or "")
+                    score_id = str(source.get("score_id") or "")
+                    current = freshness_evidence.get((scorecard_id, score_id))
+                    if current is None:
+                        continue
+                    if (
+                        source.get("champion_version") != current["champion_version"]
+                        or source.get("feedback_watermark") != current["feedback_watermark"]
+                    ):
+                        # Retain the target for the common public validator so
+                        # it returns the precise stale-assessment reason rather
+                        # than a misleading empty-batch error.
+                        fresh_targets.append(source)
+                        current_fingerprints[
+                            f"{scorecard_id}:{score_id}"
+                        ] = "live-evidence-changed"
+                        continue
+                    fresh_targets.append(source)
+                    fingerprint = self._current_assessment_fingerprint(source)
+                    if fingerprint:
+                        current_fingerprints[f"{scorecard_id}:{score_id}"] = fingerprint
+                # Ignore caller-provided current_fingerprints.  The pure
+                # decision layer will validate the embedded assessment packet
+                # against this independently recomputed map.
+                args = {
+                    **args,
+                    "targets": fresh_targets,
+                    "current_fingerprints": current_fingerprints,
+                }
             result = helper(method, args, **dependencies)
             if method != "run" or not isinstance(result, dict):
                 return result

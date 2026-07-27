@@ -301,28 +301,84 @@ def test_evidence_fingerprint_is_order_independent_and_changes_with_watermark():
     assert first != changed
 
 
+def _ready_assessment_packet(*, scorecard_id: str = "sc", score_id: str = "s") -> dict:
+    """Build the exact, complete assessment artifact required for a launch."""
+    return assess_investment(
+        {
+            "account_id": "account",
+            "scope": {"scorecard_id": scorecard_id, "score_id": score_id},
+            "window": {
+                "start": "2026-01-01T00:00:00Z",
+                "end": "2026-04-01T00:00:00Z",
+            },
+            "coverage_complete": True,
+            "champion_version": "champion",
+            "feedback_watermark": "watermark",
+            "valid_feedback_count": 200,
+            "disagreement_count": 80,
+            "reachable_classes": ["yes", "no"],
+            "final_label_counts": {"yes": 100, "no": 100},
+            "guideline_state": "consistent",
+        }
+    )
+
+
+def _ready_target(packet: dict) -> dict:
+    return {
+        "scorecard_id": packet["scope"]["scorecard_id"],
+        "score_id": packet["scope"]["score_id"],
+        "assessment": packet,
+        "assessment_fingerprint": packet["evidence_fingerprint"],
+        "assessment_complete": True,
+        "readiness_state": "ready_to_optimize",
+        "champion_version": "champion",
+        "feedback_watermark": "watermark",
+    }
+
+
 def test_approved_batch_requires_exact_approved_unique_maximum_five_targets():
+    packet = _ready_assessment_packet()
+    target = _ready_target(packet)
     accepted = validate_approved_batch(
-        [{"scorecard_id": "sc", "score_id": "s", "assessment_fingerprint": "fp"}],
+        [target],
         approved=True,
-        current_fingerprints={"sc:s": "fp"},
+        current_fingerprints={"sc:s": packet["evidence_fingerprint"]},
     )
     stale = validate_approved_batch(
-        [{"scorecard_id": "sc", "score_id": "s", "assessment_fingerprint": "old"}],
+        [{**target, "assessment_fingerprint": "old"}],
         approved=True,
-        current_fingerprints={"sc:s": "new"},
+        current_fingerprints={"sc:s": packet["evidence_fingerprint"]},
     )
 
     assert accepted["accepted"] is True
     assert stale["accepted"] is False
-    assert stale["rejected"][0]["reason"] == "stale_assessment"
+    assert stale["rejected"][0]["reason"] == "assessment_fingerprint_mismatch"
     assert validate_approved_batch([], approved=True)["accepted"] is False
     assert validate_approved_batch([{"scorecard_id": "x", "score_id": str(i)} for i in range(6)], approved=True)["accepted"] is False
+
+
+def test_approved_batch_rejects_absent_or_arbitrary_current_assessment_fingerprints():
+    packet = _ready_assessment_packet()
+    target = _ready_target(packet)
+
+    missing = validate_approved_batch([target], approved=True)
+    arbitrary = validate_approved_batch(
+        [{**target, "assessment_fingerprint": "arbitrary"}],
+        approved=True,
+        current_fingerprints={"sc:s": "arbitrary"},
+    )
+
+    assert missing["accepted"] is False
+    assert missing["rejected"][0]["reason"] == "current_assessment_fingerprint_required"
+    assert arbitrary["accepted"] is False
+    assert arbitrary["rejected"][0]["reason"] == "assessment_fingerprint_mismatch"
 
 
 def test_post_run_promotion_requires_every_safety_gate():
     base = {
         "terminal": True,
+        "indexed_optimizer_review": True,
+        "candidate_version_id": "candidate-version",
         "matched_recent_evaluation": True,
         "historical_regression_evidence": True,
         "class_specific_metrics": True,
@@ -334,6 +390,41 @@ def test_post_run_promotion_requires_every_safety_gate():
     assert classify_post_run_review(base)["post_run_state"] == "promotion_ready"
     assert classify_post_run_review({**base, "prediction_collapse": True})["post_run_state"] == "no_safe_improvement"
     assert classify_post_run_review({**base, "terminal": False})["post_run_state"] == "failed_or_incomplete"
+
+
+def test_post_run_promotion_requires_explicit_no_collapse_and_candidate_identity():
+    base = {
+        "terminal": True,
+        "indexed_optimizer_review": True,
+        "candidate_version_id": "candidate-version",
+        "matched_recent_evaluation": True,
+        "historical_regression_evidence": True,
+        "class_specific_metrics": True,
+        "rca_complete": True,
+        "artifacts_complete": True,
+        "measurable_safe_improvement": True,
+    }
+
+    missing_collapse = classify_post_run_review(base)
+    unknown_collapse = classify_post_run_review({**base, "prediction_collapse": None})
+    missing_candidate = classify_post_run_review(
+        {**base, "prediction_collapse": False, "candidate_version_id": None}
+    )
+    missing_indexed_evidence = classify_post_run_review(
+        {**base, "prediction_collapse": False, "indexed_optimizer_review": False}
+    )
+
+    for result in (
+        missing_collapse,
+        unknown_collapse,
+        missing_candidate,
+        missing_indexed_evidence,
+    ):
+        assert result["post_run_state"] == "continue_optimization"
+        assert result["promotion_ready"] is False
+    assert "prediction_collapse" in missing_collapse["missing_evidence"]
+    assert "candidate_version_id" in missing_candidate["missing_evidence"]
+    assert "indexed_optimizer_review" in missing_indexed_evidence["missing_evidence"]
 
 
 def test_summary_aggregates_actions_questions_failures_and_approval_requests():
@@ -383,6 +474,8 @@ def test_summary_retains_compact_per_score_outcomes_in_input_order():
 
 
 def test_dispatch_routes_dict_payloads_without_runtime_dependencies():
+    packet = _ready_assessment_packet(scorecard_id="sc", score_id="score")
+    target = _ready_target(packet)
     result = dispatch_optimization_operation(
         "optimization.run",
         {
@@ -391,16 +484,8 @@ def test_dispatch_routes_dict_payloads_without_runtime_dependencies():
             "max_samples": 10,
             "max_iterations": 2,
             "max_concurrency": 1,
-            "targets": [{
-                "scorecard_id": "sc",
-                "score_id": "score",
-                "assessment_fingerprint": "fp",
-                "assessment_complete": True,
-                "readiness_state": "ready_to_optimize",
-                "champion_version": "champion",
-                "feedback_watermark": "watermark",
-            }],
-            "current_fingerprints": {"sc:score": "fp"},
+            "targets": [target],
+            "current_fingerprints": {"sc:score": packet["evidence_fingerprint"]},
         },
     )
 
@@ -430,19 +515,14 @@ def test_run_limits_are_explicit_positive_and_concurrency_is_bounded(field, valu
 
 
 def test_public_run_dispatch_rejects_missing_ready_assessment_provenance():
-    target = {
-        "scorecard_id": "sc",
-        "score_id": "score",
-        "assessment_fingerprint": "fp",
-        "assessment_complete": True,
-        "readiness_state": "ready_to_optimize",
-        "champion_version": "champion",
-        "feedback_watermark": "watermark",
-    }
+    packet = _ready_assessment_packet(scorecard_id="sc", score_id="score")
+    target = _ready_target(packet)
     limits = {"max_cost_usd": 1, "max_samples": 1, "max_iterations": 1, "max_concurrency": 1}
-    accepted = dispatch_optimization_operation("run", {"approved": True, "targets": [target], **limits, "current_fingerprints": {"sc:score": "fp"}})
-    missing_marker = dispatch_optimization_operation("run", {"approved": True, "targets": [{**target, "assessment_complete": False}], **limits, "current_fingerprints": {"sc:score": "fp"}})
-    missing_limit = dispatch_optimization_operation("run", {"approved": True, "targets": [target], "max_cost_usd": 1, "max_samples": 1, "max_iterations": 1, "current_fingerprints": {"sc:score": "fp"}})
+    fingerprints = {"sc:score": packet["evidence_fingerprint"]}
+    accepted = dispatch_optimization_operation("run", {"approved": True, "targets": [target], **limits, "current_fingerprints": fingerprints})
+    incomplete_packet = {**packet, "coverage": {"complete": False, "failures": ["retry exhausted"]}}
+    missing_marker = dispatch_optimization_operation("run", {"approved": True, "targets": [{**target, "assessment": incomplete_packet}], **limits, "current_fingerprints": fingerprints})
+    missing_limit = dispatch_optimization_operation("run", {"approved": True, "targets": [target], "max_cost_usd": 1, "max_samples": 1, "max_iterations": 1, "current_fingerprints": fingerprints})
 
     assert accepted["accepted"] is True
     assert missing_marker["accepted"] is False

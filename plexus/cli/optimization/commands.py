@@ -103,11 +103,21 @@ def dispatch_optimization_operation(operation: str, payload: Dict[str, Any]) -> 
         result = shared_dispatcher(operation, dispatch_payload)
         result = _merge_freshness_rejections(result, freshness_rejections)
         return _dispatch_approved_optimizer_targets(result)
-    if operation == "review" and payload.get("procedure_id") and not payload.get("evidence"):
+    if operation == "review":
+        procedure_id = str(payload.get("procedure_id") or "")
+        # A public review cannot accept caller-supplied `terminal`, safety, or
+        # improvement booleans.  Those values have to come from the indexed
+        # optimizer manifest plus its terminal evaluation evidence.
         payload = {
             **payload,
-            "evidence": _load_indexed_optimizer_review_evidence(
-                str(payload["procedure_id"])
+            "evidence": (
+                _load_indexed_optimizer_review_evidence(procedure_id)
+                if procedure_id
+                else {
+                    "terminal": False,
+                    "incomplete": True,
+                    "error": "procedure_id is required for indexed optimizer review",
+                }
             ),
         }
     return shared_dispatcher(operation, payload)
@@ -178,7 +188,7 @@ def _prepare_live_run_request(
     if request.get("approved") is not True or not limits_valid:
         return prepared, []
 
-    fingerprints, evidence_by_target, failures = _refresh_live_target_freshness(
+    _fingerprints, evidence_by_target, failures = _refresh_live_target_freshness(
         request
     )
     rejected = list(failures)
@@ -191,6 +201,7 @@ def _prepare_live_run_request(
         if isinstance(item.get("target"), Mapping)
     }
     fresh_targets: list[dict[str, Any]] = []
+    current_fingerprints: dict[str, str] = {}
     for source in request.get("targets") or []:
         if not isinstance(source, Mapping):
             continue
@@ -204,15 +215,44 @@ def _prepare_live_run_request(
             or target.get("feedback_watermark")
             not in (None, current["feedback_watermark"])
         ):
-            rejected.append({"target": target, "reason": "stale_assessment"})
+            # Preserve the target for the shared validator, which can then
+            # report `stale_assessment` rather than treating the batch as
+            # empty.  This marker is never caller-controlled.
+            fresh_targets.append(target)
+            current_fingerprints[f"{key[0]}:{key[1]}"] = "live-evidence-changed"
             continue
         fresh_targets.append(target)
+        fingerprint = _recomputed_assessment_fingerprint(target)
+        if fingerprint:
+            current_fingerprints[f"{key[0]}:{key[1]}"] = fingerprint
 
     # Never trust current_fingerprints passed in the request.  The shared core
-    # gate sees only the values calculated from fresh live evidence.
+    # gate sees only fingerprints recomputed from the embedded assessment
+    # packet after live champion/watermark evidence is confirmed unchanged.
     prepared["targets"] = fresh_targets
-    prepared["current_fingerprints"] = fingerprints
+    prepared["current_fingerprints"] = current_fingerprints
     return prepared, rejected
+
+
+def _recomputed_assessment_fingerprint(target: Mapping[str, Any]) -> str | None:
+    """Return the canonical embedded-assessment fingerprint, if present."""
+    assessment = target.get("assessment")
+    if not isinstance(assessment, Mapping):
+        return None
+    evidence = assessment.get("evidence")
+    if not isinstance(evidence, Mapping):
+        return None
+    from plexus.optimization.decision import evidence_fingerprint
+
+    return evidence_fingerprint({
+        "account_id": assessment.get("account_id"),
+        "scope": assessment.get("scope") or {},
+        "window": assessment.get("window") or {},
+        "policy_version": assessment.get("policy_version"),
+        "champion_version": assessment.get("champion_version"),
+        "feedback_watermark": assessment.get("feedback_watermark"),
+        "evidence": dict(evidence),
+    })
 
 
 def _merge_freshness_rejections(

@@ -6,6 +6,34 @@ import pytest
 from click.testing import CliRunner
 
 
+def _ready_target(
+    scorecard_id: str, score_id: str, champion_version: str = "champion",
+    feedback_watermark: str = "watermark",
+) -> dict:
+    from plexus.optimization.decision import assess_investment
+
+    assessment = assess_investment({
+        "scorecard_id": scorecard_id, "score_id": score_id,
+        "complete": True, "champion_version": champion_version,
+        "feedback_watermark": feedback_watermark,
+        "terminal_classes_resolved": True, "guideline_state": "consistent",
+        "valid_feedback_count": 250, "reviewed_disagreements": 200,
+        "reachable_classes": ["Yes", "No"],
+        "final_label_counts": {"Yes": 125, "No": 125},
+        "weekly_disagreement_rates": [0.8] * 4,
+        "weekly_ac1_values": [0.7] * 4,
+        "weekly_bucket_counts": [20] * 4,
+    })
+    assert assessment["readiness_state"] == "ready_to_optimize"
+    return {
+        "scorecard_id": scorecard_id, "score_id": score_id,
+        "assessment": assessment,
+        "assessment_fingerprint": assessment["evidence_fingerprint"],
+        "champion_version": champion_version,
+        "feedback_watermark": feedback_watermark,
+    }
+
+
 @pytest.mark.parametrize(
     "operation",
     ["rank", "assess", "diagnose", "run", "review", "summary"],
@@ -92,6 +120,8 @@ def test_review_loads_procedure_evidence_through_injected_indexed_service(monkey
         commands,
         "_load_indexed_optimizer_review_evidence",
         lambda procedure_id: observed.append(procedure_id) or {
+            "indexed_optimizer_review": True,
+            "candidate_version_id": "candidate-1",
             "terminal": True,
             "matched_recent_evaluation": True,
             "historical_regression_evidence": True,
@@ -128,6 +158,35 @@ def test_review_procedure_with_missing_or_unindexed_artifacts_fails_closed(monke
 
     result = CliRunner().invoke(
         commands.optimization, ["review", "--input", '{"procedure_id":"proc-unindexed"}']
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["post_run_state"] == "failed_or_incomplete"
+    assert payload["promotion_ready"] is False
+
+
+def test_review_ignores_caller_supplied_promotion_booleans_without_indexed_procedure() -> None:
+    from plexus.cli.optimization import commands
+
+    result = CliRunner().invoke(
+        commands.optimization,
+        [
+            "review",
+            "--input",
+            json.dumps({
+                "evidence": {
+                    "terminal": True,
+                    "matched_recent_evaluation": True,
+                    "historical_regression_evidence": True,
+                    "class_specific_metrics": True,
+                    "prediction_collapse": False,
+                    "rca_complete": True,
+                    "artifacts_complete": True,
+                    "measurable_safe_improvement": True,
+                },
+            }),
+        ],
     )
 
     assert result.exit_code == 0, result.output
@@ -192,17 +251,7 @@ def test_run_dispatches_only_exact_approved_non_stale_targets_with_explicit_limi
             json.dumps(
                 {
                     "approved": True,
-                    "targets": [
-                        {
-                            "scorecard_id": "scorecard-1",
-                            "score_id": "score-1",
-                            "assessment_fingerprint": "current",
-                            "assessment_complete": True,
-                            "readiness_state": "ready_to_optimize",
-                            "champion_version": "champion",
-                            "feedback_watermark": "watermark",
-                        }
-                    ],
+                    "targets": [_ready_target("scorecard-1", "score-1")],
                     "current_fingerprints": {"scorecard-1:score-1": "current"},
                     "max_cost_usd": 4.5,
                     "max_samples": 80,
@@ -268,18 +317,7 @@ def test_run_preserves_successful_dispatches_when_one_target_launch_fails(monkey
             else {"procedure_id": f"procedure-{arguments['score']}"}
         ),
     )
-    targets = [
-        {
-            "scorecard_id": "card",
-            "score_id": score_id,
-            "assessment_complete": True,
-            "readiness_state": "ready_to_optimize",
-            "champion_version": "champion",
-            "feedback_watermark": "watermark",
-            "assessment_fingerprint": f"fingerprint-{score_id}",
-        }
-        for score_id in ("good", "broken")
-    ]
+    targets = [_ready_target("card", score_id) for score_id in ("good", "broken")]
 
     result = commands.dispatch_optimization_operation(
         "run",
@@ -326,22 +364,19 @@ def test_run_never_launches_rejected_or_stale_targets(
         "_refresh_live_target_freshness",
         lambda _request: (
             {"scorecard-1:score-1": current_fingerprint},
-            {("scorecard-1", "score-1"): {"champion_version": "champion", "feedback_watermark": "watermark"}},
+            {("scorecard-1", "score-1"): {
+                "champion_version": (
+                    "changed" if current_fingerprint == "changed" else "champion"
+                ),
+                "feedback_watermark": "watermark",
+            }},
             [],
         ),
     )
     payload = {
         "approved": approved,
         "targets": [
-            {
-                "scorecard_id": "scorecard-1",
-                "score_id": "score-1",
-                "assessment_fingerprint": "current",
-                "assessment_complete": True,
-                "readiness_state": "ready_to_optimize",
-                "champion_version": "champion",
-                "feedback_watermark": "watermark",
-            }
+            _ready_target("scorecard-1", "score-1")
         ],
         # This caller-provided value is deliberately ignored by the CLI.
         "current_fingerprints": {"scorecard-1:score-1": "caller-controlled"},
@@ -401,15 +436,7 @@ def test_run_persists_the_final_dispatch_packet_exactly_once(monkeypatch) -> Non
     payload = {
         "account_id": "account-1",
         "approved": True,
-        "targets": [{
-            "scorecard_id": "sc",
-            "score_id": "s",
-            "assessment_fingerprint": "current",
-            "assessment_complete": True,
-            "readiness_state": "ready_to_optimize",
-            "champion_version": "champion",
-            "feedback_watermark": "watermark",
-        }],
+        "targets": [_ready_target("sc", "s")],
         "max_cost_usd": 4.5,
         "max_samples": 80,
         "max_iterations": 2,
@@ -445,11 +472,7 @@ def test_run_rejects_live_champion_or_watermark_change_before_dispatch(monkeypat
     payload = {
         "account_id": "account-1",
         "approved": True,
-        "targets": [{
-            "scorecard_id": "sc", "score_id": "s", "assessment_fingerprint": "fresh",
-            "assessment_complete": True, "readiness_state": "ready_to_optimize",
-            "champion_version": "champion", "feedback_watermark": "watermark",
-        }],
+        "targets": [_ready_target("sc", "s")],
         "max_cost_usd": 1.0, "max_samples": 1, "max_iterations": 1, "max_concurrency": 1,
     }
 
@@ -467,11 +490,7 @@ def test_run_rejects_target_when_live_freshness_read_fails(monkeypatch) -> None:
         "_launch_optimizer_procedure",
         lambda _arguments: pytest.fail("unreadable live evidence must never launch"),
     )
-    target = {
-        "scorecard_id": "sc", "score_id": "s", "assessment_fingerprint": "old",
-        "assessment_complete": True, "readiness_state": "ready_to_optimize",
-        "champion_version": "champion", "feedback_watermark": "watermark",
-    }
+    target = _ready_target("sc", "s")
     monkeypatch.setattr(
         commands,
         "_refresh_live_target_freshness",
