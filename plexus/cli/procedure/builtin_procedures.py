@@ -7,7 +7,14 @@ from typing import Any, Dict, Optional
 
 import yaml
 
+from .tactus_runtime_controls import llm_request_timeout_seconds
+
 CONSOLE_CHAT_BUILTIN_ID = "builtin:console/chat"
+CONSOLE_CHAT_DEFAULT_MODEL = "gpt-5.4-mini"
+CONSOLE_CHAT_DEFAULT_PROVIDER = "openai"
+CONSOLE_CHAT_MAX_TOKENS = 4096
+CONSOLE_CHAT_REASONING_EFFORT = "low"
+CONSOLE_CHAT_VERBOSITY = "low"
 
 # Per-turn scope and the current request are assembled in chat_agent.tac.
 # Keep the always-on prompt compact; duplicating the operational manual here
@@ -42,7 +49,7 @@ def _build_console_chat_config(
 ) -> Dict[str, Any]:
     config = {
         "name": "Console Chat Agent",
-        "version": "1.6.31",
+        "version": "1.6.33",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -111,15 +118,20 @@ def _build_console_chat_config(
         },
         "agents": {
             "assistant": {
-                "model": "gpt-5.4-mini",
-                "reasoning_effort": "low",
-                "verbosity": "low",
+                "model": CONSOLE_CHAT_DEFAULT_MODEL,
+                "reasoning_effort": CONSOLE_CHAT_REASONING_EFFORT,
+                "verbosity": CONSOLE_CHAT_VERBOSITY,
+                "request_timeout": llm_request_timeout_seconds(),
+                # Each Console invocation already receives the latest user
+                # message directly. A remote mid-run steering lookup only adds
+                # latency to this short-lived interactive turn.
+                "steering_enabled": False,
                 # A complete guidelines-only candidate update must send the
                 # full revised Markdown document back in an execute_tactus
                 # call.  Existing real-world documents exceed 1K output
                 # tokens, so that cap truncates the JSON tool call after
                 # score.info and leaves the Console visibly stuck.
-                "max_tokens": 4096,
+                "max_tokens": CONSOLE_CHAT_MAX_TOKENS,
                 "stream": True,
                 "system_prompt": (
                     "You are the Plexus Console assistant in an interactive chat.\n\n"
@@ -367,7 +379,7 @@ _BUILTINS: Dict[str, BuiltinProcedureSpec] = {
         procedure_id=CONSOLE_CHAT_BUILTIN_ID,
         name="Console Chat Agent",
         description="Built-in general-purpose chat procedure for Plexus Console.",
-        version="1.6.31",
+        version="1.6.33",
         tac_path=_procedures_root() / "console" / "chat_agent.tac",
     ),
 }

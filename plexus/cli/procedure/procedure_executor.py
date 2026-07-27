@@ -10,7 +10,6 @@ import logging
 import json
 import inspect
 import asyncio
-import os
 import queue
 import re
 import threading
@@ -28,44 +27,6 @@ from plexus.runtime_budget import (
 logger = logging.getLogger(__name__)
 
 CONSOLE_CHAT_BUILTIN_ID = "builtin:console/chat"
-
-
-def _install_tactus_json_pydantic_patch() -> None:
-    """Allow optimizer diagnostics to serialize Pydantic Tactus events."""
-    try:
-        from tactus.primitives.json import JsonPrimitive
-    except Exception as exc:  # pragma: no cover - optional dependency variance
-        logger.debug("Could not import Tactus JsonPrimitive: %s", exc)
-        return
-
-    if getattr(JsonPrimitive, "_plexus_pydantic_json_patched", False):
-        return
-
-    def encode(self: Any, data: Any) -> str:
-        try:
-            python_data = self._lua_to_python(data)
-
-            def _default(value: Any) -> Any:
-                model_dump = getattr(value, "model_dump", None)
-                if callable(model_dump):
-                    return model_dump(mode="json")
-                raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
-
-            json_payload = json.dumps(
-                python_data,
-                ensure_ascii=False,
-                indent=None,
-                default=_default,
-            )
-            logger.debug("Encoded data to JSON (%s bytes)", len(json_payload))
-            return json_payload
-        except (TypeError, ValueError) as error:
-            error_message = f"Failed to encode to JSON: {error}"
-            logger.error(error_message)
-            raise ValueError(error_message) from error
-
-    JsonPrimitive.encode = encode
-    JsonPrimitive._plexus_pydantic_json_patched = True
 
 
 class ProcedureExecutionCancelled(RuntimeError):
@@ -86,159 +47,6 @@ def _is_dashboard_task_cancelled(client: Any, task_id: Optional[str]) -> bool:
     except Exception as exc:  # noqa: BLE001
         logger.debug("Could not check cancellation status for task %s: %s", task_id, exc)
         return False
-
-
-def _install_tactus_dspy_context_capture_patch() -> None:
-    """Capture Tactus DSPy agent prompt_context before model invocation."""
-    try:
-        from tactus.dspy.agent import DSPyAgentHandle
-    except Exception as exc:  # pragma: no cover - optional dependency variance
-        logger.debug("Could not import Tactus DSPy agent for context capture: %s", exc)
-        return
-
-    if getattr(DSPyAgentHandle, "_plexus_context_capture_patched", False):
-        return
-
-    from .logging_utils import capture_tactus_dspy_context_for_agent
-
-    original_streaming = DSPyAgentHandle._turn_with_streaming
-    original_non_streaming = DSPyAgentHandle._turn_without_streaming
-
-    def _capture(agent: Any, prompt_context: Dict[str, Any], call_site: str) -> None:
-        try:
-            capture_tactus_dspy_context_for_agent(
-                agent_name=f"Tactus DSPy Agent: {getattr(agent, 'name', 'unknown')}",
-                prompt_context=prompt_context,
-                turn_count=getattr(agent, "_turn_count", None),
-                call_site=call_site,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Failed to capture Tactus DSPy LLM context for agent %s: %s",
-                getattr(agent, "name", "unknown"),
-                exc,
-            )
-
-    def patched_streaming(self, opts: Dict[str, Any], prompt_context: Dict[str, Any]):
-        logger.info(
-            "Tactus DSPy streaming call path selected for agent=%s",
-            getattr(self, "name", "unknown"),
-        )
-        _capture(self, prompt_context, "tactus_dspy_agent_streaming")
-        return original_streaming(self, opts, prompt_context)
-
-    def patched_non_streaming(self, opts: Dict[str, Any], prompt_context: Dict[str, Any]):
-        logger.info(
-            "Tactus DSPy non-streaming call path selected for agent=%s",
-            getattr(self, "name", "unknown"),
-        )
-        _capture(self, prompt_context, "tactus_dspy_agent_non_streaming")
-        return original_non_streaming(self, opts, prompt_context)
-
-    DSPyAgentHandle._turn_with_streaming = patched_streaming
-    DSPyAgentHandle._turn_without_streaming = patched_non_streaming
-    DSPyAgentHandle._plexus_context_capture_patched = True
-    logger.debug("Installed Tactus DSPy context capture patch")
-
-
-def _install_tactus_dspy_legacy_turn_compatibility_patch() -> None:
-    """Expose the documented ``Agent.turn()`` DSL surface on DSPy agents.
-
-    Plexus procedure YAML predates the external Tactus runtime's move to a
-    callable-only agent handle.  Existing shipped procedures use
-    ``Worker.turn({inject = "..."})``.  Keep that public DSL contract while
-    delegating to the runtime's callable path, which owns checkpointing and
-    replay.  This is deliberately a compatibility alias, not a second agent
-    execution path.
-    """
-    try:
-        from tactus.dspy.agent import DSPyAgentHandle
-    except Exception as exc:  # pragma: no cover - optional dependency variance
-        logger.debug("Could not import Tactus DSPy agent for turn compatibility: %s", exc)
-        return
-
-    if getattr(DSPyAgentHandle, "_plexus_legacy_turn_patched", False):
-        return
-
-    def turn(self: Any, options: Optional[Dict[str, Any]] = None) -> Any:
-        if options is None:
-            inputs: Dict[str, Any] = {}
-        elif hasattr(options, "items"):
-            inputs = dict(options.items())
-        else:
-            raise TypeError("Agent.turn options must be a mapping")
-
-        # The legacy DSL called this field `inject`; the callable Tactus API
-        # calls it `message`.
-        if "inject" in inputs:
-            if "message" in inputs:
-                raise ValueError("Agent.turn accepts either inject or message, not both")
-            inputs["message"] = inputs.pop("inject")
-        return self(inputs)
-
-    DSPyAgentHandle.turn = turn
-    DSPyAgentHandle._plexus_legacy_turn_patched = True
-    logger.info("Installed Tactus DSPy legacy Agent.turn compatibility patch")
-
-
-def _install_tactus_dspy_request_timeout_patch() -> None:
-    """Apply a bounded, per-agent LLM request timeout to Tactus DSPy agents.
-
-    LiteLLM otherwise defaults requests to 6,000 seconds.  A single stalled
-    agent turn can therefore strand an optimizer procedure in RUNNING state
-    long after its worker has stopped making meaningful progress.  The patch
-    keeps the setting on each agent's scoped LM configuration, so concurrent
-    procedures do not overwrite one another through LiteLLM global state.
-    """
-    try:
-        from tactus.dspy.agent import DSPyAgentHandle
-    except Exception as exc:  # pragma: no cover - optional dependency variance
-        logger.debug("Could not import Tactus DSPy agent for request timeout: %s", exc)
-        return
-
-    if getattr(DSPyAgentHandle, "_plexus_request_timeout_patched", False):
-        return
-
-    original_agent_lm_config = DSPyAgentHandle._agent_lm_config
-    original_turn_without_streaming = DSPyAgentHandle._turn_without_streaming
-
-    def _request_timeout_seconds() -> float:
-        raw_value = os.environ.get("PLEXUS_LLM_REQUEST_TIMEOUT_SECONDS", "300")
-        try:
-            timeout_seconds = float(raw_value)
-        except (TypeError, ValueError):
-            logger.warning(
-                "Invalid PLEXUS_LLM_REQUEST_TIMEOUT_SECONDS=%r; using 300 seconds",
-                raw_value,
-            )
-            return 300.0
-        if timeout_seconds <= 0:
-            logger.warning(
-                "PLEXUS_LLM_REQUEST_TIMEOUT_SECONDS must be positive; using 300 seconds"
-            )
-            return 300.0
-        return timeout_seconds
-
-    def patched_agent_lm_config(self: Any, opts: Optional[Dict[str, Any]] = None):
-        model, config_kwargs = original_agent_lm_config(self, opts)
-        config_kwargs = dict(config_kwargs)
-        config_kwargs.setdefault("timeout", _request_timeout_seconds())
-        return model, config_kwargs
-
-    def patched_turn_without_streaming(
-        self: Any,
-        opts: Dict[str, Any],
-        prompt_context: Dict[str, Any],
-    ):
-        # Tactus only entered this context for streaming turns.  Its direct
-        # DSPy calls otherwise omit the per-agent LM kwargs, including timeout.
-        with self._dspy_lm_context(opts):
-            return original_turn_without_streaming(self, opts, prompt_context)
-
-    DSPyAgentHandle._agent_lm_config = patched_agent_lm_config
-    DSPyAgentHandle._turn_without_streaming = patched_turn_without_streaming
-    DSPyAgentHandle._plexus_request_timeout_patched = True
-    logger.info("Installed Tactus DSPy per-agent LLM request timeout patch")
 
 
 def _to_float(value: Any) -> Optional[float]:
@@ -1021,10 +829,17 @@ class _PlexusTraceLogBridge:
     supports_streaming = True
     _STREAM_CHUNK_FLUSH_EVENT = "__plexus_flush_agent_stream_chunk__"
 
-    def __init__(self, trace_sink: Any, on_cost_event: Optional[Any] = None):
+    def __init__(
+        self,
+        trace_sink: Any,
+        on_cost_event: Optional[Any] = None,
+        lifecycle_trace: Optional[Dict[str, Any]] = None,
+    ):
         self.trace_sink = trace_sink
         self.cost_events = []
         self._on_cost_event = on_cost_event
+        self._lifecycle_trace = lifecycle_trace
+        self._provider_request_starts: Dict[str, str] = {}
         self._events: "queue.Queue[Any]" = queue.Queue()
         self._pending_stream_chunks: Dict[str, Any] = {}
         self._queued_stream_flush_agents: set[str] = set()
@@ -1114,6 +929,10 @@ class _PlexusTraceLogBridge:
             # Also forward cost events to the trace sink so assistant/tool chat
             # messages can receive live per-turn cost metadata updates.
 
+        if self._event_type_name(event) == "agent_lifecycle":
+            self._record_agent_lifecycle(event)
+            return
+
         try:
             if self._event_type_name(event) == "agent_stream_chunk":
                 self._queue_latest_stream_chunk(event)
@@ -1122,6 +941,69 @@ class _PlexusTraceLogBridge:
         except Exception as exc:
             logger.warning("Failed queueing trace event for persistence: %s", exc)
 
+    @staticmethod
+    def _event_timestamp_iso(event: Any) -> str:
+        timestamp = _PlexusTraceLogBridge._event_field(event, "timestamp")
+        if hasattr(timestamp, "isoformat"):
+            return timestamp.isoformat()
+        return str(timestamp or "")
+
+    def _record_agent_lifecycle(self, event: Any) -> None:
+        phase = str(self._event_field(event, "phase", "") or "").strip()
+        if not phase:
+            return
+        timestamp = self._event_timestamp_iso(event)
+        request_id = str(self._event_field(event, "request_id", "") or "").strip()
+        trace = self._lifecycle_trace
+
+        if isinstance(trace, dict):
+            phase_keys = {
+                "agent_preparation_started": "t_agent_preparation_started",
+                "agent_preparation_completed": "t_agent_preparation_completed",
+                "lm_initialization_started": "t_lm_initialization_started",
+                "lm_initialization_completed": "t_lm_initialization_completed",
+            }
+            key = phase_keys.get(phase)
+            if key and not trace.get(key):
+                trace[key] = timestamp
+            elif phase == "provider_request_started":
+                trace["provider_request_count"] = (
+                    int(trace.get("provider_request_count") or 0) + 1
+                )
+                if request_id:
+                    self._provider_request_starts[request_id] = timestamp
+            elif phase == "provider_first_chunk" and not trace.get(
+                "t_provider_first_chunk"
+            ):
+                trace["t_provider_first_chunk"] = timestamp
+                if request_id and self._provider_request_starts.get(request_id):
+                    trace["t_provider_request_started"] = self._provider_request_starts[
+                        request_id
+                    ]
+                trace["provider_first_chunk_request_id"] = request_id or None
+            elif (
+                phase == "provider_request_completed"
+                and request_id
+                and request_id == trace.get("provider_first_chunk_request_id")
+                and not trace.get("t_provider_request_completed")
+            ):
+                trace["t_provider_request_completed"] = timestamp
+
+        if phase != "provider_request_started":
+            return
+        prompt_context = self._event_field(event, "prompt_context")
+        if not isinstance(prompt_context, dict):
+            return
+        try:
+            from .logging_utils import capture_tactus_dspy_context_for_agent
+
+            capture_tactus_dspy_context_for_agent(
+                agent_name=f"Tactus DSPy Agent: {self._event_agent_name(event) or 'unknown'}",
+                prompt_context=prompt_context,
+                call_site="tactus_agent_provider_request",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to capture Tactus Agent request context: %s", exc)
     def _worker_main(self) -> None:
         loop = asyncio.new_event_loop()
         try:
@@ -1713,6 +1595,10 @@ async def _execute_tactus(
             # Let runtime report parse errors with full context if adaptation fails.
             pass
 
+        from .tactus_runtime_controls import apply_default_agent_request_timeout
+
+        procedure_source = apply_default_agent_request_timeout(procedure_source)
+
         # Get OpenAI API key from options or environment (not logged — passed to API client only)
         _api_key = options.get('openai_api_key')
 
@@ -1773,6 +1659,7 @@ async def _execute_tactus(
         log_bridge = _PlexusTraceLogBridge(
             trace_sink,
             on_cost_event=_on_incremental_cost_event,
+            lifecycle_trace=options.pop("lifecycle_trace", None),
         )
 
         # Create Tactus runtime with Plexus adapters.
@@ -1826,16 +1713,11 @@ async def _execute_tactus(
                 sig_error,
             )
 
-        _install_tactus_json_pydantic_patch()
         runtime = TactusRuntime(**runtime_kwargs)
 
         # Ensure DSPy agents can stream even when runtime constructor does not expose log_handler.
         if getattr(runtime, "log_handler", None) is None:
             runtime.log_handler = log_bridge
-
-        _install_tactus_dspy_legacy_turn_compatibility_patch()
-        _install_tactus_dspy_context_capture_patch()
-        _install_tactus_dspy_request_timeout_patch()
 
         # Bridge legacy in-process MCP server to Tactus toolset registry.
         # Newer Tactus versions resolve agent tools through named toolsets.
@@ -1962,27 +1844,6 @@ async def _execute_tactus(
                 )
         except Exception as _exc:
             logger.warning("Could not register plexus.* runtime module: %s", _exc)
-
-        # Compatibility patch: newer DSPy ToolCall objects are attribute-based,
-        # while current Tactus agent code indexes them like dictionaries.
-        try:
-            from dspy.adapters.types.tool import ToolCalls
-
-            dspy_tool_call_cls = getattr(ToolCalls, "ToolCall", None)
-            if dspy_tool_call_cls and not hasattr(dspy_tool_call_cls, "__getitem__"):
-                def _tool_call_getitem(self, key):
-                    if key == "name":
-                        return getattr(self, "name", None)
-                    if key == "args":
-                        return getattr(self, "args", None)
-                    if hasattr(self, key):
-                        return getattr(self, key)
-                    raise KeyError(key)
-
-                dspy_tool_call_cls.__getitem__ = _tool_call_getitem
-                logger.info("Patched DSPy ToolCalls.ToolCall for dict-style compatibility")
-        except Exception as exc:
-            logger.warning("Could not patch DSPy ToolCall compatibility: %s", exc)
 
         # Hydrate console-trigger text into runtime context so procedures can access
         # the exact user prompt even when runtime message history is empty.
@@ -2226,38 +2087,52 @@ async def _execute_tactus(
             try:
                 await log_bridge.flush()
             except Exception as flush_error:
-                logger.warning("Failed flushing trace log bridge after cancellation: %s", flush_error)
+                logger.warning(
+                    "Failed flushing trace log bridge after cancellation: %s",
+                    flush_error,
+                )
             try:
                 await log_bridge.close()
             except Exception as close_error:
-                logger.warning("Failed closing trace log bridge after cancellation: %s", close_error)
+                logger.warning(
+                    "Failed closing trace log bridge after cancellation: %s",
+                    close_error,
+                )
         logger.info("Tactus procedure execution cancelled: %s", e)
         return {
-            'success': False,
-            'procedure_id': procedure_id,
-            'status': 'CANCELLED',
-            'error': str(e),
+            "success": False,
+            "procedure_id": procedure_id,
+            "status": "CANCELLED",
+            "error": str(e),
         }
 
     except Exception as e:
         if log_bridge:
             try:
                 await log_bridge.flush()
-                _persist_inference_costs_to_state(storage, procedure_id, log_bridge.cost_events)
+                _persist_inference_costs_to_state(
+                    storage, procedure_id, log_bridge.cost_events
+                )
             except Exception as flush_error:
-                logger.warning("Failed flushing trace log bridge after error: %s", flush_error)
+                logger.warning(
+                    "Failed flushing trace log bridge after error: %s", flush_error
+                )
             try:
                 await log_bridge.close()
             except Exception as close_error:
-                logger.warning("Failed closing trace log bridge after error: %s", close_error)
+                logger.warning(
+                    "Failed closing trace log bridge after error: %s", close_error
+                )
         if _task_id:
             try:
                 _fail_all_task_stages(client, _task_id, str(e))
             except Exception as _ce:
-                logger.warning("Could not fail task stages after error: %s", _ce, exc_info=True)
+                logger.warning(
+                    "Could not fail task stages after error: %s", _ce, exc_info=True
+                )
         logger.error(f"Tactus execution error: {e}", exc_info=True)
         return {
-            'success': False,
-            'procedure_id': procedure_id,
-            'error': f"Tactus execution error: {e}"
+            "success": False,
+            "procedure_id": procedure_id,
+            "error": f"Tactus execution error: {e}",
         }

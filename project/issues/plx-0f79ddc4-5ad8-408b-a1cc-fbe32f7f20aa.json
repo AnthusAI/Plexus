@@ -1,0 +1,18 @@
+{
+  "id": "plx-0f79ddc4-5ad8-408b-a1cc-fbe32f7f20aa",
+  "title": "Reduce interactive Console response latency",
+  "description": "Purpose: make interactive Console responses begin promptly while preserving the single supported Tactus execution path.\n\nDefinition of Done:\n- Plexus uses released Tactus APIs instead of runtime method replacement.\n- Provisioned instances preload the exact LLM adapter stack.\n- Latency telemetry separates preparation, model initialization, provider first chunk, and streaming.\n- Sandbox and production measurements meet the agreed first-token target.",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [],
+  "created_at": "2026-07-23T18:45:38.259977Z",
+  "updated_at": "2026-07-23T18:45:39.032794Z",
+  "closed_at": null,
+  "custom": {}
+}

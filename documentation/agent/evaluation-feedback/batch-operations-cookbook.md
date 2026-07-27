@@ -23,6 +23,112 @@ groups of 5.
 
 ---
 
+## Pattern 0: Complete Account-Wide Feedback Research
+
+For a request covering every scorecard, enumerate the canonical collection completely before
+analysis. Keep returned IDs in the same program, retry a failed page once, aggregate the bounded
+batch result in Lua, and return coverage evidence instead of the raw batch payload.
+
+```lua
+local token, pages, scorecard_ids = nil, 0, {}
+repeat
+  local ok, page = pcall(function()
+    return plexus.scorecards.list({ return_metadata = true, next_token = token })
+  end)
+  if ok and page == nil then ok = false end
+  if not ok then
+    ok, page = pcall(function()
+      return plexus.scorecards.list({ return_metadata = true, next_token = token })
+    end)
+  end
+  if ok and page == nil then ok = false end
+  if not ok then
+    return { complete = false, pages = pages, error = tostring(page) }
+  end
+  pages = pages + 1
+  for _, record in ipairs(page.items or {}) do
+    scorecard_ids[#scorecard_ids + 1] = record.id
+  end
+  token = page.nextToken
+until not token
+
+if #scorecard_ids == 0 then
+  return {
+    complete = true,
+    pages = pages,
+    discovered = 0,
+    coverage = {
+      target_count = 0,
+      completed_count = 0,
+      failed_count = 0,
+      complete = true,
+    },
+  }
+end
+
+local analysis = plexus.feedback.alignment_batch({
+  scorecards = scorecard_ids,
+  days = 14,
+})
+local priorities, failures = {}, {}
+local scorecards_with_feedback, scores_analyzed, feedback_items = 0, 0, 0
+for _, scorecard_result in ipairs(analysis.scorecards or {}) do
+  if scorecard_result.error then
+    failures[#failures + 1] = {
+      scorecard_name = scorecard_result.scorecard_name,
+      error = string.sub(tostring(scorecard_result.error), 1, 240),
+    }
+  else
+    local has_feedback = false
+    for _, score_result in ipairs(scorecard_result.scores or {}) do
+      scores_analyzed = scores_analyzed + 1
+      local item_count = tonumber(score_result.total_items) or 0
+      feedback_items = feedback_items + item_count
+      if item_count > 0 then
+        has_feedback = true
+        priorities[#priorities + 1] = {
+          scorecard_name = scorecard_result.scorecard_name,
+          score_name = score_result.score_name,
+          total_items = item_count,
+          accuracy = score_result.accuracy,
+          ac1 = score_result.ac1,
+          warning = score_result.warning,
+        }
+      end
+    end
+    if has_feedback then scorecards_with_feedback = scorecards_with_feedback + 1 end
+  end
+end
+
+table.sort(priorities, function(a, b)
+  local a_accuracy = tonumber(a.accuracy) or 101
+  local b_accuracy = tonumber(b.accuracy) or 101
+  if a_accuracy == b_accuracy then return a.total_items > b.total_items end
+  return a_accuracy < b_accuracy
+end)
+local highlights = {}
+for index = 1, math.min(#priorities, 10) do
+  highlights[index] = priorities[index]
+end
+
+return {
+  complete = analysis.coverage.complete,
+  pages = pages,
+  discovered = #scorecard_ids,
+  coverage = analysis.coverage,
+  totals = {
+    scorecards_with_feedback = scorecards_with_feedback,
+    scores_analyzed = scores_analyzed,
+    feedback_items = feedback_items,
+  },
+  ranked_from_count = #priorities,
+  priorities = highlights,
+  failures = failures,
+}
+```
+
+---
+
 ## Pattern 1: Find and Optimize Low-Accuracy Scores (Small Batch)
 
 Identify underperforming scores and dispatch optimizers (up to 5 at once).
