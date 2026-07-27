@@ -21,7 +21,7 @@ async def test_tactus_score_preserves_structured_runtime_failure(monkeypatch):
             }
 
     module = importlib.import_module("plexus.scores.TactusScore")
-    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(module, "_load_tactus_runtime_class", lambda: FakeRuntime)
     score = TactusScore(
         name="Structured Runtime Error",
         code='default_model "openai/gpt-5.4-nano"\nClassifyProcedure {}',
@@ -47,7 +47,7 @@ async def test_tactus_score_passes_runtime_gpt5_controls_to_prediction_runtime(m
             return {"result": {"value": "Yes", "explanation": "acknowledged"}}
 
     module = importlib.import_module("plexus.scores.TactusScore")
-    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(module, "_load_tactus_runtime_class", lambda: FakeRuntime)
 
     score = TactusScore(
         name="Acknowledges Before Redirecting",
@@ -87,7 +87,7 @@ async def test_tactus_score_uses_fresh_runtime_per_prediction_by_default(monkeyp
             }
 
     module = importlib.import_module("plexus.scores.TactusScore")
-    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(module, "_load_tactus_runtime_class", lambda: FakeRuntime)
 
     score = TactusScore(
         name="Reused Runtime",
@@ -122,7 +122,7 @@ async def test_tactus_score_can_reuse_runtime_when_explicitly_enabled(monkeypatc
 
     monkeypatch.setenv("PLEXUS_TACTUS_RUNTIME_ISOLATION_MODE", "reuse")
     module = importlib.import_module("plexus.scores.TactusScore")
-    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(module, "_load_tactus_runtime_class", lambda: FakeRuntime)
 
     score = TactusScore(
         name="Reused Runtime",
@@ -162,7 +162,7 @@ async def test_tactus_score_runtime_pool_allows_parallel_predictions(monkeypatch
 
     monkeypatch.setenv("PLEXUS_TACTUS_RUNTIME_POOL_SIZE", "2")
     module = importlib.import_module("plexus.scores.TactusScore")
-    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(module, "_load_tactus_runtime_class", lambda: FakeRuntime)
 
     score = TactusScore(
         name="Runtime Pool",
@@ -207,7 +207,7 @@ async def test_tactus_score_parallel_predictions_with_blocking_runtime_execute(m
 
     monkeypatch.setenv("PLEXUS_TACTUS_RUNTIME_POOL_SIZE", "2")
     module = importlib.import_module("plexus.scores.TactusScore")
-    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(module, "_load_tactus_runtime_class", lambda: FakeRuntime)
 
     score = TactusScore(
         name="Runtime Pool Blocking Execute",
@@ -257,7 +257,7 @@ async def test_tactus_score_enriches_explanation_with_timestamps_when_deepgram_p
                 return {"result": enriched}
 
     module = importlib.import_module("plexus.scores.TactusScore")
-    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(module, "_load_tactus_runtime_class", lambda: FakeRuntime)
 
     score = TactusScore(
         name="Test Score",
@@ -337,7 +337,7 @@ async def test_tactus_score_enriches_explanation_with_recorded_deepgram_attachme
             }
 
     module = importlib.import_module("plexus.scores.TactusScore")
-    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(module, "_load_tactus_runtime_class", lambda: FakeRuntime)
     monkeypatch.setattr(
         "plexus.utils.score_result_s3_utils.download_score_result_trace_file",
         download_only_recorded_key,
@@ -431,7 +431,7 @@ async def test_tactus_score_skips_enrichment_when_no_deepgram_data(monkeypatch):
             }
 
     module = importlib.import_module("plexus.scores.TactusScore")
-    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(module, "_load_tactus_runtime_class", lambda: FakeRuntime)
 
     score = TactusScore(
         name="Test Score",
@@ -477,7 +477,7 @@ async def test_tactus_score_enrichment_handles_nested_metadata_deepgram(monkeypa
                 return {"result": text.replace('"test quote"', '"test quote" [1:00.00-1:05.00]')}
 
     module = importlib.import_module("plexus.scores.TactusScore")
-    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(module, "_load_tactus_runtime_class", lambda: FakeRuntime)
 
     score = TactusScore(
         name="Test Score",
@@ -521,7 +521,7 @@ async def test_tactus_score_enrichment_fails_gracefully_on_error(monkeypatch):
             raise ValueError(f"Unexpected runtime context keys: {sorted(context.keys())}")
 
     module = importlib.import_module("plexus.scores.TactusScore")
-    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(module, "_load_tactus_runtime_class", lambda: FakeRuntime)
 
     score = TactusScore(
         name="Test Score",
@@ -566,7 +566,7 @@ async def test_tactus_score_enrichment_skipped_when_no_explanation(monkeypatch):
             }
 
     module = importlib.import_module("plexus.scores.TactusScore")
-    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    monkeypatch.setattr(module, "_load_tactus_runtime_class", lambda: FakeRuntime)
 
     score = TactusScore(
         name="Test Score",

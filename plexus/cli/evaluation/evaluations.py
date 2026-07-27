@@ -23,7 +23,7 @@ import boto3
 from botocore.exceptions import ClientError
 import yaml
 
-from plexus.CustomLogging import logging, set_log_group
+from plexus.CustomLogging import logging
 from plexus.Scorecard import Scorecard
 from plexus.Evaluation import AccuracyEvaluation, FeedbackEvaluation
 from plexus.cli.shared.console import console
@@ -101,8 +101,6 @@ def truncate_dict_strings(d, max_length=100):
     elif isinstance(d, str) and len(d) > max_length:
         return d[:max_length] + "..."
     return d
-
-set_log_group('plexus/cli/evaluation')
 
 from plexus.scores.Score import Score
 from plexus.dashboard.api.models.task import Task

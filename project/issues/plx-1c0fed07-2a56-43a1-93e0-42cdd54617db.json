@@ -1,0 +1,109 @@
+{
+  "id": "plx-1c0fed07-2a56-43a1-93e0-42cdd54617db",
+  "title": "Minimize score runtime dependency imports",
+  "description": "Reduce cold-start and image-size pressure for reusable scoring runtimes by making score loading import only the dependencies required for the selected score type.\n\nScope:\n- Audit scorecard and score module imports that eagerly load optional score types.\n- Move heavy score-type dependencies behind lazy imports where behavior permits.\n- Split package extras so basic scoring runtimes do not require training, IDE, workflow, or optional provider stacks.\n- Coordinate any Tactus dependency-boundary follow-up separately if Plexus still pulls unnecessary Tactus dependencies.\n\nValidation should include a focused score runtime import smoke test and existing score processor tests.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-5d98e49a-57d6-4e08-8dc8-fe0f703f9514",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "8eac9f8b-1423-40ec-b635-f17fe4cdfc6b",
+      "author": "derek.norrbom",
+      "text": "Initial audit: scorecard loading eagerly imports LangGraphScore, and LangGraphScore imports Tactus runtime at module import. The downstream runtime image also currently installs broad app dependencies. First step is to shrink the downstream serverless image dependency manifest for testing, then isolate Plexus lazy-import/package-extra changes.",
+      "created_at": "2026-07-21T19:17:10.954492Z"
+    },
+    {
+      "id": "023aa0f1-a67e-4ec2-9d47-78a0cae3aade",
+      "author": "derek.norrbom",
+      "text": "Clarification: downstream scoring uses both LangGraphScore and TactusScore in production, so the scoring runtime cannot avoid either path. The cleanup target is to remove optional training/evaluation/reporting/import side effects while preserving both score implementations.",
+      "created_at": "2026-07-21T19:29:19.787991Z"
+    },
+    {
+      "id": "35b4fddb-2703-420f-8fe0-933bd50d78c1",
+      "author": "derek.norrbom",
+      "text": "Provider split: removed langchain-google-vertexai from the default scoring extra. Vertex AI support should be installed explicitly with a provider-specific extra so downstream scoring runtimes do not pull Google BigQuery/storage/pyarrow dependencies unless they actually need that provider.",
+      "created_at": "2026-07-21T19:37:36.873964Z"
+    },
+    {
+      "id": "83d686a4-c768-4dc0-a0b7-4c603f7c1392",
+      "author": "derek.norrbom",
+      "text": "Investigating optional CloudWatch logging for lightweight scoring consumers. Root cause: importing plexus.CustomLogging currently imports watchtower and boto3 eagerly, so consumers without logging extras fail before logging is configured. I will make those dependencies lazy/optional, add regression coverage for the no-extra case, then run focused tests.",
+      "created_at": "2026-07-21T19:47:59.105032Z"
+    },
+    {
+      "id": "c6bda33e-aa51-4160-aefd-36a4b7429327",
+      "author": "derek.norrbom",
+      "text": "Scope decision: Plexus must not own downstream CloudWatch log groups or metrics. Remove CloudWatch handler creation/provisioning from the shared logging module rather than retaining a compatibility path. Plexus will provide redacted standard-library/Rich logging only; applications own AWS handlers, log groups, IAM, retention, and metrics.",
+      "created_at": "2026-07-21T19:51:17.469774Z"
+    },
+    {
+      "id": "6d5f1170-07ff-4366-906d-2c1661d9c563",
+      "author": "derek.norrbom",
+      "text": "Implemented the runtime ownership boundary. Removed CloudWatch log-group/stream provisioning and metric emission from CustomLogging, Scorecard, scoring utilities, console chat, procedure execution, workers, and evaluation CLI setup. Removed watchtower from package extras and deleted the dedicated CloudWatch runtime modules/tests. Validation (Python 3.11): python -m pytest plexus/CustomLogging_test.py plexus/Scorecard_test.py plexus/console/test_chat_runtime.py -q (48 passed); python -m pytest plexus/cli/procedure -q (passed); import smoke test succeeds with watchtower and boto3 unavailable. The remaining CloudWatch references are CDK alarm constructs, not package runtime behavior.",
+      "created_at": "2026-07-21T20:01:28.069176Z"
+    },
+    {
+      "id": "82c340f6-876e-4902-9878-89441034207f",
+      "author": "derek.norrbom",
+      "text": "Completed and pushed. Plexus no longer provisions CloudWatch log groups/streams or emits CloudWatch metrics from its runtime package. Logging remains redacted and scoped to the plexus logger; downstream applications own destinations, IAM, log groups, retention, and metrics. Focused Python 3.11 validation passed.",
+      "created_at": "2026-07-21T20:03:50.093924Z"
+    },
+    {
+      "id": "4b1658e0-7ba2-4552-83f4-e5a0c0e561e8",
+      "author": "derek.norrbom",
+      "text": "Regression found in the reduced scoring dependency set: LangGraphScore imports LangChainUser, which imports azure.identity eagerly even for non-Azure providers. This prevents requested scores from registering when azure-identity is absent. Reopening to make Azure credentials provider-scoped/lazy and add import regression coverage.",
+      "created_at": "2026-07-21T20:13:41.458964Z"
+    },
+    {
+      "id": "773b4cfb-06e3-4ef6-a7d7-dabf9ebebea9",
+      "author": "derek.norrbom",
+      "text": "Fixed the Azure provider boundary: LangChainUser now imports azure.identity only inside get_azure_credential, so LangGraphScore loads for non-Azure scoring runtimes without azure-identity. Added a subprocess import regression and made API scorecard construction raise when requested score configs fail registration, avoiding misleading successful empty instances. Validation: python -m pytest plexus/LangChainUser_test.py plexus/Scorecard_test.py -q (14 passed). The broader LangGraphScore suite produced 85 passes/24 skips and two pre-existing async-fixture errors.",
+      "created_at": "2026-07-21T20:15:51.496070Z"
+    },
+    {
+      "id": "cb07247c-a905-4afb-b856-07195973a260",
+      "author": "derek.norrbom",
+      "text": "Fix pushed at Plexus commit 66623c5 (branch head 5108c6b). Downstream AQA lock now resolves branch head 5108c6b0aee3a1a44a05a9b70113fa5c1eda4776 without azure-identity or watchtower.",
+      "created_at": "2026-07-21T20:16:59.487009Z"
+    },
+    {
+      "id": "cb4f5aef-d108-4812-bf1a-952b91ab8309",
+      "author": "derek.norrbom",
+      "text": "Cold-path profiling shows LangGraphScore registration spends 5.5s locally (19.45s in Lambda) importing unrelated engines and providers. Remove eager Tactus timestamp-enrichment imports and provider modules from LangGraphScore/LangChainUser, preserving imports only at the feature/provider call sites.",
+      "created_at": "2026-07-21T20:32:25.331224Z"
+    },
+    {
+      "id": "888f14c6-ec2e-4bd4-b5ed-8fe60dd6d151",
+      "author": "derek.norrbom",
+      "text": "Removed eager provider, workflow-runtime, cost, and dashboard imports from score discovery. Exact runtime-image registration benchmark improved from 5,499 ms to 1,250 ms before packaged bytecode; combined refactor plus bytecode measured 481 ms. Validation: python -m pytest plexus/LangChainUser_test.py plexus/Scorecard_test.py plexus/scores/test_langgraph_cost_components.py plexus/scores/LangGraphScore_test.py -q (104 passed, 24 skipped).",
+      "created_at": "2026-07-21T20:45:05.351821Z"
+    },
+    {
+      "id": "609de473-e743-4fbc-a12e-c003164c1925",
+      "author": "derek.norrbom",
+      "text": "Reopened after the optimized Tactus runtime was released. The existing score processor and reusable artifact publisher currently share one Dockerfile, so the lean scoring image will use a separate build path. The legacy production Dockerfile and pipeline will remain unchanged while the new artifact is pinned to the released Tactus package and validated for both supported score implementations.",
+      "created_at": "2026-07-27T22:18:36.187383Z"
+    },
+    {
+      "id": "b67ae03e-603f-4844-8994-facdfaf0fd77",
+      "author": "derek.norrbom",
+      "text": "Implemented a dedicated scoring-runtime Dockerfile and Dockerfile-specific context allowlist for the reusable artifact publisher. The legacy score processor Dockerfile and its all-extra install remain unchanged. Pinned the released Tactus runtime, retained lazy imports, and validated the container imports both LangGraph and Tactus score paths while excluding heavyweight non-scoring packages. Focused unit tests and container build checks pass.",
+      "created_at": "2026-07-27T22:31:04.095028Z"
+    },
+    {
+      "id": "684f0f29-168b-4fd1-92cc-779a3e91520d",
+      "author": "derek.norrbom",
+      "text": "Opened Plexus PR #499 against develop. Rebasing was not needed; merged the latest develop branch, preserved supported Tactus lifecycle controls, removed reintroduced CloudWatch ownership, reran focused procedure and scoring tests, and rebuilt the lean container successfully. The PR is mergeable and currently has no GitHub checks reported.",
+      "created_at": "2026-07-27T22:54:06.471008Z"
+    }
+  ],
+  "created_at": "2026-07-21T19:17:06.434825Z",
+  "updated_at": "2026-07-27T22:54:06.471008Z",
+  "closed_at": null,
+  "custom": {}
+}

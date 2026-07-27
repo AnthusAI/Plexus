@@ -44,19 +44,6 @@ try:
     PLEXUS_ITEM_AVAILABLE = True
 except ImportError:
     PLEXUS_ITEM_AVAILABLE = False
-try:
-    from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
-except Exception:
-    class CloudWatchLogger:  # type: ignore[override]
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def log_metric(self, *args, **kwargs):
-            pass
-
-# Initialize CloudWatch logger for metrics
-cloudwatch_logger = CloudWatchLogger(namespace="CallCriteria/API")
-
 DEPENDENCY_UNMET_MESSAGE = "Question is not applicable due to unmet dependency conditions"
 
 
@@ -1200,12 +1187,6 @@ async def get_existing_score_result(report_id: str, scorecard_id: str, score_id:
                 "method": "score_result_find_by_cache_key"
             }))
             
-            cloudwatch_logger.log_metric(
-                metric_name="CacheHit",
-                metric_value=1,
-                dimensions={"Environment": os.getenv('environment', 'unknown')}
-            )
-            
             return {
                 "value": cached_score_result.value,
                 "explanation": cached_score_result.explanation or ''
@@ -1223,12 +1204,6 @@ async def get_existing_score_result(report_id: str, scorecard_id: str, score_id:
                 "operation": "no_cached_score_result_found"
             }))
             
-            cloudwatch_logger.log_metric(
-                metric_name="CacheMiss",
-                metric_value=1,
-                dimensions={"Environment": os.getenv('environment', 'unknown')}
-            )
-            
             return None
         
     except Exception as e:
@@ -1241,11 +1216,6 @@ async def get_existing_score_result(report_id: str, scorecard_id: str, score_id:
             "scorecard_id": scorecard_id,
             "score_id": score_id
         }))
-        cloudwatch_logger.log_metric(
-            metric_name="CacheMiss",
-            metric_value=1,
-            dimensions={"Environment": os.getenv('environment', 'unknown')}
-        )
         return None
 
 async def get_text_from_item(item_id: str, client: "PlexusDashboardClient") -> str:

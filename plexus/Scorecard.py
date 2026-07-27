@@ -16,8 +16,6 @@ from datetime import datetime
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
 from plexus.scores.Score import Score
-from plexus.plexus_logging.Cloudwatch import CloudWatchLogger
-from plexus.scores.LangGraphScore import BatchProcessingPause, LangGraphScore
 
 SCORE_RESULT_TRACE_SCHEMA_VERSION = "score_result_dependency_v1"
 DEFAULT_TRACE_SCORE_IDENTIFIERS = {
@@ -27,6 +25,21 @@ DEFAULT_TRACE_SCORE_IDENTIFIERS = {
     "48813",
     "910707",
 }
+
+
+def _is_lang_graph_score_instance(value: Any) -> bool:
+    if value.__class__.__name__ != "LangGraphScore":
+        return False
+    from plexus.scores.LangGraphScore import LangGraphScore
+
+    return isinstance(value, LangGraphScore)
+
+
+def _is_batch_processing_pause(value: BaseException) -> bool:
+    return (
+        value.__class__.__name__ == "BatchProcessingPause"
+        and value.__class__.__module__ == "plexus.scores.LangGraphScore"
+    )
 
 
 def _normalize_trace_identifier(value: Any) -> str:
@@ -286,7 +299,6 @@ class Scorecard:
         # Track how many texts have been processed by this scorecard instance
         self.number_of_texts_processed = 0
 
-        self.cloudwatch_logger = CloudWatchLogger()
         # Optional preference to load only from local YAML files (no API)
         # Can be set by callers (e.g., CLI/MCP) after construction as well
         self.yaml_only = False
@@ -727,7 +739,7 @@ class Scorecard:
                 ]
 
             # Add required metadata for LangGraphScore
-            if isinstance(score_instance, LangGraphScore):
+            if _is_lang_graph_score_instance(score_instance):
                 account_key = os.getenv("PLEXUS_ACCOUNT_KEY")
                 if not account_key:
                     raise ValueError("PLEXUS_ACCOUNT_KEY not found in environment")
@@ -934,76 +946,6 @@ class Scorecard:
                 if isinstance(score_total_cost.get("components"), list):
                     self.cost_components.extend(score_total_cost.get("components"))
 
-                # Log CloudWatch metrics for this individual score
-                total_tokens = score_total_cost.get(
-                    "prompt_tokens", 0
-                ) + score_total_cost.get("completion_tokens", 0)
-                dimensions = {
-                    "ScoreCardID": str(self.properties.get("id", "unknown")),
-                    "ScoreCardName": str(self.properties.get("name", "unknown")),
-                    "Score": str(score_configuration.get("name", "unknown")),
-                    "ScoreID": str(score_configuration.get("id", "unknown")),
-                    "Modality": modality or "Development",
-                    "Environment": os.getenv("environment") or "Unknown",
-                }
-
-                self.cloudwatch_logger.log_metric(
-                    "Cost", score_total_cost.get("total_cost", 0), dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "PromptTokens", score_total_cost.get("prompt_tokens", 0), dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CompletionTokens",
-                    score_total_cost.get("completion_tokens", 0),
-                    dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "TotalTokens", total_tokens, dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CachedTokens", score_total_cost.get("cached_tokens", 0), dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "ExternalAIRequests",
-                    score_total_cost.get("llm_calls", 0),
-                    dimensions,
-                )
-
-                scorecard_dimensions = {
-                    "ScoreCardName": str(self.properties.get("name", "unknown")),
-                    "Environment": os.getenv("environment") or "Unknown",
-                }
-
-                self.cloudwatch_logger.log_metric(
-                    "CostByScorecard",
-                    score_total_cost.get("total_cost", 0),
-                    scorecard_dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "PromptTokensByScorecard",
-                    score_total_cost.get("prompt_tokens", 0),
-                    scorecard_dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CompletionTokensByScorecard",
-                    score_total_cost.get("completion_tokens", 0),
-                    scorecard_dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "TotalTokensByScorecard", total_tokens, scorecard_dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CachedTokensByScorecard",
-                    score_total_cost.get("cached_tokens", 0),
-                    scorecard_dimensions,
-                )
-                self.cloudwatch_logger.log_metric(
-                    "ExternalAIRequestsByScorecard",
-                    score_total_cost.get("llm_calls", 0),
-                    scorecard_dimensions,
-                )
-
                 # Persist the final text that was sent to the model (after input source/processors)
                 # so downstream consumers (e.g., evaluation dashboard views) can show what was scored.
                 if isinstance(score_result, list):
@@ -1025,11 +967,13 @@ class Scorecard:
                 else:
                     return [score_result]
 
-            except BatchProcessingPause:
-                # Re-raise BatchProcessingPause to be handled by API
-                logging.info(
-                    f"BatchProcessingPause caught in get_score_result for {score}"
-                )
+            except Exception as e:
+                if _is_batch_processing_pause(e):
+                    # Re-raise BatchProcessingPause to be handled by API
+                    logging.info(
+                        f"BatchProcessingPause caught in get_score_result for {score}"
+                    )
+                    raise
                 raise
             finally:
                 if hasattr(score_instance, "cleanup"):
@@ -1444,32 +1388,6 @@ class Scorecard:
                         final_result=result,
                     )
 
-                # Cost/token metrics are already recorded in get_score_result().
-                # Avoid re-instantiating the score here because it can trigger expensive setup
-                # (e.g., LangGraph workflow compilation) for every item.
-                dimensions = {
-                    "ScoreCardID": str(self.properties.get("id", "unknown")),
-                    "ScoreCardName": str(self.properties.get("name", "unknown")),
-                    "Score": str(score_config.get("name", score_name)),
-                    "ScoreID": str(score_config.get("id", "")),
-                    "Modality": modality or "Development",
-                    "Environment": os.getenv("environment") or "Unknown",
-                }
-                self.cloudwatch_logger.log_metric("ItemTokens", item_tokens, dimensions)
-
-                scorecard_dimensions = {
-                    "ScoreCardName": str(self.properties.get("name", "unknown")),
-                    "Environment": os.getenv("environment") or "Unknown",
-                }
-                self.cloudwatch_logger.log_metric(
-                    "ItemTokensByScorecard", item_tokens, scorecard_dimensions
-                )
-                self.cloudwatch_logger.log_metric(
-                    "CostPerText",
-                    self.get_accumulated_costs().get("cost_per_text", 0),
-                    scorecard_dimensions,
-                )
-
                 results_by_score_id[score_id] = result
                 results.append({"id": score_id, "name": score_name, "result": result})
                 logging.info(f"Processed score: {score_name} (ID: {score_id})")
@@ -1478,18 +1396,20 @@ class Scorecard:
                 logging.info(f"Score {score_name} was skipped: {e.reason}")
                 return
 
-            except BatchProcessingPause as e:
-                logging.info(
-                    f"Score {score_name} paused for batch processing (thread_id: {e.thread_id})"
-                )
-                # Store the paused state in results
-                results_by_score_id[score_id] = Score.Result(
-                    value="PAUSED",
-                    error=str(e),
-                    parameters=Score.Parameters(name=score_name, scorecard=self.name),
-                    metadata={"thread_id": e.thread_id, "batch_job_id": e.batch_job_id},
-                )
-                # Re-raise to be handled by higher-level code
+            except Exception as e:
+                if _is_batch_processing_pause(e):
+                    logging.info(
+                        f"Score {score_name} paused for batch processing (thread_id: {e.thread_id})"
+                    )
+                    # Store the paused state in results
+                    results_by_score_id[score_id] = Score.Result(
+                        value="PAUSED",
+                        error=str(e),
+                        parameters=Score.Parameters(name=score_name, scorecard=self.name),
+                        metadata={"thread_id": e.thread_id, "batch_job_id": e.batch_job_id},
+                    )
+                    # Re-raise to be handled by higher-level code
+                    raise
                 raise
 
         remaining_scores = set(dependency_graph.keys())
@@ -1523,14 +1443,16 @@ class Scorecard:
                     return_exceptions=True,
                 )
                 for score_id, outcome in zip(ready_batch, batch_outcomes):
-                    if isinstance(outcome, BatchProcessingPause):
+                    if isinstance(outcome, Exception) and _is_batch_processing_pause(outcome):
                         raise outcome
                     if isinstance(outcome, Exception):
                         raise outcome
                     remaining_scores.discard(score_id)
 
-            except BatchProcessingPause as e:
-                # Don't remove from remaining scores, just re-raise to be handled by caller
+            except Exception as e:
+                if _is_batch_processing_pause(e):
+                    # Don't remove from remaining scores, just re-raise to be handled by caller
+                    raise
                 raise
 
         logging.info(f"All scores processed. Total scores: {len(results_by_score_id)}")
@@ -2011,6 +1933,31 @@ class Scorecard:
         scorecard_instance = Scorecard(
             scorecard=scorecard_id, api_data=api_data, scores_config=scores_config
         )
+
+        unregistered_scores = []
+        for config in scores_config:
+            if not isinstance(config, dict):
+                continue
+            identifiers = (
+                config.get("id"),
+                config.get("key"),
+                config.get("name"),
+            )
+            if not any(
+                identifier
+                and scorecard_instance.score_registry.get_properties(identifier)
+                for identifier in identifiers
+            ):
+                unregistered_scores.append(
+                    f"{config.get('name') or config.get('key') or config.get('id')} "
+                    f"({config.get('class') or 'missing class'})"
+                )
+
+        if unregistered_scores:
+            raise RuntimeError(
+                "Failed to register requested score configurations: "
+                + ", ".join(unregistered_scores)
+            )
 
         # Verify IDs after instance creation
         if hasattr(scorecard_instance, "scores"):

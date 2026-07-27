@@ -1,0 +1,35 @@
+FROM python:3.11-slim
+
+# Runtime system libraries required by the scoring extra.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    libpq5 \
+    libcurl4 \
+    graphviz \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/workspace:/workspace/MCP
+
+WORKDIR /var/task
+
+# Keep this path separate from Dockerfile: the legacy processor deliberately
+# retains the broad "all" extra until its existing production path is retired.
+# Copy only the package and runtime support code so repository-only content can
+# never inflate the published image.
+COPY pyproject.toml README.md /workspace/
+COPY plexus /workspace/plexus
+COPY MCP /workspace/MCP
+
+RUN python -m pip install --upgrade pip && \
+    python -m pip install --no-cache-dir -e "/workspace[scoring]" && \
+    python -m pip install --no-cache-dir awslambdaric
+
+RUN python -c "import nltk; nltk.download('punkt', download_dir='/usr/local/share/nltk_data'); nltk.download('punkt_tab', download_dir='/usr/local/share/nltk_data')"
+
+COPY score-processor-lambda/handler.py ./handler.py
+
+ENTRYPOINT [ "/usr/local/bin/python", "-m", "awslambdaric" ]
+CMD ["handler.lambda_handler"]

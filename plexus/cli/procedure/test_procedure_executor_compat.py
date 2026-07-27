@@ -506,21 +506,14 @@ async def test_trace_bridge_consumes_supported_agent_lifecycle_events(monkeypatc
     from tactus.protocols.models import AgentLifecycleEvent
 
     captured_contexts = []
-    cloudwatch_contexts = []
-    cloudwatch_events = []
     lifecycle_trace = {}
     sink = _CollectingTraceSink()
     monkeypatch.setattr(
         "plexus.cli.procedure.logging_utils.capture_tactus_dspy_context_for_agent",
         lambda **kwargs: captured_contexts.append(kwargs),
     )
-    cloudwatch = SimpleNamespace(
-        log_llm_context=lambda value: cloudwatch_contexts.append(value),
-        log_run_event_from_tactus=lambda event: cloudwatch_events.append(event),
-    )
     bridge = _PlexusTraceLogBridge(
         sink,
-        cw_logger=cloudwatch,
         lifecycle_trace=lifecycle_trace,
     )
     started = datetime(2026, 7, 23, 12, 0, 0, tzinfo=timezone.utc)
@@ -578,8 +571,6 @@ async def test_trace_bridge_consumes_supported_agent_lifecycle_events(monkeypatc
         == (started + timedelta(milliseconds=225)).isoformat()
     )
     assert captured_contexts[0]["prompt_context"]["user_message"] == "hello"
-    assert cloudwatch_contexts == [{"user_message": "hello", "tools": []}]
-    assert cloudwatch_events == events
     assert sink.events == []
 
 
