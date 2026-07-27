@@ -57,6 +57,32 @@ const getResourceByShareTokenHandler = defineFunction({
     }
 });
 
+const resolveConsoleResponderParameterName = (): string => {
+    const requestedEnvironment = (
+        process.env.ENVIRONMENT ||
+        process.env.AMPLIFY_ENV ||
+        process.env.AWS_BRANCH ||
+        'development'
+    ).toLowerCase();
+    const environmentName = requestedEnvironment === 'main' || requestedEnvironment === 'production'
+        ? 'production'
+        : requestedEnvironment;
+    const normalizedEnvironmentName = environmentName
+        .replace(/[^a-z0-9-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '') || 'development';
+    return `/plexus/${normalizedEnvironmentName}/console-chat/responder`;
+};
+
+const consoleResponderParameterName = resolveConsoleResponderParameterName();
+
+export const dispatchConsoleChatHandler = defineFunction({
+    entry: './resolvers/dispatchConsoleChat.ts',
+    environment: {
+        CONSOLE_RESPONDER_PARAMETER_NAME: consoleResponderParameterName,
+    },
+});
+
 const schema = a.schema({
     Account: a
         .model({
@@ -555,6 +581,17 @@ const schema = a.schema({
             allow.authenticated()
         ])
         .handler(a.handler.function(getResourceByShareTokenHandler)),
+
+    ConsoleChatDispatchResult: a.customType({
+        accepted: a.boolean().required(),
+    }),
+
+    dispatchConsoleChat: a
+        .mutation()
+        .arguments({ messageId: a.id().required() })
+        .returns(a.ref('ConsoleChatDispatchResult'))
+        .authorization((allow) => [allow.authenticated()])
+        .handler(a.handler.function(dispatchConsoleChatHandler)),
 
     ReportConfiguration: a
         .model({

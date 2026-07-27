@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import subprocess
@@ -364,6 +365,8 @@ def test_default_score_info_accepts_version_alias(monkeypatch) -> None:
     assert result["isChampionVersion"] is False
     assert result["isSpecificVersion"] is True
     assert result["versionDetails"]["id"] == "sv-candidate"
+    assert result["previousVersionId"] == "sv-champion"
+    assert result["previousVersionSource"] == "parent"
     assert result["code"] == "name: Candidate\n"
 
 
@@ -432,6 +435,240 @@ def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> 
         "plexus.scorecards.list",
         "plexus.scorecards.info",
         "plexus.scorecards.search",
+    ]
+
+
+def test_tactus_dataflow_preserves_opaque_id_between_collection_calls(monkeypatch) -> None:
+    """Dependent reads receive the exact opaque ID returned by discovery."""
+    opaque_id = "0a0a0a0a-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    info_args: list[dict[str, Any]] = []
+
+    def fake_list(args: dict[str, Any]) -> dict[str, Any]:
+        assert args == {"return_metadata": True}
+        return {
+            "items": [{"id": opaque_id, "name": "Example Scorecard"}],
+            "nextToken": None,
+        }
+
+    def fake_info(args: dict[str, Any]) -> dict[str, Any]:
+        info_args.append(args)
+        return {"name": "Example Scorecard", "sections": {"items": []}}
+
+    runtime_module = execute.PlexusRuntimeModule
+
+    def module_factory(*args, **kwargs):
+        return runtime_module(
+            *args,
+            **kwargs,
+            scorecards_lister=fake_list,
+            scorecards_infoer=fake_info,
+        )
+
+    monkeypatch.setattr(execute, "PlexusRuntimeModule", module_factory)
+    result = execute._run_tactus_sync(
+        """
+        local page = plexus.scorecards.list({ return_metadata = true })
+        local record = page.items[1]
+        local detail = plexus.scorecards.info({ identifier = record.id })
+        return { id = record.id, name = detail.name }
+        """,
+        FastMCP("test-opaque-value-dataflow"),
+        trace_id="trace-opaque-value-dataflow",
+        trace_store=_RecordingTraceStore(),
+    )
+
+    assert result["ok"] is True
+    assert result["value"] == {
+        "id": opaque_id,
+        "name": "Example Scorecard",
+    }
+    assert info_args == [{"identifier": opaque_id}]
+
+
+def test_complete_collection_program_returns_empty_coverage_without_batch_call(
+    monkeypatch,
+) -> None:
+    batch_calls: list[dict[str, Any]] = []
+
+    def fake_list(args: dict[str, Any]) -> dict[str, Any]:
+        assert args == {"return_metadata": True}
+        return {"items": [], "nextToken": None}
+
+    runtime_module = execute.PlexusRuntimeModule
+
+    def module_factory(*args, **kwargs):
+        module = runtime_module(*args, **kwargs, scorecards_lister=fake_list)
+        module._feedback_aligner_batch = lambda batch_args: batch_calls.append(batch_args)
+        return module
+
+    monkeypatch.setattr(execute, "PlexusRuntimeModule", module_factory)
+    result = execute._run_tactus_sync(
+        """
+        local page = plexus.scorecards.list({ return_metadata = true })
+        local scorecard_ids = {}
+        for _, record in ipairs(page.items or {}) do
+          scorecard_ids[#scorecard_ids + 1] = record.id
+        end
+        if #scorecard_ids == 0 then
+          return { complete = true, discovered = 0, coverage = {
+            target_count = 0, completed_count = 0, failed_count = 0, complete = true,
+          } }
+        end
+        local analysis = plexus.feedback.alignment_batch({ scorecards = scorecard_ids })
+        return analysis.coverage
+        """,
+        FastMCP("test-empty-complete-coverage"),
+        trace_id="trace-empty-complete-coverage",
+        trace_store=_RecordingTraceStore(),
+    )
+
+    assert result["ok"] is True
+    assert result["value"] == {
+        "complete": True,
+        "discovered": 0,
+        "coverage": {
+            "target_count": 0,
+            "completed_count": 0,
+            "failed_count": 0,
+            "complete": True,
+        },
+    }
+    assert batch_calls == []
+    assert result["api_calls"] == ["plexus.scorecards.list"]
+
+
+def test_complete_collection_program_retries_failed_page_then_stops_before_batch(
+    monkeypatch,
+) -> None:
+    page_two_attempts = 0
+    batch_calls: list[dict[str, Any]] = []
+
+    def fake_list(args: dict[str, Any]) -> dict[str, Any]:
+        nonlocal page_two_attempts
+        if args == {"return_metadata": True}:
+            return {
+                "items": [{"id": "scorecard-one", "name": "One"}],
+                "nextToken": "page-two",
+            }
+        assert args == {"return_metadata": True, "next_token": "page-two"}
+        page_two_attempts += 1
+        return None
+
+    runtime_module = execute.PlexusRuntimeModule
+
+    def module_factory(*args, **kwargs):
+        module = runtime_module(*args, **kwargs, scorecards_lister=fake_list)
+        module._feedback_aligner_batch = lambda batch_args: batch_calls.append(batch_args)
+        return module
+
+    monkeypatch.setattr(execute, "PlexusRuntimeModule", module_factory)
+    result = execute._run_tactus_sync(
+        """
+        local token, pages, scorecard_ids = nil, 0, {}
+        repeat
+          local ok, page = pcall(function()
+            local args = { return_metadata = true }
+            if token then args.next_token = token end
+            return plexus.scorecards.list(args)
+          end)
+          if ok and page == nil then ok = false end
+          if not ok then
+            ok, page = pcall(function()
+              return plexus.scorecards.list({ return_metadata = true, next_token = token })
+            end)
+          end
+          if ok and page == nil then ok = false end
+          if not ok then
+            return { complete = false, pages = pages, error = "continuation page failed after retry" }
+          end
+          pages = pages + 1
+          for _, record in ipairs(page.items or {}) do
+            scorecard_ids[#scorecard_ids + 1] = record.id
+          end
+          token = page.nextToken
+        until not token
+        local analysis = plexus.feedback.alignment_batch({ scorecards = scorecard_ids })
+        return analysis.coverage
+        """,
+        FastMCP("test-incomplete-collection-coverage"),
+        trace_id="trace-incomplete-collection-coverage",
+        trace_store=_RecordingTraceStore(),
+    )
+
+    assert result["ok"] is True
+    assert result["value"]["complete"] is False
+    assert result["value"]["pages"] == 1
+    assert result["value"]["error"] == "continuation page failed after retry"
+    assert page_two_attempts == 2
+    assert batch_calls == []
+
+
+def test_default_scorecards_list_returns_metadata_for_account_wide_pages(monkeypatch) -> None:
+    """Metadata pagination remains available without identifier resolution."""
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    queries: list[str] = []
+
+    class FakeClient:
+        def execute(self, query: str) -> dict[str, Any]:
+            queries.append(query)
+            if 'nextToken: "page-2"' in query:
+                return {
+                    "listScorecards": {
+                        "items": [{"id": "card-2", "name": "Duplicate"}],
+                        "nextToken": None,
+                    }
+                }
+            return {
+                "listScorecards": {
+                    "items": [{"id": "card-1", "name": "Duplicate"}],
+                    "nextToken": "page-2",
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", FakeClient)
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("enumeration must not resolve an identifier")),
+    )
+
+    first_page = execute._default_scorecards_list({"return_metadata": True})
+    second_page = execute._default_scorecards_list(
+        {"return_metadata": True, "next_token": first_page["nextToken"]}
+    )
+
+    assert first_page == {
+        "items": [{"id": "card-1", "name": "Duplicate"}],
+        "nextToken": "page-2",
+    }
+    assert second_page == {
+        "items": [{"id": "card-2", "name": "Duplicate"}],
+        "nextToken": None,
+    }
+    assert len(queries) == 2
+    assert 'nextToken: "page-2"' in queries[1]
+
+
+def test_default_scorecards_list_uses_identifier_resolution_for_single_record_lookup(monkeypatch) -> None:
+    """Targeted single-record lookup retains its canonical resolver behavior."""
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    class FakeClient:
+        def execute(self, query: str) -> dict[str, Any]:
+            assert "getScorecard(id: \"card-1\")" in query
+            return {"getScorecard": {"id": "card-1", "name": "Duplicate"}}
+
+    monkeypatch.setattr(client_utils, "create_client", FakeClient)
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: "card-1" if identifier == "Duplicate" else None,
+    )
+
+    assert execute._default_scorecards_list({"identifier": "Duplicate"}) == [
+        {"id": "card-1", "name": "Duplicate"}
     ]
 
 
@@ -915,7 +1152,7 @@ def test_default_score_update_serializes_attribution_metadata(monkeypatch) -> No
                     "getScoreVersion": {
                         "id": "version-2",
                         "configuration": "name: old\n",
-                        "guidelines": "# new\n",
+                        "guidelines": captured_inputs[0]["guidelines"],
                     }
                 }
             if "CreateScoreVersion" in query:
@@ -976,7 +1213,21 @@ def test_default_score_update_serializes_attribution_metadata(monkeypatch) -> No
     assert parsed["attribution"]["source"] == "execute_tactus"
     assert result["guidelines_validation"]["is_valid"] is True
     assert result["changed_fields"] == ["guidelines"]
+    assert result["configuration_preserved"] is True
+    assert result["configuration_source"] == "parent_version"
+    assert captured_inputs[0]["configuration"] == "name: old\n"
     assert result["diffs"]["guidelines"]["has_changes"] is True
+    assert result["post_submit_test"] == {
+        "status": "skipped",
+        "reason": "guidelines_only_no_behavior_change",
+    }
+    assert result["post_submit_verification"] == {
+        "status": "passed",
+        "kind": "guidelines_only_persistence",
+        "guidelines_valid": True,
+        "guidelines_persisted": True,
+        "configuration_unchanged": True,
+    }
     assert result["version_url"] == "/lab/scorecards/scorecard-1/scores/score-1/versions/version-2"
     assert result["parent_version_url"] == "/lab/scorecards/scorecard-1/scores/score-1/versions/version-1"
 
@@ -1300,7 +1551,7 @@ def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
         return reader
 
     facade = execute.PlexusRuntimeModule(
-        FakeMCP(),
+        None,
         procedure_listers={
             "list": make_reader("list"),
             "info": make_reader("info"),
@@ -1498,6 +1749,23 @@ def test_execute_tactus_description_constant_includes_themed_doc_pointers() -> N
         assert namespace in description, (
             f"tool description should reference namespace {namespace!r}"
         )
+
+
+def test_execute_tactus_description_teaches_complete_coverage_composition() -> None:
+    description = execute.EXECUTE_TACTUS_DESCRIPTION
+
+    assert "Never silently reduce complete requested coverage to a sample" in description
+    assert "scorecards.list" in description
+    assert "return_metadata = true" in description
+    assert "plexus.feedback.alignment_batch" in description
+    assert "scorecards = scorecard_ids" in description
+    assert "coverage" in description
+    assert "Never return the unaggregated alignment batch payload" in description
+    assert "ranked_from_count" in description
+    assert "reviewed_error_opportunity" in description
+    assert "total_items * disagreement_rate" in description
+    assert "for _, scorecard_result in ipairs(analysis.scorecards or {})" in description
+    assert "result = analysis" not in description
 
 
 def test_execute_tactus_description_teaches_progressive_disclosure() -> None:
@@ -2355,6 +2623,123 @@ def test_planning_mode_blocks_score_create() -> None:
 
     assert "plexus.score.create" in str(exc_info.value)
     assert called is False
+
+
+def test_score_delete_requires_confirmation_and_dispatches_when_confirmed() -> None:
+    calls: list[dict] = []
+
+    def fake_score_delete(args: dict) -> dict:
+        calls.append(args)
+        return {"success": True, "id": args["id"]}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-score-delete"),
+        score_delete=fake_score_delete,
+    )
+
+    with pytest.raises(ValueError, match="confirmed = true"):
+        module.score.delete({"id": "score-1"})
+
+    assert calls == []
+    assert module.score.delete({"id": "score-1", "confirmed": True}) == {
+        "success": True,
+        "id": "score-1",
+    }
+    assert calls == [{"id": "score-1", "confirmed": True}]
+
+
+def test_default_score_delete_keeps_runtime_confirmation_out_of_graphql_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict]] = []
+
+    class FakeClient:
+        context = None
+
+        def execute(self, query: str, variables: dict) -> dict:
+            calls.append((query, variables))
+            return {"deleteScore": {"id": "score-1"}}
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+
+    assert execute._default_score_delete({"id": "score-1", "confirmed": True}) == {
+        "success": True,
+        "id": "score-1",
+    }
+    assert calls[0][1] == {"input": {"id": "score-1"}}
+
+
+def test_planning_mode_blocks_score_delete() -> None:
+    called = False
+
+    def fake_score_delete(_args: dict) -> dict:
+        nonlocal called
+        called = True
+        return {"success": True}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-planning-mode-blocks-score-delete"),
+        score_delete=fake_score_delete,
+        runtime_context={"tool_access_mode": "planning"},
+    )
+
+    with pytest.raises(execute.PlanningModeToolNotAllowed) as exc_info:
+        module.score.delete({"id": "score-1", "confirmed": True})
+
+    assert "plexus.score.delete" in str(exc_info.value)
+    assert called is False
+
+
+def test_scorecards_update_and_delete_use_explicit_lifecycle_handlers() -> None:
+    update_calls: list[dict] = []
+    delete_calls: list[dict] = []
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-scorecard-lifecycle"),
+        scorecards_updater=lambda args: update_calls.append(args) or {"success": True},
+        scorecards_deleter=lambda args: delete_calls.append(args) or {"success": True},
+    )
+
+    assert module.scorecards.update({"id": "card-1", "name": "Renamed"}) == {
+        "success": True
+    }
+    with pytest.raises(ValueError, match="confirmed = true"):
+        module.scorecards.delete({"id": "card-1"})
+    assert module.scorecards.delete({"id": "card-1", "confirmed": True}) == {
+        "success": True
+    }
+    assert update_calls == [{"id": "card-1", "name": "Renamed"}]
+    assert delete_calls == [{"id": "card-1", "confirmed": True}]
+
+
+def test_default_scorecards_update_keeps_attribution_metadata_out_of_graphql_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict]] = []
+
+    class FakeClient:
+        context = None
+
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "getScorecard" in query:
+                return {"getScorecard": {"id": "card-1"}}
+            calls.append((query, variables or {}))
+            return {"updateScorecard": {"id": "card-1", "name": "Renamed"}}
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client", lambda: FakeClient()
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.direct_identifier_resolution.direct_resolve_scorecard_identifier",
+        lambda _client, _identifier: "card-1",
+    )
+
+    result = execute._default_scorecards_update({"id": "card-1", "name": "Renamed"})
+
+    assert result["success"] is True
+    assert calls[0][1] == {"input": {"id": "card-1", "name": "Renamed"}}
 
 
 def test_planning_mode_blocks_scorecards_create() -> None:
@@ -3750,6 +4135,116 @@ def test_console_origin_score_update_guidelines_requires_guidelines_intent(monke
     assert called is False
 
 
+def test_console_origin_score_edit_is_blocked_for_guidelines_only_request() -> None:
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-guidelines-only-edit-guard"),
+        runtime_context={
+            "chat_session_id": "chat-1",
+            "console_user_message": (
+                "Make the guidelines wording clearer; keep behavior exactly the same."
+            ),
+        },
+    )
+
+    with pytest.raises(execute.ConsoleScoreEditBlockedForGuidelinesOnly):
+        module.score.edit(
+            {
+                "scorecard_identifier": "card",
+                "score_identifier": "score",
+                "instruction": "Change the score code",
+                "async": True,
+            }
+        )
+
+
+def test_console_origin_score_edit_is_blocked_for_written_rule_request() -> None:
+    """Human phrasing must retain the no-code-edit safety boundary.
+
+    This mirrors the browser acceptance prompt: it does not use the implementation
+    words "guidelines" or "wording", but it clearly requests a written-rule-only
+    revision and explicitly preserves scoring behavior.
+    """
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-written-rule-edit-guard"),
+        runtime_context={
+            "chat_session_id": "chat-1",
+            "console_user_message": (
+                "make the written rule clearer that skipped missing deps need no "
+                "manual review. behavior stays the same. save a candidate, not live."
+            ),
+        },
+    )
+
+    with pytest.raises(execute.ConsoleScoreEditBlockedForGuidelinesOnly):
+        module.score.edit(
+            {
+                "scorecard_identifier": "card",
+                "score_identifier": "score",
+                "instruction": "Change the score code",
+                "async": True,
+            }
+        )
+
+
+def test_console_origin_score_edit_is_blocked_for_vague_wording_preservation_request() -> None:
+    """The browser acceptance phrasing must not fall through to code editing."""
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-vague-wording-edit-guard"),
+        runtime_context={
+            "chat_session_id": "chat-1",
+            "console_user_message": (
+                "the wording is kind of confusing. can u make it clearer? "
+                "dont change how it scores tho. just a candidate please"
+            ),
+        },
+    )
+
+    with pytest.raises(execute.ConsoleScoreEditBlockedForGuidelinesOnly):
+        module.score.edit(
+            {
+                "scorecard_identifier": "card",
+                "score_identifier": "score",
+                "instruction": "Revise the score code for clarity",
+                "async": True,
+            }
+        )
+
+
+def test_console_origin_score_edit_rejects_candidate_only_non_instruction() -> None:
+    """A fresh session must not infer a code change from a bare affirmative."""
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-console-candidate-only-edit-guard"),
+        runtime_context={
+            "chat_session_id": "chat-1",
+            "console_user_message": "yes, do it for this one. candidate only please",
+        },
+    )
+
+    with pytest.raises(execute.ConsoleScoreEditRequiresConcreteInstruction):
+        module.score.edit(
+            {
+                "scorecard_identifier": "card",
+                "score_identifier": "score",
+                "instruction": "make this score candidate-only; do not change the champion",
+                "async": True,
+            }
+        )
+
+
+def test_score_edit_structured_output_schema_requires_every_declared_property() -> None:
+    """Strict Responses schemas must require every declared property."""
+    schema = execute._score_edit_llm_schema()
+
+    assert set(schema["required"]) == set(schema["properties"])
+    assert schema["properties"]["guidelines"]["type"] == ["string", "null"]
+
+
+def test_score_edit_smoke_test_requires_an_explicit_mechanical_pass() -> None:
+    assert execute._score_edit_smoke_test_passed({"success": True, "passed": True})
+    assert not execute._score_edit_smoke_test_passed({"success": True, "passed": False})
+    assert not execute._score_edit_smoke_test_passed({"success": False, "passed": True})
+
+
 def test_console_origin_score_update_metadata_only_is_allowed() -> None:
     seen_args: dict = {}
 
@@ -3950,6 +4445,7 @@ def test_run_score_edit_job_runs_post_submit_smoke_test_for_code_changes(
         "_default_score_test",
         lambda args: {
             "success": True,
+            "passed": True,
             "version": args.get("version"),
             "samples": args.get("samples"),
         },
@@ -4044,7 +4540,7 @@ def test_run_score_edit_job_ignores_llm_guidelines_edits_by_default(
     monkeypatch.setattr(
         execute,
         "_default_score_test",
-        lambda _args: {"success": True},
+        lambda _args: {"success": True, "passed": True},
     )
 
     result_path = tmp_path / "result.json"
@@ -4298,7 +4794,7 @@ def test_run_score_edit_job_retries_with_fallback_model_after_parse_failure(
             }
         ),
     )
-    monkeypatch.setattr(execute, "_default_score_test", lambda _args: {"success": True})
+    monkeypatch.setattr(execute, "_default_score_test", lambda _args: {"success": True, "passed": True})
 
     result_path = tmp_path / "result.json"
     execute._run_score_edit_job(
@@ -4393,8 +4889,13 @@ def test_run_score_edit_job_retries_after_post_save_smoke_failure(
     def _smoke(args: dict[str, Any]) -> dict[str, Any]:
         version = str(args.get("version") or "")
         if version == "sv-1":
-            return {"success": False, "reason": "simulated failure"}
-        return {"success": True, "version": version}
+            return {
+                "success": True,
+                "passed": False,
+                "failure_code": "selection_shortfall",
+                "reason": "simulated missing samples",
+            }
+        return {"success": True, "passed": True, "version": version}
 
     monkeypatch.setattr(execute, "_default_score_test", _smoke)
 
@@ -5036,8 +5537,8 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     class FakeProcess:
         pid = 4242
 
-        def poll(self) -> int:
-            return 1  # immediately signals process exited (fast-fail path)
+        def poll(self) -> None:
+            return None  # still running while the asynchronous record is created
 
     def fake_popen(cmd, **kwargs):
         captured["cmd"] = cmd
@@ -5103,6 +5604,31 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     assert result["child_budget"] == _child_budget()
 
 
+def test_default_evaluation_runner_reports_clean_child_exit_before_evaluation_creation(monkeypatch) -> None:
+    class CleanExitProcess:
+        pid = 4242
+
+        def poll(self) -> int:
+            return 0
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/plexus")
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: CleanExitProcess())
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    result = execute._default_evaluation_runner(
+        {
+            "evaluation_type": "feedback",
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+        },
+        None,
+    )
+
+    assert result["status"] == "error"
+    assert "exit=0" in result["error"]
+    assert result["evaluation_id"] is None
+
+
 def test_default_evaluation_runner_passes_frozen_feedback_window(monkeypatch) -> None:
     captured: dict = {}
 
@@ -5138,6 +5664,39 @@ def test_default_evaluation_runner_passes_frozen_feedback_window(monkeypatch) ->
     assert captured["cmd"][captured["cmd"].index("--feedback-start-at") + 1] == "2026-02-01T00:00:00Z"
     assert "--feedback-end-at" in captured["cmd"]
     assert captured["cmd"][captured["cmd"].index("--feedback-end-at") + 1] == "2026-05-01T00:00:00Z"
+
+
+def test_default_evaluation_runner_forwards_exact_feedback_item_ids(monkeypatch) -> None:
+    captured: dict = {}
+
+    class FakeProcess:
+        pid = 4242
+
+        def poll(self) -> int:
+            return 1
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return FakeProcess()
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/plexus")
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    execute._default_evaluation_runner(
+        {
+            "evaluation_type": "feedback",
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+            "feedback_item_ids": ["opaque-id-B", "opaque-id-A"],
+            "budget": _child_budget(),
+        },
+        None,
+    )
+
+    cmd = captured["cmd"]
+    positions = [index for index, value in enumerate(cmd) if value == "--feedback-item-id"]
+    assert [cmd[index + 1] for index in positions] == ["opaque-id-B", "opaque-id-A"]
 
 
 def test_handle_peek_refreshes_evaluation_status() -> None:
@@ -5358,6 +5917,35 @@ def test_handle_peek_reaps_completed_evaluation_process(monkeypatch) -> None:
     assert snapshot["status"] == "completed"
     assert snapshot["evaluation"]["process_status"] == "exited"
     assert snapshot["evaluation"]["process_exit_code"] == 0
+
+
+def test_handle_peek_keeps_completed_evaluation_running_until_its_process_exits(
+    monkeypatch,
+) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"evaluation_id": "eval-1", "process_id": 4242},
+    )
+
+    monkeypatch.setattr(execute, "_exited_process_status", lambda _pid: None)
+
+    def fake_evaluation_info(args: dict) -> dict:
+        return {"id": args["evaluation_id"], "status": "COMPLETED"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "running"
+    assert snapshot["evaluation"]["completion_pending_process_exit"] is True
 
 
 def test_handle_cancel_terminates_process() -> None:
@@ -6861,7 +7449,7 @@ def test_default_feedback_finder_chains_through_resolvers_and_service(
     assert kwargs["scorecard_id"] == "sc:Compliance"
     assert kwargs["score_id"] == "sn:sc:Compliance:Tone"
     assert kwargs["account_id"] == "acct-default"
-    assert kwargs["days"] == 7
+    assert kwargs["days"] == 30
     assert kwargs["limit"] == 4
     assert kwargs["offset"] == 8
     assert kwargs["initial_value"] == "Yes"
@@ -7114,3 +7702,404 @@ async def test_execute_tactus_runs_evaluation_info_through_direct_function() -> 
     record = store.records[0]
     assert record["api_calls"] == ["plexus.evaluation.info"]
     assert record["ok"] is True
+
+
+def test_feedback_alignment_batch_accepts_scorecard_id(monkeypatch) -> None:
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [],
+                        "nextToken": None,
+                    }
+                }
+            return {
+                "getScorecard": {
+                    "id": "scorecard-1",
+                    "name": "Example Scorecard",
+                    "sections": {"items": []},
+                }
+            }
+
+    resolved_identifiers = []
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: resolved_identifiers.append(identifier) or "scorecard-1",
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+
+    result = execute._default_feedback_alignment_batch({"scorecard_id": "scorecard-1"})
+
+    assert resolved_identifiers == ["scorecard-1"]
+    assert result["scorecard_id"] == "scorecard-1"
+    assert result["scores"] == []
+
+
+def test_feedback_alignment_batch_accepts_bounded_scorecard_list(monkeypatch) -> None:
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [],
+                        "nextToken": None,
+                    }
+                }
+            requested_name = next(
+                name for name in ("One", "Two", "Three") if f"id-{name}" in query
+            )
+            return {
+                "getScorecard": {
+                    "id": f"id-{requested_name}",
+                    "name": requested_name,
+                    "sections": {"items": []},
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: f"id-{identifier}",
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+
+    result = execute._default_feedback_alignment_batch(
+        {"scorecards": ["One", "Two", "Three"], "days": 30}
+    )
+
+    assert result["days"] == 30
+    assert result["scorecards_requested"] == 3
+    assert result["scorecards_analyzed"] == 3
+    assert [row["scorecard_name"] for row in result["scorecards"]] == [
+        "One",
+        "Two",
+        "Three",
+    ]
+
+
+def test_feedback_alignment_batch_selects_bounded_portfolio_in_one_call(monkeypatch) -> None:
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    inventory_args = []
+    created_clients = []
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [],
+                        "nextToken": None,
+                    }
+                }
+            raise AssertionError("bounded portfolio analysis must reuse inventory score data")
+
+    monkeypatch.setattr(
+        client_utils,
+        "create_client",
+        lambda: created_clients.append(FakeClient()) or created_clients[-1],
+    )
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("bounded portfolio analysis must not re-resolve inventory IDs")
+        ),
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+    monkeypatch.setattr(
+        execute,
+        "_default_scorecards_list",
+        lambda args: inventory_args.append(args) or [
+            {"id": "id-One", "name": "One", "sections": {"items": []}},
+            {"id": "id-Two", "name": "Two", "sections": {"items": []}},
+        ],
+    )
+
+    result = execute._default_feedback_alignment_batch(
+        {"scorecard_limit": 2, "days": 30}
+    )
+
+    assert inventory_args == [{"limit": 2, "_include_scores": True}]
+    assert len(created_clients) == 1
+    assert result["selection_rule"] == "first 2 scorecards returned"
+    assert result["scorecards_requested"] == 2
+    assert [row["scorecard_name"] for row in result["scorecards"]] == ["One", "Two"]
+
+
+def test_feedback_alignment_batch_prefetches_portfolio_window_once(monkeypatch) -> None:
+    from plexus.cli.feedback.feedback_service import FeedbackService
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    executed_queries = []
+
+    class FakeClient:
+        def execute(self, query, variables=None):
+            executed_queries.append((query, variables or {}))
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [
+                            {
+                                "id": "feedback-1",
+                                "scorecardId": "id-One",
+                                "scoreId": "score-one",
+                                "initialAnswerValue": "No",
+                                "finalAnswerValue": "Yes",
+                                "isInvalid": False,
+                            },
+                            *[
+                                {
+                                    "id": f"feedback-{index}",
+                                    "scorecardId": "id-One",
+                                    "scoreId": "score-one",
+                                    "initialAnswerValue": "Yes",
+                                    "finalAnswerValue": "Yes",
+                                    "isInvalid": False,
+                                }
+                                for index in range(2, 5)
+                            ],
+                        ],
+                        "nextToken": None,
+                    }
+                }
+
+            scorecard_name = "One" if "id-One" in query else "Two"
+            score_id = "score-one" if scorecard_name == "One" else "score-two"
+            return {
+                "getScorecard": {
+                    "id": f"id-{scorecard_name}",
+                    "name": scorecard_name,
+                    "sections": {
+                        "items": [
+                            {
+                                "scores": {
+                                    "items": [{"id": score_id, "name": f"Score {scorecard_name}"}]
+                                }
+                            }
+                        ]
+                    },
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: f"id-{identifier}",
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+    monkeypatch.setattr(
+        FeedbackService,
+        "summarize_feedback",
+        staticmethod(lambda **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected per-score query"))),
+    )
+
+    result = execute._default_feedback_alignment_batch(
+        {"scorecards": ["One", "Two"], "days": 30}
+    )
+
+    feedback_window_queries = [
+        query for query, _variables in executed_queries
+        if "ListFeedbackItemsByEditedTime" in query
+    ]
+    assert len(feedback_window_queries) == 1
+    assert result["scorecards"][0]["scores"][0]["total_items"] == 4
+    assert result["scorecards"][0]["scores"][0]["accuracy"] == 75
+    assert result["scorecards"][0]["scores"][0]["disagreements"] == 1
+    assert result["scorecards"][0]["scores"][0]["disagreement_rate"] == 0.25
+    assert result["scorecards"][0]["scores"][0]["reviewed_error_opportunity"] == 1.0
+    assert result["scorecards"][1]["scores"][0]["total_items"] == 0
+    assert result["scorecards"][1]["scores"][0]["disagreements"] == 0
+    assert result["scorecards"][1]["scores"][0]["disagreement_rate"] is None
+    assert result["scorecards"][1]["scores"][0]["reviewed_error_opportunity"] == 0.0
+
+
+def test_feedback_alignment_batch_bounds_concurrent_score_reads(monkeypatch) -> None:
+    from plexus.cli.feedback.feedback_service import FeedbackService
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    score_count = 7
+
+    class FakeClient:
+        def execute(self, _query):
+            return {
+                "getScorecard": {
+                    "id": "scorecard-1",
+                    "name": "Example Scorecard",
+                    "sections": {
+                        "items": [
+                            {
+                                "scores": {
+                                    "items": [
+                                        {"id": f"score-{index}", "name": f"Score {index}"}
+                                        for index in range(score_count)
+                                    ]
+                                }
+                            }
+                        ]
+                    },
+                }
+            }
+
+    active_reads = 0
+    max_active_reads = 0
+
+    async def fake_summarize_feedback(**kwargs):
+        nonlocal active_reads, max_active_reads
+        active_reads += 1
+        max_active_reads = max(max_active_reads, active_reads)
+        await asyncio.sleep(0.01)
+        active_reads -= 1
+        return {"analysis": {"accuracy": 100}, "score_name": kwargs["score_name"]}
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, _identifier: "scorecard-1",
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+    monkeypatch.setattr(
+        FeedbackService,
+        "summarize_feedback",
+        staticmethod(fake_summarize_feedback),
+    )
+    monkeypatch.setattr(
+        FeedbackService,
+        "format_summary_result_as_dict",
+        staticmethod(lambda summary: summary),
+    )
+
+    result = execute._default_feedback_alignment_batch({"scorecard": "Example"})
+
+    assert result["scores_analyzed"] == score_count
+    assert max_active_reads == execute.FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY
+
+
+def test_feedback_alignment_batch_accepts_complete_target_set_with_bounded_workers(
+    monkeypatch,
+) -> None:
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    identifiers = [f"opaque-scorecard-{index}" for index in range(7)]
+    display_names = {
+        identifier: f"Display Scorecard {index}"
+        for index, identifier in enumerate(identifiers)
+    }
+    feedback_window_queries = 0
+    executor_workers: list[int] = []
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            nonlocal feedback_window_queries
+            if "ListFeedbackItemsByEditedTime" in query:
+                feedback_window_queries += 1
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [],
+                        "nextToken": None,
+                    }
+                }
+            identifier = next(value for value in identifiers if value in query)
+            return {
+                "getScorecard": {
+                    "id": identifier,
+                    "name": display_names[identifier],
+                    "sections": {"items": []},
+                }
+            }
+
+    class RecordingExecutor:
+        def __init__(self, *, max_workers):
+            executor_workers.append(max_workers)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def map(self, function, values):
+            return map(function, values)
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: identifier,
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+    monkeypatch.setattr("concurrent.futures.ThreadPoolExecutor", RecordingExecutor)
+
+    result = execute._default_feedback_alignment_batch(
+        {"scorecards": identifiers, "days": 14}
+    )
+
+    assert executor_workers == [5]
+    assert feedback_window_queries == 1
+    assert [row["scorecard_id"] for row in result["scorecards"]] == identifiers
+    assert [row["scorecard_name"] for row in result["scorecards"]] == [
+        display_names[identifier] for identifier in identifiers
+    ]
+    assert result["coverage"] == {
+        "target_count": 7,
+        "completed_count": 7,
+        "failed_count": 0,
+        "complete": True,
+    }
+
+
+def test_feedback_alignment_batch_reports_incomplete_coverage_without_losing_results(
+    monkeypatch,
+) -> None:
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    identifiers = ["scorecard-one", "scorecard-missing", "scorecard-three"]
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [],
+                        "nextToken": None,
+                    }
+                }
+            identifier = next(value for value in identifiers if value in query)
+            return {
+                "getScorecard": {
+                    "id": identifier,
+                    "name": identifier,
+                    "sections": {"items": []},
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: None if identifier == "scorecard-missing" else identifier,
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+
+    result = execute._default_feedback_alignment_batch({"scorecards": identifiers})
+
+    assert [row["scorecard_name"] for row in result["scorecards"]] == identifiers
+    assert "error" not in result["scorecards"][0]
+    assert "error" in result["scorecards"][1]
+    assert "error" not in result["scorecards"][2]
+    assert result["coverage"] == {
+        "target_count": 3,
+        "completed_count": 2,
+        "failed_count": 1,
+        "complete": False,
+    }

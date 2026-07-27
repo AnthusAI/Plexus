@@ -3,7 +3,7 @@
   "title": "Minimize score runtime dependency imports",
   "description": "Reduce cold-start and image-size pressure for reusable scoring runtimes by making score loading import only the dependencies required for the selected score type.\n\nScope:\n- Audit scorecard and score module imports that eagerly load optional score types.\n- Move heavy score-type dependencies behind lazy imports where behavior permits.\n- Split package extras so basic scoring runtimes do not require training, IDE, workflow, or optional provider stacks.\n- Coordinate any Tactus dependency-boundary follow-up separately if Plexus still pulls unnecessary Tactus dependencies.\n\nValidation should include a focused score runtime import smoke test and existing score processor tests.",
   "type": "task",
-  "status": "closed",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -82,10 +82,22 @@
       "author": "derek.norrbom",
       "text": "Removed eager provider, workflow-runtime, cost, and dashboard imports from score discovery. Exact runtime-image registration benchmark improved from 5,499 ms to 1,250 ms before packaged bytecode; combined refactor plus bytecode measured 481 ms. Validation: python -m pytest plexus/LangChainUser_test.py plexus/Scorecard_test.py plexus/scores/test_langgraph_cost_components.py plexus/scores/LangGraphScore_test.py -q (104 passed, 24 skipped).",
       "created_at": "2026-07-21T20:45:05.351821Z"
+    },
+    {
+      "id": "609de473-e743-4fbc-a12e-c003164c1925",
+      "author": "derek.norrbom",
+      "text": "Reopened after the optimized Tactus runtime was released. The existing score processor and reusable artifact publisher currently share one Dockerfile, so the lean scoring image will use a separate build path. The legacy production Dockerfile and pipeline will remain unchanged while the new artifact is pinned to the released Tactus package and validated for both supported score implementations.",
+      "created_at": "2026-07-27T22:18:36.187383Z"
+    },
+    {
+      "id": "b67ae03e-603f-4844-8994-facdfaf0fd77",
+      "author": "derek.norrbom",
+      "text": "Implemented a dedicated scoring-runtime Dockerfile and Dockerfile-specific context allowlist for the reusable artifact publisher. The legacy score processor Dockerfile and its all-extra install remain unchanged. Pinned the released Tactus runtime, retained lazy imports, and validated the container imports both LangGraph and Tactus score paths while excluding heavyweight non-scoring packages. Focused unit tests and container build checks pass.",
+      "created_at": "2026-07-27T22:31:04.095028Z"
     }
   ],
   "created_at": "2026-07-21T19:17:06.434825Z",
-  "updated_at": "2026-07-21T20:47:40.874955Z",
-  "closed_at": "2026-07-21T20:47:40.874955Z",
+  "updated_at": "2026-07-27T22:31:04.095028Z",
+  "closed_at": null,
   "custom": {}
 }

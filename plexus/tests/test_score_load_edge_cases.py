@@ -227,21 +227,23 @@ class TestDataDrivenSamplesEdgeCases(unittest.TestCase):
     @patch('plexus.cli.evaluation.evaluations.importlib')
     @patch('plexus.cli.evaluation.evaluations.logging')
     def test_fallback_import_error(self, mock_logging, mock_importlib, mock_score_load):
-        """Test handling when both Score.load() and manual import fail."""
+        """Score loading failures propagate instead of producing an empty sample."""
         # Arrange
         mock_score_load.side_effect = ValueError("Score.load() failed")
         mock_importlib.import_module.side_effect = ImportError("Module not found")
         
         from plexus.cli.evaluation.evaluations import get_data_driven_samples
         
-        # Act
-        result = get_data_driven_samples(
-            self.scorecard_instance, self.scorecard_name, self.score_name,
-            self.score_config, fresh=False, reload=False, content_ids_to_sample_set=self.content_ids_set
-        )
-        
-        # Assert - should return empty list
-        self.assertEqual(result, [])
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Failed to load labeled samples for evaluation: Score.load\\(\\) failed",
+        ):
+            get_data_driven_samples(
+                self.scorecard_instance, self.scorecard_name, self.score_name,
+                self.score_config, fresh=False, reload=False, content_ids_to_sample_set=self.content_ids_set
+            )
+
+        mock_importlib.import_module.assert_not_called()
         mock_logging.error.assert_called()
 
 

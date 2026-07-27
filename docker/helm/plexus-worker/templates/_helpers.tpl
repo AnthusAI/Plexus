@@ -6,6 +6,13 @@ Expand the name of the chart.
 {{- end }}
 
 {{/*
+Create the name of the object-store credential Secret.
+*/}}
+{{- define "plexus-worker.objectStoreSecretName" -}}
+{{- required "objectStore.existingSecret is required when objectStore.enabled=true" .Values.objectStore.existingSecret -}}
+{{- end }}
+
+{{/*
 Create a default fully qualified app name.
 */}}
 {{- define "plexus-worker.fullname" -}}

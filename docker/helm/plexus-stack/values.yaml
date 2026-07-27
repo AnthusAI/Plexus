@@ -28,6 +28,42 @@ global:
     app.kubernetes.io/part-of: plexus
     app.kubernetes.io/managed-by: helm
 
+# Optional S3-compatible storage for the self-contained local stack. Production
+# deployments keep this disabled and use their managed object store.
+localObjectStore:
+  enabled: false
+  image:
+    repository: minio/minio
+    tag: RELEASE.2025-04-22T22-12-26Z
+    pullPolicy: IfNotPresent
+  clientImage:
+    repository: minio/mc
+    tag: RELEASE.2025-04-16T18-13-26Z
+    pullPolicy: IfNotPresent
+  auth:
+    existingSecret: ""
+    accessKey: plexus-local
+    secretKey: plexus-local-secret
+  service:
+    port: 9000
+  persistence:
+    enabled: true
+    size: 2Gi
+    storageClass: ""
+  buckets:
+    datasets: plexus-local-datasets
+    reportBlockDetails: plexus-local-report-block-details
+    rubricMemory: plexus-local-rubric-memory
+    taskAttachments: plexus-local-task-attachments
+    scoreResultAttachments: plexus-local-score-result-attachments
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
 # PostgreSQL configuration (Bitnami chart)
 postgresql:
   enabled: true
@@ -108,6 +144,7 @@ graphql-proxy:
     # Cache settings
     cacheTtlSeconds: 900
     cacheStaleSeconds: 86400
+    scoringJobClaimLeaseSeconds: 120
     enableDebug: false
 
   # Secret management
@@ -146,6 +183,7 @@ plexus-worker:
   env:
     LOG_LEVEL: INFO
     MAX_JOBS_PER_WORKER: "100"
+    PLEXUS_DATA_CACHE_DIRECTORY: /app/tmp/training-data-cache
     PLEXUS_DISABLE_CLOUDWATCH_LOGS: "1"
 
   # Plexus API configuration (points to proxy)
@@ -175,6 +213,8 @@ plexus-worker:
       listenerName: http
       port: 80
       pathPrefix: /v1/score
+      requestTimeout: "120s"
+      backendRequestTimeout: "120s"
 
   # Celery configuration, retained only for explicit RabbitMQ deployments.
   celery:

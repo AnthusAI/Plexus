@@ -10,6 +10,7 @@ import logging
 import json
 import inspect
 import asyncio
+import os
 import queue
 import re
 import threading
@@ -27,6 +28,44 @@ from plexus.runtime_budget import (
 logger = logging.getLogger(__name__)
 
 CONSOLE_CHAT_BUILTIN_ID = "builtin:console/chat"
+
+
+def _install_tactus_json_pydantic_patch() -> None:
+    """Allow optimizer diagnostics to serialize Pydantic Tactus events."""
+    try:
+        from tactus.primitives.json import JsonPrimitive
+    except Exception as exc:  # pragma: no cover - optional dependency variance
+        logger.debug("Could not import Tactus JsonPrimitive: %s", exc)
+        return
+
+    if getattr(JsonPrimitive, "_plexus_pydantic_json_patched", False):
+        return
+
+    def encode(self: Any, data: Any) -> str:
+        try:
+            python_data = self._lua_to_python(data)
+
+            def _default(value: Any) -> Any:
+                model_dump = getattr(value, "model_dump", None)
+                if callable(model_dump):
+                    return model_dump(mode="json")
+                raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+            json_payload = json.dumps(
+                python_data,
+                ensure_ascii=False,
+                indent=None,
+                default=_default,
+            )
+            logger.debug("Encoded data to JSON (%s bytes)", len(json_payload))
+            return json_payload
+        except (TypeError, ValueError) as error:
+            error_message = f"Failed to encode to JSON: {error}"
+            logger.error(error_message)
+            raise ValueError(error_message) from error
+
+    JsonPrimitive.encode = encode
+    JsonPrimitive._plexus_pydantic_json_patched = True
 
 
 class ProcedureExecutionCancelled(RuntimeError):
@@ -100,6 +139,106 @@ def _install_tactus_dspy_context_capture_patch() -> None:
     DSPyAgentHandle._turn_without_streaming = patched_non_streaming
     DSPyAgentHandle._plexus_context_capture_patched = True
     logger.debug("Installed Tactus DSPy context capture patch")
+
+
+def _install_tactus_dspy_legacy_turn_compatibility_patch() -> None:
+    """Expose the documented ``Agent.turn()`` DSL surface on DSPy agents.
+
+    Plexus procedure YAML predates the external Tactus runtime's move to a
+    callable-only agent handle.  Existing shipped procedures use
+    ``Worker.turn({inject = "..."})``.  Keep that public DSL contract while
+    delegating to the runtime's callable path, which owns checkpointing and
+    replay.  This is deliberately a compatibility alias, not a second agent
+    execution path.
+    """
+    try:
+        from tactus.dspy.agent import DSPyAgentHandle
+    except Exception as exc:  # pragma: no cover - optional dependency variance
+        logger.debug("Could not import Tactus DSPy agent for turn compatibility: %s", exc)
+        return
+
+    if getattr(DSPyAgentHandle, "_plexus_legacy_turn_patched", False):
+        return
+
+    def turn(self: Any, options: Optional[Dict[str, Any]] = None) -> Any:
+        if options is None:
+            inputs: Dict[str, Any] = {}
+        elif hasattr(options, "items"):
+            inputs = dict(options.items())
+        else:
+            raise TypeError("Agent.turn options must be a mapping")
+
+        # The legacy DSL called this field `inject`; the callable Tactus API
+        # calls it `message`.
+        if "inject" in inputs:
+            if "message" in inputs:
+                raise ValueError("Agent.turn accepts either inject or message, not both")
+            inputs["message"] = inputs.pop("inject")
+        return self(inputs)
+
+    DSPyAgentHandle.turn = turn
+    DSPyAgentHandle._plexus_legacy_turn_patched = True
+    logger.info("Installed Tactus DSPy legacy Agent.turn compatibility patch")
+
+
+def _install_tactus_dspy_request_timeout_patch() -> None:
+    """Apply a bounded, per-agent LLM request timeout to Tactus DSPy agents.
+
+    LiteLLM otherwise defaults requests to 6,000 seconds.  A single stalled
+    agent turn can therefore strand an optimizer procedure in RUNNING state
+    long after its worker has stopped making meaningful progress.  The patch
+    keeps the setting on each agent's scoped LM configuration, so concurrent
+    procedures do not overwrite one another through LiteLLM global state.
+    """
+    try:
+        from tactus.dspy.agent import DSPyAgentHandle
+    except Exception as exc:  # pragma: no cover - optional dependency variance
+        logger.debug("Could not import Tactus DSPy agent for request timeout: %s", exc)
+        return
+
+    if getattr(DSPyAgentHandle, "_plexus_request_timeout_patched", False):
+        return
+
+    original_agent_lm_config = DSPyAgentHandle._agent_lm_config
+    original_turn_without_streaming = DSPyAgentHandle._turn_without_streaming
+
+    def _request_timeout_seconds() -> float:
+        raw_value = os.environ.get("PLEXUS_LLM_REQUEST_TIMEOUT_SECONDS", "300")
+        try:
+            timeout_seconds = float(raw_value)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid PLEXUS_LLM_REQUEST_TIMEOUT_SECONDS=%r; using 300 seconds",
+                raw_value,
+            )
+            return 300.0
+        if timeout_seconds <= 0:
+            logger.warning(
+                "PLEXUS_LLM_REQUEST_TIMEOUT_SECONDS must be positive; using 300 seconds"
+            )
+            return 300.0
+        return timeout_seconds
+
+    def patched_agent_lm_config(self: Any, opts: Optional[Dict[str, Any]] = None):
+        model, config_kwargs = original_agent_lm_config(self, opts)
+        config_kwargs = dict(config_kwargs)
+        config_kwargs.setdefault("timeout", _request_timeout_seconds())
+        return model, config_kwargs
+
+    def patched_turn_without_streaming(
+        self: Any,
+        opts: Dict[str, Any],
+        prompt_context: Dict[str, Any],
+    ):
+        # Tactus only entered this context for streaming turns.  Its direct
+        # DSPy calls otherwise omit the per-agent LM kwargs, including timeout.
+        with self._dspy_lm_context(opts):
+            return original_turn_without_streaming(self, opts, prompt_context)
+
+    DSPyAgentHandle._agent_lm_config = patched_agent_lm_config
+    DSPyAgentHandle._turn_without_streaming = patched_turn_without_streaming
+    DSPyAgentHandle._plexus_request_timeout_patched = True
+    logger.info("Installed Tactus DSPy per-agent LLM request timeout patch")
 
 
 def _to_float(value: Any) -> Optional[float]:
@@ -329,9 +468,14 @@ def _score_edit_audit_markdown(event: Dict[str, Any]) -> str:
         else "unknown"
     )
     success = bool(event.get("success"))
+    changed_field_set = {str(field) for field in changed_fields or [] if field}
 
     if success and version_id:
-        title = "**Score edit saved**"
+        title = (
+            "**Guidelines update saved**"
+            if changed_field_set == {"guidelines"}
+            else "**Score edit saved**"
+        )
     elif version_id:
         title = "**Score edit needs review**"
     else:
@@ -595,6 +739,26 @@ def _persist_inference_costs_to_state(storage: Any, procedure_id: str, cost_even
         state_set(procedure_id, "costs", costs)
     except Exception as exc:
         logger.warning("Failed persisting inference costs to state: %s", exc)
+
+
+def _attach_persisted_costs_to_result(
+    result: Dict[str, Any], storage: Any, procedure_id: str
+) -> Dict[str, Any]:
+    """Replace runtime-native cost tables with the authoritative persisted ledger."""
+    nested_result = result.get("result")
+    state_get = getattr(storage, "state_get", None)
+    if not isinstance(nested_result, dict) or not callable(state_get):
+        return result
+
+    costs = state_get(procedure_id, "costs", {}) or {}
+    if not isinstance(costs, dict):
+        return result
+
+    normalized = dict(result)
+    normalized_nested = dict(nested_result)
+    normalized_nested["costs"] = costs
+    normalized["result"] = normalized_nested
+    return normalized
 
 
 def _normalize_tactus_result(result: Any) -> Dict[str, Any]:
@@ -1211,14 +1375,31 @@ async def _execute_tactus(
                 if not isinstance(agent_config, dict):
                     continue
                 current_model = str(agent_config.get("model") or "").strip()
-                if current_model == requested_model:
-                    applied[agent_name] = requested_model
-                    continue
                 next_agent_config = dict(agent_config)
-                next_agent_config["model"] = requested_model
-                updated_agents[agent_name] = next_agent_config
+                agent_changed = False
+                if current_model != requested_model:
+                    next_agent_config["model"] = requested_model
+                    agent_changed = True
+
+                # DSPy's OpenAI reasoning-model adapter rejects these compact
+                # GPT-5 variants unless max_tokens is at least 16k. The
+                # Console model picker is a supported user control, so a
+                # selected runnable model must also receive a runnable token
+                # configuration instead of failing after the user waits for a
+                # response.
+                if requested_model.strip().lower() in {"gpt-5-mini", "gpt-5-nano"}:
+                    try:
+                        configured_max_tokens = int(next_agent_config.get("max_tokens") or 0)
+                    except (TypeError, ValueError):
+                        configured_max_tokens = 0
+                    if configured_max_tokens < 16000:
+                        next_agent_config["max_tokens"] = 16000
+                        agent_changed = True
+
+                if agent_changed:
+                    updated_agents[agent_name] = next_agent_config
                 applied[agent_name] = requested_model
-                changed = True
+                changed = changed or agent_changed
 
             if not changed:
                 return source_text, applied
@@ -1242,6 +1423,26 @@ async def _execute_tactus(
                         parsed_source.pop('code', None)
                         changed = True
                         logger.info("Adapted legacy Tactus config: mapped 'code' to 'procedure'")
+
+                # Plexus procedure YAML has always documented `outputs`, while
+                # the current Tactus YAML parser and OutputValidator consume
+                # the singular `output` field.  Translate the documented form
+                # explicitly so required-output validation cannot be skipped.
+                has_legacy_outputs = 'outputs' in parsed_source
+                has_runtime_output = 'output' in parsed_source
+                if has_legacy_outputs and has_runtime_output:
+                    raise ValueError(
+                        "Procedure schema cannot define both 'outputs' and 'output'"
+                    )
+                if has_legacy_outputs:
+                    legacy_outputs = parsed_source.get('outputs')
+                    if not isinstance(legacy_outputs, dict):
+                        raise ValueError("Procedure 'outputs' must be a mapping")
+                    parsed_source = dict(parsed_source)
+                    parsed_source['output'] = legacy_outputs
+                    parsed_source.pop('outputs', None)
+                    changed = True
+                    logger.info("Adapted legacy Tactus config: mapped 'outputs' to 'output'")
 
                 if not parsed_source.get('default_provider'):
                     parsed_source = dict(parsed_source)
@@ -1625,13 +1826,16 @@ async def _execute_tactus(
                 sig_error,
             )
 
+        _install_tactus_json_pydantic_patch()
         runtime = TactusRuntime(**runtime_kwargs)
 
         # Ensure DSPy agents can stream even when runtime constructor does not expose log_handler.
         if getattr(runtime, "log_handler", None) is None:
             runtime.log_handler = log_bridge
 
+        _install_tactus_dspy_legacy_turn_compatibility_patch()
         _install_tactus_dspy_context_capture_patch()
+        _install_tactus_dspy_request_timeout_patch()
 
         # Bridge legacy in-process MCP server to Tactus toolset registry.
         # Newer Tactus versions resolve agent tools through named toolsets.
@@ -1874,6 +2078,7 @@ async def _execute_tactus(
         if log_bridge:
             await log_bridge.flush()
             _persist_inference_costs_to_state(storage, procedure_id, log_bridge.cost_events)
+        result = _attach_persisted_costs_to_result(result, storage, procedure_id)
 
         execution_succeeded = bool(isinstance(result, dict) and result.get("success"))
 

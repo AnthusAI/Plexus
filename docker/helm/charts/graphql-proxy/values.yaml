@@ -133,6 +133,9 @@ config:
   # Cache settings
   cacheTtlSeconds: 900
   cacheStaleSeconds: 86400
+  # In-progress synchronous scores can be reclaimed after this lease if their
+  # worker crashes before persisting a result.
+  scoringJobClaimLeaseSeconds: 120
 
   # Debug mode
   enableDebug: false

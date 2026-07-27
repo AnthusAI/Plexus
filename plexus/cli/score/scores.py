@@ -384,6 +384,12 @@ def dataset_curate(
         raise click.ClickException(str(exc))
 
 
+# The application registers ``scores`` under both ``scores`` and ``score``.
+# Keep this command available on that public group as well as the legacy alias
+# that owns the decorator above.
+scores.add_command(dataset_curate)
+
+
 @score.command(name="dataset-curate-vetted")
 @click.option('--scorecard', required=True, help='Scorecard containing the score (accepts ID, name, key, or external ID)')
 @click.option('--score', required=True, help='Score to curate associated dataset for (accepts ID, name, key, or external ID)')
@@ -451,6 +457,10 @@ def dataset_curate_vetted(
             click.echo(json.dumps({"error": str(exc)}))
             raise SystemExit(1)
         raise click.ClickException(str(exc))
+
+
+scores.add_command(dataset_curate_vetted)
+
 
 @score.command()
 @click.option('--id', required=True, help='Score ID to list versions for')

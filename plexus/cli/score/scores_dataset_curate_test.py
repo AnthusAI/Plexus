@@ -2,7 +2,16 @@ from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
-from plexus.cli.score.scores import score
+from plexus.cli.score.scores import score, scores
+
+
+def test_registered_scores_group_exposes_dataset_curate():
+    runner = CliRunner()
+
+    result = runner.invoke(scores, ["dataset-curate", "--help"])
+
+    assert result.exit_code == 0
+    assert "Build an associated dataset" in result.output
 
 
 def test_score_dataset_curate_success():

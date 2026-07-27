@@ -325,6 +325,13 @@ type ThinkingConversationRow = {
   kind: 'thinking'
 }
 
+type FailedConversationRow = {
+  id: string
+  from: 'assistant'
+  kind: 'failed'
+  triggerMessageId: string
+}
+
 type PrivateConversationRow = {
   id: string
   from: 'assistant'
@@ -333,7 +340,7 @@ type PrivateConversationRow = {
   count: number
 }
 
-type ConversationRow = MessageConversationRow | ThinkingConversationRow | PrivateConversationRow
+type ConversationRow = MessageConversationRow | ThinkingConversationRow | FailedConversationRow | PrivateConversationRow
 
 type PendingAssistantState = {
   requestedAt: string
@@ -1283,6 +1290,14 @@ const buildConversationRowsForViewer = (
     if (!isPrivateConsoleMetadata(message.metadata) || canViewPrivateConsoleMetadata(message.metadata, currentUserId)) {
       activePrivateSpan = null
       rows.push(getRowFromMessage(message))
+      if (message.role === 'USER' && message.responseStatus === 'FAILED') {
+        rows.push({
+          id: `failed-${message.id}`,
+          from: 'assistant',
+          kind: 'failed',
+          triggerMessageId: message.id,
+        })
+      }
       continue
     }
 
@@ -2145,6 +2160,8 @@ function ConversationViewer({
   const [pendingAssistantBySession, setPendingAssistantBySession] = useState<Record<string, PendingAssistantState>>({})
   const pendingAssistantBySessionRef = React.useRef<Record<string, PendingAssistantState>>({})
   const selectedSessionIdRef = React.useRef<string | undefined>(undefined)
+  const newlyCreatedSessionRef = React.useRef<ChatSession | null>(null)
+  const creatingSessionPromiseRef = React.useRef<Promise<ChatSession> | null>(null)
   const manualScrollLockRef = React.useRef(false)
   const lastScrollerTopRef = React.useRef<number | null>(null)
   const conversationScrollerRef = React.useRef<HTMLDivElement | null>(null)
@@ -2277,6 +2294,9 @@ function ConversationViewer({
 
   useEffect(() => {
     selectedSessionIdRef.current = selectedSessionId
+    if (selectedSessionId && newlyCreatedSessionRef.current?.id === selectedSessionId) {
+      newlyCreatedSessionRef.current = null
+    }
   }, [selectedSessionId])
 
   useEffect(() => {
@@ -2352,6 +2372,14 @@ function ConversationViewer({
       triggerMessageId,
     }
     browserVisibilityBySessionRef.current[sessionId] = { pending }
+    // Keep the imperative send guard in sync immediately.  React state updates
+    // are asynchronous, so relying only on the render state leaves a brief
+    // window where a second Enter can enqueue another request for the same
+    // session while the first response is already pending.
+    pendingAssistantBySessionRef.current = {
+      ...pendingAssistantBySessionRef.current,
+      [sessionId]: pending,
+    }
     setPendingAssistantBySession((prev) => ({
       ...prev,
       [sessionId]: pending,
@@ -2410,6 +2438,9 @@ function ConversationViewer({
   const clearPendingAssistant = React.useCallback((sessionId: string) => {
     delete pendingAssistantReconciledAtRef.current[sessionId]
     pendingAssistantReconcileInFlightRef.current.delete(sessionId)
+    const nextPendingBySession = { ...pendingAssistantBySessionRef.current }
+    delete nextPendingBySession[sessionId]
+    pendingAssistantBySessionRef.current = nextPendingBySession
     setPendingAssistantBySession((prev) => {
       if (!prev[sessionId]) {
         return prev
@@ -2636,6 +2667,7 @@ function ConversationViewer({
 
         const fetchedSessions = Array.isArray(sessionsData) ? sessionsData : []
         const selectedId = selectedSessionIdRef.current?.trim()
+        let initialSessionIdToHydrate = selectedId
         let mergedSessions = fetchedSessions
 
         // GSI reads can lag behind writes. If the URL points at a freshly created session
@@ -2664,7 +2696,9 @@ function ConversationViewer({
             .filter((session): session is ChatSession => Boolean(session))
             .map((session) => ({
               ...session,
-              messageCount: 0, // Will be updated when we load messages
+              // A bounded initial message feed does not establish that older
+              // sessions are empty. Preserve that distinction for the list.
+              messageCount: undefined,
             }))
 
           // Sort sessions by createdAt in descending order (most recent first)
@@ -2682,29 +2716,24 @@ function ConversationViewer({
           setInternalSessions([])
         }
 
-        // Load ALL messages for this experiment with proper pagination
-        let allMessages: any[] = []
-        let nextToken: string | null = null
-        
-        do {
-          const response: { data?: any[], nextToken?: string } = await (client.models.ChatMessage.listChatMessageByProcedureIdAndCreatedAt as any)({
-            procedureId: effectiveId,
-            limit: 1000,
-            nextToken,
-          }, {
-            selectionSet: CHAT_MESSAGE_SELECTION_SET,
-          })
-          
-          if (response?.data) {
-            allMessages = [...allMessages, ...response.data]
-          }
-          
-          nextToken = response.nextToken || null
-        } while (nextToken)
+        // Keep the initial cross-session feed bounded. Loading every page for
+        // the Console procedure grows without bound as a team uses the console
+        // and can leave the entire screen stuck on its loading placeholder.
+        const initialMessagesResponse = await (client.models.ChatMessage.listChatMessageByProcedureIdAndCreatedAt as any)({
+          procedureId: effectiveId,
+          limit: 200,
+        }, {
+          selectionSet: CHAT_MESSAGE_SELECTION_SET,
+        })
+        let allMessages: any[] = Array.isArray(initialMessagesResponse?.data)
+          ? initialMessagesResponse.data
+          : []
 
-        if (selectedId) {
+        // The selected session may be older than the bounded feed, so hydrate
+        // its complete visible history independently.
+        if (initialSessionIdToHydrate) {
           try {
-            const selectedSessionRows = await listSessionChatMessages(selectedId, {
+            const selectedSessionRows = await listSessionChatMessages(initialSessionIdToHydrate, {
               sortDirection: 'ASC',
               limit: 200,
             })
@@ -2712,8 +2741,8 @@ function ConversationViewer({
               allMessages = [...allMessages, ...selectedSessionRows]
             }
           } catch (error) {
-            console.warn('Unable to hydrate selected session messages during initial load:', {
-              sessionId: selectedId,
+            console.warn('Unable to hydrate initial session messages during initial load:', {
+              sessionId: initialSessionIdToHydrate,
               error,
             })
           }
@@ -2731,7 +2760,11 @@ function ConversationViewer({
           
           setInternalSessions(prev => prev.map(session => ({
             ...session,
-            messageCount: sessionCounts[session.id] || 0
+            // Only the bounded feed establishes a count for sessions it
+            // actually contains.  Leave every other session unknown.
+            messageCount: Object.prototype.hasOwnProperty.call(sessionCounts, session.id)
+              ? sessionCounts[session.id]
+              : session.messageCount
           })))
         }
         
@@ -3536,6 +3569,7 @@ function ConversationViewer({
 
     return !hasAssistantSincePending
   }, [pendingAssistantState, selectedSession, sortedMessages])
+
   const isPromptDisabled = !selectedSession || isAuthUnavailable
   const conversationRows = React.useMemo(
     () => buildConversationRowsForViewer(sortedMessages, currentUserId),
@@ -3577,6 +3611,10 @@ function ConversationViewer({
     () => [...sortedMessages].reverse().find(message => unresolvedPendingMessageIds.has(message.id)) || null,
     [sortedMessages, unresolvedPendingMessageIds]
   )
+  // A normal chat response must finish before the user can send another
+  // message in the same session.  HITL prompts remain writable because the
+  // user is expected to answer those explicitly.
+  const isAwaitingAssistantResponse = Boolean(pendingAssistantState) && !pendingMessageForPrompt
   const selectedSessionAccountId = selectedSession?.accountId
     || sortedMessages.find(message => message.accountId)?.accountId
   const selectedSessionProcedureId = dispatchProcedureId
@@ -4138,6 +4176,11 @@ function ConversationViewer({
       messageCount: 0,
     }
 
+    // React state propagation is asynchronous. Keep the just-created session
+    // available to a rapid submit so its first message cannot target the prior
+    // session or disappear while the selection rerenders.
+    newlyCreatedSessionRef.current = createdSession
+    selectedSessionIdRef.current = sessionId
     setInternalSessions(prev => [createdSession, ...prev.filter(session => session.id !== sessionId)])
     if (hiddenUntilNamed) {
       setSessionOverridesById(prev => ({
@@ -4175,8 +4218,10 @@ function ConversationViewer({
     }
 
     setIsCreatingSession(true)
+    const creation = createNewSession({ hiddenUntilNamed: true })
+    creatingSessionPromiseRef.current = creation
     try {
-      await createNewSession({ hiddenUntilNamed: true })
+      await creation
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create session'
       console.error('[ConsoleChat] session create failed', {
@@ -4187,6 +4232,9 @@ function ConversationViewer({
       })
       toast.error(message)
     } finally {
+      if (creatingSessionPromiseRef.current === creation) {
+        creatingSessionPromiseRef.current = null
+      }
       setIsCreatingSession(false)
     }
   }, [canCreateSession, createNewSession, isAuthUnavailable, isCreatingSession])
@@ -4198,18 +4246,29 @@ function ConversationViewer({
         return
       }
 
-      if (promptSubmitLockRef.current || isPromptSubmitting || isCreatingSession) {
+      if (promptSubmitLockRef.current || isPromptSubmitting) {
         return
       }
 
       promptSubmitLockRef.current = true
       try {
-        let targetSessionId = selectedSessionId
-        let targetSessionAccountId = selectedSessionAccountId
-        let targetSessionProcedureId = selectedSessionProcedureId
-        let targetSessionMetadata = selectedSession?.metadata
+        const creationInProgress = creatingSessionPromiseRef.current
+        const newlyCreatedSession = creationInProgress
+          ? await creationInProgress
+          : newlyCreatedSessionRef.current
+        // A New Session click is an explicit target change. While React is
+        // propagating that selection, the render closure can still point at
+        // the prior session (or no selected-session object at all). Prefer the
+        // synchronously retained new session so the first prompt cannot be
+        // dropped or sent to the prior conversation.
+        let targetSessionId = newlyCreatedSession?.id || selectedSessionId
+        let targetSessionAccountId = newlyCreatedSession?.accountId || selectedSessionAccountId
+        let targetSessionProcedureId = newlyCreatedSession?.procedureId || selectedSessionProcedureId
+        let targetSessionMetadata = newlyCreatedSession?.metadata || selectedSession?.metadata
+        let targetSessionScorecardId = newlyCreatedSession?.scorecardId || selectedSession?.scorecardId
+        let targetSessionScoreId = newlyCreatedSession?.scoreId || selectedSession?.scoreId
 
-        if (!selectedSession && targetSessionId) {
+        if (!selectedSession && !newlyCreatedSession && targetSessionId) {
           toast.info('Select a valid chat session first')
           return
         }
@@ -4221,6 +4280,8 @@ function ConversationViewer({
             targetSessionAccountId = newSession.accountId
             targetSessionProcedureId = newSession.procedureId
             targetSessionMetadata = newSession.metadata
+            targetSessionScorecardId = newSession.scorecardId
+            targetSessionScoreId = newSession.scoreId
           } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to create a fresh session before send'
             toast.error(message)
@@ -4242,6 +4303,15 @@ function ConversationViewer({
           } finally {
             setIsPromptSubmitting(false)
           }
+          return
+        }
+
+        // This ref is updated synchronously in markPendingAssistant, closing
+        // the gap between creating a message and React rendering the disabled
+        // composer.  Without it, rapid human follow-ups can be processed out
+        // of order by independent stream-worker invocations.
+        if (pendingAssistantBySessionRef.current[targetSessionId]) {
+          toast.info('Wait for the current response before sending another message')
           return
         }
 
@@ -4301,39 +4371,71 @@ function ConversationViewer({
                 ...targetConsoleMetadata,
                 mode: messageMode,
                 private: isConsolePrivate,
-                private_owner_user_id: isConsolePrivate
-                  ? privacyOwnerUserId
-                  : targetConsoleMetadata.private_owner_user_id,
-                private_only: isConsolePrivate ? !hasPublicMessages : false,
-                current_privacy_span_id: isConsolePrivate ? privacySpanId : undefined,
+              private_owner_user_id: isConsolePrivate
+                ? privacyOwnerUserId
+                : targetConsoleMetadata.private_owner_user_id,
+                ...(isConsolePrivate
+                  ? {
+                      private_only: !hasPublicMessages,
+                      current_privacy_span_id: privacySpanId,
+                    }
+                  : {
+                      ...(targetConsoleMetadata.private_only !== undefined
+                        ? { private_only: false }
+                        : {}),
+                      ...(targetConsoleMetadata.current_privacy_span_id !== undefined
+                        ? { current_privacy_span_id: undefined }
+                        : {}),
+                    }),
               },
             }
         if (nextSessionMetadata) {
           const updatedAt = nowIso
-          try {
-            const client = getClient()
-            await (client.models.ChatSession.update as any)({
-              id: targetSessionId,
-              metadata: serializeSessionMetadata(nextSessionMetadata),
-              updatedAt,
-            }, {
-              selectionSet: CHAT_SESSION_SELECTION_SET,
-            })
-            setInternalSessions(prev => prev.map(session => (
-              session.id === targetSessionId
-                ? { ...session, metadata: nextSessionMetadata, updatedAt }
-                : session
-            )))
-            setSessionOverridesById(prev => ({
-              ...prev,
-              [targetSessionId]: {
-                ...(prev[targetSessionId] || {}),
-                metadata: nextSessionMetadata,
+          const scopedScorecardId = selectedScorecardId || undefined
+          const scopedScoreId = selectedScoreId || undefined
+          const serializedCurrentMetadata = serializeSessionMetadata(targetSessionParsedMetadata)
+          const serializedNextMetadata = serializeSessionMetadata(nextSessionMetadata)
+          const sessionStateChanged = (
+            serializedCurrentMetadata !== serializedNextMetadata
+            || Boolean(scopedScorecardId && scopedScorecardId !== targetSessionScorecardId)
+            || Boolean(scopedScoreId && scopedScoreId !== targetSessionScoreId)
+          )
+          if (sessionStateChanged) {
+            try {
+              const client = getClient()
+              await (client.models.ChatSession.update as any)({
+                id: targetSessionId,
+                ...(scopedScorecardId ? { scorecardId: scopedScorecardId } : {}),
+                ...(scopedScoreId ? { scoreId: scopedScoreId } : {}),
+                metadata: serializedNextMetadata,
                 updatedAt,
-              },
-            }))
-          } catch (error) {
-            console.warn('[ConsoleChat] failed to update Console session metadata before send', error)
+              }, {
+                selectionSet: CHAT_SESSION_SELECTION_SET,
+              })
+              setInternalSessions(prev => prev.map(session => (
+                session.id === targetSessionId
+                  ? {
+                      ...session,
+                      ...(scopedScorecardId ? { scorecardId: scopedScorecardId } : {}),
+                      ...(scopedScoreId ? { scoreId: scopedScoreId } : {}),
+                      metadata: nextSessionMetadata,
+                      updatedAt,
+                    }
+                  : session
+              )))
+              setSessionOverridesById(prev => ({
+                ...prev,
+                [targetSessionId]: {
+                  ...(prev[targetSessionId] || {}),
+                  ...(scopedScorecardId ? { scorecardId: scopedScorecardId } : {}),
+                  ...(scopedScoreId ? { scoreId: scopedScoreId } : {}),
+                  metadata: nextSessionMetadata,
+                  updatedAt,
+                },
+              }))
+            } catch (error) {
+              console.warn('[ConsoleChat] failed to update Console session metadata before send', error)
+            }
           }
         }
         const optimisticMessage: ChatMessage = {
@@ -4361,9 +4463,32 @@ function ConversationViewer({
         )))
 
         let messagePersisted = false
+        let persistedMessageId: string | null = null
+        let persistedCreatedAt = nowIso
+        const coalescePersistedMessage = (
+          messageId: string,
+          patch: Partial<ChatMessage>,
+        ) => {
+          setInternalMessages(prev => {
+            const existingPersisted = prev.find((message) => message.id === messageId)
+            const mergedPersisted: ChatMessage = {
+              ...optimisticMessage,
+              ...(existingPersisted || {}),
+              ...patch,
+              id: messageId,
+              createdAt: persistedCreatedAt,
+            }
+            const withoutOptimisticOrPersisted = prev.filter((message) => (
+              message.id !== optimisticMessageId && message.id !== messageId
+            ))
+            return sortChatMessages([...withoutOptimisticOrPersisted, mergedPersisted])
+          })
+        }
         try {
           const client = getClient()
-          const attribution = await getCurrentUserAttribution()
+          const attribution = currentUserId
+            ? { createdByUserId: currentUserId }
+            : await getCurrentUserAttribution()
           if (attribution.createdByUserId) {
             setCurrentUserId(attribution.createdByUserId)
             setInternalMessages(prev => prev.map(message => (
@@ -4426,22 +4551,27 @@ function ConversationViewer({
             throw new Error('Failed to persist chat message')
           }
           messagePersisted = true
+          persistedMessageId = createdMessageId
+          persistedCreatedAt = created?.data?.createdAt || nowIso
 
-          const persistedCreatedAt = created?.data?.createdAt || nowIso
-          setInternalMessages(prev => {
-            const existingPersisted = prev.find((message) => message.id === createdMessageId)
-            const mergedPersisted: ChatMessage = {
-              ...optimisticMessage,
-              ...(existingPersisted || {}),
-              ...attribution,
-              id: createdMessageId,
-              createdAt: persistedCreatedAt,
-              createdByUserId: attribution.createdByUserId || existingPersisted?.createdByUserId,
+          // A cloud message has one execution path: direct dispatch.  Do not
+          // hide a broken dispatch behind a delayed alternate worker.
+          if (!enableProcedureSteering && responseTarget === 'cloud') {
+            try {
+              await (client.mutations.dispatchConsoleChat as any)({
+                messageId: createdMessageId,
+              })
+            } catch (dispatchError) {
+              throw new Error(`Could not start the chat response: ${String(dispatchError)}`)
             }
-            const withoutOptimisticOrPersisted = prev.filter((message) => (
-              message.id !== optimisticMessageId && message.id !== createdMessageId
-            ))
-            return sortChatMessages([...withoutOptimisticOrPersisted, mergedPersisted])
+          }
+
+          const { createdByUserId, ...attributionWithoutUserId } = attribution
+          coalescePersistedMessage(createdMessageId, {
+            ...attributionWithoutUserId,
+            ...(createdByUserId
+              ? { createdByUserId }
+              : {}),
           })
 
           if (!enableProcedureSteering) {
@@ -4466,6 +4596,28 @@ function ConversationViewer({
           }
 
           const errorMessage = formatAmplifyError(error) || getErrorMessage(error, 'Failed to send chat message')
+          if (messagePersisted && persistedMessageId) {
+            const responseCompletedAt = new Date().toISOString()
+            try {
+              await (getClient().models.ChatMessage.update as any)({
+                id: persistedMessageId,
+                responseStatus: 'FAILED',
+                responseCompletedAt,
+                responseError: errorMessage,
+              })
+            } catch (updateError) {
+              console.error('[ConsoleChat] failed to persist dispatch failure state', {
+                messageId: persistedMessageId,
+                sessionId: targetSessionId,
+                updateError,
+              })
+            }
+            coalescePersistedMessage(persistedMessageId, {
+              responseStatus: 'FAILED',
+              responseCompletedAt,
+              responseError: errorMessage,
+            })
+          }
           console.error('[ConsoleChat] send/dispatch failure', {
             messagePersisted,
             sessionId: targetSessionId,
@@ -4478,7 +4630,7 @@ function ConversationViewer({
           } else if (!isAuthFailure) {
             toast.error(errorMessage)
           }
-          throw error
+          return
         } finally {
           setIsPromptSubmitting(false)
         }
@@ -4491,7 +4643,10 @@ function ConversationViewer({
       selectedSessionId,
       selectedSession,
       selectedSessionProcedureId,
+      selectedScorecardId,
+      selectedScoreId,
       pendingMessageForPrompt,
+      isAwaitingAssistantResponse,
       isPromptSubmitting,
       isCreatingSession,
       messages,
@@ -4584,7 +4739,9 @@ function ConversationViewer({
                   </div>
                   <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                     <span className="truncate">
-                      {session.messageCount ? `${session.messageCount} messages` : 'No messages'}
+                      {typeof session.messageCount === 'number'
+                        ? (session.messageCount ? `${session.messageCount} messages` : 'No messages')
+                        : 'Messages not loaded'}
                     </span>
                     {getSessionTimestamp(session) && (
                       <Timestamp
@@ -4811,6 +4968,31 @@ function ConversationViewer({
                     )
                   }
 
+                  if (row.kind === 'failed') {
+                    return (
+                      <div className="px-3 py-2 pb-8">
+                        <Message
+                          from="assistant"
+                          data-message-id={row.id}
+                          data-from="assistant"
+                          className="max-w-full"
+                        >
+                          <div className="flex items-start">
+                            <MessageContent className="max-w-full overflow-visible px-1 py-0 sm:max-w-[85%]">
+                              <div
+                                data-testid="console-response-failed"
+                                className="flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                              >
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <span>The response could not be completed. Try sending it again or choose another model.</span>
+                              </div>
+                            </MessageContent>
+                          </div>
+                        </Message>
+                      </div>
+                    )
+                  }
+
                   if (row.kind === 'private-span') {
                     return (
                       <div className="px-3 py-2">
@@ -4870,7 +5052,7 @@ function ConversationViewer({
                 <PromptInputTextarea
                   value={promptValue}
                   onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setPromptValue(event.target.value)}
-                  disabled={isPromptDisabled || isPromptSubmitting}
+                  disabled={isPromptDisabled || isPromptSubmitting || isAwaitingAssistantResponse}
                   placeholder={
                     isAuthUnavailable
                       ? "Console unavailable"

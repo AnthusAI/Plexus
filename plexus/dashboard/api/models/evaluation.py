@@ -25,6 +25,19 @@ logger = logging.getLogger(__name__)
 _TERMINAL_STATUSES = {"COMPLETED", "FAILED", "CANCELLED", "CANCELED"}
 
 
+def _decode_metrics(metrics: Any) -> Any:
+    """Decode the AWSJSON metrics field into its object or list payload."""
+    if not isinstance(metrics, str):
+        return metrics
+    try:
+        decoded = json.loads(metrics)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Evaluation metrics must be valid JSON") from exc
+    if not isinstance(decoded, (dict, list)):
+        raise ValueError("Evaluation metrics must be a JSON object or list")
+    return decoded
+
+
 def _evaluation_cost_details_enabled() -> bool:
     """Cost details are stored in parameters.metadata; GraphQL field is disabled."""
     return False
@@ -259,7 +272,7 @@ class Evaluation(BaseModel):
             createdAt=data['createdAt'],
             updatedAt=data['updatedAt'],
             parameters=data.get('parameters'),
-            metrics=data.get('metrics'),
+            metrics=_decode_metrics(data.get('metrics')),
             inferences=data.get('inferences'),
             accuracy=data.get('accuracy'),
             cost=data.get('cost'),
@@ -336,6 +349,8 @@ class Evaluation(BaseModel):
                         value = datetime.fromisoformat(value.replace('Z', '+00:00'))
                     except Exception:
                         pass
+                if field == 'metrics':
+                    value = _decode_metrics(value)
                 setattr(self, field, value)
 
         except Exception as e:

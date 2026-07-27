@@ -75,6 +75,13 @@ class SchemaContract:
         mode = backend_mode or os.getenv("PLEXUS_BACKEND_MODE", "amplify")
         active_local_models = local_models if local_models is not None else configured_local_models()
 
+        if root_name == "claimScoringJob" and mode == "local" and operation_type == "mutation":
+            return RootClassification(
+                "private",
+                None,
+                RootOperation(root_name, operation_type, None, "custom"),
+            )
+
         operation = self.root_operation(root_name)
         if not operation and mode == "local" and operation_type == "query":
             operation = self._synthetic_legacy_index_operation(root_name)
@@ -88,7 +95,7 @@ class SchemaContract:
                 return RootClassification("control", operation.model, operation)
             return RootClassification("blocked", operation.model, operation)
 
-        if operation.custom_operation and operation_type == operation.operation_type == "query":
+        if operation.custom_operation and operation_type == operation.operation_type:
             return RootClassification(
                 "private" if mode == "local" else "control",
                 None,

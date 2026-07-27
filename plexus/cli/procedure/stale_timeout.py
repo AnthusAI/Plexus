@@ -122,9 +122,20 @@ def _classify_runtime_process_state(runtime: Dict[str, Any]) -> str:
             text=True,
         ).strip()
     except Exception:
-        return "unknown"
+        command = _read_proc_command(pid_int)
+        if command is None:
+            return "unknown"
 
     return "active" if bool(command) and expected_command in command else "inactive"
+
+
+def _read_proc_command(pid: int) -> Optional[str]:
+    """Read a process command without relying on the optional ``ps`` utility."""
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as proc_file:
+            return proc_file.read().replace(b"\x00", b" ").decode(errors="replace").strip()
+    except OSError:
+        return None
 
 
 def _list_procedure_tasks(client: Any, account_id: str) -> List[Dict[str, Any]]:
@@ -444,18 +455,6 @@ def timeout_stale_procedures(
                 }
             )
             continue
-        if runtime_state == "foreign_host":
-            skipped.append(
-                {
-                    "procedure_id": procedure_id,
-                    "reason": "foreign_runtime_host",
-                    "last_activity_at": last_activity_at.isoformat(),
-                    "activity_source": activity_source,
-                    "pid": runtime.get("pid"),
-                    "host": runtime.get("host"),
-                }
-            )
-            continue
         if runtime_state == "unknown":
             skipped.append(
                 {
@@ -481,6 +480,7 @@ def timeout_stale_procedures(
             "timeout_seconds": threshold_seconds,
             "last_chat_activity_at": last_activity_at.isoformat(),
             "activity_source": activity_source,
+            "runtime_state": runtime_state,
         }
 
         record = {

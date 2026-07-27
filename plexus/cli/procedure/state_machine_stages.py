@@ -69,9 +69,9 @@ def get_alignment_optimizer_stage_configs() -> Dict[str, StageConfig]:
     """
     Get TaskStage configurations for the feedback alignment optimizer procedure.
 
-    These stages reflect the actual workflow of the optimizer:
-    baseline evaluation → RCA analysis → propose changes → human approval
-    → iteration evaluation → compare results.
+    These stages exactly match the progress events emitted by the optimizer
+    procedure.  Keeping these names aligned lets TaskStage display meaningful
+    progress instead of silently discarding stage updates.
 
     Returns:
         Dictionary mapping stage names to StageConfig objects
@@ -85,9 +85,17 @@ def get_alignment_optimizer_stage_configs() -> Dict[str, StageConfig]:
             order=2,
             status_message="Running baseline feedback evaluation with root cause analysis"
         ),
-        "Iteration": StageConfig(
+        "Exploration": StageConfig(
             order=3,
-            status_message="Applying proposed changes and running iteration evaluation"
+            status_message="Exploring evidence and planning candidate improvements"
+        ),
+        "Selection": StageConfig(
+            order=4,
+            status_message="Selecting the strongest proposed improvement"
+        ),
+        "Finalize": StageConfig(
+            order=5,
+            status_message="Recording the optimization outcome"
         ),
     }
 

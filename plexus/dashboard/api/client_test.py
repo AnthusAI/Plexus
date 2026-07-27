@@ -81,6 +81,7 @@ def test_client_configures_transport_correctly(mock_env, mock_transport):
     assert transport_kwargs['headers']['Content-Type'] == 'application/json'
     assert transport_kwargs['verify'] is True
     assert transport_kwargs['retries'] == 3
+    assert transport_kwargs['timeout'] == 15
 
 def test_execute_handles_query_error(mock_env, mock_gql_client):
     """Test that execute handles GraphQL query errors"""
@@ -124,6 +125,26 @@ def test_execute_retries_retryable_query_error_then_succeeds(mock_env, mock_gql_
             "Throughput exceeds the current capacity for one or more global secondary indexes.",
             error_type="DynamoDB:ThrottlingException",
         ),
+        expected_result,
+    ]
+    mock_gql_client.return_value.__enter__.return_value = mock_session
+
+    with patch("plexus.dashboard.api.client.time.sleep") as mock_sleep, \
+         patch("plexus.dashboard.api.client.random.uniform", return_value=0.0):
+        result = client.execute("query { test }")
+
+    assert result == expected_result
+    assert mock_session.execute.call_count == 2
+    mock_sleep.assert_called_once()
+
+
+def test_execute_retries_transient_dns_failure_then_succeeds(mock_env, mock_gql_client):
+    client = PlexusDashboardClient()
+
+    expected_result = {'data': {'test': 'value'}}
+    mock_session = Mock()
+    mock_session.execute.side_effect = [
+        Exception("Temporary failure in name resolution"),
         expected_result,
     ]
     mock_gql_client.return_value.__enter__.return_value = mock_session

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from plexus.cli.procedure.stale_timeout import STALE_PROCEDURE_TIMEOUT_MESSAGE
 from plexus.cli.procedure.stale_timeout import STALLED_STATUS
 from plexus.cli.procedure.stale_timeout import timeout_stale_procedures
+from plexus.cli.procedure.stale_timeout import _classify_runtime_process_state
 
 
 class _FakeTask:
@@ -22,6 +23,30 @@ class _FakeTask:
         for key, value in kwargs.items():
             setattr(self, key, value)
         return self
+
+
+def test_classify_runtime_process_state_reads_proc_when_ps_is_unavailable(monkeypatch):
+    monkeypatch.setattr("plexus.cli.procedure.stale_timeout.socket.gethostname", lambda: "test-host")
+    monkeypatch.setattr("plexus.cli.procedure.stale_timeout.os.kill", lambda _pid, _signal: None)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout.subprocess.check_output",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(FileNotFoundError("ps unavailable")),
+    )
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda path, *_args, **_kwargs: (_ for _ in ()).throw(AssertionError(f"unexpected path: {path}")),
+    )
+
+    # A mismatched process command must be treated as inactive, not unknown.
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._read_proc_command",
+        lambda _pid: "unrelated-command",
+        raising=False,
+    )
+
+    assert _classify_runtime_process_state(
+        {"pid": 1234, "host": "test-host", "command": "procedure run proc-1"}
+    ) == "inactive"
 
 
 def test_timeout_stale_procedures_marks_chat_silent_run_stalled(monkeypatch):
@@ -402,8 +427,12 @@ def test_timeout_stale_procedures_skips_stale_chat_when_runtime_heartbeat_is_fre
     ]
 
 
-def test_timeout_stale_procedures_skips_foreign_host_runtime_when_activity_is_stale(monkeypatch):
+def test_timeout_stale_procedures_times_out_foreign_host_runtime_when_activity_is_stale(monkeypatch):
     now = datetime(2026, 4, 23, 20, 0, tzinfo=timezone.utc)
+    fake_task = _FakeTask()
+    fake_task.id = "task-foreign-runtime"
+    fake_task.target = "procedure/proc-foreign-runtime"
+    fake_task.command = "procedure run proc-foreign-runtime"
 
     monkeypatch.setattr(
         "plexus.cli.procedure.stale_timeout._list_procedure_tasks",
@@ -436,7 +465,19 @@ def test_timeout_stale_procedures_skips_foreign_host_runtime_when_activity_is_st
     )
     monkeypatch.setattr(
         "plexus.cli.procedure.stale_timeout.Task.get_by_id",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Task.get_by_id should not run for foreign-host runtime")),
+        lambda _task_id, _client: fake_task,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._update_procedure_status_and_metadata",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._mark_procedure_chat_sessions_stalled",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.stale_timeout._mark_nonterminal_task_stages_status",
+        lambda *_args, **_kwargs: None,
     )
 
     result = timeout_stale_procedures(
@@ -447,17 +488,10 @@ def test_timeout_stale_procedures_skips_foreign_host_runtime_when_activity_is_st
         now=now,
     )
 
-    assert result["timed_out"] == []
-    assert result["skipped"] == [
-        {
-            "procedure_id": "proc-foreign-runtime",
-            "reason": "foreign_runtime_host",
-            "last_activity_at": "2026-04-23T18:36:06+00:00",
-            "activity_source": "chat",
-            "pid": 1500,
-            "host": "other-host",
-        }
-    ]
+    assert result["skipped"] == []
+    assert len(result["timed_out"]) == 1
+    assert result["timed_out"][0]["failure"]["runtime_state"] == "foreign_host"
+    assert fake_task.update_calls[-1]["status"] == STALLED_STATUS
 
 
 def test_timeout_stale_procedures_continues_when_procedure_update_conflicts(monkeypatch):

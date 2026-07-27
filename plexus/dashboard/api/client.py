@@ -170,6 +170,7 @@ _RETRYABLE_MESSAGE_SNIPPETS = (
     "connection reset",
     "connection aborted",
     "connection refused",
+    "temporary failure in name resolution",
     "timed out",
     "timeout",
     "service unavailable",
@@ -201,6 +202,9 @@ class _BaseAPIClient:
         self._log_queue = None
         self._stop_logging = None
         self._log_thread = None
+        self._background_logging_enabled = os.getenv(
+            'PLEXUS_DISABLE_BACKGROUND_LOGGING', 'false'
+        ).lower() not in ('true', '1', 'yes')
         
         if not self.api_url or (self.auth_mode != 'iam' and not self.api_key):
             raise ValueError("Missing required API URL or API key")
@@ -228,11 +232,14 @@ class _BaseAPIClient:
         self.Scorecard = ScorecardNamespace(self)
         self.Account = AccountNamespace(self)
         
-        # Background logging setup
-        self._log_queue = Queue()
-        self._stop_logging = Event()
-        self._log_thread = Thread(target=self._process_logs, daemon=True)
-        self._log_thread.start()
+        # Long-lived Lambda workers must not create a daemon logging thread for
+        # every short-lived dashboard client. The console worker disables this
+        # optional score-result logging path explicitly.
+        if self._background_logging_enabled:
+            self._log_queue = Queue()
+            self._stop_logging = Event()
+            self._log_thread = Thread(target=self._process_logs, daemon=True)
+            self._log_thread.start()
 
     @staticmethod
     def _region_from_api_url(api_url: Optional[str]) -> Optional[str]:
@@ -285,6 +292,10 @@ class _BaseAPIClient:
             auth=auth,
             verify=True,
             retries=3,
+            # A retry policy cannot cap a request that never returns.  Bound
+            # each transport attempt so report/evaluation fan-out can recover
+            # from a stalled local proxy or network connection.
+            timeout=15,
         )
 
     def _process_logs(self):
@@ -593,6 +604,8 @@ class _BaseAPIClient:
         score_name: Optional[str] = None,
         **kwargs
     ) -> None:
+        if not self._background_logging_enabled:
+            return
         score_data = {
             'value': value,
             'itemId': item_id,

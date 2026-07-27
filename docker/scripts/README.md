@@ -14,6 +14,11 @@ new one-off variants here without updating this inventory.
 | `setup_demo_scorecard.py` | Create a demo-safe call-center scorecard in the configured backend. |
 | `fetch_demo_transcripts.py` | Seed demo-safe call-center transcript items through the GraphQL proxy. |
 
+The end-to-end, assertion-driven product demonstration is documented in
+[`docker/demo/README.md`](../demo/README.md). It supersedes the individual
+helpers above when the goal is a repeatable scoring, evaluation, reporting, and
+optimization proof rather than a narrow route smoke test.
+
 ## Local Envoy Flow
 
 ```bash

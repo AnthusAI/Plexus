@@ -181,15 +181,10 @@ class DataCache(ABC):
         logger.info(f"{context}: {df.shape[0]} rows x {df.shape[1]} columns")
         logger.info(f"Columns: {list(df.columns)}")
         
-        # Show first 3 rows sample
-        if len(df) > 0:
-            logger.info("Sample data (first 3 rows):")
-            for i in range(min(3, len(df))):
-                row_data = {}
-                for col in df.columns:
-                    value = df.iloc[i][col]
-                    row_data[col] = DataCache.format_value_for_display(value)
-                logger.info(f"  Row {i}: {row_data}")
+        # Dataset values routinely contain transcripts, labels, comments, and
+        # identifiers. Log the schema and shape above, never example rows.
+        # Callers that need to inspect data must do so through an explicitly
+        # authorized data-access path rather than ordinary service logs.
 
     @abstractmethod
     def load_dataframe(self, *args, **kwargs):

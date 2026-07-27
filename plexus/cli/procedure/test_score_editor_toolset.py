@@ -1,7 +1,6 @@
 import os
 import sys
 import pytest
-import json
 
 # Ensure the MCP directory is importable for execute module patching
 _mcp_dir = os.path.normpath(
@@ -109,6 +108,15 @@ graph:
 output:
   value: classification
   explanation: explanation
+"""
+
+
+INVALID_TACTUS_LUA_YAML = """\
+name: Test Score
+key: test-score
+class: TactusScore
+code: |
+  output_map = {"extracted_text": "state.evidence"}
 """
 
 
@@ -366,6 +374,41 @@ async def test_submit_score_version_rejects_classifier_as_extractor_candidate():
     assert "Structural validation failed" in result["error"]
     assert "Classifier cannot be used for free-form extraction" in result["error"]
     assert "class: Extractor" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_submit_score_version_rejects_tactus_lua_syntax_before_creating_version(monkeypatch):
+    import tools.tactus_runtime.execute as _exec  # type: ignore
+    from plexus.cli.procedure.tactus_adapters.score_editor_toolset import (
+        GUIDELINES_PATH,
+        ScoreEditorToolset,
+        VIRTUAL_PATH,
+    )
+
+    update_called = False
+
+    def fake_score_update(_args):
+        nonlocal update_called
+        update_called = True
+        return {"success": True, "version_id": "should-not-create"}
+
+    monkeypatch.setattr(_exec, "_default_score_update", fake_score_update)
+    toolset = ScoreEditorToolset()
+    toolset._scorecard = "sc-1"
+    toolset._score = "score-1"
+    toolset._iteration = 1
+    toolset._hypothesis = "syntax"
+    toolset._original_files[VIRTUAL_PATH] = "name: baseline\nkey: baseline\nclass: TactusScore\ncode: |\n  return {}\n"
+    toolset._files[VIRTUAL_PATH] = INVALID_TACTUS_LUA_YAML
+    toolset._original_files[GUIDELINES_PATH] = ""
+    toolset._files[GUIDELINES_PATH] = ""
+
+    result = await toolset.submit_score_version({"version_note": "reject invalid Lua"})
+
+    assert result["success"] is False
+    assert "Tactus Lua validation failed" in result["error"]
+    assert "'}' expected near ':'" in result["error"]
+    assert update_called is False
 
 
 @pytest.mark.asyncio

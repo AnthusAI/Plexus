@@ -89,6 +89,45 @@ def test_create_evaluation_injects_actor_attribution(mock_client):
     assert parameters["attribution"]["actorKey"] == "execute_tactus"
     assert parameters["attribution"]["requestUserId"] == "user-123"
 
+
+def test_from_dict_decodes_awsjson_metrics_to_a_structured_value(mock_client):
+    evaluation = Evaluation.from_dict(
+        {
+            "id": "evaluation-with-metrics",
+            "type": "accuracy",
+            "accountId": "acc-123",
+            "status": "COMPLETED",
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+            "metrics": json.dumps([
+                {"name": "accuracy", "value": 0.925},
+                {"name": "alignment", "value": 0.92},
+            ]),
+        },
+        mock_client,
+    )
+
+    assert evaluation.metrics == [
+        {"name": "accuracy", "value": 0.925},
+        {"name": "alignment", "value": 0.92},
+    ]
+
+
+def test_from_dict_rejects_invalid_metrics_json(mock_client):
+    with pytest.raises(ValueError, match="Evaluation metrics must be valid JSON"):
+        Evaluation.from_dict(
+            {
+                "id": "invalid-metrics",
+                "type": "accuracy",
+                "accountId": "acc-123",
+                "status": "COMPLETED",
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+                "metrics": "not-json",
+            },
+            mock_client,
+        )
+
 def test_update_evaluation(sample_evaluation):
     """Test that evaluation updates execute and sync locally."""
     sample_evaluation._client.execute.return_value = {

@@ -202,6 +202,34 @@ class FakeSessionTitleClient(FakeClient):
         return super().execute(query, variables, **_kwargs)
 
 
+def test_warm_console_runtime_prepares_mcp_server_without_preloading_optional_score_runtime(monkeypatch):
+    imported_modules = []
+
+    class FakeTactusCore:
+        TactusRuntime = object()
+
+    def fake_import_module(name):
+        imported_modules.append(name)
+        if name == "tactus.core":
+            return FakeTactusCore
+        return object()
+
+    async def fake_get_or_create_console_mcp_server(_runtime_context):
+        return object()
+
+    monkeypatch.setattr(chat_runtime, "_get_procedure_service", lambda _client: object())
+    monkeypatch.setattr(
+        chat_runtime,
+        "_get_or_create_console_mcp_server",
+        fake_get_or_create_console_mcp_server,
+    )
+    monkeypatch.setattr(chat_runtime, "import_module", fake_import_module, raising=False)
+
+    chat_runtime.warm_console_runtime(FakeClient())
+
+    assert imported_modules == []
+
+
 def test_should_handle_only_matching_pending_user_chat_message():
     message = chat_runtime.parse_chat_message(_raw_message())
 
@@ -378,6 +406,52 @@ def test_process_console_message_ignores_auto_title_failures(monkeypatch):
     ) is True
 
 
+def test_process_console_message_marks_completed_before_auto_title(monkeypatch):
+    client = FakeClient()
+    events = []
+    monkeypatch.setattr(
+        chat_runtime,
+        "run_console_chat_response",
+        lambda *_args, **_kwargs: events.append("response") or {"success": True},
+    )
+    monkeypatch.setattr(
+        chat_runtime,
+        "mark_message_completed",
+        lambda *_args, **_kwargs: events.append("completed"),
+    )
+    monkeypatch.setattr(
+        chat_runtime,
+        "maybe_auto_title_session",
+        lambda *_args, **_kwargs: events.append("title"),
+    )
+
+    assert chat_runtime.process_console_message(
+        client,
+        _raw_message(),
+        expected_target="cloud",
+        owner="cloud:test",
+    ) is True
+    assert events == ["response", "completed", "title"]
+
+
+def test_process_console_message_reuses_directly_fetched_trigger_message(monkeypatch):
+    client = FakeClient()
+    monkeypatch.setattr(chat_runtime, "run_console_chat_response", lambda *_args, **_kwargs: {"success": True})
+    monkeypatch.setattr(
+        chat_runtime,
+        "fetch_message",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("direct trigger should not be re-fetched")),
+    )
+
+    assert chat_runtime.process_console_message(
+        client,
+        _raw_message(),
+        expected_target="cloud",
+        owner="cloud:test",
+        poll_context={"direct_message_fetch_ms": 12},
+    ) is True
+
+
 def test_process_console_message_logs_latency_summary(monkeypatch):
     client = FakeClient()
     info_logs = []
@@ -407,6 +481,7 @@ def test_process_console_message_logs_latency_summary(monkeypatch):
         _raw_message(metadata='{"instrumentation":{"client_send_started_at":"2026-04-27T00:00:00.000Z"}}'),
         expected_target="cloud",
         owner="cloud:test",
+        poll_context={"direct_message_fetch_ms": 321},
     ) is True
 
     payloads = []
@@ -423,6 +498,7 @@ def test_process_console_message_logs_latency_summary(monkeypatch):
     summary = payloads[-1]
     assert summary["status"] == "COMPLETED"
     assert summary["message_id"] == "msg-1"
+    assert summary["direct_message_fetch_ms"] == 321
     assert isinstance(summary["claim_ms"], int)
     assert isinstance(summary["history_ms"], int)
     assert isinstance(summary["startup_ms"], int)
@@ -454,6 +530,7 @@ def test_process_console_message_logs_latency_summary(monkeypatch):
     server_latency = metadata["instrumentation"]["server_latency"]
     assert server_latency["response_owner"] == "cloud:test"
     assert server_latency["response_target"] == "cloud"
+    assert server_latency["direct_message_fetch_ms"] == 321
     assert server_latency["code_sha"] == "test-sha"
     assert isinstance(server_latency["client_to_claim_ms"], int)
     assert isinstance(server_latency["pre_model_ms"], int)
@@ -651,9 +728,161 @@ def test_run_console_chat_response_passes_console_context_to_builtin(monkeypatch
         "console_response_owner": "local:ryan:test",
         "tool_access_mode": "execution",
         "console_tool_access_mode": "execution",
+        "console_async_tasks_available": True,
+        "console_selected_model": "",
         "console_private": False,
         "disable_console_dispatch_metadata_lookup": True,
     }
+    assert kwargs["console_async_tasks_available"] is True
+
+
+def test_console_async_tasks_available_respects_explicit_false(monkeypatch):
+    monkeypatch.setenv("PLEXUS_CONSOLE_ASYNC_TASKS_AVAILABLE", "false")
+
+    assert chat_runtime.console_async_tasks_available() is False
+
+
+def test_run_console_chat_response_passes_session_score_scope_to_builtin(monkeypatch):
+    client = FakeClient()
+    message = chat_runtime.parse_chat_message(_raw_message(content="Check the selected scope"))
+    calls = []
+
+    class FakeProcedureService:
+        def __init__(self, service_client):
+            self.service_client = service_client
+
+        async def run_procedure(self, procedure_id, **kwargs):
+            calls.append(kwargs)
+            return {"success": True, "response": "ok"}
+
+    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "fetch_chat_session",
+        lambda _client, _session_id: {
+            "id": "sess-1",
+            "scorecardId": "scorecard-1",
+            "scoreId": "score-1",
+            "scorecard": {"name": "Scorecard One"},
+            "score": {"name": "Score One"},
+        },
+    )
+
+    assert message is not None
+    chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
+
+    assert calls[0]["context"]["scorecard_id"] == "scorecard-1"
+    assert calls[0]["context"]["score_id"] == "score-1"
+    assert calls[0]["context"]["scorecard"] == "scorecard-1"
+    assert calls[0]["context"]["score"] == "score-1"
+    assert calls[0]["context"]["scorecard_name"] == "Scorecard One"
+    assert calls[0]["context"]["score_name"] == "Score One"
+    assert calls[0]["console_scorecard_id"] == "scorecard-1"
+    assert calls[0]["console_score_id"] == "score-1"
+    assert calls[0]["console_scorecard_name"] == "Scorecard One"
+    assert calls[0]["console_score_name"] == "Score One"
+
+
+def test_run_console_chat_response_uses_session_scope_fetched_with_direct_message(monkeypatch):
+    client = FakeClient()
+    message = chat_runtime.parse_chat_message(_raw_message(session={
+        "id": "sess-1",
+        "scorecardId": "scorecard-1",
+        "scoreId": "score-1",
+        "scorecard": {"name": "Scorecard One"},
+        "score": {"name": "Score One"},
+    }))
+    calls = []
+
+    class FakeProcedureService:
+        async def run_procedure(self, _procedure_id, **kwargs):
+            calls.append(kwargs)
+            return {"success": True, "response": "ok"}
+
+    monkeypatch.setattr(chat_runtime, "ProcedureService", lambda _client: FakeProcedureService())
+    monkeypatch.setattr(
+        chat_runtime,
+        "fetch_chat_session",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("direct scope should avoid a session fetch")),
+    )
+
+    assert message is not None
+    chat_runtime.run_console_chat_response(client, message, owner="cloud:test")
+
+    assert calls[0]["context"]["scorecard_id"] == "scorecard-1"
+    assert calls[0]["context"]["score_id"] == "score-1"
+
+
+def test_run_console_chat_response_passes_durable_unpromoted_edit_state(monkeypatch):
+    client = FakeClient()
+    message = chat_runtime.parse_chat_message(_raw_message(content="is it live?"))
+    calls = []
+
+    class FakeProcedureService:
+        def __init__(self, service_client):
+            pass
+        async def run_procedure(self, procedure_id, **kwargs):
+            calls.append(kwargs)
+            return {"success": True, "response": "ok"}
+
+    monkeypatch.setattr(chat_runtime, "ProcedureService", FakeProcedureService)
+    monkeypatch.setattr(
+        chat_runtime,
+        "fetch_session_history",
+        lambda *_args, **_kwargs: [
+            {"role": "USER", "content": "make a candidate"},
+            {"role": "ASSISTANT", "content": "Candidate created."},
+            {"role": "USER", "content": "is it live?"},
+        ],
+    )
+    monkeypatch.setattr(chat_runtime, "fetch_latest_score_edit_audit", lambda *_args: {
+        "version_id": "candidate-1", "parent_version_id": "champion-1",
+        "promoted": False, "push_outcome": "not_pushed", "smoke_status": "failed",
+    })
+    assert message is not None
+    chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
+    assert calls[0]["console_latest_score_edit_version_id"] == "candidate-1"
+    assert calls[0]["console_latest_score_edit_promoted"] is False
+    assert calls[0]["context"]["console_latest_score_edit_smoke_status"] == "failed"
+
+
+def test_run_console_chat_response_skips_empty_followup_state_on_first_turn(monkeypatch):
+    client = FakeClient()
+    message = chat_runtime.parse_chat_message(_raw_message(content="first turn"))
+
+    class FakeProcedureService:
+        async def run_procedure(self, _procedure_id, **_kwargs):
+            return {"success": True, "response": "ok"}
+
+    monkeypatch.setattr(chat_runtime, "ProcedureService", lambda _client: FakeProcedureService())
+    monkeypatch.setattr(
+        chat_runtime,
+        "fetch_session_history",
+        lambda *_args, **_kwargs: [{"role": "USER", "content": "first turn"}],
+    )
+    monkeypatch.setattr(
+        chat_runtime,
+        "fetch_latest_score_edit_audit",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("score edit lookup should be skipped")),
+    )
+    monkeypatch.setattr(
+        chat_runtime,
+        "fetch_latest_report_task",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("report lookup should be skipped")),
+    )
+
+    assert message is not None
+    result = chat_runtime.run_console_chat_response(client, message, owner="local:ryan:test")
+
+    assert result == {"success": True, "response": "ok"}
+
+
+def test_score_edit_audit_from_metadata_reads_persisted_audit():
+    audit = chat_runtime._score_edit_audit_from_metadata(json.dumps({"score_change_audit": {
+        "kind": "score_edit", "version_id": "candidate-1", "parent_version_id": "champion-1",
+        "promoted": False, "push_outcome": "not_pushed", "post_submit_test": {"status": "failed"},
+    }}))
+    assert audit == {"version_id": "candidate-1", "parent_version_id": "champion-1", "promoted": False, "push_outcome": "not_pushed", "smoke_status": "failed"}
 
 
 def test_console_message_metadata_snapshots_tool_mode_and_private():
@@ -913,6 +1142,7 @@ def test_generate_session_title_with_llm_prefers_names_over_ids(monkeypatch):
             }
         ],
         selected_model="gpt-5.4-mini",
+        scope_context="Selected scorecard: Example Scorecard; selected score: Example Score.",
     )
 
     assert result == "SelectQuote HCS Agent Misrepresentation"
@@ -922,6 +1152,7 @@ def test_generate_session_title_with_llm_prefers_names_over_ids(monkeypatch):
     prompt = request["input"][0]["content"]
     assert "If scorecard and score names are available, include those names in the title." in prompt
     assert "Prefer human-readable scorecard/score names over IDs." in prompt
+    assert "Selected scorecard: Example Scorecard; selected score: Example Score." in prompt
 
 
 def test_fetch_session_history_filters_and_sorts_messages():
@@ -1125,6 +1356,38 @@ def test_fetch_session_history_limits_to_recent_messages_and_clips_content(monke
         {"role": "USER", "content": "older mess..."},
         {"role": "USER", "content": "new messag..."},
     ]
+
+
+def test_fetch_session_history_retains_short_evidence_reply_for_immediate_followup():
+    """A concise evidence reply must survive long enough for the next draft turn."""
+    evidence = "Source snippet: packaging and delivery are provided at no additional cost"
+    client = FakeHistoryClient([
+        {
+            "items": [
+                {
+                    "id": "msg-user-next",
+                    "role": "USER",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT",
+                    "content": "write the exact wording but do not change anything",
+                    "createdAt": "2026-04-27T00:00:03.000Z",
+                },
+                {
+                    "id": "msg-assistant-evidence",
+                    "role": "ASSISTANT",
+                    "messageType": "MESSAGE",
+                    "humanInteraction": "CHAT_ASSISTANT",
+                    "content": "Evidence review:\n" + ("details " * 35) + evidence,
+                    "createdAt": "2026-04-27T00:00:02.000Z",
+                },
+            ],
+            "nextToken": None,
+        },
+    ])
+
+    history = chat_runtime.fetch_session_history(client, "sess-1", limit=6)
+
+    assert any(evidence in message["content"] for message in history)
 
 
 def test_fetch_first_assistant_chunk_details_includes_model_and_tokens():

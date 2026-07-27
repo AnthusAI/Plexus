@@ -87,7 +87,7 @@ def test_main_uses_next_public_response_target_from_env(monkeypatch):
         "process_pending_local_messages",
         lambda _client, **kwargs: calls.append(kwargs) or next(results),
     )
-    monkeypatch.setattr(worker.time, "sleep", lambda _secs: (_ for _ in ()).throw(SystemExit(0)))
+    monkeypatch.setattr(worker, "_sleep", lambda _secs: (_ for _ in ()).throw(SystemExit(0)))
 
     try:
         worker.main()
@@ -115,7 +115,7 @@ def test_main_processes_pending_messages_with_local_owner(monkeypatch):
         "process_pending_local_messages",
         lambda _client, **kwargs: calls.append(kwargs) or next(results),
     )
-    monkeypatch.setattr(worker.time, "sleep", lambda _secs: (_ for _ in ()).throw(SystemExit(0)))
+    monkeypatch.setattr(worker, "_sleep", lambda _secs: (_ for _ in ()).throw(SystemExit(0)))
 
     try:
         worker.main()
@@ -145,7 +145,7 @@ def test_main_drain_mode_only_sleeps_when_no_work(monkeypatch):
         "process_pending_local_messages",
         lambda _client, **kwargs: calls.append(kwargs) or next(results),
     )
-    monkeypatch.setattr(worker.time, "sleep", lambda _secs: (_ for _ in ()).throw(SystemExit(0)))
+    monkeypatch.setattr(worker, "_sleep", lambda _secs: (_ for _ in ()).throw(SystemExit(0)))
 
     try:
         worker.main()

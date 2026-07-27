@@ -26,6 +26,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Tactus emits complete model inputs at INFO. Plexus score inputs can contain
+# transcripts and other private evaluation data, so keep that third-party
+# logger at WARNING unless an operator explicitly opts into payload logging.
+if os.getenv("PLEXUS_LOG_SENSITIVE_PAYLOADS", "").strip().lower() not in {"1", "true", "yes"}:
+    logging.getLogger("tactus.core.runtime").setLevel(logging.WARNING)
+
+
+def _load_tactus_runtime_class():
+    """Load the Tactus runtime only when a Tactus score executes."""
+    from tactus.core.runtime import TactusRuntime
+
+    return TactusRuntime
+
 
 class TactusScore(Score):
     """
@@ -123,7 +136,8 @@ class TactusScore(Score):
     def _create_runtime(self) -> TactusRuntime:
         """Create a runtime instance for pool use."""
         from tactus.adapters.memory import MemoryStorage
-        from tactus.core.runtime import TactusRuntime
+
+        runtime_class = _load_tactus_runtime_class()
 
         storage = MemoryStorage()
         runtime_kwargs = {
@@ -136,7 +150,7 @@ class TactusScore(Score):
             "temperature": self.parameters.temperature,
             "reset_state_on_execute": True,
         }
-        runtime_signature = inspect.signature(TactusRuntime.__init__)
+        runtime_signature = inspect.signature(runtime_class.__init__)
         accepts_arbitrary_kwargs = any(
             parameter.kind is inspect.Parameter.VAR_KEYWORD
             for parameter in runtime_signature.parameters.values()
@@ -149,7 +163,7 @@ class TactusScore(Score):
                 for key, value in runtime_kwargs.items()
                 if key in runtime_signature.parameters
             }
-        runtime = TactusRuntime(**accepted_runtime_kwargs)
+        runtime = runtime_class(**accepted_runtime_kwargs)
         logger.debug("Created Tactus runtime for '%s'", self.parameters.name)
         return runtime
 
@@ -426,6 +440,13 @@ Procedure {
                 self.parameters.code,
                 tactus_context,
             )
+
+            # The runtime reports provider and execution failures as a
+            # structured result. Preserve that diagnostic instead of treating
+            # it as a malformed successful procedure output.
+            if isinstance(result, dict) and result.get('success') is False:
+                detail = result.get('error') or result.get('message') or 'Tactus runtime failed'
+                raise RuntimeError(f"Tactus procedure failed: {detail}")
 
             # Extract value from result
             # Tactus returns a dict with 'result' key containing procedure output

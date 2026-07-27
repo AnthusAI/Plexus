@@ -1,12 +1,12 @@
 import { defineBackend } from '@aws-amplify/backend';
-import { data } from './data/resource.js';
+import { data, dispatchConsoleChatHandler } from './data/resource.js';
 import { auth } from './auth/resource.js';
 import { reportBlockDetails, dataSources, scoreResultAttachments, taskAttachments, rubricMemory } from './storage/resource.js';
 import { TaskDispatcherStack } from './functions/taskDispatcher/resource.js';
 import { ConsoleChatResponderStack } from './functions/consoleRunWorker/resource.js';
 import { McpStack } from './mcp/mcp_stack.js';
 import { TopicMemoryVectorStoreStack } from './semantic-memory/vector_store_stack.js';
-import { Duration } from 'aws-cdk-lib';
+import { ArnFormat, Duration, Stack } from 'aws-cdk-lib';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import * as backup from 'aws-cdk-lib/aws-backup';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -20,7 +20,8 @@ const backend = defineBackend({
     dataSources,
     scoreResultAttachments,
     taskAttachments,
-    rubricMemory
+    rubricMemory,
+    dispatchConsoleChatHandler,
 });
 
 // Enable PITR on all Amplify Data DynamoDB tables (AWS default retention is 35 days).
@@ -32,6 +33,7 @@ for (const table of Object.values(amplifyDynamoDbTables)) {
 }
 
 const getResourceByShareTokenFunction = backend.data.resources.functions.getResourceByShareToken;
+const dispatchConsoleChatFunction = backend.dispatchConsoleChatHandler.resources.lambda;
 
 // Add AppSync permissions to the getResourceByShareToken function
 if (getResourceByShareTokenFunction) {
@@ -191,9 +193,10 @@ if (shouldDeployConsoleWorker) {
         isSandbox ? sandboxGraphqlUrl : (process.env.PLEXUS_API_URL || '')
     ).trim();
     const consoleWorkerEnvironmentName = normalizeForResourceName(resolveEnvironmentName());
+    const consoleResponderParameterName = `/plexus/${consoleWorkerEnvironmentName}/console-chat/responder`;
     const consoleWorkerConfigSecretName = (
         process.env.PLEXUS_CONFIG_SECRET_NAME ||
-        `plexus/${consoleWorkerEnvironmentName}/config`
+        (isSandbox ? 'plexus/staging/config' : `plexus/${consoleWorkerEnvironmentName}/config`)
     ).trim();
 
     if (!resolvedDataApiUrl) {
@@ -203,6 +206,9 @@ if (shouldDeployConsoleWorker) {
                 : 'PLEXUS_API_URL must be set for ConsoleRunWorkerStack deployment'
         );
     }
+    if (isSandbox && consoleWorkerConfigSecretName === 'plexus/production/config') {
+        throw new Error('Sandbox ConsoleRunWorker must not use plexus/production/config');
+    }
 
     consoleRunWorkerStack = new ConsoleChatResponderStack(
         backend.stack,
@@ -211,9 +217,38 @@ if (shouldDeployConsoleWorker) {
             chatMessageTable,
             plexusApiUrl: resolvedDataApiUrl,
             environmentName: consoleWorkerEnvironmentName,
+            asyncTasksAvailable: !isSandbox,
+            responderParameterName: consoleResponderParameterName,
             configSecretName: consoleWorkerConfigSecretName,
             reportBlockDetailsBucket: backend.reportBlockDetails.resources.bucket,
         }
+    );
+    dispatchConsoleChatFunction.addToRolePolicy(
+        new PolicyStatement({
+            effect: Effect.ALLOW,
+            actions: ['ssm:GetParameter'],
+            resources: ['*'],
+        }),
+    );
+    dispatchConsoleChatFunction.addToRolePolicy(
+        new PolicyStatement({
+            effect: Effect.ALLOW,
+            actions: ['lambda:InvokeFunction'],
+            resources: [
+                Stack.of(dispatchConsoleChatFunction).formatArn({
+                    service: 'lambda',
+                    resource: 'function',
+                    resourceName: 'amplify-*ConsoleChatResponder*',
+                    arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+                }),
+                Stack.of(dispatchConsoleChatFunction).formatArn({
+                    service: 'lambda',
+                    resource: 'function',
+                    resourceName: 'amplify-*ConsoleChatResponder*:*',
+                    arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+                }),
+            ],
+        }),
     );
 }
 
@@ -277,29 +312,32 @@ function requireTaskDispatcherEnv(name: string): string {
 
 const environmentName = normalizeForResourceName(resolveEnvironmentName());
 
-// Create a backup plan and assign all Amplify Data DynamoDB tables.
-const dynamoDbBackupStack = backend.createStack('DynamoDbBackupStack');
-const backupVault = new backup.BackupVault(dynamoDbBackupStack, 'DynamoDbBackupVault', {
-    backupVaultName: `plexus-dynamodb-${environmentName}-vault`
-});
-const backupPlan = new backup.BackupPlan(dynamoDbBackupStack, 'DynamoDbBackupPlan', {
-    backupPlanName: `plexus-dynamodb-${environmentName}-plan`,
-    backupVault
-});
-backupPlan.addRule(new backup.BackupPlanRule({
-    ruleName: 'Daily35DayRetention',
-    scheduleExpression: events.Schedule.cron({
-        minute: '0',
-        hour: '5'
-    }),
-    deleteAfter: Duration.days(35)
-}));
-const dynamoDbBackupResources = Object.values(backend.data.resources.tables).map((table) => {
-    return backup.BackupResource.fromDynamoDbTable(table);
-});
-backupPlan.addSelection('AmplifyDataTablesSelection', {
-    resources: dynamoDbBackupResources
-});
+// Production/staging own their backup plans. Sandboxes are ephemeral and must
+// not claim a shared regional vault name while provisioning copied test data.
+if (!isSandbox) {
+    const dynamoDbBackupStack = backend.createStack('DynamoDbBackupStack');
+    const backupVault = new backup.BackupVault(dynamoDbBackupStack, 'DynamoDbBackupVault', {
+        backupVaultName: `plexus-dynamodb-${environmentName}-vault`
+    });
+    const backupPlan = new backup.BackupPlan(dynamoDbBackupStack, 'DynamoDbBackupPlan', {
+        backupPlanName: `plexus-dynamodb-${environmentName}-plan`,
+        backupVault
+    });
+    backupPlan.addRule(new backup.BackupPlanRule({
+        ruleName: 'Daily35DayRetention',
+        scheduleExpression: events.Schedule.cron({
+            minute: '0',
+            hour: '5'
+        }),
+        deleteAfter: Duration.days(35)
+    }));
+    const dynamoDbBackupResources = Object.values(backend.data.resources.tables).map((table) => {
+        return backup.BackupResource.fromDynamoDbTable(table);
+    });
+    backupPlan.addSelection('AmplifyDataTablesSelection', {
+        resources: dynamoDbBackupResources
+    });
+}
 
 // Create vector store (skip in sandbox mode - not needed for seed testing)
 let topicMemoryVectorStoreStack: TopicMemoryVectorStoreStack | undefined;

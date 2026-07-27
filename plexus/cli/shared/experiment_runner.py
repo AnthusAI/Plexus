@@ -15,6 +15,7 @@ import click
 from plexus.cli.shared.task_progress_tracker import TaskProgressTracker
 from plexus.cli.shared.stage_configurations import get_procedure_stage_configs
 from plexus.cli.shared.task_output_storage import persist_task_output_artifact
+from plexus.cli.shared.async_cleanup import drain_litellm_service_logging_tasks
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.procedure import Procedure as DashboardProcedure
 from plexus.dashboard.api.models.task import Task
@@ -979,6 +980,12 @@ async def run_procedure_with_task_tracking(
             traceback_text=traceback.format_exc(),
         )
     finally:
+        try:
+            drained = await drain_litellm_service_logging_tasks()
+            if drained:
+                logger.debug("Drained %d LiteLLM service-logging task(s) at procedure shutdown", drained)
+        except Exception as cleanup_exc:
+            logger.warning("Could not drain LiteLLM service-logging tasks: %s", cleanup_exc)
         _restore_signal_guards()
     
     return result

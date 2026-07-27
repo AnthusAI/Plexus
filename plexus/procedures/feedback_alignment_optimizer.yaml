@@ -41,6 +41,11 @@ params:
     default: 3
     description: "Maximum number of optimization iterations"
 
+  max_cost_usd:
+    type: number
+    default: 10.0
+    description: "Maximum parent-procedure LLM spend in USD. Direct CLI runs also enforce this through the runtime child-budget meter."
+
   improvement_threshold:
     type: number
     default: 0.02
@@ -56,7 +61,19 @@ params:
     type: number
     default: 3
     required: false
-    description: "Maximum number of hypotheses per cycle (agent may propose fewer). Evals run in parallel after all hypotheses are implemented."
+    description: "Maximum number of hypotheses per cycle (agent may propose fewer)."
+
+  max_parallel_evaluations:
+    type: number
+    default: 2
+    required: false
+    description: "Maximum concurrent evaluation processes. Bounds worker memory use when evaluating candidate hypotheses."
+
+  evaluation_stall_timeout_minutes:
+    type: number
+    default: 15
+    required: false
+    description: "Maximum minutes an evaluation may remain non-terminal without any processed-item or evaluation-update progress before it is treated as stalled."
 
   hint:
     type: string
@@ -145,6 +162,11 @@ outputs:
     required: false
     description: "Total regression AC1 improvement from baseline"
 
+  costs:
+    type: object
+    required: false
+    description: "Persisted procedure cost ledger, including aggregate incurred cost"
+
   diagnosis:
     type: string
     required: false
@@ -166,7 +188,7 @@ outputs:
 agents:
   hypothesis_planner:
     provider: openai
-    model: gpt-5.4-mini
+    model: gpt-5.4-nano
     temperature: 1
     system_prompt: |
       You are the hypothesis-generation planner for a Plexus score optimizer.
@@ -188,8 +210,7 @@ agents:
 
   code_editor:
     provider: openai
-    model: gpt-5-mini
-    temperature: 1
+    model: gpt-5.4-nano
     disable_streaming: true
     system_prompt: |
       You are an optimizer for a Plexus score configuration.
@@ -328,7 +349,7 @@ agents:
 
   cycle_analyst:
     provider: openai
-    model: gpt-5-mini
+    model: gpt-5.4-nano
     max_tokens: 16000
     verbosity: low
     system_prompt: |
@@ -369,7 +390,7 @@ agents:
 
   report_writer:
     provider: openai
-    model: gpt-5-mini
+    model: gpt-5.4-nano
     max_tokens: 16000
     verbosity: low
     system_prompt: |
@@ -395,7 +416,7 @@ agents:
 
   reviewer:
     provider: openai
-    model: gpt-5.4-mini
+    model: gpt-5.4-nano
     temperature: 1
     system_prompt: |
       You are a score optimization reviewer. You will see the eval results for an edit
@@ -427,7 +448,7 @@ agents:
 
   early_stop_advisor:
     provider: openai
-    model: gpt-5.4-mini
+    model: gpt-5.4-nano
     temperature: 1
     system_prompt: |
       You are an escalation advisor for a score optimization run.
@@ -670,6 +691,86 @@ code: |
       result.actual_distribution = actual_dist
     end
     return result
+  end
+
+  local function extract_selected_feedback_item_ids(eval_result)
+    if type(eval_result) ~= "table" then return nil end
+    local parameters = eval_result.parameters
+    if type(parameters) == "string" then
+      local decoded = safe_decode(parameters)
+      if type(decoded) == "table" then parameters = decoded end
+    end
+    if type(parameters) ~= "table" then return nil end
+    local ids = parameters.selected_feedback_item_ids or parameters.feedback_item_ids
+    if type(ids) ~= "table" or #ids == 0 then return nil end
+    local normalized = {}
+    for _, item_id in ipairs(ids) do
+      if has_text(item_id) then table.insert(normalized, tostring(item_id)) end
+    end
+    return #normalized > 0 and normalized or nil
+  end
+
+  local function same_id_set(left, right)
+    if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
+    local counts = {}
+    for _, item_id in ipairs(left) do
+      local key = tostring(item_id)
+      counts[key] = (counts[key] or 0) + 1
+    end
+    for _, item_id in ipairs(right) do
+      local key = tostring(item_id)
+      if not counts[key] or counts[key] == 0 then return false end
+      counts[key] = counts[key] - 1
+    end
+    for _, count in pairs(counts) do
+      if count ~= 0 then return false end
+    end
+    return true
+  end
+
+  local function prediction_mode_collapse_reason(metrics)
+    if type(metrics) ~= "table" then return nil end
+
+    local actual_nonzero = 0
+    local predicted_nonzero = 0
+    local matrix = metrics.confusion_matrix
+    if type(matrix) == "table" and #matrix > 0 then
+      local column_totals = {}
+      for _, row in ipairs(matrix) do
+        if type(row) == "table" then
+          local row_total = 0
+          for column_index, value in ipairs(row) do
+            local count = tonumber(value) or 0
+            row_total = row_total + count
+            column_totals[column_index] = (column_totals[column_index] or 0) + count
+          end
+          if row_total > 0 then actual_nonzero = actual_nonzero + 1 end
+        end
+      end
+      for _, count in pairs(column_totals) do
+        if count > 0 then predicted_nonzero = predicted_nonzero + 1 end
+      end
+    else
+      for _, entry in ipairs(metrics.actual_distribution or {}) do
+        if type(entry) == "table" and (tonumber(entry.count) or 0) > 0 then
+          actual_nonzero = actual_nonzero + 1
+        end
+      end
+      for _, entry in ipairs(metrics.predicted_distribution or {}) do
+        if type(entry) == "table" and (tonumber(entry.count) or 0) > 0 then
+          predicted_nonzero = predicted_nonzero + 1
+        end
+      end
+    end
+
+    if actual_nonzero > 1 and predicted_nonzero == 1 then
+      return string.format(
+        "prediction_mode_collapse_actual_%d_predicted_%d",
+        actual_nonzero,
+        predicted_nonzero
+      )
+    end
+    return nil
   end
 
   local function extract_cost_per_item(eval_result)
@@ -934,72 +1035,110 @@ code: |
   -- Budget for dispatched evaluations (each evaluation can take up to 90 minutes)
   local EVAL_BUDGET = {usd = 5.0, wallclock_seconds = 5400, depth = 0, tool_calls = 1000}
   local REPORT_BUDGET = {usd = 2.0, wallclock_seconds = 3600, depth = 0, tool_calls = 200}
-  local EVAL_AWAIT_TIMEOUT = "PT90M"
+  local EVAL_AWAIT_POLL_TIMEOUT = "PT1M"
+  local EVAL_STALL_POLL_LIMIT = math.max(1, math.ceil(tonumber(params.evaluation_stall_timeout_minutes) or 15))
+
+  local function evaluation_progress_marker(eval_data, waited)
+    eval_data = type(eval_data) == "table" and eval_data or {}
+    waited = type(waited) == "table" and waited or {}
+    return table.concat({
+      tostring(eval_data.status or waited.status or ""),
+      tostring(eval_data.processed_items or eval_data.processedItems or ""),
+      tostring(eval_data.total_items or eval_data.totalItems or ""),
+      tostring(eval_data.updated_at or eval_data.updatedAt or ""),
+      tostring(eval_data.incorrect_items_analyzed_for_rca
+        or (type(eval_data.parameters) == "table" and eval_data.parameters.incorrect_items_analyzed_for_rca)
+        or ""),
+    }, "|")
+  end
 
   -- Await a single evaluation handle and return the evaluation data dict.
   local function _await_eval_handle(h, label, dispatch_args)
     label = label or tostring(h and h.id or "?")
-    diag("Awaiting evaluation handle " .. label .. " (timeout=" .. EVAL_AWAIT_TIMEOUT .. ")...")
-    local waited = plexus.handle.await({id = h.id, timeout = EVAL_AWAIT_TIMEOUT})
-    -- After await, the evaluation data lives in waited.evaluation
-    local eval_data = waited.evaluation
-    if not eval_data then
-      -- If evaluation_id is available, fetch directly
-      local eval_id = waited.evaluation_id
-        or (type(waited.dispatch_result) == "table" and waited.dispatch_result.evaluation_id)
-      if eval_id then
-        local ok, info = pcall(function() return plexus.evaluation.info({evaluation_id = eval_id}) end)
-        if ok and type(info) == "table" then eval_data = info end
+    diag("Awaiting evaluation handle " .. label .. " id=" .. tostring(h.id)
+      .. " with progress-aware stall detection...")
+    local last_progress_marker = nil
+    local stalled_polls = 0
+    while true do
+      local waited = plexus.handle.await({id = h.id, timeout = EVAL_AWAIT_POLL_TIMEOUT})
+      -- After await, the evaluation data lives in waited.evaluation.
+      local eval_data = waited.evaluation
+      if not eval_data then
+        -- If evaluation_id is available, fetch directly.
+        local eval_id = waited.evaluation_id
+          or (type(waited.dispatch_result) == "table" and waited.dispatch_result.evaluation_id)
+        if eval_id then
+          local ok, info = pcall(function() return plexus.evaluation.info({evaluation_id = eval_id}) end)
+          if ok and type(info) == "table" then eval_data = info end
+        end
       end
-    end
-    if not eval_data then
-      local waited_status = tostring(waited.status or "")
-      if waited_status == "completed_unknown" then
-        local recent_lookup = {
-          evaluation_type = (dispatch_args and dispatch_args.evaluation_type) or nil,
-          score_version_id = (dispatch_args and (dispatch_args.score_version_id or dispatch_args.version)) or nil,
-          scorecard = dispatch_args and dispatch_args.scorecard or nil,
-          score = dispatch_args and dispatch_args.score or nil,
-          dataset_id = dispatch_args and dispatch_args.dataset_id or nil,
-          days = dispatch_args and dispatch_args.days or nil,
-          max_feedback_items = dispatch_args and dispatch_args.max_feedback_items or nil,
-          sampling_mode = dispatch_args and dispatch_args.sampling_mode or nil,
-          max_age_hours = 6,
-          min_items = 1,
-        }
-        local ok_recent, recent = pcall(function()
-          return plexus.evaluation.find_recent(recent_lookup)
-        end)
-        if ok_recent and type(recent) == "table" and not recent.error then
-          local recent_id = recent.evaluation_id or recent.id
-          if recent_id then
-            diag("Recovered completed_unknown handle via evaluation.find_recent: " .. tostring(recent_id))
-            eval_data = recent
+      if not eval_data then
+        local waited_status = tostring(waited.status or "")
+        if waited_status == "completed_unknown" then
+          local recent_lookup = {
+            evaluation_type = (dispatch_args and dispatch_args.evaluation_type) or nil,
+            score_version_id = (dispatch_args and (dispatch_args.score_version_id or dispatch_args.version)) or nil,
+            scorecard = dispatch_args and dispatch_args.scorecard or nil,
+            score = dispatch_args and dispatch_args.score or nil,
+            dataset_id = dispatch_args and dispatch_args.dataset_id or nil,
+            days = dispatch_args and dispatch_args.days or nil,
+            max_feedback_items = dispatch_args and dispatch_args.max_feedback_items or nil,
+            sampling_mode = dispatch_args and dispatch_args.sampling_mode or nil,
+            max_age_hours = 6,
+            min_items = 1,
+          }
+          local ok_recent, recent = pcall(function()
+            return plexus.evaluation.find_recent(recent_lookup)
+          end)
+          if ok_recent and type(recent) == "table" and not recent.error then
+            local recent_id = recent.evaluation_id or recent.id
+            if recent_id then
+              diag("Recovered completed_unknown handle via evaluation.find_recent: " .. tostring(recent_id))
+              eval_data = recent
+            end
           end
         end
       end
-    end
-    if not eval_data then
-      return {error = "Evaluation handle did not resolve: status=" .. tostring(waited.status)}
-    end
-    local eval_status = string.upper(tostring(eval_data.status or waited.status or ""))
-    if eval_status ~= "COMPLETED" then
-      local eval_error = eval_data.error_message or eval_data.errorMessage or eval_data.error or waited.error_message or waited.errorMessage or waited.error
-      local error_suffix = ""
-      if eval_error ~= nil then
-        error_suffix = " error_message=" .. tostring(eval_error)
+      local eval_status = string.upper(tostring((eval_data and eval_data.status) or waited.status or ""))
+      if eval_status == "COMPLETED" then
+        return eval_data
       end
-      return {
-        error = "Evaluation did not complete: status=" .. tostring(eval_data.status or waited.status)
-          .. " evaluation_id=" .. tostring(eval_data.evaluation_id or eval_data.id or waited.evaluation_id or "")
-          .. error_suffix
-      }
+      if eval_status == "FAILED" or eval_status == "CANCELLED" or eval_status == "CANCELED" then
+        local eval_error = (eval_data and (eval_data.error_message or eval_data.errorMessage or eval_data.error))
+          or waited.error_message or waited.errorMessage or waited.error
+        local error_suffix = ""
+        if eval_error ~= nil then
+          error_suffix = " error_message=" .. tostring(eval_error)
+        end
+        return {
+          error = "Evaluation did not complete: status=" .. tostring((eval_data and eval_data.status) or waited.status)
+            .. " evaluation_id=" .. tostring((eval_data and (eval_data.evaluation_id or eval_data.id)) or waited.evaluation_id or "")
+            .. error_suffix
+        }
+      end
+
+      local progress_marker = evaluation_progress_marker(eval_data, waited)
+      if progress_marker ~= last_progress_marker then
+        last_progress_marker = progress_marker
+        stalled_polls = 0
+      else
+        stalled_polls = stalled_polls + 1
+      end
+      if stalled_polls >= EVAL_STALL_POLL_LIMIT then
+        return {
+          error = "Evaluation stalled without progress for " .. tostring(EVAL_STALL_POLL_LIMIT)
+            .. " minute(s): status=" .. tostring((eval_data and eval_data.status) or waited.status)
+            .. " evaluation_id=" .. tostring((eval_data and (eval_data.evaluation_id or eval_data.id)) or waited.evaluation_id or h.id)
+        }
+      end
+      diag("Evaluation " .. label .. " remains active; progress=" .. progress_marker
+        .. " stalled_polls=" .. tostring(stalled_polls))
     end
-    return eval_data
   end
 
-  -- Dispatch a batch of evaluations (runs in parallel background procs),
-  -- await each, and return a list of evaluation data tables.
+  -- Dispatch evaluations in bounded parallel batches, await each, and return
+  -- a list of evaluation data tables. Large candidate batches otherwise spawn
+  -- enough full evaluation processes to exhaust a Kubernetes worker.
   local function _dispatch_evaluation_batch(batch)
     -- Normalize Lua numeric-key dict to ordered list
     local batch_list = {}
@@ -1010,8 +1149,21 @@ code: |
       for _, k in ipairs(keys) do table.insert(batch_list, batch[k]) end
     end
 
-    -- Dispatch all evaluations (they run in parallel as background processes)
+    local max_parallel = math.max(1, math.floor(tonumber(params.max_parallel_evaluations) or 2))
+    local results = {}
     local handles = {}
+    local function await_handles()
+      for _, entry in ipairs(handles) do
+        if entry.handle then
+          table.insert(results, _await_eval_handle(entry.handle, tostring(entry.idx), entry.dispatch_args))
+        else
+          table.insert(results, {error = entry.error})
+        end
+      end
+      handles = {}
+    end
+
+    -- Dispatch a bounded group, then wait before starting the next group.
     for i, item in ipairs(batch_list) do
       local dispatch_args = {}
       for k, v in pairs(item) do dispatch_args[k] = v end
@@ -1027,18 +1179,12 @@ code: |
         table.insert(handles, {handle = nil, error = tostring(h), idx = i})
         diag(string.format("Failed to dispatch evaluation %d/%d: %s", i, #batch_list, tostring(h)))
       end
-    end
-
-    -- Await all handles (sequential poll; actual evaluations ran in parallel)
-    local results = {}
-    for _, entry in ipairs(handles) do
-      if entry.handle then
-        local eval_data = _await_eval_handle(entry.handle, tostring(entry.idx), entry.dispatch_args)
-        table.insert(results, eval_data)
-      else
-        table.insert(results, {error = entry.error})
+      if #handles >= max_parallel then
+        await_handles()
       end
     end
+
+    await_handles()
     return results
   end
 
@@ -1120,36 +1266,19 @@ code: |
       dispatch = function(a) return plexus.rubric_memory.sme_question_gate(a) end
     elseif tool_name == "get_plexus_documentation" then
       dispatch = function(a)
-        -- Accept name, filename, or key (all used by different call sites)
         local raw_key = a.name or a.filename or a.key or ""
         local key = tostring(raw_key or "")
-        local candidates = { key }
-        if key ~= "" and not key:find("%.") then
-          table.insert(candidates, "evaluation-feedback." .. key)
-          table.insert(candidates, "score-authoring." .. key)
-          table.insert(candidates, "procedures." .. key)
-          table.insert(candidates, "optimizer." .. key)
-          table.insert(candidates, "repo-workflows." .. key)
-          table.insert(candidates, "mcp." .. key)
+        if key == "" or not key:find("%.") then
+          error("Documentation key must be a canonical namespace-qualified ID: '" .. key .. "'")
         end
-
-        local last_err = nil
-        for _, candidate in ipairs(candidates) do
-          local ok, result = pcall(function()
-            return plexus.docs.get({key = candidate})
-          end)
-          if ok and type(result) == "table" and result.content and result.content ~= "" then
-            return result.content
-          end
-          if ok and type(result) == "string" and result ~= "" then
-            return result
-          end
-          if not ok then
-            last_err = result
-          end
+        local result = plexus.docs.get({key = key})
+        if type(result) == "table" and result.content and result.content ~= "" then
+          return result.content
         end
-
-        error("Unknown documentation id: '" .. key .. "'" .. (last_err and (" (" .. tostring(last_err) .. ")") or ""))
+        if type(result) == "string" and result ~= "" then
+          return result
+        end
+        error("Documentation key returned no content: '" .. key .. "'")
       end
     elseif tool_name == "plexus_set_status_message" then
       dispatch = function(a)
@@ -1202,6 +1331,35 @@ code: |
       local t = os.clock() + delay
       while os.clock() < t do end
     end
+  end
+
+  local function require_exact_feedback_cohort(eval_result, expected_ids)
+    if type(expected_ids) ~= "table" or #expected_ids == 0 then
+      return false, "expected recent feedback cohort is unavailable"
+    end
+    local eval_info = eval_result
+    local actual_ids = extract_selected_feedback_item_ids(eval_info)
+    if not actual_ids and type(eval_result) == "table" then
+      local eval_id = eval_result.id or eval_result.evaluation_id
+      if has_text(eval_id) then
+        eval_info = call_plexus_tool("plexus_evaluation_info", {
+          evaluation_id = eval_id,
+          output_format = "json"
+        })
+        actual_ids = extract_selected_feedback_item_ids(eval_info)
+      end
+    end
+    if not actual_ids then
+      return false, "candidate evaluation does not expose selected_feedback_item_ids"
+    end
+    if not same_id_set(actual_ids, expected_ids) then
+      return false, string.format(
+        "candidate feedback cohort differs from baseline (expected=%d actual=%d)",
+        #expected_ids,
+        #actual_ids
+      )
+    end
+    return true, nil
   end
 
   -- Build version history table for agent context
@@ -3641,17 +3799,11 @@ code: |
     end
     return result
   end
-  COOKBOOKS.normal = load_optimizer_cookbook("optimizer-cookbook-normal")
-  COOKBOOKS.structural = load_optimizer_cookbook("optimizer-cookbook-structural")
-  COOKBOOKS.creative = load_optimizer_cookbook("optimizer-cookbook-creative")
+  COOKBOOKS.normal = load_optimizer_cookbook("evaluation-feedback.optimizer-cookbook-normal")
+  COOKBOOKS.structural = load_optimizer_cookbook("evaluation-feedback.optimizer-cookbook-structural")
+  COOKBOOKS.creative = load_optimizer_cookbook("evaluation-feedback.optimizer-cookbook-creative")
 
-  -- Load high-level score concepts doc (injected into planning context)
   local SCORE_CONCEPTS_DOC = ""
-  pcall(function()
-    local ok, result = pcall(call_plexus_tool, "get_plexus_documentation",
-      {filename = "score-concepts"}, {raw_string = true, max_retries = 1})
-    if ok and has_text(result) then SCORE_CONCEPTS_DOC = result end
-  end)
 
   -- ================================================================
   -- COERCE NUMERIC PARAMS: saved procedures store param values as
@@ -3661,6 +3813,8 @@ code: |
   params.max_iterations        = tonumber(params.max_iterations) or 3
   params.max_samples           = tonumber(params.max_samples) or 100
   params.num_candidates        = tonumber(params.num_candidates) or 3
+  params.max_parallel_evaluations = math.max(1, math.floor(tonumber(params.max_parallel_evaluations) or 2))
+  params.max_cost_usd          = tonumber(params.max_cost_usd) or 10.0
   params.improvement_threshold = tonumber(params.improvement_threshold) or 0.02
   params.target_accuracy       = tonumber(params.target_accuracy) or 0.95
   params.context_window        = tonumber(params.context_window) or 180000
@@ -3800,7 +3954,7 @@ code: |
   -- Load objective-specific guidance doc (injected into hypothesis generation context)
   -- Objective family maps: precision_safe → precision, recall_safe → recall
   local objective_family = objective:match("^(%a+)") or "alignment"
-  local obj_doc_key = "optimizer-objective-" .. objective_family
+  local obj_doc_key = "evaluation-feedback.optimizer-objective-" .. objective_family
   local OBJECTIVE_DOC = ""
   pcall(function()
     local ok, result = pcall(call_plexus_tool, "get_plexus_documentation",
@@ -4378,7 +4532,7 @@ code: |
   end
 
   -- Phase A: Setup & Baseline
-  Stage.set("setup")
+  Stage.set("Setup")
   Stage.progress(0, params.max_iterations)  -- show total cycle count from the start
   Human.notify({message = "Starting feedback alignment optimizer for scorecard=" .. params.scorecard .. ", score=" .. params.score, level = "info"})
   if params.max_iterations == 1 then
@@ -4604,6 +4758,7 @@ code: |
   local recent_baseline_metrics = nil
   local recent_baseline_cost_per_item = nil
   local recent_baseline_rca   = {}
+  local recent_baseline_feedback_item_ids = nil
   -- current score config — set by init or continuation, used in cycle loop
   local current_code_path    = nil
   local current_code         = nil
@@ -4680,7 +4835,7 @@ code: |
         days = tostring(params.days or 90),
         start_at = params.feedback_window_start_at,
         end_at = params.feedback_window_end_at,
-        max_feedback_items = 100,
+        max_feedback_items = params.max_samples or 100,
         num_topics = 8,
         include_rubric_memory = true,
         score_version_id = contradictions_score_version_id
@@ -4845,6 +5000,7 @@ code: |
     recent_baseline_cost_per_item = State.get("recent_baseline_cost_per_item")
     regression_baseline_rca   = State.get("last_regression_rca") or {}
     recent_baseline_rca   = State.get("last_recent_rca") or {}
+    recent_baseline_feedback_item_ids = State.get("recent_baseline_feedback_item_ids")
     regression_available      = regression_baseline_metrics ~= nil
 
     -- Re-pull current config from last accepted version
@@ -4910,6 +5066,15 @@ code: |
 
   local dataset_cache_by_version = {}
   local function ensure_regression_dataset_for_version(version_id)
+    local frozen_dataset_id = State.get("frozen_regression_dataset_id")
+    if has_text(frozen_dataset_id) then
+      local version_key = tostring(version_id or "__champion__")
+      dataset_cache_by_version[version_key] = {
+        dataset_id = frozen_dataset_id,
+        feedback_target_hash = State.get("feedback_target_hash")
+      }
+      return frozen_dataset_id, State.get("feedback_target_hash")
+    end
     local version_key = tostring(version_id or "__champion__")
     if dataset_cache_by_version[version_key] and has_text(dataset_cache_by_version[version_key].dataset_id) then
       return dataset_cache_by_version[version_key].dataset_id, dataset_cache_by_version[version_key].feedback_target_hash
@@ -4938,9 +5103,14 @@ code: |
     )
     local dataset_size_adequate = dataset_rows >= min_dataset_rows
       or (dataset_source_exhausted and dataset_rows >= min_acceptable)
+    local dataset_balance_contract_adequate = dataset_check
+      and dataset_check.balance_applied == true
+      and dataset_check.resolved_final_classes ~= nil
+      and dataset_check.class_coverage ~= nil
     local dataset_adequate = dataset_check and dataset_check.has_dataset
       and dataset_check.is_materialized
       and dataset_size_adequate
+      and dataset_balance_contract_adequate
       and dataset_is_fresh
 
     local selected_dataset_id = nil
@@ -4958,7 +5128,12 @@ code: |
       ), level = "info"})
     else
       if dataset_check and dataset_check.has_dataset then
-        if not dataset_is_fresh and has_text(active_feedback_target_updated_at) then
+        if not dataset_balance_contract_adequate then
+          Human.notify({message = string.format(
+            "Existing dataset for version %s lacks verified terminal-class coverage; rebuilding it with the adaptive balanced cohort contract...",
+            tostring(version_id or "champion")
+          ), level = "info"})
+        elseif not dataset_is_fresh and has_text(active_feedback_target_updated_at) then
           Human.notify({message = string.format(
             "Existing dataset for version %s is stale (created_at=%s older than watermark=%s), creating new one...",
             tostring(version_id or "champion"),
@@ -4990,8 +5165,8 @@ code: |
         score_version_id = version_id
       })
       if not build_ok then
-        Human.notify({message = "Balanced dataset build failed (" .. tostring(build_result) .. "), trying unbalanced...", level = "info"})
-        build_result = nil
+        Human.notify({message = "Balanced regression dataset build failed (" .. tostring(build_result) .. "). Regression tracking disabled for this run; no unbalanced fallback will be used.", level = "warning"})
+        return nil
       end
 
       local build_qualifying_found = build_result and tonumber(build_result.qualifying_found or 0) or 0
@@ -5000,39 +5175,23 @@ code: |
         selected_dataset_id = build_result.dataset_id
         selected_feedback_target_hash = build_result.feedback_target_hash
         selected_row_count = build_result.rows_written
-        Human.notify({message = "Created balanced dataset: " .. selected_dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
+        Human.notify({message = string.format(
+          "Created adaptive regression dataset: %s (%d rows, historical lookback extended=%s, balanced coverage complete=%s)",
+          tostring(selected_dataset_id),
+          tonumber(build_result.rows_written or 0),
+          tostring(build_result.lookback_extended == true),
+          tostring(build_result.balance_complete == true)
+        ), level = "info"})
       else
         local rows_so_far = (build_result and build_result.rows_written) or 0
-        Human.notify({message = "Balanced dataset only has " .. rows_so_far .. " rows, trying unbalanced...", level = "info"})
-
-        local unbal_ok, unbal_result = pcall(call_plexus_tool, "plexus_dataset_build_from_feedback_window", {
-          scorecard = params.scorecard,
-          score = params.score,
-          max_items = min_dataset_rows,
-          days = params.days,
-          balance = false,
-          score_version_id = version_id
-        })
-        local final_build_result = unbal_ok and unbal_result or nil
-
-        local unbal_qualifying_found = final_build_result and tonumber(final_build_result.qualifying_found or 0) or 0
-        local unbal_source_exhausted = unbal_qualifying_found > 0 and unbal_qualifying_found < min_dataset_rows
-        if final_build_result and final_build_result.rows_written and (final_build_result.rows_written >= min_dataset_rows or (unbal_source_exhausted and final_build_result.rows_written >= min_acceptable)) then
-          selected_dataset_id = final_build_result.dataset_id
-          selected_feedback_target_hash = final_build_result.feedback_target_hash
-          selected_row_count = final_build_result.rows_written
-          Human.notify({message = "Created unbalanced dataset: " .. selected_dataset_id .. " (" .. final_build_result.rows_written .. " rows)", level = "info"})
-        else
-          local final_rows = (final_build_result and final_build_result.rows_written) or 0
-          Human.notify({message = string.format(
-            "Insufficient feedback data for regression dataset (version %s): only %d items available (need %d, minimum %d). Regression tracking disabled for this run.",
-            tostring(version_id or "champion"),
-            final_rows,
-            min_dataset_rows,
-            min_acceptable
-          ), level = "warning"})
-          return nil
-        end
+        Human.notify({message = string.format(
+          "Insufficient balanced feedback data for regression dataset (version %s): only %d items available (need %d, minimum %d). Regression tracking disabled for this run; no unbalanced fallback will be used.",
+          tostring(version_id or "champion"),
+          rows_so_far,
+          min_dataset_rows,
+          min_acceptable
+        ), level = "warning"})
+        return nil
       end
     end
 
@@ -5090,7 +5249,52 @@ code: |
   else
     Human.notify({message = "Feedback watermark unavailable; using row-count/materialization checks only.", level = "warning"})
   end
-  dataset_id = ensure_regression_dataset_for_version(params.start_version)
+  if has_text(params.resume_regression_eval) then
+    Human.notify({
+      message = "Resolving frozen dataset provenance from resumed regression baseline: "
+        .. tostring(params.resume_regression_eval),
+      level = "info"
+    })
+    local resume_ok, resume_info = pcall(call_plexus_tool, "plexus_evaluation_info", {
+      evaluation_id = params.resume_regression_eval,
+      output_format = "json"
+    })
+    if not resume_ok or not resume_info or resume_info.error then
+      return {
+        success = false,
+        status = "error",
+        message = "Unable to resolve resumed regression baseline dataset provenance: "
+          .. tostring(resume_info and resume_info.error or resume_info)
+      }
+    end
+    local resume_parameters = resume_info.parameters
+    if type(resume_parameters) == "string" then
+      resume_parameters = safe_decode(resume_parameters)
+    end
+    if type(resume_parameters) ~= "table" then
+      resume_parameters = {}
+    end
+    local resumed_dataset_id = resume_info.dataset_id
+      or resume_info.datasetId
+      or resume_parameters.dataset_id
+      or resume_parameters.datasetId
+    if not has_text(resumed_dataset_id) then
+      return {
+        success = false,
+        status = "error",
+        message = "Resumed regression baseline " .. tostring(params.resume_regression_eval)
+          .. " has no dataset_id provenance; refusing to build a different cohort."
+      }
+    end
+    dataset_id = resumed_dataset_id
+    State.set("frozen_regression_dataset_id", dataset_id)
+    Human.notify({
+      message = "Reusing frozen regression dataset from resumed baseline: " .. tostring(dataset_id),
+      level = "info"
+    })
+  else
+    dataset_id = ensure_regression_dataset_for_version(params.start_version)
+  end
 
   State.set("dataset_id", dataset_id)
   State.set("feedback_target_updated_at", feedback_target_updated_at)
@@ -5143,7 +5347,7 @@ code: |
                     or current_code:match("^class:%s*(%S+)")
                     or "LangGraphScore")
   local score_class_doc_key = (score_class == "TactusScore")
-    and "score-yaml-tactusscore" or "score-yaml-langgraph"
+    and "score-authoring.score-yaml-format" or "score-authoring.langgraph-score-yaml-format"
   local SCORE_CLASS_DOC = ""
   pcall(function()
     local ok, result = pcall(call_plexus_tool, "get_plexus_documentation",
@@ -5163,7 +5367,7 @@ code: |
   Human.notify({message = "Champion version: " .. tostring(champion_version_id), level = "info"})
 
   -- Dual baseline evaluations — run new ones or reuse from a previous run
-  Stage.set("baseline")
+  Stage.set("Baseline")
   -- (regression_baseline, regression_baseline_id/metrics/rca, regression_available,
   --  recent_baseline_id/metrics/rca are all pre-declared above the continuation check)
 
@@ -5472,6 +5676,24 @@ code: |
     end
   end
 
+  -- Freeze the exact recent-feedback membership once, regardless of whether the
+  -- baseline was resumed, reused, or freshly evaluated. Every candidate must
+  -- replay these opaque IDs; matching only the window and count is insufficient.
+  do
+    local baseline_info = call_plexus_tool("plexus_evaluation_info", {
+      evaluation_id = recent_baseline_id,
+      output_format = "json"
+    })
+    recent_baseline_feedback_item_ids = extract_selected_feedback_item_ids(baseline_info)
+    if not recent_baseline_feedback_item_ids then
+      error("Recent baseline does not expose selected_feedback_item_ids; exact candidate comparison is unavailable")
+    end
+    Human.notify({message = string.format(
+      "Frozen recent feedback cohort: %d exact item IDs",
+      #recent_baseline_feedback_item_ids
+    ), level = "info"})
+  end
+
   -- Store both baselines in state
   State.set("regression_baseline_id",      regression_baseline_id)
   State.set("regression_baseline_metrics", regression_baseline_metrics)
@@ -5479,6 +5701,7 @@ code: |
   State.set("recent_baseline_id",      recent_baseline_id)
   State.set("recent_baseline_metrics", recent_baseline_metrics)
   State.set("recent_baseline_cost_per_item", recent_baseline_cost_per_item)
+  State.set("recent_baseline_feedback_item_ids", recent_baseline_feedback_item_ids)
   -- Immutable copies for dashboard display — never overwritten on acceptance
   -- (the non-initial keys are updated each accepted cycle for agent context)
   if State.get("recent_initial_baseline_metrics") == nil then
@@ -5538,7 +5761,7 @@ code: |
   -- Synthesis:   Combine successful Exploration fixes into one version
   -- Both fresh-run and continuation paths converge here.
   -- ================================================================
-  Stage.set("exploration")
+  Stage.set("Exploration")
 
   local stop_reason = nil
   -- For fresh run: State.get returns {} (set just above).
@@ -6154,7 +6377,7 @@ code: |
     -- objective. Each call sees previously proposed hypotheses to avoid
     -- duplication and ensure diversity.
     -- ================================================================
-    Stage.set("exploration")
+    Stage.set("Exploration")
     status_msg(string.format("Cycle %d/%d — planning hypotheses", cycle, max_cycles))
     Human.notify({message = string.format(
       "Cycle %d — Planning: generating hypotheses sequentially...", cycle
@@ -6184,10 +6407,10 @@ code: |
     })
 
     -- Log planning context for debugging
-    local context_log_path = string.format("optimizer_cycle%d_planning_context.txt", cycle)
-    pcall(function()
-      File.write(context_log_path, planning_inject .. "\n\nLane-specific cookbooks are injected per hypothesis slot.")
-    end)
+    local temp_dir = os.getenv("TMPDIR") or "/tmp"
+    temp_dir = temp_dir:gsub("/+$", "")
+    local context_log_path = string.format("%s/optimizer_cycle%d_planning_context.txt", temp_dir, cycle)
+    File.write(context_log_path, planning_inject .. "\n\nLane-specific cookbooks are injected per hypothesis slot.")
 
     -- Define the hypothesis generation slots for this cycle.
     -- num_candidates caps only the three normal rubric lanes; protected
@@ -6400,6 +6623,14 @@ code: |
     Human.notify({message = string.format(
       "  Planning complete: %d hypotheses", #hypotheses), level = "info"})
 
+    if params.dry_run then
+      stop_reason = "dry_run"
+      Human.notify({message =
+        "Dry run complete: hypotheses were planned, but no score versions or candidate evaluations were created.",
+        level = "info"})
+      return "break_cycle"
+    end
+
     -- ================================================================
     -- PHASE 2: Implement each hypothesis (continuous conversation)
     -- ================================================================
@@ -6441,6 +6672,7 @@ code: |
         yaml_content         = current_code,
         code_file_path       = score_pull.codeFilePath,
         parent_version_id    = last_accepted_version_id,
+        dry_run              = params.dry_run,
         iteration            = cycle,
         hypothesis           = hyp.name .. ": " .. (hyp.description or "")
       })
@@ -6886,13 +7118,12 @@ code: |
       local batch = {}
       for _, sv in ipairs(submitted_versions) do
         if regression_available then
-          local candidate_dataset_id = ensure_regression_dataset_for_version(sv.version_id)
-          sv.dataset_id = candidate_dataset_id
+          sv.dataset_id = dataset_id
           table.insert(batch, {
             scorecard_name = params.scorecard,
             score_name = params.score,
             evaluation_type = "accuracy",
-            dataset_id = candidate_dataset_id,
+            dataset_id = dataset_id,
             n_samples = params.max_samples or 100,
             version = sv.version_id,
             baseline = regression_baseline_id,
@@ -6907,6 +7138,7 @@ code: |
           days = params.days,
           max_feedback_items = params.max_samples or 100,
           sampling_mode = "newest",
+          feedback_item_ids = recent_baseline_feedback_item_ids,
           feedback_start_at = params.feedback_window_start_at,
           feedback_end_at = params.feedback_window_end_at,
           version = sv.version_id,
@@ -6919,12 +7151,15 @@ code: |
 
       status_msg(string.format("Cycle %d/%d — evaluating %d hypotheses (%d evals)", cycle, max_cycles, #submitted_versions, #batch))
       Human.notify({message = string.format(
-        "  Evaluating %d hypotheses (%d evals in parallel)...",
-        #submitted_versions, #batch
+        "  Evaluating %d hypotheses (%d evals; bounded concurrency: %d)...",
+        #submitted_versions, #batch, params.max_parallel_evaluations
       ), level = "info"})
 
-      diag(string.format("Dispatching hypothesis eval batch (%d evals)", #batch))
-      local batch_results = call_plexus_tool("plexus_evaluation_run", {batch = batch})
+      diag(string.format(
+        "Dispatching hypothesis eval batch (%d evals; max parallel %d)",
+        #batch, params.max_parallel_evaluations
+      ))
+      local batch_results = _dispatch_evaluation_batch(batch)
       record_evaluation_batch_costs(batch_results, string.format("cycle_%d_hypothesis_batch", cycle))
       diag(string.format("Hypothesis eval batch returned (%d results)", batch_results and #batch_results or 0))
 
@@ -6945,6 +7180,13 @@ code: |
         end
         local fb_r = batch_results and batch_results[base_idx + evals_per]
         if fb_r and (fb_r.id or fb_r.evaluation_id) then
+          local cohort_ok, cohort_error = require_exact_feedback_cohort(
+            fb_r,
+            recent_baseline_feedback_item_ids
+          )
+          if not cohort_ok then
+            error("Invalid candidate comparison: " .. tostring(cohort_error))
+          end
           sv.fb_metrics = extract_metrics(fb_r)
           sv.fb_cost_per_item = extract_cost_per_item(fb_r)
           sv.fb_deltas = calculate_deltas(sv.fb_metrics, recent_baseline_metrics)
@@ -6992,7 +7234,7 @@ code: |
       -- Both evaluated; programmatic selection picks the better one
       -- ================================================================
       diag("Entering synthesis phase")
-      Stage.set("selection")
+      Stage.set("Selection")
       status_msg(string.format("Cycle %d/%d — synthesis (combining best changes)", cycle, max_cycles))
       local final_version_id = nil
       local final_is_synthesis = true
@@ -7016,6 +7258,7 @@ code: |
           yaml_content         = start_code,
           code_file_path       = score_pull.codeFilePath,
           parent_version_id    = parent_version_id,
+          dry_run              = params.dry_run,
           iteration            = cycle,
           hypothesis           = string.format("Cycle %d synthesis (%s)", cycle, strategy_label)
         })
@@ -7074,8 +7317,6 @@ code: |
         local edit_failures = 0
         local step = 0
         local done = false
-        local second_chance = false
-        local second_chance_pending = false
 
         while step < max_steps and not done do
           step = step + 1
@@ -7138,27 +7379,6 @@ code: |
                 .. "\n=== END OF score_config.yaml ===")
             end
             msg = table.concat(recent_parts, "\n")
-          end
-
-          if second_chance_pending then
-            local second_parts = {
-              "Your previous attempt concluded with cannot_improve. Try a MINIMAL change: "
-                .. "a single clarifying example, one sharpened criterion, or a small prompt restructure. "
-                .. "Even a neutral result is better than skipping. Submit with submit_score_version.",
-              "Prefer the SMALLEST UNIQUE replacement inside system_message or user_message rather than replacing an entire prompt block."
-            }
-            local recurrence_agent_context = build_recurrence_agent_context(State.get("item_recurrence") or {}, cycle, 12)
-            if has_text(recurrence_agent_context) then
-              table.insert(second_parts, recurrence_agent_context)
-              notify_recurrence_context_injected("editor", State.get("item_recurrence") or {}, cycle)
-            end
-            local ec = call_plexus_tool("score_editor_get_content", {})
-            if ec and ec.file_content then
-              table.insert(second_parts, "\n=== CURRENT score_config.yaml (copy your old_str EXACTLY from here) ===\n"
-                .. ec.file_content .. "\n=== END OF score_config.yaml ===")
-            end
-            msg = table.concat(second_parts, "\n")
-            second_chance_pending = false
           end
 
           guard_context_budget(code_editor)
@@ -7308,16 +7528,10 @@ code: |
             local done_call = Tool.last_call("done")
             if done_call then
               local reason_text = tostring(tool_call_arg(done_call, "reason", "agent gave up"))
-              if string.find(string.lower(reason_text), "cannot_improve") and not second_chance then
-                second_chance = true
-                second_chance_pending = true
-                Human.notify({message = string.format("  %s: agent tried cannot_improve — giving one more chance", strategy_label), level = "info"})
-              else
-                react_done_reason = reason_text
-                Human.notify({message = string.format(
-                  "  %s: agent called done — %s", strategy_label, trunc(react_done_reason, 100)), level = "info"})
-                done = true
-              end
+              react_done_reason = reason_text
+              Human.notify({message = string.format(
+                "  %s: agent called done — %s", strategy_label, trunc(react_done_reason, 100)), level = "info"})
+              done = true
             end
           end
 
@@ -7811,13 +8025,12 @@ code: |
         local eval_batch = {}
         for _, sv in ipairs(strategy_versions) do
           if regression_available then
-            local strategy_dataset_id = ensure_regression_dataset_for_version(sv.version_id)
-            sv.dataset_id = strategy_dataset_id
+            sv.dataset_id = dataset_id
             table.insert(eval_batch, {
               scorecard_name = params.scorecard,
               score_name = params.score,
               evaluation_type = "accuracy",
-              dataset_id = strategy_dataset_id,
+              dataset_id = dataset_id,
               n_samples = params.max_samples or 100,
               version = sv.version_id,
               baseline = regression_baseline_id,
@@ -7833,6 +8046,7 @@ code: |
             days = params.days,
             max_feedback_items = params.max_samples or 100,
             sampling_mode = "newest",
+            feedback_item_ids = recent_baseline_feedback_item_ids,
             feedback_start_at = params.feedback_window_start_at,
             feedback_end_at = params.feedback_window_end_at,
             version = sv.version_id,
@@ -7869,6 +8083,13 @@ code: |
           end
           local fb_r = eval_results and eval_results[offset + evals_per]
           if fb_r and (fb_r.id or fb_r.evaluation_id) then
+            local cohort_ok, cohort_error = require_exact_feedback_cohort(
+              fb_r,
+              recent_baseline_feedback_item_ids
+            )
+            if not cohort_ok then
+              error("Invalid strategy comparison: " .. tostring(cohort_error))
+            end
             sv.fb_metrics = extract_metrics(fb_r)
             sv.fb_cost_per_item = extract_cost_per_item(fb_r)
             sv.fb_deltas = calculate_deltas(sv.fb_metrics, recent_baseline_metrics)
@@ -8119,14 +8340,12 @@ code: |
           status_msg(string.format("Cycle %d/%d — evaluating synthesis result", cycle, max_cycles))
           Human.notify({message = "  Evaluating final version...", level = "info"})
           local b_batch = {}
-          local final_dataset_id = nil
           if regression_available then
-            final_dataset_id = ensure_regression_dataset_for_version(final_version_id)
             table.insert(b_batch, {
               scorecard_name = params.scorecard,
               score_name = params.score,
               evaluation_type = "accuracy",
-              dataset_id = final_dataset_id,
+              dataset_id = dataset_id,
               n_samples = params.max_samples or 100,
               version = final_version_id,
               baseline = regression_baseline_id,
@@ -8141,6 +8360,7 @@ code: |
             days = params.days,
             max_feedback_items = params.max_samples or 100,
             sampling_mode = "newest",
+            feedback_item_ids = recent_baseline_feedback_item_ids,
             feedback_start_at = params.feedback_window_start_at,
             feedback_end_at = params.feedback_window_end_at,
             version = final_version_id,
@@ -8169,6 +8389,13 @@ code: |
           end
           local b_fb_r = b_results and b_results[b_evals_per]
           if b_fb_r and (b_fb_r.id or b_fb_r.evaluation_id) then
+            local cohort_ok, cohort_error = require_exact_feedback_cohort(
+              b_fb_r,
+              recent_baseline_feedback_item_ids
+            )
+            if not cohort_ok then
+              error("Invalid synthesis comparison: " .. tostring(cohort_error))
+            end
             b_fb_metrics = extract_metrics(b_fb_r)
             b_fb_cost_per_item = extract_cost_per_item(b_fb_r)
             b_fb_deltas = calculate_deltas(b_fb_metrics, recent_baseline_metrics)
@@ -8201,9 +8428,17 @@ code: |
 
         local disqualified = false
         local disqualification_reason = nil
+        local collapse_reason = prediction_mode_collapse_reason(b_fb_metrics)
+        local regression_collapse_reason = prediction_mode_collapse_reason(b_acc_metrics)
         if not b_fb_metrics then
           disqualified = true
           disqualification_reason = "missing_recent_metrics"
+        elseif collapse_reason then
+          disqualified = true
+          disqualification_reason = "recent_" .. collapse_reason
+        elseif regression_available and regression_collapse_reason then
+          disqualified = true
+          disqualification_reason = "regression_" .. regression_collapse_reason
         elseif regression_available and b_acc_deltas.alignment < -0.02 then
           disqualified = true
           disqualification_reason = string.format("regression_regression_vs_baseline_%.3f", b_acc_deltas.alignment)
@@ -9391,7 +9626,7 @@ code: |
   end
 
   -- Phase C: Finalization
-  Stage.set("finalize")
+  Stage.set("Finalize")
 
   -- Calculate total improvement from accepted cycles
   local last_accepted = nil
@@ -9451,7 +9686,7 @@ code: |
         days = tostring(params.days or 90),
         start_at = params.feedback_window_start_at,
         end_at = params.feedback_window_end_at,
-        max_feedback_items = 400,
+        max_feedback_items = params.max_samples or 400,
         num_topics = 12,
         include_rubric_memory = true,
         score_version_id = final_contradictions_score_version_id
@@ -10194,5 +10429,6 @@ code: |
     lab_report = lab_report_text,
     sme_agenda = sme_agenda_text,
     sme_worksheet = worksheet_text,
-    winning_version_id = last_accepted_version_id
+    winning_version_id = last_accepted_version_id,
+    costs = State.get("costs")
   }

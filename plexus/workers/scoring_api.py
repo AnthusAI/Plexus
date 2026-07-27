@@ -10,6 +10,9 @@ import sys
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from typing import Any, Dict, Optional
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit, urlunsplit
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -42,6 +45,27 @@ def env_flag_enabled(name: str) -> bool:
 
 def scoring_api_auth_required() -> bool:
     return env_flag_enabled("SCORING_API_AUTH_REQUIRED")
+
+
+def proxy_readiness_url(api_url: str) -> str:
+    """Return the proxy readiness endpoint for a local GraphQL API URL."""
+    parsed = urlsplit(api_url)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError("PLEXUS_API_URL must be an absolute URL")
+    return urlunsplit((parsed.scheme, parsed.netloc, "/readyz", "", ""))
+
+
+def graphql_proxy_is_ready() -> bool:
+    """Check the local proxy when the deployment explicitly requires it."""
+    if not env_flag_enabled("PLEXUS_SCORING_REQUIRE_PROXY_READY"):
+        return True
+    api_url = os.getenv("PLEXUS_API_URL", "")
+    try:
+        request = Request(proxy_readiness_url(api_url), method="GET")
+        with urlopen(request, timeout=2) as response:
+            return response.status == 200
+    except (HTTPError, URLError, TimeoutError, ValueError):
+        return False
 
 
 def log_auth_configuration() -> None:
@@ -82,6 +106,8 @@ def require_scoring_api_key(
 def public_error_message(status_code: int) -> str:
     if status_code == 404:
         return "Requested scoring resource was not found."
+    if status_code == 409:
+        return "Scoring request is already being processed or conflicts with persisted state."
     if status_code < 500:
         return "Scoring request is invalid."
     return "Scoring request could not be processed."
@@ -119,6 +145,8 @@ def healthz() -> Dict[str, str]:
 
 @app.get("/readyz")
 def readyz() -> Dict[str, str]:
+    if not graphql_proxy_is_ready():
+        raise HTTPException(status_code=503, detail="GraphQL proxy is not ready.")
     return {"status": "ready"}
 
 
@@ -146,6 +174,7 @@ async def score(request: ScoreRequest) -> JSONResponse:
             status_code=exc.status_code,
             content={
                 "error": "scoring_request_failed",
+                "reason_code": scoring_error_reason_code(exc),
                 "message": public_error_message(exc.status_code),
                 "scoring_job_id": request.scoring_job_id,
                 "request_id": request_id,

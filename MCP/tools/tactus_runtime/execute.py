@@ -38,6 +38,8 @@ SCORE_EDIT_AUDIT_EVENT_KEY = "score_edit_audit"
 SCORE_EDIT_AUDIT_COMPACT_KEY = "score_edit_audit_compact"
 SCORE_AUDIT_DIFF_TEXT_MAX_CHARS = 20_000
 SCORE_AUDIT_UNIFIED_DIFF_MAX_CHARS = 20_000
+FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY = 4
+FEEDBACK_ALIGNMENT_SCORECARD_CONCURRENCY = 5
 
 
 PLEXUS_DOCS_DIR = os.path.normpath(
@@ -596,6 +598,8 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("scorecards_info", "scorecards", "info"),
     ("scorecards_search", "scorecards", "search"),
     ("scorecards_create", "scorecards", "create"),
+    ("scorecards_update", "scorecards", "update"),
+    ("scorecards_delete", "scorecards", "delete"),
     ("score_info", "score", "info"),
     ("score_create", "score", "create"),
     ("score_search", "score", "search"),
@@ -605,6 +609,7 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("score_pull", "score", "pull"),
     ("score_resolve", "score", "resolve"),
     ("score_update", "score", "update"),
+    ("score_delete", "score", "delete"),
     ("score_edit", "score", "edit"),
     ("score_test", "score", "test"),
     ("score_set_champion", "score", "set_champion"),
@@ -739,6 +744,28 @@ class ConsoleGuidelinesUpdateRequiresGuidelinesIntent(PermissionError):
         )
 
 
+class ConsoleScoreEditBlockedForGuidelinesOnly(PermissionError):
+    """Raised when a guidelines-only Console request attempts a code-edit workflow."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Console chat cannot call plexus.score.edit for an explicitly guidelines-only, "
+            "behavior-preserving request. Load the full current guidelines and use "
+            "plexus.score.update with guidelines only."
+        )
+
+
+class ConsoleScoreEditRequiresConcreteInstruction(PermissionError):
+    """Raised when Console attempts a candidate-only score edit with no requested change."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Console chat cannot start plexus.score.edit from a candidate-only approval "
+            "without a concrete score change. Ask what behavior, code, or prompt should "
+            "change, or continue the specific proposal already present in this chat session."
+        )
+
+
 @dataclass(frozen=True)
 class RuntimeMethodSpec:
     handler: str
@@ -760,6 +787,8 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("scorecards", "info"): _method_spec("_call_scorecards", planning_allowed=True),
     ("scorecards", "search"): _method_spec("_call_scorecards", planning_allowed=True),
     ("scorecards", "create"): _method_spec("_call_scorecards", planning_allowed=False),
+    ("scorecards", "update"): _method_spec("_call_scorecards", planning_allowed=False),
+    ("scorecards", "delete"): _method_spec("_call_scorecards", planning_allowed=False),
     ("score", "info"): _method_spec("_call_score", planning_allowed=True),
     ("score", "create"): _method_spec("_call_score", planning_allowed=False),
     ("score", "search"): _method_spec("_call_score", planning_allowed=True),
@@ -769,6 +798,7 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("score", "pull"): _method_spec("_call_score", planning_allowed=True),
     ("score", "resolve"): _method_spec("_call_score", planning_allowed=True),
     ("score", "update"): _method_spec("_call_score", planning_allowed=False),
+    ("score", "delete"): _method_spec("_call_score", planning_allowed=False),
     ("score", "edit"): _method_spec("_call_score", planning_allowed=False),
     ("score", "test"): _method_spec("_call_score", planning_allowed=True),
     ("score", "set_champion"): _method_spec("_call_score", planning_allowed=False),
@@ -843,6 +873,7 @@ def _default_scorecards_list(args: dict[str, Any]) -> Any:
     identifier = args.get("identifier") or args.get("name") or args.get("key")
     next_token = args.get("next_token") or args.get("nextToken")
     return_metadata = bool(args.get("return_metadata", False))
+    include_scores = bool(args.get("_include_scores", False))
 
     raw_limit = args.get("limit")
     if raw_limit is None:
@@ -899,10 +930,13 @@ def _default_scorecards_list(args: dict[str, Any]) -> Any:
 
     filter_str = ", ".join(filter_parts)
     next_token_arg = f', nextToken: "{next_token}"' if next_token else ""
+    scorecard_fields = "id name key description externalId createdAt updatedAt"
+    if include_scores:
+        scorecard_fields += " sections { items { scores { items { id name } } } }"
     query = (
         "query ListScorecards { "
         f"listScorecards(filter: {{ {filter_str} }}, limit: {fetch_limit}{next_token_arg}) {{ "
-        "items { id name key description externalId createdAt updatedAt } "
+        f"items {{ {scorecard_fields} }} "
         "nextToken } }"
     )
     response = client.execute(query)
@@ -1278,6 +1312,135 @@ def _default_scorecards_create(args: dict[str, Any]) -> dict[str, Any]:
         "plexus.scorecards.create failed after compatibility attempts: "
         + " | ".join(attempted_errors)
     )
+
+
+def _default_scorecards_update(args: dict[str, Any]) -> dict[str, Any]:
+    """Update scorecard metadata without changing its scores or versions."""
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.direct_identifier_resolution import (
+        direct_resolve_scorecard_identifier,
+    )
+
+    identifier = (
+        args.get("id")
+        or args.get("scorecard_id")
+        or args.get("identifier")
+        or args.get("scorecard_identifier")
+        or args.get("scorecard")
+    )
+    if not identifier:
+        raise ValueError("plexus.scorecards.update requires id or scorecard identifier")
+
+    fields = {
+        "name": "name",
+        "key": "key",
+        "description": "description",
+        "external_id": "externalId",
+        "externalId": "externalId",
+    }
+    updates = {
+        graph_field: args[arg_name]
+        for arg_name, graph_field in fields.items()
+        if args.get(arg_name) is not None
+    }
+    if not updates:
+        raise ValueError(
+            "plexus.scorecards.update requires at least one metadata field "
+            "(name, key, description, or external_id)"
+        )
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.scorecards.update: could not create dashboard client")
+    scorecard_id = direct_resolve_scorecard_identifier(client, str(identifier))
+    if not scorecard_id:
+        raise ValueError(f"Scorecard not found: {identifier!r}")
+
+    # UpdateScorecardInput deliberately contains only model fields; unlike a
+    # create input it does not accept the runtime attribution metadata.
+    input_obj = {"id": scorecard_id, **updates}
+    mutation = """
+    mutation UpdateScorecard($input: UpdateScorecardInput!) {
+      updateScorecard(input: $input) { id name key description externalId }
+    }
+    """
+    response = client.execute(mutation, {"input": input_obj})
+    updated = (response or {}).get("updateScorecard") or {}
+    if not updated.get("id"):
+        raise RuntimeError("plexus.scorecards.update returned no scorecard")
+    return {"success": True, "scorecard": updated, "changed_fields": sorted(updates)}
+
+
+def _default_scorecards_delete(args: dict[str, Any]) -> dict[str, Any]:
+    """Delete an explicitly confirmed scorecard and all of its contents."""
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.cli.shared.direct_identifier_resolution import (
+        direct_resolve_scorecard_identifier,
+    )
+
+    if args.get("confirmed") is not True:
+        raise ValueError(
+            "plexus.scorecards.delete is destructive and requires confirmed = true"
+        )
+    identifier = (
+        args.get("id")
+        or args.get("scorecard_id")
+        or args.get("identifier")
+        or args.get("scorecard_identifier")
+        or args.get("scorecard")
+    )
+    if not identifier:
+        raise ValueError("plexus.scorecards.delete requires id or scorecard identifier")
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.scorecards.delete: could not create dashboard client")
+    scorecard_id = direct_resolve_scorecard_identifier(client, str(identifier))
+    if not scorecard_id:
+        raise ValueError(f"Scorecard not found: {identifier!r}")
+
+    info = _default_scorecards_info({"id": scorecard_id})
+    sections = ((info.get("sections") or {}).get("items") or [])
+    deleted_scores = 0
+    deleted_sections = 0
+    for section in sections:
+        for score in ((section.get("scores") or {}).get("items") or []):
+            score_id = score.get("id")
+            if not score_id:
+                continue
+            _default_score_delete({"id": score_id, "confirmed": True})
+            deleted_scores += 1
+        section_id = section.get("id")
+        if section_id:
+            mutation = """
+            mutation DeleteScorecardSection($input: DeleteScorecardSectionInput!) {
+              deleteScorecardSection(input: $input) { id }
+            }
+            """
+            client.execute(
+                mutation,
+                {"input": {"id": section_id}},
+            )
+            deleted_sections += 1
+
+    mutation = """
+    mutation DeleteScorecard($input: DeleteScorecardInput!) {
+      deleteScorecard(input: $input) { id }
+    }
+    """
+    response = client.execute(
+        mutation,
+        {"input": {"id": scorecard_id}},
+    )
+    deleted = (response or {}).get("deleteScorecard") or {}
+    if not deleted.get("id"):
+        raise RuntimeError("plexus.scorecards.delete returned no scorecard")
+    return {
+        "success": True,
+        "id": deleted["id"],
+        "deleted_scores": deleted_scores,
+        "deleted_sections": deleted_sections,
+    }
 
 
 def _default_score_search(args: dict[str, Any]) -> dict[str, Any]:
@@ -2008,15 +2171,110 @@ def _default_feedback_alignment(args: dict[str, Any]) -> dict[str, Any]:
     return FeedbackService.format_summary_result_as_dict(summary)
 
 
-def _default_feedback_alignment_batch(args: dict[str, Any]) -> dict[str, Any]:
+def _load_feedback_alignment_window(
+    client: Any,
+    *,
+    account_id: str,
+    days: int,
+) -> list[dict[str, Any]]:
+    """Load one account-scoped feedback window for bounded portfolio triage."""
+    from datetime import datetime, timedelta, timezone
+
+    query = """
+    query ListFeedbackItemsByEditedTime(
+        $accountId: String!,
+        $startTime: String!,
+        $endTime: String!,
+        $nextToken: String
+    ) {
+        listFeedbackItemByAccountIdAndEditedAt(
+            accountId: $accountId,
+            editedAt: { between: [$startTime, $endTime] },
+            limit: 1000,
+            nextToken: $nextToken
+        ) {
+            items {
+                id
+                scorecardId
+                scoreId
+                initialAnswerValue
+                finalAnswerValue
+                isInvalid
+            }
+            nextToken
+        }
+    }
     """
-    Run plexus.feedback.alignment for all scores in a scorecard.
+    end_time = datetime.now(timezone.utc) + timedelta(minutes=5)
+    start_time = end_time - timedelta(days=days, minutes=5)
+    variables = {
+        "accountId": account_id,
+        "startTime": start_time.isoformat().replace("+00:00", "Z"),
+        "endTime": end_time.isoformat().replace("+00:00", "Z"),
+        "nextToken": None,
+    }
+    items: list[dict[str, Any]] = []
+
+    while True:
+        response = client.execute(query, variables)
+        if not isinstance(response, dict):
+            raise TypeError(
+                "plexus.feedback.alignment_batch received an invalid feedback-window response"
+            )
+        if response.get("errors"):
+            raise RuntimeError(
+                "plexus.feedback.alignment_batch feedback-window query failed: "
+                + json.dumps(response["errors"])
+            )
+        page = response.get("listFeedbackItemByAccountIdAndEditedAt")
+        if not isinstance(page, dict):
+            data = response.get("data")
+            page = (
+                data.get("listFeedbackItemByAccountIdAndEditedAt")
+                if isinstance(data, dict)
+                else None
+            )
+        if not isinstance(page, dict):
+            raise RuntimeError(
+                "plexus.feedback.alignment_batch feedback-window data was missing"
+            )
+        page_items = page.get("items") or []
+        if isinstance(page_items, list):
+            items.extend(
+                item
+                for item in page_items
+                if isinstance(item, dict) and not item.get("isInvalid")
+            )
+        next_token = page.get("nextToken")
+        if not next_token:
+            return items
+        variables["nextToken"] = next_token
+
+
+def _default_feedback_alignment_batch(
+    args: dict[str, Any],
+    *,
+    _prefetched_feedback_items: list[dict[str, Any]] | None = None,
+    _prefetched_account_id: str | None = None,
+    _prefetched_scorecard_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Run plexus.feedback.alignment for all scores in one or more scorecards.
 
     Returns alignment metrics for each score in a single call, avoiding
-    N separate API calls when analyzing scorecard-wide performance.
+    N separate API calls when analyzing scorecard-wide performance. An explicit
+    ``scorecards`` list may contain the complete discovered target set; it is
+    evaluated with bounded concurrency and one shared feedback-window read.
 
-    Required args:
+    Target args (one of):
         scorecard (str): Scorecard name, key, or ID.
+        scorecard_name (str): Scorecard name.
+        scorecard_id (str): Scorecard ID.
+        scorecards (list[str]): Scorecard names, keys, or IDs. Complete account
+            coverage should be discovered with paginated scorecards.list calls
+            and passed here as one explicit list.
+        scorecard_limit (int): Select the first 1-5 account scorecards for a
+            bounded portfolio sample without a separate inventory tool call.
 
     Optional args:
         days (int): Feedback lookback window in days. Default 7.
@@ -2038,6 +2296,9 @@ def _default_feedback_alignment_batch(args: dict[str, Any]) -> dict[str, Any]:
                     "accuracy": float (0-100),
                     "ac1": float (0-1),
                     "total_items": int,
+                    "disagreements": int,
+                    "disagreement_rate": float (0-1) | None,
+                    "reviewed_error_opportunity": float,
                     "confusion_matrix": dict,
                     "precision": float,
                     "recall": float,
@@ -2047,13 +2308,165 @@ def _default_feedback_alignment_batch(args: dict[str, Any]) -> dict[str, Any]:
             ]
         }
     """
+    raw_scorecards = args.get("scorecards")
+    prefetched_scorecards_by_id: dict[str, dict[str, Any]] = {}
+    portfolio_selection_rule: str | None = None
+    has_explicit_scorecard = any(
+        args.get(key) for key in ("scorecard", "scorecard_name", "scorecard_id")
+    )
+    raw_scorecard_limit = args.get("scorecard_limit")
+    if (
+        raw_scorecards is None
+        and raw_scorecard_limit is not None
+        and not has_explicit_scorecard
+    ):
+        try:
+            scorecard_limit = int(raw_scorecard_limit)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "plexus.feedback.alignment_batch scorecard_limit must be an integer"
+            ) from exc
+        if not 1 <= scorecard_limit <= 5:
+            raise ValueError(
+                "plexus.feedback.alignment_batch scorecard_limit must be between 1 and 5"
+            )
+        inventory = _default_scorecards_list(
+            {"limit": scorecard_limit, "_include_scores": True}
+        )
+        prefetched_scorecards_by_id = {
+            str(card.get("id")): card
+            for card in inventory
+            if isinstance(card, dict) and card.get("id")
+        }
+        raw_scorecards = [
+            card.get("id") or card.get("name")
+            for card in inventory
+            if isinstance(card, dict) and (card.get("name") or card.get("id"))
+        ]
+        portfolio_selection_rule = f"first {scorecard_limit} scorecards returned"
+
+    if raw_scorecards is not None:
+        from concurrent.futures import ThreadPoolExecutor
+        from plexus.cli.shared.client_utils import create_client
+
+        if not isinstance(raw_scorecards, (list, tuple)):
+            raise ValueError(
+                "plexus.feedback.alignment_batch scorecards must be a list"
+            )
+        scorecard_identifiers = [
+            str(identifier).strip()
+            for identifier in raw_scorecards
+            if str(identifier).strip()
+        ]
+        if not scorecard_identifiers and portfolio_selection_rule is not None:
+            return {
+                "days": int(float(args.get("days", 7))),
+                "selection_rule": portfolio_selection_rule,
+                "scorecards_requested": 0,
+                "scorecards_analyzed": 0,
+                "scorecards": [],
+                "coverage": {
+                    "target_count": 0,
+                    "completed_count": 0,
+                    "failed_count": 0,
+                    "complete": True,
+                },
+            }
+        if not scorecard_identifiers:
+            raise ValueError(
+                "plexus.feedback.alignment_batch scorecards must not be empty"
+            )
+        single_args = dict(args)
+        for key in (
+            "scorecards",
+            "scorecard",
+            "scorecard_name",
+            "scorecard_id",
+            "scorecard_limit",
+        ):
+            single_args.pop(key, None)
+
+        portfolio_client = create_client()
+        if not portfolio_client:
+            raise RuntimeError(
+                "plexus.feedback.alignment_batch: could not create dashboard client"
+            )
+        portfolio_account_id = _resolve_runtime_account_id(
+            portfolio_client,
+            args,
+            "plexus.feedback.alignment_batch",
+        )
+        portfolio_feedback_items = _load_feedback_alignment_window(
+            portfolio_client,
+            account_id=portfolio_account_id,
+            days=int(float(args.get("days", 7))),
+        )
+
+        def analyze_scorecard(identifier: str) -> dict[str, Any]:
+            try:
+                return _default_feedback_alignment_batch(
+                    {**single_args, "scorecard": identifier},
+                    _prefetched_feedback_items=portfolio_feedback_items,
+                    _prefetched_account_id=portfolio_account_id,
+                    _prefetched_scorecard_data=prefetched_scorecards_by_id.get(identifier),
+                )
+            except Exception as exc:
+                return {
+                    "scorecard_name": identifier,
+                    "error": str(exc),
+                }
+
+        # scorecard_limit carries the selected scorecards (including their
+        # score lists) into this branch, so its per-scorecard work is entirely
+        # local after the single feedback-window read.  Avoid thread startup
+        # and scheduling overhead on that latency-critical path.  Explicit
+        # named scorecard lists still use bounded parallel reads below.
+        if portfolio_selection_rule is not None:
+            scorecard_results = [
+                analyze_scorecard(identifier) for identifier in scorecard_identifiers
+            ]
+        else:
+            with ThreadPoolExecutor(
+                max_workers=min(
+                    FEEDBACK_ALIGNMENT_SCORECARD_CONCURRENCY,
+                    len(scorecard_identifiers),
+                )
+            ) as executor:
+                scorecard_results = list(
+                    executor.map(analyze_scorecard, scorecard_identifiers)
+                )
+        failed_count = sum(
+            1 for scorecard_result in scorecard_results
+            if scorecard_result.get("error")
+        )
+        completed_count = len(scorecard_results) - failed_count
+        result = {
+            "days": int(float(args.get("days", 7))),
+            "scorecards_requested": len(scorecard_identifiers),
+            "scorecards_analyzed": len(scorecard_results),
+            "scorecards": scorecard_results,
+            "coverage": {
+                "target_count": len(scorecard_identifiers),
+                "completed_count": completed_count,
+                "failed_count": failed_count,
+                "complete": completed_count == len(scorecard_identifiers),
+            },
+        }
+        if portfolio_selection_rule is not None:
+            result["selection_rule"] = portfolio_selection_rule
+        return result
+
     from plexus.cli.feedback.feedback_service import FeedbackService
     from plexus.cli.shared.client_utils import create_client
     from plexus.cli.shared.memoized_resolvers import (
         memoized_resolve_scorecard_identifier,
     )
 
-    scorecard_name = args.get("scorecard_name") or args.get("scorecard")
+    scorecard_name = (
+        args.get("scorecard_name")
+        or args.get("scorecard")
+        or args.get("scorecard_id")
+    )
     if not scorecard_name:
         raise ValueError("plexus.feedback.alignment_batch requires scorecard")
 
@@ -2062,32 +2475,52 @@ def _default_feedback_alignment_batch(args: dict[str, Any]) -> dict[str, Any]:
     include_scores = args.get("include_scores")
     exclude_scores = args.get("exclude_scores", [])
 
-    client = create_client()
-    if not client:
-        raise RuntimeError("plexus.feedback.alignment_batch: could not create dashboard client")
+    client = None
+    if _prefetched_scorecard_data is not None:
+        data = _prefetched_scorecard_data
+        scorecard_id = str(data.get("id") or "").strip()
+        if not scorecard_id:
+            raise ValueError(
+                "plexus.feedback.alignment_batch prefetched scorecard data has no id"
+            )
+        account_id = _prefetched_account_id
+        if not account_id:
+            raise ValueError(
+                "plexus.feedback.alignment_batch prefetched scorecard data has no account"
+            )
+        scorecard_name = data.get("name") or scorecard_name
+    else:
+        client = create_client()
+        if not client:
+            raise RuntimeError("plexus.feedback.alignment_batch: could not create dashboard client")
 
-    account_id = _resolve_runtime_account_id(client, args, "plexus.feedback.alignment_batch")
-    scorecard_id = memoized_resolve_scorecard_identifier(client, str(scorecard_name))
-    if not scorecard_id:
-        raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found")
-
-    # Get all scores via the same GraphQL query pattern used by scorecards.info
-    import json as _json
-    query = (
-        "query GetScorecard { "
-        f'getScorecard(id: "{scorecard_id}") {{ '
-        "id name sections { items { scores { items { id name } } } } "
-        "} }"
-    )
-    response = client.execute(query)
-    if "errors" in response:
-        raise RuntimeError(
-            "plexus.feedback.alignment_batch dashboard error: "
-            + _json.dumps(response["errors"])
+        account_id = _prefetched_account_id or _resolve_runtime_account_id(
+            client,
+            args,
+            "plexus.feedback.alignment_batch",
         )
-    data = response.get("getScorecard")
-    if not data:
-        raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found after query")
+        scorecard_id = memoized_resolve_scorecard_identifier(client, str(scorecard_name))
+        if not scorecard_id:
+            raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found")
+
+        # Get all scores via the same GraphQL query pattern used by scorecards.info
+        import json as _json
+        query = (
+            "query GetScorecard { "
+            f'getScorecard(id: "{scorecard_id}") {{ '
+            "id name sections { items { scores { items { id name } } } } "
+            "} }"
+        )
+        response = client.execute(query)
+        if "errors" in response:
+            raise RuntimeError(
+                "plexus.feedback.alignment_batch dashboard error: "
+                + _json.dumps(response["errors"])
+            )
+        data = response.get("getScorecard")
+        if not data:
+            raise ValueError(f"plexus.feedback.alignment_batch: scorecard {scorecard_name!r} not found after query")
+        scorecard_name = data.get("name") or scorecard_name
 
     # Flatten scores from all sections
     all_scores = []
@@ -2112,53 +2545,98 @@ def _default_feedback_alignment_batch(args: dict[str, Any]) -> dict[str, Any]:
     if exclude_scores:
         all_scores = [s for s in all_scores if s["name"] not in exclude_scores]
 
-    # Run alignment analysis for each score
-    results = []
-    for score in all_scores:
-        score_name = score["name"]
-        score_id = score["id"]
+    prefetched_by_score: dict[str, list[Any]] | None = None
+    if _prefetched_feedback_items is not None:
+        from types import SimpleNamespace
 
-        try:
-            summary = _run_async_from_sync(
-                FeedbackService.summarize_feedback(
-                    client=client,
-                    scorecard_name=str(scorecard_name),
-                    score_name=score_name,
-                    scorecard_id=scorecard_id,
-                    score_id=score_id,
-                    account_id=account_id,
-                    days=days,
+        prefetched_by_score = {}
+        for item in _prefetched_feedback_items:
+            if item.get("scorecardId") != scorecard_id:
+                continue
+            item_score_id = str(item.get("scoreId") or "").strip()
+            if not item_score_id:
+                continue
+            prefetched_by_score.setdefault(item_score_id, []).append(
+                SimpleNamespace(
+                    initialAnswerValue=item.get("initialAnswerValue"),
+                    finalAnswerValue=item.get("finalAnswerValue"),
                 )
             )
-            summary_dict = FeedbackService.format_summary_result_as_dict(summary)
 
-            # Extract just the fields we need
-            analysis = summary_dict.get("analysis", {})
-            accuracy = analysis.get("accuracy")
+    async def analyze_scores() -> list[dict[str, Any] | None]:
+        semaphore = asyncio.Semaphore(FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY)
 
-            # Apply accuracy threshold filter if provided
-            if accuracy_threshold is not None and accuracy is not None:
-                if accuracy >= accuracy_threshold:
-                    continue
+        async def analyze_score(score: dict[str, str]) -> dict[str, Any] | None:
+            score_name = score["name"]
+            score_id = score["id"]
 
-            results.append({
-                "score_id": score_id,
-                "score_name": score_name,
-                "accuracy": accuracy,
-                "ac1": analysis.get("ac1"),
-                "total_items": analysis.get("total_items"),
-                "confusion_matrix": analysis.get("confusion_matrix"),
-                "precision": analysis.get("precision"),
-                "recall": analysis.get("recall"),
-                "warning": analysis.get("warning"),
-            })
-        except Exception as e:
-            # Include errors in results so caller knows which scores failed
-            results.append({
-                "score_id": score_id,
-                "score_name": score_name,
-                "error": str(e),
-            })
+            try:
+                if prefetched_by_score is not None:
+                    analysis = FeedbackService._analyze_feedback_items(
+                        prefetched_by_score.get(score_id, [])
+                    )
+                else:
+                    async with semaphore:
+                        summary = await FeedbackService.summarize_feedback(
+                            client=client,
+                            scorecard_name=str(scorecard_name),
+                            score_name=score_name,
+                            scorecard_id=scorecard_id,
+                            score_id=score_id,
+                            account_id=account_id,
+                            days=days,
+                        )
+                    summary_dict = FeedbackService.format_summary_result_as_dict(summary)
+                    analysis = summary_dict.get("analysis", {})
+                accuracy = analysis.get("accuracy")
+                total_items = int(analysis.get("total_items") or 0)
+                disagreements = int(analysis.get("disagreements") or 0)
+                disagreement_rate = (
+                    disagreements / total_items if total_items > 0 else None
+                )
+                reviewed_error_opportunity = (
+                    total_items * disagreement_rate
+                    if disagreement_rate is not None
+                    else 0.0
+                )
+
+                if (
+                    accuracy_threshold is not None
+                    and accuracy is not None
+                    and accuracy >= accuracy_threshold
+                ):
+                    return None
+
+                return {
+                    "score_id": score_id,
+                    "score_name": score_name,
+                    "accuracy": accuracy,
+                    "ac1": analysis.get("ac1"),
+                    "total_items": total_items,
+                    "disagreements": disagreements,
+                    "disagreement_rate": disagreement_rate,
+                    "reviewed_error_opportunity": reviewed_error_opportunity,
+                    "confusion_matrix": analysis.get("confusion_matrix"),
+                    "precision": analysis.get("precision"),
+                    "recall": analysis.get("recall"),
+                    "warning": analysis.get("warning"),
+                }
+            except Exception as exc:
+                # Include errors in results so callers can distinguish a
+                # failed read from a score with no feedback.
+                return {
+                    "score_id": score_id,
+                    "score_name": score_name,
+                    "error": str(exc),
+                }
+
+        return await asyncio.gather(*(analyze_score(score) for score in all_scores))
+
+    results = [
+        result
+        for result in _run_async_from_sync(analyze_scores())
+        if result is not None
+    ]
 
     return {
         "scorecard_id": scorecard_id,
@@ -2189,7 +2667,11 @@ def _default_feedback_finder(args: dict[str, Any]) -> dict[str, Any]:
     if not scorecard_name or not score_name:
         raise ValueError("plexus.feedback.find requires scorecard_name and score_name")
 
-    days = int(args["days"]) if args.get("days") is not None else 7
+    # A feedback lookup without an explicit window is typically initiated by a
+    # conversational request for recent disagreements.  Seven days silently
+    # hides too much evidence for that workflow; callers can still request a
+    # narrower window explicitly.
+    days = int(args["days"]) if args.get("days") is not None else 30
     limit = int(args["limit"]) if args.get("limit") is not None else None
     offset = int(args["offset"]) if args.get("offset") is not None else None
     prioritize_edit_comments = bool(args.get("prioritize_edit_comments", True))
@@ -2558,6 +3040,25 @@ def _default_score_info(args: dict[str, Any]) -> dict[str, Any]:
                 "metadata": version_data.get("metadata"),
                 "isChampion": target_version_id == score.get("championVersionId"),
             }
+            parent_version_id = str(version_data.get("parentVersionId") or "").strip()
+            if parent_version_id:
+                response["previousVersionId"] = parent_version_id
+                response["previousVersionSource"] = "parent"
+            else:
+                version_ids = [str(version.get("id") or "").strip() for version in all_versions]
+                try:
+                    version_index = version_ids.index(target_version_id)
+                except ValueError:
+                    version_index = -1
+                chronological_predecessor = (
+                    version_ids[version_index + 1]
+                    if version_index >= 0 and version_index + 1 < len(version_ids)
+                    else ""
+                )
+                response["previousVersionId"] = chronological_predecessor or None
+                response["previousVersionSource"] = (
+                    "chronological" if chronological_predecessor else None
+                )
             response["isSpecificVersion"] = bool(
                 version_id and version_id != score.get("championVersionId")
             )
@@ -3534,12 +4035,22 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
     stored_requested_max_items: Any = None
     stored_qualifying_found: Any = None
     stored_source_exhausted: Any = None
+    stored_balance_applied: Any = None
+    stored_balance_complete: Any = None
+    stored_lookback_extended: Any = None
+    stored_resolved_final_classes: Any = None
+    stored_class_coverage: Any = None
     for candidate in datasets:
         candidate_row_count: Any = None
         candidate_feedback_target_hash: str | None = None
         candidate_requested_max_items: Any = None
         candidate_qualifying_found: Any = None
         candidate_source_exhausted: Any = None
+        candidate_balance_applied: Any = None
+        candidate_balance_complete: Any = None
+        candidate_lookback_extended: Any = None
+        candidate_resolved_final_classes: Any = None
+        candidate_class_coverage: Any = None
         if candidate.get("dataSourceVersionId"):
             try:
                 dsv_result = client.execute(
@@ -3561,6 +4072,13 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
                         candidate_requested_max_items = stats.get("requested_max_items")
                         candidate_qualifying_found = stats.get("qualifying_found")
                         candidate_source_exhausted = stats.get("source_exhausted")
+                        candidate_balance_applied = stats.get("balance_applied")
+                        candidate_balance_complete = stats.get("balance_complete")
+                        candidate_lookback_extended = stats.get("lookback_extended")
+                        candidate_resolved_final_classes = stats.get(
+                            "resolved_final_classes"
+                        )
+                        candidate_class_coverage = stats.get("class_coverage")
                         candidate_feedback_target_hash = stats.get(
                             "feedback_target_hash"
                         )
@@ -3579,6 +4097,11 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
         stored_requested_max_items = candidate_requested_max_items
         stored_qualifying_found = candidate_qualifying_found
         stored_source_exhausted = candidate_source_exhausted
+        stored_balance_applied = candidate_balance_applied
+        stored_balance_complete = candidate_balance_complete
+        stored_lookback_extended = candidate_lookback_extended
+        stored_resolved_final_classes = candidate_resolved_final_classes
+        stored_class_coverage = candidate_class_coverage
         break
 
     if not dataset:
@@ -3604,6 +4127,11 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
         "requested_max_items": stored_requested_max_items,
         "qualifying_found": stored_qualifying_found,
         "source_exhausted": stored_source_exhausted,
+        "balance_applied": stored_balance_applied,
+        "balance_complete": stored_balance_complete,
+        "lookback_extended": stored_lookback_extended,
+        "resolved_final_classes": stored_resolved_final_classes,
+        "class_coverage": stored_class_coverage,
         "is_materialized": bool(readiness.get("is_materialized")),
         "dataset_file": readiness.get("dataset_file"),
         "materialization_error": readiness.get("materialization_error"),
@@ -4168,6 +4696,8 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
         _append_optional_cli_arg(cmd, "--sample-seed", args.get("sample_seed"))
         _append_optional_cli_arg(cmd, "--feedback-start-at", args.get("feedback_start_at"))
         _append_optional_cli_arg(cmd, "--feedback-end-at", args.get("feedback_end_at"))
+        for feedback_item_id in args.get("feedback_item_ids") or []:
+            cmd.extend(["--feedback-item-id", str(feedback_item_id)])
         _append_optional_cli_arg(
             cmd, "--max-category-summary-items", args.get("max_category_summary_items")
         )
@@ -4259,6 +4789,34 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
             os.unlink(id_file_path)
         except OSError:
             pass
+
+    exit_code = process.poll()
+    if evaluation_id is None and exit_code is not None:
+        def _tail(path: str) -> str:
+            try:
+                with open(path, "rb") as log_file:
+                    return log_file.read()[-3000:].decode("utf-8", errors="replace")
+            except OSError:
+                return ""
+
+        return {
+            "status": "error",
+            "process_id": process.pid,
+            "evaluation_id": None,
+            "evaluation_id_file": id_file_path,
+            "stdout_log": stdout_log_path,
+            "stderr_log": stderr_log_path,
+            "command": cmd,
+            "evaluation_type": evaluation_type,
+            "scorecard": scorecard_name,
+            "score": args.get("score_name") or args.get("score"),
+            "child_budget": _jsonable(child_budget),
+            "error": (
+                "Evaluation subprocess exited before creating an evaluation record "
+                f"(exit={exit_code}). STDERR tail:\n{_tail(stderr_log_path)}\n"
+                f"STDOUT tail:\n{_tail(stdout_log_path)}"
+            ),
+        }
 
     return {
         "status": "dispatched",
@@ -6333,6 +6891,12 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
     new_version_id: str | None = None
     if code or guidelines_provided:
         should_preserve_guidelines = bool(code) and not guidelines_provided and guidelines is None
+        # The deployed CreateScoreVersion schema requires a configuration even
+        # when the user changes only the written guidelines.  Preserve the
+        # parent configuration for that storage constraint without treating it
+        # as a user-requested code change in the result/diff.
+        should_preserve_configuration = guidelines_provided and not code
+        configuration_to_save = code
         changed_fields: list[str] = []
         if code:
             changed_fields.append("code")
@@ -6419,6 +6983,19 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
         if parent_version_id:
             parent_snapshot = _load_score_version_snapshot(parent_version_id)
 
+        if should_preserve_configuration:
+            preserved_configuration = parent_snapshot.get("configuration")
+            if not preserved_configuration:
+                return {
+                    "success": False,
+                    "error": "Unable to preserve configuration for guidelines-only score update",
+                    "error_code": "score_update_configuration_preservation_failed",
+                    "parent_version_id": parent_version_id,
+                }
+            configuration_to_save = preserved_configuration
+            result["configuration_preserved"] = True
+            result["configuration_source"] = "parent_version"
+
         version_mutation = """
         mutation CreateScoreVersion($input: CreateScoreVersionInput!) {
             createScoreVersion(input: $input) { id createdAt }
@@ -6429,8 +7006,8 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
             "note": version_note,
             "isFeatured": "false",
         }
-        if code:
-            input_obj["configuration"] = code
+        if configuration_to_save:
+            input_obj["configuration"] = configuration_to_save
         if guidelines is not None:
             input_obj["guidelines"] = guidelines
         if parent_version_id:
@@ -6499,6 +7076,42 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
             )
             if diffs:
                 result["diffs"] = diffs
+
+            if guidelines_provided and not code:
+                # A guidelines-only candidate intentionally has no behavior
+                # change to smoke-test.  Still prove the safety invariant
+                # after persistence: the full candidate document remains
+                # syntactically valid and the stored configuration is exactly
+                # the parent configuration that the adapter preserved.
+                from plexus.guidelines.validator import validate_guidelines_content
+
+                persisted_guidelines = candidate_snapshot.get("guidelines") or ""
+                persisted_configuration = candidate_snapshot.get("configuration") or ""
+                expected_configuration = parent_snapshot.get("configuration") or ""
+                persisted_validation = validate_guidelines_content(
+                    persisted_guidelines
+                ).to_dict()
+                configuration_unchanged = (
+                    bool(expected_configuration)
+                    and persisted_configuration == expected_configuration
+                )
+                guidelines_persisted = persisted_guidelines == str(guidelines or "")
+                verification_passed = (
+                    bool(persisted_validation.get("is_valid"))
+                    and configuration_unchanged
+                    and guidelines_persisted
+                )
+                result["post_submit_test"] = {
+                    "status": "skipped",
+                    "reason": "guidelines_only_no_behavior_change",
+                }
+                result["post_submit_verification"] = {
+                    "status": "passed" if verification_passed else "failed",
+                    "kind": "guidelines_only_persistence",
+                    "guidelines_valid": bool(persisted_validation.get("is_valid")),
+                    "guidelines_persisted": guidelines_persisted,
+                    "configuration_unchanged": configuration_unchanged,
+                }
         except Exception as diff_error:  # noqa: BLE001
             logger.warning(
                 "Could not generate score.update diff payload for %s/%s: %s",
@@ -6506,6 +7119,16 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
                 score_id,
                 diff_error,
             )
+            if guidelines_provided and not code:
+                result["post_submit_test"] = {
+                    "status": "skipped",
+                    "reason": "guidelines_only_no_behavior_change",
+                }
+                result["post_submit_verification"] = {
+                    "status": "failed",
+                    "kind": "guidelines_only_persistence",
+                    "error": str(diff_error),
+                }
 
     result["message"] = (
         f"Score updated: version {new_version_id}" if new_version_id
@@ -6574,12 +7197,36 @@ def _score_edit_llm_schema() -> dict[str, Any]:
         "additionalProperties": False,
         "properties": {
             "code": {"type": "string"},
-            "guidelines": {"type": "string"},
+            # Responses strict JSON Schema requires every declared property in
+            # `required`.  Null preserves the existing guidelines when a code
+            # edit does not intentionally revise them.
+            "guidelines": {"type": ["string", "null"]},
             "note": {"type": "string"},
             "summary": {"type": "string"},
         },
-        "required": ["code", "note", "summary"],
+        "required": ["code", "guidelines", "note", "summary"],
     }
+
+
+def _score_edit_output_token_budget(*, code: str, guidelines: str) -> int:
+    """Allow a complete structured rewrite of the source score documents.
+
+    The score editor returns the full YAML document, not a patch.  Budget from
+    the serialized response shape so JSON escaping is included.  UTF-8 byte
+    length is a conservative upper bound for BPE tokens; extra headroom covers
+    the note, summary, and low-effort reasoning without imposing another fixed
+    ceiling on valid score size.
+    """
+    serialized = json.dumps(
+        {
+            "code": code,
+            "guidelines": guidelines,
+            "note": "",
+            "summary": "",
+        },
+        ensure_ascii=False,
+    )
+    return max(5_000, len(serialized.encode("utf-8")) + 4_096)
 
 
 def _create_score_edit_response(
@@ -6724,6 +7371,10 @@ def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
                     client=client,
                     model=model,
                     prompt=prompt,
+                    max_output_tokens=_score_edit_output_token_budget(
+                        code=base_code,
+                        guidelines=base_guidelines,
+                    ),
                 )
                 attempt["structured_output"] = structured_output
                 _validate_score_edit_payload(parsed)
@@ -6840,7 +7491,11 @@ def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
                         ) from exc
 
                     post_submit_test = {"status": "passed", "result": smoke_result}
-                    if isinstance(smoke_result, dict) and smoke_result.get("success") is False:
+                    # `success` means the smoke-test runner completed.  A
+                    # completed run with `passed: false` still found a broken
+                    # or untestable candidate and must not be reported as a
+                    # successful post-submit verification.
+                    if not _score_edit_smoke_test_passed(smoke_result):
                         raise _ScoreEditAttemptError(
                             "score_edit_post_submit_test_failed",
                             "post_submit_test",
@@ -7007,6 +7662,38 @@ def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
 
     with open(result_path, "w", encoding="utf-8") as handle:
         json.dump(output, handle, indent=2, sort_keys=True, default=str)
+
+
+def _default_score_delete(args: dict[str, Any]) -> dict[str, Any]:
+    """Delete an explicitly confirmed score by its unambiguous ID."""
+    from plexus.cli.shared.client_utils import create_client
+
+    if args.get("confirmed") is not True:
+        raise ValueError(
+            "plexus.score.delete is destructive and requires confirmed = true"
+        )
+    score_id = str(args.get("id") or args.get("score_id") or "").strip()
+    if not score_id:
+        raise ValueError(
+            "plexus.score.delete requires the exact score id; resolve the score before deleting"
+        )
+
+    client = create_client()
+    if not client:
+        raise RuntimeError("plexus.score.delete: could not create dashboard client")
+    mutation = """
+    mutation DeleteScore($input: DeleteScoreInput!) {
+      deleteScore(input: $input) { id }
+    }
+    """
+    response = client.execute(
+        mutation,
+        {"input": {"id": score_id}},
+    )
+    deleted = (response or {}).get("deleteScore") or {}
+    if not deleted.get("id"):
+        raise RuntimeError("plexus.score.delete returned no score")
+    return {"success": True, "id": deleted["id"]}
 
 
 def _default_score_edit_runner(args: dict[str, Any]) -> dict[str, Any]:
@@ -7289,6 +7976,19 @@ def _default_score_test(args: dict[str, Any]) -> dict[str, Any]:
             days=days,
         )
     )
+
+
+def _score_edit_smoke_test_passed(result: Any) -> bool:
+    """Return whether a post-save mechanical score test actually passed.
+
+    The test runner uses ``success`` for successful execution and ``passed``
+    for the score-version result. Older callers returned only ``success``;
+    preserve that contract while treating an explicit ``passed: false`` as a
+    failed verification.
+    """
+    if not isinstance(result, dict) or result.get("success") is not True:
+        return False
+    return result.get("passed") is not False
 
 
 def _default_feedback_latest_update(args: dict[str, Any]) -> dict[str, Any]:
@@ -7628,6 +8328,8 @@ class PlexusRuntimeModule:
         scorecards_infoer: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         scorecards_searcher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         scorecards_creator: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        scorecards_updater: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        scorecards_deleter: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_info: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_create: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_searcher: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
@@ -7636,6 +8338,7 @@ class PlexusRuntimeModule:
         score_contradictions: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_pull: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_update: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        score_delete: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_edit_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_test: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         score_set_champion: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
@@ -7700,6 +8403,16 @@ class PlexusRuntimeModule:
             if scorecards_creator is not None
             else _default_scorecards_create
         )
+        self._scorecards_updater = (
+            scorecards_updater
+            if scorecards_updater is not None
+            else _default_scorecards_update
+        )
+        self._scorecards_deleter = (
+            scorecards_deleter
+            if scorecards_deleter is not None
+            else _default_scorecards_delete
+        )
         self._score_info = score_info if score_info is not None else _default_score_info
         self._score_create = (
             score_create if score_create is not None else _default_score_create
@@ -7716,6 +8429,7 @@ class PlexusRuntimeModule:
         )
         self._score_pull = score_pull if score_pull is not None else _default_score_pull
         self._score_update = score_update if score_update is not None else _default_score_update
+        self._score_delete = score_delete if score_delete is not None else _default_score_delete
         self._score_edit_runner = (
             score_edit_runner if score_edit_runner is not None else _default_score_edit_runner
         )
@@ -8207,10 +8921,67 @@ class PlexusRuntimeModule:
             "rubric",
             "policy wording",
             "wording",
+            "written rule",
+            "written rules",
             "criteria document",
             "guidance text",
         )
         return any(marker in text for marker in explicit_guidelines_markers)
+
+    def _console_request_is_guidelines_only(self) -> bool:
+        text = self._console_user_request_text()
+        if not self._console_request_allows_guidelines_update():
+            return False
+        behavior_preserving_markers = (
+            "keep behavior",
+            "behavior stays",
+            "no behavior change",
+            "keep the current behavior",
+            "keep current behavior",
+            # Human requests commonly describe the score's observable outcome
+            # rather than calling it "behavior".  These phrases still mean
+            # the instruction must never enter the code-edit workflow.
+            "don't change how it scores",
+            "do not change how it scores",
+            "dont change how it scores",
+            "don't change scoring",
+            "do not change scoring",
+            "dont change scoring",
+            "scoring stays the same",
+            "scoring should stay the same",
+        )
+        return any(marker in text for marker in behavior_preserving_markers)
+
+    @staticmethod
+    def _score_edit_instruction_is_candidate_only(instruction: Any) -> bool:
+        """Return true for dispatch text that describes version status but no edit.
+
+        The Console model sometimes expands a human's bare "yes" into an edit
+        instruction that only says to save a non-champion candidate.  That is an
+        approval boundary, not a requested behavior/code change, and dispatching
+        it makes the score editor invent one.
+        """
+        if not isinstance(instruction, str):
+            return False
+        normalized = instruction.lower().strip()
+        if not normalized:
+            return True
+        status_phrases = (
+            "candidate-only",
+            "candidate only",
+            "do not change the champion",
+            "don't change the champion",
+            "do not change champion",
+            "don't change champion",
+            "do not promote",
+            "keep it non-champion",
+        )
+        if not any(phrase in normalized for phrase in status_phrases):
+            return False
+        for phrase in status_phrases:
+            normalized = normalized.replace(phrase, " ")
+        normalized = re.sub(r"[^a-z]+", " ", normalized).strip()
+        return normalized in {"", "make this score", "make it", "do it", "save it"}
 
     def _enforce_console_score_update_policy(self, parsed: dict[str, Any]) -> None:
         if not self._is_console_runtime():
@@ -8266,6 +9037,7 @@ class PlexusRuntimeModule:
             "pull",
             "resolve",
             "update",
+            "delete",
             "edit",
             "test",
             "set_champion",
@@ -8371,7 +9143,20 @@ class PlexusRuntimeModule:
                     )
                     self._append_console_audit_event(score_edit_audit_event)
                 return result
+            if method == "delete":
+                if parsed.get("confirmed") is not True:
+                    raise ValueError(
+                        "plexus.score.delete is destructive and requires confirmed = true"
+                    )
+                return self._score_delete(parsed)
             if method == "edit":
+                if self._is_console_runtime() and self._console_request_is_guidelines_only():
+                    raise ConsoleScoreEditBlockedForGuidelinesOnly()
+                if (
+                    self._is_console_runtime()
+                    and self._score_edit_instruction_is_candidate_only(parsed.get("instruction"))
+                ):
+                    raise ConsoleScoreEditRequiresConcreteInstruction()
                 if not bool(parsed.get("async")):
                     self.handle_protocol_required = ("score", "edit")
                     raise RequiresHandleProtocol("score", "edit")
@@ -8518,7 +9303,9 @@ class PlexusRuntimeModule:
             self._budget.record_after("procedure", method)
 
     def _call_scorecards(self, namespace: str, method: str, args: Any = None) -> Any:
-        if namespace != "scorecards" or method not in {"list", "info", "search", "create"}:
+        if namespace != "scorecards" or method not in {
+            "list", "info", "search", "create", "update", "delete"
+        }:
             raise ValueError(
                 f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
             )
@@ -8530,6 +9317,14 @@ class PlexusRuntimeModule:
                 return self._scorecards_lister(parsed)
             if method == "create":
                 return self._scorecards_creator(parsed)
+            if method == "update":
+                return self._scorecards_updater(parsed)
+            if method == "delete":
+                if parsed.get("confirmed") is not True:
+                    raise ValueError(
+                        "plexus.scorecards.delete is destructive and requires confirmed = true"
+                    )
+                return self._scorecards_deleter(parsed)
             if method == "search":
                 return self._scorecards_searcher(parsed)
             return self._scorecards_infoer(parsed)
@@ -8973,6 +9768,7 @@ class PlexusRuntimeModule:
 
             task = Task.get_by_id(task_id, create_client())
         except Exception as exc:  # noqa: BLE001
+            logger.exception("Failed to refresh durable report task status task_id=%s", task_id)
             return {
                 "id": task_id,
                 "durable_id": task_id,
@@ -9216,6 +10012,16 @@ class PlexusRuntimeModule:
                     "error": (
                         "Evaluation subprocess exited before the evaluation reached a terminal status."
                     ),
+                }
+            elif not process_status and status in TERMINAL_HANDLE_STATUSES:
+                # An evaluation record becomes COMPLETED before the CLI process
+                # finishes post-evaluation work such as RCA and artifact upload.
+                # Do not release a bounded optimizer batch until that process is
+                # gone; otherwise the next batch can exceed its concurrency cap.
+                status = "running"
+                evaluation = {
+                    **evaluation,
+                    "completion_pending_process_exit": True,
                 }
         return self._handle_store.update(
             handle_id,
@@ -9875,6 +10681,23 @@ Runtime ground rules:
   `plexus.procedure.run`) must use `async = true`. They dispatch immediately
   and return a handle — no `budget` table needed.
 
+Complete coverage contract:
+- Never silently reduce complete requested coverage to a sample.
+- Exhaustively paginate the canonical collection, keep returned IDs as opaque
+  values, and pass the complete target list to one bounded downstream call.
+- Return collection completion plus downstream coverage. If either is
+  incomplete, report an incomplete result rather than an exact answer.
+- Never return the unaggregated alignment batch payload for complete research.
+  Consume every result row in Lua and return compact totals, all failures, and
+  bounded ranked highlights with `ranked_from_count`; this is full-analysis
+  summarization, not sampling.
+- Use bounded sample arguments only when the user explicitly requests or
+  approves a sample.
+- Feedback alignment rows expose `reviewed_error_opportunity` as
+  `total_items * disagreement_rate`. Rank it descending for the transparent
+  first-pass estimate of reviewed error burden; keep class coverage, drift,
+  rubric clarity, and fixability as separate qualifiers.
+
 Helper aliases injected before your snippet runs:
 - High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,
   `item`, `last_item`, `feedback`, `feedback_alignment`, `acceptance_rate`,
@@ -9889,6 +10712,96 @@ Helper aliases injected before your snippet runs:
 - Fall back to `plexus.<namespace>.<method>{...}` for anything else.
 
 Examples:
+
+0) Complete account-wide feedback research with compact coverage evidence:
+```tactus
+local token, pages, scorecard_ids = nil, 0, {}
+repeat
+  local ok, page = pcall(function()
+    return plexus.scorecards.list({ return_metadata = true, next_token = token })
+  end)
+  if ok and page == nil then ok = false end
+  if not ok then
+    ok, page = pcall(function()
+      return plexus.scorecards.list({ return_metadata = true, next_token = token })
+    end)
+  end
+  if ok and page == nil then ok = false end
+  if not ok then
+    return { complete = false, pages = pages, error = tostring(page) }
+  end
+  pages = pages + 1
+  for _, record in ipairs(page.items or {}) do
+    scorecard_ids[#scorecard_ids + 1] = record.id
+  end
+  token = page.nextToken
+until not token
+if #scorecard_ids == 0 then
+  return { complete = true, pages = pages, discovered = 0, coverage = {
+    target_count = 0, completed_count = 0, failed_count = 0, complete = true,
+  } }
+end
+local analysis = plexus.feedback.alignment_batch({
+  scorecards = scorecard_ids,
+  days = 14,
+})
+local priorities, failures = {}, {}
+local scorecards_with_feedback, scores_analyzed, feedback_items = 0, 0, 0
+for _, scorecard_result in ipairs(analysis.scorecards or {}) do
+  if scorecard_result.error then
+    failures[#failures + 1] = {
+      scorecard_name = scorecard_result.scorecard_name,
+      error = string.sub(tostring(scorecard_result.error), 1, 240),
+    }
+  else
+    local has_feedback = false
+    for _, score_result in ipairs(scorecard_result.scores or {}) do
+      scores_analyzed = scores_analyzed + 1
+      local item_count = tonumber(score_result.total_items) or 0
+      feedback_items = feedback_items + item_count
+      if item_count > 0 then
+        has_feedback = true
+        priorities[#priorities + 1] = {
+          scorecard_name = scorecard_result.scorecard_name,
+          score_name = score_result.score_name,
+          total_items = item_count,
+          accuracy = score_result.accuracy,
+          ac1 = score_result.ac1,
+          disagreements = score_result.disagreements,
+          disagreement_rate = score_result.disagreement_rate,
+          reviewed_error_opportunity = score_result.reviewed_error_opportunity,
+          warning = score_result.warning,
+        }
+      end
+    end
+    if has_feedback then scorecards_with_feedback = scorecards_with_feedback + 1 end
+  end
+end
+table.sort(priorities, function(a, b)
+  local a_value = tonumber(a.reviewed_error_opportunity) or 0
+  local b_value = tonumber(b.reviewed_error_opportunity) or 0
+  if a_value == b_value then return a.total_items > b.total_items end
+  return a_value > b_value
+end)
+local highlights = {}
+for index = 1, math.min(#priorities, 10) do
+  highlights[index] = priorities[index]
+end
+return {
+  complete = analysis.coverage.complete,
+  pages = pages,
+  discovered = #scorecard_ids,
+  coverage = analysis.coverage,
+  totals = {
+    scorecards_with_feedback = scorecards_with_feedback,
+    scores_analyzed = scores_analyzed,
+    feedback_items = feedback_items,
+  },
+  ranked_from_count = #priorities,
+  priorities = highlights,
+  failures = failures,
+}
+```
 
 1) Find a scorecard by name:
 ```tactus

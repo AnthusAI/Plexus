@@ -777,8 +777,15 @@ class Score(ABC):
             if not isinstance(config, dict):
                 raise ValueError(f"Invalid configuration format for score '{score_name}'")
             
-            # Create Score instance from the configuration
-            score_instance = cls._create_score_from_config(config)
+            # Score versions do not reliably retain their parent scorecard.
+            # Carry the canonical name from the resolved structure so report
+            # and cache paths remain scoped when the instance is created.
+            score_instance = cls._create_score_from_config(
+                cls._with_scorecard_provenance(
+                    config,
+                    scorecard_structure.get('name'),
+                )
+            )
             
             loading_mode = "yaml-only" if yaml_only else ("api-with-cache" if use_cache else "api-no-cache")
             logging.info(f"Successfully loaded score '{score_name}' (mode: {loading_mode})")
@@ -813,7 +820,9 @@ class Score(ABC):
             if not isinstance(config, dict):
                 raise ValueError(f"Invalid configuration format in {yaml_path}")
             
-            score_instance = cls._create_score_from_config(config)
+            score_instance = cls._create_score_from_config(
+                cls._with_scorecard_provenance(config, scorecard_identifier)
+            )
             logging.info(f"Successfully loaded score '{score_name}' from {yaml_path}")
             return score_instance
             
@@ -891,6 +900,18 @@ class Score(ABC):
             
         except Exception as e:
             raise ValueError(f"Error creating score instance from config: {str(e)}") from e
+
+    @staticmethod
+    def _with_scorecard_provenance(config: dict, scorecard_name: str) -> dict:
+        """Attach an authoritative scorecard name to a loaded score config."""
+        canonical_name = str(scorecard_name or "").strip()
+        if not canonical_name:
+            raise ValueError("Scorecard structure is missing a canonical name")
+        if not isinstance(config, dict):
+            raise ValueError("Score configuration must be a mapping")
+        enriched_config = dict(config)
+        enriched_config["scorecard_name"] = canonical_name
+        return enriched_config
 
     @classmethod
     def from_name(cls, scorecard, score):

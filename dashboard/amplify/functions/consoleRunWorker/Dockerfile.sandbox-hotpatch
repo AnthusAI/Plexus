@@ -1,0 +1,10 @@
+# Sandbox-only rapid iteration image. It layers the complete current worker
+# source over the isolated worker's installed dependency environment, avoiding
+# an expensive and unrelated dependency rebuild without testing a partial mix
+# of old and new Plexus modules.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+COPY plexus /workspace/plexus
+COPY MCP /workspace/MCP
+COPY dashboard/amplify/functions/consoleRunWorker/app.py /var/task/app.py

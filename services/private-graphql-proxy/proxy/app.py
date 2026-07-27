@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import timezone
 from typing import Any, Optional
@@ -129,7 +130,15 @@ async def graphql_endpoint(
     extensions: dict[str, Any] = {"proxy": {"private": [], "control": []}}
 
     for field in plan.private_fields:
-        data[field.response_key] = handle_private_field(field, variables, plan.operation_type)
+        # Postgres access in the local store is synchronous.  Keep it off the
+        # ASGI event loop so a realistic report/evaluation fan-out cannot make
+        # health probes or independent requests time out.
+        data[field.response_key] = await asyncio.to_thread(
+            handle_private_field,
+            field,
+            variables,
+            plan.operation_type,
+        )
         extensions["proxy"]["private"].append(field.name)
 
     if plan.control_fields:
@@ -138,7 +147,8 @@ async def graphql_endpoint(
             if len(plan.control_fields) == len(plan.root_fields)
             else build_root_only_query(plan, plan.control_fields)
         )
-        control_response, cache_status = execute_control_query(
+        control_response, cache_status = await asyncio.to_thread(
+            execute_control_query,
             control_query,
             variables,
             operation_name,
@@ -187,7 +197,7 @@ def handle_private_field(
     operation_type: str,
 ) -> Any:
     if not field.model:
-        return handle_local_custom_field(field, variables)
+        return handle_local_custom_field(field, variables, operation_type)
 
     if operation_type == "mutation":
         input_doc = argument_value(field.node, "input", variables)
@@ -256,7 +266,31 @@ def handle_private_field(
     raise HTTPException(status_code=400, detail=f"unsupported private query {field.name}")
 
 
-def handle_local_custom_field(field: RootField, variables: dict[str, Any]) -> Any:
+def handle_local_custom_field(
+    field: RootField,
+    variables: dict[str, Any],
+    operation_type: str,
+) -> Any:
+    if field.name == "claimScoringJob" and operation_type == "mutation":
+        input_doc = argument_value(field.node, "input", variables)
+        if not isinstance(input_doc, dict):
+            raise HTTPException(status_code=400, detail="claimScoringJob requires an input object")
+        required = ("accountId", "scoringJobId", "itemId", "scorecardId", "scoreId", "scoreResultId")
+        missing = [name for name in required if not input_doc.get(name)]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"claimScoringJob missing: {', '.join(missing)}")
+        return project_plain_value(
+            store.claim_scoring_job(
+                account_id=input_doc["accountId"],
+                scoring_job_id=input_doc["scoringJobId"],
+                item_id=input_doc["itemId"],
+                scorecard_id=input_doc["scorecardId"],
+                score_id=input_doc["scoreId"],
+                score_result_id=input_doc["scoreResultId"],
+            ),
+            field.node.selection_set,
+        )
+
     if field.name != "getResourceByShareToken":
         raise HTTPException(status_code=400, detail=f"{field.name} has no private model")
 
@@ -328,13 +362,43 @@ def list_filters(args: dict[str, Any]) -> dict[str, Any]:
     }
     filter_arg = args.get("filter")
     if isinstance(filter_arg, dict):
-        filters.update(filter_arg)
+        filters.update(conjunctive_filter_terms(filter_arg))
     for name, value in args.items():
         if name in ignored or value is None:
             continue
         if isinstance(value, dict) and "eq" in value:
             filters[name] = value["eq"]
     return filters
+
+
+def conjunctive_filter_terms(filter_arg: dict[str, Any]) -> dict[str, Any]:
+    """Convert GraphQL's nested ``and`` filter shape into local-store terms."""
+    terms: dict[str, Any] = {}
+
+    def add_terms(condition: dict[str, Any]) -> None:
+        for field_name, expected in condition.items():
+            if field_name == "and":
+                if not isinstance(expected, list):
+                    raise HTTPException(status_code=400, detail="filter.and must be a list")
+                for nested_condition in expected:
+                    if not isinstance(nested_condition, dict):
+                        raise HTTPException(status_code=400, detail="filter.and entries must be objects")
+                    add_terms(nested_condition)
+                continue
+            if field_name in {"or", "not"}:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"local GraphQL proxy does not support filter.{field_name}",
+                )
+            if field_name in terms and terms[field_name] != expected:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"local GraphQL proxy received conflicting filters for {field_name}",
+                )
+            terms[field_name] = expected
+
+    add_terms(filter_arg)
+    return terms
 
 
 def composite_begins_with_filters(args: dict[str, Any]) -> dict[str, Any]:

@@ -15,6 +15,35 @@ class _FakeScorecard:
         return {}, {"Agent Misrepresentation": "node-1"}
 
 
+class _BrokenExtractorScorecard(_FakeScorecard):
+    scores = [
+        {
+            "id": "score-1",
+            "name": "Agent Misrepresentation",
+            "class": "LangGraphScore",
+            "graph": [
+                {
+                    "name": "extractor",
+                    "class": "Extractor",
+                    "output": {
+                        "value": "extracted_evidence",
+                        "explanation": "explanation",
+                    },
+                },
+                {
+                    "name": "classifier",
+                    "class": "Classifier",
+                    "user_message": "Evidence: {{extracted_evidence}}",
+                    "output": {
+                        "value": "classification",
+                        "explanation": "explanation",
+                    },
+                },
+            ],
+        }
+    ]
+
+
 class _FakeScoreResult:
     value = "No"
     explanation = "Test explanation"
@@ -62,6 +91,65 @@ def test_score_version_test_explicit_items_override_samples(monkeypatch):
     assert result["requested_samples"] == 3
     assert result["selected_samples"] == 2
     assert result["selection_source"] == "explicit_items"
+
+
+def test_score_version_test_rejects_invalid_extractor_output_dataflow(monkeypatch):
+    monkeypatch.setattr(
+        svc,
+        "_resolve_scorecard_and_score",
+        lambda **_: (
+            "scorecard-1",
+            "score-1",
+            {"id": "score-1", "name": "Agent Misrepresentation", "championVersionId": "champ-1"},
+        ),
+    )
+    monkeypatch.setattr(
+        svc,
+        "resolve_item_identifier",
+        lambda _client, identifier, _account_id: identifier,
+    )
+    monkeypatch.setattr(
+        svc,
+        "load_scorecard_from_api",
+        lambda **_: _BrokenExtractorScorecard(),
+    )
+
+    result = asyncio.run(
+        svc.run_score_version_test(
+            client=_FakeClient(),
+            scorecard_identifier="sc",
+            score_identifier="score",
+            samples=1,
+            item_identifiers=["item-x"],
+            days=90,
+        )
+    )
+
+    assert result["passed"] is False
+    assert result["failure_code"] == "invalid_score_dataflow"
+    assert result["predictions"] == []
+    assert result["failures"] == [
+        {
+            "node": "extractor",
+            "node_class": "Extractor",
+            "output_target": "value",
+            "output_source": "extracted_evidence",
+            "message": (
+                "Extractor output source 'extracted_evidence' is invalid; "
+                "map a downstream state field to 'extracted_text'."
+            ),
+        },
+        {
+            "node": "extractor",
+            "node_class": "Extractor",
+            "output_target": "explanation",
+            "output_source": "explanation",
+            "message": (
+                "Extractor output source 'explanation' is invalid; "
+                "map a downstream state field to 'extracted_text'."
+            ),
+        },
+    ]
 
 
 def test_score_version_test_fails_on_selection_shortfall(monkeypatch):
@@ -156,6 +244,42 @@ def test_score_version_test_fails_on_unresolved_prompt_placeholders(monkeypatch)
     assert result["score_input"]["metadata"] == {"disposition": "Set Outside 48"}
     assert result["score_input"]["metadata_keys"] == ["disposition"]
     assert result["score_input"]["text_excerpt"] == "transcript"
+
+
+def test_score_version_test_decodes_nested_json_metadata_before_scoring():
+    class FakeClient(_FakeClient):
+        def execute(self, _query, _variables):
+            return {
+                "getItem": {
+                    "id": "item-1",
+                    "text": "transcript",
+                    "metadata": (
+                        '{"schools":"[{\\"school_id\\":\\"school-1\\"}]",'
+                        '"other_data":"{\\"WarmTransfer\\":\\"Yes\\"}",'
+                        '"ordinary_text":"[not JSON]"}'
+                    ),
+                }
+            }
+
+    class FakeScorecard(_FakeScorecard):
+        async def score_entire_text(self, **kwargs):
+            assert kwargs["metadata"]["schools"] == [{"school_id": "school-1"}]
+            assert kwargs["metadata"]["other_data"] == {"WarmTransfer": "Yes"}
+            assert kwargs["metadata"]["ordinary_text"] == "[not JSON]"
+            return {"node-1": _FakeScoreResult()}
+
+    result = asyncio.run(
+        svc._predict_single_item(
+            client=FakeClient(),
+            scorecard_instance=FakeScorecard(),
+            resolved_score_name="Agent Misrepresentation",
+            target_result_id="node-1",
+            score_name_for_output="Agent Misrepresentation",
+            item_id="item-1",
+        )
+    )
+
+    assert result["passed"] is True
 
 
 def test_score_version_test_uses_fallback_scorecard_items(monkeypatch):

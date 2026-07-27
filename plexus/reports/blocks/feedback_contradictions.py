@@ -20,7 +20,6 @@ from . import feedback_utils
 from .guideline_vetting import GuidelineVettingService
 from .feedback_scope_resolver import resolve_scorecard
 from .score_resolution import resolve_score_for_scorecard
-from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
 from plexus.feedback_analysis_preflight import (
     FeedbackAnalysisPreflightError,
     validate_feedback_analysis_preflight,
@@ -660,7 +659,7 @@ class FeedbackContradictions(BaseReportBlock):
             )
 
         try:
-            topic_map: Dict[str, str] = await asyncio.to_thread(self._call_bedrock_for_topics, cluster_prompt)
+            topic_map: Dict[str, str] = await asyncio.to_thread(self._call_openai_for_topics, cluster_prompt)
             if isinstance(topic_map, dict) and "assignments" in topic_map:
                 topic_map = topic_map["assignments"]
             if not isinstance(topic_map, dict):
@@ -728,7 +727,7 @@ class FeedbackContradictions(BaseReportBlock):
                 )
 
             try:
-                enrich_result = await asyncio.to_thread(self._call_bedrock_for_topics, enrich_prompt)
+                enrich_result = await asyncio.to_thread(self._call_openai_for_topics, enrich_prompt)
                 if not isinstance(enrich_result, dict):
                     raise ValueError(f"Expected dict from topic enrichment LLM, got {type(enrich_result).__name__}")
                 raw_summaries = enrich_result.get("summaries", {})
@@ -757,31 +756,23 @@ class FeedbackContradictions(BaseReportBlock):
 
         return topics
 
-    def _call_bedrock_for_topics(
+    def _call_openai_for_topics(
         self,
         prompt: str,
-        model_id: str = CLAUDE_HAIKU_45_MODEL_ID,
+        model: str = "gpt-5.4-mini",
     ) -> Dict[str, Any]:
-        import boto3
+        import os
         import re
+        from openai import OpenAI
 
-        bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
-        body = json.dumps(
-            {
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 4096,
-                "temperature": 0,
-                "messages": [{"role": "user", "content": prompt}],
-            }
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        response = client.responses.create(
+            model=model,
+            reasoning={"effort": "low"},
+            input=[{"role": "user", "content": prompt}],
+            max_output_tokens=4096,
         )
-        response = bedrock.invoke_model(
-            modelId=model_id,
-            body=body,
-            contentType="application/json",
-            accept="application/json",
-        )
-        raw = json.loads(response["body"].read())
-        text = raw["content"][0]["text"].strip()
+        text = response.output_text.strip()
 
         if "```" in text:
             match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)

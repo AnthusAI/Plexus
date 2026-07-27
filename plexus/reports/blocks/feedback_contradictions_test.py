@@ -5,12 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
 from plexus.feedback_analysis_preflight import FeedbackAnalysisPreflightError
 from plexus.feedback_analysis_preflight import FeedbackAnalysisPreflightResult
 from plexus.feedback_item_explanations import FeedbackItemExplanationTimeoutError
 from plexus.reports.blocks.feedback_contradictions import FeedbackContradictions
-from plexus.reports.blocks.guideline_vetting import GuidelineVettingService
 
 
 class _DummyClient:
@@ -63,64 +61,25 @@ def _preflight_result() -> FeedbackAnalysisPreflightResult:
     )
 
 
-def test_guideline_vetting_bedrock_uses_haiku_45(monkeypatch):
+def test_feedback_contradictions_topic_enrichment_uses_openai(monkeypatch):
     captured = {}
 
-    class _Body:
-        def read(self):
-            return json.dumps({
-                "content": [
-                    {
-                        "type": "text",
-                        "text": json.dumps(
-                            {
-                                "contradicts": False,
-                                "category": None,
-                                "reason": "Aligned.",
-                                "guideline_quote": "",
-                            }
-                        ),
-                    }
-                ]
-            }).encode()
+    class _Response:
+        output_text = json.dumps({"summaries": {}, "guideline_quotes": {}})
 
     class _Client:
-        def invoke_model(self, **kwargs):
-            captured.update(kwargs)
-            return {"body": _Body()}
+        class responses:
+            @staticmethod
+            def create(**kwargs):
+                captured.update(kwargs)
+                return _Response()
 
-    monkeypatch.setattr("boto3.client", lambda *_args, **_kwargs: _Client())
-
-    result = GuidelineVettingService()._invoke_bedrock("prompt")
-
-    assert captured["modelId"] == CLAUDE_HAIKU_45_MODEL_ID
-    assert result["contradicts"] is False
-
-
-def test_feedback_contradictions_topic_enrichment_uses_haiku_45(monkeypatch):
-    captured = {}
-
-    class _Body:
-        def read(self):
-            return json.dumps({
-                "content": [
-                    {
-                        "type": "text",
-                        "text": json.dumps({"summaries": {}, "guideline_quotes": {}}),
-                    }
-                ]
-            }).encode()
-
-    class _Client:
-        def invoke_model(self, **kwargs):
-            captured.update(kwargs)
-            return {"body": _Body()}
-
-    monkeypatch.setattr("boto3.client", lambda *_args, **_kwargs: _Client())
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr("openai.OpenAI", lambda *_args, **_kwargs: _Client())
     block = FeedbackContradictions(config={}, params={}, api_client=_DummyClient())
 
-    assert block._call_bedrock_for_topics("prompt") == {"summaries": {}, "guideline_quotes": {}}
-    assert captured["modelId"] == CLAUDE_HAIKU_45_MODEL_ID
+    assert block._call_openai_for_topics("prompt") == {"summaries": {}, "guideline_quotes": {}}
+    assert captured["model"] == "gpt-5.4-mini"
 
 
 @pytest.mark.asyncio

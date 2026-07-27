@@ -325,6 +325,22 @@ class TaskProgressTracker:
         # Update API task if we have one
         self._update_api_task_progress()
 
+    def update_status_message(self, message: str) -> None:
+        """Persist a human-readable status for the active stage immediately.
+
+        Final analysis can take materially longer than scoring. Updating the
+        stage message through the normal API sync makes that work visible
+        instead of leaving a completed progress bar looking stalled.
+        """
+        if not message:
+            raise ValueError("message is required.")
+        if not self.current_stage:
+            raise RuntimeError("Cannot update status without an active task stage.")
+
+        self.current_stage.status_message = message
+        self.status = message
+        self._update_api_task_progress(force_critical=True)
+
     def advance_stage(self):
         """Advance to next stage and update API task if we have one."""
         if not self._stages:

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import threading
 from datetime import timedelta
 
 from fastapi.testclient import TestClient
@@ -19,6 +22,37 @@ class InMemoryStore:
         }
         self.cache = {}
         self.upstream_audit = []
+        self.scoring_claims = {}
+
+    def claim_scoring_job(
+        self,
+        *,
+        account_id,
+        scoring_job_id,
+        item_id,
+        scorecard_id,
+        score_id,
+        score_result_id,
+    ):
+        key = (account_id, scoring_job_id)
+        existing = self.scoring_claims.get(key)
+        if not existing:
+            self.scoring_claims[key] = {
+                "itemId": item_id,
+                "scorecardId": scorecard_id,
+                "scoreId": score_id,
+                "scoreResultId": score_result_id,
+            }
+            return {"state": "CLAIMED", "scoreResultId": score_result_id}
+        if (existing["itemId"], existing["scorecardId"], existing["scoreId"]) != (
+            item_id,
+            scorecard_id,
+            score_id,
+        ):
+            return {"state": "CONFLICT", "scoreResultId": existing["scoreResultId"]}
+        if self.get_private("ScoreResult", {"id": existing["scoreResultId"]}):
+            return {"state": "COMPLETED", "scoreResultId": existing["scoreResultId"]}
+        return {"state": "IN_PROGRESS", "scoreResultId": existing["scoreResultId"]}
 
     def upsert_private(self, model, input_doc):
         doc = dict(input_doc)
@@ -151,6 +185,41 @@ def test_private_operation_uses_local_store_only(monkeypatch):
     assert upstream.calls == 0
 
 
+def test_claim_scoring_job_is_private_and_idempotent(monkeypatch):
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    client, store, upstream = client_with_fakes(monkeypatch)
+    payload = {
+        "query": """
+        mutation ClaimScore($input: ClaimScoringJobInput!) {
+            claimScoringJob(input: $input) { state scoreResultId }
+        }
+        """,
+        "variables": {
+            "input": {
+                "accountId": "account-1",
+                "scoringJobId": "job-1",
+                "itemId": "item-1",
+                "scorecardId": "scorecard-1",
+                "scoreId": "score-1",
+                "scoreResultId": "result-1",
+            }
+        },
+    }
+
+    first = client.post("/graphql", json=payload)
+    second = client.post("/graphql", json=payload)
+
+    assert first.status_code == 200
+    assert first.json()["data"]["claimScoringJob"] == {"state": "CLAIMED", "scoreResultId": "result-1"}
+    assert second.json()["data"]["claimScoringJob"] == {"state": "IN_PROGRESS", "scoreResultId": "result-1"}
+
+    store.upsert_private("ScoreResult", {"id": "result-1"})
+    completed = client.post("/graphql", json=payload)
+    assert completed.status_code == 200
+    assert completed.json()["data"]["claimScoringJob"] == {"state": "COMPLETED", "scoreResultId": "result-1"}
+    assert upstream.calls == 0
+
+
 def test_control_operation_is_cached(monkeypatch):
     client, _store, upstream = client_with_fakes(monkeypatch)
     payload = {
@@ -182,6 +251,34 @@ def test_graphql_endpoint_supports_local_cors_preflight(monkeypatch):
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+def test_graphql_private_store_work_does_not_block_the_event_loop(monkeypatch):
+    """A slow local-store request must leave probes and peer requests responsive."""
+    handler_thread_ids = []
+
+    class FakeRequest:
+        async def json(self):
+            return {"query": 'query { getItem(id: "item-1") { id } }'}
+
+    def blocking_handler(*_args, **_kwargs):
+        handler_thread_ids.append(threading.get_ident())
+        return {"id": "item-1"}
+
+    monkeypatch.setattr(proxy_app, "handle_private_field", blocking_handler)
+
+    async def invoke():
+        event_loop_thread_id = threading.get_ident()
+        response = await proxy_app.graphql_endpoint(FakeRequest(), None)
+        return event_loop_thread_id, response
+
+    event_loop_thread_id, response = asyncio.run(invoke())
+
+    assert json.loads(response.body) == {
+        "data": {"getItem": {"id": "item-1"}},
+        "extensions": {"proxy": {"private": ["getItem"], "control": []}},
+    }
+    assert handler_thread_ids != [event_loop_thread_id]
 
 
 def test_mixed_query_splits_private_and_control_roots(monkeypatch):
@@ -490,6 +587,51 @@ def test_local_mode_supports_feedback_composite_alias_without_upstream(monkeypat
     assert [item["id"] for item in connection["items"]] == ["feedback-cli-1"]
     assert connection["items"][0]["finalAnswerValue"] == "Yes"
     assert store.upstream_requests() == []
+
+
+def test_local_mode_lists_feedback_items_for_conjunctive_filter(monkeypatch):
+    """The standard all-time feedback query must work against local storage."""
+    monkeypatch.setenv("PLEXUS_BACKEND_MODE", "local")
+    client, store, _upstream = client_with_fakes(monkeypatch)
+    for feedback_id, scorecard_id, score_id in (
+        ("feedback-standard-1", "scorecard-1", "score-1"),
+        ("feedback-standard-other", "scorecard-other", "score-other"),
+    ):
+        store.upsert_private(
+            "FeedbackItem",
+            {
+                "id": feedback_id,
+                "accountId": "account-1",
+                "scorecardId": scorecard_id,
+                "scoreId": score_id,
+                "itemId": f"item-{feedback_id}",
+                "createdAt": "2026-06-05T01:00:00Z",
+                "updatedAt": "2026-06-05T01:00:00Z",
+            },
+        )
+
+    response = client.post(
+        "/graphql",
+        json={
+            "query": """
+            query StandardFeedbackFilter($filter: ModelFeedbackItemFilterInput) {
+                listFeedbackItems(filter: $filter, limit: 1000) { items { id } }
+            }
+            """,
+            "variables": {
+                "filter": {
+                    "and": [
+                        {"accountId": {"eq": "account-1"}},
+                        {"scorecardId": {"eq": "scorecard-1"}},
+                        {"scoreId": {"eq": "score-1"}},
+                    ]
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["listFeedbackItems"]["items"] == [{"id": "feedback-standard-1"}]
 
 
 def test_local_mode_returns_next_token_for_feedback_composite_alias(monkeypatch):

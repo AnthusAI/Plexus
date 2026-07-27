@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "event_id": "9abd7011-33ec-4b63-9528-21fc1c4f64ec",
+  "issue_id": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+  "event_type": "dependency_added",
+  "occurred_at": "2026-07-27T20:54:32.411Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "dependency_type": "relates-to",
+    "target_id": "plx-7a8b2c"
+  }
+}

@@ -1,31 +1,51 @@
 {
   "id": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
-  "title": "MCP Tactus batch operations for feedback workflows",
-  "description": "",
+  "title": "Batch and parallel optimization orchestration",
+  "description": "Purpose: Run complete multi-target feedback analysis and optimization workflows efficiently with bounded concurrency, stable ordering, isolated mutations, and explicit coverage.\n\nExclusions:\n- Silent sampling of complete-scope requests.\n- Shared mutable candidate state across targets.\n- Unbounded concurrency or automatic production promotion.\n\nDependencies: Consumes discovery output, supported runtime interfaces, reproducible cohorts, and the shared run-evidence contract. Existing batch-read and batch-dispatch capabilities remain the foundation.\n\nDefinition of Done:\n- Complete-scope workflows enumerate and report every target or explicitly report incomplete coverage.\n- Batch input and result ordering and opaque identifiers remain unchanged.\n- Concurrency and resource use are bounded and configurable.\n- Target failures remain isolated and visible without discarding successful results.\n- Planning artifacts are portable between supported local and hosted execution.\n- Existing single-target APIs remain compatible.\n- Behavior-first specifications and focused tests pass.\n\nRunning log: Preserve existing issue histories and record sanitized decisions, attempts, outcomes, and next steps in this epic or its child issues.",
   "type": "epic",
   "status": "in_progress",
-  "priority": 2,
+  "priority": 1,
   "assignee": null,
   "creator": null,
-  "parent": null,
+  "parent": "plx-8570854c-bad6-4049-be38-e04836aae830",
   "labels": [],
-  "dependencies": [],
+  "dependencies": [
+    {
+      "target": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+      "type": "relates-to"
+    },
+    {
+      "target": "plx-7a8b2c38-2c10-4890-942a-8b04bc8fc65a",
+      "type": "relates-to"
+    },
+    {
+      "target": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+      "type": "relates-to"
+    },
+    {
+      "target": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+      "type": "relates-to"
+    }
+  ],
   "comments": [
     {
       "id": "c5865dbf-0b1c-4aba-97df-4c31ce638585",
       "author": "derek",
       "text": "As an AI agent developer, I want efficient batch operations for feedback alignment and optimizer dispatch via execute_tactus, so that scorecard-wide analysis and optimization workflows scale to dozens of scores without excessive API latency.\n\nSuccess criteria:\n- Scorecard-wide feedback alignment completes in 1-2 API calls instead of N calls (one per score)\n- Batch optimizer dispatch API exists for multi-score optimization scenarios\n- Documentation accurately reflects the Tactus API surface\n- All changes maintain backward compatibility with existing single-score APIs",
-      "created_at": "2026-06-09T20:59:35.053314105Z"
+      "created_at": "2026-06-09T20:59:35.053314Z"
     },
     {
       "id": "73efddd7-184c-4917-9470-cd208549acfc",
       "author": "derek",
       "text": "All implementation tasks complete and tested. PR pending. Code committed on feature/mcp-batch-operations branch.",
-      "created_at": "2026-06-09T21:24:04.485626892Z"
+      "created_at": "2026-06-09T21:24:04.485626Z"
     }
   ],
-  "created_at": "2026-06-09T20:57:57.180873372Z",
-  "updated_at": "2026-06-09T21:24:04.485626892Z",
+  "created_at": "2026-06-09T20:57:57.180873Z",
+  "updated_at": "2026-07-27T20:53:04.635516Z",
   "closed_at": null,
-  "custom": {}
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
 }
