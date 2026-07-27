@@ -302,6 +302,16 @@ class TestEmbeddedMCPServer:
         assert "return_metadata = true" in execute_tactus_tool.description
         assert "next_token = token" in execute_tactus_tool.description
         assert "complete = false" in execute_tactus_tool.description
+        assert "opaque runtime values" in execute_tactus_tool.description
+        assert "identifier = scorecard.id" in execute_tactus_tool.description
+        assert "score_count" in execute_tactus_tool.description
+        assert "Never silently reduce complete requested coverage to a sample" in execute_tactus_tool.description
+        assert "plexus.feedback.alignment_batch" in execute_tactus_tool.description
+        assert "scorecards = scorecard_ids" in execute_tactus_tool.description
+        assert "coverage" in execute_tactus_tool.description
+        assert "Never return the unaggregated alignment batch payload" in execute_tactus_tool.description
+        assert "ranked_from_count" in execute_tactus_tool.description
+        assert "result = analysis" not in execute_tactus_tool.description
         await server.transport.initialize({"name": "Test"})
 
         result = await server.transport.call_tool(

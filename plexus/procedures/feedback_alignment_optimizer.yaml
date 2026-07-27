@@ -693,6 +693,86 @@ code: |
     return result
   end
 
+  local function extract_selected_feedback_item_ids(eval_result)
+    if type(eval_result) ~= "table" then return nil end
+    local parameters = eval_result.parameters
+    if type(parameters) == "string" then
+      local decoded = safe_decode(parameters)
+      if type(decoded) == "table" then parameters = decoded end
+    end
+    if type(parameters) ~= "table" then return nil end
+    local ids = parameters.selected_feedback_item_ids or parameters.feedback_item_ids
+    if type(ids) ~= "table" or #ids == 0 then return nil end
+    local normalized = {}
+    for _, item_id in ipairs(ids) do
+      if has_text(item_id) then table.insert(normalized, tostring(item_id)) end
+    end
+    return #normalized > 0 and normalized or nil
+  end
+
+  local function same_id_set(left, right)
+    if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
+    local counts = {}
+    for _, item_id in ipairs(left) do
+      local key = tostring(item_id)
+      counts[key] = (counts[key] or 0) + 1
+    end
+    for _, item_id in ipairs(right) do
+      local key = tostring(item_id)
+      if not counts[key] or counts[key] == 0 then return false end
+      counts[key] = counts[key] - 1
+    end
+    for _, count in pairs(counts) do
+      if count ~= 0 then return false end
+    end
+    return true
+  end
+
+  local function prediction_mode_collapse_reason(metrics)
+    if type(metrics) ~= "table" then return nil end
+
+    local actual_nonzero = 0
+    local predicted_nonzero = 0
+    local matrix = metrics.confusion_matrix
+    if type(matrix) == "table" and #matrix > 0 then
+      local column_totals = {}
+      for _, row in ipairs(matrix) do
+        if type(row) == "table" then
+          local row_total = 0
+          for column_index, value in ipairs(row) do
+            local count = tonumber(value) or 0
+            row_total = row_total + count
+            column_totals[column_index] = (column_totals[column_index] or 0) + count
+          end
+          if row_total > 0 then actual_nonzero = actual_nonzero + 1 end
+        end
+      end
+      for _, count in pairs(column_totals) do
+        if count > 0 then predicted_nonzero = predicted_nonzero + 1 end
+      end
+    else
+      for _, entry in ipairs(metrics.actual_distribution or {}) do
+        if type(entry) == "table" and (tonumber(entry.count) or 0) > 0 then
+          actual_nonzero = actual_nonzero + 1
+        end
+      end
+      for _, entry in ipairs(metrics.predicted_distribution or {}) do
+        if type(entry) == "table" and (tonumber(entry.count) or 0) > 0 then
+          predicted_nonzero = predicted_nonzero + 1
+        end
+      end
+    end
+
+    if actual_nonzero > 1 and predicted_nonzero == 1 then
+      return string.format(
+        "prediction_mode_collapse_actual_%d_predicted_%d",
+        actual_nonzero,
+        predicted_nonzero
+      )
+    end
+    return nil
+  end
+
   local function extract_cost_per_item(eval_result)
     if type(eval_result) ~= "table" then
       return nil
@@ -1251,6 +1331,35 @@ code: |
       local t = os.clock() + delay
       while os.clock() < t do end
     end
+  end
+
+  local function require_exact_feedback_cohort(eval_result, expected_ids)
+    if type(expected_ids) ~= "table" or #expected_ids == 0 then
+      return false, "expected recent feedback cohort is unavailable"
+    end
+    local eval_info = eval_result
+    local actual_ids = extract_selected_feedback_item_ids(eval_info)
+    if not actual_ids and type(eval_result) == "table" then
+      local eval_id = eval_result.id or eval_result.evaluation_id
+      if has_text(eval_id) then
+        eval_info = call_plexus_tool("plexus_evaluation_info", {
+          evaluation_id = eval_id,
+          output_format = "json"
+        })
+        actual_ids = extract_selected_feedback_item_ids(eval_info)
+      end
+    end
+    if not actual_ids then
+      return false, "candidate evaluation does not expose selected_feedback_item_ids"
+    end
+    if not same_id_set(actual_ids, expected_ids) then
+      return false, string.format(
+        "candidate feedback cohort differs from baseline (expected=%d actual=%d)",
+        #expected_ids,
+        #actual_ids
+      )
+    end
+    return true, nil
   end
 
   -- Build version history table for agent context
@@ -4649,6 +4758,7 @@ code: |
   local recent_baseline_metrics = nil
   local recent_baseline_cost_per_item = nil
   local recent_baseline_rca   = {}
+  local recent_baseline_feedback_item_ids = nil
   -- current score config — set by init or continuation, used in cycle loop
   local current_code_path    = nil
   local current_code         = nil
@@ -4890,6 +5000,7 @@ code: |
     recent_baseline_cost_per_item = State.get("recent_baseline_cost_per_item")
     regression_baseline_rca   = State.get("last_regression_rca") or {}
     recent_baseline_rca   = State.get("last_recent_rca") or {}
+    recent_baseline_feedback_item_ids = State.get("recent_baseline_feedback_item_ids")
     regression_available      = regression_baseline_metrics ~= nil
 
     -- Re-pull current config from last accepted version
@@ -4992,9 +5103,14 @@ code: |
     )
     local dataset_size_adequate = dataset_rows >= min_dataset_rows
       or (dataset_source_exhausted and dataset_rows >= min_acceptable)
+    local dataset_balance_contract_adequate = dataset_check
+      and dataset_check.balance_applied == true
+      and dataset_check.resolved_final_classes ~= nil
+      and dataset_check.class_coverage ~= nil
     local dataset_adequate = dataset_check and dataset_check.has_dataset
       and dataset_check.is_materialized
       and dataset_size_adequate
+      and dataset_balance_contract_adequate
       and dataset_is_fresh
 
     local selected_dataset_id = nil
@@ -5012,7 +5128,12 @@ code: |
       ), level = "info"})
     else
       if dataset_check and dataset_check.has_dataset then
-        if not dataset_is_fresh and has_text(active_feedback_target_updated_at) then
+        if not dataset_balance_contract_adequate then
+          Human.notify({message = string.format(
+            "Existing dataset for version %s lacks verified terminal-class coverage; rebuilding it with the adaptive balanced cohort contract...",
+            tostring(version_id or "champion")
+          ), level = "info"})
+        elseif not dataset_is_fresh and has_text(active_feedback_target_updated_at) then
           Human.notify({message = string.format(
             "Existing dataset for version %s is stale (created_at=%s older than watermark=%s), creating new one...",
             tostring(version_id or "champion"),
@@ -5044,7 +5165,7 @@ code: |
         score_version_id = version_id
       })
       if not build_ok then
-        Human.notify({message = "Balanced regression dataset build failed: " .. tostring(build_result), level = "error"})
+        Human.notify({message = "Balanced regression dataset build failed (" .. tostring(build_result) .. "). Regression tracking disabled for this run; no unbalanced fallback will be used.", level = "warning"})
         return nil
       end
 
@@ -5054,11 +5175,17 @@ code: |
         selected_dataset_id = build_result.dataset_id
         selected_feedback_target_hash = build_result.feedback_target_hash
         selected_row_count = build_result.rows_written
-        Human.notify({message = "Created balanced dataset: " .. selected_dataset_id .. " (" .. build_result.rows_written .. " rows)", level = "info"})
+        Human.notify({message = string.format(
+          "Created adaptive regression dataset: %s (%d rows, historical lookback extended=%s, balanced coverage complete=%s)",
+          tostring(selected_dataset_id),
+          tonumber(build_result.rows_written or 0),
+          tostring(build_result.lookback_extended == true),
+          tostring(build_result.balance_complete == true)
+        ), level = "info"})
       else
         local rows_so_far = (build_result and build_result.rows_written) or 0
         Human.notify({message = string.format(
-          "Insufficient balanced feedback data for regression dataset (version %s): only %d items available (need %d, minimum %d). Regression tracking disabled for this run.",
+          "Insufficient balanced feedback data for regression dataset (version %s): only %d items available (need %d, minimum %d). Regression tracking disabled for this run; no unbalanced fallback will be used.",
           tostring(version_id or "champion"),
           rows_so_far,
           min_dataset_rows,
@@ -5549,6 +5676,24 @@ code: |
     end
   end
 
+  -- Freeze the exact recent-feedback membership once, regardless of whether the
+  -- baseline was resumed, reused, or freshly evaluated. Every candidate must
+  -- replay these opaque IDs; matching only the window and count is insufficient.
+  do
+    local baseline_info = call_plexus_tool("plexus_evaluation_info", {
+      evaluation_id = recent_baseline_id,
+      output_format = "json"
+    })
+    recent_baseline_feedback_item_ids = extract_selected_feedback_item_ids(baseline_info)
+    if not recent_baseline_feedback_item_ids then
+      error("Recent baseline does not expose selected_feedback_item_ids; exact candidate comparison is unavailable")
+    end
+    Human.notify({message = string.format(
+      "Frozen recent feedback cohort: %d exact item IDs",
+      #recent_baseline_feedback_item_ids
+    ), level = "info"})
+  end
+
   -- Store both baselines in state
   State.set("regression_baseline_id",      regression_baseline_id)
   State.set("regression_baseline_metrics", regression_baseline_metrics)
@@ -5556,6 +5701,7 @@ code: |
   State.set("recent_baseline_id",      recent_baseline_id)
   State.set("recent_baseline_metrics", recent_baseline_metrics)
   State.set("recent_baseline_cost_per_item", recent_baseline_cost_per_item)
+  State.set("recent_baseline_feedback_item_ids", recent_baseline_feedback_item_ids)
   -- Immutable copies for dashboard display — never overwritten on acceptance
   -- (the non-initial keys are updated each accepted cycle for agent context)
   if State.get("recent_initial_baseline_metrics") == nil then
@@ -6972,13 +7118,12 @@ code: |
       local batch = {}
       for _, sv in ipairs(submitted_versions) do
         if regression_available then
-          local candidate_dataset_id = ensure_regression_dataset_for_version(sv.version_id)
-          sv.dataset_id = candidate_dataset_id
+          sv.dataset_id = dataset_id
           table.insert(batch, {
             scorecard_name = params.scorecard,
             score_name = params.score,
             evaluation_type = "accuracy",
-            dataset_id = candidate_dataset_id,
+            dataset_id = dataset_id,
             n_samples = params.max_samples or 100,
             version = sv.version_id,
             baseline = regression_baseline_id,
@@ -6993,6 +7138,7 @@ code: |
           days = params.days,
           max_feedback_items = params.max_samples or 100,
           sampling_mode = "newest",
+          feedback_item_ids = recent_baseline_feedback_item_ids,
           feedback_start_at = params.feedback_window_start_at,
           feedback_end_at = params.feedback_window_end_at,
           version = sv.version_id,
@@ -7034,6 +7180,13 @@ code: |
         end
         local fb_r = batch_results and batch_results[base_idx + evals_per]
         if fb_r and (fb_r.id or fb_r.evaluation_id) then
+          local cohort_ok, cohort_error = require_exact_feedback_cohort(
+            fb_r,
+            recent_baseline_feedback_item_ids
+          )
+          if not cohort_ok then
+            error("Invalid candidate comparison: " .. tostring(cohort_error))
+          end
           sv.fb_metrics = extract_metrics(fb_r)
           sv.fb_cost_per_item = extract_cost_per_item(fb_r)
           sv.fb_deltas = calculate_deltas(sv.fb_metrics, recent_baseline_metrics)
@@ -7872,13 +8025,12 @@ code: |
         local eval_batch = {}
         for _, sv in ipairs(strategy_versions) do
           if regression_available then
-            local strategy_dataset_id = ensure_regression_dataset_for_version(sv.version_id)
-            sv.dataset_id = strategy_dataset_id
+            sv.dataset_id = dataset_id
             table.insert(eval_batch, {
               scorecard_name = params.scorecard,
               score_name = params.score,
               evaluation_type = "accuracy",
-              dataset_id = strategy_dataset_id,
+              dataset_id = dataset_id,
               n_samples = params.max_samples or 100,
               version = sv.version_id,
               baseline = regression_baseline_id,
@@ -7894,6 +8046,7 @@ code: |
             days = params.days,
             max_feedback_items = params.max_samples or 100,
             sampling_mode = "newest",
+            feedback_item_ids = recent_baseline_feedback_item_ids,
             feedback_start_at = params.feedback_window_start_at,
             feedback_end_at = params.feedback_window_end_at,
             version = sv.version_id,
@@ -7930,6 +8083,13 @@ code: |
           end
           local fb_r = eval_results and eval_results[offset + evals_per]
           if fb_r and (fb_r.id or fb_r.evaluation_id) then
+            local cohort_ok, cohort_error = require_exact_feedback_cohort(
+              fb_r,
+              recent_baseline_feedback_item_ids
+            )
+            if not cohort_ok then
+              error("Invalid strategy comparison: " .. tostring(cohort_error))
+            end
             sv.fb_metrics = extract_metrics(fb_r)
             sv.fb_cost_per_item = extract_cost_per_item(fb_r)
             sv.fb_deltas = calculate_deltas(sv.fb_metrics, recent_baseline_metrics)
@@ -8180,14 +8340,12 @@ code: |
           status_msg(string.format("Cycle %d/%d — evaluating synthesis result", cycle, max_cycles))
           Human.notify({message = "  Evaluating final version...", level = "info"})
           local b_batch = {}
-          local final_dataset_id = nil
           if regression_available then
-            final_dataset_id = ensure_regression_dataset_for_version(final_version_id)
             table.insert(b_batch, {
               scorecard_name = params.scorecard,
               score_name = params.score,
               evaluation_type = "accuracy",
-              dataset_id = final_dataset_id,
+              dataset_id = dataset_id,
               n_samples = params.max_samples or 100,
               version = final_version_id,
               baseline = regression_baseline_id,
@@ -8202,6 +8360,7 @@ code: |
             days = params.days,
             max_feedback_items = params.max_samples or 100,
             sampling_mode = "newest",
+            feedback_item_ids = recent_baseline_feedback_item_ids,
             feedback_start_at = params.feedback_window_start_at,
             feedback_end_at = params.feedback_window_end_at,
             version = final_version_id,
@@ -8230,6 +8389,13 @@ code: |
           end
           local b_fb_r = b_results and b_results[b_evals_per]
           if b_fb_r and (b_fb_r.id or b_fb_r.evaluation_id) then
+            local cohort_ok, cohort_error = require_exact_feedback_cohort(
+              b_fb_r,
+              recent_baseline_feedback_item_ids
+            )
+            if not cohort_ok then
+              error("Invalid synthesis comparison: " .. tostring(cohort_error))
+            end
             b_fb_metrics = extract_metrics(b_fb_r)
             b_fb_cost_per_item = extract_cost_per_item(b_fb_r)
             b_fb_deltas = calculate_deltas(b_fb_metrics, recent_baseline_metrics)
@@ -8262,9 +8428,17 @@ code: |
 
         local disqualified = false
         local disqualification_reason = nil
+        local collapse_reason = prediction_mode_collapse_reason(b_fb_metrics)
+        local regression_collapse_reason = prediction_mode_collapse_reason(b_acc_metrics)
         if not b_fb_metrics then
           disqualified = true
           disqualification_reason = "missing_recent_metrics"
+        elseif collapse_reason then
+          disqualified = true
+          disqualification_reason = "recent_" .. collapse_reason
+        elseif regression_available and regression_collapse_reason then
+          disqualified = true
+          disqualification_reason = "regression_" .. regression_collapse_reason
         elseif regression_available and b_acc_deltas.alignment < -0.02 then
           disqualified = true
           disqualification_reason = string.format("regression_regression_vs_baseline_%.3f", b_acc_deltas.alignment)

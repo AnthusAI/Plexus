@@ -15,6 +15,13 @@ OPTIMIZER_DOCS_DIR = (
 OPTIMIZER_SKILL_PATH = (
     Path(__file__).resolve().parents[3] / "skills" / "score-optimizer" / "SKILL.md"
 )
+OPTIMIZER_COHORT_GUIDE_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "skills"
+    / "score-optimizer"
+    / "references"
+    / "feedback-cohorts.md"
+)
 
 
 def _load_optimizer_config():
@@ -47,6 +54,19 @@ end
     return lua, schedule
 
 
+def _build_optimizer_candidate_collapse_checker():
+    from lupa import LuaRuntime
+
+    config = _load_optimizer_config()
+    code = config["code"]
+    start = code.index("local function prediction_mode_collapse_reason(metrics)")
+    end = code.index("local function extract_cost_per_item(eval_result)")
+    block = code[start:end]
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    check = lua.execute(block + "\nreturn prediction_mode_collapse_reason")
+    return lua, check
+
+
 def _lua_list(lua_table):
     return [lua_table[i] for i in range(1, len(lua_table) + 1)]
 
@@ -74,6 +94,31 @@ def test_optimizer_skill_documents_three_phase_rubric_memory_sop():
     assert "Phase 1" in skill
     assert "Phase 2" in skill
     assert "Phase 3" in skill
+
+
+def test_optimizer_skill_preserves_complete_runs_and_one_cohort_selection_path():
+    skill = " ".join(OPTIMIZER_SKILL_PATH.read_text(encoding="utf-8").split())
+    cohort_guide = " ".join(
+        OPTIMIZER_COHORT_GUIDE_PATH.read_text(encoding="utf-8").split()
+    )
+
+    assert "run through terminal completion" in skill
+    assert "Do not stop, cancel, or kill an evaluation" in skill
+    assert "single canonical" in cohort_guide
+    assert "Do not recreate its selection logic in an ad hoc script" in cohort_guide
+    assert "exact feedback-item set equality" in cohort_guide
+
+
+def test_optimizer_requires_balanced_regression_cohort_without_unbalanced_fallback():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "balance = true" in code
+    assert "balance = false" not in code
+    assert "trying unbalanced" not in code.lower()
+    assert "Created unbalanced dataset" not in code
+    assert "no unbalanced fallback will be used" in code
+    assert "build_result.balance_complete" in code
 
 
 def test_optimizer_yaml_defines_dedicated_reporting_agents():
@@ -450,9 +495,12 @@ def test_optimizer_yaml_requires_requested_rows_for_cached_regression_dataset():
     assert "dataset_source_exhausted and dataset_rows >= min_acceptable" in code
     assert "dataset_requested_max_items >= min_dataset_rows" in code
     assert "dataset_check.row_count >= min_acceptable" not in code
+    assert "dataset_check.balance_applied == true" in code
+    assert "dataset_check.resolved_final_classes ~= nil" in code
+    assert "dataset_check.class_coverage ~= nil" in code
     assert "build_source_exhausted" in code
-    assert "unbal_source_exhausted" not in code
     assert "qualifying_found" in code
+    assert "unbal_source_exhausted" not in code
 
 
 def test_optimizer_yaml_bounds_report_context_and_output_shapes():
@@ -551,6 +599,35 @@ def test_optimizer_yaml_uses_shared_score_version_test_tool():
     assert 'call_plexus_tool, "plexus_score_test"' in code
     assert 'version              = candidate_id' in code
     assert 'samples              = 3' in code
+
+
+def test_optimizer_disqualifies_single_class_predictions_on_multiclass_cohort():
+    lua, check = _build_optimizer_candidate_collapse_checker()
+    reason = check(
+        lua.table_from(
+            {
+                "confusion_matrix": lua.table_from(
+                    {
+                        1: lua.table_from({1: 0, 2: 10}),
+                        2: lua.table_from({1: 0, 2: 37}),
+                    }
+                ),
+                "confusion_labels": lua.table_from({1: "no", 2: "yes"}),
+            }
+        )
+    )
+
+    assert reason == "prediction_mode_collapse_actual_2_predicted_1"
+
+
+def test_optimizer_review_gate_uses_prediction_mode_collapse_as_disqualifier():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "prediction_mode_collapse_reason(b_fb_metrics)" in code
+    assert "prediction_mode_collapse_reason(b_acc_metrics)" in code
+    assert 'disqualification_reason = "recent_" .. collapse_reason' in code
+    assert 'disqualification_reason = "regression_" .. regression_collapse_reason' in code
 
 
 def test_optimizer_yaml_routes_unresolved_placeholders_to_mechanical_repair_lane():
@@ -1009,3 +1086,42 @@ def test_optimizer_yaml_does_not_retry_cannot_improve_as_a_fallback():
     assert "agent tried cannot_improve — giving one more chance" not in code
     assert "second_chance_pending" not in code
     assert "react_done_reason = reason_text" in code
+
+
+def test_optimizer_yaml_freezes_fresh_regression_dataset_for_all_candidate_evaluations():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "dataset_id = ensure_regression_dataset_for_version(params.start_version)" in code
+    assert 'State.set("dataset_id", dataset_id)' in code
+    assert "ensure_regression_dataset_for_version(sv.version_id)" not in code
+    assert "ensure_regression_dataset_for_version(final_version_id)" not in code
+    assert "sv.dataset_id = dataset_id" in code
+    assert code.count("dataset_id = dataset_id,") >= 3
+
+
+def test_optimizer_yaml_replays_and_verifies_exact_recent_feedback_cohort():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "Frozen recent feedback cohort" in code
+    assert 'State.set("recent_baseline_feedback_item_ids"' in code
+    assert code.count("feedback_item_ids = recent_baseline_feedback_item_ids") == 3
+    assert "require_exact_feedback_cohort" in code
+    assert "candidate feedback cohort differs from baseline" in code
+    assert "Invalid candidate comparison" in code
+    assert "Invalid strategy comparison" in code
+    assert "Invalid synthesis comparison" in code
+
+
+def test_optimizer_yaml_is_valid_lua_after_exact_cohort_wiring():
+    from lupa import LuaRuntime
+
+    code = _load_optimizer_config()["code"]
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    syntax_check = lua.eval(
+        "function(source) local fn, err = load(source); return fn ~= nil, err end"
+    )
+    valid, error = syntax_check(code)
+
+    assert valid, error

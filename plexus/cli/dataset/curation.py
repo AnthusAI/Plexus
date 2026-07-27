@@ -296,21 +296,93 @@ def _resolve_score_final_classes_from_yaml_details(
         }
 
     graph_nodes = parsed.get("graph")
+    early_terminal_output_found = False
+    if isinstance(graph_nodes, list) and graph_nodes:
+        node_indexes = {
+            str(node.get("name")): index
+            for index, node in enumerate(graph_nodes)
+            if isinstance(node, dict) and node.get("name")
+        }
+        reachable_indexes = {0}
+        pending_indexes = [0]
+        while pending_indexes:
+            node_index = pending_indexes.pop(0)
+            node = graph_nodes[node_index]
+            if not isinstance(node, dict):
+                continue
+
+            explicit_targets: List[str] = []
+            conditions = node.get("conditions")
+            if isinstance(conditions, list):
+                explicit_targets.extend(
+                    str(condition.get("node"))
+                    for condition in conditions
+                    if isinstance(condition, dict) and condition.get("node")
+                )
+            edge = node.get("edge")
+            if isinstance(edge, dict) and edge.get("node"):
+                explicit_targets.append(str(edge.get("node")))
+
+            named_targets = [
+                node_indexes[target]
+                for target in explicit_targets
+                if target in node_indexes
+            ]
+            if not explicit_targets and node_index + 1 < len(graph_nodes):
+                named_targets.append(node_index + 1)
+            for target_index in named_targets:
+                if target_index not in reachable_indexes:
+                    reachable_indexes.add(target_index)
+                    pending_indexes.append(target_index)
+
+        for node_index, node in enumerate(graph_nodes[:-1]):
+            if node_index not in reachable_indexes or not isinstance(node, dict):
+                continue
+            terminal_branches: List[Dict[str, Any]] = []
+            conditions = node.get("conditions")
+            if isinstance(conditions, list):
+                terminal_branches.extend(
+                    condition
+                    for condition in conditions
+                    if isinstance(condition, dict)
+                    and str(condition.get("node") or "").upper() == "END"
+                )
+            edge = node.get("edge")
+            if (
+                isinstance(edge, dict)
+                and str(edge.get("node") or "").upper() == "END"
+            ):
+                terminal_branches.append(edge)
+            for branch in terminal_branches:
+                output = branch.get("output")
+                if isinstance(output, dict) and output.get("value") is not None:
+                    output_value = output.get("value")
+                    if str(output_value).strip().lower() in {"classification", "value"}:
+                        node_classes = node.get("valid_classes")
+                        if isinstance(node_classes, list):
+                            for node_class in node_classes:
+                                add_class(node_class)
+                            early_terminal_output_found = True
+                    else:
+                        add_class(output_value)
+                        early_terminal_output_found = True
+
     final_node = graph_nodes[-1] if isinstance(graph_nodes, list) and graph_nodes else None
     if isinstance(final_node, dict):
         node_classes = final_node.get("valid_classes")
         if isinstance(node_classes, list):
             for node_class in node_classes:
                 add_class(node_class)
-        if valid_classes:
+        if isinstance(node_classes, list) and node_classes:
             return {
                 "classes": valid_classes,
-                "source": "graph[-1].valid_classes",
+                "source": "graph.terminal_outputs" if early_terminal_output_found else "graph[-1].valid_classes",
                 "score_version_id": resolved_score_version_id,
                 "optimizer_shadow_invalid_feedback_item_ids": version_details["optimizer_shadow_invalid_feedback_item_ids"],
             }
 
         node_conditions = final_node.get("conditions")
+        final_condition_output_found = False
         if isinstance(node_conditions, list):
             for condition in node_conditions:
                 if not isinstance(condition, dict):
@@ -319,10 +391,12 @@ def _resolve_score_final_classes_from_yaml_details(
                 if not isinstance(condition_output, dict):
                     continue
                 add_class(condition_output.get("value"))
-        if valid_classes:
+                if condition_output.get("value") is not None:
+                    final_condition_output_found = True
+        if final_condition_output_found:
             return {
                 "classes": valid_classes,
-                "source": "graph[-1].conditions[].output.value",
+                "source": "graph.terminal_outputs" if early_terminal_output_found else "graph[-1].conditions[].output.value",
                 "score_version_id": resolved_score_version_id,
                 "optimizer_shadow_invalid_feedback_item_ids": version_details["optimizer_shadow_invalid_feedback_item_ids"],
             }
@@ -332,20 +406,24 @@ def _resolve_score_final_classes_from_yaml_details(
             add_class("No")
             return {
                 "classes": valid_classes,
-                "source": "graph[-1].class=YesOrNoClassifier",
+                "source": "graph.terminal_outputs" if early_terminal_output_found else "graph[-1].class=YesOrNoClassifier",
                 "score_version_id": resolved_score_version_id,
                 "optimizer_shadow_invalid_feedback_item_ids": version_details["optimizer_shadow_invalid_feedback_item_ids"],
             }
 
         if final_node.get("class") == "LogicalClassifier":
             code_text = final_node.get("code")
+            logical_output_found = False
             if isinstance(code_text, str) and code_text.strip():
                 for match in re.findall(r'value\s*=\s*["\']([^"\']+)["\']', code_text):
                     add_class(match)
-        if valid_classes:
+                    logical_output_found = True
+        else:
+            logical_output_found = False
+        if logical_output_found:
             return {
                 "classes": valid_classes,
-                "source": "graph[-1].LogicalClassifier.code",
+                "source": "graph.terminal_outputs" if early_terminal_output_found else "graph[-1].LogicalClassifier.code",
                 "score_version_id": resolved_score_version_id,
                 "optimizer_shadow_invalid_feedback_item_ids": version_details["optimizer_shadow_invalid_feedback_item_ids"],
             }
@@ -429,40 +507,38 @@ def _select_balanced_feedback_items(
         if label in buckets:
             buckets[label].append(item)
 
+    if max_items < len(known_classes):
+        raise ValueError(
+            "--max-items must be at least the number of terminal classes when balancing."
+        )
+
+    full_rounds = min(
+        max_items // len(known_classes),
+        *(len(buckets[label]) for label in known_classes),
+    )
+    if full_rounds <= 0:
+        missing_classes = [label for label in known_classes if not buckets[label]]
+        raise ValueError(
+            "Cannot build a balanced cohort because historical feedback has no "
+            f"examples for terminal classes: {missing_classes}."
+        )
+
     selected: List[FeedbackItem] = []
-    selected_ids = set()
-    bucket_indices = {label: 0 for label in known_classes}
-
-    made_progress = True
-    while len(selected) < max_items and made_progress:
-        made_progress = False
+    for row_index in range(full_rounds):
         for label in known_classes:
+            selected.append(buckets[label][row_index])
+
+    remaining_capacity = max_items - len(selected)
+    if remaining_capacity > 0:
+        for label in known_classes:
+            if remaining_capacity <= 0:
+                break
             bucket = buckets[label]
-            index = bucket_indices[label]
-            if index >= len(bucket):
-                continue
-            item = bucket[index]
-            bucket_indices[label] = index + 1
-            item_key = str(getattr(item, "id", "")) or f"idx-{len(selected)}"
-            if item_key in selected_ids:
-                continue
-            selected.append(item)
-            selected_ids.add(item_key)
-            made_progress = True
-            if len(selected) >= max_items:
-                break
+            if len(bucket) > full_rounds:
+                selected.append(bucket[full_rounds])
+                remaining_capacity -= 1
 
-    if len(selected) < max_items:
-        for item in all_qualifying_items:
-            item_key = str(getattr(item, "id", "")) or f"idx-fill-{len(selected)}"
-            if item_key in selected_ids:
-                continue
-            selected.append(item)
-            selected_ids.add(item_key)
-            if len(selected) >= max_items:
-                break
-
-    return selected[:max_items]
+    return selected
 
 
 def collect_qualifying_feedback_items(
@@ -991,7 +1067,7 @@ def build_associated_dataset_from_feedback_window(
         )
 
     try:
-        all_qualifying_items = collect_qualifying_feedback_items(
+        recent_qualifying_items = collect_qualifying_feedback_items(
             client=client,
             account_id=account_id,
             scorecard_id=scorecard_id,
@@ -1001,23 +1077,45 @@ def build_associated_dataset_from_feedback_window(
             stop_at_max=not balance,
             excluded_feedback_item_ids=shadow_invalid_feedback_item_ids,
         )
-        if not all_qualifying_items:
-            raise ValueError("No qualifying feedback items found for dataset curation.")
-
-        seed_items = all_qualifying_items[:max_items]
+        all_qualifying_items = recent_qualifying_items
+        recent_class_distribution = _compute_label_distribution(recent_qualifying_items)
+        lookback_extended = False
         class_list_used: List[str] = []
         class_resolution_source: Optional[str] = None
         resolved_score_version_used: Optional[str] = None
-        observed_label_set = sorted({
-            _normalize_label(getattr(item, "finalAnswerValue", ""))
-            for item in all_qualifying_items
-            if _normalize_label(getattr(item, "finalAnswerValue", ""))
-        })
         class_label_overlap: List[str] = []
         if balance:
             class_list_used = version_details["classes"]
             class_resolution_source = version_details["source"]
             resolved_score_version_used = version_details["score_version_id"]
+            target_per_class = max(1, (max_items + len(class_list_used) - 1) // len(class_list_used))
+            should_extend_lookback = days is not None and any(
+                recent_class_distribution.get(class_name, 0) < target_per_class
+                for class_name in class_list_used
+            )
+            if should_extend_lookback:
+                all_qualifying_items = collect_qualifying_feedback_items(
+                    client=client,
+                    account_id=account_id,
+                    scorecard_id=scorecard_id,
+                    score_id=score_id,
+                    max_items=max_items,
+                    days=None,
+                    stop_at_max=False,
+                    excluded_feedback_item_ids=shadow_invalid_feedback_item_ids,
+                )
+                lookback_extended = True
+
+        if not all_qualifying_items:
+            raise ValueError("No qualifying feedback items found for dataset curation.")
+
+        seed_items = all_qualifying_items[:max_items]
+        observed_label_set = sorted({
+            _normalize_label(getattr(item, "finalAnswerValue", ""))
+            for item in all_qualifying_items
+            if _normalize_label(getattr(item, "finalAnswerValue", ""))
+        })
+        if balance:
             class_label_overlap = sorted(set(class_list_used).intersection(set(observed_label_set)))
             min_required_overlap = 1 if max_items <= 1 else 2
             if len(class_label_overlap) < min_required_overlap:
@@ -1046,6 +1144,30 @@ def build_associated_dataset_from_feedback_window(
 
         class_distribution_before = _compute_label_distribution(seed_items)
         class_distribution_after = _compute_label_distribution(feedback_items)
+        available_class_distribution = _compute_label_distribution(all_qualifying_items)
+        missing_terminal_classes = [
+            class_name
+            for class_name in class_list_used
+            if class_distribution_after.get(class_name, 0) == 0
+        ]
+        selected_class_counts = [
+            class_distribution_after.get(class_name, 0)
+            for class_name in class_list_used
+        ]
+        balance_complete = bool(
+            balance
+            and not missing_terminal_classes
+            and selected_class_counts
+            and max(selected_class_counts) - min(selected_class_counts) <= 1
+        )
+        class_coverage = {
+            class_name: {
+                "recent": recent_class_distribution.get(class_name, 0),
+                "available": available_class_distribution.get(class_name, 0),
+                "selected": class_distribution_after.get(class_name, 0),
+            }
+            for class_name in class_list_used
+        }
 
         _data_source_id, data_source_version_id = _create_associated_dataset_datasource_version(
             client,
@@ -1058,6 +1180,9 @@ def build_associated_dataset_from_feedback_window(
             feedback_item_ids=selected_feedback_ids,
             dataset_stats={
                 "row_count": int(len(dataframe)),
+                "requested_max_items": max_items,
+                "qualifying_found": len(all_qualifying_items),
+                "source_exhausted": len(all_qualifying_items) < max_items,
                 "label_distribution": class_distribution_after,
                 "class_list_used": class_list_used,
                 "class_resolution_source": class_resolution_source,
@@ -1066,6 +1191,13 @@ def build_associated_dataset_from_feedback_window(
                 "class_label_overlap": class_label_overlap,
                 "curation_policy": "balanced_latest_feedback_labels" if balance else "latest_feedback_labels",
                 "balance_applied": balance,
+                "balance_complete": balance_complete,
+                "lookback_extended": lookback_extended,
+                "recent_qualifying_found": len(recent_qualifying_items),
+                "recent_class_distribution": recent_class_distribution,
+                "missing_terminal_classes": missing_terminal_classes,
+                "class_coverage": class_coverage,
+                "excluded_for_balance_count": len(all_qualifying_items) - len(feedback_items),
                 "class_distribution_before": class_distribution_before,
                 "class_distribution_after": class_distribution_after,
                 "optimizer_shadow_invalid_feedback_item_ids": shadow_invalid_feedback_item_ids,
@@ -1126,6 +1258,13 @@ def build_associated_dataset_from_feedback_window(
             "scorecard_id": scorecard_id,
             "s3_key": s3_key,
             "balance_applied": balance,
+            "balance_complete": balance_complete,
+            "lookback_extended": lookback_extended,
+            "recent_qualifying_found": len(recent_qualifying_items),
+            "recent_class_distribution": recent_class_distribution,
+            "missing_terminal_classes": missing_terminal_classes,
+            "class_coverage": class_coverage,
+            "excluded_for_balance_count": len(all_qualifying_items) - len(feedback_items),
             "class_list_used": class_list_used,
             "class_resolution_source": class_resolution_source,
             "resolved_final_classes": class_list_used,

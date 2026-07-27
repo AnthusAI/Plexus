@@ -81,6 +81,10 @@ class FeedbackItems(DataCache):
         initial_value: Optional[str] = Field(None, description="Filter by original AI prediction value")
         final_value: Optional[str] = Field(None, description="Filter by corrected human value")
         feedback_id: Optional[str] = Field(None, description="Specific feedback item ID to create dataset for (if specified, only this item will be included)")
+        feedback_item_ids: Optional[List[str]] = Field(
+            None,
+            description="Exact ordered feedback item IDs to include without window reselection",
+        )
         backfill_cells: Optional[bool] = Field(False, description="If True, backfill confusion matrix cells to limit_per_cell using older data outside the time window when cells have insufficient items")
         identifier_extractor: Optional[str] = Field(None, description="Optional client-specific identifier extractor class (e.g., 'CallCriteriaIdentifierExtractor')")
         column_mappings: Optional[Dict[str, str]] = Field(None, description="Optional mapping of original score names to new column names (e.g., {'Agent Misrepresentation': 'Agent Misrepresentation - With Confidence'})")
@@ -115,6 +119,17 @@ class FeedbackItems(DataCache):
             if v is not None and mode != 'random':
                 raise ValueError("sample_seed is only valid when sampling_mode='random'")
             return v
+
+        @validator('feedback_item_ids')
+        def feedback_item_ids_must_be_nonempty_and_unique(cls, v):
+            if v is None:
+                return v
+            normalized = [str(item_id).strip() for item_id in v if str(item_id).strip()]
+            if not normalized:
+                raise ValueError('feedback_item_ids must contain at least one ID')
+            if len(normalized) != len(set(normalized)):
+                raise ValueError('feedback_item_ids must not contain duplicates')
+            return normalized
             
         @validator('limit')
         def limit_must_be_positive(cls, v):
@@ -456,13 +471,16 @@ class FeedbackItems(DataCache):
             'initial_value': self.normalized_initial_value,
             'final_value': self.normalized_final_value,
             'feedback_id': self.parameters.feedback_id,
+            'feedback_item_ids': self.parameters.feedback_item_ids,
             'backfill_cells': self.parameters.backfill_cells
         }
         params_str = json.dumps(params, sort_keys=True)
         params_hash = hashlib.md5(params_str.encode()).hexdigest()[:8]
 
         # If a specific feedback_id is provided, include it in the identifier
-        if self.parameters.feedback_id:
+        if self.parameters.feedback_item_ids:
+            return f"feedback_items_{scorecard_id}_{score_id}_exact_{len(self.parameters.feedback_item_ids)}_{params_hash}"
+        elif self.parameters.feedback_id:
             return f"feedback_items_{scorecard_id}_{score_id}_single_{self.parameters.feedback_id[:8]}_{params_hash}"
         else:
             return f"feedback_items_{scorecard_id}_{score_id}_{self.parameters.days}d_{params_hash}"
@@ -570,7 +588,13 @@ class FeedbackItems(DataCache):
         logger.info(f"Found {len(feedback_items)} feedback items")
 
         # If a specific feedback_id was provided, skip sampling and use the single item
-        if self.parameters.feedback_id:
+        if self.parameters.feedback_item_ids:
+            sampled_items = feedback_items
+            logger.info(
+                "Using exact ordered feedback cohort of %s items without sampling",
+                len(self.parameters.feedback_item_ids),
+            )
+        elif self.parameters.feedback_id:
             sampled_items = feedback_items
             logger.info(f"Using single feedback item {self.parameters.feedback_id} without sampling")
         elif self.parameters.max_items is not None:
@@ -655,6 +679,7 @@ class FeedbackItems(DataCache):
                         finalCommentValue
                         editCommentValue
                         isAgreement
+                        isInvalid
                         editedAt
                         editorName
                         createdAt
@@ -810,6 +835,35 @@ class FeedbackItems(DataCache):
         
         # Process each score
         for score_id, score_name in resolved_scores:
+            if self.parameters.feedback_item_ids:
+                requested_ids = list(self.parameters.feedback_item_ids)
+                logger.info("Fetching exact feedback cohort of %s items", len(requested_ids))
+                specific_items = await self._fetch_specific_feedback_items(requested_ids)
+                by_id = {str(item.id): item for item in specific_items}
+                missing_ids = [item_id for item_id in requested_ids if item_id not in by_id]
+                wrong_scope_ids = [
+                    item_id
+                    for item_id in requested_ids
+                    if item_id in by_id
+                    and (
+                        by_id[item_id].scorecardId != scorecard_id
+                        or by_id[item_id].scoreId != score_id
+                    )
+                ]
+                invalid_ids = [
+                    item_id
+                    for item_id in requested_ids
+                    if item_id in by_id and bool(getattr(by_id[item_id], "isInvalid", False))
+                ]
+                if missing_ids or wrong_scope_ids or invalid_ids:
+                    raise ValueError(
+                        "Exact feedback cohort could not be materialized: "
+                        f"missing={len(missing_ids)} wrong_scope={len(wrong_scope_ids)} "
+                        f"invalid={len(invalid_ids)}"
+                    )
+                feedback_by_score[score_id] = [by_id[item_id] for item_id in requested_ids]
+                continue
+
             # If a specific feedback_id is provided, fetch only that item
             if self.parameters.feedback_id:
                 logger.info(f"Fetching specific feedback item: {self.parameters.feedback_id}")

@@ -41,6 +41,7 @@ def test_console_worker_uses_a_preinitialized_interactive_alias():
         "dashboard/amplify/functions/consoleRunWorker/resource.ts"
     ).read_text()
     backend = repo_root.joinpath("dashboard/amplify/backend.ts").read_text()
+    data_resource = repo_root.joinpath("dashboard/amplify/data/resource.ts").read_text()
 
     assert 'PLEXUS_EAGER_CONSOLE_RUNTIME: "true"' in resource
     assert 'aliasName: "interactive"' in resource
@@ -59,6 +60,30 @@ def test_console_worker_asset_hash_forces_nested_stack_refresh():
     assert "new ecr_assets.DockerImageAsset" in resource
     assert "CONSOLE_WORKER_IMAGE_ASSET_HASH: workerImage.assetHash" in resource
     assert "lambda.DockerImageCode.fromEcr(workerImage.repository" in resource
+
+
+def test_console_responder_parameter_isolated_by_environment():
+    repo_root = Path(__file__).resolve().parents[4]
+    resource = repo_root.joinpath(
+        "dashboard/amplify/functions/consoleRunWorker/resource.ts"
+    ).read_text()
+    backend = repo_root.joinpath("dashboard/amplify/backend.ts").read_text()
+    data_resource = repo_root.joinpath("dashboard/amplify/data/resource.ts").read_text()
+    dispatcher = repo_root.joinpath(
+        "dashboard/amplify/data/resolvers/dispatchConsoleChat.ts"
+    ).read_text()
+
+    assert "parameterName: props.responderParameterName" in resource
+    assert (
+        "const consoleResponderParameterName = "
+        "`/plexus/${consoleWorkerEnvironmentName}/console-chat/responder`;" in backend
+    )
+    assert "responderParameterName: consoleResponderParameterName," in backend
+    assert "const consoleResponderParameterName = resolveConsoleResponderParameterName();" in data_resource
+    assert "CONSOLE_RESPONDER_PARAMETER_NAME: consoleResponderParameterName," in data_resource
+    assert "dispatchConsoleChatFunction.addEnvironment" not in backend
+    assert "process.env.CONSOLE_RESPONDER_PARAMETER_NAME" in dispatcher
+    assert "'/plexus/console-chat/responder'" not in dispatcher
 
 
 def test_sandbox_hotpatch_overlays_the_complete_worker_source():

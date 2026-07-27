@@ -438,6 +438,171 @@ def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> 
     ]
 
 
+def test_tactus_dataflow_preserves_opaque_id_between_collection_calls(monkeypatch) -> None:
+    """Dependent reads receive the exact opaque ID returned by discovery."""
+    opaque_id = "0a0a0a0a-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    info_args: list[dict[str, Any]] = []
+
+    def fake_list(args: dict[str, Any]) -> dict[str, Any]:
+        assert args == {"return_metadata": True}
+        return {
+            "items": [{"id": opaque_id, "name": "Example Scorecard"}],
+            "nextToken": None,
+        }
+
+    def fake_info(args: dict[str, Any]) -> dict[str, Any]:
+        info_args.append(args)
+        return {"name": "Example Scorecard", "sections": {"items": []}}
+
+    runtime_module = execute.PlexusRuntimeModule
+
+    def module_factory(*args, **kwargs):
+        return runtime_module(
+            *args,
+            **kwargs,
+            scorecards_lister=fake_list,
+            scorecards_infoer=fake_info,
+        )
+
+    monkeypatch.setattr(execute, "PlexusRuntimeModule", module_factory)
+    result = execute._run_tactus_sync(
+        """
+        local page = plexus.scorecards.list({ return_metadata = true })
+        local record = page.items[1]
+        local detail = plexus.scorecards.info({ identifier = record.id })
+        return { id = record.id, name = detail.name }
+        """,
+        FastMCP("test-opaque-value-dataflow"),
+        trace_id="trace-opaque-value-dataflow",
+        trace_store=_RecordingTraceStore(),
+    )
+
+    assert result["ok"] is True
+    assert result["value"] == {
+        "id": opaque_id,
+        "name": "Example Scorecard",
+    }
+    assert info_args == [{"identifier": opaque_id}]
+
+
+def test_complete_collection_program_returns_empty_coverage_without_batch_call(
+    monkeypatch,
+) -> None:
+    batch_calls: list[dict[str, Any]] = []
+
+    def fake_list(args: dict[str, Any]) -> dict[str, Any]:
+        assert args == {"return_metadata": True}
+        return {"items": [], "nextToken": None}
+
+    runtime_module = execute.PlexusRuntimeModule
+
+    def module_factory(*args, **kwargs):
+        module = runtime_module(*args, **kwargs, scorecards_lister=fake_list)
+        module._feedback_aligner_batch = lambda batch_args: batch_calls.append(batch_args)
+        return module
+
+    monkeypatch.setattr(execute, "PlexusRuntimeModule", module_factory)
+    result = execute._run_tactus_sync(
+        """
+        local page = plexus.scorecards.list({ return_metadata = true })
+        local scorecard_ids = {}
+        for _, record in ipairs(page.items or {}) do
+          scorecard_ids[#scorecard_ids + 1] = record.id
+        end
+        if #scorecard_ids == 0 then
+          return { complete = true, discovered = 0, coverage = {
+            target_count = 0, completed_count = 0, failed_count = 0, complete = true,
+          } }
+        end
+        local analysis = plexus.feedback.alignment_batch({ scorecards = scorecard_ids })
+        return analysis.coverage
+        """,
+        FastMCP("test-empty-complete-coverage"),
+        trace_id="trace-empty-complete-coverage",
+        trace_store=_RecordingTraceStore(),
+    )
+
+    assert result["ok"] is True
+    assert result["value"] == {
+        "complete": True,
+        "discovered": 0,
+        "coverage": {
+            "target_count": 0,
+            "completed_count": 0,
+            "failed_count": 0,
+            "complete": True,
+        },
+    }
+    assert batch_calls == []
+    assert result["api_calls"] == ["plexus.scorecards.list"]
+
+
+def test_complete_collection_program_retries_failed_page_then_stops_before_batch(
+    monkeypatch,
+) -> None:
+    page_two_attempts = 0
+    batch_calls: list[dict[str, Any]] = []
+
+    def fake_list(args: dict[str, Any]) -> dict[str, Any]:
+        nonlocal page_two_attempts
+        if args == {"return_metadata": True}:
+            return {
+                "items": [{"id": "scorecard-one", "name": "One"}],
+                "nextToken": "page-two",
+            }
+        assert args == {"return_metadata": True, "next_token": "page-two"}
+        page_two_attempts += 1
+        return None
+
+    runtime_module = execute.PlexusRuntimeModule
+
+    def module_factory(*args, **kwargs):
+        module = runtime_module(*args, **kwargs, scorecards_lister=fake_list)
+        module._feedback_aligner_batch = lambda batch_args: batch_calls.append(batch_args)
+        return module
+
+    monkeypatch.setattr(execute, "PlexusRuntimeModule", module_factory)
+    result = execute._run_tactus_sync(
+        """
+        local token, pages, scorecard_ids = nil, 0, {}
+        repeat
+          local ok, page = pcall(function()
+            local args = { return_metadata = true }
+            if token then args.next_token = token end
+            return plexus.scorecards.list(args)
+          end)
+          if ok and page == nil then ok = false end
+          if not ok then
+            ok, page = pcall(function()
+              return plexus.scorecards.list({ return_metadata = true, next_token = token })
+            end)
+          end
+          if ok and page == nil then ok = false end
+          if not ok then
+            return { complete = false, pages = pages, error = "continuation page failed after retry" }
+          end
+          pages = pages + 1
+          for _, record in ipairs(page.items or {}) do
+            scorecard_ids[#scorecard_ids + 1] = record.id
+          end
+          token = page.nextToken
+        until not token
+        local analysis = plexus.feedback.alignment_batch({ scorecards = scorecard_ids })
+        return analysis.coverage
+        """,
+        FastMCP("test-incomplete-collection-coverage"),
+        trace_id="trace-incomplete-collection-coverage",
+        trace_store=_RecordingTraceStore(),
+    )
+
+    assert result["ok"] is True
+    assert result["value"]["complete"] is False
+    assert result["value"]["pages"] == 1
+    assert result["value"]["error"] == "continuation page failed after retry"
+    assert page_two_attempts == 2
+    assert batch_calls == []
+
+
 def test_default_scorecards_list_returns_metadata_for_account_wide_pages(monkeypatch) -> None:
     """Metadata pagination remains available without identifier resolution."""
     from plexus.cli.shared import client_utils, memoized_resolvers
@@ -1584,6 +1749,21 @@ def test_execute_tactus_description_constant_includes_themed_doc_pointers() -> N
         assert namespace in description, (
             f"tool description should reference namespace {namespace!r}"
         )
+
+
+def test_execute_tactus_description_teaches_complete_coverage_composition() -> None:
+    description = execute.EXECUTE_TACTUS_DESCRIPTION
+
+    assert "Never silently reduce complete requested coverage to a sample" in description
+    assert "scorecards.list" in description
+    assert "return_metadata = true" in description
+    assert "plexus.feedback.alignment_batch" in description
+    assert "scorecards = scorecard_ids" in description
+    assert "coverage" in description
+    assert "Never return the unaggregated alignment batch payload" in description
+    assert "ranked_from_count" in description
+    assert "for _, scorecard_result in ipairs(analysis.scorecards or {})" in description
+    assert "result = analysis" not in description
 
 
 def test_execute_tactus_description_teaches_progressive_disclosure() -> None:
@@ -5484,6 +5664,39 @@ def test_default_evaluation_runner_passes_frozen_feedback_window(monkeypatch) ->
     assert captured["cmd"][captured["cmd"].index("--feedback-end-at") + 1] == "2026-05-01T00:00:00Z"
 
 
+def test_default_evaluation_runner_forwards_exact_feedback_item_ids(monkeypatch) -> None:
+    captured: dict = {}
+
+    class FakeProcess:
+        pid = 4242
+
+        def poll(self) -> int:
+            return 1
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return FakeProcess()
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/plexus")
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    execute._default_evaluation_runner(
+        {
+            "evaluation_type": "feedback",
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+            "feedback_item_ids": ["opaque-id-B", "opaque-id-A"],
+            "budget": _child_budget(),
+        },
+        None,
+    )
+
+    cmd = captured["cmd"]
+    positions = [index for index, value in enumerate(cmd) if value == "--feedback-item-id"]
+    assert [cmd[index + 1] for index in positions] == ["opaque-id-B", "opaque-id-A"]
+
+
 def test_handle_peek_refreshes_evaluation_status() -> None:
     handles = _MemoryHandleStore()
     handle = handles.create(
@@ -7537,10 +7750,13 @@ def test_feedback_alignment_batch_accepts_bounded_scorecard_list(monkeypatch) ->
                         "nextToken": None,
                     }
                 }
+            requested_name = next(
+                name for name in ("One", "Two", "Three") if f"id-{name}" in query
+            )
             return {
                 "getScorecard": {
-                    "id": "scorecard-1",
-                    "name": "Example Scorecard",
+                    "id": f"id-{requested_name}",
+                    "name": requested_name,
                     "sections": {"items": []},
                 }
             }
@@ -7750,8 +7966,121 @@ def test_feedback_alignment_batch_bounds_concurrent_score_reads(monkeypatch) -> 
     assert max_active_reads == execute.FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY
 
 
-def test_feedback_alignment_batch_rejects_unbounded_scorecard_list() -> None:
-    with pytest.raises(ValueError, match="at most 5 scorecards"):
-        execute._default_feedback_alignment_batch(
-            {"scorecards": ["One", "Two", "Three", "Four", "Five", "Six"]}
-        )
+def test_feedback_alignment_batch_accepts_complete_target_set_with_bounded_workers(
+    monkeypatch,
+) -> None:
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    identifiers = [f"opaque-scorecard-{index}" for index in range(7)]
+    display_names = {
+        identifier: f"Display Scorecard {index}"
+        for index, identifier in enumerate(identifiers)
+    }
+    feedback_window_queries = 0
+    executor_workers: list[int] = []
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            nonlocal feedback_window_queries
+            if "ListFeedbackItemsByEditedTime" in query:
+                feedback_window_queries += 1
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [],
+                        "nextToken": None,
+                    }
+                }
+            identifier = next(value for value in identifiers if value in query)
+            return {
+                "getScorecard": {
+                    "id": identifier,
+                    "name": display_names[identifier],
+                    "sections": {"items": []},
+                }
+            }
+
+    class RecordingExecutor:
+        def __init__(self, *, max_workers):
+            executor_workers.append(max_workers)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def map(self, function, values):
+            return map(function, values)
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: identifier,
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+    monkeypatch.setattr("concurrent.futures.ThreadPoolExecutor", RecordingExecutor)
+
+    result = execute._default_feedback_alignment_batch(
+        {"scorecards": identifiers, "days": 14}
+    )
+
+    assert executor_workers == [5]
+    assert feedback_window_queries == 1
+    assert [row["scorecard_id"] for row in result["scorecards"]] == identifiers
+    assert [row["scorecard_name"] for row in result["scorecards"]] == [
+        display_names[identifier] for identifier in identifiers
+    ]
+    assert result["coverage"] == {
+        "target_count": 7,
+        "completed_count": 7,
+        "failed_count": 0,
+        "complete": True,
+    }
+
+
+def test_feedback_alignment_batch_reports_incomplete_coverage_without_losing_results(
+    monkeypatch,
+) -> None:
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    identifiers = ["scorecard-one", "scorecard-missing", "scorecard-three"]
+
+    class FakeClient:
+        def execute(self, query, _variables=None):
+            if "ListFeedbackItemsByEditedTime" in query:
+                return {
+                    "listFeedbackItemByAccountIdAndEditedAt": {
+                        "items": [],
+                        "nextToken": None,
+                    }
+                }
+            identifier = next(value for value in identifiers if value in query)
+            return {
+                "getScorecard": {
+                    "id": identifier,
+                    "name": identifier,
+                    "sections": {"items": []},
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: None if identifier == "scorecard-missing" else identifier,
+    )
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+
+    result = execute._default_feedback_alignment_batch({"scorecards": identifiers})
+
+    assert [row["scorecard_name"] for row in result["scorecards"]] == identifiers
+    assert "error" not in result["scorecards"][0]
+    assert "error" in result["scorecards"][1]
+    assert "error" not in result["scorecards"][2]
+    assert result["coverage"] == {
+        "target_count": 3,
+        "completed_count": 2,
+        "failed_count": 1,
+        "complete": False,
+    }

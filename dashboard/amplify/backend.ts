@@ -193,6 +193,7 @@ if (shouldDeployConsoleWorker) {
         isSandbox ? sandboxGraphqlUrl : (process.env.PLEXUS_API_URL || '')
     ).trim();
     const consoleWorkerEnvironmentName = normalizeForResourceName(resolveEnvironmentName());
+    const consoleResponderParameterName = `/plexus/${consoleWorkerEnvironmentName}/console-chat/responder`;
     const consoleWorkerConfigSecretName = (
         process.env.PLEXUS_CONFIG_SECRET_NAME ||
         (isSandbox ? 'plexus/staging/config' : `plexus/${consoleWorkerEnvironmentName}/config`)
@@ -217,6 +218,7 @@ if (shouldDeployConsoleWorker) {
             plexusApiUrl: resolvedDataApiUrl,
             environmentName: consoleWorkerEnvironmentName,
             asyncTasksAvailable: !isSandbox,
+            responderParameterName: consoleResponderParameterName,
             configSecretName: consoleWorkerConfigSecretName,
             reportBlockDetailsBucket: backend.reportBlockDetails.resources.bucket,
         }

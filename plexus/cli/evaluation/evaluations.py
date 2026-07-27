@@ -1235,6 +1235,7 @@ async def _run_shared_feedback_root_cause_orchestration(
     days: Optional[int],
     feedback_start_at: Optional[str] = None,
     feedback_end_at: Optional[str] = None,
+    feedback_item_ids: Optional[List[str]] = None,
     tracker=None,
     apply_feedback_window_selection: bool = False,
 ) -> Dict[str, Any]:
@@ -1340,16 +1341,47 @@ async def _run_shared_feedback_root_cause_orchestration(
         # Do not re-select from FeedbackItems here: different loader limits can
         # produce a disjoint set and silently erase every RCA candidate.
         selected_feedback_ids = list(dict.fromkeys(evaluated_feedback_item_ids))
-        selection_metadata = {
-            "sampling_mode": sampling_mode,
-            "requested_max_items": max_items,
-            "candidate_pool_count": len(selected_feedback_ids),
-            "selected_count": len(selected_feedback_ids),
-            "sample_seed": sample_seed,
-            "selection_order_basis": "persisted evaluation ScoreResults",
-            "selected_feedback_item_ids": selected_feedback_ids,
-            "shortfall_count": max(0, int(max_items or 0) - len(selected_feedback_ids)),
-        }
+        if feedback_item_ids:
+            requested_feedback_ids = {
+                str(item_id) for item_id in feedback_item_ids
+            }
+            incorrect_rows = [
+                row
+                for row in incorrect_rows
+                if not row.get("feedback_item_id")
+                or row.get("feedback_item_id") in requested_feedback_ids
+            ]
+            incorrect_score_result_map = {
+                feedback_item_id: value
+                for feedback_item_id, value in incorrect_score_result_map.items()
+                if feedback_item_id in requested_feedback_ids
+            }
+            selected_feedback_ids = [
+                feedback_item_id
+                for feedback_item_id in selected_feedback_ids
+                if feedback_item_id in requested_feedback_ids
+            ]
+            selection_metadata = {
+                "sampling_mode": "exact_ids",
+                "requested_max_items": len(feedback_item_ids),
+                "candidate_pool_count": len(selected_feedback_ids),
+                "selected_count": len(selected_feedback_ids),
+                "sample_seed": None,
+                "selection_order_basis": "persisted evaluation ScoreResults for explicit feedback_item_ids",
+                "selected_feedback_item_ids": selected_feedback_ids,
+                "shortfall_count": max(0, len(feedback_item_ids) - len(selected_feedback_ids)),
+            }
+        else:
+            selection_metadata = {
+                "sampling_mode": sampling_mode,
+                "requested_max_items": max_items,
+                "candidate_pool_count": len(selected_feedback_ids),
+                "selected_count": len(selected_feedback_ids),
+                "sample_seed": sample_seed,
+                "selection_order_basis": "persisted evaluation ScoreResults",
+                "selected_feedback_item_ids": selected_feedback_ids,
+                "shortfall_count": max(0, int(max_items or 0) - len(selected_feedback_ids)),
+            }
 
     incorrect_items_total = len(incorrect_rows)
     incorrect_items_with_feedback_link = len(
@@ -4266,6 +4298,12 @@ def last(account_key: str, type: Optional[str]):
 @click.option('--sample-seed', default=None, type=int, help='Optional random seed (only valid when --sampling-mode random).')
 @click.option('--feedback-start-at', default=None, type=str, help='Explicit editedAt lower bound for frozen optimizer feedback windows.')
 @click.option('--feedback-end-at', default=None, type=str, help='Explicit editedAt upper bound for frozen optimizer feedback windows.')
+@click.option(
+    '--feedback-item-id',
+    'feedback_item_ids',
+    multiple=True,
+    help='Exact feedback item ID to evaluate; repeat to replay a frozen cohort.',
+)
 @click.option('--max-category-summary-items', default=20, type=int, help='Maximum misclassification items per category used in aggregate triage summaries (default: 20).')
 @click.option('--baseline', default=None, type=str, help='Baseline evaluation ID for dashboard before/after metric comparison.')
 @click.option('--current-baseline', default=None, type=str, help='Current baseline evaluation ID (latest accepted version) for dual baseline dashboard display.')
@@ -4290,6 +4328,7 @@ def feedback(
     sample_seed: Optional[int],
     feedback_start_at: Optional[str],
     feedback_end_at: Optional[str],
+    feedback_item_ids: tuple[str, ...],
     max_category_summary_items: int,
     baseline: Optional[str],
     current_baseline: Optional[str],
@@ -4334,6 +4373,7 @@ def feedback(
     from plexus.dashboard.api.models.score import Score as DashboardScore
     
     normalized_sampling_mode = str(sampling_mode).lower()
+    exact_feedback_item_ids = [str(item_id).strip() for item_id in feedback_item_ids if str(item_id).strip()]
     logging.info(
         "Starting feedback evaluation for scorecard=%s, score=%s, days=%s, max_items=%s, sampling_mode=%s",
         scorecard,
@@ -4370,6 +4410,8 @@ def feedback(
     if max_category_summary_items <= 0:
         console.print("[bold red]Error: --max-category-summary-items must be a positive integer[/bold red]")
         return
+    if len(exact_feedback_item_ids) != len(set(exact_feedback_item_ids)):
+        raise click.ClickException('--feedback-item-id values must be unique')
 
     try:
         # Create API client
@@ -4474,6 +4516,8 @@ def feedback(
                 "sampling_mode": normalized_sampling_mode,
                 "sample_seed": sample_seed,
             }
+            if exact_feedback_item_ids:
+                dataset_config["feedback_item_ids"] = exact_feedback_item_ids
             if days is not None:
                 dataset_config["days"] = days
             if feedback_start_at and feedback_end_at:
@@ -4681,6 +4725,7 @@ def feedback(
                         "sample_seed": sample_seed,
                         "feedback_start_at": feedback_start_at,
                         "feedback_end_at": feedback_end_at,
+                        "feedback_item_ids": exact_feedback_item_ids or None,
                         "max_category_summary_items": max_category_summary_items,
                         "mode": "accuracy_with_feedback_dataset",
                         "score_rubric_consistency_check_requested": bool(score_rubric_consistency_check),
@@ -4846,6 +4891,7 @@ def feedback(
                             sample_seed=sample_seed,
                             feedback_start_at=feedback_start_at,
                             feedback_end_at=feedback_end_at,
+                            feedback_item_ids=exact_feedback_item_ids or None,
                             max_category_summary_items=max_category_summary_items,
                             days=days,
                             tracker=tracker,
