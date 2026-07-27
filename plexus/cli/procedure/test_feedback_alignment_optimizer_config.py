@@ -1147,6 +1147,7 @@ def test_optimizer_yaml_replays_and_verifies_exact_recent_feedback_cohort():
     assert code.count("feedback_item_ids = recent_baseline_feedback_item_ids") == 3
     assert "require_exact_feedback_cohort" in code
     assert "candidate feedback cohort differs from baseline" in code
+    assert "candidate feedback cohort order differs from baseline" in code
     assert "Invalid candidate comparison" in code
     assert "Invalid strategy comparison" in code
     assert "Invalid synthesis comparison" in code

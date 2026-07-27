@@ -738,6 +738,14 @@ code: |
     return true
   end
 
+  local function same_id_sequence(left, right)
+    if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
+    for index, item_id in ipairs(left) do
+      if tostring(item_id) ~= tostring(right[index]) then return false end
+    end
+    return true
+  end
+
   local function prediction_mode_collapse_reason(metrics)
     if type(metrics) ~= "table" then return nil end
 
@@ -1368,6 +1376,9 @@ code: |
         #expected_ids,
         #actual_ids
       )
+    end
+    if not same_id_sequence(actual_ids, expected_ids) then
+      return false, "candidate feedback cohort order differs from baseline"
     end
     return true, nil
   end
