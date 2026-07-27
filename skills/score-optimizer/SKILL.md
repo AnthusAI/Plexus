@@ -126,6 +126,7 @@ questions, and "cannot improve" conclusions.
 - Prefer `python -m plexus.cli` from the repo root over a possibly stale installed `plexus` binary.
 - Capture stdout/stderr with `tee` for real runs so you keep the traceback and early procedure/task IDs.
 - Baseline evaluations are the real start of meaningful optimizer work. Procedure creation alone is not.
+- Let every legitimate evaluation run through terminal completion, including root-cause analysis and artifact finalization. Do not stop, cancel, or kill an evaluation merely because its partial metrics already support a decision, a candidate is clearly winning or losing, or the remaining work seems unnecessary. Premature stopping saves too little human attention and leaves incomplete evidence and stale runtime state. Intervene only when the user explicitly requests cancellation or execution is clearly unauthorized or harmful.
 - Never invalidate feedback automatically.
 - Never invalidate feedback just because a contradictions report flagged an item.
 - Always discuss candidate invalidation groups with the user first.
@@ -202,6 +203,23 @@ python -m plexus.cli procedure optimize \
 
 Only include the optional flags that are actually needed.
 Pass `--max-samples` explicitly instead of relying on the CLI default. If the user does not specify a sample cap, use `200`.
+
+### Balanced regression cohort provenance
+
+Use the optimizer's existing regression-dataset builder as the one canonical
+selection path. With balancing enabled, it scans all qualifying feedback in the
+configured `--days` window and then selects across the score's classes. It does
+not automatically extend that time window. When recent review policy produces
+an imbalanced stream, deliberately increase `--days` far enough to discover the
+scarce classes before starting the run.
+
+Once the optimizer materializes a balanced cohort, freeze and reuse that exact
+cohort for every candidate comparison. Do not independently reconstruct the
+selection in an ad hoc script. An explicit local CSV or parquet input is only a
+transport for replaying an already selected materialized cohort through the
+standard evaluator; it is not a second cohort-selection algorithm. Verify exact
+feedback-item set equality between baseline and candidate evaluations before
+using their metric delta as promotion evidence.
 
 If you intentionally launch with `--max-iterations 1`, treat it as a verification-style run:
 

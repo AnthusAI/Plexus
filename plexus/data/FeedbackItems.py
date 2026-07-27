@@ -86,7 +86,12 @@ class FeedbackItems(DataCache):
         column_mappings: Optional[Dict[str, str]] = Field(None, description="Optional mapping of original score names to new column names (e.g., {'Agent Misrepresentation': 'Agent Misrepresentation - With Confidence'})")
         item_config: Optional[Dict] = Field(None, description="Optional item configuration for running Item.to_score_input() pipeline (from 'item:' section of score YAML)")
         cache_file: str = Field(default="feedback_items_cache.parquet", description="Cache file name")
-        local_cache_directory: str = Field(default='./.plexus_training_data_cache/', description="Local cache directory")
+        local_cache_directory: str = Field(
+            default_factory=lambda: os.environ.get(
+                "PLEXUS_DATA_CACHE_DIRECTORY", "./.plexus_training_data_cache/"
+            ),
+            description="Local cache directory",
+        )
         
         @validator('days')
         def days_must_be_positive(cls, v):
@@ -525,7 +530,6 @@ class FeedbackItems(DataCache):
             return self._load_from_cache(cache_identifier)
         
         days_str = f"last {self.parameters.days} days" if self.parameters.days is not None else "all time"
-        logger.error(f"🔍 FRESH LOAD DEBUG: Fetching fresh feedback data for {scorecard_name} / {score_name} ({days_str})")
         logger.info(f"Fetching fresh feedback data for {scorecard_name} / {score_name} ({days_str})")
         
         # Fetch feedback items
@@ -828,8 +832,8 @@ class FeedbackItems(DataCache):
                 feedback_by_score[score_id] = specific_items
                 continue
             
-            # Otherwise, fetch items using the normal FeedbackService approach
-            logger.error(f"🔍 FEEDBACK SERVICE DEBUG: About to call FeedbackService.find_feedback_items for score {score_name}")
+            # Otherwise, fetch items using the normal FeedbackService approach.
+            # Do not log item artifacts here: feedback content can contain sensitive text.
             all_items = await FeedbackService.find_feedback_items(
                 client=self.client,
                 scorecard_id=scorecard_id,
@@ -844,18 +848,6 @@ class FeedbackItems(DataCache):
                 prioritize_edit_comments=False
             )
             all_items = [item for item in all_items if not getattr(item, "isInvalid", False)]
-            logger.error(f"🔍 FEEDBACK SERVICE DEBUG: Received {len(all_items)} items from FeedbackService for score {score_name}")
-            
-            # Debug the first item to see what metadata structure we get
-            if all_items:
-                first_item = all_items[0]
-                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item ID: {first_item.id}")
-                logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item has .item: {hasattr(first_item, 'item')}")
-                if hasattr(first_item, 'item') and first_item.item:
-                    logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item.item.id: {first_item.item.id}")
-                    logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item.item.metadata: {getattr(first_item.item, 'metadata', 'NOT_FOUND')}")
-                else:
-                    logger.error(f"🔍 FEEDBACK SERVICE DEBUG: First item has no .item or .item is None")
             
             # Apply case-insensitive filtering locally if needed
             if self.parameters.initial_value or self.parameters.final_value:
@@ -1296,13 +1288,10 @@ class FeedbackItems(DataCache):
 
         logger.info(f"Created dataset with {len(df)} rows and {len(df.columns)} columns: {list(df.columns)}")
         logger.info(
-            "Label resolution report: resolved_rows=%s skipped_count=%s skipped_feedback_item_ids=%s",
+            "Label resolution report: resolved_rows=%s skipped_count=%s",
             label_resolution_report["resolved_rows"],
             label_resolution_report["skipped_count"],
-            label_resolution_report["skipped_feedback_item_ids"],
         )
-        logger.debug(f"Sample row data: {rows[0] if rows else 'No rows'}")
-        
         # Use the comprehensive debug utility from base class
         self.debug_dataframe(df, "FEEDBACK_ITEMS_DATASET", logger)
         
@@ -1317,22 +1306,18 @@ class FeedbackItems(DataCache):
         else:
             logger.info("All required FeedbackItems columns present")
         
-        # Special debugging for IDs column structure
+        # Validate the IDs column without logging identifiers or row values.
         if 'IDs' in df.columns and len(df) > 0:
-            logger.info("FEEDBACK_ITEMS_IDS_DEBUG: Analyzing IDs column structure...")
+            logger.info("Validating FeedbackItems identifier structure")
             sample_ids = df.iloc[0]['IDs']
-            logger.info(f"Sample IDs value type: {type(sample_ids)}")
-            logger.info(f"Sample IDs value: {sample_ids}")
             try:
                 if isinstance(sample_ids, str):
                     ids_parsed = json.loads(sample_ids)
-                    logger.info(f"Successfully parsed {len(ids_parsed)} identifiers")
-                    for idx, identifier in enumerate(ids_parsed):
-                        logger.info(f"Identifier {idx}: {identifier}")
+                    logger.info("Parsed identifier structure with %s entries", len(ids_parsed))
                 else:
-                    logger.warning(f"IDs is not a JSON string, type: {type(sample_ids)}")
+                    logger.warning("IDs is not a JSON string")
             except Exception as e:
-                logger.warning(f"Could not parse IDs JSON: {e}")
+                logger.warning("Could not parse IDs JSON: %s", type(e).__name__)
         
         return df
     

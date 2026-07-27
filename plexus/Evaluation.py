@@ -104,12 +104,11 @@ def _bedrock_runtime_client_for_rca():
 
 def _rca_llm_provider() -> str:
     provider = os.getenv("PLEXUS_RCA_LLM_PROVIDER", "openai").strip().lower()
-    if provider not in {"openai", "bedrock", "auto"}:
-        logging.warning(
-            "Invalid PLEXUS_RCA_LLM_PROVIDER=%r; using openai",
-            provider,
+    if provider != "openai":
+        raise ValueError(
+            "Reinforcement-memory RCA supports only the OpenAI provider; "
+            "set PLEXUS_RCA_LLM_PROVIDER=openai."
         )
-        return "openai"
     return provider
 
 
@@ -128,34 +127,55 @@ def _rca_bedrock_region() -> str:
 
 def _rca_reinforcement_memory_llm_helpers():
     provider = _rca_llm_provider()
-    try:
-        from biblicus.analysis.reinforcement_memory import resolve_llm_helpers
-    except ImportError as exc:
-        if provider == "bedrock":
-            from biblicus.analysis.reinforcement_memory import (
-                bedrock_causal,
-                bedrock_labeler,
-                bedrock_synthesizer,
-            )
-
-            model_id = _rca_llm_model_id() or CLAUDE_HAIKU_45_MODEL_ID
-            return (
-                bedrock_labeler(model_id=model_id, region=_rca_bedrock_region()),
-                bedrock_causal(model_id=model_id, region=_rca_bedrock_region()),
-                bedrock_synthesizer(model_id=model_id, region=_rca_bedrock_region()),
-            )
+    if provider != "openai":
         raise RuntimeError(
-            "Biblicus does not provide resolve_llm_helpers; install or run with a "
-            "Biblicus version that includes OpenAI reinforcement-memory RCA helpers."
-        ) from exc
+            "Reinforcement-memory RCA supports only the OpenAI provider; "
+            "set PLEXUS_RCA_LLM_PROVIDER=openai."
+        )
 
-    return resolve_llm_helpers(
-        provider=provider,
-        model_id=_rca_llm_model_id(),
-        region=_rca_bedrock_region(),
-        timeout_seconds=_rca_llm_timeout_seconds(),
+    from biblicus.ai.llm import LlmClientConfig, generate_completion
+
+    client = LlmClientConfig(
+        provider="openai",
+        model=_rca_llm_model_id() or "gpt-5.4-nano-2026-03-17",
         max_retries=1,
+        timeout_seconds=_rca_llm_timeout_seconds(),
     )
+    # Biblicus 1.11.3's bundled DSPy helpers expect a result object, while its
+    # public generate_completion API returns text. Keep the adapter at this
+    # boundary and use the public text contract directly.
+    def _complete(system_prompt: str, user_prompt: str) -> str:
+        return str(
+            generate_completion(
+                client=client,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            )
+            or ""
+        ).strip()
+
+    def label(keywords: List[str], exemplars: List[str]) -> str:
+        return _complete(
+            "Label a cluster of related AI classifier mistakes with a concise, specific phrase.",
+            "Keywords: " + ", ".join(keywords[:8]) + "\n\nExamples:\n"
+            + "\n".join(f"- {example[:300]}" for example in exemplars[:5]),
+        )
+
+    def infer_cause(text: str, context: Dict[str, Any]) -> Optional[str]:
+        context_json = json.dumps(context or {}, default=str)[:3000]
+        return _complete(
+            "Identify the most likely root cause of this classifier mistake. Be concrete and brief.",
+            f"Mistake evidence:\n{text[:800]}\n\nContext:\n{context_json}",
+        ) or None
+
+    def synthesize_cause(label: str, keywords: List[str], causes: List[str]) -> Optional[str]:
+        return _complete(
+            "Synthesize a concise root cause from related classifier mistakes.",
+            f"Cluster: {label}\nKeywords: {', '.join(keywords[:8])}\n\n"
+            + "\n".join(f"- {cause}" for cause in causes[:12]),
+        ) or None
+
+    return label, infer_cause, synthesize_cause
 
 
 def _bedrock_converse_for_rca(system: str, messages: list, max_tokens: int = 1000) -> str:
@@ -186,25 +206,15 @@ def _evaluation_rca_text(
     call_site: str = "evaluation_rca_text",
 ) -> str:
     """Generate RCA text with the configured provider; OpenAI is the default."""
-    if _rca_llm_provider() == "bedrock":
-        try:
-            return _bedrock_converse_for_rca(system, messages, max_tokens=max_tokens)
-        except Exception as exc:
-            logging.debug("Bedrock RCA text call failed: %s", exc)
-            return ""
+    _rca_llm_provider()
+    from plexus.rca_analysis import _invoke_rca_openai_text
 
-    try:
-        from plexus.rca_analysis import _invoke_rca_openai_text
-
-        return _invoke_rca_openai_text(
-            system=system,
-            messages=messages,
-            max_output_tokens=max_tokens,
-            call_site=call_site,
-        )
-    except Exception as exc:
-        logging.debug("OpenAI RCA text call failed: %s", exc)
-        return ""
+    return _invoke_rca_openai_text(
+        system=system,
+        messages=messages,
+        max_output_tokens=max_tokens,
+        call_site=call_site,
+    )
 
 
 def _sanitize_rca_generated_prose(text: str, *, max_sentences: int = 3, max_chars: int = 900) -> str:
@@ -901,7 +911,6 @@ class Evaluation:
             primary_score_name = self.subset_of_score_names[0]
         
         # First pass: build distributions and confusion matrices
-        logged_results_count = 0
         for result in results:
             for score_identifier, score_result in result['results'].items():
                 if not hasattr(score_result, 'value'):
@@ -942,11 +951,6 @@ class Evaluation:
                 all_predictions.append(predicted)
                 all_actuals.append(actual)
                 
-                # Log the first few results for inspection
-                if logged_results_count < 5:
-                    self.logging.info(f"Sample {logged_results_count + 1}: {score_name} - Predicted: '{predicted}', Actual: '{actual}'")
-                    logged_results_count += 1
-
                 # Determine correctness - check if predicted value exactly matches the actual value
                 is_correct = predicted == actual
                 
@@ -2737,16 +2741,9 @@ Total cost:       ${expenses['total_cost']:.6f}
                 for failed_score_identifier, failed_score_result in filtered_results.items():
                     failed_value = getattr(failed_score_result, 'value', None)
                     if isinstance(failed_value, str) and failed_value.upper() == "ERROR":
-                        underlying_error = getattr(failed_score_result, 'error', None) or getattr(failed_score_result, 'explanation', None)
-                        if not underlying_error:
-                            underlying_error = "Score execution returned ERROR value"
-                        failure_item_id = item_id or (getattr(item, 'id', None) if item else None) or content_id or 'unknown'
-                        failure_feedback_item_id = feedback_item_id or metadata.get('feedback_item_id') or 'unknown'
                         raise RuntimeError(
                             "Initial evaluation failed: "
-                            f"score '{failed_score_identifier}' returned ERROR for "
-                            f"feedback item '{failure_feedback_item_id}' item '{failure_item_id}': "
-                            f"{underlying_error}"
+                            f"score '{failed_score_identifier}' returned ERROR value"
                         )
 
                 if has_processed_scores and score_name:  # Check if we are processing a specific score
@@ -3722,6 +3719,7 @@ class FeedbackEvaluation(Evaluation):
                 end_date = self.feedback_end_at
             elif self.days is None:
                 start_date = datetime(1970, 1, 1, tzinfo=timezone.utc)
+                end_date = datetime.now(timezone.utc)
             else:
                 start_date = datetime.now(timezone.utc) - timedelta(days=self.days)
                 end_date = datetime.now(timezone.utc)
@@ -4206,7 +4204,7 @@ class FeedbackEvaluation(Evaluation):
                 """Update tracker status message and log RCA progress."""
                 self.logger.info(f"RCA: {msg}")
                 if tracker and hasattr(tracker, 'current_stage') and tracker.current_stage:
-                    tracker.current_stage.status_message = msg
+                    tracker.update_status_message(msg)
 
             # When score_result_map is provided, include all items in the map (the caller
             # has already filtered to incorrect predictions).  Without it, fall back to the
@@ -4242,21 +4240,10 @@ class FeedbackEvaluation(Evaluation):
                     sentence_transformer_embedder, TimestampedText,
                 )
             except ModuleNotFoundError as exc:
-                self.logger.warning(
+                raise RuntimeError(
                     "Biblicus reinforcement-memory RCA backend is unavailable; "
-                    "falling back to small-set RCA summarization for %d item(s): %s",
-                    len(candidate_items),
-                    exc,
-                )
-                return await self._run_small_set_root_cause_analysis(
-                    candidate_items=candidate_items,
-                    score_result_map=score_result_map,
-                    original_explanations=original_explanations or {},
-                    max_report_exemplars=max_report_exemplars,
-                    max_summarization_exemplars=max_summarization_exemplars,
-                    max_category_summary_items=max_category_summary_items,
-                    tracker=tracker,
-                )
+                    "install the required RCA dependency before running this analysis."
+                ) from exc
 
             from plexus.rca_analysis import (
                 build_misclassification_classification_contract,
@@ -5264,7 +5251,7 @@ class FeedbackEvaluation(Evaluation):
         def _update_status(msg: str):
             self.logger.info(f"RCA: {msg}")
             if tracker and hasattr(tracker, "current_stage") and tracker.current_stage:
-                tracker.current_stage.status_message = msg
+                tracker.update_status_message(msg)
 
         now_iso = datetime.now(_tz.utc).isoformat()
         score_guidelines = ""
@@ -6045,6 +6032,9 @@ class AccuracyEvaluation(Evaluation):
             # Advance to Analyzing stage after all processing is complete
             if tracker:
                 tracker.advance_stage()
+                tracker.update_status_message(
+                    "All scoring is complete; finalizing metrics, root-cause analysis, and report artifacts..."
+                )
                 self.logging.info("==== STAGE: Analysis ====")
 
             # Calculate metrics from results

@@ -158,6 +158,42 @@ def test_score_version_test_fails_on_unresolved_prompt_placeholders(monkeypatch)
     assert result["score_input"]["text_excerpt"] == "transcript"
 
 
+def test_score_version_test_decodes_nested_json_metadata_before_scoring():
+    class FakeClient(_FakeClient):
+        def execute(self, _query, _variables):
+            return {
+                "getItem": {
+                    "id": "item-1",
+                    "text": "transcript",
+                    "metadata": (
+                        '{"schools":"[{\\"school_id\\":\\"school-1\\"}]",'
+                        '"other_data":"{\\"WarmTransfer\\":\\"Yes\\"}",'
+                        '"ordinary_text":"[not JSON]"}'
+                    ),
+                }
+            }
+
+    class FakeScorecard(_FakeScorecard):
+        async def score_entire_text(self, **kwargs):
+            assert kwargs["metadata"]["schools"] == [{"school_id": "school-1"}]
+            assert kwargs["metadata"]["other_data"] == {"WarmTransfer": "Yes"}
+            assert kwargs["metadata"]["ordinary_text"] == "[not JSON]"
+            return {"node-1": _FakeScoreResult()}
+
+    result = asyncio.run(
+        svc._predict_single_item(
+            client=FakeClient(),
+            scorecard_instance=FakeScorecard(),
+            resolved_score_name="Agent Misrepresentation",
+            target_result_id="node-1",
+            score_name_for_output="Agent Misrepresentation",
+            item_id="item-1",
+        )
+    )
+
+    assert result["passed"] is True
+
+
 def test_score_version_test_uses_fallback_scorecard_items(monkeypatch):
     monkeypatch.setattr(
         svc,

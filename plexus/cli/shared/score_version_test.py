@@ -33,16 +33,45 @@ def _parse_iso_timestamp(value: Optional[str]) -> Optional[datetime]:
         return None
 
 
+def _decode_json_containers(value: Any, *, depth: int = 0) -> Any:
+    """Decode nested JSON objects/arrays while preserving ordinary strings."""
+    if depth >= 20:
+        return value
+    if isinstance(value, dict):
+        return {
+            key: _decode_json_containers(child, depth=depth + 1)
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _decode_json_containers(child, depth=depth + 1)
+            for child in value
+        ]
+    if isinstance(value, str):
+        candidate = value.strip()
+        if candidate.startswith(("{", "[")):
+            try:
+                decoded = json.loads(candidate)
+            except (json.JSONDecodeError, TypeError):
+                return value
+            if isinstance(decoded, (dict, list)):
+                return _decode_json_containers(decoded, depth=depth + 1)
+    return value
+
+
 def _normalize_metadata(raw: Any) -> Dict[str, Any]:
     if isinstance(raw, dict):
-        return dict(raw)
-    if isinstance(raw, str):
+        parsed = dict(raw)
+    elif isinstance(raw, str):
         try:
             parsed = json.loads(raw)
-            return parsed if isinstance(parsed, dict) else {}
         except json.JSONDecodeError:
             return {}
-    return {}
+    else:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return _decode_json_containers(parsed)
 
 def _truncate_diagnostic_value(value: Any, *, limit: int = 1000) -> Any:
     if isinstance(value, str):

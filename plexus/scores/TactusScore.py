@@ -26,6 +26,12 @@ from tactus.adapters.cost_collector_log import CostCollectorLogHandler
 
 logger = logging.getLogger(__name__)
 
+# Tactus emits complete model inputs at INFO. Plexus score inputs can contain
+# transcripts and other private evaluation data, so keep that third-party
+# logger at WARNING unless an operator explicitly opts into payload logging.
+if os.getenv("PLEXUS_LOG_SENSITIVE_PAYLOADS", "").strip().lower() not in {"1", "true", "yes"}:
+    logging.getLogger("tactus.core.runtime").setLevel(logging.WARNING)
+
 
 class TactusScore(Score):
     """
@@ -421,6 +427,13 @@ Procedure {
                 self.parameters.code,
                 tactus_context,
             )
+
+            # The runtime reports provider and execution failures as a
+            # structured result. Preserve that diagnostic instead of treating
+            # it as a malformed successful procedure output.
+            if isinstance(result, dict) and result.get('success') is False:
+                detail = result.get('error') or result.get('message') or 'Tactus runtime failed'
+                raise RuntimeError(f"Tactus procedure failed: {detail}")
 
             # Extract value from result
             # Tactus returns a dict with 'result' key containing procedure output

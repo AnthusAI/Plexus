@@ -61,6 +61,14 @@ def test_parameter_validation():
         FeedbackItems(**invalid_limit)
 
 
+def test_cache_directory_uses_runtime_environment(monkeypatch):
+    monkeypatch.setenv("PLEXUS_DATA_CACHE_DIRECTORY", "/tmp/plexus-feedback-cache")
+
+    parameters = FeedbackItems.Parameters(scorecard="test_scorecard", score="test_score")
+
+    assert parameters.local_cache_directory == "/tmp/plexus-feedback-cache"
+
+
 def test_initial_value_and_final_value_parameters():
     """Test the new initial_value and final_value parameters."""
     
@@ -964,8 +972,8 @@ def test_column_mappings_case_sensitivity():
         assert 'Mapped Score' not in df_different_case.columns
 
 
-def test_fetch_feedback_items_for_scores_excludes_invalid_items():
-    """Ensure invalidated feedback items are excluded before sampling."""
+def test_fetch_feedback_items_for_scores_excludes_invalid_items(caplog):
+    """Ensure invalidated feedback items are excluded without logging item content."""
     with patch('plexus.data.FeedbackItems.create_client') as mock_create_client, \
          patch('plexus.data.FeedbackItems.resolve_account_id_for_command') as mock_resolve_account:
 
@@ -982,11 +990,15 @@ def test_fetch_feedback_items_for_scores_excludes_invalid_items():
         valid_item = Mock()
         valid_item.id = "valid-1"
         valid_item.isInvalid = False
+        valid_item.item.metadata = {"transcript": "must not reach error logs"}
         invalid_item = Mock()
         invalid_item.id = "invalid-1"
         invalid_item.isInvalid = True
 
-        with patch('plexus.data.FeedbackItems.FeedbackService.find_feedback_items', return_value=[valid_item, invalid_item]):
+        with caplog.at_level(logging.ERROR), patch(
+            'plexus.data.FeedbackItems.FeedbackService.find_feedback_items',
+            return_value=[valid_item, invalid_item],
+        ):
             result = asyncio.run(
                 feedback_items._fetch_feedback_items_for_scores(
                     scorecard_id="scorecard-1",
@@ -996,3 +1008,4 @@ def test_fetch_feedback_items_for_scores_excludes_invalid_items():
 
         assert "score-1" in result
         assert [item.id for item in result["score-1"]] == ["valid-1"]
+        assert "must not reach error logs" not in caplog.text

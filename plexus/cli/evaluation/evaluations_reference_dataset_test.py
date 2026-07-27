@@ -6,19 +6,41 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pandas as pd
+from click.testing import CliRunner
 
 from plexus.cli.evaluation.evaluations import (
     assert_dataset_materialized_for_accuracy,
+    accuracy,
     _apply_feedback_rca_outcome_to_parameters,
     _fetch_accuracy_evaluation_summary_for_json,
     _run_shared_feedback_root_cause_orchestration,
     build_dataset_materialization_failure_message,
+    get_data_driven_samples,
     resolve_cloud_dataset_sample_limit,
     load_samples_from_cloud_dataset,
     get_latest_associated_dataset_for_score,
     list_associated_datasets_for_score,
     validate_dataset_materialization,
 )
+
+
+def test_data_driven_samples_fails_when_score_has_no_data_configuration(monkeypatch):
+    """A configuration error must not be silently represented as zero samples."""
+    monkeypatch.setattr(
+        "plexus.cli.evaluation.evaluations.Score.load",
+        lambda **_kwargs: SimpleNamespace(),
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to load labeled samples"):
+        get_data_driven_samples(
+            scorecard_instance=SimpleNamespace(),
+            scorecard_name="fixture-scorecard",
+            score_name="fixture-score",
+            score_config={"class": "TactusScore"},
+            fresh=False,
+            reload=False,
+            content_ids_to_sample_set=set(),
+        )
 
 
 def test_list_associated_datasets_for_score_orders_newest_first():
@@ -195,6 +217,94 @@ def test_load_samples_from_cloud_dataset_preserves_feedback_linkage_fields(tmp_p
     assert "feedback_item_id" not in sample["columns"]
 
 
+def test_load_samples_from_cloud_dataset_filters_explicit_content_ids(tmp_path):
+    source_csv = Path(tmp_path) / "source.csv"
+    pd.DataFrame(
+        [
+            {"text": "first", "Binary Score": "Yes", "content_id": "content-1"},
+            {"text": "second", "Binary Score": "No", "content_id": "content-2"},
+        ]
+    ).to_csv(source_csv, index=False)
+    mock_s3 = MagicMock()
+    mock_s3.download_file.side_effect = (
+        lambda _bucket, _key, output_path: shutil.copy(source_csv, output_path)
+    )
+
+    with patch("plexus.cli.evaluation.evaluations.get_amplify_bucket", return_value="bucket"), patch(
+        "plexus.cli.evaluation.evaluations.boto3.client",
+        return_value=mock_s3,
+    ):
+        samples = load_samples_from_cloud_dataset(
+            dataset={"id": "ds-1", "file": "datasets/test.csv", "attachedFiles": []},
+            score_name="Binary Score",
+            score_config={},
+            content_ids_to_sample_set={"content-2"},
+        )
+
+    assert [sample["content_id"] for sample in samples] == ["content-2"]
+
+
+@pytest.mark.parametrize("extension", ["csv", "parquet"])
+def test_load_samples_from_explicit_local_dataset_file_without_s3(tmp_path, extension):
+    source = Path(tmp_path) / f"matched-cohort.{extension}"
+    frame = pd.DataFrame(
+        [
+            {
+                "text": "local matched example",
+                "Binary Score": "Yes",
+                "content_id": "content-local-1",
+                "item_id": "item-local-1",
+                "feedback_item_id": "feedback-local-1",
+            }
+        ]
+    )
+    if extension == "csv":
+        frame.to_csv(source, index=False)
+    else:
+        frame.to_parquet(source, index=False)
+
+    with patch("plexus.cli.evaluation.evaluations.boto3.client") as boto_client:
+        samples = load_samples_from_cloud_dataset(
+            dataset={
+                "id": "local-matched-cohort",
+                "file": str(source),
+                "attachedFiles": [],
+            },
+            score_name="Binary Score",
+            score_config={},
+        )
+
+    boto_client.assert_not_called()
+    assert len(samples) == 1
+    assert samples[0]["content_id"] == "content-local-1"
+    assert samples[0]["item_id"] == "item-local-1"
+    assert samples[0]["feedback_item_id"] == "feedback-local-1"
+    assert samples[0]["Binary Score_label"] == "Yes"
+
+
+def test_accuracy_rejects_local_file_with_cloud_dataset_selector_before_execution(tmp_path):
+    source = Path(tmp_path) / "matched-cohort.parquet"
+    pd.DataFrame([{"text": "example", "Binary Score": "Yes"}]).to_parquet(
+        source,
+        index=False,
+    )
+
+    result = CliRunner().invoke(
+        accuracy,
+        [
+            "--scorecard",
+            "fixture-scorecard",
+            "--dataset-file",
+            str(source),
+            "--dataset-id",
+            "cloud-dataset",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--dataset-file is mutually exclusive with cloud dataset selectors" in result.output
+
+
 def test_resolve_cloud_dataset_sample_limit_uses_full_dataset_when_default_not_explicit():
     assert resolve_cloud_dataset_sample_limit(
         number_of_samples=1,
@@ -258,6 +368,115 @@ async def test_shared_feedback_rca_orchestration_returns_none_coverage_when_no_l
 
 
 @pytest.mark.asyncio
+async def test_shared_feedback_rca_all_time_selection_uses_persisted_results_only():
+    """All-time RCA selection must not issue a second, differently capped feedback query."""
+    client = MagicMock()
+    client.execute.return_value = {
+        "listScoreResultByEvaluationId": {"items": [], "nextToken": None}
+    }
+
+    with patch(
+        "plexus.Evaluation.FeedbackEvaluation._fetch_feedback_items",
+        new=AsyncMock(return_value=[]),
+    ) as fetch:
+        outcome = await _run_shared_feedback_root_cause_orchestration(
+            client=client,
+            account_key="acct-key",
+            account_id="acct-id",
+            evaluation_id="eval-1",
+            scorecard_identifier="scorecard-1",
+            scorecard_id="scorecard-1",
+            score_id="score-1",
+            score_version_id="version-1",
+            max_items=200,
+            sampling_mode="newest",
+            sample_seed=None,
+            max_category_summary_items=20,
+            days=None,
+            tracker=None,
+            apply_feedback_window_selection=True,
+        )
+
+    fetch.assert_not_awaited()
+    assert outcome["selection_metadata"]["selection_order_basis"] == "persisted evaluation ScoreResults"
+
+
+@pytest.mark.asyncio
+async def test_shared_feedback_rca_uses_persisted_evaluation_results_as_selection_authority():
+    """RCA must not discard a scored mistake because a later feedback fetch differs."""
+    client = MagicMock()
+
+    def execute_side_effect(query, _variables):
+        if "ListScoreResultsForEvaluation" in query:
+            return {
+                "listScoreResultByEvaluationId": {
+                    "items": [
+                        {
+                            "id": "sr-1",
+                            "value": "No",
+                            "metadata": json.dumps(
+                                {
+                                    "feedback_item_id": "fi-scored",
+                                    "results": {
+                                        "Score": {
+                                            "metadata": {
+                                                "correct": False,
+                                                "human_label": "Yes",
+                                            }
+                                        }
+                                    },
+                                }
+                            ),
+                            "explanation": "prediction explanation",
+                        }
+                    ],
+                    "nextToken": None,
+                }
+            }
+        if "GetOriginalScoreResult" in query:
+            return {"listScoreResultByItemIdAndTypeAndScoreIdAndUpdatedAt": {"items": []}}
+        raise AssertionError(f"Unexpected query in test: {query}")
+
+    client.execute.side_effect = execute_side_effect
+    scored_feedback = SimpleNamespace(id="fi-scored", itemId="item-1", scoreId="score-1")
+    unrelated_feedback = SimpleNamespace(id="fi-unrelated")
+
+    with patch(
+        "plexus.Evaluation.FeedbackEvaluation._fetch_feedback_items",
+        new=AsyncMock(return_value=[unrelated_feedback]),
+    ), patch(
+        "plexus.cli.evaluation.evaluations._fetch_feedback_items_by_ids",
+        new=AsyncMock(return_value={"fi-scored": scored_feedback}),
+    ), patch(
+        "plexus.Evaluation.FeedbackEvaluation._run_root_cause_analysis",
+        new=AsyncMock(return_value={"topics": [{"label": "Topic A"}]}),
+    ), patch(
+        "plexus.Evaluation.FeedbackEvaluation._persist_root_cause_for_parameters",
+        return_value={"topics": [{"label": "Topic A"}]},
+    ):
+        outcome = await _run_shared_feedback_root_cause_orchestration(
+            client=client,
+            account_key="acct-key",
+            account_id="acct-id",
+            evaluation_id="eval-1",
+            scorecard_identifier="scorecard-1",
+            scorecard_id="scorecard-1",
+            score_id="score-1",
+            score_version_id="version-1",
+            max_items=200,
+            sampling_mode="newest",
+            sample_seed=None,
+            max_category_summary_items=20,
+            days=None,
+            tracker=None,
+            apply_feedback_window_selection=True,
+        )
+
+    assert outcome["incorrect_items_total"] == 1
+    assert outcome["incorrect_items_analyzed_for_rca"] == 1
+
+
+@pytest.mark.asyncio
 async def test_shared_feedback_rca_orchestration_returns_partial_coverage_for_mixed_linkage():
     client = MagicMock()
 
@@ -314,7 +533,7 @@ async def test_shared_feedback_rca_orchestration_returns_partial_coverage_for_mi
         new=AsyncMock(return_value={"topics": [{"label": "Topic A"}]}),
     ), patch(
         "plexus.Evaluation.FeedbackEvaluation._persist_root_cause_for_parameters",
-        return_value={"topics": [{"label": "Topic A"}]},
+        return_value={"topics": [{"label": "Topic A"}], "rca_item_failures_total": 1},
     ):
         outcome = await _run_shared_feedback_root_cause_orchestration(
             client=client,
@@ -338,11 +557,13 @@ async def test_shared_feedback_rca_orchestration_returns_partial_coverage_for_mi
     assert outcome["incorrect_items_with_feedback_link"] == 1
     assert outcome["incorrect_items_without_feedback_link"] == 1
     assert outcome["incorrect_items_analyzed_for_rca"] == 1
+    assert outcome["rca_item_failures_total"] == 1
     assert outcome["rca_coverage_status"] == "partial"
     assert outcome["root_cause_required"] is True
     assert outcome["has_usable_root_cause"] is True
     assert outcome["error_message"] is None
     assert any("missing feedback_item_id linkage" in warning for warning in outcome["warnings"])
+    assert any("fallback analysis for 1 item" in warning for warning in outcome["warnings"])
 
 
 def test_apply_feedback_rca_outcome_to_parameters_sets_coverage_and_warnings():
@@ -355,6 +576,7 @@ def test_apply_feedback_rca_outcome_to_parameters_sets_coverage_and_warnings():
         "incorrect_items_with_feedback_link": 8,
         "incorrect_items_without_feedback_link": 2,
         "incorrect_items_analyzed_for_rca": 8,
+        "rca_item_failures_total": 2,
         "rca_coverage_status": "partial",
         "warnings": ["missing feedback_item_id linkage for 2 incorrect item(s)"],
     }
@@ -369,6 +591,7 @@ def test_apply_feedback_rca_outcome_to_parameters_sets_coverage_and_warnings():
     assert params["incorrect_items_with_feedback_link"] == 8
     assert params["incorrect_items_without_feedback_link"] == 2
     assert params["incorrect_items_analyzed_for_rca"] == 8
+    assert params["rca_item_failures_total"] == 2
     assert params["rca_coverage_status"] == "partial"
     assert params["rca_warnings"] == ["missing feedback_item_id linkage for 2 incorrect item(s)"]
 

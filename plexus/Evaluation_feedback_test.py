@@ -98,30 +98,15 @@ class TestFeedbackEvaluation:
 
         assert result == "openai:unit_default"
 
-    def test_evaluation_rca_text_uses_bedrock_only_when_selected(self, monkeypatch):
-        import plexus.rca_analysis as rca_mod
-
+    def test_evaluation_rca_text_rejects_bedrock_selection(self, monkeypatch):
         monkeypatch.setenv("PLEXUS_RCA_LLM_PROVIDER", "bedrock")
-        monkeypatch.setattr(
-            rca_mod,
-            "_invoke_rca_openai_text",
-            lambda **_kwargs: (_ for _ in ()).throw(
-                AssertionError("OpenAI must not be called for explicit Bedrock provider")
-            ),
-        )
-        monkeypatch.setattr(
-            "plexus.Evaluation._bedrock_converse_for_rca",
-            lambda *_args, **_kwargs: "bedrock-result",
-        )
-
-        result = _evaluation_rca_text(
-            "system",
-            [{"role": "user", "content": "prompt"}],
-            max_tokens=50,
-            call_site="unit_bedrock",
-        )
-
-        assert result == "bedrock-result"
+        with pytest.raises(ValueError, match="only the OpenAI provider"):
+            _evaluation_rca_text(
+                "system",
+                [{"role": "user", "content": "prompt"}],
+                max_tokens=50,
+                call_site="unit_bedrock",
+            )
     
     def test_initialization(self, mock_api_client):
         """Test FeedbackEvaluation initialization."""
@@ -454,6 +439,35 @@ class TestFeedbackEvaluation:
                     update_calls = mock_eval_record.update.call_args_list
                     final_call = update_calls[-1]
                     assert final_call[1].get('status') == 'COMPLETED' or final_call[0][0] == 'status'
+
+    @pytest.mark.asyncio
+    async def test_run_evaluation_with_all_time_window_sets_an_end_date(
+        self, mock_api_client, mock_feedback_items
+    ):
+        """All-time feedback evaluation must still give RCA a bounded end timestamp."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=None,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key",
+        )
+        mock_eval_record = MagicMock(id="eval-789")
+        mock_scorecard = MagicMock(id="scorecard-123")
+
+        with patch('plexus.dashboard.api.models.evaluation.Evaluation.get_by_id', return_value=mock_eval_record):
+            with patch('plexus.dashboard.api.models.scorecard.Scorecard.get_by_id', return_value=mock_scorecard):
+                with patch.object(evaluation, '_fetch_feedback_items', new_callable=AsyncMock, return_value=mock_feedback_items) as fetch:
+                    with patch.object(evaluation, '_run_root_cause_analysis', new_callable=AsyncMock, return_value={"topics": [{"label": "topic-1"}]}):
+                        result = await evaluation.run()
+
+        assert result["status"] == "success"
+        assert fetch.call_args.kwargs["start_date"] == datetime(1970, 1, 1, tzinfo=timezone.utc)
+        assert fetch.call_args.kwargs["end_date"] is not None
 
     @pytest.mark.asyncio
     async def test_run_evaluation_maps_alignment_metric_to_percentage(self, mock_api_client, mock_feedback_items):
@@ -1104,14 +1118,8 @@ class TestFeedbackEvaluation:
             raising=False,
         )
         monkeypatch.setattr(
-            rm_mod,
-            "resolve_llm_helpers",
-            lambda **kwargs: (
-                captured.setdefault("llm_provider_kwargs", kwargs) and None,
-                None,
-                None,
-            ),
-            raising=False,
+            "plexus.Evaluation._rca_reinforcement_memory_llm_helpers",
+            lambda: (None, None, None),
         )
         monkeypatch.setattr(
             rm_mod,
@@ -1155,7 +1163,6 @@ class TestFeedbackEvaluation:
         )
 
         assert captured["max_exemplars"] == 20
-        assert captured["llm_provider_kwargs"]["provider"] == "openai"
         assert result["topics"] == []
 
     @pytest.mark.asyncio
@@ -1297,6 +1304,54 @@ class TestFeedbackEvaluation:
 
         assert result == expected
         assert mock_small.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_missing_reinforcement_memory_backend_does_not_run_small_set_fallback(
+        self, monkeypatch, mock_api_client
+    ):
+        """A missing RCA backend must be explicit, not silently change analysis modes."""
+        evaluation = FeedbackEvaluation(
+            scorecard_name="Test Scorecard",
+            scorecard=None,
+            api_client=mock_api_client,
+            days=7,
+            scorecard_id="scorecard-123",
+            score_id="score-456",
+            evaluation_id="eval-789",
+            account_id="account-123",
+            account_key="test-account-key",
+        )
+        feedback_items = []
+        score_result_map = {}
+        for index in range(5):
+            item = MagicMock()
+            item.id = f"feedback-{index}"
+            item.itemId = f"item-{index}"
+            item.initialAnswerValue = "No"
+            item.finalAnswerValue = "Yes"
+            item.editCommentValue = "comment"
+            feedback_items.append(item)
+            score_result_map[item.id] = {"value": "No", "human_label": "Yes"}
+
+        import builtins
+
+        original_import = builtins.__import__
+
+        def unavailable_backend(name, *args, **kwargs):
+            if name == "biblicus.analysis.reinforcement_memory":
+                raise ModuleNotFoundError("reinforcement memory unavailable")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", unavailable_backend)
+        with patch.object(evaluation, "_run_small_set_root_cause_analysis", new_callable=AsyncMock) as small_set:
+            with pytest.raises(RuntimeError, match="reinforcement-memory RCA backend is unavailable"):
+                await evaluation._run_root_cause_analysis(
+                    feedback_items=feedback_items,
+                    score_result_map=score_result_map,
+                    original_explanations={},
+                )
+
+        small_set.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_small_set_path_returns_empty_when_no_candidates(self, mock_api_client):

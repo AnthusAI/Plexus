@@ -565,6 +565,22 @@ class TestProgressTracking:
         
         assert tracker.current_items == 25
         assert tracker.status == "Custom status"
+
+    def test_active_stage_status_message_is_persisted_immediately(self, monkeypatch):
+        """Finalization progress must be visible without waiting for another item."""
+        tracker = TaskProgressTracker(
+            stage_configs={"Analyzing": StageConfig(order=1, status_message="Starting analysis...")},
+            total_items=0,
+            prevent_new_task=True,
+        )
+        sync = Mock()
+        monkeypatch.setattr(tracker, "_update_api_task_progress", sync)
+
+        tracker.update_status_message("Scoring complete; finalizing artifacts...")
+
+        assert tracker.current_stage.status_message == "Scoring complete; finalizing artifacts..."
+        assert tracker.status == "Scoring complete; finalizing artifacts..."
+        sync.assert_called_once_with(force_critical=True)
     
     def test_progress_property(self):
         """Test progress percentage property."""

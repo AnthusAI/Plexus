@@ -160,6 +160,7 @@ def log_scorecard_configurations(scorecard_instance, context=""):
     
     logging.info(f"==== END SCORECARD CONFIGURATIONS {context} ====")
 
+
 def format_confusion_matrix_summary(final_metrics):
     """Format confusion matrix and detailed metrics for the evaluation summary."""
     summary_lines = []
@@ -855,6 +856,7 @@ def get_latest_accuracy_evaluation_for_score_since(
 def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config: dict,
                                    number_of_samples: Optional[int] = None,
                                    random_seed: Optional[int] = None,
+                                   content_ids_to_sample_set: Optional[set[str]] = None,
                                    progress_callback=None) -> list:
     """Load samples from a cloud dataset (Parquet file) and convert to evaluation format"""
     logging.info(f"Loading samples from cloud dataset: {dataset['id']}")
@@ -897,46 +899,49 @@ def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config
                            f"Attached files: {attached_files}. "
                            f"File extensions found: {file_extensions}")
     
-    # Handle both full S3 URLs and relative paths
-    if data_file_path.startswith('s3://'):
-        # Full S3 URL - parse normally
-        s3_path = data_file_path[5:]
-        bucket_name, key = s3_path.split('/', 1)
-    else:
-        # Relative path - construct full S3 URL
-        bucket_name = get_amplify_bucket()
-        if not bucket_name:
-            raise ValueError(f"S3 bucket name not found. Cannot download file: {data_file_path}")
-        key = data_file_path
-        full_s3_url = f"s3://{bucket_name}/{key}"
-        data_file_path = full_s3_url  # Update for logging consistency
-    
-    logging.info(f"Downloading from S3 bucket: {bucket_name}, key: {key}")
-    
-    # Download the data file from S3
-    s3_client = boto3.client('s3')
-    
+    local_file_path = os.path.abspath(os.path.expanduser(data_file_path))
+    using_local_file = os.path.isfile(local_file_path)
+    temporary_download_path = None
+
     try:
-        # Create appropriate temp file extension
-        file_extension = f".{file_type}"
-        with tempfile.NamedTemporaryFile(suffix=file_extension, delete=False) as temp_file:
-            temp_file_path = temp_file.name
-            
-        logging.info(f"Downloading {file_type} file to: {temp_file_path}")
-        s3_client.download_file(bucket_name, key, temp_file_path)
+        if using_local_file:
+            input_file_path = local_file_path
+            logging.info("Loading explicit local dataset file: %s", input_file_path)
+        else:
+            if os.path.isabs(data_file_path):
+                raise ValueError(f"Local dataset file not found: {data_file_path}")
+
+            # Handle both full S3 URLs and relative object keys.
+            if data_file_path.startswith('s3://'):
+                s3_path = data_file_path[5:]
+                bucket_name, key = s3_path.split('/', 1)
+            else:
+                bucket_name = get_amplify_bucket()
+                if not bucket_name:
+                    raise ValueError(
+                        f"S3 bucket name not found. Cannot download file: {data_file_path}"
+                    )
+                key = data_file_path
+                data_file_path = f"s3://{bucket_name}/{key}"
+
+            logging.info(f"Downloading from S3 bucket: {bucket_name}, key: {key}")
+            s3_client = boto3.client('s3')
+            file_extension = f".{file_type}"
+            with tempfile.NamedTemporaryFile(suffix=file_extension, delete=False) as temp_file:
+                temporary_download_path = temp_file.name
+            input_file_path = temporary_download_path
+            logging.info(f"Downloading {file_type} file to: {input_file_path}")
+            s3_client.download_file(bucket_name, key, input_file_path)
         
         # Load the data file into a DataFrame
         logging.info(f"Loading {file_type} file into DataFrame")
         if file_type == 'parquet':
-            df = pd.read_parquet(temp_file_path)
+            df = pd.read_parquet(input_file_path)
         elif file_type == 'csv':
-            df = pd.read_csv(temp_file_path)
+            df = pd.read_csv(input_file_path)
         else:
             raise ValueError(f"Unsupported file type: {file_type}")
-        
-        # Clean up the temporary file
-        os.unlink(temp_file_path)
-        
+
     except ClientError as e:
         error_code = e.response['Error']['Code']
         if error_code == 'NoSuchKey':
@@ -947,23 +952,13 @@ def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config
             raise ValueError(f"Failed to download {file_type} file from S3: {str(e)}")
     except Exception as e:
         raise ValueError(f"Failed to load {file_type} file: {str(e)}")
+    finally:
+        if temporary_download_path and os.path.exists(temporary_download_path):
+            os.unlink(temporary_download_path)
     
     # Essential dataset info
     logging.info(f"Dataset loaded: {df.shape[0]} rows x {df.shape[1]} columns")
     logging.info(f"Columns: {df.columns.tolist()}")
-    
-    # Show first 3 rows sample
-    if len(df) > 0:
-        logging.info("Sample data (first 3 rows):")
-        for i in range(min(3, len(df))):
-            row_data = {}
-            for col in df.columns:
-                value = df.iloc[i][col]
-                if isinstance(value, str) and len(value) > 100:
-                    row_data[col] = value[:97] + "..."
-                else:
-                    row_data[col] = value
-            logging.info(f"  Row {i}: {row_data}")
     
     # Basic quality check
     quality_issues = []
@@ -975,6 +970,19 @@ def load_samples_from_cloud_dataset(dataset: dict, score_name: str, score_config
             logging.warning(f"Data quality issue: {issue}")
     
     logging.info(f"Loaded DataFrame with {len(df)} rows and columns: {df.columns.tolist()}")
+
+    if content_ids_to_sample_set:
+        if 'content_id' not in df.columns:
+            raise ValueError(
+                "Cloud dataset does not contain content_id required by --content-ids-to-sample"
+            )
+        requested_ids = {str(content_id).strip() for content_id in content_ids_to_sample_set}
+        df = df[df['content_id'].map(lambda content_id: str(content_id).strip() in requested_ids)]
+        logging.info(
+            "Filtered cloud dataset to %s rows using %s requested content IDs",
+            len(df),
+            len(requested_ids),
+        )
     
     # Sample the dataframe if number_of_samples is specified
     if number_of_samples and number_of_samples < len(df):
@@ -1284,6 +1292,7 @@ async def _run_shared_feedback_root_cause_orchestration(
 
     incorrect_rows: List[Dict[str, Any]] = []
     incorrect_score_result_map: Dict[str, Dict[str, Optional[str]]] = {}
+    evaluated_feedback_item_ids: List[str] = []
     next_token = None
     while True:
         sr_response = await asyncio.to_thread(
@@ -1298,6 +1307,9 @@ async def _run_shared_feedback_root_cause_orchestration(
         score_result_data = (sr_response or {}).get("listScoreResultByEvaluationId") or {}
         for score_result in score_result_data.get("items") or []:
             metadata = _parse_score_result_metadata(score_result.get("metadata"))
+            feedback_item_id = str(metadata.get("feedback_item_id") or "").strip() or None
+            if feedback_item_id:
+                evaluated_feedback_item_ids.append(feedback_item_id)
             is_correct, human_label = _derive_score_result_correctness(
                 metadata=metadata,
                 predicted_value=score_result.get("value"),
@@ -1305,7 +1317,6 @@ async def _run_shared_feedback_root_cause_orchestration(
             if is_correct is None or is_correct:
                 continue
 
-            feedback_item_id = str(metadata.get("feedback_item_id") or "").strip() or None
             incorrect_rows.append(
                 {
                     "score_result_id": score_result.get("id"),
@@ -1325,45 +1336,20 @@ async def _run_shared_feedback_root_cause_orchestration(
 
     selection_metadata: Dict[str, Any] = {}
     if apply_feedback_window_selection:
-        # Preserve explicit selection metadata from the shared selector contract.
-        if feedback_start_at and feedback_end_at:
-            start_date = FeedbackEvaluation._parse_feedback_window_datetime(feedback_start_at)
-            end_date = FeedbackEvaluation._parse_feedback_window_datetime(feedback_end_at)
-        elif days is None:
-            start_date = datetime(1970, 1, 1, tzinfo=timezone.utc)
-        else:
-            start_date = datetime.now(timezone.utc) - timedelta(days=days)
-            end_date = datetime.now(timezone.utc)
-        feedback_items_for_selection = await fe._fetch_feedback_items(
-            scorecard_id=scorecard_id,
-            score_id=score_id,
-            start_date=start_date,
-            end_date=end_date,
-        )
-        selected_feedback_items, selection_metadata = select_feedback_items(
-            feedback_items_for_selection,
-            max_items=max_items,
-            sampling_mode=sampling_mode,
-            sample_seed=sample_seed,
-        )
-        selected_feedback_ids = {
-            str(getattr(item, "id", "") or "")
-            for item in selected_feedback_items
-            if getattr(item, "id", None)
+        # ScoreResults are the durable record of the evaluation's actual sample.
+        # Do not re-select from FeedbackItems here: different loader limits can
+        # produce a disjoint set and silently erase every RCA candidate.
+        selected_feedback_ids = list(dict.fromkeys(evaluated_feedback_item_ids))
+        selection_metadata = {
+            "sampling_mode": sampling_mode,
+            "requested_max_items": max_items,
+            "candidate_pool_count": len(selected_feedback_ids),
+            "selected_count": len(selected_feedback_ids),
+            "sample_seed": sample_seed,
+            "selection_order_basis": "persisted evaluation ScoreResults",
+            "selected_feedback_item_ids": selected_feedback_ids,
+            "shortfall_count": max(0, int(max_items or 0) - len(selected_feedback_ids)),
         }
-        if selected_feedback_ids:
-            incorrect_rows = [
-                row for row in incorrect_rows
-                if not row.get("feedback_item_id") or row.get("feedback_item_id") in selected_feedback_ids
-            ]
-            incorrect_score_result_map = {
-                feedback_item_id: value
-                for feedback_item_id, value in incorrect_score_result_map.items()
-                if feedback_item_id in selected_feedback_ids
-            }
-        else:
-            incorrect_rows = [row for row in incorrect_rows if not row.get("feedback_item_id")]
-            incorrect_score_result_map = {}
 
     incorrect_items_total = len(incorrect_rows)
     incorrect_items_with_feedback_link = len(
@@ -1483,6 +1469,23 @@ async def _run_shared_feedback_root_cause_orchestration(
         persisted_root_cause,
     )
 
+    rca_item_failures_total = 0
+    if isinstance(persisted_root_cause, dict):
+        try:
+            rca_item_failures_total = max(
+                0,
+                int(persisted_root_cause.get("rca_item_failures_total") or 0),
+            )
+        except (TypeError, ValueError):
+            logging.warning(
+                "RCA artifact reported a non-numeric rca_item_failures_total: %r",
+                persisted_root_cause.get("rca_item_failures_total"),
+            )
+    if rca_item_failures_total:
+        warnings.append(
+            f"RCA completed with fallback analysis for {rca_item_failures_total} item(s)."
+        )
+
     if incorrect_items_total == 0:
         rca_coverage_status = "none"
     elif incorrect_items_analyzed_for_rca == 0:
@@ -1490,6 +1493,7 @@ async def _run_shared_feedback_root_cause_orchestration(
     elif (
         incorrect_items_analyzed_for_rca < incorrect_items_total
         or len(missing_feedback_item_ids) > 0
+        or rca_item_failures_total > 0
     ):
         rca_coverage_status = "partial"
     else:
@@ -1502,6 +1506,7 @@ async def _run_shared_feedback_root_cause_orchestration(
         "incorrect_items_with_feedback_link": incorrect_items_with_feedback_link,
         "incorrect_items_without_feedback_link": incorrect_items_without_feedback_link,
         "incorrect_items_analyzed_for_rca": incorrect_items_analyzed_for_rca,
+        "rca_item_failures_total": rca_item_failures_total,
         "rca_coverage_status": rca_coverage_status,
         "warnings": warnings,
         "root_cause_required": contract["root_cause_required"],
@@ -1532,6 +1537,9 @@ def _apply_feedback_rca_outcome_to_parameters(
             ),
             "incorrect_items_analyzed_for_rca": int(
                 rca_outcome.get("incorrect_items_analyzed_for_rca") or 0
+            ),
+            "rca_item_failures_total": int(
+                rca_outcome.get("rca_item_failures_total") or 0
             ),
             "rca_coverage_status": rca_outcome.get("rca_coverage_status") or "none",
         }
@@ -2083,6 +2091,7 @@ def _build_evaluation_task_metadata(
 @click.option('--data-source-key', default=None, type=str, help='Key of the cloud data source to use (overrides score data config)')
 @click.option('--data-source-id', default=None, type=str, help='ID of the cloud data source to use (overrides score data config)')
 @click.option('--dataset-id', default=None, type=str, help='Specific dataset ID to use (overrides score data config)')
+@click.option('--dataset-file', default=None, type=click.Path(exists=True, dir_okay=False, path_type=str), help='Explicit local Parquet or CSV dataset file to evaluate (mutually exclusive with cloud dataset selectors).')
 @click.option('--use-score-associated-dataset', is_flag=True, default=False, help='Use the latest dataset associated with the score.')
 @click.option('--all-score-associated-datasets', is_flag=True, default=False, help='Run one evaluation per dataset associated with the score.')
 @click.option('--allow-no-labels', is_flag=True, default=False, help='Allow evaluation without ground truth labels (creates score results and distribution metrics only)')
@@ -2114,6 +2123,7 @@ def accuracy(
     data_source_key: Optional[str],
     data_source_id: Optional[str],
     dataset_id: Optional[str],
+    dataset_file: Optional[str],
     use_score_associated_dataset: bool,
     all_score_associated_datasets: bool,
     allow_no_labels: bool,
@@ -2136,6 +2146,20 @@ def accuracy(
             number_of_samples_explicit = source is not None and source != ParameterSource.DEFAULT
         except Exception:
             number_of_samples_explicit = False
+
+    if dataset_file and any(
+        [
+            data_source_name,
+            data_source_key,
+            data_source_id,
+            dataset_id,
+            use_score_associated_dataset,
+            all_score_associated_datasets,
+        ]
+    ):
+        raise click.UsageError(
+            "--dataset-file is mutually exclusive with cloud dataset selectors"
+        )
 
     def emit_json(payload: Dict[str, Any], exit_code: int = 0) -> None:
         click.echo(json.dumps(payload))
@@ -2855,13 +2879,29 @@ def accuracy(
             
             # Check if any cloud dataset options are provided
             data_set_id_for_eval = None
-            use_cloud_dataset = any([data_source_name, data_source_key, data_source_id, dataset_id, use_score_associated_dataset])
+            cloud_dataset_selectors = [
+                data_source_name,
+                data_source_key,
+                data_source_id,
+                dataset_id,
+                use_score_associated_dataset,
+            ]
+            use_cloud_dataset = bool(dataset_file or any(cloud_dataset_selectors))
             dataset_backed_accuracy = False
             
             if use_cloud_dataset:
                 # Load samples from cloud dataset
                 try:
-                    if dataset_id:
+                    if dataset_file:
+                        explicit_path = os.path.abspath(os.path.expanduser(dataset_file))
+                        cloud_dataset = {
+                            "id": f"local:{explicit_path}",
+                            "name": os.path.basename(explicit_path),
+                            "file": explicit_path,
+                            "attachedFiles": [],
+                        }
+                        logging.info("Using explicit local dataset file: %s", explicit_path)
+                    elif dataset_id:
                         logging.info(f"Using specific dataset ID: {dataset_id}")
                         cloud_dataset = get_dataset_by_id(client, dataset_id)
                     elif use_score_associated_dataset:
@@ -2885,7 +2925,7 @@ def accuracy(
                         cloud_dataset = get_latest_dataset_for_data_source(client, data_source['id'])
                     
                     logging.info(f"Using cloud dataset: {cloud_dataset['name']} (ID: {cloud_dataset['id']})")
-                    data_set_id_for_eval = cloud_dataset.get('id')
+                    data_set_id_for_eval = None if dataset_file else cloud_dataset.get('id')
                     dataset_backed_accuracy = bool(data_set_id_for_eval)
 
                     if dataset_backed_accuracy:
@@ -2898,6 +2938,11 @@ def accuracy(
                             number_of_samples_explicit=number_of_samples_explicit,
                         ),
                         random_seed=random_seed,
+                        content_ids_to_sample_set=set(
+                            content_id.strip()
+                            for content_id in content_ids_to_sample.split(',')
+                            if content_id.strip()
+                        ),
                         progress_callback=tracker.update if tracker else None
                     )
                     
@@ -2926,23 +2971,10 @@ def accuracy(
             logging.info(f"Retrieved {len(labeled_samples_data)} samples.")
 
             if len(labeled_samples_data) == 0:
-                logging.warning("No feedback items found in the specified time window. Marking evaluation as NO_DATA.")
-                if evaluation_record:
-                    try:
-                        evaluation_record.update(**{
-                            'status': 'COMPLETED',
-                            'totalItems': 0,
-                            'processedItems': 0,
-                            'errorMessage': 'No feedback items found in the specified time window.',
-                        })
-                    except Exception as _upd_err:
-                        logging.warning(f"Could not update evaluation record for NO_DATA: {_upd_err}")
-                if tracker:
-                    try:
-                        tracker.complete()
-                    except Exception as _tracker_err:
-                        logging.warning(f"Tracker failed to complete after NO_DATA evaluation: {_tracker_err}")
-                return evaluation_record
+                raise ValueError(
+                    "Accuracy evaluation selected zero labeled samples; "
+                    "an evaluation with no score executions cannot complete successfully."
+                )
 
             # Determine the subset of score names to evaluate
             subset_of_score_names = None
@@ -3085,7 +3117,6 @@ def accuracy(
                     scorecard_identifier = str(scorecard)
                 
                 logging.info(f"Using scorecard identifier for AccuracyEvaluation: {scorecard_identifier} (type: {type(scorecard_identifier)})")
-            
             
             accuracy_eval = AccuracyEvaluation(
                 scorecard_name=scorecard_identifier,
@@ -3380,6 +3411,11 @@ def accuracy(
         raise
     finally:
         try:
+            from plexus.cli.shared.async_cleanup import drain_litellm_service_logging_tasks
+
+            drained = loop.run_until_complete(drain_litellm_service_logging_tasks())
+            if drained:
+                logging.debug("Drained %d LiteLLM service-logging task(s) at evaluation shutdown", drained)
             tasks = [t for t in asyncio.all_tasks(loop) 
                     if not t.done()]
             if tasks:
@@ -3397,6 +3433,7 @@ def accuracy(
             "scorecard": scorecard,
             "score": score or None,
             "dataset_id": dataset_id,
+            "dataset_file": dataset_file,
             "use_score_associated_dataset": use_score_associated_dataset,
             "all_score_associated_datasets": all_score_associated_datasets,
             "baseline": baseline,
@@ -3593,9 +3630,7 @@ def get_data_driven_samples(
             import traceback
             logging.error(f"Full traceback: {traceback.format_exc()}")
         
-        # Return empty list on error to prevent further issues
-        logging.error("Returning empty list due to error")
-        return []
+        raise RuntimeError(f"Failed to load labeled samples for evaluation: {e}") from e
 
 def get_csv_samples(csv_filename):
     if not os.path.exists(csv_filename):
@@ -4414,6 +4449,7 @@ def feedback(
             # Import necessary modules for accuracy evaluation
             from plexus.Scorecard import Scorecard
             from plexus.Evaluation import AccuracyEvaluation
+            from plexus.data.FeedbackItems import FeedbackItems
             import yaml
             import tempfile
             import os
@@ -4431,6 +4467,10 @@ def feedback(
                 "scorecard": scorecard,  # Use the identifier provided by user
                 "score": score_name_for_dataset,  # Use score name for reliable FeedbackItems lookup
                 "max_items": max_items,
+                # ``max_items`` is the caller's total cohort size. Do not let
+                # FeedbackItems silently reduce a multiclass cohort through a
+                # separate per-confusion-cell cap.
+                "limit_per_cell": max_items,
                 "sampling_mode": normalized_sampling_mode,
                 "sample_seed": sample_seed,
             }
@@ -4439,6 +4479,21 @@ def feedback(
             if feedback_start_at and feedback_end_at:
                 dataset_config["feedback_start_at"] = feedback_start_at
                 dataset_config["feedback_end_at"] = feedback_end_at
+
+            # AccuracyEvaluation must receive the feedback rows explicitly.  Merely
+            # placing this config in a reconstructed Scorecard is unreliable: API
+            # score serialization can discard its data section, which makes the
+            # evaluator fall back to the score YAML's unrelated data source.
+            # Keep this ephemeral cache writable in locked-down worker images.
+            feedback_cache_dir = tempfile.mkdtemp(prefix="plexus-feedback-items-")
+            dataset_config["local_cache_directory"] = feedback_cache_dir
+            feedback_dataframe = FeedbackItems(**dataset_config).load_dataframe(fresh=True)
+            if feedback_dataframe.empty:
+                raise click.ClickException(
+                    "No qualifying feedback items were found for the requested score and window."
+                )
+            labeled_samples = feedback_dataframe.to_dict("records")
+            console.print(f"[dim]Loaded {len(labeled_samples)} feedback rows for evaluation.[/dim]")
 
             # Load scorecard based on --yaml flag
             if use_yaml:
@@ -4716,12 +4771,18 @@ def feedback(
                     random_seed=None,
                     subset_of_score_names=[score_name_for_dataset],  # Only evaluate the target score
                     rca_pending=True,  # Outer code owns the COMPLETED write after RCA
+                    labeled_samples=labeled_samples,
                 )
                 
                 # Advance from Setup to Processing stage before running predictions
                 if tracker:
+                    actual_sample_count = len(labeled_samples)
+                    tracker.set_total_items(actual_sample_count)
                     tracker.advance_stage()
-                    logging.info("==== STAGE: Processing ====")
+                    logging.info(
+                        "==== STAGE: Processing (%s feedback items) ====",
+                        actual_sample_count,
+                    )
 
                 # Run the evaluation
                 try:

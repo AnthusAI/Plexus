@@ -11,6 +11,7 @@ Tests the most critical business logic:
 """
 
 import asyncio
+import logging
 import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -114,6 +115,17 @@ def mock_evaluation():
 
 class TestMetricsCalculation:
     """Test core metrics calculation logic"""
+
+    def test_metrics_do_not_log_sample_predictions_or_labels(self, mock_evaluation, caplog):
+        results = create_mock_evaluation_results(
+            [("private-predicted-label", "private-actual-label")]
+        )
+
+        with caplog.at_level(logging.INFO):
+            mock_evaluation.calculate_metrics(results)
+
+        assert "private-predicted-label" not in caplog.text
+        assert "private-actual-label" not in caplog.text
     
     def test_perfect_binary_classification(self, mock_evaluation):
         """Test perfect binary classification metrics"""
@@ -331,8 +343,13 @@ class TestScoreTextProcessing:
             "test_score_label": "yes",
         })
 
-        with pytest.raises(RuntimeError, match="Initial evaluation failed: score 'test_score' returned ERROR"):
+        with pytest.raises(RuntimeError, match="Initial evaluation failed: score 'test_score' returned ERROR value") as error:
             await mock_evaluation.score_text(row, score_name="test_score")
+
+        assert "content-999" not in str(error.value)
+        assert "item-999" not in str(error.value)
+        assert "fi-999" not in str(error.value)
+        assert "other_data" not in str(error.value)
 
 
 class TestLabelStandardization:

@@ -525,6 +525,18 @@ class TestScoreUtilityMethods:
         
         expected_path = "./tmp/reports/Test_Scorecard/Test_Score_With_Spaces/"
         assert score.report_directory_path() == expected_path
+
+    def test_api_scorecard_provenance_overrides_stale_or_missing_config(self):
+        config = {"class": "ConcreteScore", "scorecard_name": "stale"}
+
+        enriched = Score._with_scorecard_provenance(config, "Canonical Scorecard")
+
+        assert enriched["scorecard_name"] == "Canonical Scorecard"
+        assert config["scorecard_name"] == "stale"
+
+    def test_api_scorecard_provenance_requires_canonical_name(self):
+        with pytest.raises(ValueError, match="canonical name"):
+            Score._with_scorecard_provenance({"class": "ConcreteScore"}, "")
     
     def test_model_directory_path(self):
         """Test model directory path generation"""

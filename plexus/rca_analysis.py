@@ -1969,32 +1969,28 @@ def analyze_score_result(
         "in the provided input artifact and why the correct label follows."
     )
 
-    try:
-        messages = [{"role": "user", "content": turn1_prompt}]
-        detailed_cause = _invoke_rca_openai_text(
-            system=system,
-            messages=messages,
-            max_output_tokens=200,
-            call_site="rca_score_result_detailed_cause",
-        )
+    messages = [{"role": "user", "content": turn1_prompt}]
+    detailed_cause = _invoke_rca_openai_text(
+        system=system,
+        messages=messages,
+        max_output_tokens=200,
+        call_site="rca_score_result_detailed_cause",
+    )
 
-        messages.append({"role": "assistant", "content": detailed_cause})
-        messages.append({"role": "user", "content": (
-            "Based on this specific error and the score configuration above, "
-            "suggest one concrete change to the score code that would prevent "
-            "this specific misclassification. Be specific and brief (1-2 sentences)."
-        )})
-        suggested_fix = _invoke_rca_openai_text(
-            system=system,
-            messages=messages,
-            max_output_tokens=150,
-            call_site="rca_score_result_suggested_fix",
-        )
+    messages.append({"role": "assistant", "content": detailed_cause})
+    messages.append({"role": "user", "content": (
+        "Based on this specific error and the score configuration above, "
+        "suggest one concrete change to the score code that would prevent "
+        "this specific misclassification. Be specific and brief (1-2 sentences)."
+    )})
+    suggested_fix = _invoke_rca_openai_text(
+        system=system,
+        messages=messages,
+        max_output_tokens=150,
+        call_site="rca_score_result_suggested_fix",
+    )
 
-        return detailed_cause, suggested_fix
-    except Exception as exc:
-        logger.warning("analyze_score_result failed: %s", exc)
-        return "", ""
+    return detailed_cause, suggested_fix
 
 
 def build_feedback_context(
