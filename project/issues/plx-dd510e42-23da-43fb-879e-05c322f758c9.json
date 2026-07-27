@@ -1,0 +1,61 @@
+{
+  "id": "plx-dd510e42-23da-43fb-879e-05c322f758c9",
+  "title": "Adopt supported Tactus Console runtime APIs",
+  "description": "Upgrade Plexus to the released Tactus lifecycle API package, remove private Tactus Agent method replacement from the Console execution path, preserve telemetry and request timeout behavior through supported APIs, and validate the resulting runtime before deployment.",
+  "type": "task",
+  "status": "closed",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ef663037-93c8-43d0-ad9a-479ea22d3fb4",
+      "author": "ryan.porter",
+      "text": "Tactus runtime API changes are on main but not yet published because the release token secret name was wrong. Tactus PR #96 repairs publication. Preparing the Plexus integration against the exact released API surface in a clean worktree; dependency lock will be finalized only after the new package exists.",
+      "created_at": "2026-07-27T20:11:51.414556Z"
+    },
+    {
+      "id": "c9501bdf-e09f-42c2-b9ec-69f3f46e817c",
+      "author": "ryan.porter",
+      "text": "Removed all production runtime replacement of Tactus Agent methods. Plexus now consumes lifecycle events for context and latency telemetry, uses native Pydantic JSON serialization, uses callable Agent syntax, and supplies request_timeout through supported Agent configuration. Added an explicit AGENTS.md prohibition on Tactus monkeypatching. Focused Console/procedure tests pass 106/106 against the Tactus main code, and targeted Ruff checks pass. Waiting for the Tactus package publication before locking the dependency.",
+      "created_at": "2026-07-27T20:18:27.228195Z"
+    },
+    {
+      "id": "fa0e3839-9ebf-4463-92c9-d9f1c02486e6",
+      "author": "ryan.porter",
+      "text": "Tactus develop-to-main PR 97 merged after all Python 3.10, 3.11, and 3.12 checks passed. The main-branch release workflow is now running. Next: verify the published package, lock Plexus to that release, validate without a local Tactus path, and open the Plexus integration PR.",
+      "created_at": "2026-07-27T20:35:17.639405Z"
+    },
+    {
+      "id": "18b2e123-b314-43ae-b3b2-c24f373bf76f",
+      "author": "ryan.porter",
+      "text": "Tactus 0.51.5 is published on PyPI with the supported lifecycle APIs. The release itself succeeded; the workflow's red status came later from an unrelated Windows desktop checkout path failure. Proceeding to lock Plexus to the published package and validate without a local Tactus PYTHONPATH.",
+      "created_at": "2026-07-27T22:29:13.862311Z"
+    },
+    {
+      "id": "db4ae381-c764-465f-852e-14f6ab789219",
+      "author": "ryan.porter",
+      "text": "Locked Plexus to published Tactus 0.51.5 and installed it without a local PYTHONPATH. Verified the package loads from site-packages and exposes request_timeout. Focused MCP, Console, and procedure integration tests pass 355/355 with scoring and infrastructure extras; Poetry lock validation, targeted Ruff, and diff checks pass.",
+      "created_at": "2026-07-27T22:33:29.609199Z"
+    },
+    {
+      "id": "0864b8ea-978c-4827-9c3c-887f3844676c",
+      "author": "ryan.porter",
+      "text": "Merged current develop into the integration branch and resolved overlapping Console contract changes by preserving the compact prompt plus external batch-operations cookbook. The combined branch passes 447 focused tests and Poetry lock validation; PR 497 is mergeable.",
+      "created_at": "2026-07-27T22:37:49.626984Z"
+    },
+    {
+      "id": "d3edb025-ae43-48db-905c-dd252f32e738",
+      "author": "ryan.porter",
+      "text": "Completed supported Tactus 0.51.5 adoption, removal of production runtime monkeypatches, published-package validation, and develop conflict resolution.",
+      "created_at": "2026-07-27T22:37:50.162533Z"
+    }
+  ],
+  "created_at": "2026-07-27T20:11:47.249890Z",
+  "updated_at": "2026-07-27T22:37:50.162533Z",
+  "closed_at": "2026-07-27T22:37:49.885900Z",
+  "custom": {}
+}

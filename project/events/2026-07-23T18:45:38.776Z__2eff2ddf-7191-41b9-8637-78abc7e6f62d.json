@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "2eff2ddf-7191-41b9-8637-78abc7e6f62d",
+  "issue_id": "plx-e4aec8b1-75fe-4a85-a057-6135fabe3899",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-23T18:45:38.776Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Integrate released Tactus lifecycle APIs and verify latency",
+    "description": "Upgrade the Tactus dependency, remove runtime method replacement, prewarm the Console model stack, correct latency metrics, keep tool context compact, and verify locally plus in the sandbox before production approval.",
+    "issue_type": "task",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-0f79ddc4-5ad8-408b-a1cc-fbe32f7f20aa",
+    "labels": []
+  }
+}
