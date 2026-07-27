@@ -53,15 +53,26 @@ _CLASS_MODULES = {
 }
 
 
-def __getattr__(name: str):
+def resolve_score_class(name: str):
+    """Resolve a configured score class without trusting package attributes.
+
+    Importing ``plexus.scores.<ClassName>`` makes Python cache that submodule on
+    this package under ``ClassName``.  Looking up the package attribute after
+    that point returns the module instead of invoking ``__getattr__``.  Resolve
+    through the explicit module map so registry behavior is import-order safe.
+    """
     module_name = _CLASS_MODULES.get(name)
     if not module_name:
         raise AttributeError(f"module 'plexus.scores' has no attribute {name!r}")
 
     module = import_module(module_name)
-    value = getattr(module, name)
+    return getattr(module, name)
+
+
+def __getattr__(name: str):
+    value = resolve_score_class(name)
     globals()[name] = value
     return value
 
 
-__all__ = ["Score", *_CLASS_MODULES.keys()]
+__all__ = ["Score", "resolve_score_class", *_CLASS_MODULES.keys()]

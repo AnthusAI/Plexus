@@ -16,6 +16,7 @@ from datetime import datetime
 from plexus.Registries import ScoreRegistry
 from plexus.Registries import scorecard_registry
 from plexus.scores.Score import Score
+from plexus.scores import resolve_score_class
 
 SCORE_RESULT_TRACE_SCHEMA_VERSION = "score_result_dependency_v1"
 DEFAULT_TRACE_SCORE_IDENTIFIERS = {
@@ -454,8 +455,7 @@ class Scorecard:
 
             # Import score class
             try:
-                score_module = importlib.import_module(f"plexus.scores")
-                score_class = getattr(score_module, score_class_name)
+                score_class = resolve_score_class(score_class_name)
             except (ImportError, AttributeError) as e:
                 logging.error(
                     f"Failed to import score class {score_class_name}: {str(e)}"
@@ -615,8 +615,7 @@ class Scorecard:
             score_info["scorecard_name"] = scorecard_properties["name"]
             if "class" in score_info:
                 class_name = score_info["class"]
-                module = importlib.import_module("plexus.scores")
-                score_class = getattr(module, class_name)
+                score_class = resolve_score_class(class_name)
                 scorecard_class.score_registry.register(
                     cls=score_class,
                     properties=score_info,
