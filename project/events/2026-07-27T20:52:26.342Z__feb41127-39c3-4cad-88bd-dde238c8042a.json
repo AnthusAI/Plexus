@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "feb41127-39c3-4cad-88bd-dde238c8042a",
+  "issue_id": "plx-8570854c-bad6-4049-be38-e04836aae830",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-27T20:52:26.342Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Feedback optimization toolchain improvements",
+    "description": "Purpose: Improve the generic Plexus feedback optimization toolchain so operators and agents can discover worthwhile work, run reproducible optimizations, validate candidates, and complete unattended workflows safely.\n\nExclusions:\n- Client-specific scorecard, score, evaluation, optimization, incident, and performance information.\n- Application behavior changes in this administrative setup issue.\n- Deployment work already owned by another active session.\n\nDefinition of Done:\n- Seven focused epics cover discovery, cohorts, candidate safety, execution, observability, parallel orchestration, and supported runtime integration.\n- Existing sanitized issue histories are preserved and reparented without duplication.\n- Dependencies and concurrency boundaries allow independent worktrees and parallel agents.\n- Kanbus hierarchy validation and confidentiality review pass.\n\nRunning log: Record decisions, progress, failures, outcomes, and next steps in sanitized Kanbus comments only.",
+    "issue_type": "initiative",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": null,
+    "labels": []
+  }
+}
