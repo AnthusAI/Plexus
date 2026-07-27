@@ -61,6 +61,7 @@ def test_once_worker_preserves_exception_traceback_behavior(monkeypatch):
     monkeypatch.setattr(local_worker, "_load_local_env", lambda: None)
     monkeypatch.setattr(local_worker, "_resolve_client", object)
     monkeypatch.setattr(local_worker, "build_response_owner", lambda _target: "local:test")
+    monkeypatch.setattr(local_worker, "warm_console_runtime", lambda _client: None)
     monkeypatch.setattr(local_worker.logger, "exception", lambda *args: exception_calls.append(args))
 
     def fail_poll(*_args, **_kwargs):

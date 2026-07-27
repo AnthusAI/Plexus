@@ -14,6 +14,7 @@ NOTE: All test data is generic and does not contain any client-specific informat
 """
 
 import pytest
+from contextlib import contextmanager
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from plexus.scores.Score import Score
 
@@ -41,6 +42,17 @@ def mock_tactus_runtime():
     runtime = AsyncMock()
     runtime.execute = AsyncMock()
     return runtime
+
+
+@contextmanager
+def patch_tactus_runtime_class():
+    """Patch the lazy Tactus runtime loader while preserving class-call assertions."""
+    runtime_class = MagicMock(name="TactusRuntime")
+    with patch(
+        "plexus.scores.TactusScore._load_tactus_runtime_class",
+        return_value=runtime_class,
+    ):
+        yield runtime_class
 
 
 @pytest.fixture
@@ -241,7 +253,7 @@ class TestTactusScoreBasicExecution:
     @pytest.mark.asyncio
     async def test_tactus_score_initialization(self):
         """Test that TactusScore initializes with required parameters."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
 
             score = TactusScore(
@@ -256,7 +268,7 @@ class TestTactusScoreBasicExecution:
 
     def test_tactus_code_fallback(self):
         """Test that 'tactus_code' YAML key still works as fallback for 'code'."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
 
             score = TactusScore(
@@ -267,7 +279,7 @@ class TestTactusScoreBasicExecution:
 
     def test_code_preferred_over_tactus_code(self):
         """Test that 'code' takes precedence when both 'code' and 'tactus_code' are provided."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
 
             score = TactusScore(
@@ -281,7 +293,7 @@ class TestTactusScoreBasicExecution:
     @pytest.mark.asyncio
     async def test_tactus_score_predict_returns_result(self, basic_code):
         """Test that predict() returns a Score.Result with proper fields."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'Yes', 'explanation': 'Test passed'}
@@ -309,7 +321,7 @@ class TestTactusScoreBasicExecution:
     @pytest.mark.asyncio
     async def test_tactus_score_passes_context_to_runtime(self, basic_code):
         """Test that predict() passes text and metadata to Tactus runtime."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'Yes', 'explanation': 'Test'}
@@ -349,7 +361,7 @@ class TestClassificationParsing:
     @pytest.mark.asyncio
     async def test_parse_yes_at_start(self, classification_parsing_code):
         """Test parsing 'YES' at the start of response."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'Yes', 'explanation': 'YES. The criteria were met.'}
@@ -369,7 +381,7 @@ class TestClassificationParsing:
     @pytest.mark.asyncio
     async def test_parse_no_at_start(self, classification_parsing_code):
         """Test parsing 'NO' at the start of response."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'No', 'explanation': 'NO. The criteria were not met.'}
@@ -389,7 +401,7 @@ class TestClassificationParsing:
     @pytest.mark.asyncio
     async def test_parse_na_at_start(self, classification_parsing_code):
         """Test parsing 'NA' at the start of response."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'NA', 'explanation': 'NA. Insufficient information.'}
@@ -409,7 +421,7 @@ class TestClassificationParsing:
     @pytest.mark.asyncio
     async def test_parse_no_not_confused_with_not(self, classification_parsing_code):
         """Test that 'NOT' is not confused with 'NO' classification."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             # The parse_classification function should handle "NOT" differently from "NO"
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
@@ -431,7 +443,7 @@ class TestClassificationParsing:
     @pytest.mark.asyncio
     async def test_parse_classification_marker(self, classification_parsing_code):
         """Test parsing 'CLASSIFICATION: YES' format."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'Yes', 'explanation': 'CLASSIFICATION: YES based on analysis'}
@@ -459,7 +471,7 @@ class TestMultiEntityAggregation:
     @pytest.mark.asyncio
     async def test_all_yes_returns_yes(self, multi_entity_aggregation_code):
         """Test that all Yes results aggregate to Yes."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'Yes', 'explanation': 'Evaluated 3 entities', 'confidence': 'high'}
@@ -487,7 +499,7 @@ class TestMultiEntityAggregation:
     @pytest.mark.asyncio
     async def test_any_no_returns_no(self, multi_entity_aggregation_code):
         """Test that any No result causes aggregate to be No."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'No', 'explanation': 'Evaluated 3 entities', 'confidence': 'high'}
@@ -515,7 +527,7 @@ class TestMultiEntityAggregation:
     @pytest.mark.asyncio
     async def test_no_entities_returns_na(self, multi_entity_aggregation_code):
         """Test that no entities to evaluate returns NA."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'NA', 'explanation': 'No entities to evaluate', 'confidence': 'high'}
@@ -538,7 +550,7 @@ class TestMultiEntityAggregation:
     @pytest.mark.asyncio
     async def test_missing_entities_array_handled(self, multi_entity_aggregation_code):
         """Test handling of missing entities array in metadata."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'NA', 'explanation': 'No entities to evaluate', 'confidence': 'high'}
@@ -569,7 +581,7 @@ class TestPrerequisiteChecking:
     @pytest.mark.asyncio
     async def test_all_prerequisites_met(self, prerequisite_checking_code):
         """Test that meeting all prerequisites returns Yes."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'Yes', 'explanation': 'All prerequisites met'}
@@ -594,7 +606,7 @@ class TestPrerequisiteChecking:
     @pytest.mark.asyncio
     async def test_category_prerequisite_not_met(self, prerequisite_checking_code):
         """Test that wrong category returns NA with explanation."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {
@@ -624,7 +636,7 @@ class TestPrerequisiteChecking:
     @pytest.mark.asyncio
     async def test_multiple_prerequisites_not_met(self, prerequisite_checking_code):
         """Test that multiple failing prerequisites are all reported."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {
@@ -662,7 +674,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_runtime_error_returns_error_result(self, basic_code):
         """Test that runtime errors return an ERROR result."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(
                 side_effect=Exception("Lua runtime error: syntax error")
@@ -685,7 +697,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_missing_value_in_output_raises_error(self, basic_code):
         """Test that missing 'value' in Tactus output causes an error."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             # Return result without 'value' field
             mock_runtime_instance.execute = AsyncMock(return_value={
@@ -708,7 +720,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_invalid_class_warning(self, basic_code):
         """Test that invalid classification value logs a warning."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'InvalidClass', 'explanation': 'Test'}
@@ -733,7 +745,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_empty_text_handled(self, basic_code):
         """Test that empty text input is handled gracefully."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'NA', 'explanation': 'Empty input'}
@@ -755,7 +767,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_missing_metadata_handled(self, basic_code):
         """Test that missing/empty metadata is handled gracefully."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'Yes', 'explanation': 'Test'}
@@ -785,21 +797,21 @@ class TestConfidenceConversion:
 
     def test_none_confidence_returns_none(self, basic_code):
         """Test that None confidence remains None."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
             score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence(None) is None
 
     def test_float_confidence_passed_through(self, basic_code):
         """Test that float confidence is passed through."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
             score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence(0.75) == 0.75
 
     def test_int_confidence_converted_to_float(self, basic_code):
         """Test that int confidence is converted to float."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
             score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence(1) == 1.0
@@ -807,7 +819,7 @@ class TestConfidenceConversion:
 
     def test_confidence_clamped_to_valid_range(self, basic_code):
         """Test that confidence values are clamped between 0.0 and 1.0."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
             score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence(1.5) == 1.0
@@ -815,14 +827,14 @@ class TestConfidenceConversion:
 
     def test_string_numeric_confidence_converted(self, basic_code):
         """Test that numeric strings are converted to float."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
             score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("0.85") == 0.85
 
     def test_string_label_high_converted(self, basic_code):
         """Test that 'high' confidence is converted to 0.9."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
             score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("high") == 0.9
@@ -831,7 +843,7 @@ class TestConfidenceConversion:
 
     def test_string_label_medium_converted(self, basic_code):
         """Test that 'medium' confidence is converted to 0.6."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
             score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("medium") == 0.6
@@ -839,28 +851,28 @@ class TestConfidenceConversion:
 
     def test_string_label_low_converted(self, basic_code):
         """Test that 'low' confidence is converted to 0.3."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
             score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("low") == 0.3
 
     def test_string_label_very_high_converted(self, basic_code):
         """Test that 'very high' confidence is converted to 0.95."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
             score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("very high") == 0.95
 
     def test_string_label_very_low_converted(self, basic_code):
         """Test that 'very low' confidence is converted to 0.1."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
             score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("very low") == 0.1
 
     def test_unknown_string_returns_none(self, basic_code):
         """Test that unknown string confidence returns None."""
-        with patch('plexus.scores.TactusScore.TactusRuntime'):
+        with patch_tactus_runtime_class():
             from plexus.scores.TactusScore import TactusScore
             score = TactusScore(name="test", code=basic_code)
             assert score._convert_confidence("unknown") is None
@@ -877,7 +889,7 @@ class TestResultConversion:
     @pytest.mark.asyncio
     async def test_previous_results_passed_to_runtime(self, basic_code):
         """Test that previous score results are converted and passed to runtime."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'Yes', 'explanation': 'Based on previous results'}
@@ -928,7 +940,7 @@ class TestComplexWorkflows:
     @pytest.mark.asyncio
     async def test_nested_metadata_extraction(self, basic_code):
         """Test extraction of deeply nested metadata fields."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {'value': 'Yes', 'explanation': 'Nested data processed'}
@@ -975,7 +987,7 @@ class TestComplexWorkflows:
     @pytest.mark.asyncio
     async def test_flat_metadata_as_single_entity(self, multi_entity_aggregation_code):
         """Test that flat metadata without entities array is treated as single entity."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             # Simulate Tactus code treating flat metadata as single entity
             mock_runtime_instance.execute = AsyncMock(return_value={
@@ -1010,7 +1022,7 @@ class TestComplexWorkflows:
         - 'medium' -> 0.6
         - 'low' -> 0.3
         """
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {
@@ -1036,7 +1048,7 @@ class TestComplexWorkflows:
     @pytest.mark.asyncio
     async def test_structured_timestamp_field_mapping(self, basic_code):
         """Test that structured timestamps are mapped to Score.Result."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {
@@ -1059,7 +1071,7 @@ class TestComplexWorkflows:
     @pytest.mark.asyncio
     async def test_deepgram_start_end_timestamp_field_mapping(self, basic_code):
         """Test that Deepgram-style start/end fields are mapped to Score.Result."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {
@@ -1082,7 +1094,7 @@ class TestComplexWorkflows:
     @pytest.mark.asyncio
     async def test_bracketed_timestamp_explanation_fallback(self, basic_code):
         """Test that bracketed explanation timestamps are used as fallback."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {
@@ -1104,7 +1116,7 @@ class TestComplexWorkflows:
     @pytest.mark.asyncio
     async def test_structured_timestamps_win_over_bracketed_explanation(self, basic_code):
         """Test structured timestamps take precedence over bracketed text."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
             mock_runtime_instance.execute = AsyncMock(return_value={
                 'result': {
@@ -1135,7 +1147,7 @@ class TestIntegrationPatterns:
     @pytest.mark.asyncio
     async def test_end_to_end_classification_workflow(self):
         """Test complete classification workflow from input to result."""
-        with patch('plexus.scores.TactusScore.TactusRuntime') as MockRuntime:
+        with patch_tactus_runtime_class() as MockRuntime:
             mock_runtime_instance = AsyncMock()
 
             # Simulate complete workflow execution
