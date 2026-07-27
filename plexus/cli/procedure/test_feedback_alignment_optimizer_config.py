@@ -405,6 +405,44 @@ def test_optimizer_yaml_skips_invalid_synthesis_strategy_selection():
     assert "No viable synthesis strategy selected" in code
 
 
+def test_optimizer_synthesis_is_fail_closed_against_the_current_cycle_leader():
+    """Feature: synthesis safety
+
+    Scenario: a synthesis candidate loses either frozen cohort to the current cycle leader
+      Given the current cycle leader was evaluated on the frozen recent and regression cohorts
+      When a synthesis candidate has a negative delta on either cohort against that leader
+      Then the candidate is not selected or carried forward
+      And the reviewer receives the leader, its cohort identity, and leader-relative deltas
+    """
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "local function require_exact_regression_cohort" in code
+    assert "strategy_recent_regression_vs_cycle_leader" in code
+    assert "strategy_regression_regression_vs_cycle_leader" in code
+    assert "synthesis_recent_regression_vs_cycle_leader" in code
+    assert "synthesis_regression_regression_vs_cycle_leader" in code
+    assert "Comparison basis: current cycle leader" in code
+    assert "Current cycle leader (reverts to)" in code
+
+
+def test_optimizer_synthesis_pins_model_without_reviewed_justification():
+    """Feature: synthesis safety
+
+    Scenario: synthesis changes a score model without review
+      Given the cycle leader has a pinned model configuration
+      When synthesis submits a version with a different model configuration
+      Then the version is rejected before selection unless an explicit reviewed justification is supplied
+    """
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert "reviewed_model_change_justification" in config["params"]
+    assert "local function model_configuration_fingerprint" in code
+    assert "model_change_requires_reviewed_justification" in code
+    assert "pinned_model_fingerprint" in code
+
+
 def test_optimizer_yaml_ignores_code_editor_prose_after_terminal_tools():
     config = _load_optimizer_config()
     code = config["code"]
@@ -673,7 +711,7 @@ def test_optimizer_yaml_strategy_b_uses_clean_starting_point_when_baseline_is_me
     assert 'strategy_b_start_code = synth_start_code' in code
     assert 'strategy_b_start_label = "MECHANICALLY CLEAN STARTING POINT (" .. synth_start_label .. ")"' in code
     assert 'diag("Strategy B switching from mechanically dirty baseline to smoke-test-clean starting point")' in code
-    assert 'run_synthesis_react(table.concat(strategy_b_parts, "\\n"), strategy_b_start_code, strategy_b_start_label, strategy_b_parent_version_id, 10, "Strategy-B")' in code
+    assert 'run_synthesis_react(table.concat(strategy_b_parts, "\\n"), strategy_b_start_code, strategy_b_start_label, strategy_b_parent_version_id, 10, "Strategy-B", pinned_model_fingerprint)' in code
 
 
 def test_optimizer_yaml_defines_safe_encode_for_score_test_failure_details():

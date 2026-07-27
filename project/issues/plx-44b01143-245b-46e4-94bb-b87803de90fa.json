@@ -15,9 +15,22 @@
       "type": "relates-to"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "f4cff1ba-aa8c-4521-94ec-ce5a11517933",
+      "author": "ryan.porter",
+      "text": "Synthesis-safety implementation is underway in an isolated worktree. Scope: compare proposed synthesis with the current cycle leader on identical recent and regression cohorts; reject negative deltas; keep the selected model pinned unless a reviewed justification permits change; retain the human promotion approval gate. Next: establish a failing observable specification, implement the minimum compatible change, then run focused tests.",
+      "created_at": "2026-07-27T21:12:58.942701Z"
+    },
+    {
+      "id": "93daa2b8-0b50-42cf-a8ba-ff62466b944c",
+      "author": "ryan.porter",
+      "text": "Implemented synthesis safety with behavior-first specifications. Outcome: synthesis strategy scoring and final carry-forward now use the current cycle leader; any negative leader-relative recent or regression delta is rejected. Recent feedback IDs and regression dataset identity are checked before comparison. The reviewer receives the leader-relative basis and cohort identifiers. Synthesis pins the score model unless reviewed_model_change_justification is supplied. Human promotion approval remains outside the optimizer. Validation: focused configuration suite passed (80 tests) and the procedure Lua body compiled. Next: commit this scoped change for integration.",
+      "created_at": "2026-07-27T21:16:04.655482Z"
+    }
+  ],
   "created_at": "2026-07-27T20:52:48.693807Z",
-  "updated_at": "2026-07-27T20:52:48.693807Z",
+  "updated_at": "2026-07-27T21:16:04.655482Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
