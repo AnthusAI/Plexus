@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "7140f9e5-c330-4a11-8046-78031f97464b",
+  "issue_id": "plx-35dc7470-678e-43eb-87b9-31685ab370d9",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-27T21:49:22.233Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Prevent FastMCP and Tactus documentation parser collision",
+    "description": "A clean Poetry install currently selects FastMCP 3, which installs the griffelib distribution, while released Tactus installs griffe. Both distributions write the same Python package paths, producing an invalid environment and preventing CI test collection.\n\nExpected behavior:\n- A clean lockfile install contains one compatible documentation-parser distribution.\n- FastMCP and Tactus imports both succeed.\n- The dispatch regression net collects and passes under the supported Python matrix.\n- The dependency constraint prevents a future lock refresh from silently restoring the collision.\n\nFeature: Compatible optimizer runtime dependencies\nScenario: CI installs the locked Plexus dependency graph\nGiven Plexus includes the supported Tactus and FastMCP runtimes\nWhen Poetry installs the lockfile into a clean environment\nThen no two distributions overwrite the same parser package\nAnd both runtimes import successfully\nAnd dispatch regression tests can be collected and executed\n\nOut of scope: upgrading Plexus to FastMCP 3 APIs or changing runtime behavior.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": []
+  }
+}

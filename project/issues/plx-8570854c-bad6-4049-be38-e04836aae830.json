@@ -1,0 +1,37 @@
+{
+  "id": "plx-8570854c-bad6-4049-be38-e04836aae830",
+  "title": "Feedback optimization toolchain improvements",
+  "description": "Purpose: Improve the generic Plexus feedback optimization toolchain so operators and agents can discover worthwhile work, run reproducible optimizations, validate candidates, and complete unattended workflows safely.\n\nExclusions:\n- Client-specific scorecard, score, evaluation, optimization, incident, and performance information.\n- Application behavior changes in this administrative setup issue.\n- Deployment work already owned by another active session.\n\nDefinition of Done:\n- Seven focused epics cover discovery, cohorts, candidate safety, execution, observability, parallel orchestration, and supported runtime integration.\n- Existing sanitized issue histories are preserved and reparented without duplication.\n- Dependencies and concurrency boundaries allow independent worktrees and parallel agents.\n- Kanbus hierarchy validation and confidentiality review pass.\n\nRunning log: Record decisions, progress, failures, outcomes, and next steps in sanitized Kanbus comments only.",
+  "type": "initiative",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": null,
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "3fc942e9-01f9-47c9-813a-d25e373b3bdb",
+      "author": "ryan.porter",
+      "text": "Program structure created in an isolated clean worktree from origin/develop. Existing top-level epics plx-7a8b2c and plx-673324 were repurposed and reparented to preserve their histories; plx-dfef94 moved to the observability epic. Several additional sanitized optimizer issues visible in other active worktrees are not present in the clean origin/develop baseline yet. They will not be duplicated or copied manually. After their owning branches land, reparent them by capability: opportunity discovery; cohort reproducibility; candidate safety; unattended execution; observability; batch orchestration; or supported runtime integration. No implementation agent should edit another session branch.",
+      "created_at": "2026-07-27T20:54:38.999143Z"
+    },
+    {
+      "id": "2cf0b133-bcbe-45c2-8e1e-eede03098c68",
+      "author": "ryan.porter",
+      "text": "Validation complete in the clean coordination worktree: Kanbus hierarchy validation passed; exactly seven epics are parented to this initiative; dependency targets resolve; and the sanitized initiative and epic content passed a client-reference scan. The clean origin/develop baseline contains only one currently movable generic diagnostics task, which was reparented to observability. Pending issue histories in other active worktrees remain untouched until their owning changes land.",
+      "created_at": "2026-07-27T20:55:45.535232Z"
+    },
+    {
+      "id": "d2020768-f611-467e-bb4f-f4887b78a14d",
+      "author": "ryan.porter",
+      "text": "Wave 1 integration is complete and locally validated. Delivered exact cohort replay, leader-relative synthesis safety, final-evidence decision artifacts, terminal-state evaluation waiting without arbitrary deadlines, and a compatible optimizer runtime dependency graph. Python 3.11 and 3.12 full suites each passed with 3,875 tests; dashboard typecheck, unit coverage, Storybook build, Chromium, and static Storybook tests passed. The remaining initiative epics stay open for later waves.",
+      "created_at": "2026-07-27T22:25:52.611653Z"
+    }
+  ],
+  "created_at": "2026-07-27T20:52:26.342039Z",
+  "updated_at": "2026-07-27T22:25:52.611653Z",
+  "closed_at": null,
+  "custom": {}
+}

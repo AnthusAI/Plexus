@@ -1,18 +1,37 @@
 {
   "id": "plx-7a8b2c38-2c10-4890-942a-8b04bc8fc65a",
-  "title": "Feedback evaluation integrity hardening",
-  "description": "Track Plexus-internal hardening of feedback evaluation preflight and integrity diagnostics. This epic contains no client-specific information.",
+  "title": "Reproducible evaluation cohorts and comparisons",
+  "description": "Purpose: Make every baseline, candidate, synthesis, and resumed evaluation comparison reproducible by preserving exact cohort identity, coverage, and provenance.\n\nExclusions:\n- Changing feedback labels or client review policy.\n- Replacing the canonical feedback evaluator.\n- Silently substituting an unbalanced or independently selected cohort.\n\nDependencies: Supplies frozen cohort and provenance contracts to candidate safety, observability, and orchestration. Cohort work can proceed independently.\n\nDefinition of Done:\n- Historical balancing considers every reachable output class and reports coverage.\n- Recent and regression baseline cohorts are materialized or otherwise replayable with exact ordered membership.\n- Fresh, candidate, synthesis, and resumed evaluations use the same applicable cohort.\n- Missing provenance or replay failures fail closed.\n- Explicit local dataset replay uses the canonical evaluation pipeline.\n- Behavior-first specifications and focused tests pass.\n\nRunning log: Preserve existing issue histories and record sanitized decisions, attempts, outcomes, and next steps in this epic or its child issues.",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
-  "parent": null,
+  "parent": "plx-8570854c-bad6-4049-be38-e04836aae830",
   "labels": [],
   "dependencies": [],
-  "comments": [],
+  "comments": [
+    {
+      "id": "a8bb0755-6275-453e-8416-1f51330b93a3",
+      "author": "ryan.porter",
+      "text": "Starting isolated implementation for frozen recent-feedback cohort replay. Scope: retain ordered reviewed-item membership after baseline selection; require candidate and synthesis feedback evaluations to reuse it; expose provenance; fail closed when replay cannot be performed. Existing child issue is maintained in a separate active worktree, so no duplicate is being created here.",
+      "created_at": "2026-07-27T21:13:01.227895Z"
+    },
+    {
+      "id": "ea40788f-58d8-4864-b3db-42f00066026a",
+      "author": "ryan.porter",
+      "text": "Implemented and verified stricter frozen recent-feedback cohort replay in the isolated worktree. Candidate, strategy, and synthesis comparisons now fail if returned cohort membership is reordered, in addition to existing missing-provenance and membership checks. Focused specifications passed (4 tests); only existing deprecation warnings were emitted.",
+      "created_at": "2026-07-27T21:14:37.427420Z"
+    },
+    {
+      "id": "5179464e-96d3-4b38-871e-0e38cf3fde8b",
+      "author": "ryan.porter",
+      "text": "Wave 1 integration landed exact ordered recent-feedback replay and regression dataset identity checks. Candidate, strategy, and synthesis comparisons fail closed when frozen cohort provenance differs. Combined focused and full supported-runtime CI passed.",
+      "created_at": "2026-07-27T22:25:44.802877Z"
+    }
+  ],
   "created_at": "2026-07-16T20:56:06.201654Z",
-  "updated_at": "2026-07-16T20:56:06.201654Z",
+  "updated_at": "2026-07-27T22:25:44.802877Z",
   "closed_at": null,
   "custom": {}
 }

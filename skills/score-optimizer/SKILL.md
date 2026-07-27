@@ -65,6 +65,48 @@ Do not treat every contradiction as a score bug. A contradiction can mean:
 - the feedback should be invalidated
 - the item is mechanical noise and should not drive optimization
 
+## Feedback-Investment Prioritization
+
+Use the reproducible screening protocol in
+[references/feedback-investment.md](references/feedback-investment.md). Record
+the window and threshold profile with every result so another operator can
+rerun the same assessment.
+
+Treat reviewed feedback as both optimization evidence and a company investment
+that must produce a useful decision. Do not prioritize scores by accuracy alone.
+For a portfolio scan, begin with the estimated number of reviewed disagreements:
+
+```text
+feedback item count * (1 - agreement rate)
+```
+
+Use that only as the first-pass impact estimate. Refine the ranking with AC1,
+class distribution, recent drift, rubric clarity, business importance, and
+whether the observed errors appear fixable in the score configuration. A
+high-volume, moderately inaccurate score can be a better opportunity than a
+very inaccurate score with only a handful of reviews.
+
+For every score investigated, report the feedback volume, disagreement count or
+rate, class coverage, and one explicit recommendation for future collection:
+
+- **Continue broad collection** when coverage is still immature and new reviews
+  are materially changing the observed failure patterns.
+- **Collect targeted scarce classes or boundaries** when the total volume is
+  adequate but one important class or decision boundary lacks evidence.
+- **Pause broad collection pending repair or clarification** when the existing
+  volume already demonstrates a score, provenance, metadata, or rubric problem.
+  More undirected reviews should not substitute for fixing the known problem.
+- **Reduce to periodic and drift-triggered monitoring** when performance is
+  stable, important classes have adequate coverage, error themes have
+  saturated, and additional reviews rarely reveal a new failure mode.
+
+Never claim that feedback collection can stop merely because aggregate accuracy
+is high or the sample is large. Preserve enough targeted and periodic review to
+detect class-specific regression, policy changes, and production drift. When
+the evidence is insufficient to choose a collection policy, state exactly what
+coverage is missing and recommend the smallest targeted collection that would
+resolve it.
+
 ## Three-Phase Rubric-Memory SOP
 
 Run optimizer work in this order. Do not skip directly to prompt/code optimization

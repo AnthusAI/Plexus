@@ -7857,7 +7857,18 @@ def test_feedback_alignment_batch_prefetches_portfolio_window_once(monkeypatch) 
                                 "initialAnswerValue": "No",
                                 "finalAnswerValue": "Yes",
                                 "isInvalid": False,
-                            }
+                            },
+                            *[
+                                {
+                                    "id": f"feedback-{index}",
+                                    "scorecardId": "id-One",
+                                    "scoreId": "score-one",
+                                    "initialAnswerValue": "Yes",
+                                    "finalAnswerValue": "Yes",
+                                    "isInvalid": False,
+                                }
+                                for index in range(2, 5)
+                            ],
                         ],
                         "nextToken": None,
                     }
@@ -7903,9 +7914,15 @@ def test_feedback_alignment_batch_prefetches_portfolio_window_once(monkeypatch) 
         if "ListFeedbackItemsByEditedTime" in query
     ]
     assert len(feedback_window_queries) == 1
-    assert result["scorecards"][0]["scores"][0]["total_items"] == 1
-    assert result["scorecards"][0]["scores"][0]["accuracy"] == 0
+    assert result["scorecards"][0]["scores"][0]["total_items"] == 4
+    assert result["scorecards"][0]["scores"][0]["accuracy"] == 75
+    assert result["scorecards"][0]["scores"][0]["disagreements"] == 1
+    assert result["scorecards"][0]["scores"][0]["disagreement_rate"] == 0.25
+    assert result["scorecards"][0]["scores"][0]["reviewed_error_opportunity"] == 1.0
     assert result["scorecards"][1]["scores"][0]["total_items"] == 0
+    assert result["scorecards"][1]["scores"][0]["disagreements"] == 0
+    assert result["scorecards"][1]["scores"][0]["disagreement_rate"] is None
+    assert result["scorecards"][1]["scores"][0]["reviewed_error_opportunity"] == 0.0
 
 
 def test_feedback_alignment_batch_bounds_concurrent_score_reads(monkeypatch) -> None:
