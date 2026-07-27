@@ -1,0 +1,45 @@
+{
+  "id": "plx-44b01143-245b-46e4-94bb-b87803de90fa",
+  "title": "Optimizer candidate and promotion safety",
+  "description": "Purpose: Ensure optimizer candidates are mechanically valid, compared against the correct incumbent, and supported by sufficient evidence before promotion can be recommended.\n\nExclusions:\n- Client-specific rubric judgments.\n- Automatic production promotion without the established approval gate.\n- Replacing the canonical evaluator.\n\nDependencies: Uses frozen cohort and provenance contracts from the reproducible-cohorts epic. Most mechanical validation can proceed independently.\n\nDefinition of Done:\n- Class collapse, invalid output classes, broken inter-node dataflow, unsafe dry-run writes, and unintended model changes fail closed.\n- Candidate and synthesis selection compare against the current leader on identical cohorts.\n- Promotion evidence includes validation outcomes, cohort identity, metrics, and explicit unresolved risks.\n- Behavior-first specifications and focused tests pass.\n\nRunning log: Record sanitized decisions, attempts, outcomes, and next steps in this epic or its child issues.",
+  "type": "epic",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8570854c-bad6-4049-be38-e04836aae830",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-7a8b2c38-2c10-4890-942a-8b04bc8fc65a",
+      "type": "relates-to"
+    }
+  ],
+  "comments": [
+    {
+      "id": "f4cff1ba-aa8c-4521-94ec-ce5a11517933",
+      "author": "ryan.porter",
+      "text": "Synthesis-safety implementation is underway in an isolated worktree. Scope: compare proposed synthesis with the current cycle leader on identical recent and regression cohorts; reject negative deltas; keep the selected model pinned unless a reviewed justification permits change; retain the human promotion approval gate. Next: establish a failing observable specification, implement the minimum compatible change, then run focused tests.",
+      "created_at": "2026-07-27T21:12:58.942701Z"
+    },
+    {
+      "id": "93daa2b8-0b50-42cf-a8ba-ff62466b944c",
+      "author": "ryan.porter",
+      "text": "Implemented synthesis safety with behavior-first specifications. Outcome: synthesis strategy scoring and final carry-forward now use the current cycle leader; any negative leader-relative recent or regression delta is rejected. Recent feedback IDs and regression dataset identity are checked before comparison. The reviewer receives the leader-relative basis and cohort identifiers. Synthesis pins the score model unless reviewed_model_change_justification is supplied. Human promotion approval remains outside the optimizer. Validation: focused configuration suite passed (80 tests) and the procedure Lua body compiled. Next: commit this scoped change for integration.",
+      "created_at": "2026-07-27T21:16:04.655482Z"
+    },
+    {
+      "id": "f07a3b03-d3e5-496c-93fc-9d82f5fb6b70",
+      "author": "ryan.porter",
+      "text": "Wave 1 integration now evaluates synthesis against the current cycle leader on identical frozen cohorts, rejects any negative leader-relative delta, and pins model configuration unless a reviewed justification is supplied. Human promotion approval remains unchanged. Full supported-runtime CI passed.",
+      "created_at": "2026-07-27T22:25:45.279843Z"
+    }
+  ],
+  "created_at": "2026-07-27T20:52:48.693807Z",
+  "updated_at": "2026-07-27T22:25:45.279843Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

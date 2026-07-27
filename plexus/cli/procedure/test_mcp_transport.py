@@ -298,19 +298,28 @@ class TestEmbeddedMCPServer:
         )
         server.register_plexus_tools([])
         execute_tactus_tool = server.transport.tools["execute_tactus"]
-        assert "exact account-wide duplicate-name count" in execute_tactus_tool.description
-        assert "return_metadata = true" in execute_tactus_tool.description
-        assert "next_token = token" in execute_tactus_tool.description
-        assert "complete = false" in execute_tactus_tool.description
-        assert "opaque runtime values" in execute_tactus_tool.description
-        assert "identifier = scorecard.id" in execute_tactus_tool.description
-        assert "score_count" in execute_tactus_tool.description
-        assert "Never silently reduce complete requested coverage to a sample" in execute_tactus_tool.description
+        assert "metadata pagination" in execute_tactus_tool.description
+        assert "opaque" in execute_tactus_tool.description
+        assert (
+            "Never silently reduce complete requested coverage to a sample"
+            in execute_tactus_tool.description
+        )
         assert "plexus.feedback.alignment_batch" in execute_tactus_tool.description
-        assert "scorecards = scorecard_ids" in execute_tactus_tool.description
         assert "coverage" in execute_tactus_tool.description
-        assert "Never return the unaggregated alignment batch payload" in execute_tactus_tool.description
+        assert (
+            "Never return the unaggregated alignment batch payload"
+            in execute_tactus_tool.description
+        )
         assert "ranked_from_count" in execute_tactus_tool.description
+        assert (
+            "evaluation-feedback.batch-operations-cookbook"
+            in execute_tactus_tool.description
+        )
+        assert (
+            "for _, scorecard_result in ipairs(analysis.scorecards or {})"
+            not in execute_tactus_tool.description
+        )
+        assert len(execute_tactus_tool.description) < 8_500
         assert "result = analysis" not in execute_tactus_tool.description
         await server.transport.initialize({"name": "Test"})
 

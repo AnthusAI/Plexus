@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "1a58ae87-ba5d-4f51-9a22-bb775f602f49",
+  "issue_id": "plx-918b4838-0c0e-462f-9364-f881f219c76d",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-27T20:52:49.335Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Optimization observability and decision artifacts",
+    "description": "Purpose: Make optimization progress, evidence, decisions, and partial failures understandable to operators and machine-checkable by other agents.\n\nExclusions:\n- Persisting full client content in logs or Kanbus.\n- Alternate metric calculations that diverge from final evaluation reports.\n- UI redesign unrelated to optimization observability.\n\nDependencies: Defines a shared run-evidence contract consumed by execution, safety, and orchestration. Contract work may proceed independently.\n\nDefinition of Done:\n- Structured status identifies current phase, completed phases, active evaluations, progress, and terminal state.\n- Decision artifacts preserve cohort provenance, candidate lineage, metrics, validation gates, failures, and selection rationale.\n- Compact summaries agree with final report metrics.\n- Partial failures remain visible without discarding successful evidence.\n- Operator handoff output is concise and actionable.\n- Behavior-first specifications and focused tests pass.\n\nRunning log: Record sanitized decisions, attempts, outcomes, and next steps in this epic or its child issues.",
+    "issue_type": "epic",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-8570854c-bad6-4049-be38-e04836aae830",
+    "labels": []
+  }
+}

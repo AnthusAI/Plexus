@@ -62,7 +62,7 @@ code: |
   State.set("stage", "writing")
 
   repeat
-    Poet.turn()
+    Poet({})
   until Tool.called("done") or Iterations.exceeded(10)
 
   -- Stage 2: Extract and record the limerick

@@ -241,6 +241,32 @@ def _find_iteration_by_version_id(iterations: List[Dict[str, Any]], version_id: 
     return None
 
 
+def _report_phase_failures(phase_statuses: Any) -> List[Dict[str, Any]]:
+    """Return stable, compact failures without hiding successful run evidence."""
+    if not isinstance(phase_statuses, dict):
+        return []
+
+    failures: List[Dict[str, Any]] = []
+    for phase, details in sorted(phase_statuses.items()):
+        if isinstance(details, dict):
+            status = str(details.get("status") or "").lower()
+            error = details.get("error") or details.get("message")
+        else:
+            status = str(details or "").lower()
+            error = None
+        if status in {"failed", "error", "cancelled"}:
+            failures.append({"phase": str(phase), "error": error})
+    return failures
+
+
+def _metrics_with_report_alignment(metrics: Any, report_alignment: Any) -> Dict[str, Any]:
+    """Keep detailed evaluation metrics while making final-report AC1 authoritative."""
+    resolved = deepcopy(metrics) if isinstance(metrics, dict) else {}
+    if _finite_number(report_alignment) is not None:
+        resolved["alignment"] = report_alignment
+    return resolved
+
+
 def _candidate_summary(candidate: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "index": candidate.get("index"),
@@ -532,19 +558,62 @@ class OptimizerResultsService:
         state: Dict[str, Any],
     ) -> Dict[str, Any]:
         iterations = [item for item in (state.get("iterations") or []) if isinstance(item, dict)]
-        winning_version_id = state.get("winning_version_id") or state.get("last_accepted_version_id")
-        winning_iteration = _find_iteration_by_version_id(iterations, winning_version_id)
-
-        current_recent_baseline_id = state.get("current_recent_baseline_id") or state.get("last_accepted_fb_eval_id")
-        current_regression_baseline_id = state.get("current_regression_baseline_id") or state.get("last_accepted_acc_eval_id")
-        best_feedback_eval_id = state.get("last_accepted_fb_eval_id") or current_recent_baseline_id
-        best_accuracy_eval_id = state.get("last_accepted_acc_eval_id") or current_regression_baseline_id
         end_of_run_report = deepcopy(state.get("end_of_run_report"))
         run_summary = _parse_json_dict((end_of_run_report or {}).get("run_summary"))
+        summary_source = "end_of_run_report" if run_summary else "optimizer_result_summary"
+        if not run_summary:
+            run_summary = _parse_json_dict(state.get("optimizer_result_summary"))
+
+        # The final report is the handoff contract.  State is retained only for
+        # supporting provenance and for older runs that predate the report.
+        winning_version_id = (
+            run_summary.get("last_accepted_version_id")
+            or run_summary.get("winning_version_id")
+            or state.get("winning_version_id")
+            or state.get("last_accepted_version_id")
+        )
+        winning_iteration = _find_iteration_by_version_id(iterations, winning_version_id)
+        current_recent_baseline_id = state.get("current_recent_baseline_id") or state.get("last_accepted_fb_eval_id")
+        current_regression_baseline_id = state.get("current_regression_baseline_id") or state.get("last_accepted_acc_eval_id")
+        best_feedback_eval_id = (
+            run_summary.get("final_recent_evaluation_id")
+            or state.get("last_accepted_fb_eval_id")
+            or current_recent_baseline_id
+        )
+        best_accuracy_eval_id = (
+            run_summary.get("final_regression_evaluation_id")
+            or state.get("last_accepted_acc_eval_id")
+            or current_regression_baseline_id
+        )
+        baseline_feedback_metrics = _metrics_with_report_alignment(
+            state.get("recent_initial_baseline_metrics") or state.get("recent_baseline_metrics"),
+            run_summary.get("baseline_fb_ac1"),
+        )
+        baseline_accuracy_metrics = _metrics_with_report_alignment(
+            state.get("regression_initial_baseline_metrics") or state.get("regression_baseline_metrics"),
+            run_summary.get("baseline_regression_ac1"),
+        )
+        winning_feedback_metrics = _metrics_with_report_alignment(
+            (winning_iteration or {}).get("recent_metrics") or state.get("recent_baseline_metrics"),
+            run_summary.get("final_fb_ac1"),
+        )
+        winning_accuracy_metrics = _metrics_with_report_alignment(
+            (winning_iteration or {}).get("regression_metrics") or state.get("regression_baseline_metrics"),
+            run_summary.get("final_regression_ac1"),
+        )
+        phase_statuses = deepcopy(state.get("final_report_phase_statuses"))
+        partial_failures = _report_phase_failures(phase_statuses)
         stop_reason = (
             run_summary.get("stop_reason")
             or state.get("stop_reason")
             or ("skipped_no_feedback" if state.get("skip_reason") else None)
+        )
+        terminal_state = (
+            "PARTIAL_FAILURE"
+            if partial_failures
+            else "COMPLETED"
+            if stop_reason
+            else None
         )
 
         manifest = {
@@ -573,43 +642,61 @@ class OptimizerResultsService:
                 "original_accuracy_evaluation_id": state.get("regression_baseline_id"),
                 "current_feedback_evaluation_id": current_recent_baseline_id,
                 "current_accuracy_evaluation_id": current_regression_baseline_id,
-                "feedback_metrics": deepcopy(
-                    state.get("recent_initial_baseline_metrics")
-                    or state.get("recent_baseline_metrics")
-                ),
-                "accuracy_metrics": deepcopy(
-                    state.get("regression_initial_baseline_metrics")
-                    or state.get("regression_baseline_metrics")
-                ),
+                "feedback_metrics": baseline_feedback_metrics,
+                "accuracy_metrics": baseline_accuracy_metrics,
             },
             "best": {
                 "winning_version_id": winning_version_id,
-                "last_accepted_version_id": state.get("last_accepted_version_id"),
+                "last_accepted_version_id": winning_version_id,
                 "best_feedback_evaluation_id": best_feedback_eval_id,
                 "best_accuracy_evaluation_id": best_accuracy_eval_id,
-                "winning_feedback_metrics": deepcopy(
-                    (winning_iteration or {}).get("recent_metrics")
-                    or state.get("recent_baseline_metrics")
-                ),
-                "winning_accuracy_metrics": deepcopy(
-                    (winning_iteration or {}).get("regression_metrics")
-                    or state.get("regression_baseline_metrics")
-                ),
+                "winning_feedback_metrics": winning_feedback_metrics,
+                "winning_accuracy_metrics": winning_accuracy_metrics,
             },
             "summary": {
                 "current_cycle": state.get("current_cycle") or len(iterations),
                 "completed_cycles": len(iterations),
                 "configured_max_iterations": (
-                    (((state.get("params") or {}).get("max_iterations")) if isinstance(state.get("params"), dict) else None)
-                    or run_summary.get("configured_max_iterations")
+                    run_summary.get("configured_max_iterations")
+                    or (((state.get("params") or {}).get("max_iterations")) if isinstance(state.get("params"), dict) else None)
                     or state.get("configured_max_iterations")
                     or run_summary.get("cycles")
                     or None
                 ),
                 "stop_reason": stop_reason,
+                "terminal_state": terminal_state,
+                "partial_failures": partial_failures,
                 "procedure_summary": deepcopy(state.get("procedure_summary")),
                 "end_of_run_report": end_of_run_report,
                 "optimization_diagnostic": deepcopy(state.get("optimization_diagnostic")),
+            },
+            "evidence": {
+                "source": summary_source,
+                "generated_at": (end_of_run_report or {}).get("generated_at"),
+                "selected_candidate": {
+                    "version_id": winning_version_id,
+                    "feedback_evaluation_id": best_feedback_eval_id,
+                    "regression_evaluation_id": best_accuracy_eval_id,
+                    "feedback_metrics": winning_feedback_metrics,
+                    "regression_metrics": winning_accuracy_metrics,
+                },
+                "current_leader_version_id": run_summary.get("champion_version_id") or state.get("champion_version_id"),
+                "cohorts": {
+                    "feedback": {
+                        "baseline_evaluation_id": state.get("recent_baseline_id"),
+                        "current_evaluation_id": current_recent_baseline_id,
+                        "item_ids": deepcopy(state.get("recent_baseline_feedback_item_ids")),
+                        "window_start_at": state.get("feedback_window_start_at"),
+                        "window_end_at": state.get("feedback_window_end_at"),
+                    },
+                    "regression": {
+                        "baseline_evaluation_id": state.get("regression_baseline_id"),
+                        "current_evaluation_id": current_regression_baseline_id,
+                        "dataset_id": state.get("frozen_regression_dataset_id") or state.get("dataset_id"),
+                    },
+                },
+                "report_phase_statuses": phase_statuses,
+                "partial_failures": partial_failures,
             },
             "cycles": [_cycle_summary(iteration) for iteration in iterations],
         }
@@ -779,6 +866,7 @@ class OptimizerResultsService:
             "completed_cycles": summary.get("completed_cycles"),
             "configured_max_iterations": summary.get("configured_max_iterations"),
             "stop_reason": summary.get("stop_reason"),
+            "terminal_state": summary.get("terminal_state"),
             "winning_version_id": best.get("winning_version_id"),
             "best_feedback_evaluation_id": best.get("best_feedback_evaluation_id"),
             "best_feedback_evaluation_url": _evaluation_url(best.get("best_feedback_evaluation_id")),
@@ -1201,8 +1289,9 @@ class OptimizerResultsService:
             )
         )
         stop_reason = raw_summary.get("stop_reason")
-        effective_status = raw_status
-        if stop_reason and str(raw_status or "").upper() == "RUNNING":
+        terminal_state = raw_summary.get("terminal_state")
+        effective_status = terminal_state or raw_status
+        if not terminal_state and stop_reason and str(raw_status or "").upper() == "RUNNING":
             effective_status = "COMPLETED"
         payload: Dict[str, Any] = {
             "procedure_id": procedure_id,
@@ -1212,7 +1301,9 @@ class OptimizerResultsService:
                 "completed_cycles": raw_summary.get("completed_cycles"),
                 "configured_max_iterations": raw_summary.get("configured_max_iterations"),
                 "stop_reason": stop_reason,
+                "terminal_state": terminal_state,
                 "effective_status": effective_status,
+                "partial_failures": raw_summary.get("partial_failures") or [],
                 "procedure_summary": raw_summary.get("procedure_summary"),
             },
             "baseline": {

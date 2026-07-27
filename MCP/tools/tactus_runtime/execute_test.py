@@ -1756,13 +1756,19 @@ def test_execute_tactus_description_teaches_complete_coverage_composition() -> N
 
     assert "Never silently reduce complete requested coverage to a sample" in description
     assert "scorecards.list" in description
-    assert "return_metadata = true" in description
+    assert "metadata pagination" in description
     assert "plexus.feedback.alignment_batch" in description
-    assert "scorecards = scorecard_ids" in description
     assert "coverage" in description
     assert "Never return the unaggregated alignment batch payload" in description
     assert "ranked_from_count" in description
     assert "reviewed_error_opportunity" in description
+    assert "evaluation-feedback.batch-operations-cookbook" in description
+    assert (
+        "for _, scorecard_result in ipairs(analysis.scorecards or {})"
+        not in description
+    )
+    assert len(description) < 8_500
+    assert "result = analysis" not in description
 
 
 def test_execute_tactus_description_documents_optimization_approval_boundary() -> None:
@@ -1774,8 +1780,7 @@ def test_execute_tactus_description_documents_optimization_approval_boundary() -
     assert "never promotes a champion" in description
     assert "no inline output fallback" in description
     assert "total_items * disagreement_rate" in description
-    assert "for _, scorecard_result in ipairs(analysis.scorecards or {})" in description
-    assert "result = analysis" not in description
+    assert "evaluation-feedback.batch-operations-cookbook" in description
 
 
 def test_execute_tactus_description_teaches_progressive_disclosure() -> None:
