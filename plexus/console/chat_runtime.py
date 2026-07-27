@@ -26,6 +26,7 @@ from plexus.cli.procedure.builtin_procedures import (
     CONSOLE_CHAT_VERBOSITY,
 )
 from plexus.cli.procedure.service import ProcedureService
+from plexus.cli.procedure.tactus_runtime_controls import llm_request_timeout_seconds
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.logging.cloudwatch_logger import PlexusCloudWatchLogger
 
@@ -928,6 +929,7 @@ def warm_console_runtime(client: PlexusDashboardClient) -> None:
         max_tokens=CONSOLE_CHAT_MAX_TOKENS,
         reasoning_effort=CONSOLE_CHAT_REASONING_EFFORT,
         verbosity=CONSOLE_CHAT_VERBOSITY,
+        request_timeout=llm_request_timeout_seconds(),
     )
 
 

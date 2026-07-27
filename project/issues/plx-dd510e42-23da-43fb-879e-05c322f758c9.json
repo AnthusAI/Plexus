@@ -1,0 +1,31 @@
+{
+  "id": "plx-dd510e42-23da-43fb-879e-05c322f758c9",
+  "title": "Adopt supported Tactus Console runtime APIs",
+  "description": "Upgrade Plexus to the released Tactus lifecycle API package, remove private Tactus Agent method replacement from the Console execution path, preserve telemetry and request timeout behavior through supported APIs, and validate the resulting runtime before deployment.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-a4c26c4d-19d5-4a5e-914b-7ddf41a959f1",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "ef663037-93c8-43d0-ad9a-479ea22d3fb4",
+      "author": "ryan.porter",
+      "text": "Tactus runtime API changes are on main but not yet published because the release token secret name was wrong. Tactus PR #96 repairs publication. Preparing the Plexus integration against the exact released API surface in a clean worktree; dependency lock will be finalized only after the new package exists.",
+      "created_at": "2026-07-27T20:11:51.414556Z"
+    },
+    {
+      "id": "c9501bdf-e09f-42c2-b9ec-69f3f46e817c",
+      "author": "ryan.porter",
+      "text": "Removed all production runtime replacement of Tactus Agent methods. Plexus now consumes lifecycle events for context and latency telemetry, uses native Pydantic JSON serialization, uses callable Agent syntax, and supplies request_timeout through supported Agent configuration. Added an explicit AGENTS.md prohibition on Tactus monkeypatching. Focused Console/procedure tests pass 106/106 against the Tactus main code, and targeted Ruff checks pass. Waiting for the Tactus package publication before locking the dependency.",
+      "created_at": "2026-07-27T20:18:27.228195Z"
+    }
+  ],
+  "created_at": "2026-07-27T20:11:47.249890Z",
+  "updated_at": "2026-07-27T20:18:27.228195Z",
+  "closed_at": null,
+  "custom": {}
+}

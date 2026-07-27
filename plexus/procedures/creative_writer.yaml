@@ -112,7 +112,7 @@ code: |
   })
 
   repeat
-    Brainstormer.turn()
+    Brainstormer({})
   until Tool.called("done") or Iterations.exceeded(10)
 
   local ideas = ""
@@ -142,10 +142,10 @@ code: |
   })
 
   -- Inject the ideas into the critic's first turn
-  Critic.turn({inject = "Here are the brainstormed ideas to evaluate:\\n\\n" .. ideas})
+  Critic({message = "Here are the brainstormed ideas to evaluate:\\n\\n" .. ideas})
 
   repeat
-    Critic.turn()
+    Critic({})
   until Tool.called("done") or Iterations.exceeded(10)
 
   local critique = ""
@@ -175,10 +175,10 @@ code: |
   })
 
   -- Inject the critique into the writer's first turn
-  Writer.turn({inject = "Here is the critic's selected idea to write about:\\n\\n" .. critique})
+  Writer({message = "Here is the critic's selected idea to write about:\\n\\n" .. critique})
 
   repeat
-    Writer.turn()
+    Writer({})
   until Tool.called("done") or Iterations.exceeded(10)
 
   local final_piece = ""

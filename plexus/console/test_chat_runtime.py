@@ -242,6 +242,7 @@ def test_warm_console_runtime_prepares_mcp_server_and_prewarms_default_agent(
                 "max_tokens": 4096,
                 "reasoning_effort": "low",
                 "verbosity": "low",
+                "request_timeout": 300.0,
             },
         )
     ]

@@ -151,6 +151,7 @@ This workflow uses a chain of skills and agents:
 - **Trust the Tools**: Use MCP tools for reading/writing data, not file edits (unless instructed).
 - **Validate First**: Always run an evaluation or prediction test before declaring a task complete.
 - **Check Documentation**: Use `get_plexus_documentation` if you are unsure about formats.
+- **Do Not Monkeypatch Tactus**: Plexus production code must never replace, wrap, or modify Tactus classes or methods at runtime. We own Tactus; add the required supported API there, release it, and upgrade Plexus to that release. Pytest's `monkeypatch` fixture remains appropriate for isolated test doubles.
 
 ## Nested AGENTS.md Guides
 

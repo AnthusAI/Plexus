@@ -10,7 +10,6 @@ import logging
 import json
 import inspect
 import asyncio
-import os
 import queue
 import re
 import threading
@@ -1614,6 +1613,10 @@ async def _execute_tactus(
         except Exception:  # noqa: BLE001
             # Let runtime report parse errors with full context if adaptation fails.
             pass
+
+        from .tactus_runtime_controls import apply_default_agent_request_timeout
+
+        procedure_source = apply_default_agent_request_timeout(procedure_source)
 
         # Get OpenAI API key from options or environment (not logged — passed to API client only)
         _api_key = options.get('openai_api_key')
