@@ -67,6 +67,41 @@ def _build_optimizer_candidate_collapse_checker():
     return lua, check
 
 
+def _build_exact_feedback_cohort_checker():
+    from lupa import LuaRuntime
+
+    code = _load_optimizer_config()["code"]
+    helper_start = code.index(
+        "local function extract_selected_feedback_item_ids(eval_result)"
+    )
+    helper_end = code.index("local function prediction_mode_collapse_reason(metrics)")
+    validator_start = code.index(
+        "local function require_exact_feedback_cohort(eval_result, expected_ids)"
+    )
+    validator_end = code.index(
+        "local function require_exact_regression_cohort(eval_result, expected_dataset_id)"
+    )
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    check = lua.execute(
+        """
+local function has_text(value)
+  return type(value) == "string" and value:match("%S") ~= nil
+end
+local function safe_decode(value) return nil end
+local function call_plexus_tool(tool_name, args) error("unexpected tool call") end
+"""
+        + code[helper_start:helper_end]
+        + code[validator_start:validator_end]
+        + "\nreturn require_exact_feedback_cohort"
+    )
+    return lua, check
+
+
+def _feedback_eval_with_ids(lua, item_ids):
+    parameters = lua.table_from({"feedback_item_ids": lua.table_from(item_ids)})
+    return lua.table_from({"parameters": parameters})
+
+
 def _lua_list(lua_table):
     return [lua_table[i] for i in range(1, len(lua_table) + 1)]
 
@@ -1159,10 +1194,57 @@ def test_optimizer_yaml_replays_and_verifies_exact_recent_feedback_cohort():
     assert code.count("feedback_item_ids = recent_baseline_feedback_item_ids") == 3
     assert "require_exact_feedback_cohort" in code
     assert "candidate feedback cohort differs from baseline" in code
-    assert "candidate feedback cohort order differs from baseline" in code
+    assert "candidate feedback cohort order differs from baseline" not in code
     assert "Invalid candidate comparison" in code
     assert "Invalid strategy comparison" in code
     assert "Invalid synthesis comparison" in code
+
+
+def test_optimizer_accepts_exact_feedback_cohort_in_a_different_order():
+    """Feature: frozen feedback cohort validation
+
+    Scenario: Evaluation service returns the frozen cohort in another order
+      Given a baseline cohort with unique feedback item IDs
+      When a candidate evaluation contains exactly those IDs in a different order
+      Then cohort validation succeeds
+    """
+    lua, check = _build_exact_feedback_cohort_checker()
+
+    valid, error = check(
+        _feedback_eval_with_ids(lua, ["item-c", "item-a", "item-b"]),
+        lua.table_from(["item-a", "item-b", "item-c"]),
+    )
+
+    assert valid is True
+    assert error is None
+
+
+def test_optimizer_rejects_feedback_cohort_membership_or_duplicate_changes():
+    """Feature: frozen feedback cohort validation
+
+    Scenario: Candidate cohort is not the exact frozen membership
+      Given a baseline cohort with unique feedback item IDs
+      When a candidate has a missing, extra, or duplicate ID
+      Then cohort validation fails with a cohort-difference diagnostic
+    """
+    lua, check = _build_exact_feedback_cohort_checker()
+    expected = lua.table_from(["item-a", "item-b", "item-c"])
+
+    cases = (
+        (["item-a", "item-b"], "candidate feedback cohort differs from baseline"),
+        (
+            ["item-a", "item-b", "item-c", "item-d"],
+            "candidate feedback cohort differs from baseline",
+        ),
+        (
+            ["item-a", "item-a", "item-c"],
+            "candidate feedback cohort contains duplicate IDs",
+        ),
+    )
+    for actual, expected_error in cases:
+        valid, error = check(_feedback_eval_with_ids(lua, actual), expected)
+        assert valid is False
+        assert expected_error in error
 
 
 def test_optimizer_yaml_is_valid_lua_after_exact_cohort_wiring():
