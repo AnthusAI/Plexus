@@ -3,7 +3,7 @@
   "title": "Unattended optimizer execution and recovery",
   "description": "Purpose: Allow optimizer runs and their evaluations to reach explicit terminal states without routine babysitting, while supporting safe resume, explicit cancellation, and recovery from genuinely abandoned work.\n\nExclusions:\n- Arbitrary wall-clock or inactivity deadlines that classify healthy evaluations as failed.\n- Prematurely stopping evaluations after an interim decision.\n- Infrastructure deployment work owned elsewhere.\n\nDependencies: Uses supported runtime lifecycle and storage interfaces. Terminal-state monitoring and resume contracts can be specified in parallel.\n\nDefinition of Done:\n- Local execution is first-class and does not require remote dispatch.\n- Healthy evaluations and finalization are allowed to finish.\n- Runs resume from durable, provenance-bearing checkpoints without repeating completed phases.\n- Explicit cancellation and abandoned-run recovery are distinguishable from normal waiting.\n- Terminal failures preserve completed evidence and actionable diagnostics.\n- Behavior-first specifications and focused tests pass.\n\nRunning log: Record sanitized decisions, attempts, outcomes, and next steps in this epic or its child issues.",
   "type": "epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -15,9 +15,22 @@
       "type": "relates-to"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "60bde0da-972e-4a6c-9493-40f0b3aaf677",
+      "author": "ryan.porter",
+      "text": "Wave 1 integration incorporated the terminal-state waiting behavior from the existing optimizer watchdog branch. Conflict resolution removed the obsolete fixed inactivity deadline and its parameter: active evaluations now poll for visibility and continue until an explicit completed, failed, or cancelled state, including subprocess finalization. The integration suite exposed and corrected one stale test that still required the removed 15-minute stall contract.",
+      "created_at": "2026-07-27T21:43:58.305907Z"
+    },
+    {
+      "id": "7717c2ae-784d-4bad-b0e7-fb31f030ac6d",
+      "author": "ryan.porter",
+      "text": "Wave 1 integration removed elapsed-time and inactivity failure thresholds for active evaluations. Polling continues through process finalization until an explicit completed, failed, or cancelled terminal state. Full supported-runtime CI passed.",
+      "created_at": "2026-07-27T22:25:45.779302Z"
+    }
+  ],
   "created_at": "2026-07-27T20:52:49.015704Z",
-  "updated_at": "2026-07-27T20:52:49.015704Z",
+  "updated_at": "2026-07-27T22:25:45.779302Z",
   "closed_at": null,
   "custom": {
     "source": "shared",

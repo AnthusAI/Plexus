@@ -156,6 +156,77 @@ def test_build_manifest_marks_no_feedback_skip_terminal():
     assert manifest["summary"]["stop_reason"] == "skipped_no_feedback"
 
 
+def test_build_manifest_uses_final_report_evidence_for_handoff_metrics_and_partial_failures():
+    """The compact handoff must not contradict the final report it links to."""
+    service = OptimizerResultsService(_FakeClient())
+    state = _sample_state()
+    state.update(
+        {
+            "last_accepted_version_id": "stale-selected-version",
+            "last_accepted_fb_eval_id": "eval-fb-stale",
+            "last_accepted_acc_eval_id": "eval-acc-stale",
+            "recent_baseline_feedback_item_ids": ["item-a", "item-b"],
+            "frozen_regression_dataset_id": "dataset-frozen",
+            "feedback_window_start_at": "2026-04-01T00:00:00Z",
+            "feedback_window_end_at": "2026-04-02T00:00:00Z",
+            "final_report_phase_statuses": {
+                "end_executive_summary": {"status": "succeeded"},
+                "end_lab_report": {"status": "failed", "error": "unavailable"},
+            },
+            "end_of_run_report": {
+                "generated_at": "2026-04-25T12:00:00Z",
+                "run_summary": {
+                    "cycles": 2,
+                    "configured_max_iterations": 4,
+                    "stop_reason": "max_iterations",
+                    "baseline_fb_ac1": 0.51,
+                    "baseline_regression_ac1": 0.49,
+                    "final_fb_ac1": 0.72,
+                    "final_regression_ac1": 0.74,
+                    "last_accepted_version_id": "version-final-selected",
+                    "champion_version_id": "version-current-leader",
+                    "final_recent_evaluation_id": "eval-fb-final",
+                    "final_regression_evaluation_id": "eval-acc-final",
+                },
+            },
+        }
+    )
+
+    manifest = service.build_manifest(
+        procedure=_sample_procedure(),
+        task=_FakeTask(),
+        state=state,
+    )
+
+    assert manifest["best"]["winning_version_id"] == "version-final-selected"
+    assert manifest["best"]["best_feedback_evaluation_id"] == "eval-fb-final"
+    assert manifest["best"]["best_accuracy_evaluation_id"] == "eval-acc-final"
+    assert manifest["best"]["winning_feedback_metrics"]["alignment"] == 0.72
+    assert manifest["best"]["winning_accuracy_metrics"]["alignment"] == 0.74
+    assert manifest["baseline"]["feedback_metrics"]["alignment"] == 0.51
+    assert manifest["baseline"]["accuracy_metrics"]["alignment"] == 0.49
+    assert manifest["summary"]["configured_max_iterations"] == 4
+    assert manifest["summary"]["terminal_state"] == "PARTIAL_FAILURE"
+    assert manifest["summary"]["partial_failures"] == [
+        {"phase": "end_lab_report", "error": "unavailable"}
+    ]
+    assert manifest["evidence"]["source"] == "end_of_run_report"
+    assert manifest["evidence"]["selected_candidate"]["version_id"] == "version-final-selected"
+    assert manifest["evidence"]["current_leader_version_id"] == "version-current-leader"
+    assert manifest["evidence"]["cohorts"]["feedback"]["item_ids"] == ["item-a", "item-b"]
+    assert manifest["evidence"]["cohorts"]["regression"]["dataset_id"] == "dataset-frozen"
+
+    compact_handoff = service.summarize_optimizer_run(
+        SimpleNamespace(
+            procedure=_sample_procedure(),
+            manifest=manifest,
+            artifact_pointer={"manifest": "tasks/task-123/optimizer/manifest.json"},
+            indexed=True,
+        )
+    )
+    assert compact_handoff["terminal_state"] == "PARTIAL_FAILURE"
+
+
 def test_index_optimizer_run_persists_manifest_and_pointer(monkeypatch):
     client = _FakeClient()
     service = OptimizerResultsService(client)
