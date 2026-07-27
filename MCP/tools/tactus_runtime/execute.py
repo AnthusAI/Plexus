@@ -2296,6 +2296,9 @@ def _default_feedback_alignment_batch(
                     "accuracy": float (0-100),
                     "ac1": float (0-1),
                     "total_items": int,
+                    "disagreements": int,
+                    "disagreement_rate": float (0-1) | None,
+                    "reviewed_error_opportunity": float,
                     "confusion_matrix": dict,
                     "precision": float,
                     "recall": float,
@@ -2586,6 +2589,16 @@ def _default_feedback_alignment_batch(
                     summary_dict = FeedbackService.format_summary_result_as_dict(summary)
                     analysis = summary_dict.get("analysis", {})
                 accuracy = analysis.get("accuracy")
+                total_items = int(analysis.get("total_items") or 0)
+                disagreements = int(analysis.get("disagreements") or 0)
+                disagreement_rate = (
+                    disagreements / total_items if total_items > 0 else None
+                )
+                reviewed_error_opportunity = (
+                    total_items * disagreement_rate
+                    if disagreement_rate is not None
+                    else 0.0
+                )
 
                 if (
                     accuracy_threshold is not None
@@ -2599,7 +2612,10 @@ def _default_feedback_alignment_batch(
                     "score_name": score_name,
                     "accuracy": accuracy,
                     "ac1": analysis.get("ac1"),
-                    "total_items": analysis.get("total_items"),
+                    "total_items": total_items,
+                    "disagreements": disagreements,
+                    "disagreement_rate": disagreement_rate,
+                    "reviewed_error_opportunity": reviewed_error_opportunity,
                     "confusion_matrix": analysis.get("confusion_matrix"),
                     "precision": analysis.get("precision"),
                     "recall": analysis.get("recall"),
@@ -10677,6 +10693,10 @@ Complete coverage contract:
   summarization, not sampling.
 - Use bounded sample arguments only when the user explicitly requests or
   approves a sample.
+- Feedback alignment rows expose `reviewed_error_opportunity` as
+  `total_items * disagreement_rate`. Rank it descending for the transparent
+  first-pass estimate of reviewed error burden; keep class coverage, drift,
+  rubric clarity, and fixability as separate qualifiers.
 
 Helper aliases injected before your snippet runs:
 - High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,
@@ -10747,6 +10767,9 @@ for _, scorecard_result in ipairs(analysis.scorecards or {}) do
           total_items = item_count,
           accuracy = score_result.accuracy,
           ac1 = score_result.ac1,
+          disagreements = score_result.disagreements,
+          disagreement_rate = score_result.disagreement_rate,
+          reviewed_error_opportunity = score_result.reviewed_error_opportunity,
           warning = score_result.warning,
         }
       end
@@ -10755,10 +10778,10 @@ for _, scorecard_result in ipairs(analysis.scorecards or {}) do
   end
 end
 table.sort(priorities, function(a, b)
-  local a_accuracy = tonumber(a.accuracy) or 101
-  local b_accuracy = tonumber(b.accuracy) or 101
-  if a_accuracy == b_accuracy then return a.total_items > b.total_items end
-  return a_accuracy < b_accuracy
+  local a_value = tonumber(a.reviewed_error_opportunity) or 0
+  local b_value = tonumber(b.reviewed_error_opportunity) or 0
+  if a_value == b_value then return a.total_items > b.total_items end
+  return a_value > b_value
 end)
 local highlights = {}
 for index = 1, math.min(#priorities, 10) do

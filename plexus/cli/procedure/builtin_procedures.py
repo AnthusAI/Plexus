@@ -42,7 +42,7 @@ def _build_console_chat_config(
 ) -> Dict[str, Any]:
     config = {
         "name": "Console Chat Agent",
-        "version": "1.6.30",
+        "version": "1.6.31",
         "class": "Tactus",
         "description": "General-purpose Console chat procedure for /lab/console.",
         "params": {
@@ -367,7 +367,7 @@ _BUILTINS: Dict[str, BuiltinProcedureSpec] = {
         procedure_id=CONSOLE_CHAT_BUILTIN_ID,
         name="Console Chat Agent",
         description="Built-in general-purpose chat procedure for Plexus Console.",
-        version="1.6.30",
+        version="1.6.31",
         tac_path=_procedures_root() / "console" / "chat_agent.tac",
     ),
 }

@@ -125,6 +125,8 @@ def test_builtin_console_procedure_yaml_contains_tactus_source():
     assert "`versionDetails.parentVersionId` is the direct immediate predecessor" in parsed["code"]
     assert "take `versionDetails.parentVersionId`" in parsed["code"]
     assert "Do not rank a score from configuration shape, prompt rigidity, or generic intuition" in parsed["code"]
+    assert "reviewed_error_opportunity" in parsed["code"]
+    assert "rank it descending" in parsed["code"]
     assert "state the exact available count rather than implying the requested count exists" in parsed["code"]
     assert "check both reviewed flip directions" in parsed["code"]
     assert "Do this before any tool call" in parsed["code"]
@@ -395,7 +397,7 @@ def test_builtin_console_procedure_version_is_current():
     yaml_text = get_builtin_procedure_yaml(CONSOLE_CHAT_BUILTIN_ID)
     parsed = yaml.safe_load(yaml_text)
     # Bumped when the Console assistant tool contract changes.
-    assert parsed["version"] == "1.6.30"
+    assert parsed["version"] == "1.6.31"
 
 
 def test_is_builtin_procedure_id():
