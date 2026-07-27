@@ -650,7 +650,8 @@ class ScoreEditorToolset:
 
         # Call plexus.score.update directly (no MCP round-trip needed)
         try:
-            import os, sys
+            import os
+            import sys
 
             _mcp_dir = os.path.normpath(
                 os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "MCP")
@@ -824,7 +825,45 @@ class ScoreEditorToolset:
             pass
 
         errors.extend(self._get_structural_validation_errors())
+        errors.extend(self._get_tactus_lua_validation_errors())
         return errors
+
+    def _get_tactus_lua_validation_errors(self) -> List[str]:
+        """Parse TactusScore Lua without executing the candidate program.
+
+        The editor persists score YAML directly.  YAML validation alone accepts a
+        malformed ``code`` block, which used to leave an optimizer-created
+        version that only failed when a later score test executed it.  Lua's
+        ``load`` compiles source without running its top-level declarations, so
+        this check keeps candidate admission side-effect free.
+        """
+        try:
+            yaml = YAML(typ="safe")
+            parsed = yaml.load(self._files[VIRTUAL_PATH])
+        except Exception:
+            return []
+
+        if not isinstance(parsed, dict) or parsed.get("class") != "TactusScore":
+            return []
+
+        code = parsed.get("code")
+        if not isinstance(code, str) or not code.strip():
+            return ["Tactus Lua validation failed: TactusScore requires a non-empty code block."]
+
+        try:
+            from lupa import LuaRuntime
+
+            check_syntax = LuaRuntime(unpack_returned_tuples=True).eval(
+                "function(source) local fn, err = load(source, 'candidate.tac', 't'); "
+                "return fn ~= nil, err end"
+            )
+            valid, error = check_syntax(code)
+        except Exception as exc:
+            return [f"Tactus Lua validation failed: parser unavailable: {exc}"]
+
+        if valid:
+            return []
+        return [f"Tactus Lua validation failed: {error}"]
 
     def _get_structural_validation_errors(self) -> List[str]:
         """

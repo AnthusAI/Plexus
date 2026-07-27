@@ -906,6 +906,14 @@ class ProcedureService:
                         if isinstance(user_context, dict):
                             context.update(user_context)
 
+                        # Tactus procedures read their parameters from the execution
+                        # context.  The CLI --dry-run flag is an execution option, so
+                        # explicitly mirror it into that parameter surface.
+                        if options.get('dry_run') is not None:
+                            context['dry_run'] = bool(options['dry_run'])
+                        if options.get('max_iterations') is not None:
+                            context['max_iterations'] = int(options['max_iterations'])
+
                         # Expose task_id so the Stage.set() MCP tool can update the dashboard
                         task_id_for_tracking = options.get('_task_id_for_stage_tracking')
                         if task_id_for_tracking:

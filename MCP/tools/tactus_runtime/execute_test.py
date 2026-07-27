@@ -438,6 +438,75 @@ def test_plexus_facade_uses_direct_scorecards_handler_without_mcp_loopback() -> 
     ]
 
 
+def test_default_scorecards_list_returns_metadata_for_account_wide_pages(monkeypatch) -> None:
+    """Metadata pagination remains available without identifier resolution."""
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    queries: list[str] = []
+
+    class FakeClient:
+        def execute(self, query: str) -> dict[str, Any]:
+            queries.append(query)
+            if 'nextToken: "page-2"' in query:
+                return {
+                    "listScorecards": {
+                        "items": [{"id": "card-2", "name": "Duplicate"}],
+                        "nextToken": None,
+                    }
+                }
+            return {
+                "listScorecards": {
+                    "items": [{"id": "card-1", "name": "Duplicate"}],
+                    "nextToken": "page-2",
+                }
+            }
+
+    monkeypatch.setattr(client_utils, "create_client", FakeClient)
+    monkeypatch.setattr(execute, "_resolve_runtime_account_id", lambda *_args: "account-1")
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("enumeration must not resolve an identifier")),
+    )
+
+    first_page = execute._default_scorecards_list({"return_metadata": True})
+    second_page = execute._default_scorecards_list(
+        {"return_metadata": True, "next_token": first_page["nextToken"]}
+    )
+
+    assert first_page == {
+        "items": [{"id": "card-1", "name": "Duplicate"}],
+        "nextToken": "page-2",
+    }
+    assert second_page == {
+        "items": [{"id": "card-2", "name": "Duplicate"}],
+        "nextToken": None,
+    }
+    assert len(queries) == 2
+    assert 'nextToken: "page-2"' in queries[1]
+
+
+def test_default_scorecards_list_uses_identifier_resolution_for_single_record_lookup(monkeypatch) -> None:
+    """Targeted single-record lookup retains its canonical resolver behavior."""
+    from plexus.cli.shared import client_utils, memoized_resolvers
+
+    class FakeClient:
+        def execute(self, query: str) -> dict[str, Any]:
+            assert "getScorecard(id: \"card-1\")" in query
+            return {"getScorecard": {"id": "card-1", "name": "Duplicate"}}
+
+    monkeypatch.setattr(client_utils, "create_client", FakeClient)
+    monkeypatch.setattr(
+        memoized_resolvers,
+        "memoized_resolve_scorecard_identifier",
+        lambda _client, identifier: "card-1" if identifier == "Duplicate" else None,
+    )
+
+    assert execute._default_scorecards_list({"identifier": "Duplicate"}) == [
+        {"id": "card-1", "name": "Duplicate"}
+    ]
+
+
 def test_default_score_update_applies_actor_attribution(monkeypatch) -> None:
     from plexus.cli.shared import client_utils, direct_identifier_resolution
     from plexus.linting import schemas
@@ -1317,7 +1386,7 @@ def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
         return reader
 
     facade = execute.PlexusRuntimeModule(
-        FakeMCP(),
+        None,
         procedure_listers={
             "list": make_reader("list"),
             "info": make_reader("info"),
@@ -5286,8 +5355,8 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     class FakeProcess:
         pid = 4242
 
-        def poll(self) -> int:
-            return 1  # immediately signals process exited (fast-fail path)
+        def poll(self) -> None:
+            return None  # still running while the asynchronous record is created
 
     def fake_popen(cmd, **kwargs):
         captured["cmd"] = cmd
@@ -5351,6 +5420,31 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     assert json.loads(captured["kwargs"]["env"]["PLEXUS_CHILD_BUDGET"]) == _child_budget()
     assert json.loads(captured["kwargs"]["env"]["PLEXUS_ACTOR_CONTEXT_JSON"])["actor_user_id"] == "user-ctx-123"
     assert result["child_budget"] == _child_budget()
+
+
+def test_default_evaluation_runner_reports_clean_child_exit_before_evaluation_creation(monkeypatch) -> None:
+    class CleanExitProcess:
+        pid = 4242
+
+        def poll(self) -> int:
+            return 0
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/plexus")
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: CleanExitProcess())
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    result = execute._default_evaluation_runner(
+        {
+            "evaluation_type": "feedback",
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+        },
+        None,
+    )
+
+    assert result["status"] == "error"
+    assert "exit=0" in result["error"]
+    assert result["evaluation_id"] is None
 
 
 def test_default_evaluation_runner_passes_frozen_feedback_window(monkeypatch) -> None:
@@ -5608,6 +5702,35 @@ def test_handle_peek_reaps_completed_evaluation_process(monkeypatch) -> None:
     assert snapshot["status"] == "completed"
     assert snapshot["evaluation"]["process_status"] == "exited"
     assert snapshot["evaluation"]["process_exit_code"] == 0
+
+
+def test_handle_peek_keeps_completed_evaluation_running_until_its_process_exits(
+    monkeypatch,
+) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"evaluation_id": "eval-1", "process_id": 4242},
+    )
+
+    monkeypatch.setattr(execute, "_exited_process_status", lambda _pid: None)
+
+    def fake_evaluation_info(args: dict) -> dict:
+        return {"id": args["evaluation_id"], "status": "COMPLETED"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "running"
+    assert snapshot["evaluation"]["completion_pending_process_exit"] is True
 
 
 def test_handle_cancel_terminates_process() -> None:
