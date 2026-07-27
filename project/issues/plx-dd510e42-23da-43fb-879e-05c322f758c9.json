@@ -3,7 +3,7 @@
   "title": "Adopt supported Tactus Console runtime APIs",
   "description": "Upgrade Plexus to the released Tactus lifecycle API package, remove private Tactus Agent method replacement from the Console execution path, preserve telemetry and request timeout behavior through supported APIs, and validate the resulting runtime before deployment.",
   "type": "task",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -40,10 +40,22 @@
       "author": "ryan.porter",
       "text": "Locked Plexus to published Tactus 0.51.5 and installed it without a local PYTHONPATH. Verified the package loads from site-packages and exposes request_timeout. Focused MCP, Console, and procedure integration tests pass 355/355 with scoring and infrastructure extras; Poetry lock validation, targeted Ruff, and diff checks pass.",
       "created_at": "2026-07-27T22:33:29.609199Z"
+    },
+    {
+      "id": "0864b8ea-978c-4827-9c3c-887f3844676c",
+      "author": "ryan.porter",
+      "text": "Merged current develop into the integration branch and resolved overlapping Console contract changes by preserving the compact prompt plus external batch-operations cookbook. The combined branch passes 447 focused tests and Poetry lock validation; PR 497 is mergeable.",
+      "created_at": "2026-07-27T22:37:49.626984Z"
+    },
+    {
+      "id": "d3edb025-ae43-48db-905c-dd252f32e738",
+      "author": "ryan.porter",
+      "text": "Completed supported Tactus 0.51.5 adoption, removal of production runtime monkeypatches, published-package validation, and develop conflict resolution.",
+      "created_at": "2026-07-27T22:37:50.162533Z"
     }
   ],
   "created_at": "2026-07-27T20:11:47.249890Z",
-  "updated_at": "2026-07-27T22:33:29.609199Z",
-  "closed_at": null,
+  "updated_at": "2026-07-27T22:37:50.162533Z",
+  "closed_at": "2026-07-27T22:37:49.885900Z",
   "custom": {}
 }
