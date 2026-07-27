@@ -121,7 +121,10 @@ class ScoreProcessorArtifactPipelineStack(Stack):
                         "pre_build": {
                             "commands": [
                                 "set -euo pipefail",
-                                "DOCKERFILE=score-processor-lambda/Dockerfile",
+                                (
+                                    "DOCKERFILE=score-processor-lambda/"
+                                    "Dockerfile.scoring-runtime"
+                                ),
                                 "test -f \"$DOCKERFILE\"",
                                 (
                                     "SOURCE_REVISION=\"${CODEBUILD_RESOLVED_SOURCE_VERSION:-"

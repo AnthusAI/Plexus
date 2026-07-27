@@ -88,13 +88,37 @@ def test_artifact_pipeline_uses_v2_pipeline_and_configured_source():
 def test_build_publishes_only_immutable_image_tag_and_digest_metadata():
     template_text = json.dumps(_template_json())
 
-    assert "score-processor-lambda/Dockerfile" in template_text
+    assert "score-processor-lambda/Dockerfile.scoring-runtime" in template_text
     assert "git-${SHORT_REVISION}" in template_text
     assert "$ECR_REPOSITORY_URI:$IMAGE_TAG" in template_text
     assert "$ECR_REPOSITORY_URI:latest" not in template_text
     assert "aws ecr describe-images" in template_text
     assert "$ECR_REPOSITORY_URI@$IMAGE_DIGEST" in template_text
     assert "image-detail.json" in template_text
+
+
+def test_scoring_runtime_dockerfile_is_isolated_from_legacy_build():
+    repository_root = Path(__file__).resolve().parents[4]
+    legacy_dockerfile = (
+        repository_root / "score-processor-lambda" / "Dockerfile"
+    ).read_text()
+    scoring_dockerfile = (
+        repository_root
+        / "score-processor-lambda"
+        / "Dockerfile.scoring-runtime"
+    ).read_text()
+    scoring_dockerignore = (
+        repository_root
+        / "score-processor-lambda"
+        / "Dockerfile.scoring-runtime.dockerignore"
+    ).read_text()
+
+    assert '"/workspace[all]"' in legacy_dockerfile
+    assert '"/workspace[scoring]"' in scoring_dockerfile
+    assert "COPY . /workspace" not in scoring_dockerfile
+    assert "!plexus/**" in scoring_dockerignore
+    assert "!MCP/**" in scoring_dockerignore
+    assert "!score-processor-lambda/handler.py" in scoring_dockerignore
 
 
 def test_build_writes_generic_plexus_metadata_parameters():

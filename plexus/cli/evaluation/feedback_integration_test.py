@@ -90,7 +90,8 @@ class TestFeedbackCommandIntegration:
             '--max-samples', '50',
         ])
         assert result.exit_code == 2
-        assert 'No such option: --max-samples' in result.output
+        assert 'No such option' in result.output
+        assert '--max-samples' in result.output
     
     def test_feedback_command_days_default(self):
         """Test that days parameter is optional (all-time when omitted)."""

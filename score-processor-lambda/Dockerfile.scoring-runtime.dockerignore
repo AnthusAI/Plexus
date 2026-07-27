@@ -1,0 +1,12 @@
+**
+
+!pyproject.toml
+!README.md
+!plexus/
+!plexus/**
+!MCP/
+!MCP/**
+!score-processor-lambda/
+!score-processor-lambda/handler.py
+!score-processor-lambda/Dockerfile.scoring-runtime
+!score-processor-lambda/Dockerfile.scoring-runtime.dockerignore
