@@ -48,7 +48,7 @@ def test_log_metric_success(mock_boto):
         'AWS_ACCESS_KEY_ID': 'test',
         'AWS_SECRET_ACCESS_KEY': 'test',
         'AWS_REGION_NAME': 'test'
-    }):
+    }, clear=True):
         logger = CloudWatchLogger()
         logger.log_metric('test_metric', 1.0, {'dim1': 'value1'})
         
@@ -68,7 +68,7 @@ def test_log_metric_client_error(mock_boto):
         'AWS_ACCESS_KEY_ID': 'test',
         'AWS_SECRET_ACCESS_KEY': 'test',
         'AWS_REGION_NAME': 'test'
-    }):
+    }, clear=True):
         logger = CloudWatchLogger()
         # Should not raise exception, but log error instead
         logger.log_metric('test_metric', 1.0, {'dim1': 'value1'})
@@ -84,7 +84,7 @@ def test_init_ignores_static_aws_keys(mock_boto):
         'AWS_ACCESS_KEY_ID': 'AKIATESTKEY1234567890',
         'AWS_SECRET_ACCESS_KEY': 'test-secret',
         'AWS_REGION_NAME': 'test'
-    }):
+    }, clear=True):
         CloudWatchLogger._shared_clients = {}
         CloudWatchLogger()
 
