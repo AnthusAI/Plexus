@@ -83,6 +83,7 @@ bertopic = { version = ">=0.16.2", optional = true }
 umap-learn = { version = "0.5.7", optional = true }
 hdbscan = { version = "0.8.40", optional = true }
 sentence-transformers = { version = ">=5.0.0", optional = true }
+biblicus = { version = ">=1.11.3,<2.0.0", extras = ["reinforcement-memory"], optional = true }
 kaleido = { version = ">=0.2.1", optional = true }
 # --- Optional: Infrastructure ---
 celery = { version = ">=5.4.0", optional = true }
@@ -110,6 +111,9 @@ scoring = [
     "pydot", "graphviz",
     "scikit-learn", "contractions",
 ]
+# Evaluation and optimization workers need the full reinforcement-memory stack
+# (embeddings, clustering, and its Virtuus state engine) for feedback RCA.
+evaluation = ["sentence-transformers", "biblicus"]
 infra = [
     "celery", "fastapi", "uvicorn", "pycurl", "sqlalchemy", "pyairtable",
 ]

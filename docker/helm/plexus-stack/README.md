@@ -48,14 +48,26 @@ cd docker/helm/plexus-stack
 cp values-local.yaml.example values-local.yaml
 ```
 
-Edit `values-local.yaml` and set:
-- `graphql-proxy.config.upstreamApiUrl` - Your AWS AppSync endpoint
-- `graphql-proxy.config.upstreamApiKey` - Your AWS AppSync API key
-- `plexus-worker.plexus.account.key` - Your Plexus account key
-- `plexus-worker.llm.openai.apiKey` - Your OpenAI API key
-- `plexus-worker.llm.anthropic.apiKey` - Your Anthropic API key
+Edit `values-local.yaml` and set the local account and proxy settings needed by
+your chosen backend mode. The local trusted mode shown in the example does not
+need AppSync credentials.
 
-### 2. Run the Local Envoy Gateway POC
+### 2. Create the local LLM secret
+
+Do not put an LLM key in Helm values: Helm stores those values in release
+history. Create the Kubernetes secret first, then keep
+`plexus-worker.llm.existingSecret` set to `plexus-local-llm-keys`.
+
+```bash
+kubectl -n plexus-local create secret generic plexus-local-llm-keys \
+  --from-literal=openai-api-key="$OPENAI_API_KEY"
+```
+
+Set `OPENAI_API_KEY` in your shell from your approved local secret source before
+running this command. The command fails if the variable is unset; it does not
+substitute a placeholder key.
+
+### 3. Run the Local Envoy Gateway POC
 
 ```bash
 cd ../../..
@@ -73,7 +85,7 @@ kubectl delete deployment/plexus-plexus-worker -n plexus-local
 
 Deleting and recreating the disposable kind cluster is also valid.
 
-### 3. Manual Deployment
+### 4. Manual Deployment
 
 ```bash
 # Build local native images for kind
@@ -98,7 +110,7 @@ For non-local clusters, publish linux/amd64 images first, then point chart value
 REGISTRY=your-registry IMAGE_TAG=1.52.0 docker/scripts/build_k8s_images.sh
 ```
 
-### 4. Verify Deployment
+### 5. Verify Deployment
 
 ```bash
 kubectl get pods -n plexus-local
@@ -112,7 +124,7 @@ curl http://localhost:8000/healthz
 curl http://localhost:8000/readyz
 ```
 
-### 5. Test Through Envoy Gateway
+### 6. Test Through Envoy Gateway
 
 ```bash
 # Find the Envoy Service for the Gateway and port-forward it.

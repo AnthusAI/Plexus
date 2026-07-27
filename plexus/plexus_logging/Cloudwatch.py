@@ -10,6 +10,11 @@ class CloudWatchLogger:
     def __init__(self, namespace="Plexus"):
         self.namespace = namespace
         self.cloudwatch_client = None
+        self.disabled = os.getenv("PLEXUS_DISABLE_CLOUDWATCH_LOGS", "").strip().lower() in {"1", "true", "yes", "on"}
+
+        if self.disabled:
+            logging.debug("CloudWatch metrics disabled by PLEXUS_DISABLE_CLOUDWATCH_LOGS")
+            return
 
         # Get AWS region
         aws_region = os.getenv('AWS_REGION_NAME') or os.getenv('AWS_REGION') or os.getenv('AWS_DEFAULT_REGION')
@@ -46,6 +51,9 @@ class CloudWatchLogger:
             metric_value (float): Value of the metric
             dimensions (dict): Dictionary of dimension names and values
         """
+        if self.disabled:
+            return
+
         if not self.cloudwatch_client:
             logging.warning(f"CloudWatch not configured, skipping metric: {metric_name}")
             return

@@ -23,4 +23,13 @@ spec:
     backendRefs:
     - name: {{ include "plexus-worker.fullname" . }}
       port: {{ .Values.service.port }}
+    {{- if or .Values.scoringApi.gateway.requestTimeout .Values.scoringApi.gateway.backendRequestTimeout }}
+    timeouts:
+      {{- if .Values.scoringApi.gateway.requestTimeout }}
+      request: {{ .Values.scoringApi.gateway.requestTimeout | quote }}
+      {{- end }}
+      {{- if .Values.scoringApi.gateway.backendRequestTimeout }}
+      backendRequest: {{ .Values.scoringApi.gateway.backendRequestTimeout | quote }}
+      {{- end }}
+    {{- end }}
 {{- end }}

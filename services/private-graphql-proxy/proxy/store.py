@@ -14,7 +14,7 @@ from psycopg import sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from .schema_contract import get_schema_contract
+from .schema_contract import configured_local_models, get_schema_contract
 
 
 def utcnow() -> datetime:
@@ -23,6 +23,20 @@ def utcnow() -> datetime:
 
 def iso_now() -> str:
     return utcnow().isoformat().replace("+00:00", "Z")
+
+
+def scoring_job_claim_lease_seconds() -> int:
+    """Return the configured stale-claim lease for synchronous scoring jobs."""
+    raw_value = os.getenv("PLEXUS_SCORING_JOB_CLAIM_LEASE_SECONDS", "120")
+    try:
+        lease_seconds = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(
+            "PLEXUS_SCORING_JOB_CLAIM_LEASE_SECONDS must be a positive integer"
+        ) from exc
+    if lease_seconds <= 0:
+        raise ValueError("PLEXUS_SCORING_JOB_CLAIM_LEASE_SECONDS must be a positive integer")
+    return lease_seconds
 
 
 def parse_datetime(value: Any) -> Optional[datetime]:
@@ -200,6 +214,18 @@ class PostgresStore:
                     create index if not exists score_results_item_type_score_updated_idx on private_data.score_results (item_id, type, score_id, updated_at);
                     create index if not exists score_results_doc_gin_idx on private_data.score_results using gin (doc);
 
+                    create table if not exists private_data.scoring_job_claims (
+                        account_id text not null,
+                        scoring_job_id text not null,
+                        item_id text not null,
+                        scorecard_id text not null,
+                        score_id text not null,
+                        score_result_id text not null,
+                        claimed_at timestamptz not null default now(),
+                        primary key (account_id, scoring_job_id)
+                    );
+                    create index if not exists scoring_job_claims_result_idx on private_data.scoring_job_claims (score_result_id);
+
                     create table if not exists private_data.feedback_items (
                         id text primary key,
                         account_id text not null,
@@ -301,6 +327,102 @@ class PostgresStore:
             with conn.cursor() as cur:
                 cur.execute("select 1 as ready")
                 return cur.fetchone()["ready"] == 1
+
+    def claim_scoring_job(
+        self,
+        *,
+        account_id: str,
+        scoring_job_id: str,
+        item_id: str,
+        scorecard_id: str,
+        score_id: str,
+        score_result_id: str,
+    ) -> dict[str, Any]:
+        """Atomically reserve a local synchronous scoring job.
+
+        A claim is scoped by account and caller-supplied job key.  If a result
+        already exists for the reserved deterministic result ID, it is complete.
+        A claim without a result remains in progress for the configured lease;
+        then a later retry can reclaim it after a worker crash.
+        """
+        scope = (account_id, scoring_job_id, item_id, scorecard_id, score_id)
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    insert into private_data.scoring_job_claims (
+                        account_id, scoring_job_id, item_id, scorecard_id,
+                        score_id, score_result_id
+                    ) values (%s, %s, %s, %s, %s, %s)
+                    on conflict (account_id, scoring_job_id) do nothing
+                    returning score_result_id
+                    """,
+                    (*scope, score_result_id),
+                )
+                inserted = cur.fetchone()
+                if inserted:
+                    conn.commit()
+                    return {"state": "CLAIMED", "scoreResultId": score_result_id}
+
+                cur.execute(
+                    """
+                    select item_id, scorecard_id, score_id, score_result_id, claimed_at
+                    from private_data.scoring_job_claims
+                    where account_id = %s and scoring_job_id = %s
+                    for update
+                    """,
+                    (account_id, scoring_job_id),
+                )
+                existing = cur.fetchone()
+                if not existing:
+                    raise RuntimeError("scoring job claim disappeared during lookup")
+                if (existing["item_id"], existing["scorecard_id"], existing["score_id"]) != (
+                    item_id,
+                    scorecard_id,
+                    score_id,
+                ):
+                    conn.commit()
+                    return {"state": "CONFLICT", "scoreResultId": existing["score_result_id"]}
+
+                if self._uses_local_model_store("ScoreResult"):
+                    # Local-mode GraphQL model mutations use the generic local
+                    # model store rather than the legacy private_data table.
+                    # Check the same store that createScoreResult writes to,
+                    # so a completed claim is observable by a later retry.
+                    cur.execute(
+                        "select 1 from local_data.score_result where doc->>'id' = %s",
+                        (existing["score_result_id"],),
+                    )
+                else:
+                    cur.execute(
+                        "select id from private_data.score_results where id = %s",
+                        (existing["score_result_id"],),
+                    )
+                if cur.fetchone():
+                    conn.commit()
+                    return {"state": "COMPLETED", "scoreResultId": existing["score_result_id"]}
+
+                cur.execute(
+                    """
+                    update private_data.scoring_job_claims
+                    set claimed_at = now(), score_result_id = %s
+                    where account_id = %s
+                      and scoring_job_id = %s
+                      and claimed_at < now() - make_interval(secs => %s)
+                    returning score_result_id
+                    """,
+                    (
+                        score_result_id,
+                        account_id,
+                        scoring_job_id,
+                        scoring_job_claim_lease_seconds(),
+                    ),
+                )
+                reclaimed = cur.fetchone()
+                conn.commit()
+                if reclaimed:
+                    return {"state": "CLAIMED", "scoreResultId": reclaimed["score_result_id"]}
+                return {"state": "IN_PROGRESS", "scoreResultId": existing["score_result_id"]}
 
     def upsert_private(self, model: str, input_doc: dict[str, Any]) -> dict[str, Any]:
         if self._uses_local_model_store(model):
@@ -595,7 +717,11 @@ class PostgresStore:
         return value
 
     def _uses_local_model_store(self, model: str) -> bool:
-        return os.getenv("PLEXUS_BACKEND_MODE", "amplify") == "local" or model not in MODEL_CONFIGS
+        return (
+            os.getenv("PLEXUS_BACKEND_MODE", "amplify") == "local"
+            or model in configured_local_models()
+            or model not in MODEL_CONFIGS
+        )
 
     def _local_table_name(self, model: str) -> str:
         snake = re.sub(r"(?<!^)(?=[A-Z])", "_", model).lower()

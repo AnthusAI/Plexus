@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # Kubernetes-ready Plexus Worker Image
 #
 # This image can run multiple worker types:
@@ -41,12 +42,20 @@ WORKDIR /app
 # Copy repository for local installation
 COPY --chown=plexus:plexus . /app
 
-# Install Plexus with the scoring and infrastructure extras only.
+# Install the scoring, evaluation, and infrastructure extras.
 # The ML training stack (torch, transformers, xgboost, ...) is excluded;
-# scoring and the predict CLI do not need it. Use ".[all]" for training images.
-ARG PLEXUS_EXTRAS="scoring,infra"
-RUN python -m pip install --upgrade pip && \
-    python -m pip install --no-cache-dir -e ".[$PLEXUS_EXTRAS]"
+# evaluation includes only the local embeddings required for feedback RCA.
+ARG PLEXUS_EXTRAS="scoring,evaluation,infra"
+# PyPI's Linux ARM64 torch distribution includes CUDA runtime packages.  The
+# Docker Desktop worker is CPU-only, so install the matching CPU wheel first;
+# the sentence-transformers dependency then reuses it instead of downloading a
+# multi-gigabyte GPU stack.
+ARG TORCH_CPU_VERSION="2.7.1"
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --upgrade pip && \
+    python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch==${TORCH_CPU_VERSION}+cpu" && \
+    python -m pip install -e ".[$PLEXUS_EXTRAS]" && \
+    python -c "import importlib.util; from importlib.metadata import version; from pathlib import Path; importlib.util.find_spec('virtuus') and Path('/usr/local/lib/VERSION').write_text(version('virtuus') + '\\n', encoding='utf-8')"
 
 # Download NLTK data during build (required for some scoring operations)
 RUN python -c "import nltk; \

@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+from uuid import NAMESPACE_URL, uuid5
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,177 @@ class ScoringJobError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.reason_code = reason_code
+
+
+def score_result_id_for_job(
+    *,
+    scoring_job_id: str,
+    item_id: str,
+    scorecard_id: str,
+    score_id: str,
+    account_id: str,
+) -> str:
+    """Return a stable persistence ID for one scoped scoring job.
+
+    The same caller job key may be retried by different workers after a gateway
+    interruption. A deterministic result ID makes the normal GraphQL create
+    operation converge on one database row even when two workers race before a
+    result exists. It deliberately includes the full target scope so a caller
+    cannot overwrite a different resource by reusing a job key.
+    """
+    scope = "\x1f".join((account_id, scoring_job_id, item_id, scorecard_id, score_id))
+    return str(uuid5(NAMESPACE_URL, f"plexus-score-result:{scope}"))
+
+
+def _find_existing_score_result(
+    client: Any,
+    *,
+    scoring_job_id: str,
+    item_id: str,
+    scorecard_id: str,
+    score_id: str,
+    account_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Return the single durable result already stored for a scoring job.
+
+    `scoring_job_id` is the caller's idempotency key for synchronous scoring.
+    A failed lookup must stop the request rather than allowing an uncertain retry
+    to make another model call and persist another result.
+    """
+    query = """
+    query ExistingScoreResults($filter: ModelScoreResultFilterInput!) {
+      listScoreResults(filter: $filter, limit: 3) {
+        items {
+          id
+          value
+          explanation
+          metadata
+          scoringJobId
+          itemId
+          scorecardId
+          scoreId
+          accountId
+        }
+      }
+    }
+    """
+    result = client.execute(
+        query,
+        {"filter": {"scoringJobId": {"eq": scoring_job_id}}},
+    )
+    items = (result.get("listScoreResults") or {}).get("items") or []
+    matching_items = [
+        item
+        for item in items
+        if item.get("itemId") == item_id
+        and item.get("scorecardId") == scorecard_id
+        and item.get("scoreId") == score_id
+        and item.get("accountId") == account_id
+    ]
+    if items and not matching_items:
+        raise ScoringJobError(
+            "Scoring job ID is already bound to a different resource",
+            status_code=409,
+            reason_code="scoring_job_scope_conflict",
+        )
+    if not matching_items:
+        return None
+    if len(matching_items) > 1:
+        raise ScoringJobError(
+            "Multiple persisted results exist for this scoring job",
+            status_code=409,
+            reason_code="duplicate_scoring_job_results",
+        )
+    return matching_items[0]
+
+
+def _claim_scoring_job(
+    client: Any,
+    *,
+    scoring_job_id: str,
+    item_id: str,
+    scorecard_id: str,
+    score_id: str,
+    account_id: str,
+    score_result_id: str,
+) -> Dict[str, Any]:
+    mutation = """
+    mutation ClaimScoringJob($input: ClaimScoringJobInput!) {
+      claimScoringJob(input: $input) {
+        state
+        scoreResultId
+      }
+    }
+    """
+    response = client.execute(
+        mutation,
+        {
+            "input": {
+                "accountId": account_id,
+                "scoringJobId": scoring_job_id,
+                "itemId": item_id,
+                "scorecardId": scorecard_id,
+                "scoreId": score_id,
+                "scoreResultId": score_result_id,
+            }
+        },
+    )
+    claim = response.get("claimScoringJob")
+    if not isinstance(claim, dict) or claim.get("state") not in {
+        "CLAIMED",
+        "COMPLETED",
+        "IN_PROGRESS",
+        "CONFLICT",
+    }:
+        raise ScoringJobError(
+            "Scoring job claim returned an invalid response",
+            status_code=500,
+            reason_code="scoring_job_claim_failed",
+        )
+    return claim
+
+
+def _get_score_result_by_id(client: Any, score_result_id: str) -> Optional[Dict[str, Any]]:
+    query = """
+    query ExistingScoreResult($id: ID!) {
+      getScoreResult(id: $id) {
+        id
+        value
+        explanation
+        metadata
+      }
+    }
+    """
+    return client.execute(query, {"id": score_result_id}).get("getScoreResult")
+
+
+def _existing_score_result_response(
+    score_result: Dict[str, Any],
+    *,
+    scoring_job_id: str,
+    item_id: str,
+    scorecard_name: str,
+    score_name: str,
+) -> Dict[str, Any]:
+    metadata = score_result.get("metadata") or {}
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except json.JSONDecodeError:
+            metadata = {}
+    return {
+        "status": "success",
+        "scoring_job_id": scoring_job_id,
+        "item_id": item_id,
+        "scorecard": scorecard_name,
+        "score": score_name,
+        "value": score_result.get("value"),
+        "explanation": score_result.get("explanation") or "",
+        "metadata": metadata,
+        "score_result_id": score_result["id"],
+        "result_id": score_result["id"],
+        "idempotent_replay": True,
+    }
 
 
 def process_scoring_job_sync(
@@ -118,6 +290,68 @@ def process_scoring_job_sync(
 
     logger.info("Found score ID for scoring job %s: %s", scoring_job_id, score_id)
 
+    existing_score_result = _find_existing_score_result(
+        client,
+        scoring_job_id=scoring_job_id,
+        item_id=item_id,
+        scorecard_id=scorecard_id,
+        score_id=score_id,
+        account_id=item_account_id,
+    )
+    if existing_score_result:
+        logger.info("Reusing persisted score result for scoring job %s", scoring_job_id)
+        return _existing_score_result_response(
+            existing_score_result,
+            scoring_job_id=scoring_job_id,
+            item_id=item_id,
+            scorecard_name=scorecard_name,
+            score_name=score_name,
+        )
+
+    score_result_id = score_result_id_for_job(
+        scoring_job_id=scoring_job_id,
+        item_id=item_id,
+        scorecard_id=scorecard_id,
+        score_id=score_id,
+        account_id=item_account_id,
+    )
+    claim = _claim_scoring_job(
+        client,
+        scoring_job_id=scoring_job_id,
+        item_id=item_id,
+        scorecard_id=scorecard_id,
+        score_id=score_id,
+        account_id=item_account_id,
+        score_result_id=score_result_id,
+    )
+    if claim["state"] == "COMPLETED":
+        completed_result = _get_score_result_by_id(client, claim["scoreResultId"])
+        if not completed_result:
+            raise ScoringJobError(
+                "Completed scoring job result is unavailable",
+                status_code=500,
+                reason_code="scoring_job_completed_result_missing",
+            )
+        return _existing_score_result_response(
+            completed_result,
+            scoring_job_id=scoring_job_id,
+            item_id=item_id,
+            scorecard_name=scorecard_name,
+            score_name=score_name,
+        )
+    if claim["state"] == "IN_PROGRESS":
+        raise ScoringJobError(
+            "Scoring job is already being processed",
+            status_code=409,
+            reason_code="scoring_job_in_progress",
+        )
+    if claim["state"] == "CONFLICT":
+        raise ScoringJobError(
+            "Scoring job ID is already bound to a different resource",
+            status_code=409,
+            reason_code="scoring_job_scope_conflict",
+        )
+
     score_instance = Score.load(
         scorecard_identifier=scorecard_id,
         score_name=score_name,
@@ -156,6 +390,7 @@ def process_scoring_job_sync(
     """
 
     result_input = {
+        "id": score_result_id,
         "scoringJobId": scoring_job_id,
         "itemId": item_id,
         "scorecardId": scorecard_id,

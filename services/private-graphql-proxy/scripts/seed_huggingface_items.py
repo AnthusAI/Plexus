@@ -7,16 +7,19 @@ import json
 import os
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 
 import requests
 
 
-AG_NEWS_LABELS = ("World", "Sports", "Business", "Sci/Tech")
 DEFAULT_DATASET = "apptek-com/apptek_callcenter_dialogues"
 DEFAULT_SPLIT = "test"
 DEFAULT_IDENTIFIER_NAME = "Hugging Face Fixture ID"
 DEFAULT_PREFIX = "proxy-call-center"
+HF_DATASETS_SERVER_ROWS_URL = "https://datasets-server.huggingface.co/rows"
+HF_DATASETS_SERVER_MAX_PAGE_SIZE = 100
 
 
 @dataclass(frozen=True)
@@ -86,17 +89,61 @@ def normalized_label(value: Any) -> int | str | None:
         return str(value)
 
 
-def resolve_label_names(dataset: Any, dataset_name: str) -> list[str] | tuple[str, ...]:
+def resolve_label_names(dataset: Any) -> list[str] | tuple[str, ...]:
     label_feature = getattr(dataset, "features", {}).get("label")
     names = getattr(label_feature, "names", None)
     if names:
         return list(names)
-    if dataset_name == DEFAULT_DATASET:
-        return AG_NEWS_LABELS
     return ()
 
 
-def load_rows(dataset_name: str, split: str, start: int, limit: int) -> tuple[Any, list[dict[str, Any]]]:
+def load_rows_from_datasets_server(
+    dataset_name: str,
+    split: str,
+    start: int,
+    limit: int,
+) -> tuple[Any, list[dict[str, Any]]]:
+    """Fetch an exact bounded slice without downloading the complete Hub dataset."""
+    rows: list[dict[str, Any]] = []
+    for offset in range(start, start + limit, HF_DATASETS_SERVER_MAX_PAGE_SIZE):
+        page_size = min(HF_DATASETS_SERVER_MAX_PAGE_SIZE, start + limit - offset)
+        response = requests.get(
+            HF_DATASETS_SERVER_ROWS_URL,
+            params={
+                "dataset": dataset_name,
+                "config": "default",
+                "split": split,
+                "offset": offset,
+                "length": page_size,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        page = payload.get("rows")
+        if not isinstance(page, list):
+            raise RuntimeError("Hugging Face datasets-server response is missing rows.")
+        rows.extend(entry["row"] for entry in page if isinstance(entry.get("row"), dict))
+        if len(page) < page_size:
+            break
+    if len(rows) != limit:
+        raise RuntimeError(
+            f"Hugging Face datasets-server returned {len(rows)} rows; expected {limit}."
+        )
+    return SimpleNamespace(features={}), rows
+
+
+def load_rows(
+    dataset_name: str,
+    split: str,
+    start: int,
+    limit: int,
+    source: str = "datasets",
+) -> tuple[Any, list[dict[str, Any]]]:
+    if source == "datasets-server":
+        return load_rows_from_datasets_server(dataset_name, split, start, limit)
+    if source != "datasets":
+        raise ValueError(f"Unsupported source: {source}")
     try:
         from datasets import Features, Value, load_dataset
     except ImportError as exc:
@@ -162,6 +209,21 @@ def create_identifier(client: GraphQLClient, input_doc: dict[str, Any]) -> dict[
     )["createIdentifier"]
 
 
+def create_feedback_item(client: GraphQLClient, input_doc: dict[str, Any]) -> dict[str, Any]:
+    return client.execute(
+        """
+        mutation SeedFixtureFeedbackItem($input: CreateFeedbackItemInput!) {
+            createFeedbackItem(input: $input) {
+                id
+                itemId
+                finalAnswerValue
+            }
+        }
+        """,
+        {"input": input_doc},
+    )["createFeedbackItem"]
+
+
 def verify_fixture(client: GraphQLClient, fixture: SeededFixture, account_id: str) -> None:
     item = client.execute(
         """
@@ -209,9 +271,16 @@ def seed_fixtures(
     prefix: str,
     identifier_name: str,
     verify: bool,
+    source: str = "datasets",
+    label_field: str | None = None,
+    feedback_scorecard_id: str | None = None,
 ) -> list[SeededFixture]:
-    dataset, rows = load_rows(dataset_name, split, start, limit)
-    label_names = resolve_label_names(dataset, dataset_name)
+    if feedback_scorecard_id and (not score_id or not label_field):
+        raise ValueError("Feedback seeding requires --score-id and --label-field.")
+
+    dataset, rows = load_rows(dataset_name, split, start, limit, source=source)
+    label_names = resolve_label_names(dataset)
+    seeded_at = datetime.now(timezone.utc).isoformat()
 
     seeded: list[SeededFixture] = []
     for offset, row in enumerate(rows):
@@ -223,15 +292,15 @@ def seed_fixtures(
         item_id = stable_fixture_id(prefix, dataset_name, split, row_index)
         external_id = f"{item_id}-external"
         identifier_value = f"{item_id}-identifier"
-        label = normalized_label(row.get("label"))
+        label = normalized_label(row.get(label_field) if label_field else row.get("label"))
         label_name = label_name_for({**row, "label": label}, label_names)
+        if label_field and label is not None:
+            label_name = str(label)
         metadata = {
             "source": "private-graphql-proxy-fixture",
             "dataset": dataset_name,
             "split": split,
             "row_index": row_index,
-            "label": label,
-            "label_name": label_name,
         }
         item_input = {
             "id": item_id,
@@ -257,6 +326,23 @@ def seed_fixtures(
                 "position": offset,
             },
         )
+        if feedback_scorecard_id:
+            create_feedback_item(
+                client,
+                {
+                    "id": f"{item_id}-feedback",
+                    "accountId": account_id,
+                    "scorecardId": feedback_scorecard_id,
+                    "scoreId": score_id,
+                    "itemId": item_id,
+                    "cacheKey": f"{score_id}:{item_id}",
+                    "initialAnswerValue": label,
+                    "finalAnswerValue": label,
+                    "editedAt": seeded_at,
+                    "isAgreement": True,
+                    "isInvalid": False,
+                },
+            )
 
         fixture = SeededFixture(
             id=item_id,
@@ -287,6 +373,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split", default=os.getenv("PLEXUS_PROXY_FIXTURE_SPLIT", DEFAULT_SPLIT))
     parser.add_argument("--start", type=int, default=int(os.getenv("PLEXUS_PROXY_FIXTURE_START", "0")))
     parser.add_argument("--limit", type=int, default=int(os.getenv("PLEXUS_PROXY_FIXTURE_LIMIT", "5")))
+    parser.add_argument("--source", choices=("datasets", "datasets-server"), default="datasets")
+    parser.add_argument("--label-field", help="Explicit source field to use as the evaluation label.")
+    parser.add_argument("--feedback-scorecard-id", help="Create labeled FeedbackItems for this scorecard.")
     parser.add_argument("--prefix", default=os.getenv("PLEXUS_PROXY_FIXTURE_PREFIX", DEFAULT_PREFIX))
     parser.add_argument("--identifier-name", default=DEFAULT_IDENTIFIER_NAME)
     parser.add_argument("--no-verify", action="store_true")
@@ -307,6 +396,9 @@ def main() -> int:
         prefix=args.prefix,
         identifier_name=args.identifier_name,
         verify=not args.no_verify,
+        source=args.source,
+        label_field=args.label_field,
+        feedback_scorecard_id=args.feedback_scorecard_id,
     )
     json.dump({"items": [fixture.as_dict() for fixture in fixtures]}, sys.stdout, indent=2)
     sys.stdout.write("\n")

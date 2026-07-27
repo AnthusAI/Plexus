@@ -52,6 +52,36 @@ spec:
           value: {{ $value | quote }}
         {{- end }}
 
+        {{- if .Values.objectStore.enabled }}
+        # S3-compatible dataset and report storage.
+        - name: AWS_ENDPOINT_URL
+          value: {{ required "objectStore.endpoint is required" .Values.objectStore.endpoint | quote }}
+        - name: PLEXUS_OBJECT_STORE_ENDPOINT
+          value: {{ .Values.objectStore.endpoint | quote }}
+        - name: AWS_DEFAULT_REGION
+          value: {{ .Values.objectStore.region | quote }}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "plexus-worker.objectStoreSecretName" . }}
+              key: {{ .Values.objectStore.accessKeySecretKey }}
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "plexus-worker.objectStoreSecretName" . }}
+              key: {{ .Values.objectStore.secretKeySecretKey }}
+        - name: AMPLIFY_STORAGE_DATASETS_BUCKET_NAME
+          value: {{ required "objectStore.buckets.datasets is required" .Values.objectStore.buckets.datasets | quote }}
+        - name: AMPLIFY_STORAGE_REPORTBLOCKDETAILS_BUCKET_NAME
+          value: {{ required "objectStore.buckets.reportBlockDetails is required" .Values.objectStore.buckets.reportBlockDetails | quote }}
+        - name: AMPLIFY_STORAGE_RUBRICMEMORY_BUCKET_NAME
+          value: {{ required "objectStore.buckets.rubricMemory is required" .Values.objectStore.buckets.rubricMemory | quote }}
+        - name: AMPLIFY_STORAGE_TASKATTACHMENTS_BUCKET_NAME
+          value: {{ required "objectStore.buckets.taskAttachments is required" .Values.objectStore.buckets.taskAttachments | quote }}
+        - name: AMPLIFY_STORAGE_SCORERESULTATTACHMENTS_BUCKET_NAME
+          value: {{ required "objectStore.buckets.scoreResultAttachments is required" .Values.objectStore.buckets.scoreResultAttachments | quote }}
+        {{- end }}
+
         # Plexus API configuration
         - name: PLEXUS_API_URL
           valueFrom:
@@ -168,7 +198,7 @@ spec:
 
         # LLM API Keys
         {{- if .Values.llm }}
-        {{- if .Values.llm.openai }}
+        {{- if or .Values.llm.openai .Values.llm.existingSecret }}
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
@@ -209,11 +239,17 @@ spec:
 
         {{- if .Values.readinessProbe.enabled }}
         readinessProbe:
+          {{- if eq .Values.workerType "scoring-api" }}
+          httpGet:
+            path: /readyz
+            port: http
+          {{- else }}
           exec:
             command:
             - python
             - -c
             - "import sys; sys.exit(0)"
+          {{- end }}
           initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
