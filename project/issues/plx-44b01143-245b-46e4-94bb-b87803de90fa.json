@@ -1,0 +1,26 @@
+{
+  "id": "plx-44b01143-245b-46e4-94bb-b87803de90fa",
+  "title": "Optimizer candidate and promotion safety",
+  "description": "Purpose: Ensure optimizer candidates are mechanically valid, compared against the correct incumbent, and supported by sufficient evidence before promotion can be recommended.\n\nExclusions:\n- Client-specific rubric judgments.\n- Automatic production promotion without the established approval gate.\n- Replacing the canonical evaluator.\n\nDependencies: Uses frozen cohort and provenance contracts from the reproducible-cohorts epic. Most mechanical validation can proceed independently.\n\nDefinition of Done:\n- Class collapse, invalid output classes, broken inter-node dataflow, unsafe dry-run writes, and unintended model changes fail closed.\n- Candidate and synthesis selection compare against the current leader on identical cohorts.\n- Promotion evidence includes validation outcomes, cohort identity, metrics, and explicit unresolved risks.\n- Behavior-first specifications and focused tests pass.\n\nRunning log: Record sanitized decisions, attempts, outcomes, and next steps in this epic or its child issues.",
+  "type": "epic",
+  "status": "open",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-8570854c-bad6-4049-be38-e04836aae830",
+  "labels": [],
+  "dependencies": [
+    {
+      "target": "plx-7a8b2c38-2c10-4890-942a-8b04bc8fc65a",
+      "type": "relates-to"
+    }
+  ],
+  "comments": [],
+  "created_at": "2026-07-27T20:52:48.693807Z",
+  "updated_at": "2026-07-27T20:52:48.693807Z",
+  "closed_at": null,
+  "custom": {
+    "source": "shared",
+    "project_label": "plx"
+  }
+}

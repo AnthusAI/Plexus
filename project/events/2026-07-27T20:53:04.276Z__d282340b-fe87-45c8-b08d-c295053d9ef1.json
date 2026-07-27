@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "event_id": "d282340b-fe87-45c8-b08d-c295053d9ef1",
+  "issue_id": "plx-7a8b2c38-2c10-4890-942a-8b04bc8fc65a",
+  "event_type": "field_updated",
+  "occurred_at": "2026-07-27T20:53:04.276Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "Feedback evaluation integrity hardening",
+        "to": "Reproducible evaluation cohorts and comparisons"
+      },
+      "description": {
+        "from": "Track Plexus-internal hardening of feedback evaluation preflight and integrity diagnostics. This epic contains no client-specific information.",
+        "to": "Purpose: Make every baseline, candidate, synthesis, and resumed evaluation comparison reproducible by preserving exact cohort identity, coverage, and provenance.\n\nExclusions:\n- Changing feedback labels or client review policy.\n- Replacing the canonical feedback evaluator.\n- Silently substituting an unbalanced or independently selected cohort.\n\nDependencies: Supplies frozen cohort and provenance contracts to candidate safety, observability, and orchestration. Cohort work can proceed independently.\n\nDefinition of Done:\n- Historical balancing considers every reachable output class and reports coverage.\n- Recent and regression baseline cohorts are materialized or otherwise replayable with exact ordered membership.\n- Fresh, candidate, synthesis, and resumed evaluations use the same applicable cohort.\n- Missing provenance or replay failures fail closed.\n- Explicit local dataset replay uses the canonical evaluation pipeline.\n- Behavior-first specifications and focused tests pass.\n\nRunning log: Preserve existing issue histories and record sanitized decisions, attempts, outcomes, and next steps in this epic or its child issues."
+      },
+      "parent": {
+        "from": null,
+        "to": "plx-8570854c-bad6-4049-be38-e04836aae830"
+      }
+    }
+  }
+}

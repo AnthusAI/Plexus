@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "event_id": "b83bb264-57c1-4201-95b1-d511f815299f",
+  "issue_id": "plx-67332423-3a85-4205-b3fe-05ab4b2d12ea",
+  "event_type": "field_updated",
+  "occurred_at": "2026-07-27T20:53:04.647Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "changes": {
+      "title": {
+        "from": "MCP Tactus batch operations for feedback workflows",
+        "to": "Batch and parallel optimization orchestration"
+      },
+      "description": {
+        "from": "",
+        "to": "Purpose: Run complete multi-target feedback analysis and optimization workflows efficiently with bounded concurrency, stable ordering, isolated mutations, and explicit coverage.\n\nExclusions:\n- Silent sampling of complete-scope requests.\n- Shared mutable candidate state across targets.\n- Unbounded concurrency or automatic production promotion.\n\nDependencies: Consumes discovery output, supported runtime interfaces, reproducible cohorts, and the shared run-evidence contract. Existing batch-read and batch-dispatch capabilities remain the foundation.\n\nDefinition of Done:\n- Complete-scope workflows enumerate and report every target or explicitly report incomplete coverage.\n- Batch input and result ordering and opaque identifiers remain unchanged.\n- Concurrency and resource use are bounded and configurable.\n- Target failures remain isolated and visible without discarding successful results.\n- Planning artifacts are portable between supported local and hosted execution.\n- Existing single-target APIs remain compatible.\n- Behavior-first specifications and focused tests pass.\n\nRunning log: Preserve existing issue histories and record sanitized decisions, attempts, outcomes, and next steps in this epic or its child issues."
+      },
+      "priority": {
+        "from": 2,
+        "to": 1
+      },
+      "parent": {
+        "from": null,
+        "to": "plx-8570854c-bad6-4049-be38-e04836aae830"
+      }
+    }
+  }
+}
