@@ -31,10 +31,16 @@
       "author": "ryan.porter",
       "text": "Implemented and verified a final-report-authoritative optimizer handoff contract. Compact artifacts now retain selected-candidate and current-leader evidence, cohort provenance, and explicit partial report failures while preserving completed evaluation evidence. Focused artifact and optimizer CLI-result tests pass; validation and scoped commit are next.",
       "created_at": "2026-07-27T21:15:44.882136Z"
+    },
+    {
+      "id": "ea0a7ab4-5198-4368-8ff3-e009813a5483",
+      "author": "ryan.porter",
+      "text": "Wave 1 integration makes final report evidence authoritative for compact handoff artifacts, preserves selected-candidate and cohort provenance, and surfaces partial report-phase failures without discarding completed evidence. Full supported-runtime and dashboard CI passed.",
+      "created_at": "2026-07-27T22:25:46.263080Z"
     }
   ],
   "created_at": "2026-07-27T20:52:49.335291Z",
-  "updated_at": "2026-07-27T21:15:44.882136Z",
+  "updated_at": "2026-07-27T22:25:46.263080Z",
   "closed_at": null,
   "custom": {
     "source": "shared",

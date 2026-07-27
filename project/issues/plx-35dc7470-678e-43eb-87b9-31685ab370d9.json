@@ -3,7 +3,7 @@
   "title": "Prevent FastMCP and Tactus documentation parser collision",
   "description": "A clean Poetry install currently selects FastMCP 3, which installs the griffelib distribution, while released Tactus installs griffe. Both distributions write the same Python package paths, producing an invalid environment and preventing CI test collection.\n\nExpected behavior:\n- A clean lockfile install contains one compatible documentation-parser distribution.\n- FastMCP and Tactus imports both succeed.\n- The dispatch regression net collects and passes under the supported Python matrix.\n- The dependency constraint prevents a future lock refresh from silently restoring the collision.\n\nFeature: Compatible optimizer runtime dependencies\nScenario: CI installs the locked Plexus dependency graph\nGiven Plexus includes the supported Tactus and FastMCP runtimes\nWhen Poetry installs the lockfile into a clean environment\nThen no two distributions overwrite the same parser package\nAnd both runtimes import successfully\nAnd dispatch regression tests can be collected and executed\n\nOut of scope: upgrading Plexus to FastMCP 3 APIs or changing runtime behavior.",
   "type": "bug",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -16,10 +16,16 @@
       "author": "ryan.porter",
       "text": "Pinned FastMCP below 3.0 and regenerated the lockfile. Clean dependency resolution now installs one Griffe implementation, and Python 3.11 dispatch regression plus the full local CI suite pass. Python 3.12 and dashboard validation remain in progress.",
       "created_at": "2026-07-27T21:55:48.532635Z"
+    },
+    {
+      "id": "b5e9c805-6f8c-4097-bf85-a9948c2a8211",
+      "author": "ryan.porter",
+      "text": "Resolved by constraining FastMCP below 3.0 and regenerating the lockfile so Tactus and FastMCP share one compatible Griffe distribution. Clean Python 3.11 and 3.12 installs passed the dispatch regression net and full CI; lock, import, Lua, dashboard, hierarchy, confidentiality, and diff validations passed.",
+      "created_at": "2026-07-27T22:25:51.539986Z"
     }
   ],
   "created_at": "2026-07-27T21:49:22.233284Z",
-  "updated_at": "2026-07-27T21:55:48.532635Z",
-  "closed_at": null,
+  "updated_at": "2026-07-27T22:25:52.070506Z",
+  "closed_at": "2026-07-27T22:25:52.070506Z",
   "custom": {}
 }

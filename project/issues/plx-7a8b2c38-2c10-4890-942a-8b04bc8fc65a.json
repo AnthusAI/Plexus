@@ -22,10 +22,16 @@
       "author": "ryan.porter",
       "text": "Implemented and verified stricter frozen recent-feedback cohort replay in the isolated worktree. Candidate, strategy, and synthesis comparisons now fail if returned cohort membership is reordered, in addition to existing missing-provenance and membership checks. Focused specifications passed (4 tests); only existing deprecation warnings were emitted.",
       "created_at": "2026-07-27T21:14:37.427420Z"
+    },
+    {
+      "id": "5179464e-96d3-4b38-871e-0e38cf3fde8b",
+      "author": "ryan.porter",
+      "text": "Wave 1 integration landed exact ordered recent-feedback replay and regression dataset identity checks. Candidate, strategy, and synthesis comparisons fail closed when frozen cohort provenance differs. Combined focused and full supported-runtime CI passed.",
+      "created_at": "2026-07-27T22:25:44.802877Z"
     }
   ],
   "created_at": "2026-07-16T20:56:06.201654Z",
-  "updated_at": "2026-07-27T21:14:37.427420Z",
+  "updated_at": "2026-07-27T22:25:44.802877Z",
   "closed_at": null,
   "custom": {}
 }
