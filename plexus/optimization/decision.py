@@ -1,0 +1,839 @@
+"""Pure decision logic for the optimization toolchain.
+
+This module deliberately accepts and returns plain dictionaries and lists.  It
+contains no API access, persistence, model calls, or score mutations so the MCP
+and CLI surfaces can share identical, reproducible decisions.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+import hashlib
+import json
+import math
+from numbers import Real
+from typing import Any, Iterable, Mapping, Sequence
+
+
+PACKET_SCHEMA_VERSION = "optimization-decision-packet-v1"
+POLICY_PROFILE_V1: dict[str, Any] = {
+    "version": "feedback-investment-v1",
+    "timezone": "UTC",
+    "complete_days": 90,
+    "complete_weeks": 12,
+    "minimum_valid_feedback": 200,
+    "minimum_final_labels_per_reachable_class": 30,
+    "maximum_acceptable_disagreement": 0.10,
+    "wilson_confidence": 0.95,
+    "latest_weeks_for_stability": 4,
+    "maximum_disagreement_range": 0.05,
+    "maximum_ac1_range": 0.05,
+    # Low-volume weekly buckets are an explanatory warning, never a blocker.
+    "weekly_minimum_count": None,
+}
+_WILSON_Z_95 = 1.959963984540054
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return _utc(value).isoformat().replace("+00:00", "Z")
+    if isinstance(value, Mapping):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_jsonable(item) for item in value]
+    return value
+
+
+def _canonical(value: Any) -> str:
+    return json.dumps(_jsonable(value), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _parse_utc(value: str | datetime) -> datetime:
+    if isinstance(value, datetime):
+        return _utc(value)
+    normalized = value.replace("Z", "+00:00")
+    return _utc(datetime.fromisoformat(normalized))
+
+
+def _iso_z(value: datetime) -> str:
+    return _utc(value).isoformat().replace("+00:00", "Z")
+
+
+@dataclass(frozen=True)
+class OptimizationDecisionPacket:
+    """Versioned portable result envelope shared by every toolchain stage."""
+
+    account_id: str | None
+    scope: Mapping[str, Any]
+    window: Mapping[str, Any]
+    evidence: Mapping[str, Any]
+    states: Mapping[str, str]
+    primary_next_action: str
+    policy_version: str = POLICY_PROFILE_V1["version"]
+    champion_version: str | None = None
+    feedback_watermark: str | None = None
+    secondary_actions: Sequence[str] = field(default_factory=tuple)
+    blockers: Sequence[str] = field(default_factory=tuple)
+    evidence_ids: Sequence[str] = field(default_factory=tuple)
+    rationale: str = ""
+    evidence_fingerprint: str | None = None
+    stakeholder_questions: Sequence[str] = field(default_factory=tuple)
+
+    def to_dict(self) -> dict[str, Any]:
+        evidence = dict(self.evidence)
+        fingerprint = self.evidence_fingerprint or evidence_fingerprint(
+            {
+                "account_id": self.account_id,
+                "scope": self.scope,
+                "window": self.window,
+                "policy_version": self.policy_version,
+                "champion_version": self.champion_version,
+                "feedback_watermark": self.feedback_watermark,
+                "evidence": evidence,
+            }
+        )
+        coverage = {
+            "complete": bool(evidence.get("coverage_complete", evidence.get("complete", False))),
+            "failures": list(evidence.get("coverage_failures") or evidence.get("failures") or []),
+        }
+        return {
+            "version": PACKET_SCHEMA_VERSION,
+            "account_id": self.account_id,
+            "scope": _jsonable(dict(self.scope)),
+            "window": _jsonable(dict(self.window)),
+            "policy_version": self.policy_version,
+            "policy": {"version": self.policy_version},
+            "champion_version": self.champion_version,
+            "champion": self.champion_version,
+            "feedback_watermark": self.feedback_watermark,
+            "watermark": self.feedback_watermark,
+            "coverage": coverage,
+            "evidence": _jsonable(evidence),
+            "states": dict(self.states),
+            "primary_next_action": self.primary_next_action,
+            "secondary_actions": list(self.secondary_actions),
+            "actions": {"primary": self.primary_next_action, "secondary": list(self.secondary_actions)},
+            "blockers": list(self.blockers),
+            "evidence_ids": list(self.evidence_ids),
+            "rationale": self.rationale,
+            "evidence_fingerprint": fingerprint,
+            "fingerprint": fingerprint,
+            "stakeholder_questions": list(self.stakeholder_questions),
+        }
+
+
+def _packet_result(stage: str, result: Mapping[str, Any], source: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Add the common packet envelope without removing legacy stage fields."""
+    source = dict(source or {})
+    legacy = dict(result)
+    source_coverage = dict(source.get("coverage") or {})
+    complete = bool(legacy.get("coverage_complete", source_coverage.get("complete", source.get("coverage_complete", source.get("complete", False)))))
+    failures = list(legacy.get("coverage_failures") or source_coverage.get("failures") or source.get("coverage_failures") or source.get("failures") or [])
+    coverage = {**source_coverage, "complete": complete, "failures": failures}
+    guideline = str(legacy.get("guideline_state") or "inconclusive")
+    feedback_rubric = str(legacy.get("feedback_rubric_state") or "inconclusive")
+    readiness = str(legacy.get("readiness_state") or ("incomplete" if not complete else "inconclusive"))
+    post_run = str(legacy.get("post_run_state") or "inconclusive")
+    promotion = "promotion_ready" if legacy.get("promotion_ready") or post_run == "promotion_ready" else "inconclusive"
+    states = {
+        "feedback_collection": str(legacy.get("feedback_collection_state") or "inconclusive"),
+        "guideline_health": guideline,
+        "guidelines": guideline,
+        "feedback_rubric_health": feedback_rubric,
+        "feedback_rubric": feedback_rubric,
+        "optimization": readiness,
+        "readiness": readiness,
+        "post_run": post_run,
+        "promotion_readiness": promotion,
+    }
+    scope = dict(source.get("scope") or legacy.get("scope") or {})
+    if not scope:
+        for key in ("scorecard_id", "score_id"):
+            value = source.get(key, legacy.get(key))
+            if value is not None:
+                scope[key] = value
+    evidence_ids = list(legacy.get("evidence_ids") or source.get("evidence_ids") or [])
+    packet = OptimizationDecisionPacket(
+        account_id=source.get("account_id", source.get("accountId", legacy.get("account_id"))),
+        scope=scope,
+        window=dict(source.get("window") or source.get("frozen_window") or legacy.get("window") or {}),
+        evidence=legacy,
+        states=states,
+        primary_next_action=str(legacy.get("primary_next_action") or f"{stage}_complete"),
+        policy_version=str(legacy.get("policy_version") or source.get("policy_version") or POLICY_PROFILE_V1["version"]),
+        champion_version=source.get("champion_version", source.get("championVersionId", legacy.get("champion_version", legacy.get("championVersionId")))),
+        feedback_watermark=source.get("feedback_watermark", source.get("feedbackWatermark", legacy.get("feedback_watermark"))),
+        secondary_actions=list(legacy.get("secondary_actions") or source.get("secondary_actions") or []),
+        blockers=list(legacy.get("blockers") or []),
+        evidence_ids=evidence_ids,
+        rationale=str(legacy.get("rationale") or f"Deterministic {stage} decision."),
+        stakeholder_questions=list(legacy.get("stakeholder_questions") or source.get("stakeholder_questions") or []),
+    ).to_dict()
+    return {**legacy, **packet, "coverage": coverage}
+
+
+def frozen_utc_window(now: datetime | None = None, complete_days: int | None = None) -> dict[str, Any]:
+    """Return the preceding complete UTC days; the current partial day is excluded."""
+    if complete_days is None:
+        complete_days = int(POLICY_PROFILE_V1["complete_days"])
+    if complete_days <= 0:
+        raise ValueError("complete_days must be positive")
+    current = _utc(now or datetime.now(timezone.utc))
+    end = current.replace(hour=0, minute=0, second=0, microsecond=0)
+    start = end - timedelta(days=complete_days)
+    return {"start": _iso_z(start), "end": _iso_z(end), "timezone": "UTC", "complete_days": complete_days}
+
+
+def wilson_interval(successes: int | float, total: int | float, confidence: float = 0.95) -> tuple[float, float]:
+    """Two-sided Wilson score interval, including exact zero and one endpoints."""
+    if total < 0 or successes < 0 or successes > total:
+        raise ValueError("successes must be between zero and total")
+    if total == 0:
+        return (0.0, 1.0)
+    if confidence != 0.95:
+        raise ValueError("only the policy's 95% Wilson interval is supported")
+    n = float(total)
+    p = float(successes) / n
+    z2 = _WILSON_Z_95 * _WILSON_Z_95
+    center = (p + z2 / (2 * n)) / (1 + z2 / n)
+    margin = _WILSON_Z_95 * math.sqrt((p * (1 - p) + z2 / (4 * n)) / n) / (1 + z2 / n)
+    return (max(0.0, center - margin), min(1.0, center + margin))
+
+
+def weekly_buckets(
+    timestamps: Iterable[str | datetime], *, window_end: str | datetime, weeks: int | None = None
+) -> list[dict[str, Any]]:
+    """Bucket timestamps into complete Monday-based UTC weeks ending at window_end."""
+    if weeks is None:
+        weeks = int(POLICY_PROFILE_V1["complete_weeks"])
+    if weeks <= 0:
+        raise ValueError("weeks must be positive")
+    end = _parse_utc(window_end).replace(hour=0, minute=0, second=0, microsecond=0)
+    # A frozen window normally ends on a Monday.  If it does not, exclude its
+    # partial week by moving back to the most recent Monday.
+    end -= timedelta(days=end.weekday())
+    starts = [end - timedelta(days=7 * offset) for offset in range(weeks, 0, -1)]
+    parsed = [_parse_utc(value) for value in timestamps]
+    buckets: list[dict[str, Any]] = []
+    for start in starts:
+        bucket_end = start + timedelta(days=7)
+        count = sum(start <= timestamp < bucket_end for timestamp in parsed)
+        buckets.append(
+            {
+                "start": _iso_z(start),
+                "end": _iso_z(bucket_end),
+                "count": count,
+                # This is informational only. It deliberately is not a policy
+                # gate; the meaningful per-class minimum is assessed separately.
+                "low_volume_warning": count < int(POLICY_PROFILE_V1["minimum_final_labels_per_reachable_class"]),
+            }
+        )
+    return buckets
+
+
+def _disagreement(score: Mapping[str, Any]) -> tuple[int, float, float]:
+    if score.get("valid_feedback_count") is not None:
+        valid_count = int(score.get("valid_feedback_count") or 0)
+    else:
+        total = int(score.get("total_items", score.get("totalItems", 0)) or 0)
+        excluded = sum(
+            int(score.get(key) or 0)
+            for key in (
+                "invalid_feedback_count", "invalid_count", "invalid_feedback_items", "invalid_items",
+                "incomplete_label_pair_count", "incomplete_label_pairs", "incomplete_initial_final_pairs", "incomplete_pairs",
+            )
+        )
+        valid_count = max(0, total - excluded)
+    disagreement_count = score.get("reviewed_disagreements", score.get("disagreement_count", score.get("disagreements")))
+    rate = score.get("disagreement_rate")
+    if disagreement_count is None and rate is not None:
+        disagreement_count = valid_count * float(rate)
+    disagreement_count = float(disagreement_count or 0)
+    if valid_count and rate is None:
+        rate = disagreement_count / valid_count
+    rate = float(rate or 0)
+    return valid_count, disagreement_count, rate
+
+
+def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str, Any] | None = None, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Rank fully analyzed scores without silently treating partial enumeration as exact."""
+    coverage = dict(coverage or {})
+    # Absence of coverage evidence is not evidence of exhaustive enumeration.
+    complete = bool(coverage.get("complete", coverage.get("coverage_complete", False)))
+    ranked: list[dict[str, Any]] = []
+    unranked: list[dict[str, Any]] = []
+    for source in scores:
+        score = dict(source)
+        enabled = score.get("enabled", True) is not False and score.get("isDisabled") is not True
+        champion = score.get("champion_version") or score.get("champion_id") or score.get("championVersionId")
+        valid_count, disagreements, rate = _disagreement(score)
+        row = {
+            **score,
+            "scorecard_id": score.get("scorecard_id", score.get("scorecardId")),
+            "score_id": score.get("score_id", score.get("scoreId", score.get("id"))),
+            "scorecard_name": score.get("scorecard_name", score.get("scorecardName")),
+            "score_name": score.get("score_name", score.get("scoreName")),
+            "champion_version": champion,
+            "valid_feedback_count": valid_count,
+            "reviewed_disagreements": disagreements,
+            "disagreement_rate": rate,
+            "reviewed_error_opportunity": valid_count * rate,
+        }
+        if not enabled:
+            row["unranked_reason"] = "disabled"
+            unranked.append(row)
+        elif not champion:
+            row["unranked_reason"] = "missing_champion"
+            unranked.append(row)
+        else:
+            ranked.append(row)
+    ranked.sort(
+        key=lambda row: (
+            -float(row["reviewed_error_opportunity"]),
+            -int(row["valid_feedback_count"]),
+            str(row.get("scorecard_name") or ""),
+            str(row.get("score_name") or ""),
+            str(row.get("score_id") or ""),
+        )
+    )
+    unranked.sort(key=lambda row: (str(row["unranked_reason"]), str(row.get("score_id") or "")))
+    result = {
+        "coverage_complete": complete,
+        "coverage_failures": list(coverage.get("failures") or coverage.get("coverage_failures") or []),
+        "exact": complete,
+        "total_population": len(scores),
+        "total_ranked": len(ranked),
+        "ranked": ranked,
+        "unranked": unranked,
+    }
+    return _packet_result("rank", result, {**dict(context or {}), "coverage": coverage})
+
+
+rank_opportunities = rank_portfolio
+
+
+def normalize_guideline_state(raw: Any) -> str:
+    """Normalize mechanical/semantic adapter results into the public state set."""
+    if raw is None or raw is False or raw == "":
+        return "missing"
+    if isinstance(raw, Mapping):
+        if raw.get("missing") or raw.get("present") is False:
+            return "missing"
+        if raw.get("valid") is False or raw.get("syntax_valid") is False:
+            return "invalid"
+        if raw.get("code_conflict") or raw.get("potential_code_conflict"):
+            return "potential_code_conflict"
+        if raw.get("complete") is False or raw.get("inconclusive"):
+            return "inconclusive"
+        return "consistent"
+    value = str(raw).strip().lower().replace("-", "_").replace(" ", "_")
+    if value in {"missing", "none", "absent"}:
+        return "missing"
+    if value in {"invalid", "syntax_error", "unreadable"}:
+        return "invalid"
+    if value in {"code_conflict", "potential_code_conflict", "conflict"}:
+        return "potential_code_conflict"
+    if value in {"inconclusive", "unknown", "pending"}:
+        return "inconclusive"
+    return "consistent"
+
+
+def normalize_structural_state(raw: Any) -> str:
+    """Normalize champion/configuration/terminal-class checks into one state."""
+    if raw is None:
+        return "consistent"
+    if isinstance(raw, Mapping):
+        if raw.get("champion_present") is False or raw.get("missing_champion"):
+            return "missing_champion"
+        if raw.get("configuration_readable") is False or raw.get("config_readable") is False:
+            return "unreadable_configuration"
+        if raw.get("terminal_classes_resolved") is False or raw.get("unresolved_terminal_classes"):
+            return "unresolved_terminal_classes"
+        if raw.get("complete") is False or raw.get("inconclusive"):
+            return "inconclusive"
+        return "consistent"
+    value = str(raw).strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "missing_champion": "missing_champion",
+        "unreadable": "unreadable_configuration",
+        "unreadable_configuration": "unreadable_configuration",
+        "unresolved_terminal_classes": "unresolved_terminal_classes",
+        "invalid": "invalid",
+        "inconclusive": "inconclusive",
+        "unknown": "inconclusive",
+    }
+    return aliases.get(value, "consistent")
+
+
+def normalize_diagnosis(diagnosis: Mapping[str, Any] | None, *, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Normalize asynchronous semantic diagnosis without inventing a model decision."""
+    diagnosis = {**dict(context or {}), **dict(diagnosis or {})}
+    guideline_state = normalize_guideline_state(diagnosis.get("guideline_state", diagnosis.get("guidelines")))
+    feedback_rubric_state = str(diagnosis.get("feedback_rubric_state") or "inconclusive")
+    if diagnosis.get("feedback_contradiction") or diagnosis.get("feedback_inconsistent"):
+        feedback_rubric_state = "inconsistent"
+    elif diagnosis.get("feedback_rubric_consistent") is True:
+        feedback_rubric_state = "consistent"
+    elif feedback_rubric_state not in {"consistent", "inconsistent", "inconclusive"}:
+        feedback_rubric_state = "inconclusive"
+    questions = list(diagnosis.get("stakeholder_questions") or [])
+    blockers = list(diagnosis.get("blockers") or [])
+    assessment = (
+        diagnosis.get("assessment")
+        if isinstance(diagnosis.get("assessment"), Mapping)
+        else diagnosis.get("assessment_packet")
+        if isinstance(diagnosis.get("assessment_packet"), Mapping)
+        else {}
+    )
+    assessment_states = (
+        assessment.get("states")
+        if isinstance(assessment.get("states"), Mapping)
+        else {}
+    )
+    assessment_readiness = (
+        assessment.get("readiness_state")
+        or assessment_states.get("readiness")
+        or assessment_states.get("optimization")
+    )
+    complete = bool(diagnosis.get("complete", True))
+    if not complete:
+        readiness_state = "incomplete"
+        primary_next_action = "complete_diagnosis"
+    elif guideline_state in {"missing", "invalid", "potential_code_conflict"}:
+        readiness_state = "repair_required"
+        primary_next_action = "repair_guidelines"
+    elif questions:
+        readiness_state = "stakeholder_clarification_required"
+        primary_next_action = "resolve_stakeholder_questions"
+    elif feedback_rubric_state == "inconsistent":
+        readiness_state = "feedback_curation_review"
+        primary_next_action = "review_feedback_curation"
+    elif blockers:
+        readiness_state = "incomplete"
+        primary_next_action = "resolve_diagnosis_blockers"
+    elif assessment_readiness == "ready_to_optimize":
+        readiness_state = "ready_to_optimize"
+        primary_next_action = "request_optimization_approval"
+    else:
+        readiness_state = str(assessment_readiness or "inconclusive")
+        primary_next_action = str(
+            assessment.get("primary_next_action") or "review_diagnosis"
+        )
+    result = {
+        "guideline_state": guideline_state,
+        "feedback_rubric_state": feedback_rubric_state,
+        "readiness_state": readiness_state,
+        "primary_next_action": primary_next_action,
+        "stakeholder_questions": questions,
+        "blockers": blockers,
+        "complete": complete,
+        "evidence_ids": list(diagnosis.get("evidence_ids") or []),
+    }
+    return _packet_result("diagnose", result, diagnosis)
+
+
+def _range(values: Sequence[float]) -> float | None:
+    return max(values) - min(values) if values else None
+
+
+def assess_investment(evidence: Mapping[str, Any], *, policy: Mapping[str, Any] | None = None, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Apply feedback-investment-v1 gates in documented safety-first order.
+
+    Ordering is: coverage, mechanical structure, guideline/semantic defects,
+    stakeholder questions, feedback curation, count, class reachability,
+    stability, then Wilson-backed disagreement outcome.
+    """
+    policy = {**POLICY_PROFILE_V1, **dict(policy or {})}
+    data = {**dict(context or {}), **dict(evidence)}
+    blockers: list[str] = []
+    coverage_complete = bool(data.get("coverage_complete", data.get("complete", False)))
+    if not coverage_complete:
+        blockers.extend(list(data.get("coverage_failures") or data.get("failures") or ["coverage is incomplete"]))
+        return _assessment("incomplete", "inconclusive", blockers, "repair_coverage", data, policy)
+
+    structural = normalize_structural_state(data.get("structural_state"))
+    if data.get("configuration_readable", data.get("config_readable", True)) is False:
+        structural = "unreadable_configuration"
+    if data.get("terminal_classes_resolved", True) is False:
+        structural = "unresolved_terminal_classes"
+    if not data.get("champion_version") or structural in {"missing_champion", "unreadable_configuration", "unresolved_terminal_classes", "invalid"}:
+        if not data.get("champion_version"):
+            blockers.append("missing champion")
+        if structural:
+            blockers.append(str(structural).replace("_", " "))
+        blockers.extend(data.get("structural_blockers") or [])
+        return _assessment("repair_required", "pause_pending_repair_or_clarification", blockers, "repair_structure", data, policy)
+
+    guideline_state = normalize_guideline_state(data.get("guideline_state"))
+    if guideline_state in {"missing", "invalid", "potential_code_conflict"}:
+        blockers.append(f"guideline state: {guideline_state}")
+        return _assessment("repair_required", "pause_pending_repair_or_clarification", blockers, "repair_guidelines", data, policy, guideline_state)
+
+    diagnosis = normalize_diagnosis(data.get("diagnosis")) if data.get("diagnosis") is not None else None
+    questions = list(data.get("stakeholder_questions") or (diagnosis or {}).get("stakeholder_questions") or [])
+    if questions:
+        return _assessment("stakeholder_clarification_required", "pause_pending_repair_or_clarification", questions, "resolve_stakeholder_questions", data, policy, guideline_state)
+    if (diagnosis or {}).get("feedback_rubric_state") == "inconsistent" or data.get("feedback_inconsistent"):
+        return _assessment("feedback_curation_review", "pause_pending_repair_or_clarification", ["feedback and rubric evidence conflict"], "review_feedback_curation", data, policy, guideline_state)
+
+    valid_count, disagreement_count, _ = _disagreement(data)
+    if valid_count < int(policy["minimum_valid_feedback"]):
+        return _assessment("insufficient_evidence", "continue_broad_collection", [f"valid feedback count {valid_count} is below {policy['minimum_valid_feedback']}"], "collect_broad_feedback", data, policy, guideline_state)
+
+    classes = list(data.get("reachable_classes") or [])
+    class_counts = dict(data.get("final_label_counts") or data.get("reachable_class_counts") or {})
+    deficient = [str(label) for label in classes if int(class_counts.get(label, 0) or 0) < int(policy["minimum_final_labels_per_reachable_class"])]
+    if deficient:
+        return _assessment("insufficient_evidence", "collect_targeted_classes", [f"reachable class below minimum: {label}" for label in deficient], "collect_targeted_classes", data, policy, guideline_state)
+
+    lower, upper = wilson_interval(disagreement_count, valid_count)
+    threshold = float(policy["maximum_acceptable_disagreement"])
+    # Once the lower confidence bound is above the acceptable rate, more broad
+    # collection only reconfirms an established problem. Weekly stability is a
+    # gate for reducing collection, not for deciding that repair/optimization
+    # is already warranted.
+    if lower > threshold:
+        return _assessment(
+            "ready_to_optimize",
+            "pause_pending_repair_or_clarification",
+            [],
+            "run_approved_optimization",
+            data,
+            policy,
+            guideline_state,
+            wilson=(lower, upper),
+        )
+
+    latest = int(policy["latest_weeks_for_stability"])
+    raw_weekly_buckets = [
+        dict(bucket)
+        for bucket in (data.get("weekly_buckets") or [])[-latest:]
+        if isinstance(bucket, Mapping)
+    ]
+    if raw_weekly_buckets:
+        weekly_disagreement = [
+            float(bucket["disagreement_rate"])
+            for bucket in raw_weekly_buckets
+            if bucket.get("disagreement_rate") is not None
+        ]
+        weekly_ac1 = [
+            float(bucket["ac1"])
+            for bucket in raw_weekly_buckets
+            if bucket.get("ac1") is not None
+        ]
+        weekly_counts = [
+            int(bucket.get("valid_feedback_count", bucket.get("count", 0)) or 0)
+            for bucket in raw_weekly_buckets
+        ]
+    else:
+        weekly_disagreement = [float(value) for value in (data.get("weekly_disagreement_rates") or [])[-latest:]]
+        weekly_ac1 = [float(value) for value in (data.get("weekly_ac1_values") or [])[-latest:]]
+        weekly_counts = list(data.get("weekly_bucket_counts") or [])[-latest:]
+    stability = {
+        "weekly_disagreement_range": _range(weekly_disagreement),
+        "weekly_ac1_range": _range(weekly_ac1),
+        "weekly_bucket_counts": weekly_counts,
+        "weekly_low_volume_warning": any(
+            int(value or 0) < int(policy["minimum_final_labels_per_reachable_class"])
+            for value in weekly_counts
+        ),
+    }
+    unstable = (
+        (bool(raw_weekly_buckets) and len(raw_weekly_buckets) < latest)
+        or len(weekly_disagreement) < latest
+        or len(weekly_ac1) < latest
+        or (stability["weekly_disagreement_range"] or 0) > float(policy["maximum_disagreement_range"])
+        or (stability["weekly_ac1_range"] or 0) > float(policy["maximum_ac1_range"])
+    )
+    if unstable:
+        return _assessment("insufficient_evidence", "continue_broad_collection", ["recent weekly metrics are insufficient or unstable"], "collect_stable_feedback", data, policy, guideline_state, stability)
+
+    # Equality is safe: <= threshold means the acceptable side of a boundary.
+    if upper <= threshold:
+        return _assessment("monitoring_candidate", "reduce_to_periodic_monitoring", [], "monitor_periodically", data, policy, guideline_state, stability, (lower, upper))
+    return _assessment("insufficient_evidence", "continue_broad_collection", ["Wilson interval crosses acceptable disagreement threshold"], "collect_more_feedback", data, policy, guideline_state, stability, (lower, upper))
+
+
+def _assessment(readiness: str, collection: str, blockers: Sequence[str], action: str, data: Mapping[str, Any], policy: Mapping[str, Any], guideline_state: str = "inconclusive", stability: Mapping[str, Any] | None = None, wilson: tuple[float, float] | None = None) -> dict[str, Any]:
+    result = {
+        "policy_version": policy["version"],
+        "readiness_state": readiness,
+        "feedback_collection_state": collection,
+        "guideline_state": guideline_state,
+        "feedback_rubric_state": normalize_diagnosis(data.get("diagnosis")).get("feedback_rubric_state") if data.get("diagnosis") else "inconclusive",
+        "primary_next_action": action,
+        "blockers": list(blockers),
+        "coverage_complete": bool(data.get("coverage_complete", data.get("complete", False))),
+        "class_counts": dict(data.get("final_label_counts") or data.get("reachable_class_counts") or {}),
+        "weekly_stability": dict(stability or {}),
+    }
+    if wilson is not None:
+        result["wilson_95"] = {"lower": wilson[0], "upper": wilson[1]}
+    return _packet_result("assess", result, data)
+
+
+def evidence_fingerprint(evidence: Mapping[str, Any]) -> str:
+    """Hash canonical evidence so a caller can reject stale assessments."""
+    return hashlib.sha256(_canonical(evidence).encode("utf-8")).hexdigest()
+
+
+def validate_run_limits(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate public optimizer-dispatch limits once for every transport.
+
+    Cost may be a positive real number. Sample and iteration caps are positive
+    integers, and concurrency is an explicitly bounded integer from one to
+    five. Missing values are never defaulted.
+    """
+    data = dict(payload)
+    invalid: list[str] = []
+    cost = data.get("max_cost_usd")
+    if isinstance(cost, bool) or not isinstance(cost, Real) or not math.isfinite(float(cost)) or float(cost) <= 0:
+        invalid.append("max_cost_usd")
+    for field in ("max_samples", "max_iterations"):
+        value = data.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            invalid.append(field)
+    concurrency = data.get("max_concurrency")
+    if isinstance(concurrency, bool) or not isinstance(concurrency, int) or not 1 <= concurrency <= 5:
+        invalid.append("max_concurrency")
+    return {
+        "valid": not invalid,
+        "invalid_fields": invalid,
+        "limits": {
+            "max_cost_usd": cost,
+            "max_samples": data.get("max_samples"),
+            "max_iterations": data.get("max_iterations"),
+            "max_concurrency": concurrency,
+        },
+    }
+
+
+def _validate_ready_targets(targets: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return explicit provenance failures for public optimizer dispatch."""
+    rejected: list[dict[str, Any]] = []
+    for target_source in targets:
+        target = dict(target_source)
+        if not target.get("scorecard_id") or not target.get("score_id"):
+            rejected.append({"target": target, "reason": "exact_target_identifiers_required"})
+            continue
+        assessment = target.get("assessment") if isinstance(target.get("assessment"), Mapping) else {}
+        complete = target.get("assessment_complete", assessment.get("complete"))
+        readiness = target.get("readiness_state", assessment.get("readiness_state"))
+        if complete is not True or readiness != "ready_to_optimize":
+            rejected.append({"target": target, "reason": "assessment_not_ready"})
+            continue
+        if not target.get("champion_version"):
+            rejected.append({"target": target, "reason": "champion_version_required"})
+            continue
+        if not target.get("feedback_watermark"):
+            rejected.append({"target": target, "reason": "feedback_watermark_required"})
+            continue
+        if not target.get("assessment_fingerprint"):
+            rejected.append({"target": target, "reason": "assessment_fingerprint_required"})
+    return rejected
+
+
+def validate_public_run_dispatch(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Apply limits and assessment provenance before lower-level batch checks."""
+    data = dict(payload)
+    targets = list(data.get("targets") or [])
+    limits = validate_run_limits(data)
+    if not limits["valid"]:
+        result = {
+            "accepted": False,
+            "accepted_targets": [],
+            "rejected": [{"reason": "invalid_run_limits", "invalid_fields": limits["invalid_fields"]}],
+            "run_limits": limits,
+            "primary_next_action": "provide_valid_run_limits",
+            "blockers": ["invalid_run_limits"],
+        }
+        return _packet_result("run", result, data)
+    provenance_rejections = _validate_ready_targets(targets)
+    if provenance_rejections:
+        result = {
+            "accepted": False,
+            "accepted_targets": [],
+            "rejected": provenance_rejections,
+            "run_limits": limits,
+            "primary_next_action": "repair_target_assessment_provenance",
+            "blockers": [str(item["reason"]) for item in provenance_rejections],
+        }
+        return _packet_result("run", result, data)
+    result = validate_approved_batch(
+        targets,
+        approved=bool(data.get("approved")),
+        current_fingerprints=data.get("current_fingerprints"),
+        context=data,
+    )
+    result["run_limits"] = limits
+    return result
+
+
+def validate_approved_batch(targets: Sequence[Mapping[str, Any]], *, approved: bool, current_fingerprints: Mapping[str, str] | None = None, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Validate an explicit <=5 target approval and reject stale targets individually."""
+    targets = list(targets)
+    rejected: list[dict[str, Any]] = []
+    source = {**dict(context or {}), "targets": targets, "approved": approved}
+    if not approved:
+        return _packet_result("run", {"accepted": False, "accepted_targets": [], "rejected": [{"reason": "approval_required"}], "primary_next_action": "obtain_batch_approval", "blockers": ["approval_required"]}, source)
+    if not targets:
+        return _packet_result("run", {"accepted": False, "accepted_targets": [], "rejected": [{"reason": "targets_required"}], "primary_next_action": "select_exact_targets", "blockers": ["targets_required"]}, source)
+    if len(targets) > 5:
+        return _packet_result("run", {"accepted": False, "accepted_targets": [], "rejected": [{"reason": "maximum_five_targets"}], "primary_next_action": "reduce_approved_batch", "blockers": ["maximum_five_targets"]}, source)
+    current_fingerprints = dict(current_fingerprints or {})
+    accepted: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for target_source in targets:
+        target = dict(target_source)
+        scorecard_id, score_id = str(target.get("scorecard_id") or ""), str(target.get("score_id") or "")
+        key = (scorecard_id, score_id)
+        printable = f"{scorecard_id}:{score_id}"
+        if not scorecard_id or not score_id:
+            rejected.append({"target": target, "reason": "exact_target_identifiers_required"})
+        elif key in seen:
+            rejected.append({"target": target, "reason": "duplicate_target"})
+        elif printable in current_fingerprints and target.get("assessment_fingerprint") != current_fingerprints[printable]:
+            rejected.append({"target": target, "reason": "stale_assessment"})
+        else:
+            accepted.append(target)
+        seen.add(key)
+    result = {
+        "accepted": not rejected,
+        "accepted_targets": accepted,
+        "rejected": rejected,
+        "primary_next_action": "dispatch_approved_targets" if not rejected else "resolve_batch_rejections",
+        "blockers": [str(item["reason"]) for item in rejected],
+    }
+    return _packet_result("run", result, source)
+
+
+def classify_post_run_review(evidence: Mapping[str, Any], *, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Classify optimizer evidence; it never promotes anything itself."""
+    data = {**dict(context or {}), **dict(evidence)}
+    if not data.get("terminal") or data.get("failed") or data.get("incomplete"):
+        return _packet_result("review", {"post_run_state": "failed_or_incomplete", "promotion_ready": False, "primary_next_action": "complete_or_repair_evaluation"}, data)
+    if data.get("stakeholder_questions") or data.get("stakeholder_decision_required"):
+        return _packet_result("review", {"post_run_state": "stakeholder_decision_required", "promotion_ready": False, "primary_next_action": "resolve_stakeholder_questions", "stakeholder_questions": list(data.get("stakeholder_questions") or [])}, data)
+    if data.get("prediction_collapse") or data.get("measurable_safe_improvement") is False:
+        return _packet_result("review", {"post_run_state": "no_safe_improvement", "promotion_ready": False, "primary_next_action": "retain_champion"}, data)
+    required = (
+        "matched_recent_evaluation",
+        "historical_regression_evidence",
+        "class_specific_metrics",
+        "rca_complete",
+        "artifacts_complete",
+        "measurable_safe_improvement",
+    )
+    missing = [name for name in required if not data.get(name)]
+    if not missing:
+        return _packet_result("review", {"post_run_state": "promotion_ready", "promotion_ready": True, "primary_next_action": "request_promotion_approval", "missing_evidence": []}, data)
+    return _packet_result("review", {"post_run_state": "continue_optimization", "promotion_ready": False, "primary_next_action": "continue_optimization", "missing_evidence": missing, "blockers": missing}, data)
+
+
+review_optimizer_result = classify_post_run_review
+
+
+def summarize_packets(packets: Sequence[Mapping[str, Any]], *, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Produce a compact, deterministic portfolio summary from decision packets."""
+    packets = [dict(packet) for packet in packets]
+    questions: list[str] = []
+    failures: list[str] = []
+    actions: list[str] = []
+    collection_recommendations: list[str] = []
+    per_score_outcomes: list[dict[str, Any]] = []
+    approvals = 0
+    for packet in packets:
+        states = dict(packet.get("states") or {})
+        action = packet.get("primary_next_action")
+        if action:
+            actions.append(str(action))
+        questions.extend(str(item) for item in packet.get("stakeholder_questions") or [])
+        failures.extend(str(item) for item in packet.get("blockers") or [])
+        collection = states.get("feedback_collection") or packet.get("feedback_collection_state")
+        if collection:
+            collection_recommendations.append(str(collection))
+        post_run = states.get("post_run") or packet.get("post_run_state")
+        if post_run == "promotion_ready" or action == "request_promotion_approval":
+            approvals += 1
+        scope = dict(packet.get("scope") or {})
+        scorecard_id = scope.get("scorecard_id", packet.get("scorecard_id"))
+        score_id = scope.get("score_id", packet.get("score_id"))
+        if not scope:
+            scope = {key: value for key, value in (("scorecard_id", scorecard_id), ("score_id", score_id)) if value is not None}
+        outcome = post_run if post_run and post_run != "inconclusive" else (states.get("optimization") or states.get("readiness") or packet.get("readiness_state") or "inconclusive")
+        packet_failures = _unique(
+            [str(item) for item in packet.get("blockers") or []]
+            + [str(item) for item in (packet.get("coverage") or {}).get("failures") or []]
+            + [str(item) for item in packet.get("coverage_failures") or []]
+        )
+        per_score_outcomes.append(
+            {
+                "scope": scope,
+                "scorecard_id": scorecard_id,
+                "score_id": score_id,
+                "states": states,
+                "outcome": outcome,
+                "blockers": list(packet.get("blockers") or []),
+                "collection_recommendation": collection,
+                "stakeholder_questions": list(packet.get("stakeholder_questions") or []),
+                "approval_request": post_run == "promotion_ready" or action == "request_promotion_approval",
+                "failures": packet_failures,
+                "next_action": action,
+            }
+        )
+    result = {
+        "packet_count": len(packets),
+        "executive_update": f"{len(packets)} decision packet(s); {approvals} promotion approval request(s).",
+        "promotion_approval_requests": approvals,
+        "stakeholder_questions": _unique(questions),
+        "failures": _unique(failures),
+        "next_actions": _unique(actions),
+        "collection_policy_recommendations": _unique(collection_recommendations),
+        "per_score_outcomes": per_score_outcomes,
+    }
+    return _packet_result("summary", result, {**dict(context or {}), "packets": packets})
+
+
+def _unique(values: Iterable[str]) -> list[str]:
+    return list(dict.fromkeys(values))
+
+
+def dispatch_optimization_operation(operation: str, payload: Mapping[str, Any], **dependencies: Any) -> dict[str, Any]:
+    """Route transport payloads to pure operations without accessing services.
+
+    Runtime adapters own pagination, semantic jobs, persistence, and optimizer
+    dispatch. This router intentionally handles only deterministic decisions.
+    """
+    del dependencies  # Reserved for adapters; pure decisions need no services.
+    data = dict(payload)
+    normalized = operation.removeprefix("optimization.").lower()
+    if normalized == "rank":
+        return rank_portfolio(data.get("scores") or [], coverage=data.get("coverage"), context=data)
+    if normalized == "assess":
+        return assess_investment(data.get("evidence") or data, policy=data.get("policy"), context=data)
+    if normalized == "diagnose":
+        return normalize_diagnosis(data.get("diagnosis") or data, context=data)
+    if normalized == "run":
+        return validate_public_run_dispatch(data)
+    if normalized == "review":
+        return classify_post_run_review(data.get("evidence") or data, context=data)
+    if normalized == "summary":
+        return summarize_packets(data.get("packets") or [], context=data)
+    if normalized in {"validate", "validate_batch"}:
+        return validate_approved_batch(
+            data.get("targets") or [],
+            approved=bool(data.get("approved")),
+            current_fingerprints=data.get("current_fingerprints"),
+            context=data,
+        )
+    raise ValueError(f"Unsupported optimization operation in pure context: {operation}")
+
+
+run_operation = dispatch_optimization_operation

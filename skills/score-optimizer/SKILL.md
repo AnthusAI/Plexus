@@ -1,6 +1,6 @@
 ---
 name: score-optimizer
-description: Run, debug, and steer the Plexus feedback-alignment optimizer from the direct CLI, including contradiction analysis, SME rubric questions, and approval-gated feedback invalidation.
+description: Rank feedback-driven optimization opportunities, assess and diagnose score readiness, run or steer the Plexus feedback-alignment optimizer, review promotion evidence, and report feedback-investment recommendations. Use for portfolio triage, diminishing-returns analysis, rubric questions, optimizer procedures, and approval-gated score improvement work.
 tags:
   - score-workflow
   - optimizer
@@ -106,6 +106,18 @@ detect class-specific regression, policy changes, and production drift. When
 the evidence is insufficient to choose a collection policy, state exactly what
 coverage is missing and recommend the smallest targeted collection that would
 resolve it.
+
+## Optimization Decision Toolchain
+
+Use the shared `plexus.optimization.*` workflow before composing portfolio
+triage, readiness, launch, and reporting steps by hand. Read
+[references/optimization-decision-toolchain.md](references/optimization-decision-toolchain.md)
+for the API sequence, decision states, evidence contract, and approval gates.
+
+Keep ranking, feedback-investment advice, optimization readiness, and promotion
+readiness as separate signals. A score can need continued feedback collection
+and still be ready to optimize, or have strong alignment while remaining
+blocked by missing or contradictory rubric evidence.
 
 ## Three-Phase Rubric-Memory SOP
 

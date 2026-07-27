@@ -1180,6 +1180,26 @@ class OptimizerResultsService:
         winning_feedback_metrics = raw_best.get("winning_feedback_metrics") or {}
         winning_accuracy_metrics = raw_best.get("winning_accuracy_metrics") or {}
         raw_status = (manifest.get("procedure") or {}).get("status")
+        end_of_run_report = raw_summary.get("end_of_run_report")
+        report_evidence = (
+            end_of_run_report.get("evidence")
+            if isinstance(end_of_run_report, dict)
+            and isinstance(end_of_run_report.get("evidence"), dict)
+            else {}
+        )
+        artifacts_complete = bool(
+            artifact_pointer.get("manifest")
+            and artifact_pointer.get("events")
+            and artifact_pointer.get("runtime_log")
+        )
+        rca_complete = bool(
+            isinstance(end_of_run_report, dict)
+            and isinstance(end_of_run_report.get("lab_report"), dict)
+            and all(
+                key in report_evidence
+                for key in ("divergence_summary", "rca_evolution", "residual_errors")
+            )
+        )
         stop_reason = raw_summary.get("stop_reason")
         effective_status = raw_status
         if stop_reason and str(raw_status or "").upper() == "RUNNING":
@@ -1224,6 +1244,10 @@ class OptimizerResultsService:
             },
             "cycles": cycles,
             "artifact_pointer": artifact_pointer,
+            "review_artifacts": {
+                "artifacts_complete": artifacts_complete,
+                "rca_complete": rca_complete,
+            },
         }
         bucket_name = resolve_task_output_attachment_bucket_name()
         if (include_runtime_log or include_events) and not bucket_name:

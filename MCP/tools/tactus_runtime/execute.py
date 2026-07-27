@@ -659,6 +659,12 @@ HELPER_BINDINGS: tuple[tuple[str, str, str], ...] = (
     ("skills_list", "skills", "list"),
     ("skills_get", "skills", "get"),
     ("guidelines_validate", "guidelines", "validate"),
+    ("optimization_rank", "optimization", "rank"),
+    ("optimization_assess", "optimization", "assess"),
+    ("optimization_diagnose", "optimization", "diagnose"),
+    ("optimization_run", "optimization", "run"),
+    ("optimization_review", "optimization", "review"),
+    ("optimization_summary", "optimization", "summary"),
     ("api_list", "api", "list"),
     ("model_frontier_plan", "model_frontier", "plan"),
     ("model_frontier_build_result_row", "model_frontier", "build_result_row"),
@@ -848,6 +854,15 @@ RUNTIME_METHOD_SPECS: dict[tuple[str, str], RuntimeMethodSpec] = {
     ("model_frontier", "build_result_row"): _method_spec("_call_model_frontier", planning_allowed=True),
     ("model_frontier", "finalize"): _method_spec("_call_model_frontier", planning_allowed=False),
     ("scorecard_retarget", "plan_score"): _method_spec("_call_scorecard_retarget", planning_allowed=True),
+    # The decision service owns policy and packet construction.  The runtime
+    # only exposes its methods, supplies existing Plexus capabilities, and
+    # blocks optimizer dispatch in Console planning mode.
+    ("optimization", "rank"): _method_spec("_call_optimization", planning_allowed=True),
+    ("optimization", "assess"): _method_spec("_call_optimization", planning_allowed=True),
+    ("optimization", "diagnose"): _method_spec("_call_optimization", planning_allowed=True),
+    ("optimization", "run"): _method_spec("_call_optimization", planning_allowed=False),
+    ("optimization", "review"): _method_spec("_call_optimization", planning_allowed=True),
+    ("optimization", "summary"): _method_spec("_call_optimization", planning_allowed=True),
 }
 
 
@@ -932,7 +947,14 @@ def _default_scorecards_list(args: dict[str, Any]) -> Any:
     next_token_arg = f', nextToken: "{next_token}"' if next_token else ""
     scorecard_fields = "id name key description externalId createdAt updatedAt"
     if include_scores:
-        scorecard_fields += " sections { items { scores { items { id name } } } }"
+        # Portfolio ranking consumes these fields directly from the exhaustive
+        # inventory.  Do not re-resolve identifiers per score just to learn
+        # whether the score is eligible for ranking.
+        scorecard_fields += (
+            " sections { items { scores { items { "
+            "id name championVersionId isDisabled "
+            "} } } }"
+        )
     query = (
         "query ListScorecards { "
         f"listScorecards(filter: {{ {filter_str} }}, limit: {fetch_limit}{next_token_arg}) {{ "
@@ -2176,6 +2198,8 @@ def _load_feedback_alignment_window(
     *,
     account_id: str,
     days: int,
+    window_start: str | None = None,
+    window_end: str | None = None,
 ) -> list[dict[str, Any]]:
     """Load one account-scoped feedback window for bounded portfolio triage."""
     from datetime import datetime, timedelta, timezone
@@ -2200,13 +2224,22 @@ def _load_feedback_alignment_window(
                 initialAnswerValue
                 finalAnswerValue
                 isInvalid
+                editedAt
             }
             nextToken
         }
     }
     """
-    end_time = datetime.now(timezone.utc) + timedelta(minutes=5)
-    start_time = end_time - timedelta(days=days, minutes=5)
+    def _parse_window_time(value: str | None) -> datetime | None:
+        if not value:
+            return None
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+
+    end_time = _parse_window_time(window_end)
+    start_time = _parse_window_time(window_start)
+    if end_time is None or start_time is None:
+        end_time = datetime.now(timezone.utc) + timedelta(minutes=5)
+        start_time = end_time - timedelta(days=days, minutes=5)
     variables = {
         "accountId": account_id,
         "startTime": start_time.isoformat().replace("+00:00", "Z"),
@@ -2400,6 +2433,8 @@ def _default_feedback_alignment_batch(
             portfolio_client,
             account_id=portfolio_account_id,
             days=int(float(args.get("days", 7))),
+            window_start=args.get("window_start"),
+            window_end=args.get("window_end"),
         )
 
         def analyze_scorecard(identifier: str) -> dict[str, Any]:
@@ -2546,12 +2581,22 @@ def _default_feedback_alignment_batch(
         all_scores = [s for s in all_scores if s["name"] not in exclude_scores]
 
     prefetched_by_score: dict[str, list[Any]] | None = None
+    prefetched_timestamps_by_score: dict[str, list[str]] = {}
     if _prefetched_feedback_items is not None:
         from types import SimpleNamespace
 
         prefetched_by_score = {}
         for item in _prefetched_feedback_items:
             if item.get("scorecardId") != scorecard_id:
+                continue
+            # The shared window loader already enforces this; keep the same
+            # contract for injected/prefetched evidence used by portfolio and
+            # runtime tests.
+            if (
+                item.get("isInvalid")
+                or item.get("initialAnswerValue") is None
+                or item.get("finalAnswerValue") is None
+            ):
                 continue
             item_score_id = str(item.get("scoreId") or "").strip()
             if not item_score_id:
@@ -2560,8 +2605,13 @@ def _default_feedback_alignment_batch(
                 SimpleNamespace(
                     initialAnswerValue=item.get("initialAnswerValue"),
                     finalAnswerValue=item.get("finalAnswerValue"),
+                    editedAt=item.get("editedAt"),
                 )
             )
+            if item.get("editedAt"):
+                prefetched_timestamps_by_score.setdefault(item_score_id, []).append(
+                    str(item["editedAt"])
+                )
 
     async def analyze_scores() -> list[dict[str, Any] | None]:
         semaphore = asyncio.Semaphore(FEEDBACK_ALIGNMENT_SCORE_CONCURRENCY)
@@ -2599,6 +2649,37 @@ def _default_feedback_alignment_batch(
                     if disagreement_rate is not None
                     else 0.0
                 )
+                weekly_disagreement_rates: list[float] = []
+                weekly_ac1_values: list[float] = []
+                weekly_bucket_counts: list[int] = []
+                weekly_detail: list[dict[str, Any]] = []
+                if prefetched_by_score is not None and args.get("window_end"):
+                    from datetime import datetime, timezone
+                    from plexus.optimization.decision import weekly_buckets
+
+                    pairs = prefetched_by_score.get(score_id, [])
+                    timestamps = [pair.editedAt for pair in pairs if getattr(pair, "editedAt", None)]
+                    weekly_detail = weekly_buckets(timestamps, window_end=str(args["window_end"]), weeks=12)
+                    for bucket in weekly_detail:
+                        start = datetime.fromisoformat(bucket["start"].replace("Z", "+00:00")).astimezone(timezone.utc)
+                        end = datetime.fromisoformat(bucket["end"].replace("Z", "+00:00")).astimezone(timezone.utc)
+                        bucket_pairs = [
+                            pair for pair in pairs
+                            if getattr(pair, "editedAt", None)
+                            and start <= datetime.fromisoformat(str(pair.editedAt).replace("Z", "+00:00")).astimezone(timezone.utc) < end
+                        ]
+                        bucket_analysis = FeedbackService._analyze_feedback_items(bucket_pairs)
+                        bucket["valid_feedback_count"] = int(bucket_analysis.get("total_items") or 0)
+                        bucket["disagreement_rate"] = (
+                            float(bucket_analysis["disagreements"]) / bucket["valid_feedback_count"]
+                            if bucket["valid_feedback_count"] else None
+                        )
+                        bucket["ac1"] = bucket_analysis.get("ac1")
+                        weekly_bucket_counts.append(bucket["valid_feedback_count"])
+                        if bucket["valid_feedback_count"]:
+                            weekly_disagreement_rates.append(float(bucket["disagreement_rate"] or 0))
+                            if bucket["ac1"] is not None:
+                                weekly_ac1_values.append(float(bucket["ac1"]))
 
                 if (
                     accuracy_threshold is not None
@@ -2616,6 +2697,16 @@ def _default_feedback_alignment_batch(
                     "disagreements": disagreements,
                     "disagreement_rate": disagreement_rate,
                     "reviewed_error_opportunity": reviewed_error_opportunity,
+                    # These distributions are computed after invalid rows and
+                    # incomplete initial/final label pairs are excluded by the
+                    # shared analyzer.  Preserve them for investment policy.
+                    "class_distribution": analysis.get("class_distribution") or [],
+                    "predicted_class_distribution": analysis.get("predicted_class_distribution") or [],
+                    "feedback_timestamps": prefetched_timestamps_by_score.get(score_id, []),
+                    "weekly_buckets": weekly_detail,
+                    "weekly_bucket_counts": weekly_bucket_counts,
+                    "weekly_disagreement_rates": weekly_disagreement_rates,
+                    "weekly_ac1_values": weekly_ac1_values,
                     "confusion_matrix": analysis.get("confusion_matrix"),
                     "precision": analysis.get("precision"),
                     "recall": analysis.get("recall"),
@@ -2746,6 +2837,19 @@ def _default_evaluation_info(args: dict[str, Any]) -> dict[str, Any]:
         return Evaluation.get_latest_evaluation(account_key, evaluation_type)
 
     return Evaluation.get_evaluation_info(evaluation_id, include_score_results)
+
+
+def _default_optimization_persist(packet: dict[str, Any]) -> Any:
+    """Persist one exact decision packet through the canonical Report/S3 path."""
+    from plexus.cli.shared.client_utils import create_client
+    from plexus.optimization.persistence import persist_decision_packet
+
+    client = create_client()
+    if client is None:
+        raise RuntimeError(
+            "plexus.optimization persistence could not create a dashboard client"
+        )
+    return persist_decision_packet(packet, client=client, persist=True)
 
 
 def _default_evaluation_archive(args: dict[str, Any]) -> dict[str, Any]:
@@ -5179,7 +5283,7 @@ def _default_procedure_optimize(args: dict[str, Any]) -> dict[str, Any]:
     OPTIMIZER_PARAMS = {
         "scorecard", "score", "days", "max_iterations", "max_samples",
         "improvement_threshold", "target_accuracy", "num_candidates",
-        "optimization_objective", "hint", "start_version",
+        "optimization_objective", "hint", "start_version", "max_cost_usd",
         "resume_regression_eval", "resume_recent_eval",
         "prior_run_prescription", "dry_run", "context_window", "agent_models",
     }
@@ -8363,6 +8467,11 @@ class PlexusRuntimeModule:
         procedure_runner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         procedure_optimize: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         procedure_archive: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        optimization_handlers: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] | None = None,
+        optimization_persister: Callable[[dict[str, Any]], Any] | None = None,
+        guidelines_validator: Callable[[str], dict[str, Any]] | None = None,
+        terminal_class_resolver: Callable[[str], Any] | None = None,
+        review_evidence_loader: Callable[[str], dict[str, Any]] | None = None,
         stream_handler: _MCPStreamEmitter | None = None,
         runtime_context: dict[str, Any] | None = None,
         catch_runtime_errors: bool = False,
@@ -8554,6 +8663,20 @@ class PlexusRuntimeModule:
         )
         self._procedure_continue = _default_procedure_continue
         self._procedure_branch = _default_procedure_branch
+        self._optimization_persister = (
+            optimization_persister
+            if optimization_persister is not None
+            else _default_optimization_persist
+        )
+        self._guidelines_validator = guidelines_validator
+        self._terminal_class_resolver = terminal_class_resolver
+        self._review_evidence_loader = review_evidence_loader
+        self._optimization_handlers: dict[str, Callable[[dict[str, Any]], Any]] = {
+            method: self._default_optimization_handler(method)
+            for method in ("rank", "assess", "diagnose", "run", "review", "summary")
+        }
+        if optimization_handlers:
+            self._optimization_handlers.update(optimization_handlers)
         self._stream_handler = stream_handler
         self._api_calls: list[str] = []
         self._latest_score_versions: dict[tuple[str, str], dict[str, Any]] = {}
@@ -9349,6 +9472,446 @@ class PlexusRuntimeModule:
             return self._feedback_aligner(parsed)
         finally:
             self._budget.record_after("feedback", method)
+
+    def _optimization_dependencies(self) -> dict[str, Any]:
+        """Capabilities supplied to the shared optimization decision service.
+
+        Keeping these adapters here lets the service reuse the canonical
+        score/feedback/report/procedure paths without importing the Tactus
+        runtime or duplicating any network-facing implementation.
+        """
+        return {
+            "scorecards_list": self._scorecards_lister,
+            "score_info": self._score_info,
+            "feedback_alignment": self._feedback_aligner,
+            "feedback_alignment_batch": self._feedback_aligner_batch,
+            "feedback_latest_update": self._feedback_latest_update,
+            "score_contradictions": self._score_contradictions,
+            "rubric_memory_recent_entries": self._rubric_memory_recent_entries,
+            "rubric_memory_evidence_pack": self._rubric_memory_evidence_pack,
+            "rubric_memory_sme_question_gate": self._rubric_memory_sme_question_gate,
+            "report_info": self._report_readers.get("info"),
+            "report_blocks": self._report_readers.get("blocks"),
+            "procedure_info": self._procedure_readers.get("info"),
+            "procedure_optimize": self._procedure_optimize,
+            # Persistence is deliberately injected.  There is no inline
+            # ReportBlock/DynamoDB fallback in the runtime.
+            "persist_packet": self._optimization_persister,
+        }
+
+    def _rank_payload_from_runtime(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Collect an account-wide, frozen alignment input for `optimization.rank`.
+
+        Pagination belongs to this transport adapter because it is the layer
+        that owns the scorecard list API.  Each cursor is retried exactly once;
+        a failed page is retained as coverage evidence, never turned into a
+        sampled/exact portfolio claim.
+        """
+        cards: list[dict[str, Any]] = []
+        failures: list[dict[str, Any]] = []
+        next_token: Any = None
+        pages = 0
+        while True:
+            page_args = {
+                "return_metadata": True,
+                "_include_scores": True,
+                "next_token": next_token,
+                "account_id": args.get("account_id"),
+            }
+            page: Any = None
+            for attempt in range(2):
+                try:
+                    page = self._scorecards_lister(page_args)
+                    break
+                except Exception as exc:  # noqa: BLE001 - preserve coverage evidence
+                    if attempt:
+                        failures.append({"page": pages + 1, "error": str(exc)})
+            if page is None:
+                break
+            pages += 1
+            if isinstance(page, dict):
+                items = page.get("items") or []
+                next_token = page.get("nextToken") or page.get("next_token")
+            else:
+                items, next_token = page, None
+            cards.extend(item for item in items if isinstance(item, dict))
+            if not next_token:
+                break
+
+        coverage: dict[str, Any] = {
+            "complete": not failures,
+            "pages_completed": pages,
+            "failures": failures,
+            "scorecards_discovered": len(cards),
+        }
+        card_ids = [str(card["id"]) for card in cards if card.get("id")]
+        if not card_ids:
+            return {"scores": [], "coverage": coverage}
+        from plexus.optimization.decision import frozen_utc_window
+
+        window = frozen_utc_window(complete_days=90)
+        try:
+            alignment = self._feedback_aligner_batch({
+                "scorecards": card_ids,
+                "days": 90,
+                "window_start": window["start"],
+                "window_end": window["end"],
+                "account_id": args.get("account_id"),
+            })
+        except Exception as exc:  # noqa: BLE001 - partial is observable, never exact
+            coverage["complete"] = False
+            coverage["failures"].append({"stage": "feedback_alignment", "error": str(exc)})
+            return {"scores": [], "coverage": coverage}
+
+        downstream_coverage = alignment.get("coverage") if isinstance(alignment, dict) else None
+        if isinstance(downstream_coverage, dict) and not downstream_coverage.get("complete", False):
+            coverage["complete"] = False
+            coverage["failures"].extend(downstream_coverage.get("failures") or [{"stage": "feedback_alignment", "error": "incomplete"}])
+        inventory_scores: dict[tuple[str, str], dict[str, Any]] = {}
+        for card in cards:
+            card_id = str(card.get("id") or "")
+            for section in (card.get("sections") or {}).get("items") or []:
+                for score in (section.get("scores") or {}).get("items") or []:
+                    if isinstance(score, dict) and score.get("id"):
+                        inventory_scores[(card_id, str(score["id"]))] = score
+
+        rows: list[dict[str, Any]] = []
+        for card_result in (alignment.get("scorecards") or []) if isinstance(alignment, dict) else []:
+            if not isinstance(card_result, dict):
+                continue
+            for score in card_result.get("scores") or []:
+                if isinstance(score, dict):
+                    scorecard_id = str(score.get("scorecard_id") or card_result.get("scorecard_id") or "")
+                    score_id = str(score.get("score_id") or "")
+                    inventory = inventory_scores.get((scorecard_id, score_id), {})
+                    rows.append({
+                        **score,
+                        # The feedback analyzer calls these total_items and
+                        # disagreements.  The decision packet calls them
+                        # valid feedback and reviewed disagreements.
+                        "valid_feedback_count": score.get("valid_feedback_count", score.get("total_items", 0)),
+                        "reviewed_disagreements": score.get("reviewed_disagreements", score.get("disagreements", 0)),
+                        "champion_version": score.get("champion_version") or inventory.get("championVersionId"),
+                        "enabled": score.get("enabled", not bool(inventory.get("isDisabled", False))),
+                        "scorecard_id": scorecard_id,
+                        "scorecard_name": score.get("scorecard_name") or card_result.get("scorecard_name"),
+                    })
+        return {"scores": rows, "coverage": coverage, "window": window}
+
+    def _current_optimization_freshness(
+        self, targets: Any
+    ) -> tuple[dict[tuple[str, str], dict[str, Any]], list[dict[str, Any]]]:
+        """Read the current champion and feedback watermark for exact targets."""
+        evidence_by_target: dict[tuple[str, str], dict[str, Any]] = {}
+        failures: list[dict[str, Any]] = []
+        for source in targets if isinstance(targets, list) else []:
+            if not isinstance(source, dict):
+                continue
+            scorecard_id = str(source.get("scorecard_id") or "")
+            score_id = str(source.get("score_id") or "")
+            if not scorecard_id or not score_id:
+                continue
+            try:
+                info = self._score_info({
+                    "scorecard_identifier": scorecard_id,
+                    "score_identifier": score_id,
+                })
+                watermark = self._feedback_latest_update({
+                    "scorecard_name": scorecard_id,
+                    "score_name": score_id,
+                    "days": 90,
+                })
+                evidence = {
+                    "scorecard_id": scorecard_id,
+                    "score_id": score_id,
+                    "champion_version": (info or {}).get("championVersionId"),
+                    "feedback_watermark": (watermark or {}).get("latest_feedback_updated_at"),
+                }
+                evidence_by_target[(scorecard_id, score_id)] = evidence
+            except Exception as exc:  # noqa: BLE001 - a failed recheck must not dispatch
+                failures.append({
+                    "target": source,
+                    "reason": "freshness_check_failed",
+                    "error": str(exc),
+                })
+        return evidence_by_target, failures
+
+    def _optimization_assessment_payload(self, args: dict[str, Any]) -> dict[str, Any]:
+        scorecard_id = str(args.get("scorecard_id") or "")
+        score_id = str(args.get("score_id") or "")
+        if not scorecard_id or not score_id:
+            raise ValueError("plexus.optimization.assess requires exact scorecard_id and score_id")
+        evidence = dict(args.get("rank_evidence") or args.get("evidence") or {})
+        failures: list[Any] = list((evidence.get("coverage") or {}).get("failures") or [])
+        try:
+            info = self._score_info({"scorecard_identifier": scorecard_id, "score_identifier": score_id})
+        except Exception as exc:  # noqa: BLE001
+            return {"scorecard_id": scorecard_id, "score_id": score_id, "coverage": {"complete": False, "failures": [str(exc)]}, "coverage_complete": False}
+        code = info.get("code") if isinstance(info, dict) else None
+        guidelines = info.get("guidelines") if isinstance(info, dict) else None
+        terminal_classes: list[str] = []
+        terminal_resolved = False
+        if code:
+            try:
+                resolver = self._terminal_class_resolver
+                if resolver is None:
+                    from plexus.rca_analysis import resolve_final_output_classes_from_yaml_text
+                    resolver = resolve_final_output_classes_from_yaml_text
+                resolved = resolver(str(code))
+                terminal_classes = list((resolved or {}).get("classes") or resolved or [])
+                terminal_resolved = bool(terminal_classes)
+            except Exception as exc:  # noqa: BLE001
+                failures.append(f"terminal class resolution failed: {exc}")
+        guideline_state = "missing"
+        if guidelines:
+            try:
+                validator = self._guidelines_validator
+                if validator is None:
+                    from plexus.guidelines.validator import validate_guidelines_content
+                    validation = validate_guidelines_content(str(guidelines)).to_dict()
+                else:
+                    validation = validator(str(guidelines))
+                guideline_state = "consistent" if validation.get("is_valid", validation.get("valid", False)) else "invalid"
+            except Exception as exc:  # noqa: BLE001
+                guideline_state = "invalid"
+                failures.append(f"guidelines validation failed: {exc}")
+        counts = {
+            str(row.get("label")): int(row.get("count") or 0)
+            for row in evidence.get("class_distribution") or []
+            if isinstance(row, dict) and row.get("label") is not None
+        }
+        for label in terminal_classes:
+            counts.setdefault(str(label), 0)
+        if evidence.get("feedback_timestamps") and (evidence.get("window") or args.get("window")):
+            try:
+                from plexus.optimization.decision import weekly_buckets
+                weekly = weekly_buckets(
+                    evidence["feedback_timestamps"],
+                    window_end=(evidence.get("window") or args["window"])["end"],
+                )
+                evidence.setdefault("weekly_bucket_counts", [bucket["count"] for bucket in weekly])
+                evidence.setdefault("weekly_buckets", weekly)
+            except Exception as exc:  # noqa: BLE001
+                failures.append(f"weekly metrics unavailable: {exc}")
+        coverage = dict(evidence.get("coverage") or {})
+        complete = bool(coverage.get("complete", evidence.get("coverage_complete", True))) and not failures
+        return {
+            **evidence,
+            "account_id": args.get("account_id"), "scorecard_id": scorecard_id, "score_id": score_id,
+            "scope": {"scorecard_id": scorecard_id, "score_id": score_id},
+            "window": evidence.get("window") or args.get("window") or {},
+            "coverage": {**coverage, "complete": complete, "failures": failures},
+            "coverage_complete": complete, "coverage_failures": failures,
+            "champion_version": info.get("championVersionId"),
+            "configuration_readable": bool(code), "terminal_classes_resolved": terminal_resolved,
+            "reachable_classes": terminal_classes, "final_label_counts": counts,
+            "guideline_state": guideline_state,
+            "feedback_watermark": evidence.get("feedback_watermark"),
+        }
+
+    def _optimization_diagnosis_payload(self, args: dict[str, Any]) -> dict[str, Any]:
+        scorecard_id, score_id = str(args.get("scorecard_id") or ""), str(args.get("score_id") or "")
+        if not scorecard_id or not score_id:
+            raise ValueError("plexus.optimization.diagnose requires exact scorecard_id and score_id")
+        failures: list[str] = []
+        info: dict[str, Any] = {}
+        try:
+            info = self._score_info({"scorecard_identifier": scorecard_id, "score_identifier": score_id})
+        except Exception as exc:  # noqa: BLE001
+            failures.append(str(exc))
+        base = {"scorecard": scorecard_id, "score": score_id, "scorecard_id": scorecard_id, "score_id": score_id, "version": info.get("championVersionId")}
+        results: dict[str, Any] = {}
+        for name, handler in (
+            ("contradictions", self._score_contradictions),
+            ("rubric_memory", self._rubric_memory_recent_entries),
+            ("rubric_evidence", self._rubric_memory_evidence_pack),
+            ("sme_gate", self._rubric_memory_sme_question_gate),
+        ):
+            try:
+                value = handler(base)
+                results[name] = value
+                if isinstance(value, dict) and (value.get("pending") or value.get("handle_id")):
+                    failures.append(f"{name} pending")
+            except Exception as exc:  # noqa: BLE001
+                failures.append(str(exc))
+        contradictions = results.get("contradictions") or {}
+        sme = results.get("sme_gate") or {}
+        return {
+            "account_id": args.get("account_id"), "scorecard_id": scorecard_id, "score_id": score_id,
+            "scope": {"scorecard_id": scorecard_id, "score_id": score_id},
+            "assessment": args.get("assessment") or args.get("assessment_packet") or {},
+            "window": args.get("window") or {},
+            "feedback_watermark": args.get("feedback_watermark"),
+            "champion_version": info.get("championVersionId"),
+            "guideline_state": (
+                "potential_code_conflict"
+                if isinstance(contradictions, dict) and contradictions.get("status") == "potential_conflict"
+                else contradictions.get("status", "inconclusive") if isinstance(contradictions, dict) else "inconclusive"
+            ),
+            "feedback_rubric_consistent": isinstance(contradictions, dict) and contradictions.get("status") == "consistent",
+            "stakeholder_questions": (sme.get("questions") or []) if isinstance(sme, dict) else [],
+            "complete": not failures, "coverage": {"complete": not failures, "failures": failures},
+            "coverage_complete": not failures, "coverage_failures": failures,
+            "evidence_ids": [value.get("id") for value in results.values() if isinstance(value, dict) and value.get("id")],
+        }
+
+    def _optimization_review_payload(self, args: dict[str, Any]) -> dict[str, Any]:
+        if args.get("evidence") or not args.get("procedure_id"):
+            return args
+        procedure_id = str(args["procedure_id"])
+        try:
+            if self._review_evidence_loader is not None:
+                manifest = self._review_evidence_loader(procedure_id)
+            else:
+                from plexus.cli.shared.client_utils import create_client
+                from plexus.cli.shared.optimizer_results import OptimizerResultsService
+                manifest = OptimizerResultsService(create_client()).summarize_optimizer_procedure(procedure_id)
+            from plexus.optimization.orchestration import (
+                build_indexed_optimizer_review_evidence,
+            )
+
+            evidence = build_indexed_optimizer_review_evidence(
+                manifest,
+                procedure_id=procedure_id,
+                read_evaluation=lambda evaluation_id: self._evaluation_info(
+                    {"evaluation_id": evaluation_id}
+                ),
+            )
+            return {"evidence": evidence}
+        except Exception as exc:  # indexed evidence is mandatory for promotion review
+            return {"evidence": {"procedure_id": procedure_id, "terminal": False, "incomplete": True, "error": str(exc)}}
+
+    def _default_optimization_handler(
+        self, method: str
+    ) -> Callable[[dict[str, Any]], Any]:
+        """Return a thin adapter to the shared decision service.
+
+        The import remains lazy so existing Tactus surfaces keep working while
+        the optional optimization package is not installed in a deployment.
+        """
+        def invoke(args: dict[str, Any]) -> Any:
+            try:
+                from plexus.optimization import decision
+            except ImportError as exc:
+                raise RuntimeError(
+                    "plexus.optimization decision service is unavailable"
+                ) from exc
+            helper = getattr(decision, "dispatch_optimization_operation", None)
+            if not callable(helper):
+                raise RuntimeError(
+                    "plexus.optimization.decision.dispatch_optimization_operation is unavailable"
+                )
+            dependencies = self._optimization_dependencies()
+            if method == "rank" and not args.get("scores"):
+                args = {**args, **self._rank_payload_from_runtime(args)}
+            elif method == "assess":
+                args = self._optimization_assessment_payload(args)
+            elif method == "diagnose":
+                args = self._optimization_diagnosis_payload(args)
+            elif method == "review":
+                args = self._optimization_review_payload(args)
+            freshness_evidence: dict[tuple[str, str], dict[str, Any]] = {}
+            freshness_failures: list[dict[str, Any]] = []
+            if method == "run" and args.get("approved") is True:
+                freshness_evidence, freshness_failures = (
+                    self._current_optimization_freshness(args.get("targets"))
+                )
+            result = helper(method, args, **dependencies)
+            if method != "run" or not isinstance(result, dict):
+                return result
+
+            accepted_targets: list[dict[str, Any]] = []
+            rejected = list(result.get("rejected") or []) + freshness_failures
+            for target in result.get("accepted_targets") or []:
+                if not isinstance(target, dict):
+                    continue
+                key = (str(target.get("scorecard_id") or ""), str(target.get("score_id") or ""))
+                current = freshness_evidence.get(key)
+                if current is None:
+                    rejected.append({"target": target, "reason": "freshness_check_failed"})
+                    continue
+                if (
+                    target.get("champion_version") not in (None, current["champion_version"])
+                    or target.get("feedback_watermark") not in (None, current["feedback_watermark"])
+                ):
+                    rejected.append({"target": target, "reason": "stale_assessment"})
+                    continue
+                accepted_targets.append(target)
+
+            # Validation is pure and returns only explicitly accepted opaque
+            # targets.  Dispatch each accepted target through the existing
+            # optimizer entry point; never create score versions or promote a
+            # champion here.
+            dispatches: list[dict[str, Any]] = []
+            for target in accepted_targets:
+                if not isinstance(target, dict):
+                    continue
+                dispatch_args = {
+                    key: value
+                    for key, value in args.items()
+                    if key not in {"approved", "targets", "current_fingerprints", "persist", "concurrency", "max_concurrency"}
+                }
+                dispatch_args.update({
+                    "scorecard": target["scorecard_id"],
+                    "score": target["score_id"],
+                })
+                dispatch_row = {
+                    "target": {
+                        "scorecard_id": target["scorecard_id"],
+                        "score_id": target["score_id"],
+                    },
+                }
+                try:
+                    dispatch_row.update({
+                        "status": "dispatched",
+                        "result": self._procedure_optimize(dispatch_args),
+                    })
+                except Exception as exc:  # noqa: BLE001 - preserve per-target coverage
+                    dispatch_row.update({"status": "failed", "error": str(exc)})
+                dispatches.append(dispatch_row)
+            failed_dispatches = sum(
+                row.get("status") == "failed" for row in dispatches
+            )
+            return {
+                **result,
+                "accepted": bool(accepted_targets) and not rejected,
+                "accepted_targets": accepted_targets,
+                "rejected": rejected,
+                "dispatches": dispatches,
+                "dispatch_coverage": {
+                    "target_count": len(dispatches),
+                    "dispatched_count": len(dispatches) - failed_dispatches,
+                    "failed_count": failed_dispatches,
+                    "complete": failed_dispatches == 0,
+                },
+            }
+
+        return invoke
+
+    def _call_optimization(
+        self, namespace: str, method: str, args: Any = None
+    ) -> Any:
+        if namespace != "optimization" or method not in self._optimization_handlers:
+            raise ValueError(
+                f"Unsupported Plexus runtime API: plexus.{namespace}.{method}"
+            )
+        self._budget.check_before("optimization", method)
+        self._record_api_call("optimization", method)
+        try:
+            parsed = _merge_runtime_context_args(_args(args), self._runtime_context)
+            result = self._optimization_handlers[method](parsed)
+            if parsed.get("persist") is True:
+                if self._optimization_persister is None:
+                    raise RuntimeError(
+                        "plexus.optimization persistence requires a configured Report/S3 handler"
+                    )
+                # The persistence path receives precisely the caller-visible
+                # packet.  Its return is intentionally ignored: no inline
+                # fallback or alternate response representation is permitted.
+                self._optimization_persister(result)
+            return result
+        finally:
+            self._budget.record_after("optimization", method)
 
     def _call_rubric_memory(self, namespace: str, method: str, args: Any = None) -> Any:
         if namespace != "rubric_memory" or method not in {
@@ -10697,6 +11260,15 @@ Complete coverage contract:
   `total_items * disagreement_rate`. Rank it descending for the transparent
   first-pass estimate of reviewed error burden; keep class coverage, drift,
   rubric clarity, and fixability as separate qualifiers.
+
+Optimization decision toolchain:
+- `plexus.optimization.rank`, `assess`, `diagnose`, `review`, and `summary`
+  are planning-safe decision-packet operations. They preserve opaque IDs and
+  must report incomplete coverage rather than an exact portfolio claim.
+- `plexus.optimization.run` is execution-only. It requires `approved = true`
+  and at most five exact `{ scorecard_id, score_id }` targets, reuses the
+  existing optimizer, and never promotes a champion. `persist = true` requires
+  configured report persistence; there is no inline output fallback.
 
 Helper aliases injected before your snippet runs:
 - High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,

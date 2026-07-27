@@ -452,6 +452,10 @@ def test_summarize_optimizer_procedure_requires_index_and_returns_cycles(monkeyp
     assert payload["procedure_id"] == "proc-123"
     assert payload["best"]["best_feedback_evaluation_url"].endswith("/eval-fb-best")
     assert payload["cycles"][0]["feedback_evaluation_url"].endswith("/eval-fb-1")
+    assert payload["review_artifacts"] == {
+        "artifacts_complete": False,
+        "rca_complete": False,
+    }
 
 
 def test_build_promotion_packet_uses_best_candidate_and_guideline_paths(monkeypatch, tmp_path):
