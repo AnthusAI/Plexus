@@ -1050,11 +1050,12 @@ code: |
   -- before the full diag implementation is defined at the start of the main body
   local diag = function(msg) end  -- no-op until overwritten at line ~1415
 
-  -- Budget for dispatched evaluations (each evaluation can take up to 90 minutes)
+  -- Budget for dispatched evaluations. Runtime budget is a resource ceiling,
+  -- not a success deadline; healthy evaluations may legitimately take longer
+  -- while scoring or finalizing RCA.
   local EVAL_BUDGET = {usd = 5.0, wallclock_seconds = 5400, depth = 0, tool_calls = 1000}
   local REPORT_BUDGET = {usd = 2.0, wallclock_seconds = 3600, depth = 0, tool_calls = 200}
   local EVAL_AWAIT_POLL_TIMEOUT = "PT1M"
-  local EVAL_STALL_POLL_LIMIT = math.max(1, math.ceil(tonumber(params.evaluation_stall_timeout_minutes) or 15))
 
   local function evaluation_progress_marker(eval_data, waited)
     eval_data = type(eval_data) == "table" and eval_data or {}
@@ -1074,9 +1075,7 @@ code: |
   local function _await_eval_handle(h, label, dispatch_args)
     label = label or tostring(h and h.id or "?")
     diag("Awaiting evaluation handle " .. label .. " id=" .. tostring(h.id)
-      .. " with progress-aware stall detection...")
-    local last_progress_marker = nil
-    local stalled_polls = 0
+      .. " until it reaches a terminal state...")
     while true do
       local waited = plexus.handle.await({id = h.id, timeout = EVAL_AWAIT_POLL_TIMEOUT})
       -- After await, the evaluation data lives in waited.evaluation.
@@ -1118,7 +1117,11 @@ code: |
         end
       end
       local eval_status = string.upper(tostring((eval_data and eval_data.status) or waited.status or ""))
-      if eval_status == "COMPLETED" then
+      local handle_status = string.upper(tostring(waited.status or ""))
+      if eval_status == "COMPLETED"
+        and (handle_status == "COMPLETED" or handle_status == "COMPLETED_UNKNOWN")
+        and type(eval_data) == "table"
+        and not eval_data.completion_pending_process_exit then
         return eval_data
       end
       if eval_status == "FAILED" or eval_status == "CANCELLED" or eval_status == "CANCELED" then
@@ -1136,21 +1139,7 @@ code: |
       end
 
       local progress_marker = evaluation_progress_marker(eval_data, waited)
-      if progress_marker ~= last_progress_marker then
-        last_progress_marker = progress_marker
-        stalled_polls = 0
-      else
-        stalled_polls = stalled_polls + 1
-      end
-      if stalled_polls >= EVAL_STALL_POLL_LIMIT then
-        return {
-          error = "Evaluation stalled without progress for " .. tostring(EVAL_STALL_POLL_LIMIT)
-            .. " minute(s): status=" .. tostring((eval_data and eval_data.status) or waited.status)
-            .. " evaluation_id=" .. tostring((eval_data and (eval_data.evaluation_id or eval_data.id)) or waited.evaluation_id or h.id)
-        }
-      end
-      diag("Evaluation " .. label .. " remains active; progress=" .. progress_marker
-        .. " stalled_polls=" .. tostring(stalled_polls))
+      diag("Evaluation " .. label .. " remains active; progress=" .. progress_marker)
     end
   end
 

@@ -856,12 +856,26 @@ def test_optimizer_yaml_rejects_non_completed_evaluation_handles():
     config = _load_optimizer_config()
     code = config["code"]
 
-    assert 'if eval_status == "COMPLETED" then' in code
+    assert 'if eval_status == "COMPLETED"\n' in code
     assert 'if eval_status == "FAILED" or eval_status == "CANCELLED" or eval_status == "CANCELED" then' in code
     assert "local eval_error = (eval_data and (eval_data.error_message or eval_data.errorMessage" in code
     assert '" error_message=" .. tostring(eval_error)' in code
     assert '"Evaluation did not complete: status=" .. tostring((eval_data and eval_data.status) or waited.status)' in code
     assert "score_version_id = eval_result.score_version_id or eval_result.scoreVersionId" in code
+
+
+def test_optimizer_waits_for_a_terminal_evaluation_state_without_a_time_deadline():
+    code = _load_optimizer_config()["code"]
+
+    assert 'local EVAL_AWAIT_POLL_TIMEOUT = "PT1M"' in code
+    assert "local function evaluation_progress_marker(eval_data, waited)" in code
+    assert "not eval_data.completion_pending_process_exit" in code
+    assert "while true do" in code
+    assert "remains active; progress=" in code
+    assert "EVAL_STALL_POLL_LIMIT" not in code
+    assert "Evaluation stalled without progress" not in code
+    assert 'local EVAL_AWAIT_TIMEOUT = "PT90M"' not in code
+    assert "Evaluation did not complete: status=RUNNING" not in code
 
 
 def test_optimizer_yaml_skips_scores_with_no_recent_feedback_baseline():
