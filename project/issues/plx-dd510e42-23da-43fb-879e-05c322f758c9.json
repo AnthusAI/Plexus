@@ -22,10 +22,28 @@
       "author": "ryan.porter",
       "text": "Removed all production runtime replacement of Tactus Agent methods. Plexus now consumes lifecycle events for context and latency telemetry, uses native Pydantic JSON serialization, uses callable Agent syntax, and supplies request_timeout through supported Agent configuration. Added an explicit AGENTS.md prohibition on Tactus monkeypatching. Focused Console/procedure tests pass 106/106 against the Tactus main code, and targeted Ruff checks pass. Waiting for the Tactus package publication before locking the dependency.",
       "created_at": "2026-07-27T20:18:27.228195Z"
+    },
+    {
+      "id": "fa0e3839-9ebf-4463-92c9-d9f1c02486e6",
+      "author": "ryan.porter",
+      "text": "Tactus develop-to-main PR 97 merged after all Python 3.10, 3.11, and 3.12 checks passed. The main-branch release workflow is now running. Next: verify the published package, lock Plexus to that release, validate without a local Tactus path, and open the Plexus integration PR.",
+      "created_at": "2026-07-27T20:35:17.639405Z"
+    },
+    {
+      "id": "18b2e123-b314-43ae-b3b2-c24f373bf76f",
+      "author": "ryan.porter",
+      "text": "Tactus 0.51.5 is published on PyPI with the supported lifecycle APIs. The release itself succeeded; the workflow's red status came later from an unrelated Windows desktop checkout path failure. Proceeding to lock Plexus to the published package and validate without a local Tactus PYTHONPATH.",
+      "created_at": "2026-07-27T22:29:13.862311Z"
+    },
+    {
+      "id": "db4ae381-c764-465f-852e-14f6ab789219",
+      "author": "ryan.porter",
+      "text": "Locked Plexus to published Tactus 0.51.5 and installed it without a local PYTHONPATH. Verified the package loads from site-packages and exposes request_timeout. Focused MCP, Console, and procedure integration tests pass 355/355 with scoring and infrastructure extras; Poetry lock validation, targeted Ruff, and diff checks pass.",
+      "created_at": "2026-07-27T22:33:29.609199Z"
     }
   ],
   "created_at": "2026-07-27T20:11:47.249890Z",
-  "updated_at": "2026-07-27T20:18:27.228195Z",
+  "updated_at": "2026-07-27T22:33:29.609199Z",
   "closed_at": null,
   "custom": {}
 }
