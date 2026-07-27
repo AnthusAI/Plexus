@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import tempfile
 import time
@@ -11,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional, Sequence
 
 from plexus.Evaluation import Evaluation
+from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
 from plexus.dashboard.api.models.task import Task
 from plexus.cli.shared.stage_configurations import get_feedback_evaluation_stage_configs
 from plexus.utils.feedback_selection import normalize_feedback_sampling_mode
@@ -19,6 +21,25 @@ from plexus.utils.feedback_selection import normalize_feedback_sampling_mode
 TERMINAL_EVALUATION_STATUSES = frozenset({"COMPLETED", "FAILED", "CANCELLED", "ERROR"})
 
 SCAFFOLD_SOURCE_DESCRIPTION = "Generated directly from vetted feedback item IDs."
+
+
+def fail_feedback_evaluation_after_runner_abort(
+    *,
+    client: Any,
+    evaluation_id: str,
+) -> None:
+    """Durably terminate an evaluation when its supervising runner aborts.
+
+    The runner owns the evaluator process group. Once it terminates that group,
+    a non-terminal record must not remain RUNNING indefinitely.
+    """
+    evaluation = DashboardEvaluation.get_by_id(evaluation_id, client)
+    if str(evaluation.status or "").upper() in TERMINAL_EVALUATION_STATUSES:
+        return
+    evaluation.update(
+        status="FAILED",
+        errorMessage="Feedback evaluation runner aborted before terminal completion.",
+    )
 
 
 @dataclass(frozen=True)
@@ -73,6 +94,48 @@ def build_feedback_command(
     if request.sample_seed is not None:
         cmd.extend(["--sample-seed", str(request.sample_seed)])
     return cmd
+
+
+def launch_feedback_evaluation_process(
+    command: Sequence[str],
+    *,
+    stdout: Any,
+    stderr: Any,
+) -> subprocess.Popen:
+    """Launch an evaluator in a dedicated session so cancellation owns its descendants."""
+    return subprocess.Popen(
+        command,
+        stdout=stdout,
+        stderr=stderr,
+        start_new_session=True,
+    )
+
+
+def terminate_feedback_evaluation_process_group(
+    process: subprocess.Popen,
+    *,
+    graceful_timeout_seconds: int = 15,
+) -> None:
+    """Terminate and reap the evaluator's dedicated process group."""
+    if process.poll() is not None:
+        return
+
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+
+    try:
+        process.wait(timeout=graceful_timeout_seconds)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    process.wait(timeout=graceful_timeout_seconds)
 
 
 def ensure_feedback_runner_task(
@@ -222,7 +285,7 @@ def wait_for_feedback_evaluation_id(
             return evaluation_id
         if process is not None:
             return_code = process.poll()
-            if return_code is not None and return_code != 0:
+            if return_code is not None:
                 raise RuntimeError(
                     f"Feedback evaluation process exited before evaluation record creation (exit={return_code})."
                 )
@@ -460,8 +523,9 @@ def run_feedback_evaluation_orchestrated(
     stdout_path = os.path.join(log_dir, f"{log_prefix}-stdout.log")
     stderr_path = os.path.join(log_dir, f"{log_prefix}-stderr.log")
 
+    evaluation_id: Optional[str] = None
     with open(stdout_path, "w+b") as stdout_log, open(stderr_path, "w+b") as stderr_log:
-        process = subprocess.Popen(
+        process = launch_feedback_evaluation_process(
             command,
             stdout=stdout_log,
             stderr=stderr_log,
@@ -507,7 +571,7 @@ def run_feedback_evaluation_orchestrated(
             try:
                 process.wait(timeout=60)
             except subprocess.TimeoutExpired:
-                process.kill()
+                terminate_feedback_evaluation_process_group(process)
                 _killed_for_timeout = True
                 import logging as _logging
                 _logging.getLogger(__name__).warning(
@@ -521,9 +585,18 @@ def run_feedback_evaluation_orchestrated(
                     "Feedback evaluation process exited non-zero "
                     f"(exit={process.returncode}) for evaluation {evaluation_id}. stderr tail:\n{tail}"
                 )
-        except Exception:
-            if process.poll() is None:
-                process.kill()
+        except Exception as exc:
+            terminate_feedback_evaluation_process_group(process)
+            if evaluation_id:
+                try:
+                    fail_feedback_evaluation_after_runner_abort(
+                        client=client,
+                        evaluation_id=evaluation_id,
+                    )
+                except Exception as cleanup_exc:
+                    raise RuntimeError(
+                        "Feedback evaluation runner aborted and could not persist the terminal failure state."
+                    ) from cleanup_exc
             raise
 
     summary = build_feedback_run_summary(

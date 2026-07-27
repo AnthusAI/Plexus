@@ -10,7 +10,11 @@ from plexus.cli.shared.feedback_evaluation_runner import (
     build_feedback_run_summary,
     ensure_feedback_runner_task,
     find_feedback_evaluation_id_by_task_id,
+    fail_feedback_evaluation_after_runner_abort,
     format_feedback_run_kanbus_comment,
+    launch_feedback_evaluation_process,
+    terminate_feedback_evaluation_process_group,
+    wait_for_feedback_evaluation_id,
     wait_for_feedback_evaluation_terminal_status,
 )
 
@@ -42,6 +46,30 @@ def test_build_feedback_command_includes_required_runner_fields():
     assert "--sample-seed 42" in command_string
     assert "--max-category-summary-items 10" in command_string
     assert "--yaml" in command_string
+
+
+def test_launches_feedback_evaluation_in_its_own_process_group(monkeypatch):
+    process = Mock()
+    popen = Mock(return_value=process)
+    monkeypatch.setattr("plexus.cli.shared.feedback_evaluation_runner.subprocess.Popen", popen)
+
+    result = launch_feedback_evaluation_process(["plexus", "evaluate", "feedback"], stdout=Mock(), stderr=Mock())
+
+    assert result is process
+    assert popen.call_args.kwargs["start_new_session"] is True
+
+
+def test_termination_signals_and_reaps_the_whole_feedback_process_group(monkeypatch):
+    process = Mock(pid=4321)
+    process.poll.side_effect = [None, -15]
+    process.wait.return_value = -15
+    killpg = Mock()
+    monkeypatch.setattr("plexus.cli.shared.feedback_evaluation_runner.os.killpg", killpg)
+
+    terminate_feedback_evaluation_process_group(process, graceful_timeout_seconds=3)
+
+    killpg.assert_called_once_with(4321, pytest.importorskip("signal").SIGTERM)
+    process.wait.assert_called_once_with(timeout=3)
 
 
 def test_build_feedback_command_omits_days_when_not_provided():
@@ -80,6 +108,25 @@ def test_find_feedback_evaluation_id_by_task_id_filters_by_type_and_task():
         task_id="runner-task-1",
     )
     assert evaluation_id == "eval-target"
+
+
+def test_wait_for_feedback_evaluation_id_fails_when_child_exits_cleanly_before_creation(monkeypatch):
+    client = Mock()
+    client.execute.return_value = {
+        "listEvaluationByAccountIdAndUpdatedAt": {"items": [], "nextToken": None}
+    }
+    process = Mock()
+    process.poll.return_value = 0
+
+    with pytest.raises(RuntimeError, match=r"exited before evaluation record creation \(exit=0\)"):
+        wait_for_feedback_evaluation_id(
+            client=client,
+            account_id="acct-1",
+            task_id="runner-task-1",
+            timeout_seconds=10,
+            poll_interval_seconds=0,
+            process=process,
+        )
 
 
 def test_build_summary_extracts_metrics_and_root_cause_fields():
@@ -177,6 +224,33 @@ def test_wait_for_feedback_evaluation_terminal_status_returns_completed(monkeypa
         poll_interval_seconds=0,
     )
     assert info["status"] == "COMPLETED"
+
+
+def test_runner_abort_marks_non_terminal_evaluation_failed(monkeypatch):
+    evaluation = Mock(status="RUNNING")
+    monkeypatch.setattr(
+        "plexus.cli.shared.feedback_evaluation_runner.DashboardEvaluation.get_by_id",
+        lambda evaluation_id, client: evaluation,
+    )
+
+    fail_feedback_evaluation_after_runner_abort(client=Mock(), evaluation_id="eval-1")
+
+    evaluation.update.assert_called_once_with(
+        status="FAILED",
+        errorMessage="Feedback evaluation runner aborted before terminal completion.",
+    )
+
+
+def test_runner_abort_does_not_overwrite_terminal_evaluation(monkeypatch):
+    evaluation = Mock(status="COMPLETED")
+    monkeypatch.setattr(
+        "plexus.cli.shared.feedback_evaluation_runner.DashboardEvaluation.get_by_id",
+        lambda evaluation_id, client: evaluation,
+    )
+
+    fail_feedback_evaluation_after_runner_abort(client=Mock(), evaluation_id="eval-1")
+
+    evaluation.update.assert_not_called()
 
 
 def test_wait_for_feedback_evaluation_terminal_status_times_out(monkeypatch):

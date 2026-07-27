@@ -1,10 +1,12 @@
 import json
 import signal
+import asyncio
 from types import SimpleNamespace
 
 import click
 import pytest
 
+from plexus.cli.shared.async_cleanup import drain_litellm_service_logging_tasks
 from plexus.cli.shared.experiment_runner import _extract_run_parameters_from_procedure_yaml
 from plexus.cli.shared.experiment_runner import run_procedure_with_task_tracking
 
@@ -87,6 +89,29 @@ def _patch_service(monkeypatch, run_impl):
             return await run_impl(procedure_id, **options)
 
     monkeypatch.setattr("plexus.cli.procedure.service.ProcedureService", _FakeProcedureService)
+
+
+def test_drain_litellm_service_logging_tasks_leaves_unrelated_tasks_running():
+    class ServiceLogging:
+        async def async_service_success_hook(self):
+            await asyncio.Event().wait()
+
+    async def unrelated_task():
+        await asyncio.Event().wait()
+
+    async def run_test():
+        service_hook = asyncio.create_task(ServiceLogging().async_service_success_hook())
+        unrelated = asyncio.create_task(unrelated_task())
+        try:
+            drained = await drain_litellm_service_logging_tasks(timeout_seconds=0)
+            assert drained == 1
+            assert service_hook.cancelled()
+            assert not unrelated.done()
+        finally:
+            unrelated.cancel()
+            await asyncio.gather(unrelated, return_exceptions=True)
+
+    asyncio.run(run_test())
 
 
 def test_extract_run_parameters_prefers_value_then_default_for_params_mapping():

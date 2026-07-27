@@ -2,6 +2,8 @@ import json
 import sys
 import types
 
+import pytest
+
 from plexus.rca_analysis import (
     CONFIG_FIXABILITY_OPTIONS,
     MECHANICAL_SUBTYPES,
@@ -18,6 +20,7 @@ from plexus.rca_analysis import (
     explain_misclassification_item_classification,
     extract_misclassification_evidence_flags,
     normalize_best_evidence_source,
+    analyze_score_result,
 )
 
 
@@ -704,6 +707,21 @@ def test_explainer_compacts_wordy_rationale(monkeypatch):
         "The item failed because the score treated a generic medication mention as confirmation. "
         "The current rubric requires a clearer medication-specific link."
     )
+
+
+def test_analyze_score_result_surfaces_llm_failure(monkeypatch):
+    def fail(**_kwargs):
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr("plexus.rca_analysis._invoke_rca_openai_text", fail)
+
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        analyze_score_result(
+            primary_input="input",
+            predicted="No",
+            correct="Yes",
+            explanation="reason",
+        )
 
 
 def test_invoke_rca_openai_text_captures_context(tmp_path, monkeypatch):

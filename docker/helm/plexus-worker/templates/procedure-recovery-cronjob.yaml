@@ -1,0 +1,77 @@
+{{- if .Values.procedureRecovery.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "plexus-worker.fullname" . }}-procedure-recovery
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "plexus-worker.labels" . | nindent 4 }}
+    plexus.ai/job: procedure-recovery
+spec:
+  schedule: {{ .Values.procedureRecovery.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.procedureRecovery.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.procedureRecovery.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            {{- include "plexus-worker.selectorLabels" . | nindent 12 }}
+            plexus.ai/job: procedure-recovery
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "plexus-worker.serviceAccountName" . }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          containers:
+          - name: procedure-recovery
+            securityContext:
+              {{- toYaml .Values.securityContext | nindent 14 }}
+            image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+            imagePullPolicy: {{ .Values.image.pullPolicy }}
+            command:
+            - plexus
+            - procedure
+            - timeout-stale
+            - --threshold-seconds
+            - {{ .Values.procedureRecovery.thresholdSeconds | quote }}
+            - --lookback-hours
+            - {{ .Values.procedureRecovery.lookbackHours | quote }}
+            - --output
+            - json
+            env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            - name: PLEXUS_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "plexus-worker.secretName" . }}
+                  key: api-url
+            - name: PLEXUS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "plexus-worker.secretName" . }}
+                  key: api-key
+            - name: PLEXUS_ACCOUNT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "plexus-worker.secretName" . }}
+                  key: account-key
+            resources:
+              {{- toYaml .Values.procedureRecovery.resources | nindent 14 }}
+            volumeMounts:
+            {{- if .Values.volumes.tmp.enabled }}
+            - name: tmp
+              mountPath: /app/tmp
+            {{- end }}
+          volumes:
+          {{- if .Values.volumes.tmp.enabled }}
+          - name: tmp
+            emptyDir:
+              sizeLimit: {{ .Values.volumes.tmp.sizeLimit }}
+          {{- end }}
+{{- end }}

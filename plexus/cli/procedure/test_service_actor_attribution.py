@@ -1,10 +1,47 @@
 from contextlib import nullcontext
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from plexus.cli.procedure.builtin_procedures import CONSOLE_CHAT_BUILTIN_ID
 from plexus.cli.procedure.service import ProcedureService
+
+
+@pytest.mark.asyncio
+async def test_tactus_execution_options_are_passed_to_procedure_parameters():
+    client = Mock()
+    service = ProcedureService(client)
+    service.get_procedure_info = Mock(return_value=SimpleNamespace(
+        scorecard_name="Demo", score_name="Score",
+        procedure=SimpleNamespace(scorecardId="scorecard-1", scoreId="score-1"),
+    ))
+    service.get_procedure_yaml = Mock(return_value="name: Feedback Alignment Optimizer\nclass: Tactus\n")
+    captured = {}
+
+    async def capture_execute(**kwargs):
+        captured.update(kwargs)
+        return {"success": True, "status": "COMPLETED"}
+
+    with patch(
+        "plexus.cli.procedure.service.ProcedureService._build_optimizer_recent_rubric_memory_briefing",
+        new=AsyncMock(return_value=None),
+    ), patch(
+        "plexus.cli.procedure.service.ProcedureService._build_optimizer_rubric_memory_briefing",
+        new=AsyncMock(return_value=None),
+    ), patch(
+        "plexus.cli.procedure.mcp_transport.create_procedure_mcp_server",
+        new=AsyncMock(return_value=Mock()),
+    ), patch(
+        "plexus.cli.procedure.procedure_executor.execute_procedure",
+        new=AsyncMock(side_effect=capture_execute),
+    ):
+        await service.run_procedure(
+            "procedure-1", account_id="acct-1", dry_run=True, max_iterations=1
+        )
+
+    assert captured["context"]["dry_run"] is True
+    assert captured["context"]["max_iterations"] == 1
 
 
 @pytest.mark.asyncio

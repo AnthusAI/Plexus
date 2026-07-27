@@ -6,7 +6,7 @@ import { AccountProvider } from "@/app/contexts/AccountContext";
 import { Authenticator, useAuthenticator } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
 import { Amplify } from "aws-amplify";
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Toaster } from "sonner";
 import { resolveAmplifyOutputs } from "./amplify-config";
@@ -147,9 +147,9 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     }
   }, [authStatus, router, pathname, directToLogin, isPublicPath, isAccessiblePublicPath]);
 
-  // While auth is loading, render nothing
+  // Keep the authentication boundary visible while Amplify initializes.
   if (!authStatus) {
-    return null;
+    return <div role="status">Preparing sign-in…</div>;
   }
 
   // For public paths
@@ -157,8 +157,12 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
     return children;
   }
 
-  // For all other pages, show content only if authenticated
-  return authStatus === 'authenticated' ? children : null;
+  if (authStatus === 'unauthenticated') {
+    return <Authenticator />;
+  }
+
+  // For all other pages, show content only if authenticated.
+  return authStatus === 'authenticated' ? children : <div role="status">Preparing sign-in…</div>;
 }
 
 export default function ClientLayout({

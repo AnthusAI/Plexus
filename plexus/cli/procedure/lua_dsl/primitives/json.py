@@ -60,7 +60,12 @@ class JsonPrimitive:
             # Convert Lua tables to Python dicts recursively if needed
             python_data = self._lua_to_python(data)
 
-            json_str = json.dumps(python_data, ensure_ascii=False, indent=None)
+            json_str = json.dumps(
+                python_data,
+                ensure_ascii=False,
+                indent=None,
+                default=self._json_default,
+            )
             logger.debug(f"Encoded data to JSON ({len(json_str)} bytes)")
             return json_str
 
@@ -68,6 +73,14 @@ class JsonPrimitive:
             error_msg = f"Failed to encode to JSON: {e}"
             logger.error(error_msg)
             raise ValueError(error_msg)
+
+    @staticmethod
+    def _json_default(value: Any) -> Any:
+        """Serialize Pydantic runtime events nested in procedure diagnostics."""
+        model_dump = getattr(value, "model_dump", None)
+        if callable(model_dump):
+            return model_dump(mode="json")
+        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
     def decode(self, json_str: str):
         """

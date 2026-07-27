@@ -156,6 +156,31 @@ class TestJsonEncode:
         with pytest.raises(ValueError, match="Failed to encode to JSON"):
             json_primitive.encode(CustomObject())
 
+    def test_encode_pydantic_event_nested_in_diagnostic(self, json_primitive):
+        """Should preserve runtime event details in optimizer diagnostics."""
+        from tactus.protocols.models import CostEvent
+
+        diagnostic = {
+            "error": "Prediction failed",
+            "cost_event": CostEvent(
+                agent_name="optimizer",
+                model="openai/gpt-5.4-nano",
+                provider="openai",
+                prompt_tokens=10,
+                completion_tokens=5,
+                total_tokens=15,
+                prompt_cost=0.001,
+                completion_cost=0.001,
+                total_cost=0.002,
+            ),
+        }
+
+        parsed = json.loads(json_primitive.encode(diagnostic))
+
+        assert parsed["error"] == "Prediction failed"
+        assert parsed["cost_event"]["agent_name"] == "optimizer"
+        assert parsed["cost_event"]["total_tokens"] == 15
+
 
 class TestJsonDecode:
     """Tests for Json.decode()"""

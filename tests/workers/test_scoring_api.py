@@ -82,6 +82,7 @@ def test_score_endpoint_returns_structured_scoring_error():
     assert payload == {
         "error": "scoring_request_failed",
         "message": "Requested scoring resource was not found.",
+        "reason_code": "resource_not_found",
         "scoring_job_id": "job-1",
     }
 

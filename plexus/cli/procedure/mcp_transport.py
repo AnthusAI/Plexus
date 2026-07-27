@@ -326,6 +326,14 @@ def _update_stage_status_message(client: Any, task_id: str, message: str) -> Non
         {"input": {"id": running["id"], "statusMessage": message[:500]}},
         retry_policy=LONG_RUNNING_WRITE_RETRY_POLICY_NAME,
     )
+    try:
+        _touch_task_runtime_heartbeat(client, task_id)
+    except Exception as exc:
+        logger.warning(
+            "Could not refresh runtime heartbeat for task %s after status message update: %s",
+            task_id,
+            exc,
+        )
 
 
 def _update_stage_progress(client: Any, task_id: str, current: int, total: int) -> None:

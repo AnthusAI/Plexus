@@ -8,6 +8,9 @@ from plexus.cli.procedure.mcp_transport import create_procedure_mcp_server
 from plexus.cli.procedure.procedure_executor import (
     _PlexusTraceLogBridge,
     _execute_tactus,
+    _install_tactus_dspy_legacy_turn_compatibility_patch,
+    _install_tactus_dspy_request_timeout_patch,
+    _install_tactus_json_pydantic_patch,
     _score_edit_audit_markdown,
 )
 
@@ -23,6 +26,117 @@ def test_score_change_audit_calls_out_guidelines_only_candidate() -> None:
 
     assert markdown.startswith("**Guidelines update saved**")
     assert "- Changed fields: `guidelines`" in markdown
+
+
+def test_tactus_agent_request_timeout_is_configurable_per_agent(monkeypatch) -> None:
+    from tactus.dspy import agent as tactus_agent
+
+    class FakeDSPyAgentHandle:
+        def _agent_lm_config(self, _opts=None):
+            return "openai/gpt-5.4-nano", {"max_tokens": 200}
+
+        def _turn_without_streaming(self, _opts, _prompt_context):
+            return None
+
+    monkeypatch.setattr(tactus_agent, "DSPyAgentHandle", FakeDSPyAgentHandle)
+    monkeypatch.setenv("PLEXUS_LLM_REQUEST_TIMEOUT_SECONDS", "47")
+
+    _install_tactus_dspy_request_timeout_patch()
+
+    _, kwargs = FakeDSPyAgentHandle()._agent_lm_config()
+    assert kwargs == {"max_tokens": 200, "timeout": 47.0}
+
+
+def test_tactus_legacy_turn_delegates_to_callable_agent(monkeypatch) -> None:
+    """Shipped YAML procedures retain their documented Agent.turn() surface."""
+    from tactus.dspy import agent as tactus_agent
+
+    class FakeDSPyAgentHandle:
+        def __init__(self):
+            self.inputs = None
+
+        def __call__(self, inputs):
+            self.inputs = inputs
+            return "called"
+
+    monkeypatch.setattr(tactus_agent, "DSPyAgentHandle", FakeDSPyAgentHandle)
+
+    _install_tactus_dspy_legacy_turn_compatibility_patch()
+    agent = FakeDSPyAgentHandle()
+    assert agent.turn({"inject": "continue"}) == "called"
+    assert agent.inputs == {"message": "continue"}
+
+
+def test_tactus_legacy_turn_rejects_ambiguous_message(monkeypatch) -> None:
+    from tactus.dspy import agent as tactus_agent
+
+    class FakeDSPyAgentHandle:
+        def __call__(self, _inputs):
+            return None
+
+    monkeypatch.setattr(tactus_agent, "DSPyAgentHandle", FakeDSPyAgentHandle)
+    _install_tactus_dspy_legacy_turn_compatibility_patch()
+
+    with pytest.raises(ValueError, match="either inject or message"):
+        FakeDSPyAgentHandle().turn({"inject": "one", "message": "two"})
+
+
+def test_tactus_non_streaming_turn_uses_scoped_lm_context(monkeypatch) -> None:
+    """Non-streaming agents must receive the same scoped timeout as streams."""
+    from contextlib import contextmanager
+    from tactus.dspy import agent as tactus_agent
+
+    class FakeDSPyAgentHandle:
+        def __init__(self):
+            self.in_lm_context = False
+
+        def _agent_lm_config(self, _opts=None):
+            return "openai/gpt-5.4-nano", {}
+
+        @contextmanager
+        def _dspy_lm_context(self, _opts=None):
+            self.in_lm_context = True
+            try:
+                yield
+            finally:
+                self.in_lm_context = False
+
+        def _turn_without_streaming(self, _opts, _prompt_context):
+            return self.in_lm_context
+
+    monkeypatch.setattr(tactus_agent, "DSPyAgentHandle", FakeDSPyAgentHandle)
+
+    _install_tactus_dspy_request_timeout_patch()
+
+    assert FakeDSPyAgentHandle()._turn_without_streaming({}, {}) is True
+
+
+def test_tactus_json_patch_serializes_pydantic_events_without_error_log(caplog) -> None:
+    """Pydantic diagnostics remain serializable without a spurious error."""
+    from tactus.primitives.json import JsonPrimitive
+    from tactus.protocols.models import CostEvent
+
+    _install_tactus_json_pydantic_patch()
+
+    with caplog.at_level("ERROR"):
+        payload = JsonPrimitive().encode(
+            {
+                "event": CostEvent(
+                    agent_name="optimizer",
+                    model="openai/gpt-5.4-nano",
+                    provider="openai",
+                    prompt_tokens=1,
+                    completion_tokens=1,
+                    total_tokens=2,
+                    prompt_cost=0,
+                    completion_cost=0,
+                    total_cost=0,
+                )
+            }
+        )
+
+    assert '"agent_name": "optimizer"' in payload
+    assert "Failed to encode to JSON" not in caplog.text
 
 
 class _FakeRuntime:
@@ -282,7 +396,11 @@ class _RuntimeWithCostEvents:
                 total_cost=0.003,
             )
         )
-        return {"success": True, "response": "cost event emitted"}
+        return {
+            "success": True,
+            "response": "cost event emitted",
+            "result": {"success": True},
+        }
 
 
 class _RuntimeWithFailureResult:
@@ -1619,6 +1737,8 @@ async def test_execute_tactus_persists_inference_costs_from_cost_events(monkeypa
     assert costs["inference"]["breakdown"][0]["model"] == "gpt-5.2"
     assert costs["inference"]["breakdown"][0]["spent_usd"] == pytest.approx(0.003)
     assert costs["totals"]["overall"]["incurred"] == pytest.approx(0.003)
+    assert result["result"]["costs"] == costs
+    assert result["result"]["costs"]["totals"]["overall"]["incurred"] == pytest.approx(0.003)
 
 
 @pytest.mark.asyncio
@@ -1733,6 +1853,56 @@ async def test_execute_tactus_applies_child_depth_budget_to_runtime_source(monke
 
     assert result["success"] is True
     assert "max_depth: 2" in _RuntimeCapturesSource.last_source
+
+
+@pytest.mark.asyncio
+async def test_execute_tactus_maps_documented_outputs_to_runtime_output(monkeypatch):
+    """Required Plexus outputs must reach Tactus's output validator."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    class _RuntimeCapturesSource(_FakeRuntime):
+        last_source = None
+
+        async def execute(self, source, context, format="yaml"):
+            self.__class__.last_source = source
+            return await super().execute(source, context, format=format)
+
+    monkeypatch.setattr("tactus.core.TactusRuntime", _RuntimeCapturesSource)
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusStorageAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusHITLAdapter",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.tactus_adapters.PlexusTraceSink",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.procedure.chat_recorder.ProcedureChatRecorder",
+        lambda *_a, **_k: SimpleNamespace(),
+    )
+
+    result = await _execute_tactus(
+        procedure_id="p-output-schema",
+        procedure_source=(
+            "name: Test\n"
+            "class: Tactus\n"
+            "outputs:\n"
+            "  success: {type: boolean, required: true}\n"
+            "code: |\n"
+            "  return { success = true }\n"
+        ),
+        client=SimpleNamespace(),
+        mcp_server=None,
+        context={},
+    )
+
+    assert result["success"] is True
+    assert "output:" in _RuntimeCapturesSource.last_source
+    assert "outputs:" not in _RuntimeCapturesSource.last_source
 
 
 @pytest.mark.asyncio

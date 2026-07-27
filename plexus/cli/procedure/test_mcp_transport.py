@@ -14,6 +14,7 @@ import sys
 from unittest.mock import Mock, patch
 from plexus.cli.procedure.mcp_transport import (
     _advance_task_to_stage_by_name,
+    _update_stage_status_message,
     _update_stage_progress,
     InProcessMCPTransport,
     EmbeddedMCPServer,
@@ -421,6 +422,32 @@ def test_update_stage_progress_uses_long_running_retry_policy():
     heartbeat_metadata = json.loads(fake_task.update.call_args.kwargs["metadata"])
     assert "lastHeartbeatAt" in heartbeat_metadata["runtime"]
     assert fake_task.update.call_args.kwargs["updatedAt"] == heartbeat_metadata["runtime"]["lastHeartbeatAt"]
+
+
+def test_update_stage_status_message_refreshes_runtime_heartbeat():
+    client = Mock()
+    fake_task = Mock()
+    fake_task.metadata = json.dumps({"runtime": {"pid": 123}})
+    fake_task.update.return_value = fake_task
+    client.execute.side_effect = [
+        {
+            "getTask": {
+                "stages": {
+                    "items": [
+                        {"id": "stage-2", "name": "Evaluation", "status": "RUNNING"},
+                    ]
+                }
+            }
+        },
+        {"updateTaskStage": {"id": "stage-2", "statusMessage": "Working"}},
+    ]
+
+    with patch("plexus.cli.procedure.mcp_transport.Task.get_by_id", return_value=fake_task):
+        _update_stage_status_message(client, "task-1", "Working")
+
+    assert client.execute.call_args_list[1].kwargs["retry_policy"] == LONG_RUNNING_WRITE_RETRY_POLICY_NAME
+    heartbeat_metadata = json.loads(fake_task.update.call_args.kwargs["metadata"])
+    assert "lastHeartbeatAt" in heartbeat_metadata["runtime"]
 
 
 class TestProcedureMCPClient:

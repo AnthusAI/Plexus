@@ -1551,7 +1551,7 @@ def test_plexus_facade_uses_direct_procedure_handlers_without_mcp_loopback(
         return reader
 
     facade = execute.PlexusRuntimeModule(
-        FakeMCP(),
+        None,
         procedure_listers={
             "list": make_reader("list"),
             "info": make_reader("info"),
@@ -5535,8 +5535,8 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     class FakeProcess:
         pid = 4242
 
-        def poll(self) -> int:
-            return 1  # immediately signals process exited (fast-fail path)
+        def poll(self) -> None:
+            return None  # still running while the asynchronous record is created
 
     def fake_popen(cmd, **kwargs):
         captured["cmd"] = cmd
@@ -5602,6 +5602,31 @@ def test_default_evaluation_runner_dispatches_cli_without_mcp_loopback(
     assert result["child_budget"] == _child_budget()
 
 
+def test_default_evaluation_runner_reports_clean_child_exit_before_evaluation_creation(monkeypatch) -> None:
+    class CleanExitProcess:
+        pid = 4242
+
+        def poll(self) -> int:
+            return 0
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/plexus")
+    monkeypatch.setattr("subprocess.Popen", lambda *args, **kwargs: CleanExitProcess())
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    result = execute._default_evaluation_runner(
+        {
+            "evaluation_type": "feedback",
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+        },
+        None,
+    )
+
+    assert result["status"] == "error"
+    assert "exit=0" in result["error"]
+    assert result["evaluation_id"] is None
+
+
 def test_default_evaluation_runner_passes_frozen_feedback_window(monkeypatch) -> None:
     captured: dict = {}
 
@@ -5637,6 +5662,39 @@ def test_default_evaluation_runner_passes_frozen_feedback_window(monkeypatch) ->
     assert captured["cmd"][captured["cmd"].index("--feedback-start-at") + 1] == "2026-02-01T00:00:00Z"
     assert "--feedback-end-at" in captured["cmd"]
     assert captured["cmd"][captured["cmd"].index("--feedback-end-at") + 1] == "2026-05-01T00:00:00Z"
+
+
+def test_default_evaluation_runner_forwards_exact_feedback_item_ids(monkeypatch) -> None:
+    captured: dict = {}
+
+    class FakeProcess:
+        pid = 4242
+
+        def poll(self) -> int:
+            return 1
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return FakeProcess()
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/plexus")
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    execute._default_evaluation_runner(
+        {
+            "evaluation_type": "feedback",
+            "scorecard_name": "Compliance",
+            "score_name": "Tone",
+            "feedback_item_ids": ["opaque-id-B", "opaque-id-A"],
+            "budget": _child_budget(),
+        },
+        None,
+    )
+
+    cmd = captured["cmd"]
+    positions = [index for index, value in enumerate(cmd) if value == "--feedback-item-id"]
+    assert [cmd[index + 1] for index in positions] == ["opaque-id-B", "opaque-id-A"]
 
 
 def test_handle_peek_refreshes_evaluation_status() -> None:
@@ -5857,6 +5915,35 @@ def test_handle_peek_reaps_completed_evaluation_process(monkeypatch) -> None:
     assert snapshot["status"] == "completed"
     assert snapshot["evaluation"]["process_status"] == "exited"
     assert snapshot["evaluation"]["process_exit_code"] == 0
+
+
+def test_handle_peek_keeps_completed_evaluation_running_until_its_process_exits(
+    monkeypatch,
+) -> None:
+    handles = _MemoryHandleStore()
+    handle = handles.create(
+        kind="evaluation",
+        parent_trace_id="trace-1",
+        api_call="plexus.evaluation.run",
+        args={"async": True},
+        dispatch_result={"evaluation_id": "eval-1", "process_id": 4242},
+    )
+
+    monkeypatch.setattr(execute, "_exited_process_status", lambda _pid: None)
+
+    def fake_evaluation_info(args: dict) -> dict:
+        return {"id": args["evaluation_id"], "status": "COMPLETED"}
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test"),
+        handle_store=handles,
+        evaluation_info=fake_evaluation_info,
+    )
+
+    snapshot = module.handle.peek({"id": handle["id"]})
+
+    assert snapshot["status"] == "running"
+    assert snapshot["evaluation"]["completion_pending_process_exit"] is True
 
 
 def test_handle_cancel_terminates_process() -> None:

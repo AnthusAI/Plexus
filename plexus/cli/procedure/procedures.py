@@ -115,6 +115,63 @@ def _optimizer_feedback_window(days: int, now: Optional[datetime] = None) -> tup
     return _iso_z(start_at), _iso_z(end_at)
 
 
+def _optimizer_resumed_recent_window(client, evaluation_id: str) -> dict[str, Any]:
+    """Recover the exact recent-feedback cohort inputs from a resumed evaluation."""
+    from plexus.dashboard.api.models.evaluation import Evaluation as DashboardEvaluation
+
+    try:
+        evaluation = DashboardEvaluation.get_by_id(evaluation_id, client)
+    except Exception as exc:
+        raise click.ClickException(
+            f"Could not load resumed recent evaluation {evaluation_id}: {exc}"
+        ) from exc
+
+    parameters = evaluation.parameters
+    if isinstance(parameters, str):
+        try:
+            parameters = json.loads(parameters)
+        except json.JSONDecodeError as exc:
+            raise click.ClickException(
+                f"Resumed recent evaluation {evaluation_id} has invalid parameter provenance"
+            ) from exc
+    if not isinstance(parameters, dict):
+        parameters = {}
+
+    start_at = parameters.get("feedback_start_at")
+    end_at = parameters.get("feedback_end_at")
+    days = parameters.get("days")
+    requested_max_items = parameters.get("requested_max_items")
+    if requested_max_items is None:
+        requested_max_items = parameters.get("max_items")
+
+    try:
+        days = int(days)
+        requested_max_items = int(requested_max_items)
+    except (TypeError, ValueError):
+        days = 0
+        requested_max_items = 0
+
+    if (
+        not isinstance(start_at, str)
+        or not start_at.strip()
+        or not isinstance(end_at, str)
+        or not end_at.strip()
+        or days <= 0
+        or requested_max_items <= 0
+    ):
+        raise click.ClickException(
+            f"Resumed recent evaluation {evaluation_id} is missing frozen-window provenance "
+            "(feedback_start_at, feedback_end_at, days, requested_max_items)"
+        )
+
+    return {
+        "feedback_window_start_at": start_at,
+        "feedback_window_end_at": end_at,
+        "days": days,
+        "max_samples": requested_max_items,
+    }
+
+
 @click.group()
 def procedure():
     """Manage procedures for AI system optimization."""
@@ -1125,6 +1182,27 @@ def watch(interval: int):
 @click.option('--days', '-d', default=90, help='Feedback window in days (default: 90)')
 @click.option('--max-samples', type=int, default=None, help='Maximum feedback samples per evaluation (default: all available)')
 @click.option('--max-iterations', type=int, default=10, help='Maximum optimization iterations (default: 10)')
+@click.option(
+    '--num-candidates',
+    type=click.IntRange(min=1, max=3),
+    default=3,
+    show_default=True,
+    help='Maximum hypotheses evaluated per optimization cycle.',
+)
+@click.option(
+    '--max-cost-usd',
+    type=click.FloatRange(min=0.01),
+    default=10.0,
+    show_default=True,
+    help='Hard parent-procedure LLM cost budget in USD.',
+)
+@click.option(
+    '--evaluation-stall-timeout-minutes',
+    type=click.IntRange(min=1),
+    default=15,
+    show_default=True,
+    help='Maximum minutes without evaluation progress before treating it as stalled.',
+)
 @click.option('--improvement-threshold', type=float, default=0.02, help='Minimum AC1 improvement to continue (default: 0.02)')
 @click.option('--dry-run', is_flag=True, help='Run analysis only without making score updates')
 @click.option('--resume-regression-eval', type=str, default=None, help='Reuse existing regression baseline evaluation ID (skip running baselines)')
@@ -1138,7 +1216,7 @@ def watch(interval: int):
     help='Per-agent model override as agent=model. Repeatable. Example: --agent-model hypothesis_planner=gpt-5.4-mini',
 )
 @click.option('--output', '-o', type=click.Choice(['json', 'yaml', 'table']), default='table', help='Output format')
-def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, improvement_threshold: float, dry_run: bool, resume_regression_eval: str, resume_recent_eval: str, version: str, hint: str, agent_models: tuple[str, ...], output: str):
+def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterations: int, num_candidates: int, max_cost_usd: float, evaluation_stall_timeout_minutes: int, improvement_threshold: float, dry_run: bool, resume_regression_eval: str, resume_recent_eval: str, version: str, hint: str, agent_models: tuple[str, ...], output: str):
     """Run feedback alignment optimization with RCA for a score.
 
     This command runs the iterative optimization loop:
@@ -1178,11 +1256,18 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         console.print("[yellow]Hint: This command requires the procedure YAML to be in plexus/procedures/[/yellow]")
         return
 
-    try:
-        feedback_window_start_at, feedback_window_end_at = _optimizer_feedback_window(days)
-    except ValueError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        return
+    if resume_recent_eval is not None:
+        resumed_window = _optimizer_resumed_recent_window(client, resume_recent_eval)
+        feedback_window_start_at = resumed_window["feedback_window_start_at"]
+        feedback_window_end_at = resumed_window["feedback_window_end_at"]
+        days = resumed_window["days"]
+        max_samples = resumed_window["max_samples"]
+    else:
+        try:
+            feedback_window_start_at, feedback_window_end_at = _optimizer_feedback_window(days)
+        except ValueError as e:
+            console.print(f"[red]Error: {e}[/red]")
+            return
 
     console.print(f"[cyan]Starting feedback alignment optimization...[/cyan]")
     console.print(f"  Scorecard: {scorecard}")
@@ -1190,6 +1275,9 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
     console.print(f"  Feedback window: {days} days")
     console.print(f"  Frozen feedback range: {feedback_window_start_at} to {feedback_window_end_at}")
     console.print(f"  Max iterations: {max_iterations}")
+    console.print(f"  Candidates per cycle: {num_candidates}")
+    console.print(f"  Parent LLM cost budget: ${max_cost_usd:.2f}")
+    console.print(f"  Evaluation stall timeout: {evaluation_stall_timeout_minutes} minutes without progress")
     console.print(f"  Improvement threshold: {improvement_threshold:.2%}")
     console.print(f"  Dry run: {'Yes' if dry_run else 'No'}")
     if agent_models:
@@ -1204,6 +1292,15 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         "feedback_window_start_at": feedback_window_start_at,
         "feedback_window_end_at": feedback_window_end_at,
         "max_iterations": max_iterations,
+        "num_candidates": num_candidates,
+        "max_cost_usd": max_cost_usd,
+        "_plexus_child_budget": {
+            "usd": max_cost_usd,
+            "wallclock_seconds": 14400,
+            "tool_calls": 5000,
+            "depth": 2,
+        },
+        "evaluation_stall_timeout_minutes": evaluation_stall_timeout_minutes,
         "improvement_threshold": improvement_threshold,
         "dry_run": dry_run
     }
@@ -1248,6 +1345,7 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         return
 
     console.print("Creating optimization procedure...")
+    from plexus.cli.procedure.state_machine_stages import get_alignment_optimizer_stage_configs
     result = service.create_procedure(
         account_identifier=account,
         scorecard_identifier=scorecard,
@@ -1257,6 +1355,7 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
         score_version_id=version,
         name=f"Optimizer: {scorecard}",
         dispatch_mode="local",
+        stage_configs=get_alignment_optimizer_stage_configs(),
     )
 
     if not result.success:
@@ -1305,7 +1404,7 @@ def optimize(scorecard: str, score: str, days: int, max_samples: int, max_iterat
 
     # Parse result
     if output == 'json':
-        console.print(JSON.from_data(exec_result_clean))
+        click.echo(json_mod.dumps(exec_result_clean, indent=2))
     elif output == 'yaml':
         console.print(yaml.dump(exec_result_clean, default_flow_style=False))
     else:

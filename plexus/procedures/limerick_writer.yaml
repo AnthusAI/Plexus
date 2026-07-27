@@ -14,10 +14,6 @@ outputs:
     type: string
     required: true
     description: "The generated limerick text"
-  node_id:
-    type: string
-    required: true
-    description: "Graph node ID containing the limerick"
   success:
     type: boolean
     required: true
@@ -100,7 +96,6 @@ code: |
   -- Return results matching output schema
   return {
     limerick = limerick,
-    node_id = node_id,
     success = success,
     metadata = {
       iterations = Iterations.current(),

@@ -16,11 +16,16 @@ def test_process_scoring_job_sync_persists_result(monkeypatch):
     monkeypatch.setenv("PLEXUS_ACCOUNT_KEY", "acct-1")
 
     fake_client = Mock()
-    fake_client.execute.return_value = {
-        "createScoreResult": {
-            "id": "score-result-1",
+    fake_client.execute.side_effect = [
+        {"listScoreResults": {"items": []}},
+        {
+            "claimScoringJob": {
+                "state": "CLAIMED",
+                "scoreResultId": "claimed-result-1",
+            },
         },
-    }
+        {"createScoreResult": {"id": "score-result-1"}},
+    ]
     fake_item = SimpleNamespace(id="item-1", text="hello", accountId="acct-1")
     fake_result = SimpleNamespace(
         value={"label": "Yes"},
@@ -67,7 +72,7 @@ def test_process_scoring_job_sync_persists_result(monkeypatch):
         use_cache=True,
         yaml_only=False,
     )
-    fake_client.execute.assert_called_once()
+    assert fake_client.execute.call_count == 3
     result_input = fake_client.execute.call_args.args[1]["input"]
     assert result_input["accountId"] == "acct-1"
     assert result_input["scoreId"] == "score-1"
@@ -78,11 +83,16 @@ def test_process_scoring_job_sync_falls_back_for_empty_item_account_id(monkeypat
     monkeypatch.delenv("PLEXUS_ACCOUNT_KEY", raising=False)
 
     fake_client = Mock()
-    fake_client.execute.return_value = {
-        "createScoreResult": {
-            "id": "score-result-1",
+    fake_client.execute.side_effect = [
+        {"listScoreResults": {"items": []}},
+        {
+            "claimScoringJob": {
+                "state": "CLAIMED",
+                "scoreResultId": "claimed-result-1",
+            },
         },
-    }
+        {"createScoreResult": {"id": "score-result-1"}},
+    ]
     fake_item = SimpleNamespace(id="item-1", text="hello", accountId="")
     fake_result = SimpleNamespace(value="Yes", explanation="matched", metadata={})
     fake_score_instance = FakeScoreInstance(fake_result)

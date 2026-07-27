@@ -7,7 +7,6 @@ import json
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from plexus.bedrock_models import CLAUDE_HAIKU_45_MODEL_ID
 from plexus.rubric_memory import validate_rubric_memory_citations
 
 logger = logging.getLogger(__name__)
@@ -38,10 +37,8 @@ class GuidelineVettingService:
 
     def __init__(
         self,
-        invoke_bedrock: Optional[Callable[[str, bool], Dict[str, Any]]] = None,
-        invoke_openai: Optional[Callable[[str, str], Dict[str, Any]]] = None,
+        invoke_openai: Optional[Callable[[str, str, str], Dict[str, Any]]] = None,
     ):
-        self._invoke_bedrock_fn = invoke_bedrock or self._invoke_bedrock
         self._invoke_openai_fn = invoke_openai or self._invoke_openai
 
     def _build_prompt(
@@ -123,54 +120,12 @@ class GuidelineVettingService:
             text = obj_match.group(0)
         return json.loads(text)
 
-    def _invoke_bedrock(self, prompt: str, use_thinking: bool = False) -> Dict[str, Any]:
-        """Single Haiku classifier call with one parse retry."""
-        import boto3
-
-        bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
-        body_dict: Dict[str, Any] = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        if use_thinking:
-            body_dict["max_tokens"] = 4000
-            body_dict["temperature"] = 1
-            body_dict["thinking"] = {"type": "enabled", "budget_tokens": 3000}
-        else:
-            body_dict["max_tokens"] = 400
-            body_dict["temperature"] = 0
-
-        body = json.dumps(body_dict)
-        last_error: Optional[Exception] = None
-        for _ in range(2):
-            response = bedrock.invoke_model(
-                modelId=CLAUDE_HAIKU_45_MODEL_ID,
-                body=body,
-                contentType="application/json",
-                accept="application/json",
-            )
-            raw = json.loads(response["body"].read())
-            thinking_text = ""
-            text = ""
-            for block in raw.get("content", []):
-                if block.get("type") == "thinking":
-                    thinking_text = block.get("thinking", "")
-                elif block.get("type") == "text":
-                    text = (block.get("text") or "").strip()
-            if not text and raw.get("content"):
-                text = (raw["content"][0].get("text") or "").strip()
-            try:
-                parsed = self._parse_classifier_response(text)
-                if thinking_text:
-                    parsed["_thinking"] = thinking_text
-                return parsed
-            except json.JSONDecodeError as exc:
-                last_error = exc
-        if last_error:
-            raise last_error
-        raise ValueError("Classifier response parsing failed without exception context.")
-
-    def _invoke_openai(self, prompt: str, reasoning_effort: str = "low") -> Dict[str, Any]:
+    def _invoke_openai(
+        self,
+        prompt: str,
+        reasoning_effort: str = "low",
+        model: str = "gpt-5.4-nano",
+    ) -> Dict[str, Any]:
         """GPT-5.4 classifier with corrective retries for strict JSON output."""
         import os
         from dotenv import load_dotenv
@@ -185,7 +140,7 @@ class GuidelineVettingService:
 
         for _ in range(4):
             response = client.responses.create(
-                model="gpt-5.4",
+                model=model,
                 reasoning={"effort": reasoning_effort},
                 input=input_messages,
                 max_output_tokens=4000 if reasoning_effort == "high" else 400,
@@ -342,13 +297,14 @@ class GuidelineVettingService:
                 if prompt is None:
                     return None
 
+                round_one_models = ["gpt-5.4-nano", "gpt-5.4-nano"]
                 round_one_raw = await asyncio.gather(
-                    asyncio.to_thread(self._invoke_bedrock_fn, prompt),
-                    asyncio.to_thread(self._invoke_openai_fn, prompt),
-                    asyncio.to_thread(self._invoke_bedrock_fn, prompt),
+                    *(
+                        asyncio.to_thread(self._invoke_openai_fn, prompt, "low", model)
+                        for model in round_one_models
+                    ),
                     return_exceptions=True,
                 )
-                round_one_models = ["haiku", "gpt", "haiku"]
                 round_one_votes: List[Tuple[str, Optional[Dict[str, Any]]]] = [
                     (model, result if not isinstance(result, Exception) else None)
                     for model, result in zip(round_one_models, round_one_raw)
@@ -369,20 +325,18 @@ class GuidelineVettingService:
                 if not round_one_unanimous:
                     round_one_context = _build_prior_votes_context(round_one_votes)
 
-                    prompt_round_two_haiku = prompt + "\n\n" + round_one_context
+                    prompt_round_two = prompt + "\n\n" + round_one_context
                     try:
-                        round_two_haiku = await asyncio.to_thread(self._invoke_bedrock_fn, prompt_round_two_haiku, True)
+                        round_two_openai = await asyncio.to_thread(
+                            self._invoke_openai_fn,
+                            prompt_round_two,
+                            "high",
+                            "gpt-5.4-mini",
+                        )
                     except Exception:
-                        round_two_haiku = None
+                        round_two_openai = None
 
-                    round_two_context = _build_prior_votes_context(round_one_votes + [("haiku", round_two_haiku)])
-                    prompt_round_two_gpt = prompt + "\n\n" + round_two_context
-                    try:
-                        round_two_gpt = await asyncio.to_thread(self._invoke_openai_fn, prompt_round_two_gpt, "high")
-                    except Exception:
-                        round_two_gpt = None
-
-                    round_two_votes = [("haiku", round_two_haiku), ("gpt", round_two_gpt)]
+                    round_two_votes = [("gpt-5.4-mini", round_two_openai)]
                     valid_round_two = [(model, result) for model, result in round_two_votes if result is not None]
                     round_two_bools = [result["contradicts"] for _, result in valid_round_two]
                     yes_count += sum(round_two_bools)

@@ -16,6 +16,12 @@ global:
       port: 8000
       path: "/graphql"
 
+localObjectStore:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 2Gi
+
 postgresql:
   enabled: true
   image:
@@ -45,6 +51,11 @@ postgresql:
 graphql-proxy:
   enabled: true
   replicaCount: 1
+  # A one-proxy Docker Desktop deployment cannot satisfy minAvailable: 1
+  # during a voluntary disruption. Disable the production PDB locally so
+  # routine restarts and upgrades remain possible.
+  podDisruptionBudget:
+    enabled: false
   image:
     repository: plexus-graphql-proxy
     tag: "local"
@@ -58,6 +69,8 @@ graphql-proxy:
     upstreamApiKey: ""
     upstreamDisabled: true
     enableDebug: true
+    # Faster retry recovery after a locally interrupted score request.
+    scoringJobClaimLeaseSeconds: 15
     # --- Option B: AppSync upstream (original) ---
     # backendMode: "amplify"
     # authMode: ""
@@ -74,14 +87,48 @@ plexus-worker:
   enabled: true
   workerType: scoring-api
   replicaCount: 1
+  # A one-worker Docker Desktop deployment cannot satisfy the worker chart's
+  # production PDB default (minAvailable: 2). Disable it locally so normal
+  # voluntary restarts and upgrades are not blocked.
+  podDisruptionBudget:
+    enabled: false
   image:
     repository: plexus-worker
     tag: "local"
     pullPolicy: IfNotPresent
   env:
     LOG_LEVEL: DEBUG
-    MAX_JOBS_PER_WORKER: "10"
+    MAX_JOBS_PER_WORKER: "2"
+    # The worker image is unprivileged; keep package caches on its writable
+    # tmp volume so evaluation startup does not silently degrade to memory-only.
+    HOME: /app/tmp
+    XDG_CACHE_HOME: /app/tmp/cache
+    MPLCONFIGDIR: /app/tmp/matplotlib
+    PLEXUS_DATA_CACHE_DIRECTORY: /app/tmp/training-data-cache
+    # Do not accept scoring traffic while the local GraphQL proxy is unready.
+    PLEXUS_SCORING_REQUIRE_PROXY_READY: "1"
     PLEXUS_DISABLE_CLOUDWATCH_LOGS: "1"
+
+  # The demo optimizer evaluates two candidates concurrently in-process.
+  # These measured limits prevent the Linux OOM killer from terminating the
+  # worker during the candidate-evaluation phase on Docker Desktop.
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "4Gi"
+      cpu: 2
+  objectStore:
+    enabled: true
+    endpoint: "http://plexus-local-object-store:9000"
+    existingSecret: "plexus-local-object-store"
+    buckets:
+      datasets: "plexus-local-datasets"
+      reportBlockDetails: "plexus-local-report-block-details"
+      rubricMemory: "plexus-local-rubric-memory"
+      taskAttachments: "plexus-local-task-attachments"
+      scoreResultAttachments: "plexus-local-score-result-attachments"
   plexus:
     createSecrets: true
     api:
@@ -102,6 +149,10 @@ plexus-worker:
       listenerName: http
       port: 80
       pathPrefix: /v1/score
+      # Real LLM scoring can exceed Envoy Gateway's implicit timeout under
+      # concurrent local use. Keep the route budgets explicit.
+      requestTimeout: "120s"
+      backendRequestTimeout: "120s"
   celery:
     enabled: false
     app: plexus.workers.celery_app
@@ -111,8 +162,15 @@ plexus-worker:
       createSecrets: true
       url: "amqp://plexus:plexus@host.docker.internal:5672/"
   llm:
-    createSecrets: true
-    openai:
-      apiKey: "your-openai-api-key-here"
-    anthropic:
-      apiKey: "your-anthropic-api-key-here"
+    # Create this secret before Helm install; do not put an API key or a
+    # placeholder into a values file that Helm will persist in release history.
+    createSecrets: false
+    existingSecret: "plexus-local-llm-keys"
+    openai: true
+    anthropic: false
+  procedureRecovery:
+    # Mark interrupted procedure runs STALLED promptly after Docker Desktop
+    # replaces a worker pod. Recovery remains an explicit operator rerun.
+    enabled: true
+    schedule: "*/1 * * * *"
+    thresholdSeconds: 120

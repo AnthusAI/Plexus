@@ -170,6 +170,7 @@ _RETRYABLE_MESSAGE_SNIPPETS = (
     "connection reset",
     "connection aborted",
     "connection refused",
+    "temporary failure in name resolution",
     "timed out",
     "timeout",
     "service unavailable",
@@ -291,6 +292,10 @@ class _BaseAPIClient:
             auth=auth,
             verify=True,
             retries=3,
+            # A retry policy cannot cap a request that never returns.  Bound
+            # each transport attempt so report/evaluation fan-out can recover
+            # from a stalled local proxy or network connection.
+            timeout=15,
         )
 
     def _process_logs(self):

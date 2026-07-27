@@ -280,6 +280,73 @@ graph:
     assert classes == ["Yes", "No"]
 
 
+def test_resolve_score_valid_classes_includes_reachable_early_exit():
+    client = MagicMock()
+    client.execute = MagicMock(
+        side_effect=[
+            {"getScore": {"id": "score-1", "championVersionId": "sv-1"}},
+            {
+                "getScoreVersion": {
+                    "id": "sv-1",
+                    "configuration": """
+graph:
+  - name: applicability
+    class: Classifier
+    valid_classes: ["Continue", "NA"]
+    conditions:
+      - state: Classification
+        value: "Continue"
+        node: final_classifier
+      - state: Classification
+        value: "NA"
+        node: END
+        output:
+          value: "NA"
+  - name: final_classifier
+    class: Classifier
+    valid_classes: ["Yes", "No"]
+""",
+                }
+            },
+        ]
+    )
+
+    classes = resolve_score_valid_classes_from_score_yaml(client=client, score_id="score-1")
+
+    assert classes == ["NA", "Yes", "No"]
+
+
+def test_resolve_score_valid_classes_expands_dynamic_early_exit_value():
+    client = MagicMock()
+    client.execute = MagicMock(
+        side_effect=[
+            {"getScore": {"id": "score-1", "championVersionId": "sv-1"}},
+            {
+                "getScoreVersion": {
+                    "id": "sv-1",
+                    "configuration": """
+graph:
+  - name: initial_classifier
+    class: Classifier
+    valid_classes: ["Yes", "No"]
+    edge:
+      node: END
+      output:
+        value: classification
+  - name: unreachable_node
+    class: Classifier
+    valid_classes: ["Maybe"]
+""",
+                }
+            },
+        ]
+    )
+
+    classes = resolve_score_valid_classes_from_score_yaml(client=client, score_id="score-1")
+
+    assert classes == ["Yes", "No", "Maybe"]
+
+
 def test_resolve_score_valid_classes_from_logical_classifier_code():
     client = MagicMock()
     client.execute = MagicMock(
@@ -336,7 +403,7 @@ classes:
     assert "GetScoreChampionVersion" not in first_call_query
 
 
-def test_select_balanced_feedback_items_round_robins_and_preserves_size():
+def test_select_balanced_feedback_items_stops_before_reintroducing_material_imbalance():
     def item(item_id: str, label: str):
         return SimpleNamespace(
             id=item_id,
@@ -361,8 +428,8 @@ def test_select_balanced_feedback_items_round_robins_and_preserves_size():
         max_items=4,
     )
 
-    assert len(selected) == 4
-    assert _compute_label_distribution(selected) == {"No": 1, "Yes": 3}
+    assert len(selected) == 3
+    assert _compute_label_distribution(selected) == {"No": 1, "Yes": 2}
 
 
 def test_ordered_unique_feedback_ids_preserves_input_order():
@@ -470,6 +537,9 @@ def test_build_associated_dataset_from_feedback_window_persists_stats(
     assert mock_collect.call_args.kwargs["excluded_feedback_item_ids"] == ["fb-2", "fb-1"]
     stats = mock_create_datasource_version.call_args.kwargs["dataset_stats"]
     assert stats["row_count"] == 2
+    assert stats["requested_max_items"] == 2
+    assert stats["qualifying_found"] == 2
+    assert stats["source_exhausted"] is False
     assert stats["label_distribution"] == {"No": 1, "Yes": 1}
     assert stats["balance_applied"] is True
     assert stats["class_resolution_source"] == "graph[-1].LogicalClassifier.code"
@@ -480,6 +550,106 @@ def test_build_associated_dataset_from_feedback_window_persists_stats(
     assert result["optimizer_shadow_invalid_feedback_item_ids"] == ["fb-2", "fb-1"]
     assert result["score_version_id_used"] == "sv-explicit"
     assert result["feedback_target_hash"]
+
+
+@patch("plexus.cli.dataset.curation._upload_dataset_parquet", return_value="datasets/account-1/dataset-1/dataset.parquet")
+@patch("plexus.cli.dataset.curation._fetch_score_champion_version", return_value=None)
+@patch("plexus.cli.dataset.curation._create_associated_dataset_datasource_version", return_value=("ds-1", "dsv-1"))
+@patch("plexus.cli.dataset.curation.FeedbackItems")
+@patch(
+    "plexus.cli.dataset.curation._resolve_score_final_classes_from_yaml_details",
+    return_value={
+        "classes": ["NA", "Yes", "No"],
+        "source": "graph.terminal_outputs",
+        "score_version_id": "sv-explicit",
+        "optimizer_shadow_invalid_feedback_item_ids": [],
+    },
+)
+@patch("plexus.cli.dataset.curation.collect_qualifying_feedback_items")
+@patch("plexus.cli.dataset.curation._fetch_scorecard_account_id", return_value="account-1")
+@patch("plexus.cli.dataset.curation._fetch_score_name", return_value="Test Score")
+def test_balanced_feedback_window_extends_history_for_sparse_terminal_classes(
+    _mock_score_name,
+    _mock_account,
+    mock_collect,
+    _mock_class_resolver,
+    mock_feedback_items_class,
+    mock_create_datasource_version,
+    _mock_champion,
+    _mock_upload,
+):
+    def feedback(item_id: str, label: str, edited_at: str):
+        return SimpleNamespace(
+            id=item_id,
+            accountId="account-1",
+            scorecardId="scorecard-1",
+            scoreId="score-1",
+            finalAnswerValue=label,
+            editedAt=edited_at,
+            item=SimpleNamespace(id=f"item-{item_id}", text=f"text-{item_id}"),
+        )
+
+    recent = [
+        feedback("recent-na-1", "NA", "2026-03-03T00:00:00Z"),
+        feedback("recent-na-2", "NA", "2026-03-02T00:00:00Z"),
+        feedback("recent-yes-1", "Yes", "2026-03-01T00:00:00Z"),
+        feedback("recent-yes-2", "Yes", "2026-02-28T00:00:00Z"),
+    ]
+    historical = recent + [
+        feedback("older-no-1", "No", "2025-12-02T00:00:00Z"),
+        feedback("older-no-2", "No", "2025-12-01T00:00:00Z"),
+    ]
+    mock_collect.side_effect = [recent, historical]
+
+    import pandas as pd
+
+    row_builder = MagicMock()
+    row_builder._create_dataset_rows.side_effect = lambda items, _name: pd.DataFrame(
+        {
+            "feedback_item_id": [item.id for item in items],
+            "text": [item.item.text for item in items],
+            "metadata": ["{}"] * len(items),
+            "IDs": ["[]"] * len(items),
+            "Test Score": [item.finalAnswerValue for item in items],
+        }
+    )
+    mock_feedback_items_class.return_value = row_builder
+
+    mock_client = MagicMock()
+    mock_client.execute = MagicMock(
+        side_effect=[
+            {"createDataSet": {"id": "dataset-1"}},
+            {"updateDataSet": {"id": "dataset-1", "file": "datasets/account-1/dataset-1/dataset.parquet"}},
+            {"getDataSet": {"id": "dataset-1", "file": "datasets/account-1/dataset-1/dataset.parquet", "attachedFiles": []}},
+        ]
+    )
+
+    result = build_associated_dataset_from_feedback_window(
+        client=mock_client,
+        scorecard_id="scorecard-1",
+        score_id="score-1",
+        max_items=6,
+        days=30,
+        balance=True,
+        class_source_score_version_id="sv-explicit",
+    )
+
+    assert mock_collect.call_count == 2
+    assert mock_collect.call_args_list[0].kwargs["days"] == 30
+    assert mock_collect.call_args_list[1].kwargs["days"] is None
+    assert result["lookback_extended"] is True
+    assert result["balance_complete"] is True
+    assert result["recent_class_distribution"] == {"NA": 2, "Yes": 2}
+    assert result["class_coverage"] == {
+        "NA": {"recent": 2, "available": 2, "selected": 2},
+        "Yes": {"recent": 2, "available": 2, "selected": 2},
+        "No": {"recent": 0, "available": 2, "selected": 2},
+    }
+    assert result["class_distribution_after"] == {"NA": 2, "No": 2, "Yes": 2}
+    stats = mock_create_datasource_version.call_args.kwargs["dataset_stats"]
+    assert stats["lookback_extended"] is True
+    assert stats["recent_class_distribution"] == {"NA": 2, "Yes": 2}
+    assert stats["label_distribution"] == {"NA": 2, "No": 2, "Yes": 2}
 
 
 @patch("plexus.cli.dataset.curation._fetch_score_champion_version", return_value=None)

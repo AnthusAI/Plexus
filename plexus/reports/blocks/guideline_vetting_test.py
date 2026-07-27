@@ -6,16 +6,48 @@ from plexus.reports.blocks.guideline_vetting import GuidelineVettingService
 
 
 @pytest.mark.asyncio
-async def test_analyze_items_marks_unanimous_non_contradiction_as_reference_eligible():
-    def bedrock_vote(_prompt: str, _use_thinking: bool = False):
+async def test_analyze_items_uses_openai_votes_without_bedrock():
+    requested_models = []
+
+    def openai_vote(_prompt: str, _reasoning_effort: str, model: str):
+        requested_models.append(model)
         return {
             "contradicts": False,
             "category": None,
-            "reason": "Aligned with guideline.",
+            "reason": "Consistent with policy.",
             "guideline_quote": "Allows this behavior.",
         }
 
-    def openai_vote(_prompt: str, _reasoning_effort: str = "low"):
+    item = SimpleNamespace(
+        id="fi-openai-only",
+        itemId="item-openai-only",
+        initialAnswerValue="No",
+        finalAnswerValue="Yes",
+        editCommentValue="Reviewer changed label.",
+        editorName="Reviewer",
+        editedAt=None,
+        isInvalid=False,
+        item=None,
+    )
+
+    service = GuidelineVettingService(invoke_openai=openai_vote)
+    results = await service.analyze_items(
+        items=[item],
+        guidelines="Guideline text",
+        max_concurrent=2,
+        score_results_by_item={},
+    )
+
+    assert requested_models == ["gpt-5.4-nano", "gpt-5.4-nano"]
+    assert [vote["model"] for vote in results[0]["voting"]] == [
+        "gpt-5.4-nano",
+        "gpt-5.4-nano",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_analyze_items_marks_unanimous_non_contradiction_as_reference_eligible():
+    def openai_vote(_prompt: str, _reasoning_effort: str, _model: str):
         return {
             "contradicts": False,
             "category": None,
@@ -35,7 +67,7 @@ async def test_analyze_items_marks_unanimous_non_contradiction_as_reference_elig
         item=None,
     )
 
-    service = GuidelineVettingService(invoke_bedrock=bedrock_vote, invoke_openai=openai_vote)
+    service = GuidelineVettingService(invoke_openai=openai_vote)
     results = await service.analyze_items(
         items=[item],
         guidelines="Guideline text",
@@ -52,15 +84,18 @@ async def test_analyze_items_marks_unanimous_non_contradiction_as_reference_elig
 
 @pytest.mark.asyncio
 async def test_analyze_items_marks_contradiction_as_not_reference_eligible():
-    def bedrock_vote(_prompt: str, _use_thinking: bool = False):
-        return {
-            "contradicts": True,
-            "category": "contradiction",
-            "reason": "Violates explicit policy.",
-            "guideline_quote": "Do not make this claim.",
-        }
+    vote_count = 0
 
-    def openai_vote(_prompt: str, _reasoning_effort: str = "low"):
+    def openai_vote(_prompt: str, reasoning_effort: str, _model: str):
+        nonlocal vote_count
+        vote_count += 1
+        if reasoning_effort == "high" or vote_count == 1:
+            return {
+                "contradicts": True,
+                "category": "contradiction",
+                "reason": "Violates explicit policy.",
+                "guideline_quote": "Do not make this claim.",
+            }
         return {
             "contradicts": False,
             "category": None,
@@ -80,7 +115,7 @@ async def test_analyze_items_marks_contradiction_as_not_reference_eligible():
         item=None,
     )
 
-    service = GuidelineVettingService(invoke_bedrock=bedrock_vote, invoke_openai=openai_vote)
+    service = GuidelineVettingService(invoke_openai=openai_vote)
     results = await service.analyze_items(
         items=[item],
         guidelines="Guideline text",
@@ -98,17 +133,7 @@ async def test_analyze_items_marks_contradiction_as_not_reference_eligible():
 async def test_analyze_items_includes_and_validates_rubric_memory_citations():
     captured_prompts = []
 
-    def bedrock_vote(prompt: str, _use_thinking: bool = False):
-        captured_prompts.append(prompt)
-        return {
-            "contradicts": False,
-            "category": None,
-            "reason": "Aligned with rubric memory.",
-            "guideline_quote": "Allows this behavior.",
-            "citation_ids": ["support:01:abc"],
-        }
-
-    def openai_vote(prompt: str, _reasoning_effort: str = "low"):
+    def openai_vote(prompt: str, _reasoning_effort: str, _model: str):
         captured_prompts.append(prompt)
         return {
             "contradicts": False,
@@ -134,7 +159,7 @@ async def test_analyze_items_includes_and_validates_rubric_memory_citations():
         "citation_index": [{"id": "support:01:abc"}],
     }
 
-    service = GuidelineVettingService(invoke_bedrock=bedrock_vote, invoke_openai=openai_vote)
+    service = GuidelineVettingService(invoke_openai=openai_vote)
     results = await service.analyze_items(
         items=[item],
         guidelines="Guideline text",

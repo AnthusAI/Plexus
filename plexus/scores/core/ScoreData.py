@@ -48,18 +48,9 @@ class ScoreData:
         logging.info(f"Dataset loaded: {self.dataframe.shape[0]} rows x {self.dataframe.shape[1]} columns")
         logging.info(f"Columns: {list(self.dataframe.columns)}")
         
-        # Show first 3 rows sample if data exists
-        if len(self.dataframe) > 0:
-            logging.info("Sample data (first 3 rows):")
-            for i in range(min(3, len(self.dataframe))):
-                row_data = {}
-                for col in self.dataframe.columns:
-                    value = self.dataframe.iloc[i][col]
-                    if isinstance(value, str) and len(value) > 100:
-                        row_data[col] = value[:97] + "..."
-                    else:
-                        row_data[col] = value
-                logging.info(f"  Row {i}: {row_data}")
+        # Dataset rows can contain transcripts, labels, comments, and identifiers.
+        # Shape and schema are sufficient operational diagnostics; sample values must
+        # not be emitted through ordinary service logs.
         
         # Basic quality checks
         if len(self.dataframe) > 0:

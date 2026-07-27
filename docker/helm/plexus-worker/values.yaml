@@ -164,8 +164,30 @@ env:
   MAX_JOBS_PER_WORKER: "100"
   ERROR_RETRY_DELAY: "5"
   SCORECARD_CACHE_DIR: /app/data/scorecards
+  # The image runs as an unprivileged user. Keep all library configuration and
+  # cache writes on the writable tmp volume rather than falling back at runtime.
+  HOME: /app/tmp
+  XDG_CACHE_HOME: /app/tmp/cache
+  MPLCONFIGDIR: /app/tmp/matplotlib
+  PLEXUS_DATA_CACHE_DIRECTORY: /app/tmp/training-data-cache
   # Disable CloudWatch log shipping — K8s captures stdout/stderr natively.
   PLEXUS_DISABLE_CLOUDWATCH_LOGS: "1"
+
+# S3-compatible storage used by datasets, report blocks, and optimization
+# attachments. Credentials are always read from a Kubernetes Secret.
+objectStore:
+  enabled: false
+  endpoint: ""
+  region: us-east-1
+  existingSecret: ""
+  accessKeySecretKey: access-key-id
+  secretKeySecretKey: secret-access-key
+  buckets:
+    datasets: ""
+    reportBlockDetails: ""
+    rubricMemory: ""
+    taskAttachments: ""
+    scoreResultAttachments: ""
 
 # Plexus API configuration (from secrets)
 plexus:
@@ -233,6 +255,11 @@ scoringApi:
     port: 80
     pathPrefix: /v1/score
     routeName: ""
+    # LLM-backed scoring commonly exceeds Envoy Gateway's short implicit
+    # upstream timeout under concurrent load. Keep the client and backend
+    # budgets explicit and equal for synchronous requests.
+    requestTimeout: "120s"
+    backendRequestTimeout: "120s"
 
 # Console worker specific configuration
 console:
@@ -240,3 +267,23 @@ console:
   responseTarget: local:developer
   idlePollSeconds: 0.2
   errorBackoffSeconds: 5.0
+
+# Detect procedure invocations that outlived their worker pod. The job marks
+# them STALLED; it intentionally never retries LLM work automatically.
+procedureRecovery:
+  enabled: false
+  schedule: "*/5 * * * *"
+  thresholdSeconds: 900
+  lookbackHours: 72
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  # The recovery command loads the full Plexus runtime. Keep this aligned with
+  # the worker's baseline so a cold start is not OOM-killed before it can
+  # inspect stale procedures.
+  resources:
+    requests:
+      memory: 1Gi
+      cpu: 500m
+    limits:
+      memory: 4Gi
+      cpu: "2"

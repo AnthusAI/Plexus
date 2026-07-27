@@ -159,24 +159,24 @@ class TestEvaluationCommandsDataDrivenSamples(unittest.TestCase):
         self.assertIsInstance(result, list)
     
     @patch('plexus.scores.Score.Score.load')
-    def test_score_load_fails_returns_empty_list(self, mock_score_load):
-        """Test that Score.load() failures result in empty list returned."""
+    def test_score_load_failure_propagates(self, mock_score_load):
+        """Score.load() failures stop the evaluation instead of hiding missing data."""
         # Arrange
         mock_score_load.side_effect = ValueError("Score.load() failed")
         
         # Import the function to test
         from plexus.cli.evaluation.evaluations import get_data_driven_samples
         
-        # Act
-        result = get_data_driven_samples(
-            self.scorecard_instance, self.scorecard_name, self.score_name,
-            self.score_config, fresh=False, reload=False, content_ids_to_sample_set=self.content_ids_set
-        )
-        
-        # Assert - function catches exception and returns empty list
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Failed to load labeled samples for evaluation: Score.load\\(\\) failed",
+        ):
+            get_data_driven_samples(
+                self.scorecard_instance, self.scorecard_name, self.score_name,
+                self.score_config, fresh=False, reload=False, content_ids_to_sample_set=self.content_ids_set
+            )
+
         mock_score_load.assert_called_once()
-        self.assertEqual(result, [])
-        self.assertIsInstance(result, list)
 
 
 class TestPlexusDashboardClient(unittest.TestCase):
@@ -334,7 +334,7 @@ class TestBackwardCompatibility(unittest.TestCase):
     
     @patch('plexus.scores.Score.Score.load')
     def test_get_data_driven_samples_error_handling(self, mock_score_load):
-        """Test that get_data_driven_samples returns empty list on Score.load() errors."""
+        """Test that get_data_driven_samples exposes Score.load() errors."""
         # Arrange - Score.load() fails
         mock_score_load.side_effect = ValueError("Score.load() failed")
         
@@ -342,16 +342,16 @@ class TestBackwardCompatibility(unittest.TestCase):
         
         score_config = {"class": "TestScore", "data": {}}
         
-        # Act - should not raise exception, should return empty list
-        result = get_data_driven_samples(
-            MagicMock(), "test_scorecard", "test_score", 
-            score_config, fresh=False, reload=False, content_ids_to_sample_set=set()
-        )
-        
-        # Assert - should have attempted Score.load() and returned empty list on error
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Failed to load labeled samples for evaluation: Score.load\\(\\) failed",
+        ):
+            get_data_driven_samples(
+                MagicMock(), "test_scorecard", "test_score",
+                score_config, fresh=False, reload=False, content_ids_to_sample_set=set()
+            )
+
         mock_score_load.assert_called_once()
-        self.assertEqual(result, [])
-        self.assertIsInstance(result, list)
 
 
 if __name__ == '__main__':

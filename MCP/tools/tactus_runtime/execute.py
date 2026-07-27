@@ -4019,12 +4019,22 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
     stored_requested_max_items: Any = None
     stored_qualifying_found: Any = None
     stored_source_exhausted: Any = None
+    stored_balance_applied: Any = None
+    stored_balance_complete: Any = None
+    stored_lookback_extended: Any = None
+    stored_resolved_final_classes: Any = None
+    stored_class_coverage: Any = None
     for candidate in datasets:
         candidate_row_count: Any = None
         candidate_feedback_target_hash: str | None = None
         candidate_requested_max_items: Any = None
         candidate_qualifying_found: Any = None
         candidate_source_exhausted: Any = None
+        candidate_balance_applied: Any = None
+        candidate_balance_complete: Any = None
+        candidate_lookback_extended: Any = None
+        candidate_resolved_final_classes: Any = None
+        candidate_class_coverage: Any = None
         if candidate.get("dataSourceVersionId"):
             try:
                 dsv_result = client.execute(
@@ -4046,6 +4056,13 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
                         candidate_requested_max_items = stats.get("requested_max_items")
                         candidate_qualifying_found = stats.get("qualifying_found")
                         candidate_source_exhausted = stats.get("source_exhausted")
+                        candidate_balance_applied = stats.get("balance_applied")
+                        candidate_balance_complete = stats.get("balance_complete")
+                        candidate_lookback_extended = stats.get("lookback_extended")
+                        candidate_resolved_final_classes = stats.get(
+                            "resolved_final_classes"
+                        )
+                        candidate_class_coverage = stats.get("class_coverage")
                         candidate_feedback_target_hash = stats.get(
                             "feedback_target_hash"
                         )
@@ -4064,6 +4081,11 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
         stored_requested_max_items = candidate_requested_max_items
         stored_qualifying_found = candidate_qualifying_found
         stored_source_exhausted = candidate_source_exhausted
+        stored_balance_applied = candidate_balance_applied
+        stored_balance_complete = candidate_balance_complete
+        stored_lookback_extended = candidate_lookback_extended
+        stored_resolved_final_classes = candidate_resolved_final_classes
+        stored_class_coverage = candidate_class_coverage
         break
 
     if not dataset:
@@ -4089,6 +4111,11 @@ def _default_dataset_check_associated(args: dict[str, Any]) -> dict[str, Any]:
         "requested_max_items": stored_requested_max_items,
         "qualifying_found": stored_qualifying_found,
         "source_exhausted": stored_source_exhausted,
+        "balance_applied": stored_balance_applied,
+        "balance_complete": stored_balance_complete,
+        "lookback_extended": stored_lookback_extended,
+        "resolved_final_classes": stored_resolved_final_classes,
+        "class_coverage": stored_class_coverage,
         "is_materialized": bool(readiness.get("is_materialized")),
         "dataset_file": readiness.get("dataset_file"),
         "materialization_error": readiness.get("materialization_error"),
@@ -4653,6 +4680,8 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
         _append_optional_cli_arg(cmd, "--sample-seed", args.get("sample_seed"))
         _append_optional_cli_arg(cmd, "--feedback-start-at", args.get("feedback_start_at"))
         _append_optional_cli_arg(cmd, "--feedback-end-at", args.get("feedback_end_at"))
+        for feedback_item_id in args.get("feedback_item_ids") or []:
+            cmd.extend(["--feedback-item-id", str(feedback_item_id)])
         _append_optional_cli_arg(
             cmd, "--max-category-summary-items", args.get("max_category_summary_items")
         )
@@ -4744,6 +4773,34 @@ def _default_evaluation_runner(args: dict[str, Any], mcp: "FastMCP | None") -> d
             os.unlink(id_file_path)
         except OSError:
             pass
+
+    exit_code = process.poll()
+    if evaluation_id is None and exit_code is not None:
+        def _tail(path: str) -> str:
+            try:
+                with open(path, "rb") as log_file:
+                    return log_file.read()[-3000:].decode("utf-8", errors="replace")
+            except OSError:
+                return ""
+
+        return {
+            "status": "error",
+            "process_id": process.pid,
+            "evaluation_id": None,
+            "evaluation_id_file": id_file_path,
+            "stdout_log": stdout_log_path,
+            "stderr_log": stderr_log_path,
+            "command": cmd,
+            "evaluation_type": evaluation_type,
+            "scorecard": scorecard_name,
+            "score": args.get("score_name") or args.get("score"),
+            "child_budget": _jsonable(child_budget),
+            "error": (
+                "Evaluation subprocess exited before creating an evaluation record "
+                f"(exit={exit_code}). STDERR tail:\n{_tail(stderr_log_path)}\n"
+                f"STDOUT tail:\n{_tail(stdout_log_path)}"
+            ),
+        }
 
     return {
         "status": "dispatched",
@@ -7135,6 +7192,27 @@ def _score_edit_llm_schema() -> dict[str, Any]:
     }
 
 
+def _score_edit_output_token_budget(*, code: str, guidelines: str) -> int:
+    """Allow a complete structured rewrite of the source score documents.
+
+    The score editor returns the full YAML document, not a patch.  Budget from
+    the serialized response shape so JSON escaping is included.  UTF-8 byte
+    length is a conservative upper bound for BPE tokens; extra headroom covers
+    the note, summary, and low-effort reasoning without imposing another fixed
+    ceiling on valid score size.
+    """
+    serialized = json.dumps(
+        {
+            "code": code,
+            "guidelines": guidelines,
+            "note": "",
+            "summary": "",
+        },
+        ensure_ascii=False,
+    )
+    return max(5_000, len(serialized.encode("utf-8")) + 4_096)
+
+
 def _create_score_edit_response(
     *,
     client: Any,
@@ -7277,6 +7355,10 @@ def _run_score_edit_job(args: dict[str, Any], result_path: str) -> None:
                     client=client,
                     model=model,
                     prompt=prompt,
+                    max_output_tokens=_score_edit_output_token_budget(
+                        code=base_code,
+                        guidelines=base_guidelines,
+                    ),
                 )
                 attempt["structured_output"] = structured_output
                 _validate_score_edit_payload(parsed)
@@ -9914,6 +9996,16 @@ class PlexusRuntimeModule:
                     "error": (
                         "Evaluation subprocess exited before the evaluation reached a terminal status."
                     ),
+                }
+            elif not process_status and status in TERMINAL_HANDLE_STATUSES:
+                # An evaluation record becomes COMPLETED before the CLI process
+                # finishes post-evaluation work such as RCA and artifact upload.
+                # Do not release a bounded optimizer batch until that process is
+                # gone; otherwise the next batch can exceed its concurrency cap.
+                status = "running"
+                evaluation = {
+                    **evaluation,
+                    "completion_pending_process_exit": True,
                 }
         return self._handle_store.update(
             handle_id,

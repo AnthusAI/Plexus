@@ -9,6 +9,33 @@ from plexus.scores.TactusScore import TactusScore
 
 
 @pytest.mark.asyncio
+async def test_tactus_score_preserves_structured_runtime_failure(monkeypatch):
+    class FakeRuntime:
+        def __init__(self, **_kwargs):
+            self.log_handler = None
+
+        async def execute(self, _code, context, format):
+            return {
+                "success": False,
+                "error": "OpenAI authentication failed",
+            }
+
+    module = importlib.import_module("plexus.scores.TactusScore")
+    monkeypatch.setattr(module, "TactusRuntime", FakeRuntime)
+    score = TactusScore(
+        name="Structured Runtime Error",
+        code='default_model "openai/gpt-5.4-nano"\nClassifyProcedure {}',
+        valid_classes=["Yes", "No"],
+    )
+
+    result = await score.predict(Score.Input(text="hello", metadata={}))
+
+    assert result.value == "ERROR"
+    assert result.error == "Tactus procedure failed: OpenAI authentication failed"
+    assert "must return 'value'" not in result.error
+
+
+@pytest.mark.asyncio
 async def test_tactus_score_passes_runtime_gpt5_controls_to_prediction_runtime(monkeypatch):
     captured = {}
 
