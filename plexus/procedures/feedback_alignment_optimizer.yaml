@@ -69,12 +69,6 @@ params:
     required: false
     description: "Maximum concurrent evaluation processes. Bounds worker memory use when evaluating candidate hypotheses."
 
-  evaluation_stall_timeout_minutes:
-    type: number
-    default: 15
-    required: false
-    description: "Maximum minutes an evaluation may remain non-terminal without any processed-item or evaluation-update progress before it is treated as stalled."
-
   hint:
     type: string
     required: false

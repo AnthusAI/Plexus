@@ -1091,18 +1091,16 @@ def test_optimizer_yaml_bounds_parallel_evaluation_processes():
     assert "local batch_results = _dispatch_evaluation_batch(batch)" in code
 
 
-def test_optimizer_waits_while_evaluation_progress_advances_and_only_fails_when_stalled():
+def test_optimizer_does_not_treat_elapsed_or_inactive_time_as_evaluation_failure():
     config = _load_optimizer_config()
     code = config["code"]
 
     assert "evaluation_timeout_minutes" not in config["params"]
-    assert config["params"]["evaluation_stall_timeout_minutes"]["default"] == 15
+    assert "evaluation_stall_timeout_minutes" not in config["params"]
     assert 'local EVAL_AWAIT_POLL_TIMEOUT = "PT1M"' in code
     assert "local function evaluation_progress_marker(eval_data, waited)" in code
-    assert "if progress_marker ~= last_progress_marker then" in code
-    assert "stalled_polls = 0" in code
-    assert "stalled_polls = stalled_polls + 1" in code
-    assert "Evaluation stalled without progress" in code
+    assert "EVAL_STALL_POLL_LIMIT" not in code
+    assert "Evaluation stalled without progress" not in code
     assert "Evaluation did not complete: status=RUNNING" not in code
 
 
