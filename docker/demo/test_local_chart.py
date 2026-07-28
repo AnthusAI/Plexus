@@ -69,11 +69,12 @@ def test_local_chart_renders_ready_persistent_object_store_with_secret_backed_wo
     recovery = by_identity[("CronJob", "plexus-plexus-worker-procedure-recovery")]
     recovery_env = {
         item["name"]: item
-        for item in recovery["spec"]["jobTemplate"]["spec"]["template"]["spec"][
-            "containers"
-        ][0]["env"]
+        for item in recovery["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["env"]
     }
     assert recovery_env["PLEXUS_GRAPHQL_AUTH_MODE"]["value"] == "api_key"
+    assert recovery_env["PLEXUS_API_KEY"]["valueFrom"]["secretKeyRef"]["name"] == env[
+        "PLEXUS_API_KEY"
+    ]["valueFrom"]["secretKeyRef"]["name"]
     worker_volumes = worker["spec"]["template"]["spec"]["volumes"]
     assert any(
         volume.get("secret", {}).get("secretName") == "plexus-local-object-store-tls"

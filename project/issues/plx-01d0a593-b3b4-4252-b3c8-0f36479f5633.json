@@ -22,10 +22,16 @@
       "author": "ryan.porter",
       "text": "Additional observable scenario:\n\nScenario: Ticket authorization is visible without leaking artifact details\nGiven a local Kubernetes client requests an authorized artifact transfer ticket\nWhen the private GraphQL proxy issues the ticket\nThen kubectl logs exposes a correlation identifier, request count, and resource types through the proxy application logger\nAnd the log omits signed URLs, object keys, filenames, checksums, resource IDs, and credentials",
       "created_at": "2026-07-28T20:15:25.434219Z"
+    },
+    {
+      "id": "a2bcaf0f-db96-4aee-9543-6a62e79a5b18",
+      "author": "ryan.porter",
+      "text": "Additional observable scenario:\n\nScenario: Every worker entry point uses explicit local authentication\nGiven the local Helm release configures workers for GraphQL API-key authentication\nWhen the main worker deployment and scheduled procedure-recovery workload start\nThen both receive PLEXUS_GRAPHQL_AUTH_MODE=api_key and the Secret-backed API key\nAnd neither attempts Cognito, IAM, or another authentication fallback",
+      "created_at": "2026-07-28T20:26:46.529333Z"
     }
   ],
   "created_at": "2026-07-28T17:57:47.425636Z",
-  "updated_at": "2026-07-28T20:15:25.434219Z",
+  "updated_at": "2026-07-28T20:26:46.529333Z",
   "closed_at": null,
   "custom": {}
 }

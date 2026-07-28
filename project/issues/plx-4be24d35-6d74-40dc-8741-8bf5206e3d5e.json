@@ -64,10 +64,22 @@
       "author": "ryan.porter",
       "text": "Final compatibility evidence: fresh strict run A 20260728T192000Z-pr513a4 passed all seven phases and was verified read-only after run B and again after the final proxy rollout. Fresh run B 20260728T195400Z-pr513b stopped only at the deterministic post-optimizer hook, then resume consumed completed task artifact 82d73cf1-5c11-4e66-b964-904b2f3446a6 through GraphQL, retained optimizer_dispatch_count=1, promoted winner bd779f2f-87a0-42f6-b389-a04cefe8ad03, reproduced final AC1 0.96, and passed recovery. Run B baseline: accuracy 0.77, feedback AC1 0.563111, regression AC1 0.525121; deltas +0.416891 and +0.414885; optimizer cost $0.06120887. Post-restart and post-final-rollout ticket download returned the same winner. Final proxy logs contain correlation-only TASK ticket lines and omit artifact details. Final deployment: commit f6f1985af715bbac1259bfb4cf8ffd0bcacbfd21, Helm revision 49, worker/proxy Ready. Focused checks: 146 product/demo/chart/optimizer tests and 65 proxy tests passed; 6 proxy environment tests intentionally deselected; Ruff passed. Requested prior Kanbus ID plx-a18496 is absent from this branch index, so no project files were copied; evidence is recorded on the active integration records. Artifacts remain under /tmp/plexus-k8s-demo and the release remains running.",
       "created_at": "2026-07-28T20:22:11.813862Z"
+    },
+    {
+      "id": "8834ac40-df09-4d67-a146-f27980933dd1",
+      "author": "ryan.porter",
+      "text": "Final rollout exposed a repeated procedure-recovery CronJob failure that the main deployment readiness assertions did not cover. A captured diagnostic Job failed before recovery logic because its Plexus client attempted Cognito: the CronJob omitted explicit PLEXUS_GRAPHQL_AUTH_MODE=api_key even though the main worker deployment had it. Every scheduled job reached BackoffLimitExceeded. Next: add a rendered-chart specification for explicit CronJob auth, wire the same Secret-backed settings into the recovery pod, redeploy, and require a successful diagnostic recovery Job.",
+      "created_at": "2026-07-28T20:26:46.797914Z"
+    },
+    {
+      "id": "60c4295a-ba1e-498c-a4b6-022d4aa6522d",
+      "author": "ryan.porter",
+      "text": "Recovery CronJob specification first failed because PLEXUS_GRAPHQL_AUTH_MODE was absent. Added the same required explicit api_key value used by the worker deployment while retaining the existing shared Secret-backed PLEXUS_API_KEY. No authentication fallback was added. Rendered chart and demo harness checks are green: 19 passed; Ruff and diff checks pass. Next: deploy committed snapshot and require a terminally successful recovery Job plus no new BackoffLimitExceeded event.",
+      "created_at": "2026-07-28T20:28:06.296079Z"
     }
   ],
   "created_at": "2026-07-28T17:58:38.910670Z",
-  "updated_at": "2026-07-28T20:22:11.813862Z",
+  "updated_at": "2026-07-28T20:28:06.296079Z",
   "closed_at": null,
   "custom": {}
 }
