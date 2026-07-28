@@ -50,10 +50,16 @@
       "author": "ryan.porter",
       "text": "The live Amplify preview cleared the original backend TypeScript failure, then exposed a CloudFormation circular dependency between data, function, and backup stacks. The artifact-ticket AppSync resolver belongs in the data resource group; applying Amplify's supported resourceGroupName placement and rerunning the same preview deployment.",
       "created_at": "2026-07-28T18:09:11.625073Z"
+    },
+    {
+      "id": "774255df-c30b-430c-9cae-d913f76f4f1f",
+      "author": "ryan.porter",
+      "text": "The corrected resource graph deployed until provisioned-concurrency initialization. CloudWatch showed the Console image lacked requests_aws4auth even though IAM GraphQL auth is enabled. Add the existing locked dependency explicitly to the Console image and fail image construction unless both boto3 and requests_aws4auth import successfully.",
+      "created_at": "2026-07-28T18:29:52.035964Z"
     }
   ],
   "created_at": "2026-07-28T12:52:39.017652Z",
-  "updated_at": "2026-07-28T18:09:11.625073Z",
+  "updated_at": "2026-07-28T18:29:52.035964Z",
   "closed_at": null,
   "custom": {
     "source": "shared",

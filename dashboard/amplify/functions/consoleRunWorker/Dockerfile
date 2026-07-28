@@ -29,7 +29,8 @@ RUN test -f /workspace/MCP/tools/tactus_runtime/execute.py && \
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --progress-bar off --upgrade pip && \
     python -m pip install --progress-bar off -e "/workspace[scoring]" && \
-    python -m pip install --progress-bar off "python-statemachine>=2.5.0" "celery>=5.4.0" awslambdaric
+    python -m pip install --progress-bar off "python-statemachine>=2.5.0" "celery>=5.4.0" requests-aws4auth awslambdaric && \
+    python -c "import boto3, requests_aws4auth"
 
 COPY dashboard/amplify/functions/consoleRunWorker/app.py /var/task/app.py
 
