@@ -1,12 +1,17 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from plexus.scores.LangGraphScore import LangGraphScore, BatchProcessingPause
+from plexus.scores.LangGraphScore import (
+    LangGraphScore,
+    BatchProcessingPause,
+    _await_with_nonblocking_timeout,
+)
 from plexus.scores.Score import Score
 from typing import Optional
 from types import SimpleNamespace
 from pydantic import BaseModel, Field, ConfigDict
 import logging
 import os
+import asyncio
 
 # Set the default fixture loop scope to function
 pytest.asyncio_fixture_scope = "function"
@@ -36,6 +41,29 @@ class AsyncIteratorMock:
             return next(self.iter)
         except StopIteration:
             raise StopAsyncIteration
+
+
+@pytest.mark.asyncio
+async def test_nonblocking_timeout_returns_when_provider_ignores_cancellation():
+    """A stuck provider must not make the evaluation wait for cancellation."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def stubborn_provider():
+        started.set()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            # Model a provider awaitable that does not cooperate with the first
+            # cancellation request while its I/O remains live.
+            await release.wait()
+
+    with pytest.raises(TimeoutError, match="workflow deadline exceeded"):
+        await _await_with_nonblocking_timeout(stubborn_provider(), 0.01)
+
+    assert started.is_set()
+    release.set()
+    await asyncio.sleep(0)
 
 @pytest.fixture
 def basic_graph_config():

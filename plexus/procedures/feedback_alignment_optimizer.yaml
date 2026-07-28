@@ -51,6 +51,12 @@ params:
     default: 0.02
     description: "Minimum AC1 (Gwet's alignment) improvement to continue iterating (0.02 = 2%)"
 
+  max_recall_regression:
+    type: number
+    default: 0.05
+    required: false
+    description: "Maximum allowed drop in protected-class recall when selecting candidates or synthesis leaders (0.05 = five percentage points). Set an explicitly reviewed larger value only when that tradeoff is intended."
+
   target_accuracy:
     type: number
     default: 0.95
@@ -1585,13 +1591,31 @@ code: |
     return hypotheses
   end
 
-  -- Exploration success classification: either metric improving is enough,
-  -- as long as the other doesn't significantly regress.
+  -- Exploration success classification: aggregate improvement is necessary but
+  -- never sufficient when it regresses protected-class recall beyond the
+  -- configured, explicitly reviewable limit. Rejected candidates remain in
+  -- the evidence log but cannot become synthesis leaders.
   local IMPROVEMENT_THRESHOLD = 0.005   -- meaningful positive delta on the improving metric
   local REGRESSION_FLOOR      = -0.05   -- the other metric must not drop more than this
 
   local function classify_exploration_success(cand)
     if not cand.fb_deltas then return false end
+    cand.class_safety_rejection = nil
+    local recall_floor = -params.max_recall_regression
+    local recent_recall_delta = cand.fb_deltas.recall or 0
+    local historical_recall_delta = cand.acc_deltas and (cand.acc_deltas.recall or 0) or 0
+    if recent_recall_delta < recall_floor then
+      cand.class_safety_rejection = string.format(
+        "recent recall regression %.4f exceeds allowed %.4f",
+        recent_recall_delta, params.max_recall_regression)
+      return false
+    end
+    if cand.acc_deltas and historical_recall_delta < recall_floor then
+      cand.class_safety_rejection = string.format(
+        "historical recall regression %.4f exceeds allowed %.4f",
+        historical_recall_delta, params.max_recall_regression)
+      return false
+    end
     local fb_d = cand.fb_deltas.alignment or 0
     local acc_d = cand.acc_deltas and cand.acc_deltas.alignment or 0
     local fb_improves  = fb_d  > IMPROVEMENT_THRESHOLD and acc_d >= REGRESSION_FLOOR
@@ -3908,6 +3932,7 @@ code: |
   params.max_parallel_evaluations = math.max(1, math.floor(tonumber(params.max_parallel_evaluations) or 2))
   params.max_cost_usd          = tonumber(params.max_cost_usd) or 10.0
   params.improvement_threshold = tonumber(params.improvement_threshold) or 0.02
+  params.max_recall_regression = math.max(0, tonumber(params.max_recall_regression) or 0.05)
   params.target_accuracy       = tonumber(params.target_accuracy) or 0.95
   params.context_window        = tonumber(params.context_window) or 180000
 
@@ -7302,6 +7327,28 @@ code: |
         end
       end
 
+      -- A dispatched batch is not evidence of a completed comparison.  Never
+      -- allow missing handles/metrics to become zero-delta candidate results:
+      -- that would let synthesis reason from an unevaluated edit.
+      local incomplete_candidates = {}
+      for _, sv in ipairs(submitted_versions) do
+        sv.evaluation_incomplete = (not sv.fb_eval_id)
+          or (regression_available and not sv.acc_eval_id)
+        if sv.evaluation_incomplete then
+          table.insert(incomplete_candidates, tostring(sv.version_id or sv.index))
+        end
+      end
+      if #incomplete_candidates > 0 then
+        local incomplete_message = "Candidate evaluation batch returned no terminal evidence for: "
+          .. table.concat(incomplete_candidates, ", ")
+        State.set("candidate_evaluation_incomplete", {
+          cycle = cycle,
+          candidates = incomplete_candidates,
+          message = incomplete_message,
+        })
+        error("candidate_evaluation_incomplete: " .. incomplete_message)
+      end
+
       -- Classify hypotheses as succeeded/failed
       local succeeded = {}
       local failed = {}
@@ -7319,6 +7366,7 @@ code: |
         "  Results: %d succeeded, %d failed", #succeeded, #failed), level = "info"})
       for _, sv in ipairs(submitted_versions) do
         local status_label = sv.succeeded and "SUCCEEDED" or "FAILED"
+        local rejection_detail = sv.class_safety_rejection and ("; rejected: " .. sv.class_safety_rejection) or ""
         local fb_d = sv.fb_deltas and sv.fb_deltas.alignment or 0
         local acc_d = sv.acc_deltas and sv.acc_deltas.alignment or 0
         local fb_d_cur = sv.fb_deltas_vs_current and sv.fb_deltas_vs_current.alignment or 0
@@ -7326,11 +7374,11 @@ code: |
         Human.notify({message = string.format(
           "    Hyp %d [%s]: Recent AC1 %+.3f (vs current %+.3f), Regression AC1 %+.3f (vs current %+.3f)  [%s]",
           sv.index, status_label, fb_d, fb_d_cur, acc_d, acc_d_cur,
-          trunc(sv.done_reason or "", 60)
+          trunc((sv.done_reason or "") .. rejection_detail, 100)
         ), level = "info"})
-        diag(string.format("Hyp %d [%s] version=%s: Recent AC1 %+.3f (cur %+.3f), Regression AC1 %+.3f (cur %+.3f) — %s",
+        diag(string.format("Hyp %d [%s] version=%s: Recent AC1 %+.3f (cur %+.3f), Regression AC1 %+.3f (cur %+.3f) — %s%s",
           sv.index, status_label, tostring(sv.version_id or "?"),
-          fb_d, fb_d_cur, acc_d, acc_d_cur, trunc(sv.done_reason or sv.hypothesis and sv.hypothesis.name or "", 80)))
+          fb_d, fb_d_cur, acc_d, acc_d_cur, trunc(sv.done_reason or sv.hypothesis and sv.hypothesis.name or "", 80), rejection_detail))
       end
 
       -- ================================================================
