@@ -44,10 +44,16 @@
       "author": "ryan.porter",
       "text": "Combined sandbox acceptance found that persisted procedure state survives credential-free reload, but Tactus checkpoint entries using concrete types such as explicit_checkpoint are omitted because the migration serializer accepts only the literal type checkpoint. Fix must preserve all execution-log checkpoint types and replay metadata, then rerun live checkpoint reload and focused CI before the integration PR.",
       "created_at": "2026-07-28T17:20:22.369305Z"
+    },
+    {
+      "id": "c581f0fd-d466-4428-aa38-51243d0d3345",
+      "author": "ryan.porter",
+      "text": "Checkpoint repair is committed and published as 390e4eed. Sandbox acceptance with AWS credential/profile variables and API key removed passed: Cognito identity and AppSync reads; verified procedure artifact PUT/GET; state reload; concrete Tactus checkpoint type and payload preservation; same-run checkpoint replay without executing the body; and three optimizer artifacts indexed and read back. Direct boto3 S3 creation was forced to fail. Corrected full CI passed on Python 3.11 and 3.12 with 3,928 passed per runtime; focused migration suite passed 23 tests; lint, compilation, diff check, and Kanbus validation passed. Dashboard, Storybook, Amplify, dispatch, and schema suites remain green from combined-head validation. The separate evaluation-consumer lane is still required before stored-dataset accuracy and complete feedback-evidence gates can pass; its additive ticket foundation is already in develop.",
+      "created_at": "2026-07-28T17:31:00.988983Z"
     }
   ],
   "created_at": "2026-07-28T12:52:39.017652Z",
-  "updated_at": "2026-07-28T17:20:22.369305Z",
+  "updated_at": "2026-07-28T17:31:00.988983Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
