@@ -30,7 +30,12 @@ mutation CreateArtifactTransferTickets($requests: [ArtifactTransferRequest!]!) {
 }
 """
 
-_EXPIRY_RESPONSE_MARKERS = ("requestexpired", "expiredtoken", "signature has expired")
+_EXPIRY_RESPONSE_MARKERS = (
+    "requestexpired",
+    "expiredtoken",
+    "request has expired",
+    "signature has expired",
+)
 
 
 class GraphQLArtifactStoreError(RuntimeError):
@@ -271,9 +276,9 @@ class GraphQLArtifactStore:
         size_bytes: int,
         content_type: str,
     ) -> dict[str, Any]:
-        """Add integrity metadata without replacing a compatible ``_s3_key``."""
+        """Add integrity metadata while retaining the compatible ``_s3_key`` field."""
         metadata = dict(existing_metadata or {})
-        metadata.setdefault("_s3_key", object_key)
+        metadata["_s3_key"] = object_key
         metadata.update(
             {
                 "sha256": sha256,

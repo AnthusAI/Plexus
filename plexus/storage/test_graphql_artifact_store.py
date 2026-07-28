@@ -157,7 +157,11 @@ def test_upload_transfers_verified_bytes_before_returning_metadata_without_s3(mo
     store = GraphQLArtifactStore(executor, http_session=http)
     monkeypatch.setattr(boto3, "client", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("S3 must not be used")))
 
-    metadata = store.upload_bytes(write_request(), PAYLOAD, existing_metadata={"_s3_key": "legacy/key"})
+    metadata = store.upload_bytes(
+        write_request(),
+        PAYLOAD,
+        existing_metadata={"_s3_key": "legacy/key", "retain": "unrelated"},
+    )
 
     assert http.calls == [
         {
@@ -169,7 +173,8 @@ def test_upload_transfers_verified_bytes_before_returning_metadata_without_s3(mo
         }
     ]
     assert metadata == {
-        "_s3_key": "legacy/key",
+        "_s3_key": "artifacts/report-1/output.json",
+        "retain": "unrelated",
         "sha256": PAYLOAD_SHA256,
         "size_bytes": len(PAYLOAD),
         "content_type": "application/json",
@@ -206,6 +211,20 @@ def test_expired_signed_url_reissues_one_ticket_and_retries_once():
     metadata = store.upload_bytes(write_request(), PAYLOAD)
 
     assert metadata["_s3_key"] == "artifacts/report-1/output.json"
+    assert len(executor.calls) == 2
+    assert [call["url"] for call in http.calls] == [
+        "https://storage.example/upload",
+        "https://storage.example/replacement",
+    ]
+
+
+def test_standard_s3_expiry_message_reissues_one_ticket_and_retries_once():
+    executor = FakeExecutor([[ticket()], [ticket(url="https://storage.example/replacement")]])
+    http = FakeHTTPSession([FakeResponse(403, text="Request has expired"), FakeResponse(200)])
+    store = GraphQLArtifactStore(executor, http_session=http)
+
+    store.upload_bytes(write_request(), PAYLOAD)
+
     assert len(executor.calls) == 2
     assert [call["url"] for call in http.calls] == [
         "https://storage.example/upload",
