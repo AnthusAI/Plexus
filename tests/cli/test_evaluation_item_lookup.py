@@ -94,7 +94,7 @@ scores:
                 parameters=self.parameters,
             )
 
-    with patch("plexus.scores.DummyScore", DummyScore, create=True):
+    with patch("plexus.Scorecard.resolve_score_class", return_value=DummyScore):
         scorecard_class = Scorecard.create_from_yaml(str(yaml_path))
     scorecard_instance = scorecard_class(scorecard=scorecard_class.name)
 
@@ -157,7 +157,7 @@ scores:
                 parameters=self.parameters,
             )
 
-    with patch("plexus.scores.DummyScore", DummyScore, create=True):
+    with patch("plexus.Scorecard.resolve_score_class", return_value=DummyScore):
         scorecard_class = Scorecard.create_from_yaml(str(yaml_path))
     scorecard_instance = scorecard_class(scorecard=scorecard_class.name)
 

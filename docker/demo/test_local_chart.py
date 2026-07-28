@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -17,7 +18,23 @@ def test_local_chart_renders_ready_persistent_object_store_with_secret_backed_wo
     helm_root = tmp_path / "helm"
     shutil.copytree(source_root, helm_root)
     chart = helm_root / "plexus-stack"
-    subprocess.run(("helm", "dependency", "build", str(chart)), check=True, capture_output=True)
+    helm_env = {
+        **os.environ,
+        "HELM_REPOSITORY_CONFIG": str(tmp_path / "repositories.yaml"),
+        "HELM_REPOSITORY_CACHE": str(tmp_path / "repository-cache"),
+    }
+    subprocess.run(
+        ("helm", "repo", "add", "bitnami", "https://charts.bitnami.com/bitnami"),
+        check=True,
+        capture_output=True,
+        env=helm_env,
+    )
+    subprocess.run(
+        ("helm", "dependency", "build", str(chart)),
+        check=True,
+        capture_output=True,
+        env=helm_env,
+    )
     rendered = subprocess.run(
         (
             "helm",
