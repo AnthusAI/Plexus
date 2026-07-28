@@ -12,6 +12,10 @@ from plexus.rubric_memory import validate_rubric_memory_citations
 logger = logging.getLogger(__name__)
 
 
+class GuidelineVettingError(RuntimeError):
+    """Raised when a report cannot finish vetting every eligible feedback item."""
+
+
 def _build_prior_votes_context(votes: List[tuple]) -> str:
     """Format prior vote results into a context block for tiebreaker prompts."""
     lines = ["--- Prior Vote Results ---"]
@@ -38,8 +42,10 @@ class GuidelineVettingService:
     def __init__(
         self,
         invoke_openai: Optional[Callable[[str, str, str], Dict[str, Any]]] = None,
+        request_timeout_seconds: float = 15.0,
     ):
         self._invoke_openai_fn = invoke_openai or self._invoke_openai
+        self._request_timeout_seconds = request_timeout_seconds
 
     def _build_prompt(
         self,
@@ -144,6 +150,7 @@ class GuidelineVettingService:
                 reasoning={"effort": reasoning_effort},
                 input=input_messages,
                 max_output_tokens=4000 if reasoning_effort == "high" else 400,
+                timeout=self._request_timeout_seconds,
             )
             text = response.output_text.strip()
             reasoning_summary = ""
@@ -312,8 +319,16 @@ class GuidelineVettingService:
 
                 valid_round_one = [(model, result) for model, result in round_one_votes if result is not None]
                 if len(valid_round_one) < 2:
-                    logger.warning("Too many vote failures for feedback item %s; skipping", getattr(item, "id", "unknown"))
-                    return None
+                    failures = [
+                        type(result).__name__
+                        for result in round_one_raw
+                        if isinstance(result, Exception)
+                    ]
+                    raise GuidelineVettingError(
+                        "Guideline vetting could not complete feedback item "
+                        f"{getattr(item, 'id', 'unknown')}: "
+                        f"{', '.join(failures) or 'missing vote'}"
+                    )
 
                 round_one_bools = [result["contradicts"] for _, result in valid_round_one]
                 yes_count = sum(round_one_bools)
@@ -333,8 +348,11 @@ class GuidelineVettingService:
                             "high",
                             "gpt-5.4-mini",
                         )
-                    except Exception:
-                        round_two_openai = None
+                    except Exception as exc:
+                        raise GuidelineVettingError(
+                            "Guideline tiebreaker could not complete feedback item "
+                            f"{getattr(item, 'id', 'unknown')}: {type(exc).__name__}"
+                        ) from exc
 
                     round_two_votes = [("gpt-5.4-mini", round_two_openai)]
                     valid_round_two = [(model, result) for model, result in round_two_votes if result is not None]

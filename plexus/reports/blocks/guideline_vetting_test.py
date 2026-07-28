@@ -2,7 +2,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from plexus.reports.blocks.guideline_vetting import GuidelineVettingService
+from plexus.reports.blocks.guideline_vetting import (
+    GuidelineVettingError,
+    GuidelineVettingService,
+)
 
 
 @pytest.mark.asyncio
@@ -172,3 +175,55 @@ async def test_analyze_items_includes_and_validates_rubric_memory_citations():
     assert results[0]["citation_ids"] == ["support:01:abc"]
     assert results[0]["citation_validation"]["missing_ids"] == []
     assert results[0]["rubric_memory_citation_count"] == 1
+
+
+def test_openai_vote_sets_a_bounded_request_timeout(monkeypatch):
+    captured = {}
+
+    class _Response:
+        output_text = '{"contradicts": false, "category": null, "reason": "", "guideline_quote": "", "citation_ids": []}'
+        output = []
+
+    class _Client:
+        class responses:
+            @staticmethod
+            def create(**kwargs):
+                captured.update(kwargs)
+                return _Response()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr("openai.OpenAI", lambda *_args, **_kwargs: _Client())
+
+    service = GuidelineVettingService(request_timeout_seconds=12)
+    result = service._invoke_openai("Prompt")
+
+    assert result["contradicts"] is False
+    assert captured["timeout"] == 12
+
+
+@pytest.mark.asyncio
+async def test_analyze_items_fails_instead_of_silently_returning_partial_vetting():
+    def timed_out_vote(_prompt: str, _reasoning_effort: str, _model: str):
+        raise TimeoutError("provider request timed out")
+
+    item = SimpleNamespace(
+        id="fi-timeout",
+        itemId="item-timeout",
+        initialAnswerValue="No",
+        finalAnswerValue="Yes",
+        editCommentValue="Reviewer changed label.",
+        editorName="Reviewer",
+        editedAt=None,
+        isInvalid=False,
+        item=None,
+    )
+
+    service = GuidelineVettingService(invoke_openai=timed_out_vote)
+
+    with pytest.raises(GuidelineVettingError, match="fi-timeout"):
+        await service.analyze_items(
+            items=[item],
+            guidelines="Guideline text",
+            max_concurrent=1,
+            score_results_by_item={},
+        )
