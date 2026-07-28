@@ -187,10 +187,11 @@ class _BaseAPIClient:
         api_key: Optional[str] = None,
         context: Optional[ClientContext] = None,
         token_provider: Optional[Any] = None,
+        auth_mode: Optional[str] = None,
     ):
         self.api_url = api_url or os.getenv('PLEXUS_API_URL')
         self.api_key = api_key or os.getenv('PLEXUS_API_KEY')
-        self.auth_mode = (os.getenv('PLEXUS_GRAPHQL_AUTH_MODE') or 'api_key').strip().lower()
+        self.auth_mode = (auth_mode or os.getenv('PLEXUS_GRAPHQL_AUTH_MODE') or 'api_key').strip().lower()
         self._token_provider = token_provider
         self.api_region = (
             os.getenv('PLEXUS_API_REGION')
@@ -1079,12 +1080,14 @@ class PlexusDashboardClient(_BaseAPIClient):
         api_key: Optional[str] = None,
         context: Optional[ClientContext] = None,
         token_provider: Optional[Any] = None,
+        auth_mode: Optional[str] = None,
     ):
         super().__init__(
             api_url=api_url,
             api_key=api_key,
             context=context,
             token_provider=token_provider,
+            auth_mode=auth_mode,
         )
         
     # Context manager methods

@@ -14,6 +14,7 @@ import webbrowser
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Protocol
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -52,20 +53,47 @@ class CognitoAuthConfig:
     scopes: tuple[str, ...] = ("openid", "email", "profile")
 
     @classmethod
+    def _output_paths(cls) -> tuple[Path, ...]:
+        repository_root = Path(__file__).resolve().parents[2]
+        return (
+            repository_root / "dashboard" / "amplify_outputs.json",
+            repository_root / "amplify_outputs.json",
+        )
+
+    @classmethod
+    def _amplify_output(cls) -> Mapping[str, Any]:
+        for output_path in cls._output_paths():
+            try:
+                payload = json.loads(output_path.read_text())
+            except (OSError, ValueError):
+                continue
+            if isinstance(payload, dict):
+                auth = payload.get("auth")
+                if isinstance(auth, dict):
+                    return auth
+        return {}
+
+    @classmethod
     def from_environment(cls) -> "CognitoAuthConfig":
-        domain = os.getenv("PLEXUS_COGNITO_DOMAIN", "").strip().rstrip("/")
-        client_id = os.getenv("PLEXUS_COGNITO_CLIENT_ID", "").strip()
-        region = os.getenv("PLEXUS_COGNITO_REGION", "").strip() or None
+        output = cls._amplify_output()
+        oauth = output.get("oauth") if isinstance(output.get("oauth"), dict) else {}
+        output_domain = oauth.get("domain") if isinstance(oauth, dict) else None
+        domain = (os.getenv("PLEXUS_COGNITO_DOMAIN") or output_domain or "").strip().rstrip("/")
+        client_id = (os.getenv("PLEXUS_COGNITO_CLIENT_ID") or output.get("user_pool_client_id") or "").strip()
+        region = (os.getenv("PLEXUS_COGNITO_REGION") or output.get("aws_region") or "").strip() or None
         redirect_uri = os.getenv("PLEXUS_COGNITO_REDIRECT_URI", DEFAULT_REDIRECT_URI).strip()
         if not domain or not client_id:
             raise ApplicationAuthenticationRequired(
-                "Cognito application authentication is not configured. "
-                "Set PLEXUS_COGNITO_DOMAIN and PLEXUS_COGNITO_CLIENT_ID, then run `plexus login`."
+                "Cognito hosted authorization is not configured. Deploy the Amplify OAuth configuration so "
+                "amplify_outputs.json includes auth.oauth.domain, or set PLEXUS_COGNITO_DOMAIN and "
+                "PLEXUS_COGNITO_CLIENT_ID before running `plexus login`."
             )
-        if not domain.startswith("https://"):
+        if "://" in domain and not domain.startswith("https://"):
             raise ApplicationAuthenticationRequired(
                 "PLEXUS_COGNITO_DOMAIN must be an HTTPS hosted-authorization URL. Run `plexus login` after fixing it."
             )
+        if not domain.startswith("https://"):
+            domain = f"https://{domain}"
         if redirect_uri != DEFAULT_REDIRECT_URI:
             raise ApplicationAuthenticationRequired(
                 f"PLEXUS_COGNITO_REDIRECT_URI must be {DEFAULT_REDIRECT_URI}. Run `plexus login` after fixing it."
@@ -94,6 +122,26 @@ class TokenSet:
     expires_at: datetime
 
 
+class _LoopbackCallbackListener:
+    def __init__(self, server: ThreadingHTTPServer, result: dict[str, Any], completed: threading.Event):
+        self._server = server
+        self._result = result
+        self._completed = completed
+
+    def wait(self, timeout_seconds: int = 300) -> str:
+        deadline = time.monotonic() + timeout_seconds
+        while not self._completed.wait(timeout=self._server.timeout):
+            self._server.handle_request()
+            if time.monotonic() >= deadline:
+                raise LoopbackCallbackError("Timed out waiting for the Cognito login callback. Run `plexus login` again.")
+        if "error" in self._result:
+            raise self._result["error"]
+        return self._result["code"]
+
+    def close(self) -> None:
+        self._server.server_close()
+
+
 class KeyringRefreshTokenStore:
     """Stores the long-lived refresh credential in the operating-system keychain."""
 
@@ -106,6 +154,11 @@ class KeyringRefreshTokenStore:
                     "The operating-system keychain integration is unavailable. Run `plexus login` after installing Plexus authentication support."
                 ) from exc
         self._keyring = keyring_module
+        errors = getattr(keyring_module, "errors", None)
+        missing_credential_error = getattr(errors, "PasswordDeleteError", ())
+        self._missing_credential_error = (
+            missing_credential_error if isinstance(missing_credential_error, type) else ()
+        )
 
     def get(self) -> Optional[str]:
         return self._keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME)
@@ -116,10 +169,13 @@ class KeyringRefreshTokenStore:
     def delete(self) -> None:
         try:
             self._keyring.delete_password(KEYRING_SERVICE, KEYRING_USERNAME)
-        except Exception:
-            # Absence is an already-signed-out state. Keyring implementations do
-            # not consistently expose a shared "not found" exception class.
+        except self._missing_credential_error:
             return
+        except Exception as exc:
+            raise ApplicationAuthenticationRequired(
+                "Could not remove the Plexus refresh credential from the operating-system keychain. "
+                "Resolve the keychain error and run `plexus logout` again."
+            ) from exc
 
 
 class CognitoAuthService:
@@ -136,6 +192,7 @@ class CognitoAuthService:
         self.credential_store = credential_store or KeyringRefreshTokenStore()
         self.http = http
         self.browser_opener = browser_opener
+        self._tokens: Optional[TokenSet] = None
 
     @staticmethod
     def _new_state() -> str:
@@ -186,7 +243,7 @@ class CognitoAuthService:
             raise LoopbackCallbackError("The login callback did not include an authorization code. Run `plexus login` again.")
         return code
 
-    def _receive_loopback_callback(self, expected_state: str, timeout_seconds: int = 300) -> str:
+    def _bind_loopback_callback(self, expected_state: str) -> _LoopbackCallbackListener:
         redirect = urlparse(self.config.redirect_uri)
         result: dict[str, Any] = {}
         completed = threading.Event()
@@ -222,45 +279,63 @@ class CognitoAuthService:
                 "Free the port and run `plexus login` again."
             ) from exc
         server.timeout = 0.25
-        deadline = time.monotonic() + timeout_seconds
+        return _LoopbackCallbackListener(server, result, completed)
+
+    def _receive_loopback_callback(self, expected_state: str, timeout_seconds: int = 300) -> str:
+        listener = self._bind_loopback_callback(expected_state)
         try:
-            while not completed.wait(timeout=server.timeout):
-                server.handle_request()
-                if time.monotonic() >= deadline:
-                    raise LoopbackCallbackError("Timed out waiting for the Cognito login callback. Run `plexus login` again.")
+            return listener.wait(timeout_seconds)
         finally:
-            server.server_close()
-        if "error" in result:
-            raise result["error"]
-        return result["code"]
+            listener.close()
 
     def login(self) -> str:
         authorization = self.create_authorization_request()
-        if not self.browser_opener(authorization.url):
-            raise ApplicationAuthenticationRequired(
-                f"Could not open a browser. Open {authorization.url} and then return to this terminal."
-            )
-        code = self._receive_loopback_callback(authorization.state)
-        return self.complete_authorization(code, authorization.code_verifier)
+        listener = self._bind_loopback_callback(authorization.state)
+        try:
+            if not self.browser_opener(authorization.url):
+                raise ApplicationAuthenticationRequired(
+                    f"Could not open a browser. Open {authorization.url} and then return to this terminal."
+                )
+            code = listener.wait()
+            return self.complete_authorization(code, authorization.code_verifier)
+        finally:
+            listener.close()
 
     def complete_authorization(self, code: str, code_verifier: str) -> str:
-        response = self.http.post(
-            f"{self.config.domain}/oauth2/token",
-            data={
-                "grant_type": "authorization_code",
-                "client_id": self.config.client_id,
-                "code": code,
-                "redirect_uri": self.config.redirect_uri,
-                "code_verifier": code_verifier,
-            },
-            timeout=15,
-        )
-        response.raise_for_status()
-        tokens = self._tokens_from_response(response.json())
-        refresh_token = response.json().get("refresh_token")
+        try:
+            response = self.http.post(
+                f"{self.config.domain}/oauth2/token",
+                data={
+                    "grant_type": "authorization_code",
+                    "client_id": self.config.client_id,
+                    "code": code,
+                    "redirect_uri": self.config.redirect_uri,
+                    "code_verifier": code_verifier,
+                },
+                timeout=15,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            tokens = self._tokens_from_response(payload)
+        except ApplicationAuthenticationRequired:
+            raise
+        except Exception as exc:
+            raise ApplicationAuthenticationRequired(
+                "Cognito could not exchange the authorization code. Check the hosted authorization deployment and run `plexus login` again."
+            ) from exc
+        refresh_token = payload.get("refresh_token")
         if not refresh_token:
             raise ApplicationAuthenticationRequired("Cognito did not issue a refresh credential. Run `plexus login` again.")
-        self.credential_store.set(refresh_token)
+        try:
+            self.credential_store.set(refresh_token)
+        except ApplicationAuthenticationRequired:
+            raise
+        except Exception as exc:
+            raise ApplicationAuthenticationRequired(
+                "Cognito login succeeded but the refresh credential could not be stored in the operating-system keychain. "
+                "Resolve the keychain error and run `plexus login` again."
+            ) from exc
+        self._tokens = tokens
         return self._identity_from_tokens(tokens)
 
     def _refresh_tokens(self) -> TokenSet:
@@ -302,7 +377,10 @@ class CognitoAuthService:
         )
 
     def get_access_token(self) -> str:
-        return self._refresh_tokens().access_token
+        if self._tokens and self._tokens.expires_at > datetime.now(timezone.utc) + timedelta(seconds=60):
+            return self._tokens.access_token
+        self._tokens = self._refresh_tokens()
+        return self._tokens.access_token
 
     @staticmethod
     def _jwt_claims(token: Optional[str]) -> Mapping[str, Any]:

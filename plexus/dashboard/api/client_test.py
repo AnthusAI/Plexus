@@ -98,6 +98,16 @@ def test_client_sends_explicit_cognito_bearer_token(mock_transport, monkeypatch)
     assert 'x-api-key' not in transport_kwargs['headers']
 
 
+def test_client_accepts_explicit_cognito_auth_mode_without_global_environment(mock_transport, monkeypatch):
+    monkeypatch.setenv('PLEXUS_API_URL', 'https://test.api')
+    monkeypatch.delenv('PLEXUS_GRAPHQL_AUTH_MODE', raising=False)
+    token_provider = Mock(get_access_token=Mock(return_value='access-token'))
+
+    PlexusDashboardClient(auth_mode='cognito', token_provider=token_provider)
+
+    assert mock_transport.call_args.kwargs['headers']['Authorization'] == 'Bearer access-token'
+
+
 def test_client_does_not_fall_back_to_api_key_when_cognito_session_is_unavailable(monkeypatch):
     monkeypatch.setenv('PLEXUS_API_URL', 'https://test.api')
     monkeypatch.setenv('PLEXUS_API_KEY', 'legacy-key')
