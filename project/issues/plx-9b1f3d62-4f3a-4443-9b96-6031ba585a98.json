@@ -3,9 +3,9 @@
   "title": "Run credential-free integration acceptance and rollout",
   "description": "Purpose: Integrate, verify, and roll out the application-authenticated local workflow.\n\nAcceptance:\n- Python 3.11 and 3.12 CI pass.\n- Dashboard typecheck, unit, Storybook build, and browser tests pass.\n- Sandbox environment contains no AWS profile or session variables.\n- One plexus login supports an accuracy evaluation with a stored dataset.\n- A feedback evaluation persists complete root-cause evidence.\n- A local optimizer checkpoints and resumes with final artifacts visible in the dashboard.\n- An expired access token refreshes without user or AWS intervention.\n- Additive backend support deploys before migrated clients.\n- Production acceptance uses a controlled evaluation with no local AWS credentials.\n\nClose only after final rollout verification is recorded.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
-  "assignee": null,
+  "assignee": "codex/root",
   "creator": null,
   "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
   "labels": [
@@ -26,9 +26,22 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "d47afe53-4875-438a-92fb-7b8b7b492cc1",
+      "author": "ryan.porter",
+      "text": "Production Amplify compile failure confirmed: the CDK L1 function is typed as IFunction, so addEnvironment is unavailable. Use the supported Amplify function resource for environment injection while retaining the L1 function for IAM policy attachment, and add the Amplify backend TypeScript project to the standard dashboard typecheck so this cannot pass local CI unnoticed again.",
+      "created_at": "2026-07-28T17:39:52.940567Z"
+    },
+    {
+      "id": "0eef6027-c9ef-455d-8b6a-c8a2c11fe84c",
+      "author": "ryan.porter",
+      "text": "Implemented the supported Amplify function environment configuration and added backend compilation to the standard dashboard typecheck. Validation passed: backend TypeScript, web TypeScript, git diff check, and Kanbus validation.",
+      "created_at": "2026-07-28T17:41:30.365982Z"
+    }
+  ],
   "created_at": "2026-07-28T12:52:39.017652Z",
-  "updated_at": "2026-07-28T12:52:39.017652Z",
+  "updated_at": "2026-07-28T17:41:30.365982Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
