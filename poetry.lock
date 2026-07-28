@@ -1232,10 +1232,9 @@ simplejson = ">=3.19.3"
 name = "click"
 version = "8.1.8"
 description = "Composable command line interface toolkit"
-optional = true
+optional = false
 python-versions = ">=3.7"
 groups = ["main"]
-markers = "extra == \"scoring\" or extra == \"procedures\" or extra == \"all\" or extra == \"infra\" or extra == \"ml\""
 files = [
     {file = "click-8.1.8-py3-none-any.whl", hash = "sha256:63c132bbbed01578a06712a2d1f497bb62d9c1c0d329b7903a866228027263b2"},
     {file = "click-8.1.8.tar.gz", hash = "sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a"},
@@ -11223,4 +11222,4 @@ scoring = ["boto3", "graphviz", "langchain", "langchain-anthropic", "langchain-a
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "72ccce5b32363a2bf866e1b75a8c569232938fbbb54ad8f18c86b000296f7abc"
+content-hash = "7627a3980942dd1f93911e336f6f0b5a1a0a6a06de204a5f744315ba6654cc89"

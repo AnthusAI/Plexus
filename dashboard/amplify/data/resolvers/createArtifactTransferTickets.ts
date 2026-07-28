@@ -191,11 +191,10 @@ async function assertResourceAccess(request: TransferRequest, identity: unknown)
   return { bucket, objectKey };
 }
 
-function writeHeaders(contentType: string, sizeBytes: number, sha256: string): Record<string, string> {
+function writeHeaders(contentType: string, sizeBytes: number): Record<string, string> {
   return {
     'content-type': contentType,
     'content-length': String(sizeBytes),
-    'x-amz-checksum-sha256': Buffer.from(sha256, 'hex').toString('base64'),
   };
 }
 
@@ -223,13 +222,14 @@ export const handler = async (event: ArtifactTransferTicketEvent) => {
       return { objectKey, method: 'GET', url, requiredHeaders: {}, expiresAt };
     }
 
-    const requiredHeaders = writeHeaders(request.contentType, request.sizeBytes, request.sha256);
+    const requiredHeaders = writeHeaders(request.contentType, request.sizeBytes);
+    const checksumSHA256 = Buffer.from(request.sha256, 'hex').toString('base64');
     const url = await getSignedUrl(s3, new PutObjectCommand({
       Bucket: bucket,
       Key: objectKey,
       ContentType: request.contentType,
       ContentLength: request.sizeBytes,
-      ChecksumSHA256: requiredHeaders['x-amz-checksum-sha256'],
+      ChecksumSHA256: checksumSHA256,
     }), { expiresIn: URL_TTL_SECONDS });
     return { objectKey, method: 'PUT', url, requiredHeaders, expiresAt };
   }));

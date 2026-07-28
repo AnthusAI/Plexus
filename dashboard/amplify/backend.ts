@@ -87,11 +87,11 @@ if (createArtifactTransferTicketsFunction) {
     ];
 
     for (const resource of ticketedResources) {
-        createArtifactTransferTicketsFunction.addEnvironment(
+        backend.createArtifactTransferTicketsHandler.addEnvironment(
             resource.tableEnvironmentName,
             resource.table.tableName,
         );
-        createArtifactTransferTicketsFunction.addEnvironment(
+        backend.createArtifactTransferTicketsHandler.addEnvironment(
             resource.bucketEnvironmentName,
             resource.bucket.bucketName,
         );

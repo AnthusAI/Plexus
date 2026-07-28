@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "event_id": "84091eff-aa95-4caf-9380-fdb8512695f5",
+  "issue_id": "plx-378ed959-6032-46ff-b569-aa9d59b8269c",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T13:41:48.584Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Restore deployability of artifact-ticket sandbox backend",
+    "description": "## Problem\n\nThe additive artifact-ticket backend fails Amplify sandbox type validation because environment configuration is applied through an interface that does not expose that supported operation. This blocks the early application-authentication and transfer acceptance gate.\n\n## Expected behavior\n\nGiven the additive artifact-ticket backend is present\nWhen the existing Amplify sandbox is synthesized and deployed\nThen backend type validation succeeds\nAnd the ticket resolver receives its required table and bucket configuration\nAnd Cognito login plus a real signed artifact round trip can be tested before consumer migrations proceed.\n\n## Scope\n\nRepair the supported Amplify/CDK resource integration, add a regression contract, redeploy the existing sandbox, and record sanitized acceptance evidence. Do not add direct-storage, API-key, AWS-SSO, or silent fallback behavior.",
+    "issue_type": "bug",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+    "labels": [
+      "aws-login-free",
+      "sandbox-acceptance"
+    ]
+  }
+}
