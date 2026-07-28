@@ -6943,9 +6943,13 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
             parent_version_id = score_data.get("championVersionId")
             if should_preserve_guidelines:
                 champion_version = score_data.get("championVersion") or {}
-                preserved_guidelines = champion_version.get("guidelines")
-                if preserved_guidelines is not None:
-                    guidelines = str(preserved_guidelines)
+                if "guidelines" in champion_version:
+                    # ``null`` is the API representation of an existing version
+                    # with no written guidance.  It is still authoritative
+                    # content for a code-only child: preserve it as the empty
+                    # document rather than rejecting the update or inventing
+                    # guidance from another source.
+                    guidelines = str(champion_version.get("guidelines") or "")
                     result["guidelines_preserved"] = True
                     result["guidelines_source"] = "parent_version"
         elif should_preserve_guidelines:
@@ -6959,9 +6963,11 @@ def _default_score_update(args: dict[str, Any]) -> dict[str, Any]:
             """
             resp = client.execute(q, {"id": parent_version_id})
             parent_version = (resp or {}).get("getScoreVersion") or {}
-            preserved_guidelines = parent_version.get("guidelines")
-            if preserved_guidelines is not None:
-                guidelines = str(preserved_guidelines)
+            if "guidelines" in parent_version:
+                # See the champion-version path above: a null value denotes an
+                # empty existing guidance document and must be carried forward
+                # unchanged for a code-only candidate.
+                guidelines = str(parent_version.get("guidelines") or "")
                 result["guidelines_preserved"] = True
                 result["guidelines_source"] = "parent_version"
 

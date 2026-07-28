@@ -1338,6 +1338,69 @@ def test_default_score_update_preserves_parent_guidelines_for_code_only_edits(
     assert result["diffs"]["code"]["has_changes"] is True
 
 
+def test_default_score_update_preserves_empty_parent_guidelines_for_code_only_edits(
+    monkeypatch,
+) -> None:
+    captured_inputs: list[dict] = []
+
+    class FakeClient:
+        def execute(self, query: str, variables: dict | None = None) -> dict:
+            if "GetScoreChampionId" in query:
+                return {
+                    "getScore": {
+                        "championVersionId": "version-parent",
+                        "championVersion": {"guidelines": None},
+                    }
+                }
+            if "GetScoreVersionForConsoleAudit" in query:
+                if variables["id"] == "version-parent":
+                    return {
+                        "getScoreVersion": {
+                            "id": "version-parent",
+                            "configuration": "name: baseline\n",
+                            "guidelines": None,
+                        }
+                    }
+                return {
+                    "getScoreVersion": {
+                        "id": "version-child",
+                        "configuration": "name: updated\n",
+                        "guidelines": "",
+                    }
+                }
+            if "CreateScoreVersion" in query:
+                captured_inputs.append(variables["input"])
+                return {"createScoreVersion": {"id": "version-child", "createdAt": "now"}}
+            raise AssertionError(f"Unexpected query: {query}")
+
+    monkeypatch.setattr(
+        "plexus.cli.shared.client_utils.create_client",
+        lambda: FakeClient(),
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.direct_identifier_resolution.direct_resolve_scorecard_identifier",
+        lambda _client, _identifier: "scorecard-1",
+    )
+    monkeypatch.setattr(
+        "plexus.cli.shared.direct_identifier_resolution.direct_resolve_score_identifier",
+        lambda _client, _scorecard_id, _identifier: "score-1",
+    )
+
+    result = execute._default_score_update(
+        {
+            "scorecard_identifier": "Scorecard",
+            "score_identifier": "Score",
+            "code": "name: updated\n",
+            "version_note": "code-only",
+        }
+    )
+
+    assert result["success"] is True
+    assert result["guidelines_preserved"] is True
+    assert result["guidelines_source"] == "parent_version"
+    assert captured_inputs[0]["guidelines"] == ""
+
+
 def test_default_score_set_champion_does_not_duplicate_open_history_entry(
     monkeypatch,
 ) -> None:
