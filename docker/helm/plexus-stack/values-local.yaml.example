@@ -146,7 +146,6 @@ plexus-worker:
       key: "local-dev-key"
     account:
       key: "local-demo"
-    graphqlAuthMode: "api_key"
   service:
     enabled: true
     type: ClusterIP

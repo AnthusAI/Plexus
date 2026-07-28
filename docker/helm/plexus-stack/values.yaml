@@ -217,7 +217,6 @@ plexus-worker:
       key: "local-dev-key"
     account:
       key: ""  # Set in values-{env}.yaml
-    graphqlAuthMode: api_key
 
   service:
     enabled: true

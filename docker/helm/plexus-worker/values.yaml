@@ -210,9 +210,6 @@ plexus:
   account:
     key: ""  # Set via values override or Octopus variables
 
-  # Explicit client authentication mode: api_key, iam, or cognito.
-  graphqlAuthMode: api_key
-
 # Score Processor specific configuration
 scoreProcessor:
   enabled: true

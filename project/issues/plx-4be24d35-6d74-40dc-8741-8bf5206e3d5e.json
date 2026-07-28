@@ -82,10 +82,16 @@
       "author": "ryan.porter",
       "text": "Recovery authentication repair passed live on committed snapshot d3a48e41f593bc5dced38cb543132d59dadc6773. Helm rendered and deployed PLEXUS_GRAPHQL_AUTH_MODE=api_key on the procedure-recovery CronJob. Manual proof Job completed with exit 0 and checked three completed local procedures; the next controller-scheduled Job plexus-plexus-worker-procedure-recovery-29754510 also succeeded. Final focused validation after this fix: 146 product/demo/chart/optimizer tests and 65 proxy tests passed, with 6 intentional proxy environment deselections; Ruff passed. The final local release remains running. Keep work in progress until the local commits land.",
       "created_at": "2026-07-28T20:31:17.205768Z"
+    },
+    {
+      "id": "c82b5f14-32e2-4f06-bd94-4d6bdb1e3bbc",
+      "author": "ryan.porter",
+      "text": "During rebase onto current PR 513 head, the upstream branch already introduced the canonical plexus.api.authMode model. The older local graphqlAuthMode field would have emitted a second PLEXUS_GRAPHQL_AUTH_MODE=api_key and overridden explicit IAM rendering. Removed that obsolete duplicate path, retained upstream API-key/CronJob wiring, and kept the regression assertion that recovery uses the same Secret-backed key. Rebased focused validation is green: 148 product/demo/chart/optimizer tests and 65 proxy tests, with 6 intentional proxy environment deselections; Ruff and diff checks pass.",
+      "created_at": "2026-07-28T20:41:52.205593Z"
     }
   ],
   "created_at": "2026-07-28T17:58:38.910670Z",
-  "updated_at": "2026-07-28T20:31:17.205768Z",
+  "updated_at": "2026-07-28T20:41:52.205593Z",
   "closed_at": null,
   "custom": {}
 }

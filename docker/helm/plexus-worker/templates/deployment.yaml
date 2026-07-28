@@ -110,9 +110,6 @@ spec:
             secretKeyRef:
               name: {{ include "plexus-worker.secretName" . }}
               key: account-key
-        - name: PLEXUS_GRAPHQL_AUTH_MODE
-          value: {{ required "plexus.graphqlAuthMode must be explicit" .Values.plexus.graphqlAuthMode | quote }}
-
         {{- if eq .Values.workerType "score-processor" }}
         # Score Processor specific config
         - name: PLEXUS_SCORING_WORKER_REQUEST_STANDARD_QUEUE_URL
