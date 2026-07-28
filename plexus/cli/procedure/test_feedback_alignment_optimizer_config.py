@@ -946,6 +946,19 @@ def test_optimizer_yaml_marks_one_cycle_runs_as_verification_only():
     assert 'local completion_mode = params.max_iterations == 1 and "Verification complete" or "Optimization complete"' in code
 
 
+def test_optimizer_yaml_rejects_aggregate_gains_that_regress_protected_recall():
+    config = _load_optimizer_config()
+    code = config["code"]
+
+    assert config["params"]["max_recall_regression"]["default"] == 0.05
+    assert "local function classify_exploration_success(cand)" in code
+    assert "local recall_floor = -params.max_recall_regression" in code
+    assert "cand.class_safety_rejection" in code
+    assert "recent recall regression" in code
+    assert "historical recall regression" in code
+    assert '"; rejected: " .. sv.class_safety_rejection' in code
+
+
 def test_optimizer_yaml_runs_diagnostic_synthesis_when_no_hypothesis_has_positive_signal():
     config = _load_optimizer_config()
     code = config["code"]
