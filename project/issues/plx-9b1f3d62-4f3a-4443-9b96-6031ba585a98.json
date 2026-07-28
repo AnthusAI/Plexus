@@ -38,10 +38,22 @@
       "author": "ryan.porter",
       "text": "Implemented the supported Amplify function environment configuration and added backend compilation to the standard dashboard typecheck. Validation passed: backend TypeScript, web TypeScript, git diff check, and Kanbus validation.",
       "created_at": "2026-07-28T17:41:30.365982Z"
+    },
+    {
+      "id": "55f60ddc-688b-4971-abd1-66c57b824e6c",
+      "author": "ryan.porter",
+      "text": "Live deployment validation: the configured Amplify staging branch is substantially behind current development and cannot provide representative proof. Use a temporary Amplify development branch tied to the focused fix branch, monitor its real build/deploy result, then remove the temporary cloud branch.",
+      "created_at": "2026-07-28T17:44:30.431522Z"
+    },
+    {
+      "id": "85c550ca-4019-4376-9be8-292e7010d707",
+      "author": "ryan.porter",
+      "text": "The live Amplify preview cleared the original backend TypeScript failure, then exposed a CloudFormation circular dependency between data, function, and backup stacks. The artifact-ticket AppSync resolver belongs in the data resource group; applying Amplify's supported resourceGroupName placement and rerunning the same preview deployment.",
+      "created_at": "2026-07-28T18:09:11.625073Z"
     }
   ],
   "created_at": "2026-07-28T12:52:39.017652Z",
-  "updated_at": "2026-07-28T17:41:30.365982Z",
+  "updated_at": "2026-07-28T18:09:11.625073Z",
   "closed_at": null,
   "custom": {
     "source": "shared",

@@ -85,6 +85,7 @@ export const dispatchConsoleChatHandler = defineFunction({
 
 export const createArtifactTransferTicketsHandler = defineFunction({
     entry: './resolvers/createArtifactTransferTickets.ts',
+    resourceGroupName: 'data',
 });
 
 const schema = a.schema({
