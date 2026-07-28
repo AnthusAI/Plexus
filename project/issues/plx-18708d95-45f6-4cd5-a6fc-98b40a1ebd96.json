@@ -3,7 +3,7 @@
   "title": "Implement GraphQLArtifactStore",
   "description": "Purpose: Implement the single application-authorized artifact byte-transfer client.\n\nOwned scope:\n- Ticket batching through the frozen GraphQL contract.\n- HTTPS upload and download.\n- SHA-256 and size validation.\n- Upload bytes before persisting metadata pointers.\n- Preserve _s3_key while adding checksum, size, and content type.\n- Retry once by requesting a new ticket only when a signed URL expires.\n\nExclusions:\n- Direct S3, inline-data, API-key, and AWS-credential fallbacks.\n- Procedure, evaluation, optimizer, and task-specific migration logic.\n\nAcceptance:\n- Unit and contract tests use mocked GraphQL and HTTP responses.\n- Authorization, transfer, and integrity errors fail closed.\n- Tests prove no boto3 S3 client is constructed.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "assignee": null,
   "creator": null,
@@ -19,9 +19,28 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "aecc0a3b-dc96-4212-8d83-22638e9dcfd4",
+      "author": "ryan.porter",
+      "text": "Kickoff: canonical agent /root/graphql_artifact_store is implementing the GraphQLArtifactStore lane in /Users/ryan.porter/Projects/Plexus-graphql-artifact-store on codex/aws-login-free-artifact-store from base 03e0b04b67a162c37fbcf3cc9bd28d0c363b571a. Owned scope: frozen-contract ticket batching, HTTPS byte transfer, integrity verification, metadata helper, and expiry-only retry. Dependency boundary: this lane accepts an injected existing dashboard-client execute/query surface and will not modify client authentication or consumer migrations.",
+      "created_at": "2026-07-28T12:57:42.375169Z"
+    },
+    {
+      "id": "285f0abc-2943-4b49-b48b-1029cd79b65b",
+      "author": "ryan.porter",
+      "text": "Specification milestone: added behavior-first GraphQLArtifactStore contract tests for batched ticket payloads, HTTPS-only upload/download, integrity verification, expiry-only retry, authorization failure, and S3 prohibition. The initial focused run failed during collection because plexus.storage.graphql_artifact_store did not yet exist; after the minimal implementation, the focused suite passes (7 passed). The store consumes only an injected execute(query, variables) surface and does not modify dashboard-client authentication.",
+      "created_at": "2026-07-28T13:00:32.668125Z"
+    },
+    {
+      "id": "755f3191-37be-4e07-912e-ea493af04fb5",
+      "author": "ryan.porter",
+      "text": "Implementation milestone: GraphQLArtifactStore now uses only injected execute(query, variables) authorization, requests one-to-twenty tickets through createArtifactTransferTickets, enforces HTTPS ticket URLs, preserves required signed headers (including AWSJSON decoding), verifies SHA-256 and size, returns metadata only after successful upload, preserves _s3_key, and refreshes exactly once only for explicit signed-URL expiry. Focused Python 3.12 validation: 9 passed; flake8, py_compile, git diff --check, and kanbus validate passed. No dashboard client, auth, consumer migration, direct S3, inline-data, API-key, or AWS-credential code changed.",
+      "created_at": "2026-07-28T13:02:53.063789Z"
+    }
+  ],
   "created_at": "2026-07-28T12:52:37.689199Z",
-  "updated_at": "2026-07-28T12:52:37.689199Z",
+  "updated_at": "2026-07-28T13:02:53.063789Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
