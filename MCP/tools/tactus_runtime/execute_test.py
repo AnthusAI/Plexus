@@ -7925,6 +7925,57 @@ def test_feedback_alignment_batch_prefetches_portfolio_window_once(monkeypatch) 
     assert result["scorecards"][1]["scores"][0]["reviewed_error_opportunity"] == 0.0
 
 
+def test_feedback_alignment_batch_derives_percent_accuracy_from_reviewed_counts(
+    monkeypatch,
+) -> None:
+    """Portfolio results have one percent accuracy contract, regardless of source units."""
+    from plexus.cli.feedback.feedback_service import FeedbackService
+
+    monkeypatch.setattr(
+        FeedbackService,
+        "_analyze_feedback_items",
+        staticmethod(
+            lambda _items: {
+                # Simulate a legacy ratio-valued upstream analysis.  The
+                # reviewed counts remain the canonical portfolio evidence.
+                "accuracy": 0.25,
+                "total_items": 4,
+                "disagreements": 1,
+            }
+        ),
+    )
+
+    result = execute._default_feedback_alignment_batch(
+        {"scorecard": "Example", "days": 30},
+        _prefetched_account_id="account-1",
+        _prefetched_scorecard_data={
+            "id": "scorecard-1",
+            "name": "Example",
+            "sections": {
+                "items": [
+                    {"scores": {"items": [{"id": "score-1", "name": "Score"}]}}
+                ]
+            },
+        },
+        _prefetched_feedback_items=[
+            {
+                "id": f"feedback-{index}",
+                "scorecardId": "scorecard-1",
+                "scoreId": "score-1",
+                "initialAnswerValue": "No" if index == 1 else "Yes",
+                "finalAnswerValue": "Yes",
+                "isInvalid": False,
+            }
+            for index in range(1, 5)
+        ],
+    )
+
+    row = result["scores"][0]
+    assert row["accuracy"] == 75.0
+    assert row["disagreement_rate"] == 0.25
+    assert row["reviewed_error_opportunity"] == 1.0
+
+
 def test_feedback_alignment_batch_bounds_concurrent_score_reads(monkeypatch) -> None:
     from plexus.cli.feedback.feedback_service import FeedbackService
     from plexus.cli.shared import client_utils, memoized_resolvers

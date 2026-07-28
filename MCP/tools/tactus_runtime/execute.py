@@ -2588,9 +2588,17 @@ def _default_feedback_alignment_batch(
                         )
                     summary_dict = FeedbackService.format_summary_result_as_dict(summary)
                     analysis = summary_dict.get("analysis", {})
-                accuracy = analysis.get("accuracy")
                 total_items = int(analysis.get("total_items") or 0)
                 disagreements = int(analysis.get("disagreements") or 0)
+                # The per-score analysis has historically exposed accuracy in
+                # both ratio and percent forms.  Portfolio callers need one
+                # stable, documented unit, so derive it from the reviewed
+                # counts returned alongside every batch row.
+                accuracy = (
+                    100.0 * (total_items - disagreements) / total_items
+                    if total_items > 0
+                    else None
+                )
                 disagreement_rate = (
                     disagreements / total_items if total_items > 0 else None
                 )
