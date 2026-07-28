@@ -1,4 +1,4 @@
-"""App-side redaction helpers for log messages before CloudWatch ingestion."""
+"""App-side redaction helpers for log messages before external ingestion."""
 
 from __future__ import annotations
 

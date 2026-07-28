@@ -13,7 +13,7 @@ The stack creates:
 - a CodeBuild project with Docker enabled
 - generic SSM parameters containing the latest published artifact metadata for the configured channel
 
-The pipeline builds `score-processor-lambda/Dockerfile` from a clean checkout and pushes an immutable `git-<source-sha>` tag. It then resolves the ECR image digest and writes the digest-pinned image URI to SSM.
+The pipeline builds `score-processor-lambda/Dockerfile.scoring-runtime` from a clean checkout and pushes an immutable `git-<source-sha>` tag. This dedicated image installs only the Plexus `scoring` extra; the existing `score-processor-lambda/Dockerfile` and legacy deployment pipeline continue to install `all`. The pipeline then resolves the ECR image digest and writes the digest-pinned image URI to SSM.
 
 ## Metadata
 
@@ -52,4 +52,3 @@ cdk synth
 cd infrastructure/score_processor_artifacts
 cdk deploy plexus-score-processor-artifacts-development
 ```
-

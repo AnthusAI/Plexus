@@ -1,27 +1,19 @@
 import os
 import json
 import re
-import pandas as pd
 from functools import wraps
 from pydantic import BaseModel, ValidationError as PydanticValidationError, field_validator, ConfigDict
 from typing import Optional, Union, List
 from abc import ABC, abstractmethod
 # from tensorflow.keras.utils import plot_model
-from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
 from plexus.CustomLogging import logging
 from collections import Counter
 
 from plexus.Registries import scorecard_registry
-from plexus.scores.core.ScoreData import ScoreData
-from plexus.scores.core.ScoreVisualization import ScoreVisualization
 from plexus.scores.core.utils import ensure_report_directory_exists
 from plexus.scores.core.CostAccumulator import CostAccumulator
 
-class Score(ABC,
-    # Core Score functionality.   
-    ScoreData,
-    ScoreVisualization
-):
+class Score(ABC):
     """
     Abstract base class for implementing classification and scoring models in Plexus.
 
@@ -392,6 +384,27 @@ class Score(ABC,
         """
         pass
 
+    def load_data(self, *, data=None, excel=None, fresh=False, reload=False):
+        from plexus.scores.core.ScoreData import ScoreData
+
+        return ScoreData.load_data(
+            self,
+            data=data,
+            excel=excel,
+            fresh=fresh,
+            reload=reload,
+        )
+
+    def _load_data_cache(self):
+        from plexus.scores.core.ScoreData import ScoreData
+
+        return ScoreData._load_data_cache(self)
+
+    def analyze_dataset(self):
+        from plexus.scores.core.ScoreData import ScoreData
+
+        return ScoreData.analyze_dataset(self)
+
     def evaluate_model(self):
         """
         Evaluate the model on the validation data.
@@ -401,6 +414,8 @@ class Score(ABC,
         dict
             Dictionary containing evaluation metrics.
         """
+        from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score
+
         print("Generating evaluation metrics...")
 
         self.predict_validation()
@@ -433,11 +448,13 @@ class Score(ABC,
         logging.info(f"Unique values in self.val_predictions: {set(self.val_predictions)}")
         logging.info(f"label_map: {self.label_map}")
 
-        self._plot_confusion_matrix()
-        self._plot_roc_curve()
-        self._plot_precision_recall_curve()
-        self._plot_training_history()
-        self._plot_calibration_curve()
+        from plexus.scores.core.ScoreVisualization import ScoreVisualization
+
+        ScoreVisualization._plot_confusion_matrix(self)
+        ScoreVisualization._plot_roc_curve(self)
+        ScoreVisualization._plot_precision_recall_curve(self)
+        ScoreVisualization._plot_training_history(self)
+        ScoreVisualization._plot_calibration_curve(self)
 
         metrics = {
             "validation_accuracy": accuracy,
@@ -502,6 +519,8 @@ class Score(ABC,
             True if the text is classified as relevant, False otherwise.
         """
         clean_text = text.replace('\n', ' ').strip()
+        import pandas as pd
+
         model_input = pd.DataFrame([clean_text], columns=['text'])
         prediction = self.predict(model_input)['prediction'].iloc[0]
         return prediction == '__label__relevant'
@@ -861,17 +880,16 @@ class Score(ABC,
     @classmethod
     def _create_score_from_config(cls, config: dict):
         """Create a Score instance from configuration dictionary."""
-        import importlib
-        
         # Get the score class
         class_name = config.get('class')
         if not class_name:
             raise ValueError("No 'class' field found in score configuration")
         
         try:
-            # Import the score class
-            module = importlib.import_module('plexus.scores')
-            score_class = getattr(module, class_name)
+            # Import locally to avoid the Score -> scores namespace cycle.
+            from plexus.scores import resolve_score_class
+
+            score_class = resolve_score_class(class_name)
             
             # Create instance with parameters from config
             parameters = {k: v for k, v in config.items() if k != 'class'}

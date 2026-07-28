@@ -8,21 +8,21 @@ Uses the Tactus runtime with in-process execution (no Docker containers)
 for high-volume Plexus scenarios with trusted code.
 """
 
+from __future__ import annotations
+
 import asyncio
 import inspect
 import json
 import logging
 import os
-from typing import Optional, Union, List, Any, Dict
+from typing import Optional, Union, List, Any, Dict, TYPE_CHECKING
 from pydantic import ConfigDict, model_validator
 
 from plexus.scores.Score import Score
 from plexus.utils.score_result_timestamps import extract_score_result_timestamps
 
-# Import Tactus components
-from tactus.core.runtime import TactusRuntime
-from tactus.adapters.memory import MemoryStorage
-from tactus.adapters.cost_collector_log import CostCollectorLogHandler
+if TYPE_CHECKING:
+    from tactus.core.runtime import TactusRuntime
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,13 @@ logger = logging.getLogger(__name__)
 # logger at WARNING unless an operator explicitly opts into payload logging.
 if os.getenv("PLEXUS_LOG_SENSITIVE_PAYLOADS", "").strip().lower() not in {"1", "true", "yes"}:
     logging.getLogger("tactus.core.runtime").setLevel(logging.WARNING)
+
+
+def _load_tactus_runtime_class():
+    """Load the Tactus runtime only when a Tactus score executes."""
+    from tactus.core.runtime import TactusRuntime
+
+    return TactusRuntime
 
 
 class TactusScore(Score):
@@ -128,6 +135,10 @@ class TactusScore(Score):
 
     def _create_runtime(self) -> TactusRuntime:
         """Create a runtime instance for pool use."""
+        from tactus.adapters.memory import MemoryStorage
+
+        runtime_class = _load_tactus_runtime_class()
+
         storage = MemoryStorage()
         runtime_kwargs = {
             "procedure_id": self.parameters.name or "tactus_score",
@@ -139,7 +150,7 @@ class TactusScore(Score):
             "temperature": self.parameters.temperature,
             "reset_state_on_execute": True,
         }
-        runtime_signature = inspect.signature(TactusRuntime.__init__)
+        runtime_signature = inspect.signature(runtime_class.__init__)
         accepts_arbitrary_kwargs = any(
             parameter.kind is inspect.Parameter.VAR_KEYWORD
             for parameter in runtime_signature.parameters.values()
@@ -152,7 +163,7 @@ class TactusScore(Score):
                 for key, value in runtime_kwargs.items()
                 if key in runtime_signature.parameters
             }
-        runtime = TactusRuntime(**accepted_runtime_kwargs)
+        runtime = runtime_class(**accepted_runtime_kwargs)
         logger.debug("Created Tactus runtime for '%s'", self.parameters.name)
         return runtime
 
@@ -399,6 +410,8 @@ Procedure {
             The prediction result with value and explanation
         """
         runtime = await self._acquire_runtime()
+        from tactus.adapters.cost_collector_log import CostCollectorLogHandler
+
         runtime.log_handler = CostCollectorLogHandler()
 
         try:

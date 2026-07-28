@@ -23,7 +23,7 @@ import boto3
 from botocore.exceptions import ClientError
 import yaml
 
-from plexus.CustomLogging import logging, set_log_group
+from plexus.CustomLogging import logging
 from plexus.Scorecard import Scorecard
 from plexus.Evaluation import AccuracyEvaluation, FeedbackEvaluation
 from plexus.cli.shared.console import console
@@ -101,8 +101,6 @@ def truncate_dict_strings(d, max_length=100):
     elif isinstance(d, str) and len(d) > max_length:
         return d[:max_length] + "..."
     return d
-
-set_log_group('plexus/cli/evaluation')
 
 from plexus.scores.Score import Score
 from plexus.dashboard.api.models.task import Task
@@ -3165,6 +3163,7 @@ def accuracy(
                 scorecard_id=sc_id_for_eval,
                 score_id=score_id_for_eval,
                 score_version_id=score_version_id_for_eval,
+                parameters=evaluation_record.parameters,
                 override_folder=f"./overrides/{scorecard_name_resolved}",
                 allow_no_labels=allow_no_labels
             )
@@ -4817,6 +4816,7 @@ def feedback(
                     subset_of_score_names=[score_name_for_dataset],  # Only evaluate the target score
                     rca_pending=True,  # Outer code owns the COMPLETED write after RCA
                     labeled_samples=labeled_samples,
+                    parameters=evaluation_record.parameters,
                 )
                 
                 # Advance from Setup to Processing stage before running predictions

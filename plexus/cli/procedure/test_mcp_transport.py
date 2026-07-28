@@ -255,6 +255,7 @@ class TestEmbeddedMCPServer:
     @pytest.mark.asyncio
     async def test_execute_tactus_receives_experiment_context(self, monkeypatch):
         """Console account context should be passed into nested execute_tactus."""
+        pytest.importorskip("fastmcp")
         project_root = os.path.dirname(
             os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         )

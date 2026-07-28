@@ -715,29 +715,44 @@ code: |
   end
 
   local function same_id_set(left, right)
-    if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
-    local counts = {}
+    if type(left) ~= "table" or type(right) ~= "table" then
+      return false, { missing = 0, extra = 0, actual_duplicates = 0, expected_duplicates = 0 }
+    end
+    local left_counts = {}
+    local right_counts = {}
+    local actual_duplicates = 0
+    local expected_duplicates = 0
     for _, item_id in ipairs(left) do
       local key = tostring(item_id)
-      counts[key] = (counts[key] or 0) + 1
+      left_counts[key] = (left_counts[key] or 0) + 1
+      if left_counts[key] > 1 then actual_duplicates = actual_duplicates + 1 end
     end
     for _, item_id in ipairs(right) do
       local key = tostring(item_id)
-      if not counts[key] or counts[key] == 0 then return false end
-      counts[key] = counts[key] - 1
+      right_counts[key] = (right_counts[key] or 0) + 1
+      if right_counts[key] > 1 then expected_duplicates = expected_duplicates + 1 end
     end
-    for _, count in pairs(counts) do
-      if count ~= 0 then return false end
+    local missing = 0
+    local extra = 0
+    for key, expected_count in pairs(right_counts) do
+      local actual_count = left_counts[key] or 0
+      if actual_count < expected_count then missing = missing + (expected_count - actual_count) end
     end
-    return true
-  end
-
-  local function same_id_sequence(left, right)
-    if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
-    for index, item_id in ipairs(left) do
-      if tostring(item_id) ~= tostring(right[index]) then return false end
+    for key, actual_count in pairs(left_counts) do
+      local expected_count = right_counts[key] or 0
+      if actual_count > expected_count then extra = extra + (actual_count - expected_count) end
     end
-    return true
+    local exact = #left == #right
+      and missing == 0
+      and extra == 0
+      and actual_duplicates == 0
+      and expected_duplicates == 0
+    return exact, {
+      missing = missing,
+      extra = extra,
+      actual_duplicates = actual_duplicates,
+      expected_duplicates = expected_duplicates
+    }
   end
 
   local function prediction_mode_collapse_reason(metrics)
@@ -1353,15 +1368,27 @@ code: |
     if not actual_ids then
       return false, "candidate evaluation does not expose selected_feedback_item_ids"
     end
-    if not same_id_set(actual_ids, expected_ids) then
+    local exact_cohort, cohort_diff = same_id_set(actual_ids, expected_ids)
+    if cohort_diff.expected_duplicates > 0 then
       return false, string.format(
-        "candidate feedback cohort differs from baseline (expected=%d actual=%d)",
-        #expected_ids,
-        #actual_ids
+        "expected recent feedback cohort contains duplicate IDs (duplicates=%d)",
+        cohort_diff.expected_duplicates
       )
     end
-    if not same_id_sequence(actual_ids, expected_ids) then
-      return false, "candidate feedback cohort order differs from baseline"
+    if cohort_diff.actual_duplicates > 0 then
+      return false, string.format(
+        "candidate feedback cohort contains duplicate IDs (duplicates=%d)",
+        cohort_diff.actual_duplicates
+      )
+    end
+    if not exact_cohort then
+      return false, string.format(
+        "candidate feedback cohort differs from baseline (expected=%d actual=%d missing=%d extra=%d)",
+        #expected_ids,
+        #actual_ids,
+        cohort_diff.missing,
+        cohort_diff.extra
+      )
     end
     return true, nil
   end

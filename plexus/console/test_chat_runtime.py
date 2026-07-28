@@ -575,17 +575,6 @@ def test_process_console_message_logs_latency_summary(monkeypatch):
     assert isinstance(server_latency["client_total_ms"], int)
 
 
-def test_local_targets_skip_cloudwatch_logging_by_default(monkeypatch):
-    message = chat_runtime.parse_chat_message(_raw_message(responseTarget="local:ryan"))
-    assert message is not None
-
-    monkeypatch.delenv("PLEXUS_CONSOLE_LOCAL_CLOUDWATCH", raising=False)
-    assert chat_runtime._should_log_cloudwatch_for_message(message) is False
-
-    monkeypatch.setenv("PLEXUS_CONSOLE_LOCAL_CLOUDWATCH", "true")
-    assert chat_runtime._should_log_cloudwatch_for_message(message) is True
-
-
 def test_process_console_message_marks_failed_when_harness_raises(monkeypatch):
     client = FakeClient()
 

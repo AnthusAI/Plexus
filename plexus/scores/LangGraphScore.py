@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 import os
 import logging
 import traceback
-import graphviz
 from types import FunctionType
 from typing import Type, Tuple, Literal, Optional, Any, TypedDict, List, Dict, Union
 from pydantic import BaseModel, ConfigDict, create_model, Field
@@ -19,16 +20,34 @@ from plexus.scores.Score import Score
 from plexus.utils.dict_utils import truncate_dict_strings
 from plexus.utils.score_result_timestamps import extract_score_result_timestamps
 
-from tactus.core.runtime import TactusRuntime
-from tactus.adapters.memory import MemoryStorage
-
-from langchain_community.callbacks import OpenAICallbackHandler
-
 from langgraph.graph import StateGraph, END
 
-import litellm as _litellm
-
 from langchain_core.globals import set_debug, set_verbose
+
+
+class _CostCalculator:
+    @staticmethod
+    def cost_per_token(*, model, prompt_tokens, completion_tokens):
+        try:
+            from openai_cost_calculator.openai_cost_calculator import calculate_cost
+
+            costs = calculate_cost(
+                model_name=model,
+                input_tokens=prompt_tokens,
+                output_tokens=completion_tokens,
+            )
+            return costs["input_cost"], costs["output_cost"]
+        except (KeyError, TypeError, ValueError):
+            from litellm import cost_per_token
+
+            return cost_per_token(
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+
+
+_litellm = _CostCalculator()
 
 # Patch langchain_core's restricted Jinja2 sandbox to allow dict attribute access.
 # langchain_core >=0.3.81 introduced _RestrictedSandboxedEnvironment which blocks
@@ -70,10 +89,6 @@ else:
 from pathlib import Path
 import uuid
 from langgraph.errors import NodeInterrupt
-from plexus.dashboard.api.client import PlexusDashboardClient
-from plexus.dashboard.api.models.account import Account
-from plexus.dashboard.api.models.scoring_job import ScoringJob
-
 from plexus.utils.dict_utils import truncate_dict_strings
 class BatchProcessingPause(Exception):
     """Exception raised when execution should pause for batch processing."""
@@ -1033,7 +1048,7 @@ class LangGraphScore(Score, LangChainUser):
         fresh tracking of token usage in subsequent operations.
         """
         if self.parameters.model_provider in ["AzureChatOpenAI", "ChatOpenAI"]:
-            self.openai_callback = OpenAICallbackHandler()
+            self.openai_callback = self._create_openai_callback()
             self.model = self.model.with_config(callbacks=[self.openai_callback])
         else:
             self.token_counter.prompt_tokens = 0
@@ -1575,6 +1590,9 @@ Procedure {
 """
 
         try:
+            from tactus.adapters.memory import MemoryStorage
+            from tactus.core.runtime import TactusRuntime
+
             # Create a temporary TactusRuntime for enrichment using MemoryStorage
             storage = MemoryStorage()
             runtime = TactusRuntime(
@@ -1835,6 +1853,8 @@ Procedure {
         batch_job_id: str
     ) -> List[Dict[str, Any]]:
         """Get all scoring jobs associated with a batch job."""
+        from plexus.dashboard.api.client import PlexusDashboardClient
+
         # Create client using account_key from metadata
         client = PlexusDashboardClient.for_scorecard(
             account_key=self.parameters.account_key,

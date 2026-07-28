@@ -833,13 +833,11 @@ class _PlexusTraceLogBridge:
         self,
         trace_sink: Any,
         on_cost_event: Optional[Any] = None,
-        cw_logger: Optional[Any] = None,
         lifecycle_trace: Optional[Dict[str, Any]] = None,
     ):
         self.trace_sink = trace_sink
         self.cost_events = []
         self._on_cost_event = on_cost_event
-        self._cw_logger = cw_logger
         self._lifecycle_trace = lifecycle_trace
         self._provider_request_starts: Dict[str, str] = {}
         self._events: "queue.Queue[Any]" = queue.Queue()
@@ -933,11 +931,6 @@ class _PlexusTraceLogBridge:
 
         if self._event_type_name(event) == "agent_lifecycle":
             self._record_agent_lifecycle(event)
-            if self._cw_logger is not None:
-                try:
-                    self._cw_logger.log_run_event_from_tactus(event)
-                except Exception as exc:
-                    logger.debug("CloudWatch lifecycle log failed: %s", exc)
             return
 
         try:
@@ -1011,12 +1004,6 @@ class _PlexusTraceLogBridge:
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Failed to capture Tactus Agent request context: %s", exc)
-        if self._cw_logger is not None:
-            try:
-                self._cw_logger.log_llm_context(prompt_context)
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("CloudWatch LLM context log failed: %s", exc)
-
     def _worker_main(self) -> None:
         loop = asyncio.new_event_loop()
         try:
@@ -1044,11 +1031,6 @@ class _PlexusTraceLogBridge:
                     except Exception as exc:
                         logger.warning("Failed recording streamed trace event: %s", exc)
 
-                    if self._cw_logger is not None:
-                        try:
-                            self._cw_logger.log_run_event_from_tactus(event)
-                        except Exception as exc:
-                            logger.debug("CloudWatch run log failed: %s", exc)
                 finally:
                     self._events.task_done()
         finally:
@@ -1165,7 +1147,6 @@ async def _execute_tactus(
     """
     logger.info(f"Executing procedure {procedure_id} with Tactus runtime")
     log_bridge: Optional[_PlexusTraceLogBridge] = None
-    cw_logger = None
 
     try:
         from tactus.core import TactusRuntime
@@ -1672,24 +1653,12 @@ async def _execute_tactus(
                 )
             _persist_inference_costs_to_state(storage, procedure_id, [event])
 
-        # Generate invocation_run_id here so it can be used for CloudWatch stream naming.
+        # Generate a run identifier for Tactus runtime correlation.
         invocation_run_id = str(uuid.uuid4())
-
-        _account_key = (
-            getattr(getattr(client, "context", None), "account_key", None) or "unknown"
-        )
-        from .cloudwatch_logger import _create_procedure_cloudwatch_logger
-
-        cw_logger = _create_procedure_cloudwatch_logger(
-            account_key=_account_key,
-            procedure_id=procedure_id,
-            invocation_run_id=invocation_run_id,
-        )
 
         log_bridge = _PlexusTraceLogBridge(
             trace_sink,
             on_cost_event=_on_incremental_cost_event,
-            cw_logger=cw_logger,
             lifecycle_trace=options.pop("lifecycle_trace", None),
         )
 
@@ -1952,30 +1921,6 @@ async def _execute_tactus(
         except Exception as _inject_err:
             logger.debug("Could not inject _procedure_id into State: %s", _inject_err)
 
-        # Store CloudWatch log stream pointer in procedure metadata so the UI can locate logs.
-        if cw_logger is not None:
-            try:
-                import json as _json
-                _cw_meta_result = client.execute(
-                    "query GetProcedureMeta($id: ID!) { getProcedure(id: $id) { metadata } }",
-                    {"id": procedure_id},
-                )
-                _existing_meta_str = (
-                    (_cw_meta_result.get("getProcedure") or {}).get("metadata") or "{}"
-                )
-                try:
-                    _meta = _json.loads(_existing_meta_str) or {}
-                except Exception:
-                    _meta = {}
-                _meta["cloudwatchLogGroup"] = cw_logger.log_group
-                _meta["cloudwatchLogStreamPrefix"] = f"{procedure_id}/"
-                client.execute(
-                    "mutation UpdateProcedureCWMeta($input: UpdateProcedureInput!) { updateProcedure(input: $input) { id } }",
-                    {"input": {"id": procedure_id, "metadata": _json.dumps(_meta)}},
-                )
-            except Exception as _cw_meta_err:
-                logger.debug("Could not store CloudWatch metadata on procedure: %s", _cw_meta_err)
-
         if _is_dashboard_task_cancelled(client, _task_id):
             raise ProcedureExecutionCancelled(
                 f"Procedure execution cancelled for task {_task_id}"
@@ -2134,12 +2079,6 @@ async def _execute_tactus(
             except Exception as close_error:
                 logger.warning("Failed closing trace log bridge after success: %s", close_error)
 
-        if cw_logger is not None:
-            try:
-                await asyncio.to_thread(cw_logger.close, execution_succeeded)
-            except Exception as _cw_err:
-                logger.debug("Failed closing CloudWatch logger after success: %s", _cw_err)
-
         logger.info(f"Tactus execution complete: {result.get('success')}")
         return result
 
@@ -2158,13 +2097,6 @@ async def _execute_tactus(
                 logger.warning(
                     "Failed closing trace log bridge after cancellation: %s",
                     close_error,
-                )
-        if cw_logger is not None:
-            try:
-                await asyncio.to_thread(cw_logger.close, False)
-            except Exception as _cw_err:
-                logger.debug(
-                    "Failed closing CloudWatch logger after cancellation: %s", _cw_err
                 )
         logger.info("Tactus procedure execution cancelled: %s", e)
         return {
@@ -2190,13 +2122,6 @@ async def _execute_tactus(
             except Exception as close_error:
                 logger.warning(
                     "Failed closing trace log bridge after error: %s", close_error
-                )
-        if cw_logger is not None:
-            try:
-                await asyncio.to_thread(cw_logger.close, False)
-            except Exception as _cw_err:
-                logger.debug(
-                    "Failed closing CloudWatch logger after error: %s", _cw_err
                 )
         if _task_id:
             try:
