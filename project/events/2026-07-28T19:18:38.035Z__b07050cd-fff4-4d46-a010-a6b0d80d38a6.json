@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "event_id": "b07050cd-fff4-4d46-a010-a6b0d80d38a6",
+  "issue_id": "plx-e1644dcb-9940-434e-a09d-8d6b1367427f",
+  "event_type": "issue_created",
+  "occurred_at": "2026-07-28T19:18:38.035Z",
+  "actor_id": "ryan.porter",
+  "payload": {
+    "title": "Return the selected optimizer version to automation",
+    "description": "As an automation caller, I want a completed optimizer task to return the selected score version, so that guarded promotion can use the same persisted result contract as human-readable optimizer reporting.\n\nFeature: Optimizer result identity\n\nScenario: Accepted candidate is returned to the caller\nGiven an optimization cycle accepts a candidate and records it as the last accepted version\nWhen the procedure completes and persists its declared output\nThen the task result includes winning_version_id for that accepted version\nAnd the indexed optimizer summary and task result identify the same winning version\nAnd no promotion occurs inside the optimizer itself",
+    "issue_type": "story",
+    "status": "open",
+    "priority": 1,
+    "assignee": null,
+    "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+    "labels": []
+  }
+}
