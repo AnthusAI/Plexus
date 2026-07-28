@@ -682,25 +682,7 @@ class DemoHarness:
         if not feedback_id:
             feedback_id = self._run_evaluation(
                 "feedback",
-                (
-                    "plexus",
-                    "evaluate",
-                    "feedback",
-                    "--scorecard",
-                    ids["scorecard"],
-                    "--score",
-                    ids["score"],
-                    "--version",
-                    ids["version"],
-                    "--days",
-                    "7",
-                    "--max-items",
-                    "100",
-                    "--sampling-mode",
-                    "newest",
-                    "--notes",
-                    f"Kubernetes demo {self.manifest.run_id} feedback baseline",
-                ),
+                feedback_evaluation_cli_command(self.manifest, ids),
             )
             self.manifest.metadata["feedback_evaluation_id"] = feedback_id
 
@@ -1387,6 +1369,33 @@ def optimizer_cli_command(manifest: DemoManifest, ids: Mapping[str, str]) -> lis
         "--agent-model", "report_writer=gpt-5.4-nano", "--agent-model",
         "reviewer=gpt-5.4-nano", "--agent-model", "early_stop_advisor=gpt-5.4-nano",
         "--output", "json",
+    ]
+
+
+def feedback_evaluation_cli_command(
+    manifest: DemoManifest, ids: Mapping[str, str]
+) -> list[str]:
+    seed_anchor = manifest.metadata.get("seed_anchor")
+    if not isinstance(seed_anchor, str) or not seed_anchor.strip():
+        raise DemoFailure("feedback evaluation requires the retained seed anchor")
+    try:
+        end_at = datetime.fromisoformat(seed_anchor.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise DemoFailure("feedback evaluation seed anchor is invalid") from exc
+    if end_at.tzinfo is None:
+        raise DemoFailure("feedback evaluation seed anchor must include a timezone")
+    end_at = end_at.astimezone(timezone.utc)
+    start_at = end_at - timedelta(days=1)
+
+    def iso_z(value: datetime) -> str:
+        return value.isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    return [
+        "plexus", "evaluate", "feedback", "--scorecard", ids["scorecard"],
+        "--score", ids["score"], "--version", ids["version"], "--days", "7",
+        "--max-items", "100", "--sampling-mode", "newest",
+        "--feedback-start-at", iso_z(start_at), "--feedback-end-at", iso_z(end_at),
+        "--notes", f"Kubernetes demo {manifest.run_id} feedback baseline",
     ]
 
 

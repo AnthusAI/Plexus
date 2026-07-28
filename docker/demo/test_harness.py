@@ -15,6 +15,7 @@ from docker.demo.harness import (
     curated_dataset_identity,
     evaluation_accuracy_fraction,
     extract_last_json,
+    feedback_evaluation_cli_command,
     initial_score_configuration,
     load_banking77_rows,
     metric_value,
@@ -204,6 +205,20 @@ def test_optimizer_reuses_verified_paired_baselines_and_required_nano_agents() -
     agent_models = [command[index + 1] for index, item in enumerate(command) if item == "--agent-model"]
     assert agent_models
     assert all(model.endswith("=gpt-5.4-nano") for model in agent_models)
+
+
+def test_feedback_baseline_freezes_the_run_scoped_seed_window() -> None:
+    manifest = DemoManifest.new("20260723T123456Z-ab12", "strict", 10.0, 2)
+    manifest.metadata["seed_anchor"] = "2026-07-23T12:34:56Z"
+
+    command = feedback_evaluation_cli_command(
+        manifest, {"scorecard": "scorecard-1", "score": "score-1", "version": "version-1"}
+    )
+
+    assert command[command.index("--feedback-start-at") + 1] == "2026-07-22T12:34:56Z"
+    assert command[command.index("--feedback-end-at") + 1] == "2026-07-23T12:34:56Z"
+    assert command[command.index("--days") + 1] == "7"
+    assert command[command.index("--max-items") + 1] == "100"
 
 
 def test_resume_and_verify_require_an_explicit_run_id() -> None:

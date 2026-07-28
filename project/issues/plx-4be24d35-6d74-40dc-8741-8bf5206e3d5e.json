@@ -34,10 +34,22 @@
       "author": "ryan.porter",
       "text": "Fresh live run 20260728T182500Z-pr513a passed TLS ticket smoke, infrastructure, seeding, predictions, paired 100-item evaluations, and reporting. Baseline was intentionally imperfect (accuracy 0.77; feedback AC1 0.563111; regression AC1 0.504006). Optimization did not dispatch: the unchanged demo command failed closed because PR 513 exposes --evaluation-stall-timeout-minutes instead of the harness's --evaluation-timeout-minutes. No optimizer retry was attempted. Next: specify the supported CLI flag, repair only this command seam, and start a fresh strict run ID.",
       "created_at": "2026-07-28T18:39:46.551147Z"
+    },
+    {
+      "id": "2b2606e0-0e24-4198-a275-4c133632fab6",
+      "author": "ryan.porter",
+      "text": "Fresh strict run 20260728T184100Z-pr513a2 again passed HTTPS ticket smoke, infrastructure, idempotent seeding, predictions, both 100-item evaluations, and reports. Deterministic baseline: accuracy 0.77; feedback AC1 0.563111; regression AC1 0.504006. Optimization failed before dispatch because the resumed feedback evaluation lacked required frozen-window provenance: feedback_start_at, feedback_end_at, days, and requested_max_items. No optimizer retry was attempted. External sanitized evidence remains under /tmp/plexus-k8s-demo/20260728T184100Z-pr513a2. Next: add an outside-in specification for demo-created evaluation provenance, repair only that integration seam, then use a fresh run ID.",
+      "created_at": "2026-07-28T18:54:37.227052Z"
+    },
+    {
+      "id": "e342f629-ccd3-4cbb-851e-90df50d5e7c4",
+      "author": "ryan.porter",
+      "text": "Outside-in provenance repair: the new demo specification first failed because no frozen-window evaluation command existed. The minimal repair derives explicit UTC feedback_start_at and feedback_end_at bounds from the retained run seed anchor and uses them when creating the 100-item feedback baseline; days=7 and max_items=100 remain recorded for optimizer provenance. Focused checks are green: 49 demo/product/chart tests and 64 private-proxy tests, plus Ruff. A fresh strict run is next; the failed A2 optimizer will not be retried.",
+      "created_at": "2026-07-28T18:56:30.677065Z"
     }
   ],
   "created_at": "2026-07-28T17:58:38.910670Z",
-  "updated_at": "2026-07-28T18:39:46.551147Z",
+  "updated_at": "2026-07-28T18:56:30.677065Z",
   "closed_at": null,
   "custom": {}
 }
