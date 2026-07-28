@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from fastapi.testclient import TestClient
 import pytest
 
 from proxy import app as proxy_app
@@ -159,6 +158,7 @@ def test_readyz_reports_security_mode_metadata(monkeypatch):
         "authModeExplicit": True,
         "upstreamDisabled": True,
         "externalAccessControlRequired": True,
+        "artifactTicketsEnabled": False,
     }
 
 
@@ -222,6 +222,33 @@ def test_security_configuration_fails_startup_for_invalid_trusted_open(monkeypat
 
     with pytest.raises(RuntimeError, match="trusted_open requires PLEXUS_BACKEND_MODE=local"):
         proxy_app.assert_security_configuration()
+
+
+def test_local_artifact_tickets_require_explicit_api_key_auth(monkeypatch):
+    client, store, _upstream = client_with_fakes(monkeypatch)
+    store.ready = lambda: True
+    monkeypatch.setattr(
+        proxy_app,
+        "artifact_ticket_configuration",
+        replace(proxy_app.artifact_ticket_configuration, enabled=True),
+    )
+    monkeypatch.setattr(
+        proxy_app,
+        "settings",
+        replace(
+            proxy_app.settings,
+            backend_mode="local",
+            auth_mode="trusted_open",
+            auth_mode_explicit=True,
+            proxy_api_key=None,
+            upstream_disabled=True,
+        ),
+    )
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    assert "explicit PLEXUS_PROXY_AUTH_MODE=api_key" in response.json()["detail"]
 
 
 def test_settings_infer_auth_mode_from_api_key(monkeypatch):

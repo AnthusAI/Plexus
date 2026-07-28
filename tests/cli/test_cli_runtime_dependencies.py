@@ -39,3 +39,19 @@ def test_installed_cli_uses_the_lightweight_entrypoint():
     pyproject = tomllib.loads((project_root / "pyproject.toml").read_text())
 
     assert pyproject["tool"]["poetry"]["scripts"]["plexus"] == "plexus.cli.entrypoint:main"
+
+
+def test_worker_scoring_extra_declares_legacy_cli_import_dependencies():
+    """The worker image must import every command used by the demo fixture."""
+    project_root = Path(__file__).resolve().parents[2]
+    pyproject = tomllib.loads((project_root / "pyproject.toml").read_text())
+
+    scoring = set(pyproject["tool"]["poetry"]["extras"]["scoring"])
+
+    assert {
+        "contractions",
+        "openpyxl",
+        "pandas",
+        "pyarrow",
+        "seaborn",
+    } <= scoring

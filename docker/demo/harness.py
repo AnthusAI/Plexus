@@ -4,7 +4,6 @@ import concurrent.futures
 import csv
 import hashlib
 import json
-import os
 import re
 import socket
 import subprocess
@@ -45,6 +44,8 @@ PROXY_SERVICE = "plexus-graphql-proxy"
 OBJECT_STORE_DEPLOYMENT = "plexus-local-object-store"
 OBJECT_STORE_SERVICE = "plexus-local-object-store"
 OPENAI_SECRET = "plexus-local-llm-keys"
+PROXY_API_KEY = "local-dev-key"
+OBJECT_STORE_TLS_SECRET = "plexus-local-object-store-tls"
 ACCOUNT_ID = "local-demo-account"
 ACCOUNT_KEY = "local-demo"
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -129,14 +130,16 @@ class CommandRunner:
 
 
 class GraphQLClient:
-    def __init__(self, endpoint: str):
+    def __init__(self, endpoint: str, api_key: str | None = None):
         self.endpoint = endpoint
         self.session = requests.Session()
+        self.api_key = api_key
 
     def execute(self, query: str, variables: Mapping[str, Any] | None = None) -> dict[str, Any]:
         response = self.session.post(
             self.endpoint,
             json={"query": query, "variables": dict(variables or {})},
+            headers={"x-api-key": self.api_key} if self.api_key else {},
             timeout=30,
         )
         response.raise_for_status()
@@ -156,6 +159,7 @@ class DemoHarness:
     output_dir: Path
     promote: bool = False
     resume: bool = False
+    interrupt_after_optimizer: bool = False
 
     def __post_init__(self) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -823,9 +827,24 @@ class DemoHarness:
         ids = self.ids
         payload = self._resumable_optimizer_payload(ids)
         if payload is None:
+            dispatch_count = int(self.manifest.metadata.get("optimizer_dispatch_count") or 0) + 1
+            if dispatch_count != 1:
+                raise DemoFailure("optimizer dispatch is not automatically retried")
+            self.manifest.metadata["optimizer_dispatch_count"] = dispatch_count
+            self._persist()
             command = optimizer_cli_command(self.manifest, ids)
             result = self.runner.run(self._worker_command(*command), timeout=14400)
             payload = extract_last_json(result.stdout)
+            if (
+                self.interrupt_after_optimizer
+                and not self.manifest.metadata.get("optimizer_controlled_interruption_consumed")
+            ):
+                self.manifest.metadata["optimizer_controlled_interruption_consumed"] = True
+                self.manifest.metadata["optimizer_completed_before_interruption"] = True
+                self._persist()
+                raise DemoFailure(
+                    "controlled acceptance interruption after optimizer completion"
+                )
         logical = payload.get("result") if isinstance(payload.get("result"), dict) else payload
         if not logical.get("success", True) or logical.get("status") == "error":
             raise DemoFailure("optimizer returned a logical failure")
@@ -885,6 +904,9 @@ class DemoHarness:
         if not outcome.passed:
             failed = [item["name"] for item in outcome.assertions if not item["passed"]]
             raise DemoFailure(f"optimizer acceptance failed: {', '.join(failed)}")
+        if self.resume and self.manifest.metadata.get("optimizer_completed_before_interruption"):
+            if self.manifest.metadata.get("optimizer_dispatch_count") != 1:
+                raise DemoFailure("optimizer reran during completed-artifact resume")
         self.manifest.metadata.update(
             {
                 "winning_version_id": winning_version,
@@ -938,11 +960,12 @@ class DemoHarness:
         task_id = completed_optimizer_identity(summary, ids, procedure_id)
 
         code = (
-            "import boto3,json,os,sys;"
-            "bucket=os.environ['AMPLIFY_STORAGE_TASKATTACHMENTS_BUCKET_NAME'];"
-            "key='tasks/'+sys.argv[1]+'/output.json';"
-            "client=boto3.client('s3',endpoint_url=os.environ.get('PLEXUS_OBJECT_STORE_ENDPOINT'));"
-            "payload=json.loads(client.get_object(Bucket=bucket,Key=key)['Body'].read());"
+            "import json,sys;"
+            "from plexus.dashboard.api.client import PlexusDashboardClient;"
+            "from plexus.cli.shared.task_output_storage import download_task_output_artifact;"
+            "client=PlexusDashboardClient();"
+            "task=(client.execute('query DemoTask($id: ID!){getTask(id:$id){id output}}',{'id':sys.argv[1]}).get('getTask') or {});"
+            "payload=json.loads(download_task_output_artifact(task_id=sys.argv[1],compact_output=task.get('output'),client=client));"
             "result=payload.get('result') or {};"
             "costs=result.get('costs') or {};"
             "safe={'result':{'success':result.get('success'),'status':result.get('status'),"
@@ -1182,7 +1205,7 @@ class DemoHarness:
     @contextmanager
     def graphql(self) -> Iterator[GraphQLClient]:
         with self.port_forward(NAMESPACE, f"svc/{PROXY_SERVICE}", 8000) as base_url:
-            yield GraphQLClient(f"{base_url}/graphql")
+            yield GraphQLClient(f"{base_url}/graphql", PROXY_API_KEY)
 
     @contextmanager
     def port_forward(self, namespace: str, resource: str, remote_port: int) -> Iterator[str]:

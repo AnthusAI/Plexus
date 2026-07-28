@@ -18,6 +18,9 @@ global:
 
 localObjectStore:
   enabled: true
+  tls:
+    enabled: true
+    existingSecret: "plexus-local-object-store-tls"
   persistence:
     enabled: true
     size: 2Gi
@@ -61,24 +64,27 @@ graphql-proxy:
     tag: "local"
     pullPolicy: IfNotPresent
   config:
-    # --- Option A: Local MVP (no auth, no upstream) ---
+    # Local API-key mode is explicit so workers cannot fall back to Cognito or IAM.
     backendMode: "local"
-    authMode: "trusted_open"
-    proxyApiKey: ""
+    authMode: "api_key"
+    proxyApiKey: "local-dev-key"
     upstreamApiUrl: ""
     upstreamApiKey: ""
     upstreamDisabled: true
     enableDebug: true
     # Faster retry recovery after a locally interrupted score request.
     scoringJobClaimLeaseSeconds: 15
-    # --- Option B: AppSync upstream (original) ---
-    # backendMode: "amplify"
-    # authMode: ""
-    # proxyApiKey: "your-proxy-api-key-here"
-    # upstreamApiUrl: "https://your-appsync-endpoint.appsync-api.us-west-2.amazonaws.com/graphql"
-    # upstreamApiKey: "your-appsync-api-key-here"
-    # upstreamDisabled: false
-    # enableDebug: true
+  artifactStore:
+    enabled: true
+    endpoint: "https://plexus-local-object-store:9000"
+    region: "us-east-1"
+    accountId: "local-demo-account"
+    existingSecret: "plexus-local-object-store"
+    buckets:
+      datasets: "plexus-local-datasets"
+      reportBlockDetails: "plexus-local-report-block-details"
+      taskAttachments: "plexus-local-task-attachments"
+      scoreResultAttachments: "plexus-local-score-result-attachments"
   createSecrets: true
   postgresql:
     username: "plexus_proxy"  # Set username explicitly
@@ -121,8 +127,13 @@ plexus-worker:
       cpu: 2
   objectStore:
     enabled: true
-    endpoint: "http://plexus-local-object-store:9000"
+    endpoint: "https://plexus-local-object-store:9000"
     existingSecret: "plexus-local-object-store"
+    caBundle:
+      enabled: true
+      existingSecret: "plexus-local-object-store-tls"
+      secretKey: ca.crt
+      mountPath: /app/certs/minio-ca.crt
     buckets:
       datasets: "plexus-local-datasets"
       reportBlockDetails: "plexus-local-report-block-details"
@@ -135,6 +146,7 @@ plexus-worker:
       key: "local-dev-key"
     account:
       key: "local-demo"
+    graphqlAuthMode: "api_key"
   service:
     enabled: true
     type: ClusterIP

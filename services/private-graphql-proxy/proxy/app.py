@@ -11,6 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from graphql.language.ast import FieldNode, SelectionSetNode
 
+from .artifact_tickets import (
+    ArtifactTicketConfiguration,
+    ArtifactTicketRequestError,
+    ArtifactTicketService,
+)
 from .config import Settings
 from .graphql_tools import (
     RootField,
@@ -18,7 +23,6 @@ from .graphql_tools import (
     argument_value,
     build_operation_plan,
     build_root_only_query,
-    project_list_connection,
 )
 from .schema_contract import get_schema_contract
 from .store import PostgresStore, cache_key_for, utcnow
@@ -27,6 +31,8 @@ from .upstream import UpstreamAppSyncClient
 
 settings = Settings.from_env()
 store = PostgresStore(settings.database_url)
+artifact_ticket_configuration = ArtifactTicketConfiguration.from_env()
+artifact_tickets = ArtifactTicketService(artifact_ticket_configuration, store)
 upstream = UpstreamAppSyncClient(
     settings.upstream_api_url,
     settings.upstream_api_key,
@@ -178,6 +184,11 @@ def security_configuration_error() -> Optional[str]:
             return "PLEXUS_PROXY_AUTH_MODE=trusted_open requires PLEXUS_BACKEND_MODE=local"
         if not settings.upstream_disabled:
             return "PLEXUS_PROXY_AUTH_MODE=trusted_open requires PLEXUS_PROXY_UPSTREAM_DISABLED=true"
+    if artifact_ticket_configuration.enabled:
+        if settings.backend_mode != "local":
+            return "local artifact transfer tickets require PLEXUS_BACKEND_MODE=local"
+        if settings.auth_mode != "api_key" or not settings.auth_mode_explicit:
+            return "local artifact transfer tickets require explicit PLEXUS_PROXY_AUTH_MODE=api_key"
     return None
 
 
@@ -188,6 +199,7 @@ def security_metadata() -> dict[str, Any]:
         "authModeExplicit": settings.auth_mode_explicit,
         "upstreamDisabled": settings.upstream_disabled,
         "externalAccessControlRequired": settings.auth_mode == "trusted_open",
+        "artifactTicketsEnabled": artifact_ticket_configuration.enabled,
     }
 
 
@@ -271,6 +283,14 @@ def handle_local_custom_field(
     variables: dict[str, Any],
     operation_type: str,
 ) -> Any:
+    if field.name == "createArtifactTransferTickets" and operation_type == "mutation":
+        raw_requests = argument_value(field.node, "requests", variables)
+        try:
+            tickets = artifact_tickets.issue(raw_requests)
+        except ArtifactTicketRequestError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        return project_plain_value(tickets, field.node.selection_set)
+
     if field.name == "claimScoringJob" and operation_type == "mutation":
         input_doc = argument_value(field.node, "input", variables)
         if not isinstance(input_doc, dict):

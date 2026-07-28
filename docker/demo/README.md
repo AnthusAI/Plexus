@@ -34,6 +34,15 @@ Secret does not exist, the runner loads the approved local Plexus configuration
 and creates the Secret through stdin. The key is never written to Helm values,
 the command log, or result artifacts.
 
+The local GraphQL proxy runs in explicit API-key mode and authorizes procedure,
+task, optimizer, dataset, evaluation, and score-result artifact transfers with
+short-lived signed HTTPS tickets. The deployer creates one reusable local CA and
+MinIO TLS Secret if it is absent; subsequent upgrades reuse that Secret. Workers
+mount only the CA for ticket transfers. MinIO signing credentials are held in
+Kubernetes Secrets and injected into the proxy. Worker MinIO credentials remain
+temporarily available only because evaluation/report consumers are outside PR
+#513's migration scope; the suite does not claim fully credential-free storage.
+
 Prerequisites:
 
 - Docker Desktop Kubernetes is enabled and the active context is
@@ -145,6 +154,21 @@ while consuming its result, `resume` verifies the single run-scoped procedure
 and task attachment, reads only the sanitized decision/metric/cost fields, and
 continues with guarded promotion. It refuses to rerun an incomplete optimizer;
 starting another optimization always requires a new run ID.
+
+The acceptance-only interruption hook proves this path deterministically:
+
+```bash
+RUN_ID=20260728T200000Z-resume
+poetry run python -m docker.demo.runner run \
+  --run-id "$RUN_ID" --deploy --promote --profile strict \
+  --max-cost-usd 10 --max-iterations 2 --interrupt-after-optimizer
+
+# The first command is expected to fail immediately after the optimizer task
+# and its output artifact complete. Resume consumes that artifact through a
+# GraphQL ticket and asserts the optimizer dispatch count remains exactly one.
+poetry run python -m docker.demo.runner resume \
+  --run-id "$RUN_ID" --output-dir "/tmp/plexus-k8s-demo/$RUN_ID" --promote
+```
 
 ## Evidence
 

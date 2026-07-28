@@ -10,6 +10,7 @@ import pytest
 from docker.demo.core import DemoManifest, PHASES
 from docker.demo.harness import (
     CommandRunner,
+    DemoHarness,
     completed_optimizer_identity,
     curated_dataset_identity,
     evaluation_accuracy_fraction,
@@ -207,3 +208,13 @@ def test_resume_and_verify_require_an_explicit_run_id() -> None:
     for command in ("resume", "verify"):
         with pytest.raises(SystemExit):
             parser().parse_args([command])
+
+
+def test_controlled_optimizer_interruption_is_run_only_and_resume_uses_graphql_tickets() -> None:
+    args = parser().parse_args(["run", "--interrupt-after-optimizer"])
+    assert args.interrupt_after_optimizer is True
+
+    resume_source = DemoHarness._resumable_optimizer_payload.__code__.co_consts
+    rendered_constants = " ".join(str(value) for value in resume_source)
+    assert "download_task_output_artifact" in rendered_constants
+    assert "boto3" not in rendered_constants

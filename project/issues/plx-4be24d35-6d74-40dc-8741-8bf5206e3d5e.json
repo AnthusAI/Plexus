@@ -1,0 +1,37 @@
+{
+  "id": "plx-4be24d35-6d74-40dc-8741-8bf5206e3d5e",
+  "title": "Integrate PR 513 with the Kubernetes demo suite",
+  "description": "Validate PR 513 from an isolated integration branch against the committed Docker Desktop Kubernetes demo. Preserve the initial unmodified failure, implement only the specified local GraphQL ticket, verified TLS, explicit authentication, and resume-path compatibility, then prove two fresh strict runs plus retained verification. Use public data only and record sanitized evidence.",
+  "type": "task",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-4586dd4b-07b7-422b-853f-e7780413ad5e",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "5b1fdbb9-662c-4437-9a61-ec8ef9bf3157",
+      "author": "ryan.porter",
+      "text": "Kickoff: isolated worktree /Users/ryan.porter/Projects/Plexus-pr513-k8s-integration on codex/pr-513-k8s-integration. Frozen inputs: develop a002fcbca06782af1f6d7d4e0ffdf664294a58da; PR 513 b301bc50d7d2005552e4406b18c7e7f140138178. The prior demo task ID is absent from this branch, so no project files were copied from the primary checkout.",
+      "created_at": "2026-07-28T17:58:47.010765Z"
+    },
+    {
+      "id": "80177f50-9316-4727-80f8-25735085e036",
+      "author": "ryan.porter",
+      "text": "Unmodified strict run 20260728T180024Z-pr513raw preserved the first failing specification. Infrastructure passed, then seed failed before any model call or optimizer retry: the worker CLI import graph for dataset curation reached ExpandContractionsProcessor and raised ModuleNotFoundError for contractions. Affected layer: worker runtime packaging. No workaround was applied; external evidence is retained under /tmp/plexus-k8s-demo/20260728T180024Z-pr513raw.",
+      "created_at": "2026-07-28T18:04:34.725882Z"
+    },
+    {
+      "id": "db929451-cd5a-44ea-93bd-364bc77b7bde",
+      "author": "ryan.porter",
+      "text": "Outside-in compatibility results: the unchanged PR branch first failed during run-scoped dataset curation because the lean worker extra omitted direct CLI import dependencies. Added an executable dependency contract and the minimal declared runtime set. Implemented local GraphQL artifact transfer tickets with resource/account/key/size/checksum validation, HTTPS-only signed URLs, explicit API-key auth, reusable MinIO TLS/CA wiring, integrity-bearing task output envelopes, GraphQL-ticket resume, and a one-shot post-optimizer interruption hook. Focused evidence is green: 73 product/demo/chart tests and 63 private-proxy tests. Live immutable-image deployment and strict runs remain pending.",
+      "created_at": "2026-07-28T18:22:02.121814Z"
+    }
+  ],
+  "created_at": "2026-07-28T17:58:38.910670Z",
+  "updated_at": "2026-07-28T18:22:02.121814Z",
+  "closed_at": null,
+  "custom": {}
+}

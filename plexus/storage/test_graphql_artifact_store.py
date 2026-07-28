@@ -66,6 +66,21 @@ class FakeHTTPSession:
         return self.responses.pop(0)
 
 
+class FakeCAHTTPSession(FakeHTTPSession):
+    def request(self, method, url, *, headers, data=None, timeout=None, verify=None):
+        self.calls.append(
+            {
+                "method": method,
+                "url": url,
+                "headers": headers,
+                "data": data,
+                "timeout": timeout,
+                "verify": verify,
+            }
+        )
+        return self.responses.pop(0)
+
+
 class FakeExecutor:
     def __init__(self, ticket_batches):
         self.ticket_batches = list(ticket_batches)
@@ -320,3 +335,22 @@ def test_http_failure_fails_closed_without_inline_or_s3_fallback():
         store.upload_bytes(write_request(), PAYLOAD)
 
     assert len(executor.calls) == 1
+
+
+def test_configured_local_ca_bundle_is_used_for_https_verification(tmp_path, monkeypatch):
+    ca_bundle = tmp_path / "minio-ca.crt"
+    ca_bundle.write_text("test local CA")
+    monkeypatch.setenv("PLEXUS_ARTIFACT_CA_BUNDLE", str(ca_bundle))
+    executor = FakeExecutor([[ticket()]])
+    http = FakeCAHTTPSession([FakeResponse(200)])
+
+    GraphQLArtifactStore(executor, http_session=http).upload_bytes(write_request(), PAYLOAD)
+
+    assert http.calls[0]["verify"] == str(ca_bundle)
+
+
+def test_missing_configured_local_ca_bundle_fails_closed(monkeypatch):
+    monkeypatch.setenv("PLEXUS_ARTIFACT_CA_BUNDLE", "/missing/minio-ca.crt")
+
+    with pytest.raises(ValueError, match="CA bundle"):
+        GraphQLArtifactStore(FakeExecutor([]), http_session=FakeHTTPSession([]))

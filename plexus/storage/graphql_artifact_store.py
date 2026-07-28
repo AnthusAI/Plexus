@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
+from pathlib import Path
 from typing import Any, Mapping, Optional, Protocol, Sequence
 from urllib.parse import urlparse
 
@@ -205,6 +207,7 @@ class GraphQLArtifactStore:
         *,
         http_session: Optional[HTTPSession] = None,
         timeout_seconds: float = 30.0,
+        ca_bundle: Optional[str] = None,
     ) -> None:
         if not hasattr(executor, "execute") or not callable(executor.execute):
             raise TypeError("executor must provide an execute(query, variables) method")
@@ -213,6 +216,15 @@ class GraphQLArtifactStore:
         self._executor = executor
         self._http_session = http_session or requests.Session()
         self._timeout_seconds = timeout_seconds
+        configured_ca_bundle = ca_bundle if ca_bundle is not None else os.getenv(
+            "PLEXUS_ARTIFACT_CA_BUNDLE"
+        )
+        self._ca_bundle: Optional[str] = None
+        if configured_ca_bundle and configured_ca_bundle.strip():
+            bundle_path = Path(configured_ca_bundle).expanduser()
+            if not bundle_path.is_file():
+                raise ValueError("configured artifact CA bundle does not exist")
+            self._ca_bundle = str(bundle_path.resolve())
 
     def request_tickets(
         self, requests_to_authorize: Sequence[ArtifactTransferRequest]
@@ -368,13 +380,14 @@ class GraphQLArtifactStore:
         if ticket.is_expired(datetime.now(timezone.utc)):
             raise _ExpiredSignedURL("signed URL expired before transfer")
         try:
-            response = self._http_session.request(
-                ticket.method,
-                ticket.url,
-                headers=ticket.required_headers,
-                data=payload,
-                timeout=self._timeout_seconds,
-            )
+            request_kwargs: dict[str, Any] = {
+                "headers": ticket.required_headers,
+                "data": payload,
+                "timeout": self._timeout_seconds,
+            }
+            if self._ca_bundle:
+                request_kwargs["verify"] = self._ca_bundle
+            response = self._http_session.request(ticket.method, ticket.url, **request_kwargs)
         except requests.RequestException as exc:
             raise ArtifactTransferError("HTTPS artifact transfer failed") from exc
         except Exception as exc:

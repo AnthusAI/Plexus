@@ -80,6 +80,14 @@ spec:
           value: {{ required "objectStore.buckets.taskAttachments is required" .Values.objectStore.buckets.taskAttachments | quote }}
         - name: AMPLIFY_STORAGE_SCORERESULTATTACHMENTS_BUCKET_NAME
           value: {{ required "objectStore.buckets.scoreResultAttachments is required" .Values.objectStore.buckets.scoreResultAttachments | quote }}
+        {{- if .Values.objectStore.caBundle.enabled }}
+        - name: PLEXUS_ARTIFACT_CA_BUNDLE
+          value: {{ required "objectStore.caBundle.mountPath is required" .Values.objectStore.caBundle.mountPath | quote }}
+        # Direct evaluation/report consumers remain on the S3-compatible API
+        # until their GraphQL-ticket migration lands; they trust the same CA.
+        - name: AWS_CA_BUNDLE
+          value: {{ .Values.objectStore.caBundle.mountPath | quote }}
+        {{- end }}
         {{- end }}
 
         # Plexus API configuration
@@ -102,6 +110,8 @@ spec:
             secretKeyRef:
               name: {{ include "plexus-worker.secretName" . }}
               key: account-key
+        - name: PLEXUS_GRAPHQL_AUTH_MODE
+          value: {{ required "plexus.graphqlAuthMode must be explicit" .Values.plexus.graphqlAuthMode | quote }}
 
         {{- if eq .Values.workerType "score-processor" }}
         # Score Processor specific config
@@ -269,6 +279,12 @@ spec:
         - name: tmp
           mountPath: /app/tmp
         {{- end }}
+        {{- if and .Values.objectStore.enabled .Values.objectStore.caBundle.enabled }}
+        - name: object-store-ca
+          mountPath: {{ required "objectStore.caBundle.mountPath is required" .Values.objectStore.caBundle.mountPath | quote }}
+          subPath: {{ .Values.objectStore.caBundle.secretKey | quote }}
+          readOnly: true
+        {{- end }}
 
       volumes:
       {{- if .Values.volumes.scorecardCache.enabled }}
@@ -280,6 +296,14 @@ spec:
       - name: tmp
         emptyDir:
           sizeLimit: {{ .Values.volumes.tmp.sizeLimit }}
+      {{- end }}
+      {{- if and .Values.objectStore.enabled .Values.objectStore.caBundle.enabled }}
+      - name: object-store-ca
+        secret:
+          secretName: {{ required "objectStore.caBundle.existingSecret is required" .Values.objectStore.caBundle.existingSecret | quote }}
+          items:
+          - key: {{ .Values.objectStore.caBundle.secretKey | quote }}
+            path: {{ .Values.objectStore.caBundle.secretKey | quote }}
       {{- end }}
 
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}

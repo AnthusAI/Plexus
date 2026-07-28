@@ -182,6 +182,11 @@ objectStore:
   existingSecret: ""
   accessKeySecretKey: access-key-id
   secretKeySecretKey: secret-access-key
+  caBundle:
+    enabled: false
+    existingSecret: ""
+    secretKey: ca.crt
+    mountPath: /app/certs/object-store-ca.crt
   buckets:
     datasets: ""
     reportBlockDetails: ""
@@ -204,6 +209,9 @@ plexus:
 
   account:
     key: ""  # Set via values override or Octopus variables
+
+  # Explicit client authentication mode: api_key, iam, or cognito.
+  graphqlAuthMode: api_key
 
 # Score Processor specific configuration
 scoreProcessor:

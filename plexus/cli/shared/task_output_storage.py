@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from plexus.storage.graphql_artifact_store import ArtifactTransferRequest, GraphQLArtifactStore
 
@@ -88,7 +88,12 @@ def _serialize_task_output_payload(output_payload: Any, *, format_type: str) -> 
 
 
 def compact_task_output_for_storage(
-    output_payload: Any, *, output_attachment_path: str, status: str = "ok", error_message: Optional[str] = None,
+    output_payload: Any,
+    *,
+    output_attachment_path: str,
+    output_attachment_metadata: Optional[Mapping[str, Any]] = None,
+    status: str = "ok",
+    error_message: Optional[str] = None,
 ) -> str:
     if not output_attachment_path:
         raise ValueError("output_attachment_path is required")
@@ -98,6 +103,8 @@ def compact_task_output_for_storage(
         "preview": _task_output_preview_from_payload(output_payload),
         "output_attachment": output_attachment_path,
     }
+    if output_attachment_metadata is not None:
+        compact_payload["output_attachment_metadata"] = dict(output_attachment_metadata)
     if error_message:
         compact_payload["error"] = error_message
     return json.dumps(compact_payload)
@@ -133,7 +140,66 @@ def persist_task_output_artifact(
     if uploaded_key not in attached_files:
         attached_files.append(uploaded_key)
     return (
-        compact_task_output_for_storage(output_payload, output_attachment_path=uploaded_key, status=status, error_message=error_message),
+        compact_task_output_for_storage(
+            output_payload,
+            output_attachment_path=uploaded_key,
+            output_attachment_metadata=metadata,
+            status=status,
+            error_message=error_message,
+        ),
         attached_files,
         uploaded_key,
     )
+
+
+def download_task_output_artifact(
+    *,
+    task_id: str,
+    compact_output: Any,
+    client: Any = None,
+    artifact_store: Optional[GraphQLArtifactStore] = None,
+) -> bytes:
+    """Read a compacted task output through its GraphQL-authorized ticket."""
+    if not task_id:
+        raise ValueError("task_id is required to download a task output artifact.")
+    try:
+        envelope = json.loads(compact_output) if isinstance(compact_output, str) else compact_output
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Task output compact envelope is invalid JSON.") from exc
+    if not isinstance(envelope, Mapping):
+        raise RuntimeError("Task output compact envelope must be an object.")
+
+    metadata = envelope.get("output_attachment_metadata")
+    if not isinstance(metadata, Mapping):
+        raise RuntimeError(
+            "Task output artifact lacks integrity metadata and cannot be read through the authorized artifact store."
+        )
+    object_key = metadata.get("_s3_key")
+    if object_key != envelope.get("output_attachment"):
+        raise RuntimeError("Task output artifact metadata does not match its attachment pointer.")
+    prefix = f"tasks/{task_id}/"
+    if not isinstance(object_key, str) or not object_key.startswith(prefix):
+        raise RuntimeError("Task output artifact pointer is outside the requested task scope.")
+    filename = object_key[len(prefix):]
+    size_bytes = metadata.get("size_bytes")
+    sha256 = metadata.get("sha256")
+    content_type = metadata.get("content_type")
+    if (
+        not filename
+        or not isinstance(size_bytes, int)
+        or not isinstance(sha256, str)
+        or not isinstance(content_type, str)
+    ):
+        raise RuntimeError("Task output artifact integrity metadata is invalid.")
+
+    request = ArtifactTransferRequest(
+        operation="READ",
+        resource_type="TASK",
+        resource_id=task_id,
+        artifact_type="TASK_ATTACHMENT",
+        filename=filename,
+        content_type=content_type,
+        size_bytes=size_bytes,
+        sha256=sha256,
+    )
+    return _artifact_store(client=client, artifact_store=artifact_store).download_bytes(request)

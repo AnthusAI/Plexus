@@ -49,8 +49,11 @@ def test_local_chart_renders_ready_persistent_object_store_with_secret_backed_wo
         item["name"]: item
         for item in worker["spec"]["template"]["spec"]["containers"][0]["env"]
     }
-    assert env["AWS_ENDPOINT_URL"]["value"] == "http://plexus-local-object-store:9000"
+    assert env["AWS_ENDPOINT_URL"]["value"] == "https://plexus-local-object-store:9000"
     assert env["PLEXUS_OBJECT_STORE_ENDPOINT"]["value"] == env["AWS_ENDPOINT_URL"]["value"]
+    assert env["PLEXUS_GRAPHQL_AUTH_MODE"]["value"] == "api_key"
+    assert env["PLEXUS_ARTIFACT_CA_BUNDLE"]["value"] == "/app/certs/minio-ca.crt"
+    assert env["AWS_CA_BUNDLE"]["value"] == env["PLEXUS_ARTIFACT_CA_BUNDLE"]["value"]
     assert env["AMPLIFY_STORAGE_DATASETS_BUCKET_NAME"]["value"] == "plexus-local-datasets"
     assert env["AWS_ACCESS_KEY_ID"]["valueFrom"]["secretKeyRef"]["name"] == (
         "plexus-local-object-store"
@@ -71,10 +74,46 @@ def test_local_chart_renders_ready_persistent_object_store_with_secret_backed_wo
         ][0]["env"]
     }
     assert recovery_env["PLEXUS_GRAPHQL_AUTH_MODE"]["value"] == "api_key"
+    worker_volumes = worker["spec"]["template"]["spec"]["volumes"]
+    assert any(
+        volume.get("secret", {}).get("secretName") == "plexus-local-object-store-tls"
+        for volume in worker_volumes
+    )
+
+    object_store = by_identity[("Deployment", "plexus-local-object-store")]
+    object_store_container = object_store["spec"]["template"]["spec"]["containers"][0]
+    assert object_store_container["args"] == [
+        "server", "/data", "--certs-dir", "/etc/minio/certs"
+    ]
+    assert object_store_container["readinessProbe"]["httpGet"]["scheme"] == "HTTPS"
+    assert any(
+        volume.get("secret", {}).get("secretName") == "plexus-local-object-store-tls"
+        for volume in object_store["spec"]["template"]["spec"]["volumes"]
+    )
+
+    proxy = by_identity[("Deployment", "plexus-graphql-proxy")]
+    proxy_env = {
+        item["name"]: item
+        for item in proxy["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    assert proxy_env["PLEXUS_ARTIFACT_STORE_ACCESS_KEY_ID"]["valueFrom"]["secretKeyRef"]["name"] == (
+        "plexus-local-object-store"
+    )
+    assert proxy_env["PLEXUS_ARTIFACT_STORE_SECRET_ACCESS_KEY"]["valueFrom"]["secretKeyRef"]["name"] == (
+        "plexus-local-object-store"
+    )
+    proxy_config = by_identity[("ConfigMap", "plexus-graphql-proxy")]["data"]
+    assert proxy_config["PLEXUS_PROXY_AUTH_MODE"] == "api_key"
+    assert proxy_config["PLEXUS_ARTIFACT_TICKETS_ENABLED"] == "true"
+    assert proxy_config["PLEXUS_ARTIFACT_STORE_ENDPOINT"] == (
+        "https://plexus-local-object-store:9000"
+    )
 
     bucket_job = by_identity[("Job", "plexus-local-object-store-buckets")]
     args = bucket_job["spec"]["template"]["spec"]["containers"][0]["args"]
     rendered_args = " ".join(args)
+    assert "https://plexus-local-object-store:9000" in rendered_args
+    assert "--insecure" not in rendered_args
     for bucket in (
         "plexus-local-datasets",
         "plexus-local-report-block-details",
