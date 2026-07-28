@@ -1922,7 +1922,7 @@ def test_execute_tactus_description_documents_fixed_optimization_cooldown() -> N
     assert "recent_score_activity" in description
     assert "wait_for_cooldown" in description
     assert "rechecks live activity before dispatch" in description
-    assert "invalid_champion" in description
+    assert "unresolved_champion_reference" in description
 
 
 def test_execute_tactus_description_teaches_progressive_disclosure() -> None:

@@ -530,7 +530,7 @@ def test_rank_distinguishes_a_dangling_champion_from_incomplete_activity():
 
     assert result["exact"] is True
     assert result["ranked"] == []
-    assert result["unranked"][0]["unranked_reason"] == "invalid_champion"
+    assert result["unranked"][0]["unranked_reason"] == "unresolved_champion_reference"
     assert result["coverage"]["activity"]["incomplete_score_count"] == 0
 
 

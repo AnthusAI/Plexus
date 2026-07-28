@@ -160,7 +160,7 @@ incomplete. A direct assessment reports `cooldown_active` with
 dispatch and rejects any newly modified target without starting its optimizer.
 If a scalar champion ID does not resolve through the champion relationship,
 the score is structurally ineligible and remains visible as
-`invalid_champion`; it is not an activity-coverage failure.
+`unresolved_champion_reference`; it is not an activity-coverage failure.
 
 ## Three-Phase Rubric-Memory SOP
 

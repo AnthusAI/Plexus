@@ -600,7 +600,7 @@ def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str
             row["unranked_reason"] = "missing_champion"
             unranked.append(row)
         elif score.get("champion_relationship_valid") is False:
-            row["unranked_reason"] = "invalid_champion"
+            row["unranked_reason"] = "unresolved_champion_reference"
             unranked.append(row)
         else:
             supplied_activity = score.get("score_activity")

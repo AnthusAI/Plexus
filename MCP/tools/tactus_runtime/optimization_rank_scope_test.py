@@ -61,7 +61,7 @@ def test_rank_scope_classifies_a_dangling_champion_as_structurally_unranked() ->
     assert result["exact"] is True
     assert result["ranked"] == []
     assert result["coverage"]["activity"]["incomplete_score_count"] == 0
-    assert result["unranked"][0]["unranked_reason"] == "invalid_champion"
+    assert result["unranked"][0]["unranked_reason"] == "unresolved_champion_reference"
     assert result["unranked"][0]["champion_version"] == "version-score"
 
 

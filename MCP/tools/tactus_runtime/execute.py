@@ -11782,7 +11782,8 @@ Rank scope: opaque `scorecard_ids` or literal case-insensitive
 the later of `score.updatedAt` or newest score-version `createdAt`;
 `recent_score_activity`; missing evidence is incomplete; assessment returns
 `cooldown_active`/`wait_for_cooldown`; run rechecks live activity before dispatch.
-An unresolved scalar champion ID is structurally unranked as `invalid_champion`,
+An unresolved scalar champion ID is structurally unranked as
+`unresolved_champion_reference`,
 not misreported as missing cooldown evidence.
 
 Helper aliases are injected before the snippet: high-frequency short names and
