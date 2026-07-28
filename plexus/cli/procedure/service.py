@@ -22,6 +22,7 @@ import time
 import yaml
 from plexus.dashboard.api.client import PlexusDashboardClient
 from plexus.dashboard.api.models.procedure import Procedure
+from plexus.cli.procedure.tactus_adapters.storage import ProcedureArtifactStorageError
 from plexus.dashboard.api.models.procedure_template import ProcedureTemplate
 from plexus.dashboard.api.models.score import Score
 from plexus.dashboard.api.models.scorecard import Scorecard
@@ -270,7 +271,8 @@ class ProcedureService:
                 name=name,
             )
 
-            # Upload YAML as code.tac to S3 and record the key in metadata.
+            # Upload YAML as an application-authorized attachment and record
+            # both the compatible key and integrity envelope in metadata.
             # Also seed scorecard_name/score_name so the dashboard subtitle renders
             # immediately without waiting for the first Lua State checkpoint.
             try:
@@ -292,14 +294,26 @@ class ProcedureService:
                     except Exception:
                         pass
                 if yaml_config:
-                    try:
-                        from plexus.reports.s3_utils import upload_procedure_file
-                        s3_key = upload_procedure_file(procedure.id, "code.tac", yaml_config, content_type="text/plain")
-                        current_meta["code_s3_key"] = s3_key
-                        logger.info(f"Uploaded code.tac to S3 for procedure {procedure.id}: {s3_key}")
-                    except Exception as exc:
-                        logger.warning(f"Could not upload code.tac for procedure {procedure.id}: {exc}")
+                    from plexus.cli.procedure.tactus_adapters.storage import (
+                        upload_procedure_attachment,
+                    )
+                    pointer = upload_procedure_attachment(
+                        self.client,
+                        procedure.id,
+                        "code.tac",
+                        yaml_config,
+                        content_type="text/plain",
+                        existing_metadata=current_meta.get("code_artifact"),
+                    )
+                    # Keep the legacy reader key while recording the integrity
+                    # envelope required by GraphQLArtifactStore reads.
+                    current_meta["code_s3_key"] = pointer["_s3_key"]
+                    current_meta["code_artifact"] = pointer
                 procedure.update(metadata=_json.dumps(current_meta))
+            except RuntimeError:
+                # Artifact authorization and integrity failures must not leave
+                # a procedure that appears runnable with an unchecked fallback.
+                raise
             except Exception as exc:
                 logger.warning(f"Could not update metadata for procedure {procedure.id}: {exc}")
 
@@ -500,25 +514,34 @@ class ProcedureService:
                 logger.info(f"Using YAML from Procedure.code field for {procedure_id}")
                 return procedure.code
 
-            # FIRST-B: Download code.tac from S3 if key is stored in metadata
-            try:
-                import json as _json
-                metadata_value = getattr(procedure, "metadata", None)
-                if isinstance(metadata_value, str):
-                    meta = _json.loads(metadata_value or "{}") or {}
-                elif isinstance(metadata_value, dict):
-                    meta = metadata_value
-                else:
-                    meta = {}
-                s3_key = meta.get("code_s3_key")
-                if s3_key:
-                    from plexus.reports.s3_utils import download_procedure_code
-                    s3_code = download_procedure_code(procedure_id, [s3_key])
-                    if s3_code:
-                        logger.info(f"Loaded YAML from S3 code.tac for procedure {procedure_id}")
-                        return s3_code
-            except Exception as exc:
-                logger.warning(f"Could not load code.tac from S3 for {procedure_id}: {exc}")
+            # FIRST-B: Load the integrity-verified code attachment when the
+            # procedure was stored without an inline code projection.
+            import json as _json
+            metadata_value = getattr(procedure, "metadata", None)
+            if isinstance(metadata_value, str):
+                meta = _json.loads(metadata_value or "{}") or {}
+            elif isinstance(metadata_value, dict):
+                meta = metadata_value
+            else:
+                meta = {}
+            if meta.get("code_artifact"):
+                from plexus.cli.procedure.tactus_adapters.storage import (
+                    download_procedure_attachment,
+                )
+                return download_procedure_attachment(
+                    self.client,
+                    procedure_id,
+                    "code.tac",
+                    meta["code_artifact"],
+                    content_type="text/plain",
+                ).decode("utf-8")
+            if meta.get("code_s3_key"):
+                from plexus.cli.procedure.tactus_adapters.storage import (
+                    ProcedureArtifactStorageError,
+                )
+                raise ProcedureArtifactStorageError(
+                    "Legacy code_s3_key has no integrity metadata; re-save the procedure before resume"
+                )
 
             # SECOND: Get template if procedure has one
             # NOTE: templateId was renamed to parentProcedureId
@@ -540,6 +563,8 @@ class ProcedureService:
             logger.warning(f"No YAML configuration found for procedure {procedure_id}")
             return None
             
+        except ProcedureArtifactStorageError:
+            raise
         except Exception as e:
             logger.error(f"Error getting procedure YAML: {str(e)}")
             return None

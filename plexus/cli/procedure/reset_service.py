@@ -217,7 +217,7 @@ def clone_state_for_branch(
     truncate_to_cycle: int,
 ) -> Dict[str, Any]:
     """
-    Clone S3 state from source procedure to target, truncated to cycle N.
+    Clone persisted procedure state from source to target, truncated to cycle N.
 
     Used to implement branching: the target procedure starts from cycle N of
     the source, with empty checkpoints (fresh execution), so the optimizer

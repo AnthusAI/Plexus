@@ -257,8 +257,8 @@ def prepare_continuation(
     Prepare a completed procedure for continuation.
 
     Steps:
-    1. Load current YAML (from DynamoDB code field or S3 via ProcedureService)
-    2. Count completed cycles from S3 State
+    1. Load current YAML (from the code field or verified attachment via ProcedureService)
+    2. Count completed cycles from persisted State
     3. Update params.max_iterations.value = completed + additional_cycles
     4. Optionally update params.hint.value and params.target_accuracy.value
     5. Save updated YAML back to procedure.code via GraphQL
@@ -287,7 +287,7 @@ def prepare_continuation(
             code = _fh.read()
         logger.info("Loaded fresh optimizer YAML from %s", _optimizer_yaml_path)
     if not code:
-        # Fallback: load from procedure record (DynamoDB or S3)
+        # Fallback: load from the procedure record or verified attachment.
         code = procedure.get('code') or ''
         if not code:
             service = ProcedureService(client)
@@ -305,41 +305,37 @@ def prepare_continuation(
 
     updated_code = _update_yaml_params(code, new_max_iterations, hint, target_accuracy)
 
-    # Save updated YAML: always write to S3 (procedure YAML may exceed DynamoDB 400 KB),
-    # also persist in DynamoDB code field when small enough (handled by Procedure.update).
+    # Persist the definition before updating its pointer. The old code_s3_key
+    # remains for readers, while code_artifact carries checksum and size.
+    from plexus.cli.procedure.tactus_adapters.storage import upload_procedure_attachment
+
+    raw_meta = procedure.get('metadata') or '{}'
     try:
-        import json as _json
-        from plexus.reports.s3_utils import upload_procedure_file
-        s3_key = upload_procedure_file(procedure_id, "code.tac", updated_code, content_type="text/plain")
-
-        # Fetch current metadata so we can update the code_s3_key pointer
-        raw_meta = procedure.get('metadata') or '{}'
-        try:
-            current_meta = _json.loads(raw_meta) if isinstance(raw_meta, str) else (raw_meta or {})
-        except Exception:
-            current_meta = {}
-        current_meta['code_s3_key'] = s3_key
-
-        # Update DynamoDB: small YAML goes in code field; large YAML goes S3-only.
-        input_data: dict = {'id': procedure_id, 'metadata': _json.dumps(current_meta)}
-        if len(updated_code.encode('utf-8')) < 350_000:
-            input_data['code'] = updated_code
-        client.execute(
-            """
-            mutation UpdateProcedureContinuation($input: UpdateProcedureInput!) {
-                updateProcedure(input: $input) { id }
-            }
-            """,
-            {'input': input_data},
-        )
-        logger.info("Saved updated YAML to S3 (%s) and DynamoDB for procedure %s", s3_key, procedure_id)
-    except Exception as exc:
-        logger.warning("S3 upload failed for procedure %s: %s — falling back to DynamoDB-only", procedure_id, exc)
-        client.execute(_UPDATE_PROCEDURE_CODE_MUTATION, {
-            'id': procedure_id,
-            'code': updated_code,
-        })
-        logger.info("Saved updated YAML to DynamoDB for procedure %s", procedure_id)
+        current_meta = json.loads(raw_meta) if isinstance(raw_meta, str) else (raw_meta or {})
+    except json.JSONDecodeError as exc:
+        raise ValueError("Procedure metadata is not valid JSON") from exc
+    pointer = upload_procedure_attachment(
+        client,
+        procedure_id,
+        "code.tac",
+        updated_code,
+        content_type="text/plain",
+        existing_metadata=current_meta.get("code_artifact"),
+    )
+    current_meta['code_s3_key'] = pointer['_s3_key']
+    current_meta['code_artifact'] = pointer
+    input_data: dict = {'id': procedure_id, 'metadata': json.dumps(current_meta)}
+    if len(updated_code.encode('utf-8')) < 350_000:
+        input_data['code'] = updated_code
+    client.execute(
+        """
+        mutation UpdateProcedureContinuation($input: UpdateProcedureInput!) {
+            updateProcedure(input: $input) { id }
+        }
+        """,
+        {'input': input_data},
+    )
+    logger.info("Saved verified procedure definition for %s", procedure_id)
 
     reset_checkpoints_only(client, procedure_id)
     logger.info("Checkpoints cleared for procedure %s (State preserved)", procedure_id)
@@ -414,6 +410,36 @@ def prepare_branch(
     target_id = new_procedure['id']
 
     logger.info("Created branch procedure %s from %s (cycle %d)", target_id, source_id, cycle)
+
+    # Persist a verified attachment for the newly-created definition before
+    # cloning state. Keep the inline code projection for existing readers, but
+    # resume paths require this integrity envelope when the projection is absent.
+    from plexus.cli.procedure.tactus_adapters.storage import upload_procedure_attachment
+
+    raw_metadata = new_procedure.get("metadata") or {}
+    try:
+        metadata = json.loads(raw_metadata) if isinstance(raw_metadata, str) else dict(raw_metadata)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("New branch procedure metadata is not valid JSON") from exc
+    pointer = upload_procedure_attachment(
+        client,
+        target_id,
+        "code.tac",
+        updated_code,
+        content_type="text/plain",
+        existing_metadata=metadata.get("code_artifact"),
+    )
+    metadata["code_s3_key"] = pointer["_s3_key"]
+    metadata["code_artifact"] = pointer
+    client.execute(
+        """
+        mutation UpdateBranchedProcedureCodeArtifact($input: UpdateProcedureInput!) {
+            updateProcedure(input: $input) { id }
+        }
+        """,
+        {"input": {"id": target_id, "metadata": json.dumps(metadata)}},
+    )
+    logger.info("Saved verified procedure definition for branch %s", target_id)
 
     # Clone state truncated to cycle N
     clone_result = clone_state_for_branch(client, source_id, target_id, cycle)

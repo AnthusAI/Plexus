@@ -27,6 +27,7 @@ import boto3
 import pytest
 
 from plexus.storage.graphql_artifact_store import (
+    ArtifactUpload,
     ArtifactAuthorizationError,
     ArtifactIntegrityError,
     ArtifactTicketError,
@@ -181,6 +182,39 @@ def test_upload_transfers_verified_bytes_before_returning_metadata_without_s3(mo
     }
 
 
+def test_upload_batch_requests_all_tickets_once_before_uploading_each_verified_artifact():
+    second_payload = b"second application-authorized artifact"
+    second_request = ArtifactTransferRequest(
+        operation="WRITE",
+        resource_type="PROCEDURE",
+        resource_id="procedure-1",
+        artifact_type="PROCEDURE_ATTACHMENT",
+        filename="lua_state.json",
+        content_type="application/json",
+        size_bytes=len(second_payload),
+        sha256=hashlib.sha256(second_payload).hexdigest(),
+    )
+    executor = FakeExecutor([[ticket(), ticket(url="https://storage.example/second")]])
+    http = FakeHTTPSession([FakeResponse(200), FakeResponse(200)])
+    store = GraphQLArtifactStore(executor, http_session=http)
+
+    metadata = store.upload_batch(
+        [
+            ArtifactUpload(write_request(), PAYLOAD),
+            ArtifactUpload(second_request, second_payload),
+        ]
+    )
+
+    assert len(executor.calls) == 1
+    assert len(executor.calls[0][1]["requests"]) == 2
+    assert [call["url"] for call in http.calls] == [
+        "https://storage.example/upload",
+        "https://storage.example/second",
+    ]
+    assert metadata[0]["_s3_key"] == "artifacts/report-1/output.json"
+    assert metadata[1]["_s3_key"] == "artifacts/report-1/output.json"
+
+
 def test_decodes_required_headers_returned_as_graphql_awsjson():
     awsjson_ticket = ticket()
     awsjson_ticket["requiredHeaders"] = json.dumps(awsjson_ticket["requiredHeaders"])
@@ -253,6 +287,18 @@ def test_download_checksum_failure_fails_closed_without_retries():
 
     assert len(executor.calls) == 1
     assert len(http.calls) == 1
+
+
+def test_download_batch_requests_all_tickets_once_and_verifies_each_payload():
+    executor = FakeExecutor([[ticket(method="GET"), ticket(method="GET", url="https://storage.example/second")]])
+    http = FakeHTTPSession([FakeResponse(200, content=PAYLOAD), FakeResponse(200, content=PAYLOAD)])
+    store = GraphQLArtifactStore(executor, http_session=http)
+
+    payloads = store.download_batch([read_request(), read_request()])
+
+    assert payloads == [PAYLOAD, PAYLOAD]
+    assert len(executor.calls) == 1
+    assert len(executor.calls[0][1]["requests"]) == 2
 
 
 def test_upload_rejects_mismatched_declared_bytes_before_requesting_ticket():
