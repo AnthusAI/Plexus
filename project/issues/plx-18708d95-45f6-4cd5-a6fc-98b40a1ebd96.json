@@ -37,10 +37,16 @@
       "author": "ryan.porter",
       "text": "Implementation milestone: GraphQLArtifactStore now uses only injected execute(query, variables) authorization, requests one-to-twenty tickets through createArtifactTransferTickets, enforces HTTPS ticket URLs, preserves required signed headers (including AWSJSON decoding), verifies SHA-256 and size, returns metadata only after successful upload, preserves _s3_key, and refreshes exactly once only for explicit signed-URL expiry. Focused Python 3.12 validation: 9 passed; flake8, py_compile, git diff --check, and kanbus validate passed. No dashboard client, auth, consumer migration, direct S3, inline-data, API-key, or AWS-credential code changed.",
       "created_at": "2026-07-28T13:02:53.063789Z"
+    },
+    {
+      "id": "dfca2029-2c1b-4545-a4c7-350475f57fff",
+      "author": "ryan.porter",
+      "text": "Handoff: implementation is committed as 104167b70 and pushed on codex/aws-login-free-artifact-store. Draft PR to develop: https://github.com/AnthusAI/Plexus/pull/502. Validation evidence: focused Python 3.12 suite 9 passed; flake8, py_compile, git diff --check, and kanbus validate passed. Residual dependency boundary: the additive ticket backend must deploy its frozen url/requiredHeaders GraphQL response before any Wave 2 consumer migrates. This task remains in_progress for coordinator closure after landing.",
+      "created_at": "2026-07-28T13:03:31.735680Z"
     }
   ],
   "created_at": "2026-07-28T12:52:37.689199Z",
-  "updated_at": "2026-07-28T13:02:53.063789Z",
+  "updated_at": "2026-07-28T13:03:31.735680Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
