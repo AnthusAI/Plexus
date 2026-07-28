@@ -3,9 +3,9 @@
   "title": "Run credential-free integration acceptance and rollout",
   "description": "Purpose: Integrate, verify, and roll out the application-authenticated local workflow.\n\nAcceptance:\n- Python 3.11 and 3.12 CI pass.\n- Dashboard typecheck, unit, Storybook build, and browser tests pass.\n- Sandbox environment contains no AWS profile or session variables.\n- One plexus login supports an accuracy evaluation with a stored dataset.\n- A feedback evaluation persists complete root-cause evidence.\n- A local optimizer checkpoints and resumes with final artifacts visible in the dashboard.\n- An expired access token refreshes without user or AWS intervention.\n- Additive backend support deploys before migrated clients.\n- Production acceptance uses a controlled evaluation with no local AWS credentials.\n\nClose only after final rollout verification is recorded.",
   "type": "task",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
-  "assignee": null,
+  "assignee": "codex/root",
   "creator": null,
   "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
   "labels": [
@@ -26,9 +26,46 @@
       "type": "blocked-by"
     }
   ],
-  "comments": [],
+  "comments": [
+    {
+      "id": "d47afe53-4875-438a-92fb-7b8b7b492cc1",
+      "author": "ryan.porter",
+      "text": "Production Amplify compile failure confirmed: the CDK L1 function is typed as IFunction, so addEnvironment is unavailable. Use the supported Amplify function resource for environment injection while retaining the L1 function for IAM policy attachment, and add the Amplify backend TypeScript project to the standard dashboard typecheck so this cannot pass local CI unnoticed again.",
+      "created_at": "2026-07-28T17:39:52.940567Z"
+    },
+    {
+      "id": "0eef6027-c9ef-455d-8b6a-c8a2c11fe84c",
+      "author": "ryan.porter",
+      "text": "Implemented the supported Amplify function environment configuration and added backend compilation to the standard dashboard typecheck. Validation passed: backend TypeScript, web TypeScript, git diff check, and Kanbus validation.",
+      "created_at": "2026-07-28T17:41:30.365982Z"
+    },
+    {
+      "id": "55f60ddc-688b-4971-abd1-66c57b824e6c",
+      "author": "ryan.porter",
+      "text": "Live deployment validation: the configured Amplify staging branch is substantially behind current development and cannot provide representative proof. Use a temporary Amplify development branch tied to the focused fix branch, monitor its real build/deploy result, then remove the temporary cloud branch.",
+      "created_at": "2026-07-28T17:44:30.431522Z"
+    },
+    {
+      "id": "85c550ca-4019-4376-9be8-292e7010d707",
+      "author": "ryan.porter",
+      "text": "The live Amplify preview cleared the original backend TypeScript failure, then exposed a CloudFormation circular dependency between data, function, and backup stacks. The artifact-ticket AppSync resolver belongs in the data resource group; applying Amplify's supported resourceGroupName placement and rerunning the same preview deployment.",
+      "created_at": "2026-07-28T18:09:11.625073Z"
+    },
+    {
+      "id": "774255df-c30b-430c-9cae-d913f76f4f1f",
+      "author": "ryan.porter",
+      "text": "The corrected resource graph deployed until provisioned-concurrency initialization. CloudWatch showed the Console image lacked requests_aws4auth even though IAM GraphQL auth is enabled. Add the existing locked dependency explicitly to the Console image and fail image construction unless both boto3 and requests_aws4auth import successfully.",
+      "created_at": "2026-07-28T18:29:52.035964Z"
+    },
+    {
+      "id": "5f2a033c-42d1-4341-a765-62a45c782830",
+      "author": "ryan.porter",
+      "text": "Live Amplify validation succeeded end-to-end on commit 8a598edf. Job 4 completed BUILD, DEPLOY, and VERIFY successfully after backend TypeScript compilation, CloudFormation creation, and Console provisioned-concurrency initialization. PR 514 is ready for review; keep the issue open until the fix lands.",
+      "created_at": "2026-07-28T19:15:25.052719Z"
+    }
+  ],
   "created_at": "2026-07-28T12:52:39.017652Z",
-  "updated_at": "2026-07-28T12:52:39.017652Z",
+  "updated_at": "2026-07-28T19:15:25.052719Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
