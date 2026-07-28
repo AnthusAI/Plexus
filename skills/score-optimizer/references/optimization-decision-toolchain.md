@@ -77,6 +77,27 @@ plexus optimization rank --input @complete-rank-evidence.json \
 This CLI form consumes the supplied evidence file; use the Tactus method above
 when live exhaustive discovery and feedback analysis are required.
 
+### Seven-day anti-churn policy
+
+Every live rank applies fixed policy `score-activity-cooldown-v1`. The request
+freezes one UTC `as_of` and excludes a score when the later of its record
+`updatedAt` and newest version `createdAt` is at or after the rolling 168-hour
+cutoff. This includes an unpromoted new version and a promotion or metadata edit
+that updates the score record. Score results and evaluations do not start the
+cooldown.
+
+Excluded scores remain in `unranked` as `recent_score_activity` with activity
+source/timestamp, newest opaque version ID/timestamp, cutoff, and eligibility
+timestamp. Missing or malformed recency evidence fails closed and prevents an
+exact ranking. Assessment preserves this evidence and returns
+`cooldown_active` plus `wait_for_cooldown`. Launch rechecks the same live fields;
+a new edit or version after assessment is rejected without optimizer dispatch.
+
+Offline CLI evidence must include complete activity coverage with the fixed
+policy version and frozen `as_of`, plus complete per-score activity evidence.
+Older evidence files without those fields can be inspected, but cannot claim an
+exact ranking. The policy is not a caller option and cannot be disabled.
+
 ## Assessment and diagnosis
 
 Preserve the frozen UTC window, champion version, feedback watermark, policy

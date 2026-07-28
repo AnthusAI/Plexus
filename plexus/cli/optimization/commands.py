@@ -263,7 +263,7 @@ def _merge_freshness_rejections(
     extra = [dict(item) for item in freshness_rejections]
     if not extra:
         return result
-    rejected = [*list(result.get("rejected") or []), *extra]
+    rejected = [*extra, *list(result.get("rejected") or [])]
     blockers = [*list(result.get("blockers") or []), *(str(item.get("reason")) for item in extra)]
     evidence = dict(result.get("evidence") or {})
     evidence["rejected"] = rejected
@@ -322,7 +322,14 @@ def _read_live_score_info(client: Any, scorecard_id: str, score_id: str) -> Mapp
     result = client.execute(
         """
         query OptimizationLiveScore($scoreId: ID!) {
-            getScore(id: $scoreId) { id championVersionId }
+            getScore(id: $scoreId) {
+                id
+                championVersionId
+                updatedAt
+                versions(sortDirection: DESC, limit: 1) {
+                    items { id createdAt }
+                }
+            }
         }
         """,
         {"scoreId": score_id},

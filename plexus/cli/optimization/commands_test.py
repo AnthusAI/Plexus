@@ -23,6 +23,20 @@ def _ready_target(
         "weekly_disagreement_rates": [0.8] * 4,
         "weekly_ac1_values": [0.7] * 4,
         "weekly_bucket_counts": [20] * 4,
+        "score_activity": {
+            "policy_version": "score-activity-cooldown-v1",
+            "as_of": "2026-07-28T00:00:00Z",
+            "cutoff": "2026-07-21T00:00:00Z",
+            "score_updated_at": "2024-01-02T00:00:00Z",
+            "newest_version_id": "old-version",
+            "newest_version_created_at": "2024-01-01T00:00:00Z",
+            "activity_source": "score_record",
+            "activity_timestamp": "2024-01-02T00:00:00Z",
+            "eligibility_timestamp": "2024-01-09T00:00:00Z",
+            "recent": False,
+            "complete": True,
+            "failure": None,
+        },
     })
     assert assessment["readiness_state"] == "ready_to_optimize"
     return {
@@ -107,16 +121,39 @@ def test_optimization_rank_cli_scopes_supplied_complete_evidence() -> None:
                 "score_id": "score-a", "score_name": "One",
                 "champion_version": "version-a", "total_items": 10,
                 "disagreements": 2,
+                "score_activity": {
+                    "policy_version": "score-activity-cooldown-v1",
+                    "as_of": "2026-07-28T00:00:00Z",
+                    "score_updated_at": "2024-01-02T00:00:00Z",
+                    "newest_version_id": "old-version-a",
+                    "newest_version_created_at": "2024-01-01T00:00:00Z",
+                    "complete": True, "recent": False,
+                    "activity_timestamp": "2024-01-02T00:00:00Z",
+                },
             },
             {
                 "scorecard_id": "card-b", "scorecard_name": "Beta",
                 "score_id": "score-b", "score_name": "Two",
                 "champion_version": "version-b", "total_items": 10,
                 "disagreements": 3,
+                "score_activity": {
+                    "policy_version": "score-activity-cooldown-v1",
+                    "as_of": "2026-07-28T00:00:00Z",
+                    "score_updated_at": "2024-01-02T00:00:00Z",
+                    "newest_version_id": "old-version-b",
+                    "newest_version_created_at": "2024-01-01T00:00:00Z",
+                    "complete": True, "recent": False,
+                    "activity_timestamp": "2024-01-02T00:00:00Z",
+                },
             },
         ],
         "coverage": {
             "complete": True,
+            "activity": {
+                "policy_version": "score-activity-cooldown-v1",
+                "as_of": "2026-07-28T00:00:00Z",
+                "complete": True,
+            },
             "scope": {
                 "requested_scorecard_ids": ["card-a"],
                 "requested_scorecard_name_prefixes": [],
@@ -160,7 +197,14 @@ def test_optimization_rank_cli_does_not_claim_exact_without_scope_coverage() -> 
                     "score_id": "score-a", "champion_version": "version-a",
                     "total_items": 10, "disagreements": 2,
                 }],
-                "coverage": {"complete": True},
+                "coverage": {
+                    "complete": True,
+                    "activity": {
+                        "policy_version": "score-activity-cooldown-v1",
+                        "as_of": "2026-07-28T00:00:00Z",
+                        "complete": False,
+                    },
+                },
             }),
             "--option", 'scorecard_ids=["card-a"]',
         ],
@@ -170,6 +214,63 @@ def test_optimization_rank_cli_does_not_claim_exact_without_scope_coverage() -> 
     packet = json.loads(result.output)
     assert packet["exact"] is False
     assert "scope coverage" in str(packet["coverage"]["failures"]).lower()
+
+
+def test_optimization_rank_cli_old_evidence_without_activity_coverage_is_not_exact() -> None:
+    from plexus.cli.optimization import commands
+
+    result = CliRunner().invoke(
+        commands.optimization,
+        [
+            "rank",
+            "--input",
+            json.dumps({
+                "scores": [{
+                    "scorecard_id": "card-a",
+                    "score_id": "score-a",
+                    "champion_version": "version-a",
+                    "total_items": 10,
+                    "disagreements": 2,
+                }],
+                "coverage": {"complete": True},
+            }),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    packet = json.loads(result.output)
+    assert packet["exact"] is False
+    assert packet["ranked"] == []
+    assert packet["unranked"][0]["unranked_reason"] == "incomplete_score_activity"
+    assert "activity coverage" in str(packet["coverage"]["failures"]).lower()
+
+
+def test_optimization_rank_cli_incomplete_activity_coverage_never_becomes_exact() -> None:
+    from plexus.cli.optimization import commands
+
+    result = CliRunner().invoke(
+        commands.optimization,
+        [
+            "rank",
+            "--input",
+            json.dumps({
+                "scores": [],
+                "coverage": {
+                    "complete": True,
+                    "activity": {
+                        "policy_version": "score-activity-cooldown-v1",
+                        "as_of": "2026-07-28T00:00:00Z",
+                        "complete": False,
+                    },
+                },
+            }),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    packet = json.loads(result.output)
+    assert packet["exact"] is False
+    assert "activity coverage" in str(packet["coverage"]["failures"]).lower()
 
 
 def test_persist_false_does_not_invoke_cli_persistence(monkeypatch) -> None:
@@ -465,6 +566,52 @@ def test_run_never_launches_rejected_or_stale_targets(
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["rejected"][0]["reason"] == reason
+
+
+def test_run_never_launches_target_rejected_for_recent_score_activity(monkeypatch) -> None:
+    from plexus.cli.optimization import commands
+
+    target = _ready_target("scorecard-1", "score-1")
+    monkeypatch.setattr(
+        commands,
+        "_refresh_live_target_freshness",
+        lambda _request: (
+            {},
+            {},
+            [{
+                "target": target,
+                "reason": "recent_score_activity",
+                "score_updated_at": "2026-07-27T12:00:00Z",
+            }],
+        ),
+    )
+    monkeypatch.setattr(
+        commands,
+        "_launch_optimizer_procedure",
+        lambda _arguments: pytest.fail("recent score activity must prevent optimizer launch"),
+    )
+
+    result = commands.dispatch_optimization_operation(
+        "run",
+        {
+            "approved": True,
+            "account_id": "account",
+            "targets": [target],
+            "max_cost_usd": 2.0,
+            "max_samples": 40,
+            "max_iterations": 2,
+            "max_concurrency": 1,
+        },
+    )
+
+    assert result["accepted_targets"] == []
+    assert result["dispatches"] == []
+    assert any(
+        row.get("reason") == "recent_score_activity"
+        and row.get("target") == target
+        and row.get("score_updated_at") == "2026-07-27T12:00:00Z"
+        for row in result["rejected"]
+    )
 
 
 def test_run_requires_all_explicit_execution_limits_before_any_launch(monkeypatch) -> None:

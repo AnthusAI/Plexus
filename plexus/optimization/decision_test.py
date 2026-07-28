@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from plexus.optimization.decision import (
     OptimizationDecisionPacket,
     POLICY_PROFILE_V1,
+    SCORE_ACTIVITY_COOLDOWN_V1,
     assess_investment,
     classify_post_run_review,
     dispatch_optimization_operation,
     evidence_fingerprint,
+    evaluate_score_activity,
     frozen_utc_window,
     normalize_guideline_state,
     normalize_structural_state,
@@ -21,6 +23,57 @@ from plexus.optimization.decision import (
     weekly_buckets,
     wilson_interval,
 )
+
+
+def _iso(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _score_activity_source(
+    *,
+    score_updated_at: str | None,
+    newest_version_created_at: str | None,
+    newest_version_id: str = "version-1",
+) -> dict:
+    """Minimal score evidence used by the pure anti-churn policy."""
+    version: dict[str, str] = {"id": newest_version_id}
+    if newest_version_created_at is not None:
+        version["createdAt"] = newest_version_created_at
+    score: dict[str, object] = {"id": "score-1", "versions": [version]}
+    if score_updated_at is not None:
+        score["updatedAt"] = score_updated_at
+    return score
+
+
+def _ready_assessment_evidence(**extra: object) -> dict:
+    return {
+        "coverage_complete": True,
+        "champion_version": "champion-1",
+        "valid_feedback_count": 200,
+        "disagreement_count": 80,
+        "reachable_classes": ["yes", "no"],
+        "final_label_counts": {"yes": 100, "no": 100},
+        "guideline_state": "consistent",
+        **extra,
+    }
+
+
+def _old_score_activity() -> dict:
+    return evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at="2024-01-02T00:00:00Z",
+            newest_version_created_at="2024-01-01T00:00:00Z",
+        ),
+        as_of=datetime(2026, 7, 28, tzinfo=timezone.utc),
+    )
+
+
+def _activity_coverage() -> dict:
+    return {
+        "policy_version": "score-activity-cooldown-v1",
+        "as_of": "2026-07-28T00:00:00Z",
+        "complete": True,
+    }
 
 
 def test_packet_has_versioned_transport_independent_contract():
@@ -53,6 +106,329 @@ def test_frozen_utc_window_excludes_current_partial_day():
     }
 
 
+def test_score_activity_uses_the_newest_version_inside_the_cooldown_window():
+    as_of = datetime(2026, 7, 28, tzinfo=timezone.utc)
+    older = evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at="2026-01-01T00:00:00Z",
+            newest_version_created_at="2026-01-01T00:00:00Z",
+        ),
+        as_of=as_of,
+    )
+    cutoff = datetime.fromisoformat(older["cutoff"].replace("Z", "+00:00"))
+    newest_version = cutoff + timedelta(seconds=1)
+
+    activity = evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at=_iso(cutoff - timedelta(days=1)),
+            newest_version_created_at=_iso(newest_version),
+            newest_version_id="newest-version",
+        ),
+        as_of=as_of,
+    )
+
+    assert activity["policy_version"] == SCORE_ACTIVITY_COOLDOWN_V1["version"]
+    assert activity["as_of"] == _iso(as_of)
+    assert activity["newest_version_id"] == "newest-version"
+    assert activity["newest_version_created_at"] == _iso(newest_version)
+    assert activity["activity_timestamp"] == _iso(newest_version)
+    assert activity["eligibility_timestamp"] == _iso(
+        newest_version + timedelta(hours=168)
+    )
+    assert activity["activity_source"] == "newest_version"
+    assert activity["complete"] is True
+    assert activity["recent"] is True
+    assert activity["failure"] is None
+
+
+def test_score_activity_counts_recent_score_update_even_when_the_version_is_old():
+    as_of = datetime(2026, 7, 28, tzinfo=timezone.utc)
+    baseline = evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at="2026-01-01T00:00:00Z",
+            newest_version_created_at="2026-01-01T00:00:00Z",
+        ),
+        as_of=as_of,
+    )
+    cutoff = datetime.fromisoformat(baseline["cutoff"].replace("Z", "+00:00"))
+    score_update = cutoff + timedelta(seconds=1)
+
+    activity = evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at=_iso(score_update),
+            newest_version_created_at=_iso(cutoff - timedelta(days=30)),
+        ),
+        as_of=as_of,
+    )
+
+    assert activity["score_updated_at"] == _iso(score_update)
+    assert activity["activity_timestamp"] == _iso(score_update)
+    assert activity["eligibility_timestamp"] == _iso(
+        score_update + timedelta(hours=168)
+    )
+    assert activity["activity_source"] == "score_record"
+    assert activity["recent"] is True
+    assert activity["complete"] is True
+
+
+def test_score_activity_selects_the_later_valid_timestamp_and_excludes_the_inclusive_cutoff():
+    as_of = datetime(2026, 7, 28, tzinfo=timezone.utc)
+    baseline = evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at="2026-01-01T00:00:00Z",
+            newest_version_created_at="2026-01-01T00:00:00Z",
+        ),
+        as_of=as_of,
+    )
+    cutoff = datetime.fromisoformat(baseline["cutoff"].replace("Z", "+00:00"))
+
+    later_version = cutoff - timedelta(seconds=1)
+    selected_later = evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at=_iso(cutoff - timedelta(days=1)),
+            newest_version_created_at=_iso(later_version),
+        ),
+        as_of=as_of,
+    )
+    exactly_at_cutoff = evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at=_iso(cutoff),
+            newest_version_created_at=_iso(cutoff - timedelta(days=1)),
+        ),
+        as_of=as_of,
+    )
+
+    assert selected_later["activity_timestamp"] == _iso(later_version)
+    assert selected_later["recent"] is False
+    assert exactly_at_cutoff["eligibility_timestamp"] == _iso(as_of)
+    assert exactly_at_cutoff["recent"] is True
+    assert exactly_at_cutoff["complete"] is True
+
+
+def test_score_activity_allows_older_evidence_and_excludes_future_activity():
+    as_of = datetime(2026, 7, 28, tzinfo=timezone.utc)
+    baseline = evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at="2026-01-01T00:00:00Z",
+            newest_version_created_at="2026-01-01T00:00:00Z",
+        ),
+        as_of=as_of,
+    )
+    cutoff = datetime.fromisoformat(baseline["cutoff"].replace("Z", "+00:00"))
+    older = evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at=_iso(cutoff - timedelta(days=1)),
+            newest_version_created_at=_iso(cutoff - timedelta(days=2)),
+        ),
+        as_of=as_of,
+    )
+    future = evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at=_iso(as_of + timedelta(seconds=1)),
+            newest_version_created_at=_iso(cutoff - timedelta(days=2)),
+        ),
+        as_of=as_of,
+    )
+
+    assert older["complete"] is True
+    assert older["recent"] is False
+    assert future["complete"] is True
+    assert future["recent"] is True
+    assert future["activity_timestamp"] == _iso(as_of + timedelta(seconds=1))
+    assert future["failure"] is None
+
+
+def test_score_activity_selects_newest_of_multiple_versions_without_changing_its_id():
+    activity = evaluate_score_activity(
+        {
+            "updatedAt": "2024-01-01T00:00:00Z",
+            "versions": [
+                {"id": "older", "createdAt": "2024-02-01T00:00:00Z"},
+                {
+                    "id": "opaque:newest/version+id",
+                    "createdAt": "2024-03-01T00:00:00Z",
+                },
+            ],
+        },
+        as_of=datetime(2026, 7, 28, tzinfo=timezone.utc),
+    )
+
+    assert activity["complete"] is True
+    assert activity["newest_version_id"] == "opaque:newest/version+id"
+    assert activity["newest_version_created_at"] == "2024-03-01T00:00:00Z"
+
+
+@pytest.mark.parametrize(
+    "score",
+    [
+        _score_activity_source(
+            score_updated_at=None,
+            newest_version_created_at="2026-01-01T00:00:00Z",
+        ),
+        _score_activity_source(
+            score_updated_at="not-a-timestamp",
+            newest_version_created_at="2026-01-01T00:00:00Z",
+        ),
+        _score_activity_source(
+            score_updated_at="2026-01-01T00:00:00Z",
+            newest_version_created_at=None,
+        ),
+        _score_activity_source(
+            score_updated_at="2026-01-01T00:00:00Z",
+            newest_version_created_at="not-a-timestamp",
+        ),
+    ],
+)
+def test_score_activity_missing_or_malformed_required_timestamps_fails_closed(score):
+    activity = evaluate_score_activity(score, as_of=datetime(2026, 7, 28, tzinfo=timezone.utc))
+
+    assert activity["complete"] is False
+    assert activity["recent"] is True
+    assert activity["failure"]
+
+
+def test_rank_aggregates_and_excludes_recent_score_activity():
+    as_of = datetime(2026, 7, 28, tzinfo=timezone.utc)
+    old_activity = evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at="2026-01-01T00:00:00Z",
+            newest_version_created_at="2026-01-01T00:00:00Z",
+        ),
+        as_of=as_of,
+    )
+    recent_activity = evaluate_score_activity(
+        _score_activity_source(
+            score_updated_at="2026-07-27T00:00:00Z",
+            newest_version_created_at="2026-01-01T00:00:00Z",
+        ),
+        as_of=as_of,
+    )
+    ranked = rank_portfolio(
+        [
+            {
+                "scorecard_id": "card", "score_id": "old", "scorecard_name": "Card",
+                "score_name": "Old", "champion_version": "champion-old",
+                "valid_feedback_count": 20, "disagreement_count": 5,
+                "score_activity": old_activity,
+            },
+            {
+                "scorecard_id": "card", "score_id": "recent", "scorecard_name": "Card",
+                "score_name": "Recent", "champion_version": "champion-recent",
+                "valid_feedback_count": 20, "disagreement_count": 10,
+                "score_activity": recent_activity,
+            },
+        ],
+        coverage={"complete": True, "activity": _activity_coverage()},
+    )
+
+    assert [row["score_id"] for row in ranked["ranked"]] == ["old"]
+    assert ranked["recent_activity_excluded_count"] == 1
+    assert ranked["unranked"][0]["score_id"] == "recent"
+    assert ranked["unranked"][0]["unranked_reason"] == "recent_score_activity"
+
+
+@pytest.mark.parametrize(
+    "activity_coverage",
+    [
+        {"complete": True, "as_of": "2026-07-28T00:00:00Z"},
+        {"complete": True, "policy_version": "score-activity-cooldown-v1"},
+    ],
+)
+def test_rank_is_never_exact_without_fixed_policy_and_frozen_activity_coverage(
+    activity_coverage,
+):
+    result = rank_portfolio(
+        [{
+            "scorecard_id": "card",
+            "score_id": "score",
+            "scorecard_name": "Card",
+            "score_name": "Score",
+            "champion_version": "champion",
+            "valid_feedback_count": 20,
+            "disagreement_count": 5,
+            "score_activity": _old_score_activity(),
+        }],
+        coverage={"complete": True, "activity": activity_coverage},
+    )
+
+    assert result["exact"] is False
+    assert result["coverage_complete"] is False
+    assert "complete inventory activity coverage evidence is required" in result[
+        "coverage_failures"
+    ]
+
+
+def test_assessment_cooldown_is_material_evidence_with_a_distinct_fingerprint():
+    as_of = datetime(2026, 7, 28, tzinfo=timezone.utc)
+    first = assess_investment(
+        _ready_assessment_evidence(
+            cooldown_active=True,
+            score_activity=evaluate_score_activity(
+                _score_activity_source(
+                    score_updated_at="2026-07-27T00:00:00Z",
+                    newest_version_created_at="2026-07-26T00:00:00Z",
+                ),
+                as_of=as_of,
+            ),
+        )
+    )
+    second = assess_investment(
+        _ready_assessment_evidence(
+            cooldown_active=True,
+            score_activity=evaluate_score_activity(
+                _score_activity_source(
+                    score_updated_at="2026-07-28T00:00:00Z",
+                    newest_version_created_at="2026-07-26T00:00:00Z",
+                ),
+                as_of=as_of,
+            ),
+        )
+    )
+
+    assert first["cooldown_active"] is True
+    assert first["primary_next_action"] == "wait_for_cooldown"
+    assert first["evidence"]["score_activity"]["recent"] is True
+    assert first["evidence_fingerprint"] != second["evidence_fingerprint"]
+
+
+def test_assessment_fails_closed_without_complete_fixed_policy_activity_evidence():
+    missing = assess_investment(_ready_assessment_evidence())
+    malformed = assess_investment(
+        _ready_assessment_evidence(
+            score_activity={
+                "policy_version": "score-activity-cooldown-v1",
+                "complete": False,
+                "recent": True,
+            }
+        )
+    )
+    nonboolean_recent = assess_investment(
+        _ready_assessment_evidence(
+            score_activity={**_old_score_activity(), "recent": "false"}
+        )
+    )
+    integer_recent = assess_investment(
+        _ready_assessment_evidence(
+            score_activity={**_old_score_activity(), "recent": 1}
+        )
+    )
+    malformed_timestamp = assess_investment(
+        _ready_assessment_evidence(
+            score_activity={
+                **_old_score_activity(),
+                "activity_timestamp": "not-a-timestamp",
+            }
+        )
+    )
+
+    assert missing["readiness_state"] == "incomplete"
+    assert malformed["readiness_state"] == "incomplete"
+    assert nonboolean_recent["readiness_state"] == "incomplete"
+    assert integer_recent["readiness_state"] == "incomplete"
+    assert malformed_timestamp["readiness_state"] == "incomplete"
+    assert missing["primary_next_action"] == "repair_activity_evidence"
+
+
 def test_wilson_interval_and_equality_boundary_are_deterministic():
     lower, upper = wilson_interval(10, 100)
 
@@ -69,6 +445,7 @@ def test_wilson_interval_and_equality_boundary_are_deterministic():
             "weekly_disagreement_rates": [0.10, 0.10, 0.10, 0.10],
             "weekly_ac1_values": [0.80, 0.80, 0.80, 0.80],
             "guideline_state": "consistent",
+            "score_activity": _old_score_activity(),
         }
     )
     assert decision["readiness_state"] == "monitoring_candidate"
@@ -104,6 +481,7 @@ def test_low_volume_complete_weekly_metrics_warn_without_blocking_monitoring():
                 for _ in range(4)
             ],
             "guideline_state": "consistent",
+            "score_activity": _old_score_activity(),
         }
     )
 
@@ -114,12 +492,12 @@ def test_low_volume_complete_weekly_metrics_warn_without_blocking_monitoring():
 def test_rank_portfolio_is_stable_and_never_claims_incomplete_coverage_is_exact():
     result = rank_portfolio(
         [
-            {"scorecard_id": "a", "score_id": "b", "scorecard_name": "A", "score_name": "Z", "valid_feedback_count": 20, "disagreement_rate": 0.5, "champion_version": "1"},
-            {"scorecard_id": "a", "score_id": "a", "scorecard_name": "A", "score_name": "A", "valid_feedback_count": 20, "disagreement_rate": 0.5, "champion_version": "1"},
+            {"scorecard_id": "a", "score_id": "b", "scorecard_name": "A", "score_name": "Z", "valid_feedback_count": 20, "disagreement_rate": 0.5, "champion_version": "1", "score_activity": _old_score_activity()},
+            {"scorecard_id": "a", "score_id": "a", "scorecard_name": "A", "score_name": "A", "valid_feedback_count": 20, "disagreement_rate": 0.5, "champion_version": "1", "score_activity": _old_score_activity()},
             {"scorecard_id": "a", "score_id": "disabled", "scorecard_name": "A", "score_name": "D", "valid_feedback_count": 99, "disagreement_rate": 1.0, "champion_version": "1", "enabled": False},
             {"scorecard_id": "a", "score_id": "none", "scorecard_name": "A", "score_name": "N", "valid_feedback_count": 99, "disagreement_rate": 1.0},
         ],
-        coverage={"complete": False, "failures": ["page 2 failed"]},
+        coverage={"complete": False, "failures": ["page 2 failed"], "activity": _activity_coverage()},
     )
 
     assert [row["score_id"] for row in result["ranked"]] == ["a", "b"]
@@ -149,6 +527,7 @@ def test_rank_supports_alignment_aliases_and_excludes_declared_unusable_pairs():
                 "invalid_feedback_count": 1,
                 "incomplete_label_pair_count": 2,
                 "championVersionId": "version",
+                "score_activity": _old_score_activity(),
             },
             {
                 "scorecardId": "card",
@@ -159,7 +538,7 @@ def test_rank_supports_alignment_aliases_and_excludes_declared_unusable_pairs():
                 "isDisabled": True,
             },
         ],
-        coverage={"complete": False, "retries": 2, "failures": ["retry exhausted"]},
+        coverage={"complete": False, "retries": 2, "failures": ["retry exhausted"], "activity": _activity_coverage()},
     )
 
     assert result["ranked"][0]["score_id"] == "eligible"
@@ -179,6 +558,7 @@ def test_assessment_orders_structural_and_evidence_gates_before_readiness():
             "reachable_classes": ["yes", "no"],
             "final_label_counts": {"yes": 200, "no": 0},
             "guideline_state": "consistent",
+            "score_activity": _old_score_activity(),
         }
     )
 
@@ -198,6 +578,7 @@ def test_assessment_high_stable_disagreement_is_ready_and_low_stable_is_monitori
         "weekly_disagreement_rates": [0.20] * 4,
         "weekly_ac1_values": [0.70] * 4,
         "guideline_state": "consistent",
+        "score_activity": _old_score_activity(),
     }
     high = assess_investment({**common, "disagreement_count": 40})
     low = assess_investment({**common, "disagreement_count": 0})
@@ -221,6 +602,7 @@ def test_established_high_disagreement_pauses_broad_collection_without_weekly_ga
             "weekly_ac1_values": [],
             "weekly_bucket_counts": [0, 0, 0, 0],
             "guideline_state": "consistent",
+            "score_activity": _old_score_activity(),
         }
     )
 
@@ -314,6 +696,7 @@ def _ready_assessment_packet(*, scorecard_id: str = "sc", score_id: str = "s") -
             "coverage_complete": True,
             "champion_version": "champion",
             "feedback_watermark": "watermark",
+            "score_activity": _old_score_activity(),
             "valid_feedback_count": 200,
             "disagreement_count": 80,
             "reachable_classes": ["yes", "no"],
@@ -431,14 +814,17 @@ def test_summary_aggregates_actions_questions_failures_and_approval_requests():
     summary = summarize_packets(
         [
             {"states": {"post_run": "promotion_ready"}, "primary_next_action": "request_promotion_approval", "stakeholder_questions": ["confirm policy"]},
-            {"states": {"readiness": "incomplete"}, "blockers": ["coverage failed"], "primary_next_action": "repair_coverage"},
+            {"states": {"readiness": "cooldown_active"}, "blockers": ["coverage failed"], "primary_next_action": "wait_for_cooldown"},
+            {"recent_activity_excluded_count": 2, "states": {"readiness": "inconclusive"}},
         ]
     )
 
-    assert summary["packet_count"] == 2
+    assert summary["packet_count"] == 3
     assert summary["promotion_approval_requests"] == 1
     assert summary["stakeholder_questions"] == ["confirm policy"]
     assert summary["failures"] == ["coverage failed"]
+    assert summary["recent_activity_deferred_count"] == 3
+    assert "3 recently modified score" in summary["executive_update"]
     assert POLICY_PROFILE_V1["weekly_minimum_count"] is None
 
 

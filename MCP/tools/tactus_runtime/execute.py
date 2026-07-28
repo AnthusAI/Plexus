@@ -952,7 +952,8 @@ def _default_scorecards_list(args: dict[str, Any]) -> Any:
         # whether the score is eligible for ranking.
         scorecard_fields += (
             " sections { items { scores { items { "
-            "id name championVersionId isDisabled "
+            "id name championVersionId isDisabled updatedAt "
+            "versions(sortDirection: DESC, limit: 1) { items { id createdAt } } "
             "} } } }"
         )
     query = (
@@ -2289,6 +2290,8 @@ def _aggregate_feedback_alignment_window(
     *,
     account_id: str,
     days: int,
+    window_start: str | None = None,
+    window_end: str | None = None,
 ) -> dict[tuple[str, str], dict[tuple[str, str], int]]:
     """Stream one complete feedback window into compact per-score pair counts.
 
@@ -2323,12 +2326,23 @@ def _aggregate_feedback_alignment_window(
         }
     }
     """
-    end_time = datetime.now(timezone.utc) + timedelta(minutes=5)
-    start_time = end_time - timedelta(days=days, minutes=5)
+    if bool(window_start) != bool(window_end):
+        raise ValueError(
+            "plexus.feedback.alignment_batch requires both window_start and "
+            "window_end when either is supplied"
+        )
+    if window_start and window_end:
+        start_value = str(window_start)
+        end_value = str(window_end)
+    else:
+        end_time = datetime.now(timezone.utc) + timedelta(minutes=5)
+        start_time = end_time - timedelta(days=days, minutes=5)
+        start_value = start_time.isoformat().replace("+00:00", "Z")
+        end_value = end_time.isoformat().replace("+00:00", "Z")
     variables = {
         "accountId": account_id,
-        "startTime": start_time.isoformat().replace("+00:00", "Z"),
-        "endTime": end_time.isoformat().replace("+00:00", "Z"),
+        "startTime": start_value,
+        "endTime": end_value,
         "nextToken": None,
     }
     aggregates: dict[tuple[str, str], Counter[tuple[str, str]]] = defaultdict(Counter)
@@ -3101,7 +3115,7 @@ def _default_score_info(args: dict[str, Any]) -> dict[str, Any]:
                     id name key
                     sections {{ items {{ id name scores {{ items {{
                         id name key externalId description type
-                        championVersionId isDisabled
+                        championVersionId isDisabled updatedAt
                     }} }} }} }}
                 }}
             }}"""
@@ -3132,7 +3146,7 @@ def _default_score_info(args: dict[str, Any]) -> dict[str, Any]:
                         id name key
                         sections {{ items {{ id name scores {{ items {{
                             id name key externalId description type
-                            championVersionId isDisabled
+                            championVersionId isDisabled updatedAt
                         }} }} }} }}
                     }}
                 }}
@@ -3196,6 +3210,7 @@ def _default_score_info(args: dict[str, Any]) -> dict[str, Any]:
         "externalId": score.get("externalId"),
         "type": score.get("type"),
         "championVersionId": score.get("championVersionId"),
+        "updatedAt": score.get("updatedAt"),
         "isDisabled": score.get("isDisabled", False),
         "location": {
             "scorecardId": scorecard_id,
@@ -9631,6 +9646,10 @@ class PlexusRuntimeModule:
         a failed page is retained as coverage evidence, never turned into a
         sampled/exact portfolio claim.
         """
+        from datetime import datetime, timezone
+
+        as_of_datetime = datetime.now(timezone.utc).replace(microsecond=0)
+        as_of = as_of_datetime.isoformat().replace("+00:00", "Z")
         cards: list[dict[str, Any]] = []
         failures: list[dict[str, Any]] = []
         next_token: Any = None
@@ -9641,6 +9660,7 @@ class PlexusRuntimeModule:
                 "_include_scores": True,
                 "next_token": next_token,
                 "account_id": args.get("account_id"),
+                "as_of": as_of,
             }
             page: Any = None
             for attempt in range(2):
@@ -9669,6 +9689,7 @@ class PlexusRuntimeModule:
             "scorecards_discovered": len(cards),
         }
         from plexus.optimization.decision import (
+            evaluate_score_activity,
             frozen_utc_window,
             normalize_rank_scope,
             rank_scope_matches,
@@ -9720,7 +9741,12 @@ class PlexusRuntimeModule:
             "total_scorecards_inspected": len(cards),
         }
         coverage["scope"] = scope_evidence
-        window = frozen_utc_window(complete_days=90)
+        coverage["activity"] = {
+            "policy_version": "score-activity-cooldown-v1",
+            "as_of": as_of,
+            "complete": True,
+        }
+        window = frozen_utc_window(now=as_of_datetime, complete_days=90)
         base_payload = {
             "scores": [],
             "coverage": coverage,
@@ -9739,6 +9765,7 @@ class PlexusRuntimeModule:
                 "window_start": window["start"],
                 "window_end": window["end"],
                 "account_id": args.get("account_id"),
+                "as_of": as_of,
             })
         except Exception as exc:  # noqa: BLE001 - partial is observable, never exact
             coverage["complete"] = False
@@ -9819,6 +9846,7 @@ class PlexusRuntimeModule:
                         })
                         continue
                     inventory = inventory or {}
+                    score_activity = evaluate_score_activity(inventory, as_of=as_of)
                     rows.append({
                         **score,
                         # The feedback analyzer calls these total_items and
@@ -9830,6 +9858,10 @@ class PlexusRuntimeModule:
                         "enabled": score.get("enabled", not bool(inventory.get("isDisabled", False))),
                         "scorecard_id": result_card_id,
                         "scorecard_name": score.get("scorecard_name") or card_result.get("scorecard_name"),
+                        "score_updated_at": inventory.get("updatedAt"),
+                        "newest_version_id": score_activity.get("newest_version_id"),
+                        "newest_version_created_at": score_activity.get("newest_version_created_at"),
+                        "score_activity": score_activity,
                     })
         if unexpected_scorecard_ids or unexpected_score_rows:
             coverage["complete"] = False
@@ -9867,9 +9899,12 @@ class PlexusRuntimeModule:
     def _current_optimization_freshness(
         self, targets: Any
     ) -> tuple[dict[tuple[str, str], dict[str, Any]], list[dict[str, Any]]]:
-        """Read the current champion and feedback watermark for exact targets."""
+        """Read current champion, feedback, and score-activity evidence."""
         evidence_by_target: dict[tuple[str, str], dict[str, Any]] = {}
         failures: list[dict[str, Any]] = []
+        from datetime import datetime, timezone
+
+        as_of = datetime.now(timezone.utc).replace(microsecond=0)
         for source in targets if isinstance(targets, list) else []:
             if not isinstance(source, dict):
                 continue
@@ -9887,11 +9922,35 @@ class PlexusRuntimeModule:
                     "score_name": score_id,
                     "days": 90,
                 })
+                from plexus.optimization.decision import evaluate_score_activity
+
+                activity = evaluate_score_activity(info or {}, as_of=as_of)
+                if activity.get("complete") is not True:
+                    raise RuntimeError(
+                        "live score activity evidence is incomplete: "
+                        + str(activity.get("failure") or "unknown activity failure")
+                    )
+                if activity.get("recent") is True:
+                    failures.append({
+                        "target": source,
+                        "reason": "recent_score_activity",
+                        "score_updated_at": activity.get("score_updated_at"),
+                        "newest_version_id": activity.get("newest_version_id"),
+                        "newest_version_created_at": activity.get("newest_version_created_at"),
+                        "activity_timestamp": activity.get("activity_timestamp"),
+                        "activity_as_of": activity.get("as_of"),
+                    })
+                    continue
                 evidence = {
                     "scorecard_id": scorecard_id,
                     "score_id": score_id,
                     "champion_version": (info or {}).get("championVersionId"),
                     "feedback_watermark": (watermark or {}).get("latest_feedback_updated_at"),
+                    "score_updated_at": activity.get("score_updated_at"),
+                    "newest_version_id": activity.get("newest_version_id"),
+                    "newest_version_created_at": activity.get("newest_version_created_at"),
+                    "activity_timestamp": activity.get("activity_timestamp"),
+                    "activity_as_of": activity.get("as_of"),
                 }
                 evidence_by_target[(scorecard_id, score_id)] = evidence
             except Exception as exc:  # noqa: BLE001 - a failed recheck must not dispatch
@@ -10266,7 +10325,7 @@ class PlexusRuntimeModule:
                 return result
 
             accepted_targets: list[dict[str, Any]] = []
-            rejected = list(result.get("rejected") or []) + freshness_failures
+            rejected = freshness_failures + list(result.get("rejected") or [])
             for target in result.get("accepted_targets") or []:
                 if not isinstance(target, dict):
                     continue
@@ -11703,24 +11762,19 @@ Complete coverage contract:
   `total_items * disagreement_rate`. Rank it descending first; report class
   coverage, drift, rubric clarity, and fixability separately.
 
-Optimization: `plexus.optimization.rank/assess/diagnose/review/summary` plan.
+Optimization: `plexus.optimization.rank/assess/diagnose/review/summary` plan;
 `plexus.optimization.run` needs `approved = true`, at most five exact targets,
-and never promotes a champion. `persist = true` has no inline output fallback.
-
-Rank account-wide; scope with opaque `scorecard_ids` or literal case-insensitive
+and never promotes a champion; `persist = true` has no inline output fallback.
+Rank scope: opaque `scorecard_ids` or literal case-insensitive
 `scorecard_name_prefixes`; empty arrays are invalid.
+`score-activity-cooldown-v1`: frozen UTC `as_of`; 168-hour inclusive cutoff on
+the later of `score.updatedAt` or newest score-version `createdAt`;
+`recent_score_activity`; missing evidence is incomplete; assessment returns
+`cooldown_active`/`wait_for_cooldown`; run rechecks live activity before dispatch.
 
-Helper aliases injected before your snippet runs:
-- High-frequency: `evaluate`, `predict`, `scorecards`, `scorecard`, `score`,
-  `item`, `last_item`, `feedback`, `feedback_alignment`, `acceptance_rate`,
-  `score_champion_version_timeline`, `dataset`, `report`, `report_configs`,
-  `procedure`, `procedures`, `procedure_sessions`, `procedure_messages`,
-  `procedure_continue`, `procedure_branch`.
-- Canonical `namespace_method`: `scorecards_list`, `scorecards_search`,
-  `score_info`, `score_search`, `score_resolve`, `evaluation_info`, `evaluation_run`,
-  `handle_status`, `handle_await`, `handle_cancel`, `docs_list`, `docs_get`,
-  `skills_list`, `skills_get`, `guidelines_validate`, `api_list`, plus one
-  helper per advertised API.
+Helper aliases are injected before the snippet: high-frequency short names and
+canonical `namespace_method` forms, including `docs_list/docs_get`,
+`skills_list/skills_get`, handle operations, and one helper per advertised API.
 - Fall back to `plexus.<namespace>.<method>{...}` for anything else.
 
 The complete account-wide research program is documented outside this

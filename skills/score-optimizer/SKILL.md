@@ -147,6 +147,18 @@ plexus.optimization.rank({
   failure is incomplete coverage: report partial evidence, never an exact rank
   or count, and never include out-of-scope scorecards.
 
+The ranker also enforces the fixed seven-day score-activity cooldown. It freezes
+one UTC `as_of` timestamp and uses the later of the score record's `updatedAt`
+and the newest version's `createdAt`. Activity exactly at the 168-hour cutoff
+is still inside the cooldown. Recently edited scores remain visible under
+`unranked` with reason `recent_score_activity`, their opaque newest-version ID,
+activity source and timestamp, cutoff, and eligibility timestamp. Do not bypass
+this fixed policy or reinterpret a recently modified score as a candidate.
+Missing or malformed activity evidence fails closed and makes the portfolio
+incomplete. A direct assessment reports `cooldown_active` with
+`wait_for_cooldown`; an approved run rechecks live activity immediately before
+dispatch and rejects any newly modified target without starting its optimizer.
+
 ## Three-Phase Rubric-Memory SOP
 
 Run optimizer work in this order. Do not skip directly to prompt/code optimization

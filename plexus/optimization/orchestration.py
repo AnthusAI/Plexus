@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Sequence
 
 
@@ -14,6 +15,7 @@ def refresh_target_freshness(
     *,
     read_score_info: Callable[[str, str], Mapping[str, Any]],
     read_feedback_latest: Callable[[str, str], Mapping[str, Any]],
+    now: datetime | str | None = None,
 ) -> tuple[dict[str, str], dict[tuple[str, str], dict[str, Any]], list[dict[str, Any]]]:
     """Read current champion/watermark evidence for every exact target.
 
@@ -25,6 +27,7 @@ def refresh_target_freshness(
     verified_assessment_fingerprints: dict[str, str] = {}
     evidence_by_target: dict[tuple[str, str], dict[str, Any]] = {}
     failures: list[dict[str, Any]] = []
+    frozen_now = now or datetime.now(timezone.utc).replace(microsecond=0)
     for source in targets:
         target = dict(source)
         scorecard_id = str(target.get("scorecard_id") or "")
@@ -45,11 +48,41 @@ def refresh_target_freshness(
             )
             if not champion_version or not watermark:
                 raise RuntimeError("live champion version or feedback watermark is missing")
+            from plexus.optimization.decision import evaluate_score_activity
+
+            activity = evaluate_score_activity(score, as_of=frozen_now)
+            if activity.get("complete") is not True:
+                raise RuntimeError(
+                    "live score activity evidence is incomplete: "
+                    + str(activity.get("failure") or "unknown activity failure")
+                )
+            if activity.get("recent") is True:
+                failures.append(
+                    {
+                        "target": target,
+                        "reason": "recent_score_activity",
+                        "score_updated_at": activity.get("score_updated_at"),
+                        "newest_version_id": activity.get("newest_version_id"),
+                        "newest_version_created_at": activity.get(
+                            "newest_version_created_at"
+                        ),
+                        "activity_timestamp": activity.get("activity_timestamp"),
+                        "activity_as_of": activity.get("as_of"),
+                    }
+                )
+                continue
             evidence = {
                 "scorecard_id": scorecard_id,
                 "score_id": score_id,
                 "champion_version": champion_version,
                 "feedback_watermark": watermark,
+                "score_updated_at": activity.get("score_updated_at"),
+                "newest_version_id": activity.get("newest_version_id"),
+                "newest_version_created_at": activity.get(
+                    "newest_version_created_at"
+                ),
+                "activity_timestamp": activity.get("activity_timestamp"),
+                "activity_as_of": activity.get("as_of"),
             }
             # Preserve the original full-assessment provenance token only when
             # the two live freshness fields still match. Never invent a second

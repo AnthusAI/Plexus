@@ -32,6 +32,12 @@ POLICY_PROFILE_V1: dict[str, Any] = {
     # Low-volume weekly buckets are an explanatory warning, never a blocker.
     "weekly_minimum_count": None,
 }
+SCORE_ACTIVITY_COOLDOWN_V1: dict[str, Any] = {
+    "version": "score-activity-cooldown-v1",
+    "timezone": "UTC",
+    "duration_hours": 168,
+    "cutoff_inclusive": True,
+}
 _WILSON_Z_95 = 1.959963984540054
 _RANK_SELECTOR_FIELDS = ("scorecard_ids", "scorecard_name_prefixes")
 
@@ -65,6 +71,180 @@ def _parse_utc(value: str | datetime) -> datetime:
 
 def _iso_z(value: datetime) -> str:
     return _utc(value).isoformat().replace("+00:00", "Z")
+
+
+def evaluate_score_activity(
+    score: Mapping[str, Any], *, as_of: datetime | str | None = None
+) -> dict[str, Any]:
+    """Evaluate the fixed rolling cooldown from complete inventory evidence.
+
+    Both the mutable score timestamp and the newest immutable version timestamp
+    are required.  Missing or malformed evidence fails closed.  Future
+    timestamps are conservatively treated as recent rather than silently
+    repairing clock skew.
+    """
+    frozen_as_of = _parse_utc(as_of) if as_of is not None else datetime.now(timezone.utc)
+    duration = timedelta(hours=int(SCORE_ACTIVITY_COOLDOWN_V1["duration_hours"]))
+    cutoff = frozen_as_of - duration
+    updated_value = score.get("updatedAt", score.get("score_updated_at"))
+    versions_value = score.get("versions")
+    if isinstance(versions_value, Mapping):
+        versions_value = versions_value.get("items")
+    versions = list(versions_value or []) if isinstance(versions_value, (list, tuple)) else []
+    if not versions and (
+        score.get("newest_version_id") or score.get("newest_version_created_at")
+    ):
+        versions = [{
+            "id": score.get("newest_version_id"),
+            "createdAt": score.get("newest_version_created_at"),
+        }]
+    parsed_versions: list[tuple[datetime, str, Any]] = []
+    version_failure: str | None = None
+    for version in versions:
+        if not isinstance(version, Mapping):
+            version_failure = "malformed newest version evidence"
+            break
+        version_id_value = version.get("id")
+        created_value = version.get("createdAt")
+        if not isinstance(version_id_value, str) or not version_id_value or not isinstance(
+            created_value, (str, datetime)
+        ) or not created_value:
+            version_failure = "missing newest version id or createdAt"
+            break
+        try:
+            parsed_versions.append(
+                (_parse_utc(created_value), version_id_value, created_value)
+            )
+        except (TypeError, ValueError) as exc:
+            version_failure = f"malformed newest version timestamp: {exc}"
+            break
+    newest_parsed = max(parsed_versions, default=None, key=lambda item: item[0])
+    version_id = newest_parsed[1] if newest_parsed else None
+    version_created_value = newest_parsed[2] if newest_parsed else None
+
+    base = {
+        "policy_version": SCORE_ACTIVITY_COOLDOWN_V1["version"],
+        "as_of": _iso_z(frozen_as_of),
+        "cutoff": _iso_z(cutoff),
+        "score_updated_at": updated_value,
+        "newest_version_id": version_id,
+        "newest_version_created_at": version_created_value,
+    }
+    missing = []
+    if not isinstance(updated_value, (str, datetime)) or not updated_value:
+        missing.append("score.updatedAt")
+    if not isinstance(version_id, str) or not version_id:
+        missing.append("newest version id")
+    if not isinstance(version_created_value, (str, datetime)) or not version_created_value:
+        missing.append("newest version createdAt")
+    if missing or version_failure:
+        return {
+            **base,
+            "activity_source": None,
+            "activity_timestamp": None,
+            "eligibility_timestamp": None,
+            "recent": True,
+            "complete": False,
+            "failure": ("incomplete inventory activity evidence: " + version_failure)
+            if version_failure
+            else None
+            or "missing inventory activity evidence: " + ", ".join(missing),
+        }
+    try:
+        score_updated = _parse_utc(updated_value)
+        version_created = _parse_utc(version_created_value)
+    except (TypeError, ValueError) as exc:
+        return {
+            **base,
+            "activity_source": None,
+            "activity_timestamp": None,
+            "eligibility_timestamp": None,
+            "recent": True,
+            "complete": False,
+            "failure": f"malformed inventory activity timestamp: {exc}",
+        }
+
+    if score_updated > version_created:
+        activity, source = score_updated, "score_record"
+    elif version_created > score_updated:
+        activity, source = version_created, "newest_version"
+    else:
+        activity, source = score_updated, "score_record_and_newest_version"
+    return {
+        **base,
+        "score_updated_at": _iso_z(score_updated),
+        "newest_version_created_at": _iso_z(version_created),
+        "activity_source": source,
+        "activity_timestamp": _iso_z(activity),
+        "eligibility_timestamp": _iso_z(activity + duration),
+        # The cutoff is inclusive: exactly 168 hours old remains deferred.
+        "recent": activity >= cutoff,
+        "complete": True,
+        "failure": None,
+    }
+
+
+def _validated_score_activity_evidence(
+    evidence: Any,
+) -> dict[str, Any] | None:
+    """Return canonical fixed-policy activity evidence or fail closed.
+
+    Callers may persist decision packets and later submit them at another
+    boundary.  Recompute the derived cooldown fields from their source
+    timestamps so malformed booleans, timestamps, or internally inconsistent
+    evidence cannot bypass the policy.
+    """
+    if (
+        not isinstance(evidence, Mapping)
+        or evidence.get("policy_version")
+        != SCORE_ACTIVITY_COOLDOWN_V1["version"]
+        or evidence.get("complete") is not True
+        or type(evidence.get("recent")) is not bool
+    ):
+        return None
+    required_fields = (
+        "as_of",
+        "cutoff",
+        "score_updated_at",
+        "newest_version_id",
+        "newest_version_created_at",
+        "activity_source",
+        "activity_timestamp",
+        "eligibility_timestamp",
+    )
+    if not all(evidence.get(field) for field in required_fields):
+        return None
+    try:
+        canonical = evaluate_score_activity(
+            {
+                "updatedAt": evidence.get("score_updated_at"),
+                "versions": [{
+                    "id": evidence.get("newest_version_id"),
+                    "createdAt": evidence.get("newest_version_created_at"),
+                }],
+            },
+            as_of=evidence.get("as_of"),
+        )
+        if canonical.get("complete") is not True:
+            return None
+        if evidence.get("recent") is not canonical.get("recent"):
+            return None
+        for field in ("newest_version_id", "activity_source"):
+            if evidence.get(field) != canonical.get(field):
+                return None
+        for field in (
+            "as_of",
+            "cutoff",
+            "score_updated_at",
+            "newest_version_created_at",
+            "activity_timestamp",
+            "eligibility_timestamp",
+        ):
+            if _parse_utc(evidence[field]) != _parse_utc(canonical[field]):
+                return None
+    except (TypeError, ValueError):
+        return None
+    return canonical
 
 
 @dataclass(frozen=True)
@@ -359,10 +539,43 @@ def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str
             failures = list(coverage.get("failures") or [])
             failures.append("complete scope coverage evidence is required")
             coverage.update({"complete": False, "failures": failures})
+    activity_coverage = coverage.get("activity")
+    activity_coverage_complete = (
+        isinstance(activity_coverage, Mapping)
+        and activity_coverage.get("complete") is True
+        and activity_coverage.get("policy_version")
+        == SCORE_ACTIVITY_COOLDOWN_V1["version"]
+        and bool(activity_coverage.get("as_of"))
+    )
+    if bool(coverage.get("complete", coverage.get("coverage_complete", False))) and not activity_coverage_complete:
+        failures = list(coverage.get("failures") or [])
+        failures.append("complete inventory activity coverage evidence is required")
+        coverage.update({"complete": False, "failures": failures})
+    activity_as_of = (
+        activity_coverage.get("as_of")
+        if isinstance(activity_coverage, Mapping)
+        else context.get("as_of")
+    )
+    try:
+        frozen_activity_as_of = (
+            _parse_utc(activity_as_of)
+            if activity_as_of
+            else datetime.now(timezone.utc).replace(microsecond=0)
+        )
+    except (TypeError, ValueError) as exc:
+        frozen_activity_as_of = datetime.now(timezone.utc).replace(microsecond=0)
+        failures = list(coverage.get("failures") or [])
+        failures.append({"stage": "score_activity", "error": f"invalid frozen as_of: {exc}"})
+        coverage.update({"complete": False, "failures": failures})
+    activity_cutoff = frozen_activity_as_of - timedelta(
+        hours=int(SCORE_ACTIVITY_COOLDOWN_V1["duration_hours"])
+    )
     # Absence of coverage evidence is not evidence of exhaustive enumeration.
     complete = bool(coverage.get("complete", coverage.get("coverage_complete", False)))
     ranked: list[dict[str, Any]] = []
     unranked: list[dict[str, Any]] = []
+    activity_failures: list[dict[str, Any]] = []
+    recent_activity_excluded_count = 0
     for source in scores:
         score = dict(source)
         enabled = score.get("enabled", True) is not False and score.get("isDisabled") is not True
@@ -387,7 +600,61 @@ def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str
             row["unranked_reason"] = "missing_champion"
             unranked.append(row)
         else:
-            ranked.append(row)
+            supplied_activity = score.get("score_activity")
+            if isinstance(supplied_activity, Mapping):
+                supplied_as_of = supplied_activity.get("as_of")
+                try:
+                    supplied_as_of_matches = bool(supplied_as_of) and (
+                        _iso_z(_parse_utc(supplied_as_of))
+                        == _iso_z(frozen_activity_as_of)
+                    )
+                except (TypeError, ValueError):
+                    supplied_as_of_matches = False
+                if (
+                    supplied_activity.get("policy_version")
+                    != SCORE_ACTIVITY_COOLDOWN_V1["version"]
+                    or not supplied_as_of_matches
+                ):
+                    activity = {
+                        **dict(supplied_activity),
+                        "complete": False,
+                        "recent": True,
+                        "failure": "inventory activity policy metadata is incomplete",
+                    }
+                else:
+                    activity = evaluate_score_activity(
+                        {
+                            "updatedAt": supplied_activity.get("score_updated_at"),
+                            "versions": [{
+                                "id": supplied_activity.get("newest_version_id"),
+                                "createdAt": supplied_activity.get(
+                                    "newest_version_created_at"
+                                ),
+                            }],
+                        },
+                        as_of=supplied_as_of,
+                    )
+            else:
+                activity = evaluate_score_activity(score, as_of=frozen_activity_as_of)
+            row["score_activity"] = activity
+            if activity.get("complete") is not True:
+                row["unranked_reason"] = "incomplete_score_activity"
+                unranked.append(row)
+                activity_failures.append(
+                    {
+                        "stage": "score_activity",
+                        "scorecard_id": row.get("scorecard_id"),
+                        "score_id": row.get("score_id"),
+                        "error": activity.get("failure")
+                        or "inventory activity evidence is incomplete",
+                    }
+                )
+            elif activity.get("recent") is True:
+                row["unranked_reason"] = "recent_score_activity"
+                unranked.append(row)
+                recent_activity_excluded_count += 1
+            else:
+                ranked.append(row)
     ranked.sort(
         key=lambda row: (
             -float(row["reviewed_error_opportunity"]),
@@ -398,12 +665,30 @@ def rank_portfolio(scores: Sequence[Mapping[str, Any]], *, coverage: Mapping[str
         )
     )
     unranked.sort(key=lambda row: (str(row["unranked_reason"]), str(row.get("score_id") or "")))
+    coverage_failures = list(
+        coverage.get("failures") or coverage.get("coverage_failures") or []
+    ) + activity_failures
+    complete = complete and not activity_failures
+    coverage["complete"] = complete
+    coverage["failures"] = coverage_failures
+    coverage["activity"] = {
+        "policy_version": SCORE_ACTIVITY_COOLDOWN_V1["version"],
+        "duration_hours": SCORE_ACTIVITY_COOLDOWN_V1["duration_hours"],
+        "cutoff_inclusive": SCORE_ACTIVITY_COOLDOWN_V1["cutoff_inclusive"],
+        "as_of": _iso_z(frozen_activity_as_of),
+        "cutoff": _iso_z(activity_cutoff),
+        "complete": not activity_failures,
+        "incomplete_score_count": len(activity_failures),
+        "recent_activity_excluded_count": recent_activity_excluded_count,
+    }
     result = {
         "coverage_complete": complete,
-        "coverage_failures": list(coverage.get("failures") or coverage.get("coverage_failures") or []),
+        "coverage_failures": coverage_failures,
         "exact": complete,
         "total_population": len(scores),
         "total_ranked": len(ranked),
+        "recent_activity_excluded_count": recent_activity_excluded_count,
+        "activity_policy": dict(coverage["activity"]),
         "ranked": ranked,
         "unranked": unranked,
     }
@@ -552,6 +837,30 @@ def assess_investment(evidence: Mapping[str, Any], *, policy: Mapping[str, Any] 
         blockers.extend(list(data.get("coverage_failures") or data.get("failures") or ["coverage is incomplete"]))
         return _assessment("incomplete", "inconclusive", blockers, "repair_coverage", data, policy)
 
+    score_activity = _validated_score_activity_evidence(data.get("score_activity"))
+    if score_activity is None:
+        return _assessment(
+            "incomplete",
+            "inconclusive",
+            ["complete fixed-policy score activity evidence is required"],
+            "repair_activity_evidence",
+            data,
+            policy,
+        )
+    data["score_activity"] = score_activity
+    cooldown_active = bool(data.get("cooldown_active")) or (
+        score_activity.get("recent") is True
+    )
+    if cooldown_active:
+        return _assessment(
+            "cooldown_active",
+            "inconclusive",
+            [],
+            "wait_for_cooldown",
+            data,
+            policy,
+        )
+
     structural = normalize_structural_state(data.get("structural_state"))
     if data.get("configuration_readable", data.get("config_readable", True)) is False:
         structural = "unreadable_configuration"
@@ -667,7 +976,13 @@ def _assessment(readiness: str, collection: str, blockers: Sequence[str], action
         "coverage_complete": bool(data.get("coverage_complete", data.get("complete", False))),
         "class_counts": dict(data.get("final_label_counts") or data.get("reachable_class_counts") or {}),
         "weekly_stability": dict(stability or {}),
+        "cooldown_active": bool(data.get("cooldown_active")) or (
+            isinstance(data.get("score_activity"), Mapping)
+            and data["score_activity"].get("recent") is True
+        ),
     }
+    if isinstance(data.get("score_activity"), Mapping):
+        result["score_activity"] = dict(data["score_activity"])
     if wilson is not None:
         result["wilson_95"] = {"lower": wilson[0], "upper": wilson[1]}
     return _packet_result("assess", result, data)
@@ -778,6 +1093,12 @@ def _ready_target_provenance_failure(target: Mapping[str, Any]) -> str | None:
         return "champion_version_required"
     if not feedback_watermark:
         return "feedback_watermark_required"
+    evidence = assessment.get("evidence")
+    activity = _validated_score_activity_evidence(
+        evidence.get("score_activity") if isinstance(evidence, Mapping) else None
+    )
+    if activity is None or activity.get("recent") is not False:
+        return "score_activity_evidence_required"
     if (
         target.get("champion_version") != champion_version
         or target.get("feedback_watermark") != feedback_watermark
@@ -917,6 +1238,7 @@ def summarize_packets(packets: Sequence[Mapping[str, Any]], *, context: Mapping[
     collection_recommendations: list[str] = []
     per_score_outcomes: list[dict[str, Any]] = []
     approvals = 0
+    recently_deferred = 0
     for packet in packets:
         states = dict(packet.get("states") or {})
         action = packet.get("primary_next_action")
@@ -928,6 +1250,14 @@ def summarize_packets(packets: Sequence[Mapping[str, Any]], *, context: Mapping[
         if collection:
             collection_recommendations.append(str(collection))
         post_run = states.get("post_run") or packet.get("post_run_state")
+        readiness = states.get("optimization") or states.get("readiness") or packet.get(
+            "readiness_state"
+        )
+        rank_deferred = int(packet.get("recent_activity_excluded_count") or 0)
+        if rank_deferred:
+            recently_deferred += rank_deferred
+        elif readiness == "cooldown_active" or action == "wait_for_cooldown":
+            recently_deferred += 1
         if post_run == "promotion_ready" or action == "request_promotion_approval":
             approvals += 1
         scope = dict(packet.get("scope") or {})
@@ -935,7 +1265,7 @@ def summarize_packets(packets: Sequence[Mapping[str, Any]], *, context: Mapping[
         score_id = scope.get("score_id", packet.get("score_id"))
         if not scope:
             scope = {key: value for key, value in (("scorecard_id", scorecard_id), ("score_id", score_id)) if value is not None}
-        outcome = post_run if post_run and post_run != "inconclusive" else (states.get("optimization") or states.get("readiness") or packet.get("readiness_state") or "inconclusive")
+        outcome = post_run if post_run and post_run != "inconclusive" else (readiness or "inconclusive")
         packet_failures = _unique(
             [str(item) for item in packet.get("blockers") or []]
             + [str(item) for item in (packet.get("coverage") or {}).get("failures") or []]
@@ -958,8 +1288,12 @@ def summarize_packets(packets: Sequence[Mapping[str, Any]], *, context: Mapping[
         )
     result = {
         "packet_count": len(packets),
-        "executive_update": f"{len(packets)} decision packet(s); {approvals} promotion approval request(s).",
+        "executive_update": (
+            f"{len(packets)} decision packet(s); {approvals} promotion approval request(s); "
+            f"{recently_deferred} recently modified score(s) deferred."
+        ),
         "promotion_approval_requests": approvals,
+        "recent_activity_deferred_count": recently_deferred,
         "stakeholder_questions": _unique(questions),
         "failures": _unique(failures),
         "next_actions": _unique(actions),

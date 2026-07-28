@@ -10,7 +10,17 @@ from fastmcp import FastMCP
 from . import execute
 
 
-def _card(card_id: str, name: str, score_id: str = "score") -> dict[str, Any]:
+def _card(
+    card_id: str,
+    name: str,
+    score_id: str = "score",
+    *,
+    score_updated_at: str = "2024-01-01T00:00:00Z",
+    latest_version_id: str | None = None,
+    latest_version_created_at: str = "2024-01-01T00:00:00Z",
+) -> dict[str, Any]:
+    """Return an inventory row with deliberately old, valid activity evidence."""
+    latest_version_id = latest_version_id or f"version-{score_id}"
     return {
         "id": card_id,
         "name": name,
@@ -18,6 +28,11 @@ def _card(card_id: str, name: str, score_id: str = "score") -> dict[str, Any]:
             "id": score_id,
             "name": f"{name} score",
             "championVersionId": f"version-{score_id}",
+            "updatedAt": score_updated_at,
+            "versions": {"items": [{
+                "id": latest_version_id,
+                "createdAt": latest_version_created_at,
+            }]},
         }]}}]},
     }
 
@@ -230,6 +245,91 @@ def test_rank_scope_zero_exact_matches_is_complete_and_skips_feedback_batch() ->
     assert result["coverage"]["complete"] is True
     assert result["coverage"]["scope"]["matched_scorecard_count"] == 0
     assert result["coverage"]["scope"]["unmatched_scorecard_name_prefixes"] == ["No such scorecard"]
+
+
+def test_rank_scope_uses_one_frozen_as_of_and_returns_inventory_activity_evidence() -> None:
+    """Ranking freezes the inventory/activity view before any downstream read."""
+    opaque_version_id = "version:opaque/with+punctuation_123"
+    page_calls: list[dict[str, Any]] = []
+    alignment_calls: list[dict[str, Any]] = []
+
+    def list_cards(args: dict[str, Any]) -> dict[str, Any]:
+        page_calls.append(dict(args))
+        return {
+            "items": [_card(
+                "card-a",
+                "Alpha",
+                score_updated_at="2024-02-03T04:05:06Z",
+                latest_version_id=opaque_version_id,
+                latest_version_created_at="2024-02-02T03:04:05Z",
+            )],
+            "nextToken": None,
+        }
+
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-scoped-rank-activity-evidence"), scorecards_lister=list_cards
+    )
+    module._feedback_aligner_batch = lambda args: alignment_calls.append(args) or _complete_alignment(
+        [_alignment_row("card-a", "Alpha")], 1
+    )
+
+    result = module.optimization.rank({"scorecard_ids": ["card-a"]})
+
+    assert len(page_calls) == 1
+    as_of = page_calls[0]["as_of"]
+    assert as_of.endswith("Z")
+    assert alignment_calls[0]["as_of"] == as_of
+    assert result["coverage"]["activity"]["as_of"] == as_of
+    assert result["ranked"][0]["score_activity"] == {
+        "policy_version": "score-activity-cooldown-v1",
+        "as_of": as_of,
+        "cutoff": result["coverage"]["activity"]["cutoff"],
+        "score_updated_at": "2024-02-03T04:05:06Z",
+        "newest_version_id": opaque_version_id,
+        "newest_version_created_at": "2024-02-02T03:04:05Z",
+        "activity_source": "score_record",
+        "activity_timestamp": "2024-02-03T04:05:06Z",
+        "eligibility_timestamp": "2024-02-10T04:05:06Z",
+        "recent": False,
+        "complete": True,
+        "failure": None,
+    }
+
+
+@pytest.mark.parametrize("broken_inventory", [
+    {"updatedAt": None},
+    {"updatedAt": "not-a-timestamp"},
+    {"versions": {"items": []}},
+    {"versions": {"items": [{"id": "version-only"}]}},
+    {"versions": {"items": [{"id": 7, "createdAt": "2024-01-01T00:00:00Z"}]}},
+    {"versions": {"items": [{"id": "version-only", "createdAt": "not-a-timestamp"}]}},
+])
+def test_rank_scope_missing_or_malformed_inventory_activity_fails_closed(
+    broken_inventory: dict[str, Any],
+) -> None:
+    """Incomplete activity evidence must never produce an exact rank or cooldown."""
+    batch_calls: list[dict[str, Any]] = []
+    card = _card("card-a", "Alpha")
+    score = card["sections"]["items"][0]["scores"]["items"][0]
+    score.update(broken_inventory)
+    module = execute.PlexusRuntimeModule(
+        FastMCP("test-scoped-rank-invalid-activity"),
+        scorecards_lister=lambda _args: {"items": [card], "nextToken": None},
+    )
+    module._feedback_aligner_batch = lambda args: batch_calls.append(args) or _complete_alignment(
+        [_alignment_row("card-a", "Alpha")], 1
+    )
+
+    result = module.optimization.rank({"scorecard_ids": ["card-a"]})
+
+    assert len(batch_calls) == 1
+    assert result["exact"] is False
+    assert result["coverage"]["complete"] is False
+    assert result["coverage"]["activity"]["complete"] is False
+    assert "inventory activity" in str(result["coverage"]["failures"]).lower()
+    assert result["ranked"] == []
+    assert result["unranked"][0]["score_id"] == "score"
+    assert result["unranked"][0]["unranked_reason"] == "incomplete_score_activity"
 
 
 def test_rank_scope_failed_continuation_does_not_analyze_partial_scope_or_claim_exact() -> None:

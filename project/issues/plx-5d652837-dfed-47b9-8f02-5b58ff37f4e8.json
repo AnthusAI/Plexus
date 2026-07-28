@@ -1,0 +1,49 @@
+{
+  "id": "plx-5d652837-dfed-47b9-8f02-5b58ff37f4e8",
+  "title": "Defer recently modified scores from optimization",
+  "description": "As an optimization operator, I want recently modified scores excluded from automatic optimization selection, so that the system does not repeatedly spend effort on work that is already active.\n\nIn scope: deterministic ranking cooldown, evidence and fingerprints, assessment state, launch-time recheck, documentation, and tests.\n\nOut of scope: production optimization runs, automatic champion promotion, and feedback mutations.\n\nFeature: Seven-day score activity cooldown\n\nScenario: A recently created version is not ranked\nGiven a score has complete ranking evidence\nAnd its newest version was created within the rolling seven-day UTC window\nWhen optimization opportunities are ranked\nThen the score is retained as unranked with recent activity evidence\nAnd it is not returned as an optimization candidate\n\nScenario: A recent score update starts the cooldown\nGiven the newest score version is older than seven days\nAnd the score record was updated within seven days\nWhen optimization opportunities are ranked\nThen the score is excluded for recent activity\n\nScenario: Missing recency evidence fails closed\nGiven an otherwise eligible score lacks valid score activity evidence\nWhen optimization opportunities are ranked\nThen the score is not ranked\nAnd portfolio coverage is incomplete\n\nScenario: Launch rechecks activity\nGiven a score was previously approved for optimization\nAnd new score activity occurs before dispatch\nWhen the approved optimizer batch is launched\nThen that target is rejected for recent activity\nAnd no optimizer procedure is dispatched for it",
+  "type": "story",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-fd01cdab-e015-4b55-99fb-4ff65e688736",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "d060b03b-ae0f-4c06-a63d-f7fbc682b055",
+      "author": "ryan.porter",
+      "text": "Implementation starting on the existing optimization decision-toolchain pull request. The work will extend the current exhaustive inventory path, preserve opaque identifiers, and fail closed when activity evidence is unavailable.",
+      "created_at": "2026-07-28T17:09:23.985062Z"
+    },
+    {
+      "id": "9837a376-63be-46b6-ba98-d185856d0098",
+      "author": "ryan.porter",
+      "text": "Outside-in specifications were added before production behavior. Initial focused evidence was red for the intended gaps: the fixed cooldown policy/helper did not exist, exhaustive inventory omitted score activity fields, missing activity did not fail closed, and approved launches did not reject recent activity. The specifications cover recent and unpromoted versions, score-record updates, inclusive cutoff, older and future timestamps, multiple versions, malformed or missing evidence, opaque IDs, assessment fingerprints, offline evidence, summary output, and launch-time rejection.",
+      "created_at": "2026-07-28T17:27:36.659144Z"
+    },
+    {
+      "id": "a199ffcd-bccf-41b3-ab73-21a1f6c08294",
+      "author": "ryan.porter",
+      "text": "Implemented score-activity-cooldown-v1 through the existing ranking, assessment, and optimizer-launch paths. Ranking freezes one UTC as_of, reads score.updatedAt plus only the newest version id/createdAt during exhaustive inventory, retains recent scores as unranked, and marks malformed activity incomplete. Assessment emits cooldown_active/wait_for_cooldown and fingerprints the evidence. Runtime and CLI launch adapters re-read live score/version activity and reject recent or incomplete targets before dispatch. Focused optimization/runtime validation is green: 133 passed.",
+      "created_at": "2026-07-28T17:27:36.837895Z"
+    },
+    {
+      "id": "ba91d97f-6371-43ba-b3a9-20d23093c72c",
+      "author": "ryan.porter",
+      "text": "Implementation and local validation are complete. Final fail-closed auditing now requires fixed activity-policy metadata plus a frozen as_of before ranking can be exact, requires a boolean recent state and complete timestamps before assessment, and confirms the live score-info path returns score updatedAt plus version evidence for launch rechecks. A merge-regression in frozen feedback-window forwarding was also repaired through the existing shared aggregation path. Validation: focused optimization/runtime 364 passed; dispatch regression 13 passed on Python 3.11; full suites 3,999 passed on Python 3.11 and 3,999 passed on Python 3.12; version sync, lock validation, targeted flake8, and diff checks passed. Existing Node 20 evidence remains green because no dashboard sources changed: typecheck, 668 unit tests, Storybook build, and 700 Chromium tests. Production ranking and optimizer runs were not performed.",
+      "created_at": "2026-07-28T17:58:15.949045Z"
+    },
+    {
+      "id": "61592c05-a4d2-444c-ac64-dcc699f43f6e",
+      "author": "ryan.porter",
+      "text": "Final independent audit fixes are complete. Ranking now derives the feedback window and score-activity cutoff from one frozen UTC instant, including across a midnight boundary. Assessment and launch provenance now recompute canonical cooldown evidence, require exact booleans, and reject malformed or internally inconsistent timestamps. Final post-fix validation: focused optimization/runtime 364 passed; Python 3.11 full suite 3,999 passed; Python 3.12 full suite 3,999 passed; static gates remain green. The story stays in progress until merge to develop.",
+      "created_at": "2026-07-28T18:06:26.758138Z"
+    }
+  ],
+  "created_at": "2026-07-28T17:09:16.380112Z",
+  "updated_at": "2026-07-28T18:06:26.758138Z",
+  "closed_at": null,
+  "custom": {}
+}
