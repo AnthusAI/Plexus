@@ -35,11 +35,12 @@ describe('artifact transfer ticket schema and infrastructure contract', () => {
     expect(dataResource).toContain("allow.authenticated('identityPool')");
   });
 
-  it('limits the signing function to GetItem and the four canonical bucket prefixes', () => {
+  it('limits the signing function to GetItem and the canonical bucket prefixes', () => {
     expect(backend).toContain("actions: ['dynamodb:GetItem']");
     expect(backend).toContain("actions: ['s3:GetObject', 's3:PutObject']");
-    for (const prefix of ['datasets/*', 'procedures/*', 'reportblocks/procedures/*', 'scoreresults/*', 'tasks/*']) {
+    for (const prefix of ['datasets/*', 'procedures/*', 'reportblocks/procedures/*', 'scoreresults/*', 'evaluations/*', 'tasks/*']) {
       expect(backend).toContain(`'${prefix}'`);
     }
+    expect(backend).toContain("tableEnvironmentName: 'EVALUATION_TABLE_NAME'");
   });
 });

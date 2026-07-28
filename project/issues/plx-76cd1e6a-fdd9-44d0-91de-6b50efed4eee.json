@@ -1,0 +1,31 @@
+{
+  "id": "plx-76cd1e6a-fdd9-44d0-91de-6b50efed4eee",
+  "title": "Repair dashboard dependency lockfile for clean installs",
+  "description": "Fresh Node 20 dashboard dependency installation fails because the package manifest and lockfile disagree. Restore reproducible clean installs before ticket-route deployment.",
+  "type": "bug",
+  "status": "in_progress",
+  "priority": 1,
+  "assignee": null,
+  "creator": null,
+  "parent": "plx-b1de1ae5-84e0-461a-a667-d1ce0465930d",
+  "labels": [],
+  "dependencies": [],
+  "comments": [
+    {
+      "id": "4516f1e2-b85e-41ff-a1c0-36ad47ffdc6e",
+      "author": "ryan.porter",
+      "text": "Reproduced clean-install lockfile failure and repaired dashboard/package-lock.json. npm ci --dry-run now validates; fix is included in the foundation PR and awaits landing.",
+      "created_at": "2026-07-28T13:35:07.676591Z"
+    },
+    {
+      "id": "eaa172f9-bd1e-4a55-8713-0a302a40ff99",
+      "author": "ryan.porter",
+      "text": "Lockfile repair is in draft PR #506 (commit dabf04a2c); keep this P1 open until the PR lands and clean-install validation is available on develop.",
+      "created_at": "2026-07-28T13:35:37.311086Z"
+    }
+  ],
+  "created_at": "2026-07-28T13:29:16.903182Z",
+  "updated_at": "2026-07-28T13:35:37.311086Z",
+  "closed_at": null,
+  "custom": {}
+}

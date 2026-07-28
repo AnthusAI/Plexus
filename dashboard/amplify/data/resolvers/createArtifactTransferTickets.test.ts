@@ -180,6 +180,24 @@ describe('createArtifactTransferTickets', () => {
     })]);
   });
 
+  it('preserves the existing evaluation RCA key layout', async () => {
+    process.env.EVALUATION_TABLE_NAME = 'Evaluation-table';
+    process.env.SCORE_RESULT_ATTACHMENTS_BUCKET_NAME = 'score-result-attachments-bucket';
+    dynamoSend.mockResolvedValue({ Item: { id: { S: 'evaluation-1' }, accountId: { S: 'account-1' } } });
+
+    await expect(handler(event([{
+      operation: 'WRITE', resourceType: 'EVALUATION', resourceId: 'evaluation-1', artifactType: 'EVALUATION_RCA', filename: 'root_cause.full.json', contentType: 'application/json', sizeBytes: 42, sha256,
+    }]) as any)).resolves.toEqual([expect.objectContaining({
+      objectKey: 'evaluations/evaluation-1/root_cause.full.json',
+      method: 'PUT',
+    })]);
+    expect(mockGetItemCommand).toHaveBeenCalledWith({
+      TableName: 'Evaluation-table',
+      Key: { id: { S: 'evaluation-1' } },
+      ConsistentRead: true,
+    });
+  });
+
   it('rejects an API key identity without signing a URL', async () => {
     await expect(handler({
       arguments: { requests: [{
