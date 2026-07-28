@@ -28,10 +28,16 @@
       "author": "ryan.porter",
       "text": "Fresh strict Kubernetes run A passed from immutable integration commit 65ff7d0d03457b8fc3ade9ff15959cee51c8a842. Run ID: 20260728T192000Z-pr513a4. Baseline: accuracy 0.76, feedback AC1 0.546142, regression AC1 0.504006; both cohorts completed exactly 100 items with zero errors. The optimizer returned winning version 0ab800a8-fb55-41aa-91ee-54a4c0c7fdb6, improved feedback AC1 by 0.453858 and regression AC1 by 0.415994, passed guarded promotion, and final 100-item evaluation reproduced AC1 0.980002. Optimizer cost ledger: $0.04671406. All seven phases passed, including restart persistence and identical Helm upgrade. Sanitized evidence: /tmp/plexus-k8s-demo/20260728T192000Z-pr513a4.",
       "created_at": "2026-07-28T19:53:27.203810Z"
+    },
+    {
+      "id": "f08e92b0-5f85-47a4-8539-b588154995e5",
+      "author": "ryan.porter",
+      "text": "Validation complete on the local integration branch. Strict run A returned and promoted its winner with final AC1 0.980002. Strict run B returned its winner, was intentionally interrupted after artifact completion, then resumed through the GraphQL ticket path with dispatch count exactly one and final AC1 0.96. Read-only retained verification passed after subsequent runs and the final proxy rollout. Keep this task in progress until commits land.",
+      "created_at": "2026-07-28T20:22:12.092073Z"
     }
   ],
   "created_at": "2026-07-28T19:18:38.252392Z",
-  "updated_at": "2026-07-28T19:53:27.203810Z",
+  "updated_at": "2026-07-28T20:22:12.092073Z",
   "closed_at": null,
   "custom": {}
 }
