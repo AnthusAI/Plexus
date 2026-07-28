@@ -16,6 +16,7 @@ from botocore.config import Config
 
 MAX_BATCH_SIZE = 20
 MAX_WRITE_BYTES = 100 * 1024 * 1024
+APPLICATION_LOGGER = logging.getLogger("uvicorn.error")
 
 
 @dataclass(frozen=True)
@@ -148,7 +149,7 @@ class ArtifactTicketService:
             self._issue_one(self._validate_request(raw), trusted_account_id)
             for raw in raw_requests
         ]
-        logging.info(
+        APPLICATION_LOGGER.info(
             "artifact_transfer_tickets correlation_id=%s request_count=%d resource_types=%s",
             correlation_id,
             len(tickets),

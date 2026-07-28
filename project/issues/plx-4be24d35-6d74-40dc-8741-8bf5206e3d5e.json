@@ -46,10 +46,22 @@
       "author": "ryan.porter",
       "text": "Outside-in provenance repair: the new demo specification first failed because no frozen-window evaluation command existed. The minimal repair derives explicit UTC feedback_start_at and feedback_end_at bounds from the retained run seed anchor and uses them when creating the 100-item feedback baseline; days=7 and max_items=100 remain recorded for optimizer provenance. Focused checks are green: 49 demo/product/chart tests and 64 private-proxy tests, plus Ruff. A fresh strict run is next; the failed A2 optimizer will not be retried.",
       "created_at": "2026-07-28T18:56:30.677065Z"
+    },
+    {
+      "id": "735dee72-1423-4e25-a360-7f631f894cea",
+      "author": "ryan.porter",
+      "text": "Post-restart GraphQL download of run B task artifact 82d73cf1-5c11-4e66-b964-904b2f3446a6 succeeded with target_reached and winning version bd779f2f-87a0-42f6-b389-a04cefe8ad03, proving artifact persistence after worker/proxy restarts. The ticket request returned HTTP 200, but the intended artifact_transfer_tickets INFO line was absent from kubectl logs because the service used the root logger while the container emits Uvicorn application logs. Next: specify sanitized log visibility and route the existing message through the application logger; do not add payload logging.",
+      "created_at": "2026-07-28T20:15:25.677425Z"
+    },
+    {
+      "id": "9903c89a-fb4a-4871-ad95-7dcd27b83238",
+      "author": "ryan.porter",
+      "text": "Sanitized proxy-correlation specification first failed because no application logger existed. Routed the existing correlation-only message through uvicorn.error and added a specification that prohibits resource IDs, filenames, checksums, URLs, and other artifact details. Private-proxy suite is green: 65 passed, 6 intentionally deselected; Ruff and diff checks pass. Next: deploy this committed proxy image and repeat the post-restart GraphQL artifact download to prove the correlation line appears in kubectl logs.",
+      "created_at": "2026-07-28T20:16:22.343021Z"
     }
   ],
   "created_at": "2026-07-28T17:58:38.910670Z",
-  "updated_at": "2026-07-28T18:56:30.677065Z",
+  "updated_at": "2026-07-28T20:16:22.343021Z",
   "closed_at": null,
   "custom": {}
 }

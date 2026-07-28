@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from proxy import artifact_tickets
 from proxy.artifact_tickets import (
     ArtifactTicketConfiguration,
     ArtifactTicketRequestError,
@@ -91,6 +92,25 @@ def test_issues_checksum_bound_https_ticket_with_canonical_task_key():
     assert params["Key"] == "tasks/task-1/optimizer/manifest.json"
     assert params["ChecksumSHA256"] == tickets[0]["requiredHeaders"]["x-amz-checksum-sha256"]
     assert ttl == 300
+
+
+def test_ticket_issue_is_correlated_in_application_logs_without_artifact_details(monkeypatch):
+    messages = []
+
+    class FakeLogger:
+        def info(self, message, *args):
+            messages.append(message % args)
+
+    monkeypatch.setattr(artifact_tickets, "APPLICATION_LOGGER", FakeLogger())
+    service = ArtifactTicketService(configuration(), FakeStore(), s3_client=FakeS3())
+
+    service.issue([request()])
+
+    assert len(messages) == 1
+    assert "artifact_transfer_tickets correlation_id=" in messages[0]
+    assert "request_count=1 resource_types=TASK" in messages[0]
+    for prohibited in ("task-1", "manifest.json", SHA256, "https://"):
+        assert prohibited not in messages[0]
 
 
 def test_dataset_key_is_account_scoped_and_read_ticket_has_no_write_headers():

@@ -16,10 +16,16 @@
       "author": "ryan.porter",
       "text": "Additional compatibility scenario found by the live strict suite:\n\nScenario: Resume optimization from the demo feedback baseline\nGiven a run-scoped feedback evaluation selected from the retained deterministic seed anchor\nWhen the Kubernetes demo passes that completed evaluation to the optimizer as its recent baseline\nThen the evaluation records explicit feedback_start_at and feedback_end_at bounds, the positive lookback days, and the requested maximum item count\nAnd the optimizer resumes the exact frozen cohort without selecting a new one",
       "created_at": "2026-07-28T18:55:10.651588Z"
+    },
+    {
+      "id": "97b985b4-5725-47ca-bcae-6b3f197a8666",
+      "author": "ryan.porter",
+      "text": "Additional observable scenario:\n\nScenario: Ticket authorization is visible without leaking artifact details\nGiven a local Kubernetes client requests an authorized artifact transfer ticket\nWhen the private GraphQL proxy issues the ticket\nThen kubectl logs exposes a correlation identifier, request count, and resource types through the proxy application logger\nAnd the log omits signed URLs, object keys, filenames, checksums, resource IDs, and credentials",
+      "created_at": "2026-07-28T20:15:25.434219Z"
     }
   ],
   "created_at": "2026-07-28T17:57:47.425636Z",
-  "updated_at": "2026-07-28T18:55:10.651588Z",
+  "updated_at": "2026-07-28T20:15:25.434219Z",
   "closed_at": null,
   "custom": {}
 }
