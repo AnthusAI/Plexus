@@ -93,6 +93,24 @@ def test_login_binds_loopback_listener_before_opening_browser(config):
     listener.close.assert_called_once()
 
 
+def test_login_keeps_listener_open_when_browser_does_not_launch(config, capsys):
+    listener = Mock()
+    listener.wait.return_value = "authorization-code"
+    service = CognitoAuthService(
+        config=config,
+        credential_store=Mock(),
+        browser_opener=lambda _url: False,
+    )
+    service._bind_loopback_callback = Mock(return_value=listener)
+    service.complete_authorization = Mock(return_value="person@example.test")
+
+    assert service.login() == "person@example.test"
+
+    assert "Open this URL to continue login" in capsys.readouterr().err
+    listener.wait.assert_called_once()
+    listener.close.assert_called_once()
+
+
 def test_configuration_discovery_uses_the_hosted_domain_client_and_region(monkeypatch):
     monkeypatch.setenv("PLEXUS_COGNITO_DOMAIN", "https://tenant.auth.us-east-1.amazoncognito.com")
     monkeypatch.setenv("PLEXUS_COGNITO_CLIENT_ID", "user-pool-client")

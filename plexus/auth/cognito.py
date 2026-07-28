@@ -8,6 +8,7 @@ import hmac
 import json
 import os
 import secrets
+import sys
 import threading
 import time
 import webbrowser
@@ -293,8 +294,9 @@ class CognitoAuthService:
         listener = self._bind_loopback_callback(authorization.state)
         try:
             if not self.browser_opener(authorization.url):
-                raise ApplicationAuthenticationRequired(
-                    f"Could not open a browser. Open {authorization.url} and then return to this terminal."
+                print(
+                    f"Could not open a browser automatically. Open this URL to continue login:\n{authorization.url}",
+                    file=sys.stderr,
                 )
             code = listener.wait()
             return self.complete_authorization(code, authorization.code_verifier)

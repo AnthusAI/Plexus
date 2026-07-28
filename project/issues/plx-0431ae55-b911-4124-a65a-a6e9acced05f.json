@@ -61,10 +61,16 @@
       "author": "ryan.porter",
       "text": "Review-fix milestone: listener binding now precedes browser launch; tokens are memory-cached with a 60-second pre-expiry refresh; dashboard client accepts explicit auth_mode; keychain deletion only suppresses the keyring missing-credential condition; and CLI config discovers deployed Cognito OAuth output with environment precedence. Token-exchange failures now provide actionable login guidance. Focused suite: 53 passed; flake8 and poetry lock validation passed. Kanbus task/story records and events will be included with this review follow-up.",
       "created_at": "2026-07-28T13:13:56.939492Z"
+    },
+    {
+      "id": "9cddeedd-74a3-429d-93ce-6ecbb5ca34b4",
+      "author": "ryan.porter",
+      "text": "Blocking type-review fix complete: Amplify externalProviders now uses the supported direct callbackUrls, logoutUrls, and scopes properties (the backend factory supplies domainPrefix). Direct TypeScript compile against installed backend-auth definitions passed. The browser-launch fallback now prints the authorization URL and keeps the bound callback listener available. Focused suite is 54 passed; flake8 and poetry lock validation passed.",
+      "created_at": "2026-07-28T13:19:20.766119Z"
     }
   ],
   "created_at": "2026-07-28T12:52:37.023332Z",
-  "updated_at": "2026-07-28T13:13:56.939492Z",
+  "updated_at": "2026-07-28T13:19:20.766119Z",
   "closed_at": null,
   "custom": {
     "source": "shared",
