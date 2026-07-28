@@ -1,3 +1,5 @@
+import asyncio
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -227,3 +229,47 @@ async def test_analyze_items_fails_instead_of_silently_returning_partial_vetting
             max_concurrent=1,
             score_results_by_item={},
         )
+
+
+@pytest.mark.asyncio
+async def test_analyze_items_bounds_an_injected_vote_that_never_returns():
+    release_vote = threading.Event()
+
+    def hanging_vote(_prompt: str, _reasoning_effort: str, _model: str):
+        release_vote.wait(timeout=5)
+        return {
+            "contradicts": False,
+            "category": None,
+            "reason": "Late response.",
+            "guideline_quote": "Allows this behavior.",
+        }
+
+    item = SimpleNamespace(
+        id="fi-hanging-vote",
+        itemId="item-hanging-vote",
+        initialAnswerValue="No",
+        finalAnswerValue="Yes",
+        editCommentValue="Reviewer changed label.",
+        editorName="Reviewer",
+        editedAt=None,
+        isInvalid=False,
+        item=None,
+    )
+    service = GuidelineVettingService(
+        invoke_openai=hanging_vote,
+        request_timeout_seconds=0.01,
+    )
+
+    try:
+        with pytest.raises(GuidelineVettingError, match="fi-hanging-vote"):
+            await asyncio.wait_for(
+                service.analyze_items(
+                    items=[item],
+                    guidelines="Guideline text",
+                    max_concurrent=1,
+                    score_results_by_item={},
+                ),
+                timeout=0.5,
+            )
+    finally:
+        release_vote.set()

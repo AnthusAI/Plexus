@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -44,7 +45,7 @@ class GuidelineVettingService:
         invoke_openai: Optional[Callable[[str, str, str], Dict[str, Any]]] = None,
         request_timeout_seconds: float = 15.0,
     ):
-        self._invoke_openai_fn = invoke_openai or self._invoke_openai
+        self._invoke_openai_fn = invoke_openai
         self._request_timeout_seconds = request_timeout_seconds
 
     def _build_prompt(
@@ -184,6 +185,83 @@ class GuidelineVettingService:
             raise last_error
         raise ValueError("OpenAI classifier did not return JSON and no parse error was captured.")
 
+    async def _invoke_openai_async(
+        self,
+        prompt: str,
+        reasoning_effort: str = "low",
+        model: str = "gpt-5.4-nano",
+    ) -> Dict[str, Any]:
+        """Run the production OpenAI vote asynchronously so cancellation reaches the HTTP call."""
+        import os
+        from dotenv import load_dotenv
+        from openai import AsyncOpenAI
+
+        load_dotenv(override=False)
+        client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        input_messages: List[Dict[str, str]] = [{"role": "user", "content": prompt}]
+        last_error: Optional[Exception] = None
+        try:
+            for _ in range(4):
+                response = await client.responses.create(
+                    model=model,
+                    reasoning={"effort": reasoning_effort},
+                    input=input_messages,
+                    max_output_tokens=4000 if reasoning_effort == "high" else 400,
+                    timeout=self._request_timeout_seconds,
+                )
+                text = response.output_text.strip()
+                reasoning_summary = ""
+                for item in response.output:
+                    if getattr(item, "type", None) != "reasoning":
+                        continue
+                    for part in getattr(item, "summary", []) or []:
+                        if getattr(part, "type", None) == "summary_text":
+                            reasoning_summary += getattr(part, "text", "")
+                try:
+                    parsed = self._parse_classifier_response(text)
+                    if reasoning_summary:
+                        parsed["_thinking"] = reasoning_summary
+                    return parsed
+                except json.JSONDecodeError as exc:
+                    last_error = exc
+                    input_messages.append({"role": "assistant", "content": text or "(empty response)"})
+                    input_messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Your response was not valid JSON. Respond ONLY with a valid JSON object "
+                                "with exactly these keys: \"contradicts\" (boolean), \"reason\" (string), "
+                                "\"category\" (string), \"guideline_quote\" (string), "
+                                "\"citation_ids\" (array). No prose, no code blocks, no extra text."
+                            ),
+                        }
+                    )
+        finally:
+            await client.close()
+        if last_error:
+            raise last_error
+        raise ValueError("OpenAI classifier did not return JSON and no parse error was captured.")
+
+    async def _invoke_vote(
+        self,
+        prompt: str,
+        reasoning_effort: str,
+        model: str,
+    ) -> Dict[str, Any]:
+        """Bound every vote without leaving production network work in executor threads."""
+        if self._invoke_openai_fn is None:
+            return await self._invoke_openai_async(prompt, reasoning_effort, model)
+
+        if inspect.iscoroutinefunction(self._invoke_openai_fn):
+            return await asyncio.wait_for(
+                self._invoke_openai_fn(prompt, reasoning_effort, model),
+                timeout=self._request_timeout_seconds,
+            )
+        return await asyncio.wait_for(
+            asyncio.to_thread(self._invoke_openai_fn, prompt, reasoning_effort, model),
+            timeout=self._request_timeout_seconds,
+        )
+
     def _build_result_item(
         self,
         item: Any,
@@ -307,7 +385,7 @@ class GuidelineVettingService:
                 round_one_models = ["gpt-5.4-nano", "gpt-5.4-nano"]
                 round_one_raw = await asyncio.gather(
                     *(
-                        asyncio.to_thread(self._invoke_openai_fn, prompt, "low", model)
+                        self._invoke_vote(prompt, "low", model)
                         for model in round_one_models
                     ),
                     return_exceptions=True,
@@ -342,11 +420,8 @@ class GuidelineVettingService:
 
                     prompt_round_two = prompt + "\n\n" + round_one_context
                     try:
-                        round_two_openai = await asyncio.to_thread(
-                            self._invoke_openai_fn,
-                            prompt_round_two,
-                            "high",
-                            "gpt-5.4-mini",
+                        round_two_openai = await self._invoke_vote(
+                            prompt_round_two, "high", "gpt-5.4-mini"
                         )
                     except Exception as exc:
                         raise GuidelineVettingError(
