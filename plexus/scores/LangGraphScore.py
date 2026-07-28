@@ -99,6 +99,34 @@ class BatchProcessingPause(Exception):
         self.message = message or f"Execution paused for batch processing. Thread ID: {thread_id}"
         super().__init__(self.message)
 
+
+async def _await_with_nonblocking_timeout(awaitable, timeout_seconds: float):
+    """Bound an awaitable even if it ignores cancellation.
+
+    ``asyncio.wait_for`` waits for the cancelled task to finish cancelling.
+    Provider I/O can ignore that cancellation, which turns a nominal timeout
+    into an unbounded wait and stalls an entire evaluation.  Keep observing the
+    abandoned task so an eventual exception is consumed, but return control to
+    the caller immediately when its deadline expires.
+    """
+    task = asyncio.ensure_future(awaitable)
+    done, _pending = await asyncio.wait({task}, timeout=timeout_seconds)
+    if task in done:
+        return task.result()
+
+    task.cancel()
+
+    def _consume_late_result(completed_task):
+        try:
+            completed_task.result()
+        except (asyncio.CancelledError, Exception):
+            # The evaluation already recorded the timeout.  Late provider
+            # completion must not produce an unhandled-task warning.
+            pass
+
+    task.add_done_callback(_consume_late_result)
+    raise TimeoutError(f"workflow deadline exceeded after {timeout_seconds} seconds")
+
 # Temporarily suppress the specific Pydantic warning about protected namespaces
 warnings.filterwarnings("ignore", 
     message="Field \"model_.*\" .* has conflict with protected namespace \"model_\".*")
@@ -1691,12 +1719,12 @@ Procedure {
             # Add timeout protection to prevent infinite hangs
             timeout_seconds = int(os.getenv('LANGGRAPH_TIMEOUT', '300'))  # Default 5 minutes
             
-            graph_result = await asyncio.wait_for(
+            graph_result = await _await_with_nonblocking_timeout(
                 self.workflow.ainvoke(
                     initial_state,
                     config=thread
                 ),
-                timeout=timeout_seconds
+                timeout_seconds=timeout_seconds,
             )
             
             # DEBUG: Log the graph_result before converting to Score.Result
