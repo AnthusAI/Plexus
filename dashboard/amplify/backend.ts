@@ -71,6 +71,13 @@ if (createArtifactTransferTicketsFunction) {
             objectPrefixes: ['scoreresults/*'],
         },
         {
+            table: backend.data.resources.tables.Evaluation,
+            tableEnvironmentName: 'EVALUATION_TABLE_NAME',
+            bucket: backend.scoreResultAttachments.resources.bucket,
+            bucketEnvironmentName: 'SCORE_RESULT_ATTACHMENTS_BUCKET_NAME',
+            objectPrefixes: ['evaluations/*'],
+        },
+        {
             table: backend.data.resources.tables.Task,
             tableEnvironmentName: 'TASK_TABLE_NAME',
             bucket: backend.taskAttachments.resources.bucket,

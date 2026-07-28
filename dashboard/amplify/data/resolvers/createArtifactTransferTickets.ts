@@ -7,12 +7,13 @@ const MAX_WRITE_BYTES = 100 * 1024 * 1024;
 const URL_TTL_SECONDS = 5 * 60;
 
 type Operation = 'READ' | 'WRITE';
-type ResourceType = 'DATA_SET' | 'PROCEDURE' | 'SCORE_RESULT' | 'TASK';
+type ResourceType = 'DATA_SET' | 'PROCEDURE' | 'SCORE_RESULT' | 'EVALUATION' | 'TASK';
 type ArtifactType =
   | 'DATASET_FILE'
   | 'PROCEDURE_ATTACHMENT'
   | 'PROCEDURE_DASHBOARD_STATE'
   | 'SCORE_RESULT_ATTACHMENT'
+  | 'EVALUATION_RCA'
   | 'TASK_ATTACHMENT';
 
 type TransferRequest = {
@@ -64,6 +65,13 @@ const ROUTES: Record<ArtifactType, ArtifactRoute> = {
     bucketEnv: 'SCORE_RESULT_ATTACHMENTS_BUCKET_NAME',
     keyPrefix: 'scoreresults',
     tableEnv: 'SCORE_RESULT_TABLE_NAME',
+  },
+  EVALUATION_RCA: {
+    resourceType: 'EVALUATION',
+    artifactType: 'EVALUATION_RCA',
+    bucketEnv: 'SCORE_RESULT_ATTACHMENTS_BUCKET_NAME',
+    keyPrefix: 'evaluations',
+    tableEnv: 'EVALUATION_TABLE_NAME',
   },
   TASK_ATTACHMENT: {
     resourceType: 'TASK',
@@ -120,6 +128,9 @@ function validateRequest(value: unknown): TransferRequest {
   }
   if (artifactType === 'PROCEDURE_DASHBOARD_STATE' && filename !== 'dashboard_state.json') {
     throw new Error('PROCEDURE_DASHBOARD_STATE must use dashboard_state.json');
+  }
+  if (artifactType === 'EVALUATION_RCA' && filename !== 'root_cause.full.json') {
+    throw new Error('EVALUATION_RCA must use root_cause.full.json');
   }
   if (!/^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/.test(contentType)) {
     throw new Error('contentType must be a valid media type');
